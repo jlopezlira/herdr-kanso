@@ -262,10 +262,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     moves to the nearest pane still in view. Cmd+Alt+, and Cmd+Alt+. slide
     one column. Clicking an edge tab or a minimap mark slides to that pane.
   - Drag a header's six-dot grip (or Ctrl+drag the header) onto another
-    header to move the pane: the left half of the target means before it,
-    the right half after it. A 3px `foreground` bar on that edge shows where
-    it will land, and the dragged header dims. Dropping on an edge tab puts
-    the pane just beyond that edge.
+    header to move the pane: the left quarter of the target means a column
+    of its own before it, the right quarter one after it, and the middle
+    half stacks it under that pane, in its column. A 3px `foreground` bar
+    on the edge, or an `accent` wash at 25% over the whole header, shows
+    where it will land, and the dragged header dims. Any number of panes can
+    stack; the 90px minimum height is the only limit. Dropping on an edge
+    tab puts the pane just beyond that edge.
 - **Side panels, on demand**:
   - Clicking a panel button rewrites the panel stack to hold only that
     panel's block and shows it. Clicking it again, or closing the panel any

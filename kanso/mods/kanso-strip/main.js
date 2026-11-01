@@ -548,17 +548,24 @@ export default class Strip extends View {
   // A pane dragged onto another lands as its own column before or after
   // that one's column (`side`); without a side, on the side it came from.
   // Panes never move vertically: one dragged out of a stack leaves it.
+  // side: "before" or "after" puts the pane in a column of its own beside the
+  // target's column; "into" stacks it under the target pane, in its column
+  // (any number of panes can stack; the layout's 90px minimum is the limit).
   move(st, id, to, side) {
     const from = this.where(st, id), target = this.where(st, to);
-    if (!from || !target || id === to || (from.ci === target.ci && st.cols[from.ci].panes.length === 1)) return;
-    // A pinned pane never changes place, and nothing lands among the pinned.
-    if (st.cols[from.ci].pin || st.cols[target.ci].pin) return;
+    if (!from || !target || id === to) return;
+    const into = side === "into";
+    if (!into && from.ci === target.ci && st.cols[from.ci].panes.length === 1) return;
+    // A pinned pane never changes place, and nothing lands among the pinned
+    // (stacking under a pinned pane is fine: the column keeps its place).
+    if (st.cols[from.ci].pin || (st.cols[target.ci].pin && !into)) return;
     const col = st.cols[from.ci];
     const after = side ? side === "after" : from.ci < target.ci;
     col.panes.splice(from.ri, 1);
     if (!col.panes.length) st.cols.splice(from.ci, 1);
     const t = this.where(st, to);
-    st.cols.splice(after ? t.ci + 1 : t.ci, 0, { panes: [id], w: col.w });
+    if (into) { const c = st.cols[t.ci]; c.panes.splice(t.ri + 1, 0, id); if (c.hs) delete c.hs; }
+    else st.cols.splice(after ? t.ci + 1 : t.ci, 0, { panes: [id], w: col.w });
     this.order(st);
     this.clampView(st);
   }
