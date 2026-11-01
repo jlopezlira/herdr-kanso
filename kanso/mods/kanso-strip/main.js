@@ -183,12 +183,13 @@ export default class Strip extends View {
         .content(card));
   }
 
-  // A 1px block that measures: {ruler: "h"} stands at the end of work-body
-  // and takes its height; {ruler: <pane>} lies under that pane's terminal
-  // and takes its width. Both are drawn in `background`.
+  // A block that measures: {ruler: "h"} is 1px wide at the end of work-body
+  // and takes its height (drawn in `chrome`, as the gutter); {ruler: <pane>}
+  // lies under that pane's terminal, RADIUS tall, takes its width and draws
+  // the slab's rounded bottom in `background`.
   renderRuler() {
     const what = props().ruler;
-    return div().size_full().on_size_change((sz) => {
+    return div().size_full().when(what !== "h", (el) => el.rounded_b(RADIUS).bg(theme().background)).on_size_change((sz) => {
       const v = Math.round(what === "h" ? sz.height : sz.width);
       const px = shared(PX) ?? {};
       if (v && px[what] !== v) setShared(PX, { ...px, [what]: v });
@@ -568,8 +569,10 @@ export default class Strip extends View {
     const byId = new Map(ps.map((p) => [p.pane, p]));
     const weight = (f) => Math.max(1, Math.round(f * 1000));
     const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: HEADER_H }, content: { mod: "kanso-pane", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
-    const ruler = (what) => ({ id: `strip-ruler-${what}`, type: "block", size: { px: 1 }, min: 1, max: 1, background: what === "h" ? "chrome" : "background",
-      content: { mod: "kanso-strip", props: { ruler: what } } });
+    // A pane's ruler is also its foot: a terminal paints square corners, so
+    // the foot, RADIUS tall, draws the slab's rounded bottom over the frame.
+    const ruler = (what) => { const px = what === "h" ? 1 : RADIUS; return { id: `strip-ruler-${what}`, type: "block", size: { px }, min: px, max: px, background: "chrome",
+      content: { mod: "kanso-strip", props: { ruler: what } } }; };
     const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: RADIUS,
       children: [header(id), { id: `term-${id}`, type: "block", content: { terminal: byId.get(id).terminal } }, ruler(id)] });
     // One pane: the cell is the column. Stacked: the panes share the height

@@ -76,8 +76,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       gutter between two columns sideways, or between two stacked panes up
       and down (a column never goes under 140 px, a stacked pane under 90).
       Once the drag has rested 250 ms, the strip reads the sizes back from
-      the layout and its 1px ruler blocks (one under each terminal for its
-      width, one at the end of work-body for the height) and keeps them as
+      the layout and its ruler blocks (one under each terminal, 8 tall,
+      for its width, which also draws the slab's rounded bottom since a
+      terminal paints square corners; one 1px wide at the end of work-body
+      for the height) and keeps them as
       shares, so later trees keep what you dragged. The view always starts at a
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
