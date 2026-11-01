@@ -78,11 +78,18 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
       start from which the rest of the row fits. When columns lie beyond an
-      edge, a 28-wide edge tab stands there (`background`, `hover` on hover):
-      the next pane's program icon (15, 80%), its state (a breathing
-      `working` dot, a breathing `blocked` one, a `done` one), the count of
-      panes beyond when more than one (10.5, `dim`) and a ‹ or › at the
-      bottom; its tooltip names the pane. Click it and that pane comes in.
+      edge, a 28-wide edge rail stands there in `chrome` (`hover` on hover),
+      so it reads as frame, not pane. At its middle, a ‹ or › (14, `muted`)
+      over a stack of 20 tiles (`input`, rounded 5, 5 apart, up to 8 then
+      "+N"), one per pane beyond in row order, each with its program icon
+      (12, `muted` when tinted) and, at its top-right corner, its state (a 7
+      dot: breathing `working`, breathing `blocked`, `done`; none when the
+      program reports nothing). Resting the pointer on the stack (350 ms)
+      opens a card beside it (220 wide, `chrome`, hairline `border`, rounded
+      9): "N panes beyond the left edge" (11, `dim`) and a 26-tall row per
+      pane with its icon, its name (12.5) and its state dot. A click on a
+      tile or a row brings that pane in; a click on the bare rail brings in
+      the nearest one.
       Off-screen columns aren't drawn. A split down stacks a pane
       under the focused one in the same column; stacked panes share the
       column's height equally. Panes never move vertically: dragging one out
@@ -291,7 +298,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-tabs`: tabs, panel buttons and the on-demand panel mount via
     `layout.set`.
   - `kanso-strip`: the canvas. The copy in the status row is the controller
-    and minimap; copies with `{edge, side, count}` draw an edge tab. State per
+    and minimap; copies with `{edge, side, count, panes}` draw an edge rail. State per
     tab lives in shared `strip.state` (`{cols: [{panes, w, pin}], vx, n}`);
     the last chosen `n` is in shared `strip.n` for new tabs.
     Headers talk to it through shared `strip.req` (scroll, move, width),

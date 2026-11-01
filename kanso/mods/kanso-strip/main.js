@@ -10,8 +10,8 @@
 // the view shows. Each column in view is a header block (kanso-pane) over a
 // live `{terminal}` block (Herdr can't clip a terminal, so none is ever cut).
 // When columns lie beyond an edge, a narrow "edge" block (a copy of this mod)
-// stands there with the next pane's program and state; click it to bring that
-// pane in. Off-screen columns aren't in the tree at all. The shown columns
+// stands there: a rail with a stack of tiles, one per pane beyond, and a card
+// on hover that names them; click one to bring that pane in. Off-screen columns aren't in the tree at all. The shown columns
 // share the width by their weights, so they stretch a little to fill it.
 //
 // Herdr rules that shape the tree: a layout nests at most 16 levels (columns
@@ -19,7 +19,7 @@
 // single-child ones (free space is a filler block, never an empty column).
 //
 // Copies, chosen by props: none = the controller and minimap (status bar),
-// {edge: pane, side, count} = the tab at an edge for the next pane beyond it.
+// {edge: pane, side, count, panes} = the tab at an edge for the panes beyond it.
 //
 // State per tab in shared "strip.state": { cols: [{ panes, w, pin }], vx }
 //   w: column width as a share of the view; vx: the view's left edge on the
@@ -31,7 +31,7 @@
 // (scroll, focus, move, width) and "strip.intent" (where the next pane goes).
 
 import { View, div, svg, image } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { spaces, panes, focused, layout, run, shared, setShared, theme, nextCommand, props } from "herdr";
 
 // How many panes the view holds at once (`st.n`, 1 to 8; you choose). A new
@@ -110,34 +110,71 @@ export default class Strip extends View {
 
   // ---- Edge: the tab at the view's edge for the panes beyond it --------------
 
+  // A rail in the frame's own color, so it reads as chrome rather than as a
+  // pane. At its middle, where the eye lands, a chevron over a stack of small
+  // tiles, one per pane beyond the edge, each with its program and a state dot:
+  // the row of panes, seen end-on. Resting the pointer there opens a card that
+  // names them; a click on a tile or a row brings that pane in, a click on the
+  // bare rail the nearest one.
   renderEdge() {
     const t = theme(), p = props();
-    const info = panes().find((q) => q.pane === p.edge);
-    const prog = info?.program, st = info?.status;
-    const pic = !prog?.icon ? null : prog.tint ? svg(prog.icon).size(15).flex_none().text_color(t.muted) : image(prog.icon).w(15).h(15).flex_none();
-    const name = (prog?.agent || prog?.shell) && prog.name || info?.title || prog?.name || "Pane";
+    const all = panes();
+    const ids = (p.panes ?? [p.edge]).filter((id) => all.some((q) => q.pane === id));
+    const left = p.side === "left";
+    const chevron = left ? "\u2039" : "\u203a";
+    const show = (id) => setShared("strip.req", { op: "focus", pane: id, n: nonce() });
+    const name = (info) => {
+      const prog = info?.program;
+      return (prog?.agent || prog?.shell) && prog.name || info?.title || prog?.name || "Pane";
+    };
+    const icon = (prog, size, color) => !prog?.icon ? div().size(size) : prog.tint ? svg(prog.icon).size(size).flex_none().text_color(color) : image(prog.icon).w(size).h(size).flex_none();
+    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).loop("opacity", { from: 0.35, to: 1, period: 1800 })
+      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })
+      : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
+    const MAX_TILES = 8;
+    const tile = (id) => {
+      const info = all.find((q) => q.pane === id), d = dot(info?.status, 7);
+      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(5).bg(t.input)
+        .flex().items_center().justify_center()
+        .hover((h) => h.bg(t.selected))
+        .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
+        .child(icon(info?.program, 12, t.muted))
+        .when(Boolean(d), (el) => el.child(d.absolute().top(-2).right(-2).border(1).border_color(t.chrome)));
+    };
+    const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
+      .child(div().h(16).text_size(14).text_color(t.muted).child(chevron))
+      .children(ids.slice(0, MAX_TILES).map(tile))
+      .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
+    const rowOf = (id) => {
+      const info = all.find((q) => q.pane === id), d = dot(info?.status, 6);
+      return h_flex().id(`edge-row-${id}`).h(26).px(8).gap(8).items_center().rounded(6).cursor_pointer()
+        .hover((h) => h.bg(t.hover))
+        .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
+        .child(icon(info?.program, 13, t.muted))
+        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(name(info)))
+        .when(Boolean(d), (el) => el.child(d));
+    };
+    const card = v_flex().w(220).p(6).gap(1).rounded(9).bg(t.chrome).border(1).border_color(t.border)
+      .child(div().h(22).px(8).flex().items_center().text_size(11).text_color(t.dim)
+        .child(`${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`))
+      .children(ids.map(rowOf));
     const drag = shared("strip.drag");
-    return v_flex().id("edge").size_full().items_center().pt(10).pb(10).gap(8).bg(t.background).cursor_pointer()
+    return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(t.hover))
       .when(Boolean(drag) && drag.pane !== p.edge, (el) => el.bg(t.hover))
-      .tooltip(p.count > 1 ? `${name} and ${p.count - 1} more` : name)
       .on_mouse_move(forwardResize)
       // Dropping a dragged pane here puts it just beyond this edge.
       .on_mouse_up("left", () => {
         endResize();
         const d = shared("strip.drag");
         if (!d) return;
-        if (d.pane !== p.edge && Date.now() - d.at < 15000) setShared("strip.req", { op: "move", pane: d.pane, to: p.edge, side: p.side === "left" ? "after" : "before", n: nonce() });
+        if (d.pane !== p.edge && Date.now() - d.at < 15000) setShared("strip.req", { op: "move", pane: d.pane, to: p.edge, side: left ? "after" : "before", n: nonce() });
         setShared("strip.drag", null);
       })
-      .on_click(() => setShared("strip.req", { op: "focus", pane: p.edge, n: nonce() }))
-      .when(Boolean(pic), (el) => el.child(pic.opacity(0.8)))
-      .when(st === "working", (el) => el.child(div().size(6).rounded_full().bg(t.working).loop("opacity", { from: 0.35, to: 1, period: 1800 })))
-      .when(st === "blocked", (el) => el.child(div().size(7).rounded_full().bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })))
-      .when(st === "done", (el) => el.child(div().size(6).rounded_full().bg(t.done)))
-      .when(p.count > 1, (el) => el.child(div().text_size(10.5).text_color(t.dim).child(String(p.count))))
-      .child(div().flex_1())
-      .child(div().text_size(13).text_color(t.dim).child(p.side === "left" ? "\u2039" : "\u203a"));
+      .on_click(() => show(p.edge))
+      .child(HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(350).close_delay(250)
+        .trigger(stack)
+        .content(card));
   }
 
   // ---- The model ---------------------------------------------------------------
@@ -466,15 +503,17 @@ export default class Strip extends View {
     const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) })
       : { id: `strip-col-${c.panes[0]}`, type: "column", gap: 1, background: "border", resizable: false, size: { weight: weight(c.w) },
         children: c.panes.map((id) => live(id, { weight: 1000 })) };
-    const edge = (ci, side, count) => ({ id: `strip-edge-${side}`, type: "block", size: { px: EDGE_W },
-      content: { mod: "kanso-strip", props: { edge: st.cols[ci].panes[0], side, count } } });
+    // The edge tab knows the nearest column beyond it (what a click brings in)
+    // and every pane beyond, in row order, for its tiles and its card.
+    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: EDGE_W },
+      content: { mod: "kanso-strip", props: { edge: st.cols[ci].panes[0], side, count: beyond.length, panes: beyond.flatMap((r) => st.cols[r.ci].panes) } } });
     const row = this.row(st), shown = this.shownCols(st);
     this.shown = new Set(shown);
     const k = row.findIndex((r) => r.ci === shown[0]);
     const after = k + shown.length;
     const out = shown.map((ci) => whole(st.cols[ci]));
-    if (k > 0) out.unshift(edge(row[k - 1].ci, "left", k));
-    if (after < row.length) out.push(edge(row[after].ci, "right", row.length - after));
+    if (k > 0) out.unshift(edge(row[k - 1].ci, "left", row.slice(0, k)));
+    if (after < row.length) out.push(edge(row[after].ci, "right", row.slice(after)));
     // Pinned columns stay at their side, in their order, always whole.
     const pinned = (side) => st.cols.filter((c) => c.pin === side).map(whole);
     return [...pinned("left"), ...out, ...pinned("right")];
