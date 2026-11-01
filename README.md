@@ -7,8 +7,7 @@ slow down when the window is behind. Panes live on an endless strip, as in
 Omarchy's scrolling layout: a new one opens beside the focused one at its own
 width, nothing shrinks, and the view slides to it, a pane at a time, never
 showing a cut one: a narrow rail at the edge stacks what lies beyond (hover it
-for their names). You
-choose how many panes the view holds at once, 1 to 8.
+for their names). You choose how many panes the view holds at once, 1 to 8.
 
 | Keys | What they do |
 |---|---|
