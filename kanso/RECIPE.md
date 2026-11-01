@@ -71,7 +71,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       (default 2): a new column takes 1/n of it, so on a wide screen you can
       hold 3, 4 or more side by side. A lone pane fills the view. Every header ends in a
       six-dot grip (14 icon, `dim`, `foreground` on hover or while held,
-      grab cursor), 6 from the edge. Resizing is Herdr's own: drag the 6
+      grab cursor), 6 from the edge. The header's top corners round with
+      the slab's (8). Resizing is Herdr's own: drag the 6
       gutter between two columns sideways, or between two stacked panes up
       and down (a column never goes under 140 px, a stacked pane under 90).
       Once the drag has rested 250 ms, the strip reads the sizes back from

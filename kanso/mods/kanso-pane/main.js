@@ -143,6 +143,8 @@ export default class Pane extends View {
       .items_center()
       .text_size(12.5)
       .relative()
+      // The pane is a rounded slab; the header's wash follows its top corners.
+      .rounded_t(8)
       // Pinned: the accent's tint, a little stronger when it's also the selected one.
       .when(pinned && st !== "blocked", (el) => el.bg(t.accent + (on ? "40" : "24")))
       .when(st === "blocked", (el) => el.bg(t.blocked + "66")
