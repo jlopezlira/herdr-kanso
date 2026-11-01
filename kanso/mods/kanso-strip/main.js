@@ -142,7 +142,7 @@ export default class Strip extends View {
     const MAX_TILES = 8;
     const tile = (id) => {
       const info = all.find((q) => q.pane === id), d = dot(info?.status, 7);
-      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(5).bg(t.input)
+      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(t.input)
         .flex().items_center().justify_center()
         .hover((h) => h.bg(t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
@@ -162,7 +162,7 @@ export default class Strip extends View {
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(name(info)))
         .when(Boolean(d), (el) => el.child(d));
     };
-    const card = v_flex().w(220).p(6).gap(1).rounded(9).bg(t.chrome).shadow_md()
+    const card = v_flex().w(220).p(6).gap(1).rounded(8).bg(t.chrome).shadow_md()
       .child(div().h(22).px(8).flex().items_center().text_size(11).text_color(t.dim)
         .child(`${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`))
       .children(ids.map(rowOf));
@@ -690,7 +690,7 @@ export default class Strip extends View {
           .bg(at?.ci === i && at?.ri !== r ? t.muted : tone)));
     });
     const n = st.n ?? DEFAULT_N;
-    const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(4)
+    const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
       .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)
       .hover((h) => h.bg(t.foreground + "12").text_color(t.foreground))
       .on_click(() => { action(); this.dirty = true; })

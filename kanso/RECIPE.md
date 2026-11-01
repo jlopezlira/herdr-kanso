@@ -19,7 +19,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Sidebar**, theme `chrome` (`#161615` dark, `#e3dfd6` light).
   - **Top strip**, 48 tall: the macOS traffic lights (at `[12, 16]`) and,
     at its right end (14 in), Herdr's mark: its icon
-    (`frame/welcome/herdr.png`, 20, radius 5) and "Herdr" (13, semibold,
+    (`frame/welcome/herdr.png`, 20, radius 6) and "Herdr" (13, semibold,
     `foreground`), so you know what you're in. It drags the window.
     Collapsed, the strip is empty and the mark sits lower, over the rail's
     buttons.
@@ -28,8 +28,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       Search and Hide sidebar at the right. Each is a 32 square with a 17 icon
       in `muted` that turns `foreground` on hover over a `foreground`+`12`
       wash.
-    - Space rows are 32 tall with radius 8. Each starts with a 22 avatar
-      (radius 7): the name's first letter, semibold 12, in the space's color
+    - Space rows are 32 tall with radius 6. Each starts with a 22 avatar
+      (radius 6): the name's first letter, semibold 12, in the space's color
       over that color at alpha `26`. Then come the name (13, medium when
       active) and, right-aligned, the repo, branch and ahead/behind counts in
       11.5.
@@ -51,12 +51,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       name's first letter, then the name and "N agents".
     - Collapsed, each item is a centred square with its label as a tooltip.
       When an app update is ready, a 6 `accent` dot shows on Settings.
+- **Corners**: two radii and nothing else. Surfaces (panes, cards, popovers,
+  menus) are 8; controls and rows (buttons, tabs, list rows, tiles, chips,
+  fields) are 6; dots are circles.
 - **Work area**, padding 6, gap 4, on `chrome`. No card and no lines: the
   panes are `background` slabs with radius 8 on the frame, 6 apart, and
   that 6 gutter is where Herdr's own dividers are dragged.
     - **Tab bar** (`kanso-tabs`), 48 tall, no line under it. It drags the
       window.
-      - Tabs are 26 tall with radius 7: program icon 15, name 12.5, then the
+      - Tabs are 26 tall with radius 6: program icon 15, name 12.5, then the
         tab's status. The active tab has a `foreground`+`12` wash and the
         rest are `muted`, with no borders and no tray behind them. A close x
         (13) shows on the active tab only when there is more than one tab.
@@ -86,7 +89,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       start from which the rest of the row fits. When columns lie beyond an
       edge, a 28-wide edge rail stands there in `chrome` (`hover` on hover),
       so it reads as frame, not pane. At its middle, a ‹ or › (14, `muted`)
-      over a stack of 20 tiles (`input`, rounded 5, 5 apart, up to 8 then
+      over a stack of 20 tiles (`input`, rounded 6, 5 apart, up to 8 then
       "+N"), one per pane beyond in row order, each with its program icon
       (12, `muted` when tinted) and, at its top-right corner, its state (a 7
       dot: breathing `working`, breathing `blocked`, `done`; none when the
