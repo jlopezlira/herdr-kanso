@@ -224,7 +224,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Click an agent row to focus its pane. Sessions are listed in the order
     the strip shows their panes, tab by tab; drag one onto another in the
     tab on screen to move its pane there (a 2px `accent` line shows where).
-    A pinned pane shows a pin and doesn't move.
+    A pinned pane shows a pin and doesn't move. Panes stacked in one
+    column on screen are held together in one soft slab (`foreground` at
+    3%, radius 6), so the sidebar shows what is linked.
   - Every terminal in the space is listed, not only the agents that report
     a status to Herdr: after those come the rest (Codex and other models'
     CLIs, shells, servers) with their program's icon, their title (a shell's
@@ -264,9 +266,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Drag a header's six-dot grip (or Ctrl+drag the header) onto another
     header to move the pane: the left quarter of the target means a column
     of its own before it, the right quarter one after it, and the middle
-    half stacks it under that pane, in its column. A 3px `foreground` bar
-    on the edge, or an `accent` wash at 25% over the whole header, shows
-    where it will land, and the dragged header dims. Any number of panes can
+    half stacks it with that pane, in its column: above it when the pointer
+    is on the upper half of the header, below it on the lower half. A 3px
+    `foreground` bar on the edge it lands on (left, right, top or bottom),
+    plus an `accent` wash at 25% over the header when stacking, shows where
+    it will land, and the dragged header dims. Any number of panes can
     stack; the 90px minimum height is the only limit. Dropping on an edge
     tab puts the pane just beyond that edge.
 - **Side panels, on demand**:

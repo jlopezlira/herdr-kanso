@@ -269,6 +269,25 @@ export default class Spaces extends View {
     return list.map((a, i) => [a, i]).sort((x, y) => (x[0].tab_index - y[0].tab_index) || (pos(x[0]) - pos(y[0])) || (x[1] - y[1])).map(([a]) => a);
   }
 
+  // The rows of a space, with the panes that share a strip column (stacked
+  // one over another) held together in one soft slab, so the sidebar shows
+  // what is linked on screen.
+  stacked(mine, indent, t) {
+    const state = shared("strip.state") ?? {};
+    const colOf = (a) => { const c = (state[a.tab]?.cols ?? []).find((k) => k.panes?.includes(a.pane)); return c && c.panes.length > 1 ? `${a.tab}:${c.panes[0]}` : null; };
+    const out = [];
+    for (let i = 0; i < mine.length;) {
+      const key = colOf(mine[i]);
+      let j = i + 1;
+      while (key && j < mine.length && colOf(mine[j]) === key) j++;
+      const rows = mine.slice(i, j).map((a) => agentRow(a, indent, t, this.reorder(a, mine)));
+      if (key && rows.length > 1) out.push(v_flex().id(`stack-${key}`).flex_none().rounded(6).bg(t.foreground + "08").children(rows));
+      else out.push(...rows);
+      i = j;
+    }
+    return out;
+  }
+
   // Drag a session onto another in the same tab (the one on screen) to move
   // its pane there in the strip. Pinned panes stay where they are.
   reorder(a, mine) {
@@ -299,7 +318,7 @@ export default class Spaces extends View {
       if (collapsed) return this.compact(r, t);
       const mine = this.inStripOrder(all.filter((a) => a.space === r.w.id));
       const open = !this.agentsFolded.has(r.w.id);
-      return [this.row(r, t, mine), ...(open ? mine.map((a) => agentRow(a, r.tree ? CHILD_PAD : 0, t, this.reorder(a, mine))) : [])];
+      return [this.row(r, t, mine), ...(open ? this.stacked(mine, r.tree ? CHILD_PAD : 0, t) : [])];
     };
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].sort();
     const loading = m => {

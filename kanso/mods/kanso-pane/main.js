@@ -90,10 +90,11 @@ export default class Pane extends View {
     const width = e.bounds?.width || this.width || 0;
     if (width) this.width = width;
     if (shared("strip.drag")) {
-      // Three zones: the left quarter puts it before this column, the right
-      // quarter after, the middle stacks it under this pane.
-      const x = e.local_position.x;
-      const side = x < width / 4 ? "before" : x > width * 3 / 4 ? "after" : "into";
+      // Four zones: the left quarter puts it in a column before this one, the
+      // right quarter after; the middle stacks it with this pane, above when
+      // the pointer is on the upper half of the header, below on the lower.
+      const x = e.local_position.x, y = e.local_position.y, h = e.bounds?.height || 34;
+      const side = x < width / 4 ? "before" : x > width * 3 / 4 ? "after" : y < h / 2 ? "above" : "below";
       if (side !== this.dropSide) { this.dropSide = side; cx.notify(); }
     }
   }
@@ -156,7 +157,9 @@ export default class Pane extends View {
       // Dropping: a bar on the edge the pane will land on.
       .when(dropping && side === "before", (el) => el.border_l(3).border_color(t.foreground))
       .when(dropping && side === "after", (el) => el.border_r(3).border_color(t.foreground))
-      .when(dropping && side === "into", (el) => el.bg(t.accent + "40"))
+      .when(dropping && (side === "above" || side === "below"), (el) => el.bg(t.accent + "40"))
+      .when(dropping && side === "above", (el) => el.border_t(3).border_color(t.foreground))
+      .when(dropping && side === "below", (el) => el.border_b(3).border_color(t.foreground))
       .when(Boolean(drag) && drag.pane === pane, (el) => el.opacity(0.5))
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
       .on_size_change((sz) => { this.width = sz.width; })
