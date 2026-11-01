@@ -20,7 +20,7 @@ for their names). You choose how many panes the view holds at once, 1 to 8.
 | Cmd+Shift+- and Cmd+Shift+= | Fewer or more panes per view (1 to 8) |
 | Cmd+Shift+0 | Even the panes out |
 | Cmd+Shift+Enter | Make the pane wider or narrower |
-| Drag the thin handle at a header's right edge | Resize that pane; the others reflow |
+| Drag the gutter between two panes | Resize them, sideways or up and down |
 | Drag the six-dot grip onto another pane | Move it before or after that pane |
 | Wheel over a header or the minimap | Slide the view |
 | Cmd+Shift+O | Open the pane's folder in a code editor |

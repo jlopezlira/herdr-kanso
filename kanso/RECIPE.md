@@ -46,15 +46,16 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       a tooltip.
   - **Footer** (`kanso-chrome`, `footer: true`), 156 tall, bottom-aligned:
     - Settings (gear) and Add machine (server icon), 34 tall, icon 17.
-    - A 1px `border` divider.
+    - An 8 space.
     - An account chip: a 32 avatar (28 when collapsed) with the home folder
       name's first letter, then the name and "N agents".
     - Collapsed, each item is a centred square with its label as a tooltip.
       When an app update is ready, a 6 `accent` dot shows on Settings.
-- **Work area**, padding 6, gap 4, on `chrome`.
-  - **Inset card**: `background` fill, 1px `border`, radius 10, no shadow.
-    - **Tab bar** (`kanso-tabs`), 48 tall, with a 1px `border` line under it.
-      It drags the window.
+- **Work area**, padding 6, gap 4, on `chrome`. No card and no lines: the
+  panes are `background` slabs with radius 8 on the frame, 6 apart, and
+  that 6 gutter is where Herdr's own dividers are dragged.
+    - **Tab bar** (`kanso-tabs`), 48 tall, no line under it. It drags the
+      window.
       - Tabs are 26 tall with radius 7: program icon 15, name 12.5, then the
         tab's status. The active tab has a `foreground`+`12` wash and the
         rest are `muted`, with no borders and no tray behind them. A close x
@@ -70,11 +71,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       (default 2): a new column takes 1/n of it, so on a wide screen you can
       hold 3, 4 or more side by side. A lone pane fills the view. Every header ends in a
       six-dot grip (14 icon, `dim`, `foreground` on hover or while held,
-      grab cursor) and, at the very edge, a thin resize handle (a 2px line
-      that shows on hover, col-resize cursor). Dragging the handle resizes
-      that column; its neighbour
-      gives or takes the space (never under 8% of the view), the rest reflow,
-      and the row grows or shrinks in pages. The view always starts at a
+      grab cursor), 6 from the edge. Resizing is Herdr's own: drag the 6
+      gutter between two columns sideways, or between two stacked panes up
+      and down (a column never goes under 140 px, a stacked pane under 90).
+      Once the drag has rested 250 ms, the strip reads the sizes back from
+      the layout and its 1px ruler blocks (one under each terminal for its
+      width, one at the end of work-body for the height) and keeps them as
+      shares, so later trees keep what you dragged. The view always starts at a
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
       start from which the rest of the row fits. When columns lie beyond an
@@ -85,14 +88,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       (12, `muted` when tinted) and, at its top-right corner, its state (a 7
       dot: breathing `working`, breathing `blocked`, `done`; none when the
       program reports nothing). Resting the pointer on the stack (350 ms)
-      opens a card beside it (220 wide, `chrome`, hairline `border`, rounded
+      opens a card beside it (220 wide, `chrome`, a soft shadow, rounded
       9): "N panes beyond the left edge" (11, `dim`) and a 26-tall row per
       pane with its icon, its name (12.5) and its state dot. A click on a
       tile or a row brings that pane in; a click on the bare rail brings in
       the nearest one.
       Off-screen columns aren't drawn. A split down stacks a pane
       under the focused one in the same column; stacked panes share the
-      column's height equally. Panes never move vertically: dragging one out
+      column's height equally until you drag the gutter between them
+      (evening out resets that). Panes never move vertically: dragging one out
       of a stack makes it its own column. A tab holding a mod pane falls back to
       Herdr's own split view.
       A column can be pinned (the header's pin button on hover, "Pin pane"
@@ -281,12 +285,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - `spaces`: block `kanso-spaces`.
     - `sidebar-footer`: block `kanso-chrome` with `{footer: true}`, 156 px.
   - `work` (column, padding 6, gap 4):
-    - `inset` (`background`, border, radius 10):
+    - `inset` (column, no fill, no border):
       - `tabs`: block `kanso-tabs`, 48 px, `window_drag`.
-      - `work-body` (row, `border` background, gap 1):
-        - `main`: `{tab: "active"}` with the `kanso-pane` header (height 34)
-          and no pane borders. `kanso-strip` replaces it with the canvas's
-          columns (`strip-*` nodes) and puts it back for tabs it can't show.
+      - `work-body` (row, `chrome` background, gap 6):
+        - `main`: `{tab: "active"}` with the `kanso-pane` header (height 34),
+          radius 8, gap 6 and no pane borders. `kanso-strip` replaces it with
+          the canvas's columns (`strip-*` nodes, `background`, radius 8) and
+          puts it back for tabs it can't show.
         - `panel-body`: stack, 368 px (280 to 900), hidden, no children.
           `kanso-tabs` mounts the open panel in it.
     - `status-row` (row, 26 px): `status` (`kanso-status` `{side: "left"}`,
@@ -299,9 +304,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `layout.set`.
   - `kanso-strip`: the canvas. The copy in the status row is the controller
     and minimap; copies with `{edge, side, count, panes}` draw an edge rail. State per
-    tab lives in shared `strip.state` (`{cols: [{panes, w, pin}], vx, n}`);
-    the last chosen `n` is in shared `strip.n` for new tabs.
-    Headers talk to it through shared `strip.req` (scroll, move, width),
+    tab lives in shared `strip.state` (`{cols: [{panes, w, pin, hs}], vx,
+    n}`; `hs` is each stacked pane's share of the height); the last chosen
+    `n` is in shared `strip.n` for new tabs. Copies with `{ruler}` are the
+    1px rulers; what they measure is in shared `strip.px`.
+    Headers talk to it through shared `strip.req` (scroll, move, width, pin),
     `strip.intent` (where the next new pane goes) and `strip.drag`.
   - `kanso-pane`: pane header.
   - `kanso-menu`: the terminal right-click menu (root `terminal_menu`):
@@ -354,8 +361,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   `panel-body` itself for that reason.
 - Herdr won't let a mod handle the mouse over terminal text, so reordering
   is Ctrl+drag on the pane headers, not on the terminal, and a grip drag only
-  tracks while the pointer stays on the header row (edge tabs forward it
-  too; a terminal below the headers swallows it).
+  tracks while the pointer stays on the header row (a terminal below the
+  headers swallows it). Resizing isn't a mod's drag at all: it is Herdr's
+  divider, read back afterwards.
+- A host argument nests at most 16 levels, and the layout tree counts each
+  node and its `children` array: there is no room for a wrapper around the
+  strip's columns in `work-body`, which is why the rulers sit inside the
+  columns and at the row's end instead.
 - A terminal block takes the keyboard on click, so `focused().pane` is null
   and implicit pane commands fail. Pass `pane` or `terminal` explicitly
   (`pane.split {pane}`, `pane.focus {terminal}`), and focus a new pane only
@@ -422,8 +434,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   third each; the view slides to the new one and the minimap shows four
   pills. Cmd+Shift+= makes it 4 per view and all four fit; Cmd+Shift+- twice
   goes back to 2 per view with the focused pane still in view.
-- Dragging a header grip 200px right on a 1200px view moves that divider by
-  a sixth of the view and the next column shrinks by the same.
+- Dragging the gutter between two columns 200px right on a 1200px view
+  makes the left one a sixth of the view wider and the right one that much
+  narrower; a quarter second later the minimap pills show the new shares,
+  and sliding the view or opening a pane keeps them.
+- Dragging the gutter between two stacked panes gives one the height the
+  other loses; Cmd+Shift+0 evens them out again.
 - Cmd+Alt+Left past the first column in view slides the view.
 - Pin the left pane of three and scroll: it stays at the left, whole, while
   the others slide beside it. Ctrl+dragging it, Cmd+Shift+] and dropping a

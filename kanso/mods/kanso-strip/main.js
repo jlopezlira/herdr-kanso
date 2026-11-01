@@ -19,16 +19,20 @@
 // single-child ones (free space is a filler block, never an empty column).
 //
 // Copies, chosen by props: none = the controller and minimap (status bar),
-// {edge: pane, side, count, panes} = the tab at an edge for the panes beyond it.
+// {edge: pane, side, count, panes} = the tab at an edge for the panes beyond it,
+// {ruler: <pane> | "h"} = a 1px block that measures a pane's width or the strip's height.
 //
 // State per tab in shared "strip.state": { cols: [{ panes, w, pin }], vx }
 //   w: column width as a share of the view; vx: the view's left edge on the
 //   row, in view widths, always a column's start. pin: "left" or "right" for a pinned column, which
 //   stays on that side of the view, always whole, while the rest slides in
 //   the space left between the pinned ones. A column may stack panes (split down): they share
-//   its height equally and never move vertically; drag moves a pane sideways.
+//   height (hs: pane -> share, equal until dragged) and never move
+//   vertically; drag moves a pane sideways.
 // Headers and edges talk to the controller through shared "strip.req"
-// (scroll, focus, move, width) and "strip.intent" (where the next pane goes).
+// (scroll, focus, move, width, pin) and "strip.intent" (where the next pane goes).
+// Resizing is Herdr's own divider drag; the strip reads the result back
+// (see "Resizing" below) with the help of 1px ruler blocks that measure.
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
@@ -49,13 +53,18 @@ const WHEEL_PX = 600; // trackpad/wheel pixels that slide the view one full widt
 const EDGE_W = 28; // the tab at an edge that stands for the panes beyond it
 const WHEEL_STEP = 0.25; // of a view width of wheel travel moves one column
 const MIN_VIEW = 0.2; // pinned columns always leave this much of the view to slide
+const COL_MIN = 140; // px: a column can't be dragged narrower
+const ROW_MIN = 90; // px: a stacked pane can't be dragged shorter
+const SETTLE = 250; // ms without the dragged sizes changing before the strip adopts them
 
+const GAP = 6; // the soft gutter between panes, in the frame's tone: no lines
+const RADIUS = 8;
 const TAB_BLOCK = {
-  id: "main", type: "block", background: "border",
+  id: "main", type: "block", background: "chrome",
   content: { tab: "active", pane: {
     header: { content: { mod: "kanso-pane" }, reveal: "always", height: HEADER_H, position: "top" },
     background: "background", border: { width: 0, color: "border" }, focus: { width: 0, color: "border" },
-    radius: 0, gap: 1, lone: false } },
+    radius: RADIUS, gap: GAP, lone: false } },
 };
 
 function find(node, id) {
@@ -71,24 +80,21 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const step = (list, v) => list[(list.findIndex((s) => Math.abs(s - v) < EPS) + 1) % list.length];
 const nonce = () => Date.now() + Math.random();
 
-// While a header grip is held (shared "strip.resize"), any strip surface
-// under the pointer forwards its moves, so the drag survives crossing an edge
-// tab. Terminal text never reports the pointer; stay on the headers.
-function forwardResize(e) {
-  const r = shared("strip.resize");
-  if (!r || !r.w || !r.px) return;
-  const dx = e.position.x - r.x;
-  if (Math.abs(dx) < 2) return;
-  setShared("strip.resize", { ...r, x: e.position.x });
-  setShared("strip.req", { op: "resize", pane: r.pane, d: dx / (r.px / r.w), n: nonce() });
-}
-const endResize = () => { if (shared("strip.resize")) setShared("strip.resize", null); };
+// The node a column is in the tree.
+const nodeId = (c) => (c.panes.length === 1 ? `strip-${c.panes[0]}` : `strip-col-${c.panes[0]}`);
+
+// What the ruler blocks measured, in logical px, lives in shared "strip.px":
+// each pane's width (a 1px line under its terminal) by pane id, and the
+// strip's height (a 1px line at the end of work-body) as "h". Each copy of
+// this mod runs on its own, so they meet in shared state; the controller
+// reads it when it adopts a drag and drops the panes that are gone.
+const PX = "strip.px";
 
 export default class Strip extends View {
   init(_props, cx) {
     const p = props() ?? {};
-    this.kind = p.edge ? "edge" : "controller";
-    if (this.kind === "edge") return;
+    this.kind = p.edge ? "edge" : p.ruler ? "ruler" : "controller";
+    if (this.kind !== "controller") return;
 
     this.state = JSON.parse(JSON.stringify(shared(KEY) ?? {}));
     this.saved = JSON.stringify(this.state);
@@ -98,6 +104,8 @@ export default class Strip extends View {
     this.sets = [];
     // Scrolling writes the layout at most every 60 ms, however fast the wheel.
     cx.timer.every(60, (cx) => { if (this.dirty) { this.dirty = false; cx.notify(); } });
+    // A drag on one of Herdr's dividers changes the tree without telling us.
+    cx.timer.every(150, (cx) => { if (this.adopt()) cx.notify(); });
     cx.spawn(async (cx) => {
       for (;;) {
         let c;
@@ -154,7 +162,7 @@ export default class Strip extends View {
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(name(info)))
         .when(Boolean(d), (el) => el.child(d));
     };
-    const card = v_flex().w(220).p(6).gap(1).rounded(9).bg(t.chrome).border(1).border_color(t.border)
+    const card = v_flex().w(220).p(6).gap(1).rounded(9).bg(t.chrome).shadow_md()
       .child(div().h(22).px(8).flex().items_center().text_size(11).text_color(t.dim)
         .child(`${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`))
       .children(ids.map(rowOf));
@@ -162,10 +170,8 @@ export default class Strip extends View {
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(t.hover))
       .when(Boolean(drag) && drag.pane !== p.edge, (el) => el.bg(t.hover))
-      .on_mouse_move(forwardResize)
       // Dropping a dragged pane here puts it just beyond this edge.
       .on_mouse_up("left", () => {
-        endResize();
         const d = shared("strip.drag");
         if (!d) return;
         if (d.pane !== p.edge && Date.now() - d.at < 15000) setShared("strip.req", { op: "move", pane: d.pane, to: p.edge, side: left ? "after" : "before", n: nonce() });
@@ -175,6 +181,18 @@ export default class Strip extends View {
       .child(HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(350).close_delay(250)
         .trigger(stack)
         .content(card));
+  }
+
+  // A 1px block that measures: {ruler: "h"} stands at the end of work-body
+  // and takes its height; {ruler: <pane>} lies under that pane's terminal
+  // and takes its width. Both are drawn in `background`.
+  renderRuler() {
+    const what = props().ruler;
+    return div().size_full().on_size_change((sz) => {
+      const v = Math.round(what === "h" ? sz.height : sz.width);
+      const px = shared(PX) ?? {};
+      if (v && px[what] !== v) setShared(PX, { ...px, [what]: v });
+    });
   }
 
   // ---- The model ---------------------------------------------------------------
@@ -224,6 +242,7 @@ export default class Strip extends View {
     if (!st.n) st.n = shared("strip.n") ?? DEFAULT_N;
     const ids = new Set(ps.map((p) => p.pane));
     st.cols = st.cols.map((c) => ({ ...c, panes: c.panes.filter((id) => ids.has(id)) })).filter((c) => c.panes.length);
+    for (const c of st.cols) if (c.hs) c.hs = Object.fromEntries(c.panes.filter((id) => id in c.hs).map((id) => [id, c.hs[id]]));
     const known = new Set(st.cols.flatMap((c) => c.panes));
     const fresh = ps.filter((p) => !known.has(p.pane));
     if (fresh.length && !st.cols.length) {
@@ -338,7 +357,7 @@ export default class Strip extends View {
   setN(st, n, keep) {
     st.n = clamp(Math.round(n), 1, N_MAX);
     setShared("strip.n", st.n);
-    for (const c of st.cols) if (!c.pin) c.w = 1 / st.n; // a pinned pane keeps its width
+    for (const c of st.cols) { if (!c.pin) c.w = 1 / st.n; delete c.hs; } // a pinned pane keeps its width
     this.clampView(st);
     if (keep) this.reveal(st, keep);
   }
@@ -346,15 +365,67 @@ export default class Strip extends View {
   // Even out the columns to the current count without changing it.
   fit(st, keep) { this.setN(st, st.n ?? DEFAULT_N, keep); }
 
-  // Dragging the divider right of column `ci` by `d` (share of the view): that
-  // column grows, the next one gives the space, both stay at least MIN_W.
-  resize(st, ci, d) {
-    const a = st.cols[ci], b = st.cols[ci + 1];
-    if (!a) return;
-    if (!b) { a.w = clamp(a.w + d, MIN_W, 1); this.clampView(st); return; }
-    const dd = clamp(d, MIN_W - a.w, b.w - MIN_W);
-    a.w += dd; b.w -= dd;
-    this.clampView(st);
+  // ---- Resizing: Herdr's own dividers --------------------------------------------
+  // The boundaries between columns and between stacked panes are Herdr's
+  // (`resizable`). A drag leaves a px size on the node it moved; once the
+  // sizes have stayed put for SETTLE ms, this reads them back and turns them
+  // into shares, so the next tree the strip writes keeps what you dragged.
+  sizesOf(nodes) {
+    const sig = {};
+    for (const n of nodes) {
+      if (!this.isCol(n)) continue;
+      sig[n.id] = n.size ?? null;
+      if (String(n.id).startsWith("strip-col-")) for (const c of n.children ?? []) sig[c.id] = c.size ?? null;
+    }
+    return sig;
+  }
+  isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge") && !id.startsWith("strip-ruler"); }
+
+  adopt() {
+    const tab = this.tab(), st = tab && this.state[tab];
+    if (!st || !this.appliedSizes) return false;
+    const body = find(layout(), "work-body");
+    if (!body?.children) return false;
+    const text = JSON.stringify(this.sizesOf(body.children));
+    if (text === this.appliedSizes) { this.drift = null; return false; }
+    const now = Date.now();
+    if (this.drift?.text !== text) { this.drift = { text, at: now }; return false; }
+    if (now - this.drift.at < SETTLE) return false;
+    const colNodes = body.children.filter((n) => this.isCol(n));
+    const inTree = st.cols.filter((c) => colNodes.some((n) => n.id === nodeId(c)));
+    // Widths come from the panes' rulers; the strip's height from its own.
+    const px = shared(PX) ?? {};
+    const width = (c) => px[c.panes[0]] ?? 0;
+    const H = px.h;
+    if (!H || inTree.some((c) => !width(c))) return false;
+    const span = inTree.reduce((s, c) => s + width(c), 0) || 1;
+    const sumW = inTree.reduce((s, c) => s + c.w, 0);
+    // What each stacked pane measures: px ones take theirs, the rest share
+    // what is left by weight.
+    const pxOf = (nodes, total, gap) => {
+      const fixed = nodes.reduce((s, n) => s + (n.size?.px ?? 0), 0) + gap * (nodes.length - 1);
+      const wsum = nodes.reduce((s, n) => s + (n.size?.px ? 0 : (n.size?.weight ?? 1)), 0) || 1;
+      const free = Math.max(0, total - fixed);
+      return new Map(nodes.map((n) => [n.id, n.size?.px ?? free * (n.size?.weight ?? 1) / wsum]));
+    };
+    let changed = false;
+    for (const c of inTree) {
+      const n = colNodes.find((k) => k.id === nodeId(c));
+      const w = clamp(width(c) / span * sumW, MIN_W, 1);
+      if (Math.abs(w - c.w) > EPS) { c.w = w; changed = true; }
+      if (c.panes.length > 1 && n.children) {
+        const hs = pxOf(n.children, H, GAP);
+        const tot = c.panes.reduce((s, id) => s + (hs.get(`strip-${id}`) ?? 0), 0) || 1;
+        const next = Object.fromEntries(c.panes.map((id) => [id, (hs.get(`strip-${id}`) ?? 0) / tot]));
+        if (JSON.stringify(next) !== JSON.stringify(c.hs ?? null)) { c.hs = next; changed = true; }
+      }
+    }
+    this.drift = null;
+    if (changed) this.clampView(st);
+    // Write the tree again either way: weights in place of the px the drag
+    // left, so the row keeps filling the view when the window changes.
+    this.applied = null;
+    return true;
   }
 
   // Wheel travel adds up; a quarter of the view moves the view one column.
@@ -464,7 +535,7 @@ export default class Strip extends View {
     else if (req.op === "width") {
       const at = this.where(st, req.pane);
       if (at) { st.cols[at.ci].w = step(W_STEPS, st.cols[at.ci].w); this.reveal(st, req.pane); }
-    } else if (req.op === "resize") { const at = this.where(st, req.pane); if (at) this.resize(st, at.ci, req.d); this.dirty = true; }
+    }
     else if (req.op === "per") this.setN(st, req.n, st.focus);
     else if (req.op === "pin") this.pin(st, req.pane);
     else if (req.op === "move") {
@@ -497,15 +568,19 @@ export default class Strip extends View {
     const byId = new Map(ps.map((p) => [p.pane, p]));
     const weight = (f) => Math.max(1, Math.round(f * 1000));
     const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: HEADER_H }, content: { mod: "kanso-pane", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
-    const live = (id, size) => ({ id: `strip-${id}`, type: "column", size, background: "background",
-      children: [header(id), { id: `term-${id}`, type: "block", content: { terminal: byId.get(id).terminal } }] });
-    // One pane: the cell is the column. Stacked: equal shares of the height.
-    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) })
-      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: 1, background: "border", resizable: false, size: { weight: weight(c.w) },
-        children: c.panes.map((id) => live(id, { weight: 1000 })) };
+    const ruler = (what) => ({ id: `strip-ruler-${what}`, type: "block", size: { px: 1 }, min: 1, max: 1, background: what === "h" ? "chrome" : "background",
+      content: { mod: "kanso-strip", props: { ruler: what } } });
+    const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: RADIUS,
+      children: [header(id), { id: `term-${id}`, type: "block", content: { terminal: byId.get(id).terminal } }, ruler(id)] });
+    // One pane: the cell is the column. Stacked: the panes share the height
+    // (`hs`, equal until a divider is dragged).
+    const share = (c, id) => (c.hs?.[id] ?? 1) / c.panes.reduce((s, k) => s + (c.hs?.[k] ?? 1), 0);
+    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) }, COL_MIN)
+      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: GAP, background: "chrome", min: COL_MIN, size: { weight: weight(c.w) },
+        children: c.panes.map((id) => live(id, { weight: weight(share(c, id)) }, ROW_MIN)) };
     // The edge tab knows the nearest column beyond it (what a click brings in)
     // and every pane beyond, in row order, for its tiles and its card.
-    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: EDGE_W },
+    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: EDGE_W }, min: EDGE_W, max: EDGE_W,
       content: { mod: "kanso-strip", props: { edge: st.cols[ci].panes[0], side, count: beyond.length, panes: beyond.flatMap((r) => st.cols[r.ci].panes) } } });
     const row = this.row(st), shown = this.shownCols(st);
     this.shown = new Set(shown);
@@ -516,7 +591,8 @@ export default class Strip extends View {
     if (after < row.length) out.push(edge(row[after].ci, "right", row.slice(after)));
     // Pinned columns stay at their side, in their order, always whole.
     const pinned = (side) => st.cols.filter((c) => c.pin === side).map(whole);
-    return [...pinned("left"), ...out, ...pinned("right")];
+    // The height ruler stands at the end, 1px wide.
+    return [...pinned("left"), ...out, ...pinned("right"), ruler("h")];
   }
 
 
@@ -538,6 +614,7 @@ export default class Strip extends View {
     const rest = body.children.filter((n) => !mine(n));
     body.children = [...rest.slice(0, Math.max(0, at)), ...nodes, ...rest.slice(Math.max(0, at))];
     this.applied = text;
+    this.appliedSizes = JSON.stringify(this.sizesOf(nodes));
     try { run("layout.set", { layout: tree }); } catch { this.halted = now; return false; }
     return true;
   }
@@ -547,6 +624,14 @@ export default class Strip extends View {
     for (const id of Object.keys(this.state)) if (!tabs.has(id)) delete this.state[id];
     const text = JSON.stringify(this.state);
     if (text !== this.saved) { this.saved = text; setShared(KEY, JSON.parse(text)); }
+    // Measurements of panes that are gone go too.
+    const px = shared(PX);
+    if (px && Date.now() - (this.prunedAt ?? 0) > 10000) {
+      this.prunedAt = Date.now();
+      const live = new Set(panes().map((p) => p.pane));
+      const kept = Object.fromEntries(Object.entries(px).filter(([k]) => k === "h" || live.has(k)));
+      if (Object.keys(kept).length !== Object.keys(px).length) setShared(PX, kept);
+    }
   }
 
   // ---- Drawing -----------------------------------------------------------------
@@ -559,6 +644,7 @@ export default class Strip extends View {
 
   render() {
     if (this.kind === "edge") return this.renderEdge();
+    if (this.kind === "ruler") return this.renderRuler();
     const t = theme();
     if (this.halted && Date.now() - this.halted > 10000) { this.halted = 0; this.sets = []; this.applied = null; }
     if (this.halted) return h_flex().size_full().justify_center().items_center().text_size(11).text_color(t.blocked).child("Strip paused");

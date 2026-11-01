@@ -168,8 +168,8 @@ export default class Tabs extends View {
     // The count comes from the Specs panel itself, so it shows only while that
     // panel is open (closed, the panel isn't running and its count would be stale).
     const specsExtra = now === "specs" ? specsBadge(space, t) : null;
-    // No background of its own: the inset card behind it shows through, so the rounded corners stay clean.
-    return h_flex().size_full().min_w(0).px(12).gap(2).items_center().border_b(1).border_color(t.border)
+    // No background and no line of its own: it sits on the frame.
+    return h_flex().size_full().min_w(0).px(12).gap(2).items_center()
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel(e => this.wheel(e))
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(6).overflow_x_scrollbar()

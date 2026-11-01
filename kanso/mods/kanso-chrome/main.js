@@ -40,7 +40,7 @@ export default class WorkspaceChrome extends View {
           .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
         // A server, not a second "+": the rail already has one for New space.
         .child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add machine", () => run("mod.open", { name: "machine-add" })))
-        .child(div().h(1).my(4).flex_none().bg(t.border).when(collapsed, el => el.w(28)).when(!collapsed, el => el.mx(2)))
+        .child(div().h(8).flex_none())
         .child(chip);
     }
     // The top bar holds the traffic lights and lets you drag the window. Open,
