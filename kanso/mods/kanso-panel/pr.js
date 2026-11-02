@@ -30,7 +30,7 @@ const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$
 const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
 const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
 // Every open pull request of this repository, by anyone: the list a click picks from.
-const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName";
+const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,statusCheckRollup,additions,deletions";
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
@@ -400,54 +400,89 @@ export class PullRequest {
     return [...(this.openPrs ?? [])].sort((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
   }
 
-  // The switcher, drawn as Spend's menus: a quiet "N open" trigger and a popover
-  // of rows; the shown one is selected. Hidden when the only one is the one shown.
+  // One open pull request's state, in a word and a color, from what the list reads.
+  rowState(p, c) {
+    const seen = new Set();
+    const checks = (p.statusCheckRollup ?? []).map(checkOf).filter((ch) => !seen.has(ch.name) && seen.add(ch.name));
+    const failing = checks.filter((x) => x.state === "fail").length, running = checks.filter((x) => x.state === "pending").length;
+    if (p.isDraft) return { text: "Draft", color: c.dim };
+    if (failing) return { text: `${failing} check${failing > 1 ? "s" : ""} failing`, color: c.red };
+    if (p.reviewDecision === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
+    if (running) return { text: `${running} check${running > 1 ? "s" : ""} running`, color: c.yellow };
+    if (p.reviewDecision === "APPROVED") return { text: "Approved", color: c.green };
+    if (p.reviewDecision === "REVIEW_REQUIRED") return { text: "Waiting for a review", color: c.yellow };
+    if (checks.length) return { text: "Checks passed", color: c.green };
+    return { text: "Open", color: c.dim };
+  }
+
+  // The switcher: a "N open" trigger and a popover of the open ones, grouped as
+  // this branch, yours and others. Each row reads as the hero does in small: the
+  // whole title, who and when, then its state in its color and its size; the
+  // shown one is selected and says so. Hidden when the only one is the one shown.
   switcher(c) {
     const list = this.openList(), shown = this.pr?.url;
     const create = (this.fallback || this.none) && Boolean(this.branch);
     if (!list.length || (list.length === 1 && list[0].url === shown && !create)) return null;
     const id = "pr-switch", me = this.viewer;
-    const trigger = Button.new(`${id}-trigger`).h(26).px(6).gap(4).flex_none().items_center().rounded(6).cursor_pointer()
+    const trigger = Button.new(`${id}-trigger`).h(26).pl(10).pr(8).gap(6).flex_none().items_center().rounded(6).cursor_pointer()
+      .border_1().border_color(this.menu ? c.muted : c.border)
       .accessibility_label(`${list.length} open pull requests`).tooltip("Show another open pull request")
       .hover((s) => s.bg(c.subtle))
-      .child(div().text_size(12).text_color(c.muted).child(`${list.length} open`))
-      .child(svg(`${ICON}chevron-down.svg`).size(12).text_color(c.dim));
+      .child(div().text_size(12).text_color(c.text).child(`${list.length} open`))
+      .child(svg(`${ICON}chevron-down.svg`).size(12).text_color(c.muted));
     const popover = Popover.new(id).trigger(trigger).anchor("top_right")
       .open(this.menu)
       .on_open_change((open, cx) => {
         this.menu = open;
         // Rows are built in this event, never in the render pass.
-        this.menuOptions = open ? list.map((p) => ({
-          p, label: p.title,
-          detail: [`#${p.number}`, p.author?.login === me ? "yours" : p.author?.login, (p.url === this.branchUrl || p.headRefName === this.branch) && "this branch", p.isDraft && "draft"].filter(Boolean).join(" · "),
-          meta: ago(p.updatedAt),
-        })) : null;
+        if (!open) { this.menuOptions = null; cx.notify(); return; }
+        const here = (p) => p.url === this.branchUrl || p.headRefName === this.branch;
+        const groups = [
+          ["This branch", list.filter(here)],
+          ["Yours", list.filter((p) => !here(p) && me && p.author?.login === me)],
+          [me ? "Others" : "Open", list.filter((p) => !here(p) && !(me && p.author?.login === me))],
+        ].filter(([, rows]) => rows.length);
+        this.menuOptions = groups.flatMap(([title, rows]) => [{ title, count: rows.length }, ...rows.map((p) => ({
+          p, state: this.rowState(p, c),
+          meta: [`#${p.number}`, p.author?.login === me ? "you" : p.author?.login, `updated ${ago(p.updatedAt)}`].filter(Boolean).join(" · "),
+        }))]);
         cx.notify();
       });
     if (!this.menu || !this.menuOptions) return popover;
-    const options = this.menuOptions;
-    return popover.content(v_flex().w(300).p(G.xs).gap(1).rounded(8).bg(c.popover).border_1().border_color(c.border)
-      .child(div().id(`${id}-list`).w_full().max_h(360).overflow_y_scrollbar()
-        .child(v_flex().w_full().gap(1).children(options.map((o, i) => {
-          const on = o.p.url === shown;
-          return Button.new(`${id}-option-${i}`).w_full().px(8).py(5).gap(G.sm).items_center().rounded(6).cursor_pointer()
-            .selected(on)
-            .when(on, (el) => el.bg(c.selected))
-            .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-            .focus((s) => s.bg(c.selected))
-            .accessibility_label(`#${o.p.number} ${o.label}`)
-            .on_click((_e, cx) => this.choose(o.p, cx))
-            .child(v_flex().flex_1().min_w(0).gap(1)
-              .child(div().truncate().text_size(12).text_color(c.text).when(on, (e) => e.font_medium()).child(o.label))
-              .child(div().truncate().text_size(10.5).text_color(c.dim).child(o.detail)))
-            .child(div().flex_none().text_size(11).text_color(c.dim).child(o.meta));
-        }))))
-      .when(create, (el) => el.child(div().mx(8).my(G.xs).h(1).bg(c.border))
-        .child(Button.new(`${id}-create`).w_full().px(8).py(6).items_center().rounded(6).cursor_pointer()
+    const width = Math.min(460, Math.max(300, (this.width || 368) - 32));
+    let n = 0;
+    const rows = this.menuOptions.map((o, i) => {
+      if (o.title) return h_flex().w_full().px(10).pt(i ? G.md : G.xs).pb(G.xs).justify_between()
+        .child(div().text_size(11).text_color(c.muted).child(o.title))
+        .child(div().text_size(11).text_color(c.dim).child(String(o.count)));
+      const on = o.p.url === shown, p = o.p;
+      return Button.new(`${id}-option-${n++}`).w_full().px(10).py(8).rounded(6).cursor_pointer()
+        .selected(on)
+        .when(on, (el) => el.bg(c.selected))
+        .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
+        .focus((s) => s.bg(c.selected))
+        .accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`)
+        .on_click((_e, cx) => this.choose(p, cx))
+        .child(v_flex().w_full().min_w(0).gap(3)
+          .child(h_flex().w_full().items_start().gap(G.md)
+            .child(div().flex_1().min_w(0).text_size(13).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
+            .when(on, (el) => el.child(div().flex_none().pt(1).text_size(11).text_color(c.text).child("Shown"))))
+          .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(o.meta))
+          .child(h_flex().w_full().gap(G.sm).items_center()
+            .child(div().size(6).flex_none().rounded_full().bg(o.state.color))
+            .child(div().text_size(11).text_color(o.state.color === c.dim ? c.muted : o.state.color).child(o.state.text))
+            .when(p.additions !== undefined, (el) => el
+              .child(div().text_size(11).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
+    });
+    return popover.content(v_flex().w(width).p(G.xs).rounded(8).bg(c.popover).border_1().border_color(c.border)
+      .child(div().id(`${id}-list`).w_full().max_h(440).overflow_y_scrollbar()
+        .child(v_flex().w_full().gap(2).children(rows)))
+      .when(create, (el) => el.child(div().mx(10).my(G.xs).h(1).bg(c.border))
+        .child(Button.new(`${id}-create`).w_full().px(10).py(7).items_center().rounded(6).cursor_pointer()
           .disabled(Boolean(this.busy))
           .hover((s) => s.bg(c.subtle))
           .on_click((_e, cx) => { this.menu = false; this.menuOptions = null; this.createPr(cx); })
-          .child(div().truncate().text_size(12).text_color(c.muted).child(`Create one for ${this.branch}`)))));
+          .child(div().truncate().text_size(12).text_color(c.text).child(`Create a pull request for ${this.branch}`)))));
   }
 
   iconButton(id, icon, tip, onClick, c, spin) {
