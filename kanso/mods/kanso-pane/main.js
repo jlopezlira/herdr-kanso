@@ -13,6 +13,8 @@ import { h_flex } from "gpui-base";
 import { panes, spaces, props, run, openOverlay, theme, home, focused, shared, setShared } from "herdr";
 
 const BADGE_MAX_W = 220;
+// A held pane (shared "strip.drag") and where it would land ("strip.drop") end together.
+const endDrag = () => { setShared("strip.drop", null); setShared("strip.drag", null); };
 
 function icon(p, size, color) {
   if (!p?.icon) return null;
@@ -71,32 +73,37 @@ export default class Pane extends View {
     openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { folder: p.cwd, machine: space?.machine ?? null } });
   }
 
-  // The six-dot grip near the header's right edge: drag it onto another
-  // header to move this pane before or after that one (shared "strip.drag"
-  // while held; Ctrl+drag anywhere on the header does the same).
+  // The six-dot grip near the header's right edge: hold it and drag onto
+  // another pane to move this pane there (shared "strip.drag" while held;
+  // Ctrl+drag anywhere on the header does the same). While it is held the
+  // strip turns every pane into a drop card (kanso-strip's `drop` copies).
   grip(t, pane) {
     const held = shared("strip.drag")?.pane === pane;
     return div().id(`grip-${pane}`).w(18).h_full().flex_none().flex().items_center().justify_center().cursor_grab()
-      .tooltip("Drag to move before or after another pane")
+      .tooltip("Hold and drag onto another pane to move this one there")
       .text_color(held ? t.foreground : t.dim)
       .hover((h) => h.text_color(t.foreground))
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); setShared("strip.drag", { pane, at: Date.now() }); })
+      // A press anywhere else while this pane is still held: it was let go
+      // where nothing took it, so the hold ends.
+      .on_mouse_down_out(() => { const d = shared("strip.drag"); if (d?.pane === pane && Date.now() - d.at > 300) endDrag(); })
       .child(svg("mods/kanso-chrome/icons/grip-vertical.svg").size(14));
   }
 
-  // While a move is held, every header reports which half of it the pointer
-  // is on. (Resizing is Herdr's own divider between columns, not a handle.)
-  dragMove(e, cx) {
+  // While a pane is held, the header is the top of its pane's drop card: the
+  // left quarter means a column before this pane, the right quarter one
+  // after, the middle stacks the held pane above it (the card below the
+  // header has the zone for below). What the pointer says goes to shared
+  // "strip.drop", which the header and the card both draw from.
+  dragMove(e, pane) {
     const width = e.bounds?.width || this.width || 0;
     if (width) this.width = width;
-    if (shared("strip.drag")) {
-      // Four zones: the left quarter puts it in a column before this one, the
-      // right quarter after; the middle stacks it with this pane, above when
-      // the pointer is on the upper half of the header, below on the lower.
-      const x = e.local_position.x, y = e.local_position.y, h = e.bounds?.height || 34;
-      const side = x < width / 4 ? "before" : x > width * 3 / 4 ? "after" : y < h / 2 ? "above" : "below";
-      if (side !== this.dropSide) { this.dropSide = side; cx.notify(); }
-    }
+    const d = shared("strip.drag");
+    if (!d || d.pane === pane || !width) return;
+    const x = e.local_position.x;
+    const side = x < width / 4 ? "before" : x > width * 3 / 4 ? "after" : "above";
+    const cur = shared("strip.drop");
+    if (cur?.to !== pane || cur.side !== side) setShared("strip.drop", { to: pane, side });
   }
 
   button(t, id, icon, command, args) {
@@ -130,10 +137,10 @@ export default class Pane extends View {
     const strip = Boolean(props()?.strip);
     const remembered = strip ? shared("strip.state")?.[p.tab]?.focus : null;
     const on = remembered ? remembered === pane : p.focused || (strip && p.terminal && focused()?.terminal === p.terminal);
-    // Ctrl+drag a header onto another to rearrange the strip.
+    // A held pane: this header is the top of a drop card (see dragMove).
     const drag = strip ? shared("strip.drag") : null;
-    const dropping = Boolean(drag && drag.pane !== pane && this.hovered);
-    const side = this.dropSide ?? "after";
+    const drop = drag && drag.pane !== pane ? shared("strip.drop") : null;
+    const side = drop?.to === pane ? drop.side : null;
     const ink = on || st === "blocked";
     // A pinned pane stays on its side of the view: a pin by its title says so.
     const pinned = strip && Boolean(shared("strip.state")?.[p.tab]?.cols?.find((c) => c.panes?.includes(pane))?.pin);
@@ -154,28 +161,32 @@ export default class Pane extends View {
       .when(st === "blocked", (el) => el.bg(t.blocked + "66")
         .child(div().absolute().left_0().bottom_0().w_full().h(2).bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })))
       .when(on && !pinned && st !== "blocked", (el) => el.bg(t.selected))
-      // Dropping: a bar on the edge the pane will land on.
-      .when(dropping && side === "before", (el) => el.border_l(3).border_color(t.foreground))
-      .when(dropping && side === "after", (el) => el.border_r(3).border_color(t.foreground))
-      .when(dropping && (side === "above" || side === "below"), (el) => el.bg(t.accent + "40"))
-      .when(dropping && side === "above", (el) => el.border_t(3).border_color(t.foreground))
-      .when(dropping && side === "below", (el) => el.border_b(3).border_color(t.foreground))
-      .when(Boolean(drag) && drag.pane === pane, (el) => el.opacity(0.5))
-      .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
+      // Where the held pane lands lights up in the accent, header and card as
+      // one: the left or right half for a column before or after, the whole
+      // header (the top of the pane) for above.
+      .when(Boolean(side), (el) => el.child(h_flex().absolute().inset_0().rounded_t(8)
+        .child(div().flex_1().h_full().when(side === "before" || side === "above", (d) => d.bg(t.accent + "40").rounded_tl(8).when(side === "above", (d) => d.rounded_tr(8))))
+        .child(div().flex_1().h_full().when(side === "after" || side === "above", (d) => d.bg(t.accent + "40").rounded_tr(8)))))
+      .when(Boolean(drag) && drag.pane === pane, (el) => el.opacity(0.4))
+      .when(Boolean(drag), (el) => el.cursor_grabbing())
+      .on_hover((hovered, cx) => {
+        this.hovered = hovered;
+        if (!hovered && shared("strip.drop")?.to === pane && shared("strip.drop")?.side !== "below") setShared("strip.drop", null);
+        cx.notify();
+      })
       .on_size_change((sz) => { this.width = sz.width; })
       .when(strip, (el) => el
         .on_scroll_wheel((e) => this.wheel(e))
-        .on_mouse_move((e, cx) => this.dragMove(e, cx))
+        .on_mouse_move((e) => this.dragMove(e, pane))
         .on_mouse_down("left", (e) => {
           if (e.modifiers.control && !pinned) setShared("strip.drag", { pane, at: Date.now() });
-          else if (shared("strip.drag")) setShared("strip.drag", null); // a drag dropped elsewhere
+          else if (shared("strip.drag")) endDrag(); // a drag let go elsewhere
         })
-        .on_mouse_up("left", (e) => {
+        .on_mouse_up("left", () => {
           const d = shared("strip.drag");
           if (!d) return;
-          if (d.pane !== pane && Date.now() - d.at < 15000) setShared("strip.req", { op: "move", pane: d.pane, to: pane, side, n: Date.now() + Math.random() });
-          setShared("strip.drag", null);
-          this.dropSide = null;
+          if (d.pane !== pane) setShared("strip.req", { op: "move", pane: d.pane, to: pane, side: side ?? "above", n: Date.now() + Math.random() });
+          endDrag();
         }))
       .on_click(() => run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }))
       .when(Boolean(pic), (el) => el.child(pic.opacity(ink ? 1 : 0.75)))
@@ -188,7 +199,7 @@ export default class Pane extends View {
       .when(st === "blocked", el => el.child(h_flex().flex_none().gap(6).items_center().text_size(11.5).font_medium().text_color(t.foreground)
         .child(div().size(7).rounded_full().bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })).child("Needs you")))
       .when(st === "done" && !this.hovered, el => el.child(div().size(6).flex_none().rounded_full().bg(t.done)))
-      .when(this.hovered, el => el
+      .when(this.hovered && !drag, el => el
         .when(strip, el => el.child(this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground))))
         .when(Boolean(p.cwd), el => el.child(this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p))))
         .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))

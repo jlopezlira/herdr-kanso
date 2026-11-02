@@ -528,6 +528,8 @@ export default class Spaces extends View {
         .child(hide);
     return v_flex().id("spaces-root").size_full().min_h(0).bg(t.chrome).text_size(13)
       .on_size_change((size) => { this.width = size.width; })
+      // A pane held in the strip and let go here goes back where it was.
+      .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.draggedAgent = null; cx.notify(); })
