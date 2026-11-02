@@ -134,18 +134,23 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       told `files`, `changes` or `pr` (`props.panel`), `token-spend`
       (Insights) or `sdd-focused`.
       The PR panel (`kanso-panel` with `pr`) shows the open pull request of the focused
-      pane's branch, as T3 Code does, or another of your open ones, drawn like the Spend panel: one
+      pane's branch, as T3 Code does, or another of your open ones anywhere, drawn like the Spend panel: one
       centered column (max 1080, 16 px sides under 560 wide, else 32), no
       cards or uppercase labels, `canvas` behind, hierarchy from size, weight
       and tone, hairlines between list rows. Top to bottom:
       - Header: "Pull request" (17, 20 when wide) and two 26 icon buttons,
         refresh (spins while reading) and open on GitHub.
-      - Your open pull requests (`gh pr list --author @me`, open, in this
-        repository, newest first), unless the only one is the one shown:
-        the title (13, medium when shown) over `#n · branch`, "this branch"
-        and "draft" (11, dim), and at the right its age or "shown"; 5 shown,
-        "Show N more". A click shows that one; the branch's own goes back
-        to following the branch. Without one shown, the list sits below.
+      - Your open pull requests (`gh search prs --author @me --state open`,
+        every repository; this one's first, then newest), unless the only one
+        is the one shown. The note reads "N here · M elsewhere". A row: the
+        title (13, medium when shown) over `#n` (`owner/repo #n` from another
+        repository), "this branch" and "draft" (11, dim), and at the right its
+        age or "shown"; 5 shown, "Show N more". A click shows that one; the
+        branch's own goes back to following the branch. Every `gh pr` action
+        names the pull request by URL, so merge, ready, close, diff and the
+        pickers work on any repository; the agent tasks that change code
+        (Address feedback, Resolve conflicts) need this repository's checkout.
+        Outside a repository, or with none shown, the list sits below.
       - Hero: `#n · head → base` (15, muted); the title (22, 28 wide, light,
         line height 1.25); a 6 dot and the verdict (15): ready to merge
         (green), checks failing, conflicts or changes requested (red),
