@@ -221,9 +221,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     unfolds its agents; the folded state is kept.
   - Drag a space to reorder it (a 2px `accent` line shows where it lands).
     Double-click a space to rename it (Herdr's `space.rename` prompt).
-  - Double-click a session row to rename the terminal in place: an input
-    (22 tall, `input` fill, radius 6) takes the name's place with the name
-    selected; Enter or a click elsewhere saves, Esc leaves it. The name is
+  - Double-click a session row to rename the terminal: the same dialog
+    Herdr opens for a space or a tab (`kanso-prompt`, 420 wide, with the
+    name it shows now selected; Enter saves, Esc leaves it). The name is
     the terminal's own `kanso.name` label in herdr-core (`hc label <t>
     kanso.name=<name>`; empty removes it and the automatic name is back),
     so it survives a restart and the pane header, the edge tabs and the
@@ -346,9 +346,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `strip.intent` (where the next new pane goes), `strip.drag` (the held
     pane) and `strip.drop` (where it would land). Copies with `{drop}` are
     the cards that stand in for terminals while a pane is held.
-  - `kanso-pane`: pane header. Double-click it to rename the terminal in
-    place (the same `kanso.name` label the sidebar edits); the keyboard
-    goes back to the terminal when the editor closes.
+  - `kanso-pane`: pane header. Double-click it to rename the terminal (the
+    same dialog and `kanso.name` label as the sidebar).
+  - `kanso-prompt`: Herdr's prompt dialog, copied, for what Herdr has no
+    command for. Props `{title, value, hint}` and either `command: {name,
+    args}` (runs it with `name`, as Herdr's prompt) or `label: {terminal,
+    key}` (`hc label <terminal> <key>=<text>`; empty removes the label).
+    Opened as a dialog 420 wide.
   - `kanso-menu`: the terminal right-click menu (root `terminal_menu`):
     split right, left and down through the strip, width, right-clicks
     to the program, send back, "Open with…" (when the pane has a folder),

@@ -2,8 +2,8 @@
 // fold state lives in main.js. statusMark and agentIcon mirror sdd-focused/lib/ui.js
 // (Herdr doesn't let one mod import another's files): keep them in step.
 import { div, svg, image } from "gpui-kit";
-import { h_flex, Input } from "gpui-base";
-import { run, terminals } from "herdr";
+import { h_flex } from "gpui-base";
+import { run, terminals, openOverlay } from "herdr";
 
 const AGENT_ROW = 28;
 const AGENT_PAD = 30; // under the space name: 8px row padding + 20px avatar + gap
@@ -21,15 +21,15 @@ export function givenNames() {
   return out;
 }
 
-// The inline editor that stands in for a name: Enter or a click elsewhere
-// saves, Esc cancels. `state` is an InputState; `cancel` is the caller's.
-export function nameEditor(state, t, cancel) {
-  return div().id("name-editor").flex_1().min_w(0)
-    .on_key_down((e, cx) => { if (e.key === "escape") { cancel(cx); cx.stop_propagation(); } })
-    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-    .on_mouse_up("left", (_e, cx) => cx.stop_propagation())
-    .on_click((_e, cx) => cx.stop_propagation())
-    .child(Input.new(state).w_full().h(22).px(6).rounded(6).bg(t.input).text_size(12.5).text_color(t.foreground));
+// Renaming a terminal: the same dialog Herdr opens to rename a space or a
+// tab (`kanso-prompt`, a copy of Herdr's prompt that writes the label). It
+// opens with the name the terminal shows now; Enter saves, Esc leaves it,
+// and an empty name brings the automatic one back.
+export const PROMPT_W = 420;
+export function renameTerminal(terminal, shown) {
+  openOverlay({ mod: "kanso-prompt", kind: "dialog", width: PROMPT_W, props: {
+    title: "Rename terminal", value: shown ?? "", hint: "Empty: the name the program gives it",
+    label: { terminal, key: NAME_LABEL } } });
 }
 
 // The name you gave the terminal; else the agent's own title ("Subida de
@@ -101,10 +101,8 @@ export function agentFold(id, mine, open, onToggle, t) {
 // focused one carries full ink and a faint wash, the rest stay muted; clicking
 // goes to its pane.
 // `drag` (optional): { pinned, target, down, up } to reorder panes from here.
-// `edit` (optional): { begin(a, cx), editor } — a double-click on the row
-// begins renaming it; `editor` is the element that takes the name's place
-// while this row is the one being renamed.
-export function agentRow(a, indent, t, drag, edit) {
+// A double-click on the row renames the terminal (renameTerminal).
+export function agentRow(a, indent, t, drag) {
   const pic = agentIcon(a.program, 15, t.foreground);
   const idle = (a.status === "idle" || a.status === "done" || !a.status) && !a.focused;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -112,15 +110,15 @@ export function agentRow(a, indent, t, drag, edit) {
     .items_center().rounded(6).text_size(12.5).cursor_pointer()
     .when(a.focused, (el) => el.bg(t.foreground + "0c"))
     .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click(() => { if (!edit?.editor) run("pane.focus", { pane: a.pane }); })
-    .when(Boolean(edit), (el) => el.on_mouse_down("left", (e, cx) => { if (e.click_count === 2) edit.begin(a, cx); }))
+    .on_click(() => run("pane.focus", { pane: a.pane }))
+    .on_mouse_down("left", (e) => { if (e.click_count === 2) renameTerminal(a.address, agentLabel(a)); })
     // Dropping: a line on the side the pane will land on.
     .when(drag?.target === "before", (el) => el.border_t(2).border_color(t.accent))
     .when(drag?.target === "after", (el) => el.border_b(2).border_color(t.accent))
     .when(Boolean(drag), (el) => el.on_mouse_down("left", () => drag.down()).on_mouse_up("left", (_e, cx) => drag.up(cx))
       .on_hover((h, cx) => drag.hover(h, cx)))
     .when(Boolean(pic), (el) => el.child(pic.opacity(a.focused ? 1 : 0.8)))
-    .child(edit?.editor ?? div().flex_1().min_w(0).truncate()
+    .child(div().flex_1().min_w(0).truncate()
       .text_color(a.focused ? t.foreground : idle ? t.dim : t.muted)
       .when(a.focused, (el) => el.font_medium())
       .child(agentLabel(a)))

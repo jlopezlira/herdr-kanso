@@ -8,8 +8,8 @@
 // switch, right-click for its menu, drag to reorder.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, InputState } from "gpui-base";
-import { agentRow, agentFold, agentLabel, withTerminals, givenNames, nameEditor, NAME_LABEL } from "./agents.js";
+import { v_flex, h_flex } from "gpui-base";
+import { agentRow, agentFold, withTerminals, givenNames } from "./agents.js";
 import { spaces, machines, panes, agents, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
 // Where a space is now: its first terminal's live folder, else where it was made.
@@ -280,7 +280,7 @@ export default class Spaces extends View {
       const key = colOf(mine[i]);
       let j = i + 1;
       while (key && j < mine.length && colOf(mine[j]) === key) j++;
-      const rows = mine.slice(i, j).map((a) => agentRow(a, indent, t, this.reorder(a, mine), this.renamer(a, t)));
+      const rows = mine.slice(i, j).map((a) => agentRow(a, indent, t, this.reorder(a, mine)));
       if (key && rows.length > 1) out.push(v_flex().id(`stack-${key}`).flex_none().rounded(6).bg(t.foreground + "08").children(rows));
       else out.push(...rows);
       i = j;
@@ -310,42 +310,9 @@ export default class Spaces extends View {
     };
   }
 
-  // Renaming a session: a double-click on its row puts an editor in the
-  // name's place, with the name selected. Enter or a click elsewhere saves
-  // it as the terminal's `kanso.name` label (empty: the label goes, and the
-  // automatic name is back); Esc leaves it as it was.
-  renamer(a, t) {
-    const mine = this.renaming?.address === a.address;
-    return {
-      begin: (a, cx) => this.beginRename(a, cx),
-      editor: mine ? nameEditor(this.renaming.input, t, (cx) => this.endRename(false, cx)) : null,
-    };
-  }
-
-  beginRename(a, cx) {
-    if (this.renaming) this.endRename(true, cx);
-    const was = a.name ?? "";
-    const value = was || agentLabel(a);
-    const input = InputState.new({ value });
-    input.set_selected_range({ start: 0, end: value.length });
-    input.on("submit", (_e, cx) => this.endRename(true, cx));
-    input.on("blur", (_e, cx) => this.endRename(true, cx));
-    this.renaming = { address: a.address, input, was };
-    // The editor exists at the next draw: focus it once it does.
-    cx.timer.after(40, () => this.renaming?.input === input && input.focus());
-    cx.notify();
-  }
-
-  endRename(save, cx) {
-    const r = this.renaming;
-    if (!r) return;
-    this.renaming = null;
-    const name = r.input.value().trim();
-    if (save && name !== r.was) hc(["label", r.address, `${NAME_LABEL}=${name}`]).catch(() => {});
-    cx?.notify();
-  }
-
   // The rows, under a header per machine once one isn't this computer.
+  // A session's name is the terminal's `kanso.name` label when it has one
+  // (a double-click on the row opens the rename dialog).
   grouped(t, collapsed) {
     const rows = this.ordered();
     const given = givenNames();
