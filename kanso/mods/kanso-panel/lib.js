@@ -1,7 +1,68 @@
 // Shared by the three panels of the kanso-panel mod (files, changes, pull request).
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
-import { spaces, panes, focused, layout, run, theme, settings } from "herdr";
+import { spaces, panes, focused, layout, run, theme, settings, shared, setShared } from "herdr";
+
+// Same helper as kanso-strip, kanso-tabs, kanso-spaces and open-with.
+const LAYOUT_INTENT = "kanso.layout";
+
+function walkLayout(node, id) {
+  if (node?.id === id) return node;
+  for (const child of node?.children ?? []) {
+    const found = walkLayout(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function paintLayout(tree) {
+  const intent = shared(LAYOUT_INTENT);
+  if (!intent || !tree) return;
+  if (intent.nodes) {
+    const body = walkLayout(tree, "work-body");
+    if (body?.children) {
+      const mine = (n) => n.id === "main" || String(n.id).startsWith("strip-");
+      const at = body.children.findIndex(mine);
+      const rest = body.children.filter((n) => !mine(n));
+      const i = Math.max(0, at);
+      body.children = [...rest.slice(0, i), ...JSON.parse(JSON.stringify(intent.nodes)), ...rest.slice(i)];
+    }
+  }
+  if ("panel" in intent) {
+    const body = walkLayout(tree, "panel-body");
+    const wrap = walkLayout(tree, "panel") ?? body;
+    if (body) {
+      const child = intent.panel ? JSON.parse(JSON.stringify(intent.panel)) : null;
+      body.children = child ? [child] : [];
+      if (child) body.active = child.id;
+      else delete body.active;
+      if (wrap) wrap.hidden = !child;
+    }
+  }
+  if (intent.rail) {
+    const sidebar = (tree.children ?? []).find((n) => n.id === "sidebar");
+    if (sidebar) {
+      tree.resizable = intent.rail.open;
+      sidebar.min = intent.rail.min;
+    }
+  }
+}
+
+function commitLayout(patch) {
+  setShared(LAYOUT_INTENT, { ...(shared(LAYOUT_INTENT) ?? {}), ...patch });
+  const tree = layout();
+  if (!tree) return false;
+  paintLayout(tree);
+  run("layout.set", { layout: tree });
+  return true;
+}
+
+// A relative path that stays inside its root: no absolute path, no ".." segment.
+export function insideRoot(path) {
+  if (!path || typeof path !== "string" || path.includes("\0")) return false;
+  if (path.startsWith("/") || path.startsWith("\\") || /^[A-Za-z]:/.test(path)) return false;
+  return path.split(/[\\/]/).every((part) => part !== "..");
+}
 
 // Where the focused pane is: its folder, the machine it is on (null: this
 // computer) and its space.
@@ -56,21 +117,9 @@ export function markdownView(id, text, t) {
 
 // ---- The panel stack --------------------------------------------------------------
 
-function findNode(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) { const found = findNode(child, id); if (found) return found; }
-  return null;
-}
-
 // Puts one block in the side panel (as kanso-tabs' panel buttons do) or,
 // with no id, empties it: Herdr then ends the panel's mod.
 export function showPanel(id, content) {
-  const tree = layout();
-  const panel = findNode(tree, "panel"), body = findNode(tree, "panel-body");
-  if (!body) return false;
-  body.children = id ? [{ id, type: "block", content }] : [];
-  if (id) body.active = id; else delete body.active;
-  (panel ?? body).hidden = !id;
-  run("layout.set", { layout: tree });
-  return true;
+  if (!walkLayout(layout(), "panel-body")) return false;
+  return commitLayout({ panel: id ? { id, type: "block", content } : null });
 }

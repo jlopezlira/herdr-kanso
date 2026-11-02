@@ -462,9 +462,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - Herdr's own terminal menu passes a terminal block's id (`term-<pane>`) as
   its target pane, so its Split and Close fail with "no pane". Kanso ships
   its own menu, which finds the real pane from the clicked terminal.
-- Cap layout writes: the strip writes only when its tree changes, and pauses
-  itself for 10 s after 6 writes in 3 s, so a mistake can't keep the window
-  busy.
+- Cap layout writes: the strip writes only when its tree changes, at most
+  once every 50 ms, and pauses itself for 10 s after 90 writes in 3 s, so a
+  mistake can't keep the window busy.
+- `layout.set` replaces the whole tree, and a set that has not landed still
+  reads as the old one. The strip, the tabs, the panel and the sidebar keep
+  their piece in shared `kanso.layout` (`nodes`, `panel`, `rail`) and put all
+  three back on every write, so one writer cannot drop another's.
 
 - Never use `.spin()` for a busy state. It redraws the whole window about
   30 times a second while any agent works, and every redraw repaints every
