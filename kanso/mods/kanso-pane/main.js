@@ -9,10 +9,11 @@
 // this pane. Props from the app: { pane, terminal }. Click: focus the pane.
 
 import { View, div, svg, image } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { panes, spaces, props, run, openOverlay, theme, home, focused, shared, setShared } from "herdr";
+import { h_flex, InputState, Input } from "gpui-base";
+import { panes, spaces, props, run, openOverlay, theme, home, focused, shared, setShared, terminals, hc } from "herdr";
 
 const BADGE_MAX_W = 220;
+const NAME_LABEL = "kanso.name"; // the terminal label that holds a name you gave it
 // A held pane (shared "strip.drag") and where it would land ("strip.drop") end together.
 const endDrag = () => { setShared("strip.drop", null); setShared("strip.drag", null); };
 
@@ -32,6 +33,46 @@ export default class Pane extends View {
 
   me() {
     return panes().find((p) => p.pane === props()?.pane);
+  }
+
+  // The name you gave this terminal: its `kanso.name` label in herdr-core
+  // (the sidebar reads the same one). Double-click the header to change it:
+  // an editor takes the name's place with the name selected; Enter or a
+  // click elsewhere saves, Esc leaves it, empty brings the automatic name back.
+  given(p) {
+    return p.terminal ? terminals().find((term) => term.address === p.terminal)?.labels?.[NAME_LABEL] ?? null : null;
+  }
+
+  beginRename(p, shown, cx) {
+    if (this.renaming) this.endRename(true, cx);
+    const was = this.given(p) ?? "";
+    const value = was || shown;
+    const input = InputState.new({ value });
+    input.set_selected_range({ start: 0, end: value.length });
+    input.on("submit", (_e, cx) => this.endRename(true, cx));
+    input.on("blur", (_e, cx) => this.endRename(true, cx));
+    this.renaming = { terminal: p.terminal, input, was };
+    cx.timer.after(40, () => this.renaming?.input === input && input.focus());
+    cx.notify();
+  }
+
+  endRename(save, cx) {
+    const r = this.renaming;
+    if (!r) return;
+    this.renaming = null;
+    const name = r.input.value().trim();
+    if (save && name !== r.was) hc(["label", r.terminal, `${NAME_LABEL}=${name}`]).catch(() => {});
+    run("pane.focus", { terminal: r.terminal }); // the keyboard goes back to the terminal
+    cx?.notify();
+  }
+
+  editor(t) {
+    return div().id("name-editor").flex_1().min_w(0).max_w(260)
+      .on_key_down((e, cx) => { if (e.key === "escape") { this.endRename(false, cx); cx.stop_propagation(); } })
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_mouse_up("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => cx.stop_propagation())
+      .child(Input.new(this.renaming.input).w_full().h(22).px(6).rounded(6).bg(t.input).text_size(12.5).text_color(t.foreground));
   }
 
   // Where the pane is: quiet text, no outline. The branch keeps its glyph.
@@ -125,7 +166,8 @@ export default class Pane extends View {
     const t = theme();
     const p = this.me();
     if (!p) return div();
-    const name = p.mod === "sdd-focused" ? "Spec" : ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
+    const name = p.mod === "sdd-focused" ? "Spec" : this.given(p) || ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
+    const editing = Boolean(this.renaming) && this.renaming.terminal === p.terminal;
     const pic = icon(p.program, 15, t.muted);
     const st = p.status;
     const pane = p.pane;
@@ -175,22 +217,25 @@ export default class Pane extends View {
         cx.notify();
       })
       .on_size_change((sz) => { this.width = sz.width; })
+      .on_mouse_down("left", (e, cx) => {
+        // A double-click renames the terminal; in the strip, Ctrl+press holds the pane.
+        if (e.click_count === 2 && p.terminal && !editing) { this.beginRename(p, name, cx); return; }
+        if (!strip) return;
+        if (e.modifiers.control && !pinned) setShared("strip.drag", { pane, at: Date.now() });
+        else if (shared("strip.drag")) endDrag(); // a drag let go elsewhere
+      })
       .when(strip, (el) => el
         .on_scroll_wheel((e) => this.wheel(e))
         .on_mouse_move((e) => this.dragMove(e, pane))
-        .on_mouse_down("left", (e) => {
-          if (e.modifiers.control && !pinned) setShared("strip.drag", { pane, at: Date.now() });
-          else if (shared("strip.drag")) endDrag(); // a drag let go elsewhere
-        })
         .on_mouse_up("left", () => {
           const d = shared("strip.drag");
           if (!d) return;
           if (d.pane !== pane) setShared("strip.req", { op: "move", pane: d.pane, to: pane, side: side ?? "above", n: Date.now() + Math.random() });
           endDrag();
         }))
-      .on_click(() => run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }))
+      .on_click(() => { if (!editing) run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }); })
       .when(Boolean(pic), (el) => el.child(pic.opacity(ink ? 1 : 0.75)))
-      .child(div().flex_none().truncate().max_w(260).text_size(12.5).when(ink, el => el.font_medium()).text_color(ink ? t.foreground : t.muted).child(name))
+      .child(editing ? this.editor(t) : div().flex_none().truncate().max_w(260).text_size(12.5).when(ink, el => el.font_medium()).text_color(ink ? t.foreground : t.muted).child(name))
       .when(Boolean(p.cwd), (el) => el.child(this.where(t, folder(p.cwd), null, ink)))
       .when(Boolean(p.branch), (el) => el.child(this.where(t, p.branch, "mods/kanso-chrome/icons/branch.svg", ink)))
       .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))

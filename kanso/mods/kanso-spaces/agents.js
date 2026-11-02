@@ -2,8 +2,8 @@
 // fold state lives in main.js. statusMark and agentIcon mirror sdd-focused/lib/ui.js
 // (Herdr doesn't let one mod import another's files): keep them in step.
 import { div, svg, image } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { run } from "herdr";
+import { h_flex, Input } from "gpui-base";
+import { run, terminals } from "herdr";
 
 const AGENT_ROW = 28;
 const AGENT_PAD = 30; // under the space name: 8px row padding + 20px avatar + gap
@@ -11,9 +11,32 @@ const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
-// The agent's own title ("Subida de inventarios…"), unless it is only a path,
-// a user@host prompt or the program's name: then the tab's name.
+// A name you gave a terminal (double-click its row or its pane header) is
+// the `kanso.name` label on the terminal itself, in herdr-core: it survives
+// a restart and every Kanso mod reads the same one. By address.
+export const NAME_LABEL = "kanso.name";
+export function givenNames() {
+  const out = new Map();
+  for (const term of terminals()) { const n = term?.labels?.[NAME_LABEL]; if (n) out.set(term.address, n); }
+  return out;
+}
+
+// The inline editor that stands in for a name: Enter or a click elsewhere
+// saves, Esc cancels. `state` is an InputState; `cancel` is the caller's.
+export function nameEditor(state, t, cancel) {
+  return div().id("name-editor").flex_1().min_w(0)
+    .on_key_down((e, cx) => { if (e.key === "escape") { cancel(cx); cx.stop_propagation(); } })
+    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+    .on_mouse_up("left", (_e, cx) => cx.stop_propagation())
+    .on_click((_e, cx) => cx.stop_propagation())
+    .child(Input.new(state).w_full().h(22).px(6).rounded(6).bg(t.input).text_size(12.5).text_color(t.foreground));
+}
+
+// The name you gave the terminal; else the agent's own title ("Subida de
+// inventarios…"), unless it is only a path, a user@host prompt or the
+// program's name: then the tab's name.
 export function agentLabel(a) {
+  if (a.name) return a.name;
   const live = clean(a.title);
   const telling = live && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@")
     && live.toLowerCase() !== a.program?.key && live !== a.program?.name;
@@ -78,7 +101,10 @@ export function agentFold(id, mine, open, onToggle, t) {
 // focused one carries full ink and a faint wash, the rest stay muted; clicking
 // goes to its pane.
 // `drag` (optional): { pinned, target, down, up } to reorder panes from here.
-export function agentRow(a, indent, t, drag) {
+// `edit` (optional): { begin(a, cx), editor } — a double-click on the row
+// begins renaming it; `editor` is the element that takes the name's place
+// while this row is the one being renamed.
+export function agentRow(a, indent, t, drag, edit) {
   const pic = agentIcon(a.program, 15, t.foreground);
   const idle = (a.status === "idle" || a.status === "done" || !a.status) && !a.focused;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -86,14 +112,15 @@ export function agentRow(a, indent, t, drag) {
     .items_center().rounded(6).text_size(12.5).cursor_pointer()
     .when(a.focused, (el) => el.bg(t.foreground + "0c"))
     .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click(() => run("pane.focus", { pane: a.pane }))
+    .on_click(() => { if (!edit?.editor) run("pane.focus", { pane: a.pane }); })
+    .when(Boolean(edit), (el) => el.on_mouse_down("left", (e, cx) => { if (e.click_count === 2) edit.begin(a, cx); }))
     // Dropping: a line on the side the pane will land on.
     .when(drag?.target === "before", (el) => el.border_t(2).border_color(t.accent))
     .when(drag?.target === "after", (el) => el.border_b(2).border_color(t.accent))
     .when(Boolean(drag), (el) => el.on_mouse_down("left", () => drag.down()).on_mouse_up("left", (_e, cx) => drag.up(cx))
       .on_hover((h, cx) => drag.hover(h, cx)))
     .when(Boolean(pic), (el) => el.child(pic.opacity(a.focused ? 1 : 0.8)))
-    .child(div().flex_1().min_w(0).truncate()
+    .child(edit?.editor ?? div().flex_1().min_w(0).truncate()
       .text_color(a.focused ? t.foreground : idle ? t.dim : t.muted)
       .when(a.focused, (el) => el.font_medium())
       .child(agentLabel(a)))

@@ -39,7 +39,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
-import { spaces, panes, focused, layout, run, shared, setShared, theme, nextCommand, props } from "herdr";
+import { spaces, panes, focused, layout, run, shared, setShared, theme, nextCommand, props, terminals } from "herdr";
 
 // How many panes the view holds at once (`st.n`, 1 to 8; you choose). A new
 // column takes 1/n of the view; dragging the divider between two columns
@@ -94,9 +94,16 @@ const nodeId = (c) => (c.panes.length === 1 ? `strip-${c.panes[0]}` : `strip-col
 const PX = "strip.px";
 const DRAG_MAX = 12000; // ms a held pane stays held with nobody dropping it (let go over a gutter)
 
-const nameOf = (info) => {
+// A pane's name: the one you gave its terminal (the `kanso.name` label, set
+// by a double-click on a header or a sidebar row), else the program's.
+const givenNames = () => {
+  const out = new Map();
+  for (const term of terminals()) { const n = term?.labels?.["kanso.name"]; if (n) out.set(term.address, n); }
+  return out;
+};
+const nameOf = (info, given) => {
   const prog = info?.program;
-  return (prog?.agent || prog?.shell) && prog.name || info?.title || prog?.name || "Pane";
+  return given?.get(info?.terminal) || (prog?.agent || prog?.shell) && prog.name || info?.title || prog?.name || "Pane";
 };
 const iconOf = (prog, size, color) => !prog?.icon ? div().size(size) : prog.tint ? svg(prog.icon).size(size).flex_none().text_color(color) : image(prog.icon).w(size).h(size).flex_none();
 // Where on a pane the pointer is: the left and right quarters mean a column
@@ -156,7 +163,8 @@ export default class Strip extends View {
     const left = p.side === "left";
     const chevron = left ? "\u2039" : "\u203a";
     const show = (id) => setShared("strip.req", { op: "focus", pane: id, n: nonce() });
-    const name = nameOf, icon = iconOf;
+    const given = givenNames();
+    const name = (info) => nameOf(info, given), icon = iconOf;
     const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).loop("opacity", { from: 0.35, to: 1, period: 1800 })
       : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })
       : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
@@ -245,7 +253,7 @@ export default class Strip extends View {
   // nothing.
   renderDrop() {
     const t = theme(), id = props().drop;
-    const all = panes();
+    const all = panes(), given = givenNames();
     const me = all.find((q) => q.pane === id);
     const drag = shared("strip.drag");
     const held = drag ? all.find((q) => q.pane === drag.pane) : null;
@@ -255,7 +263,7 @@ export default class Strip extends View {
     const label = (info, strong) => v_flex().flex_1().size_full().min_w(0).min_h(0).items_center().justify_center().gap(8)
       .child(iconOf(info?.program, 22, strong ? t.foreground : t.muted))
       .child(div().w_full().px(12).truncate().text_center().text_size(13).when(strong, (el) => el.font_medium())
-        .text_color(strong ? t.foreground : t.muted).child(nameOf(info)));
+        .text_color(strong ? t.foreground : t.muted).child(nameOf(info, given)));
     const across = side === "before" || side === "after";
     const first = side === "before" || side === "above";
     const ghost = () => label(held, true).bg(t.accent + "40");
