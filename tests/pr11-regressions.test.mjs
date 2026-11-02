@@ -211,12 +211,12 @@ test("Files virtual rows use list-level handlers for open, expand and context me
   assert.deepEqual(actions, [["toggle", "directory"], ["show", "file.txt"], ["openWith", "file.txt"]]);
 });
 
-test("Pull request panel lists your open ones everywhere and shows the one you pick", async () => {
-  const url = (repo, n) => `https://github.com/${repo}/pull/${n}`;
+test("Pull request panel lists the repository's open ones, by anyone, and shows the one you pick", async () => {
+  const url = (n) => `https://github.com/o/here/pull/${n}`;
   const prs = {
-    [url("o/here", 1)]: { number: 1, title: "Branch work", repository: { nameWithOwner: "o/here" }, url: url("o/here", 1), headRefName: "feat", updatedAt: "2026-10-01T00:00:00Z" },
-    [url("o/here", 2)]: { number: 2, title: "Other work", repository: { nameWithOwner: "o/here" }, url: url("o/here", 2), headRefName: "other", updatedAt: "2026-10-02T00:00:00Z" },
-    [url("o/away", 7)]: { number: 7, title: "Elsewhere", repository: { nameWithOwner: "o/away" }, url: url("o/away", 7), headRefName: "x", updatedAt: "2026-10-03T00:00:00Z" },
+    [url(1)]: { number: 1, title: "Branch work", url: url(1), author: { login: "me" }, headRefName: "feat", updatedAt: "2026-10-01T00:00:00Z" },
+    [url(2)]: { number: 2, title: "Other work", url: url(2), author: { login: "me" }, headRefName: "other", updatedAt: "2026-10-02T00:00:00Z" },
+    [url(3)]: { number: 3, title: "Bump a dependency", url: url(3), author: { login: "app/dependabot" }, headRefName: "deps", updatedAt: "2026-10-03T00:00:00Z" },
   };
   const calls = [];
   const exec = async (command, args) => {
@@ -225,40 +225,39 @@ test("Pull request panel lists your open ones everywhere and shows the one you p
       const out = { "rev-parse": "/repo\n", branch: "feat\n", remote: "git@github.com:o/here.git\n" }[args[0]];
       return { code: 0, stdout: out, stderr: "" };
     }
-    if (args[0] === "search") return { code: 0, stdout: JSON.stringify(Object.values(prs)), stderr: "" };
-    if (args[0] === "pr" && args[1] === "view") return { code: 0, stdout: JSON.stringify(prs[args[2] === "--json" ? url("o/here", 1) : args[2]]), stderr: "" };
+    if (args[0] === "pr" && args[1] === "list") return { code: 0, stdout: JSON.stringify(Object.values(prs)), stderr: "" };
+    if (args[0] === "pr" && args[1] === "view") return { code: 0, stdout: JSON.stringify(prs[args[2] === "--json" ? url(1) : args[2]]), stderr: "" };
+    if (args[0] === "api" && args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
     return { code: 1, stdout: "", stderr: "offline" };
   };
   const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
     exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
   });
   const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, mine: [], selected: null, threads: [] });
+  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
   const { cx, drain } = context();
   panel.refresh(cx); await drain();
   assert.equal(panel.pr.number, 1);
-  assert.deepEqual([...panel.mine].map((p) => p.number), [2, 1, 7], "this repository first, then newest");
-  panel.choose(prs[url("o/away", 7)], cx); await drain();
-  assert.equal(panel.pr.url, url("o/away", 7), "a pull request from another repository opens by URL");
-  assert.ok(calls.includes(`gh pr view ${url("o/away", 7)} --json ${calls.find((c) => c.startsWith("gh pr view --json")).slice("gh pr view --json ".length)}`));
-  assert.equal(panel.local(panel.pr.url), false);
-  panel.choose(prs[url("o/here", 1)], cx); await drain();
+  assert.deepEqual([...panel.openPrs].map((p) => p.number), [3, 2, 1], "every author, newest first");
+  assert.ok(calls.includes(`gh pr list --state open --limit 100 --json ${calls.find((c) => c.startsWith("gh pr list")).split("--json ")[1]}`));
+  assert.ok(!calls.some((c) => c.includes("--author")), "not only yours");
+  panel.choose(prs[url(3)], cx); await drain();
+  assert.equal(panel.pr.number, 3, "someone else's opens too");
+  assert.equal(panel.selected, url(3));
+  panel.choose(prs[url(1)], cx); await drain();
   assert.equal(panel.pr.number, 1);
   assert.equal(panel.selected, null, "the branch's own follows the branch again");
-  assert.equal(panel.local(panel.pr.url), true);
 });
 
-test("Pull request panel lists yours outside a repository", async () => {
-  const exec = async (command, args) => command === "git" ? { code: 128, stdout: "", stderr: "not a git repository" }
-    : args[0] === "search" ? { code: 0, stdout: JSON.stringify([{ number: 3, title: "T", repository: { nameWithOwner: "o/r" }, url: "https://github.com/o/r/pull/3", updatedAt: "2026-10-01T00:00:00Z" }]), stderr: "" }
-    : { code: 1, stdout: "", stderr: "" };
+test("Pull request panel shows a quiet placeholder outside a repository, not an error", async () => {
+  const exec = async (command) => command === "git" ? { code: 128, stdout: "", stderr: "not a git repository" } : { code: 1, stdout: "", stderr: "" };
   const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], { exec, key: () => "home", location: () => ({ cwd: "/home", on: null }) });
   const panel = new PullRequest();
-  Object.assign(panel, { expanded: {}, mine: [], selected: null, threads: [] });
+  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
   const { cx, drain } = context();
   panel.refresh(cx); await drain();
-  assert.equal(panel.mine.length, 1);
-  assert.equal(panel.error.title, "Not a git repository");
+  assert.equal(panel.outside, true);
+  assert.equal(panel.error, null);
 });
 
 async function layoutFixture() {
