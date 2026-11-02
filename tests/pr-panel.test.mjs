@@ -32,8 +32,10 @@ test("Pull request panel lists the repository's open ones, by anyone, and shows 
   assert.deepEqual([...panel.openPrs].map((p) => p.number), [3, 2, 1], "every author, newest first");
   assert.ok(calls.includes(`gh pr list --state open --limit 100 --json ${calls.find((c) => c.startsWith("gh pr list")).split("--json ")[1]}`));
   assert.ok(!calls.some((c) => c.includes("--author")), "not only yours");
+  panel.listing = true; // the page of open ones
   panel.choose(prs[url(3)], cx); await drain();
   assert.equal(panel.pr.number, 3, "someone else's opens too");
+  assert.equal(panel.listing, false, "a pick goes back to the one shown");
   assert.equal(panel.selected, url(3));
   panel.choose(prs[url(1)], cx); await drain();
   assert.equal(panel.pr.number, 1);

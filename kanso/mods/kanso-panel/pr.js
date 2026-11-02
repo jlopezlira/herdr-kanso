@@ -1,8 +1,8 @@
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
 // One pull request at a time: the focused pane's branch's own, else the newest
-// open one in that repository; a dropdown in the header lists every open one,
-// by anyone (yours first), and a click shows it,
+// open one in that repository; "N open" in the header turns the panel to a page
+// of every open one, by anyone, and a click there shows it,
 // read with the GitHub CLI (`gh`), in the spirit of T3 Code's pull request view and drawn the way the
 // Spend panel is: one centered column, no cards or uppercase labels, hierarchy
 // from type size, weight and tone, hairlines between rows, a breathing
@@ -107,14 +107,14 @@ export class PullRequest {
     this.expanded = { checks: false, files: false }; this.width = 368;
     this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own, else the newest
     this.fallback = false; // shown: the newest, as the branch has none
-    this.menu = false; this.menuOptions = null;
+    this.listing = false; // the page of open ones instead of the one shown
     this.picker = null; this.candidates = null; this.query = "";
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.refresh(cx);
-    // Every minute while shown, every 20 s while a check runs; never under an open picker or list.
+    // Every minute while shown, every 20 s while a check runs; never under an open picker.
     cx.timer.every(20000, (cx) => {
-      if (this.picker || this.menu) return;
+      if (this.picker) return;
       const pending = this.checks().some((ch) => ch.state === "pending");
       if (pending || Date.now() - (this.loadedAt ?? 0) > 58000) this.refresh(cx);
     });
@@ -141,7 +141,7 @@ export class PullRequest {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed = null; this.picker = null;
       this.openPrs = []; this.selected = null; this.home = null; this.branchUrl = null; this.outside = false;
-      this.fallback = false; this.menu = false; this.menuOptions = null;
+      this.fallback = false; this.listing = false;
     }
     if (!cwd) return;
     this.cwd = cwd; this.on = on;
@@ -218,7 +218,7 @@ export class PullRequest {
   // Shows another open pull request (by its URL); the branch's own goes back to
   // following the branch.
   choose(p, cx) {
-    this.menu = false; this.menuOptions = null;
+    this.listing = false;
     if (this.pr?.url === p.url) { cx.notify(); return; }
     this.selected = p.url === this.branchUrl ? null : p.url; this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
     this.none = false; this.error = null; this.note = null; this.armed = null; this.picker = null;
@@ -415,75 +415,68 @@ export class PullRequest {
     return { text: "Open", color: c.dim };
   }
 
-  // The switcher: a "N open" trigger and a popover of the open ones, grouped as
-  // this branch, yours and others. Each row reads as the hero does in small: the
-  // whole title, who and when, then its state in its color and its size; the
-  // shown one is selected and says so. Hidden when the only one is the one shown.
-  switcher(c) {
-    const list = this.openList(), shown = this.pr?.url;
+  // Whether there is anything to switch to: hidden when the only one is the one shown.
+  canSwitch() {
+    const list = this.openPrs ?? [];
     const create = (this.fallback || this.none) && Boolean(this.branch);
-    if (!list.length || (list.length === 1 && list[0].url === shown && !create)) return null;
-    const id = "pr-switch", me = this.viewer;
-    const trigger = Button.new(`${id}-trigger`).h(26).pl(10).pr(8).gap(6).flex_none().items_center().rounded(6).cursor_pointer()
-      .border_1().border_color(this.menu ? c.muted : c.border)
-      .accessibility_label(`${list.length} open pull requests`).tooltip("Show another open pull request")
+    return list.length > 0 && !(list.length === 1 && list[0].url === this.pr?.url && !create);
+  }
+
+  // The header's pill: "N open" turns to the page of open ones; there, "Back to #n" returns.
+  switchPill(c) {
+    const back = this.listing && this.pr;
+    const label = this.listing ? (back ? `Back to #${this.pr.number}` : "Back") : `${this.openPrs.length} open`;
+    return Button.new("pr-switch").h(26).pl(10).pr(8).gap(6).flex_none().items_center().rounded(6).cursor_pointer()
+      .border_1().border_color(this.listing ? c.muted : c.border)
+      .accessibility_label(this.listing ? label : `${this.openPrs.length} open pull requests`)
+      .tooltip(this.listing ? "Back to the one shown" : "Every open pull request")
       .hover((s) => s.bg(c.subtle))
-      .child(div().text_size(12).text_color(c.text).child(`${list.length} open`))
-      .child(svg(`${ICON}chevron-down.svg`).size(12).text_color(c.muted));
-    const popover = Popover.new(id).trigger(trigger).anchor("top_right")
-      .open(this.menu)
-      .on_open_change((open, cx) => {
-        this.menu = open;
-        // Rows are built in this event, never in the render pass.
-        if (!open) { this.menuOptions = null; cx.notify(); return; }
-        const here = (p) => p.url === this.branchUrl || p.headRefName === this.branch;
-        const groups = [
-          ["This branch", list.filter(here)],
-          ["Yours", list.filter((p) => !here(p) && me && p.author?.login === me)],
-          [me ? "Others" : "Open", list.filter((p) => !here(p) && !(me && p.author?.login === me))],
-        ].filter(([, rows]) => rows.length);
-        this.menuOptions = groups.flatMap(([title, rows]) => [{ title, count: rows.length }, ...rows.map((p) => ({
-          p, state: this.rowState(p, c),
-          meta: [`#${p.number}`, p.author?.login === me ? "you" : p.author?.login, `updated ${ago(p.updatedAt)}`].filter(Boolean).join(" · "),
-        }))]);
-        cx.notify();
-      });
-    if (!this.menu || !this.menuOptions) return popover;
-    const width = Math.min(460, Math.max(300, (this.width || 368) - 32));
+      .on_click((_e, cx) => { this.listing = !this.listing; cx.notify(); })
+      .child(div().text_size(12).text_color(c.text).child(label))
+      .when(!this.listing, (el) => el.child(svg(`${ICON}chevron-right.svg`).size(12).text_color(c.muted)));
+  }
+
+  // The page of open ones, grouped as this branch, yours and others. Each row
+  // reads as the hero does in small: the whole title, who and when, then its
+  // state in its color and its size; the shown one is selected and says so.
+  openPage(c) {
+    const list = this.openList(), shown = this.pr?.url, me = this.viewer;
+    const here = (p) => p.url === this.branchUrl || p.headRefName === this.branch;
+    const mine = (p) => Boolean(me) && p.author?.login === me;
+    const groups = [
+      ["This branch", list.filter(here)],
+      ["Yours", list.filter((p) => !here(p) && mine(p))],
+      [me ? "Others" : "Open", list.filter((p) => !here(p) && !mine(p))],
+    ].filter(([, rows]) => rows.length);
+    const create = (this.fallback || this.none) && Boolean(this.branch);
     let n = 0;
-    const rows = this.menuOptions.map((o, i) => {
-      if (o.title) return h_flex().w_full().px(10).pt(i ? G.md : G.xs).pb(G.xs).justify_between()
-        .child(div().text_size(11).text_color(c.muted).child(o.title))
-        .child(div().text_size(11).text_color(c.dim).child(String(o.count)));
-      const on = o.p.url === shown, p = o.p;
-      return Button.new(`${id}-option-${n++}`).w_full().px(10).py(8).rounded(6).cursor_pointer()
+    const row = (p) => {
+      const on = p.url === shown, state = this.rowState(p, c), i = n++;
+      const meta = [`#${p.number}`, mine(p) ? "you" : p.author?.login, `updated ${ago(p.updatedAt)}`].filter(Boolean).join(" · ");
+      return Button.new(`pr-open-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
         .selected(on)
         .when(on, (el) => el.bg(c.selected))
         .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-        .focus((s) => s.bg(c.selected))
         .accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`)
         .on_click((_e, cx) => this.choose(p, cx))
-        .child(v_flex().w_full().min_w(0).gap(3)
+        .child(v_flex().w_full().min_w(0).gap(4)
           .child(h_flex().w_full().items_start().gap(G.md)
-            .child(div().flex_1().min_w(0).text_size(13).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
-            .when(on, (el) => el.child(div().flex_none().pt(1).text_size(11).text_color(c.text).child("Shown"))))
-          .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(o.meta))
+            .child(div().flex_1().min_w(0).text_size(14).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
+            .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown"))))
+          .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
           .child(h_flex().w_full().gap(G.sm).items_center()
-            .child(div().size(6).flex_none().rounded_full().bg(o.state.color))
-            .child(div().text_size(11).text_color(o.state.color === c.dim ? c.muted : o.state.color).child(o.state.text))
-            .when(p.additions !== undefined, (el) => el
-              .child(div().text_size(11).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
-    });
-    // Spend's menu: the content itself is the scroll area, sized to its rows up to 440.
-    return popover.content(v_flex().w(width).max_h(440).overflow_y_scrollbar().p(G.xs).gap(2).rounded(8)
-      .bg(c.popover).border_1().border_color(c.border)
-      .children(rows)
-      .when(create, (el) => el.child(div().mx(10).my(G.xs).h(1).bg(c.border))
-        .child(Button.new(`${id}-create`).w_full().px(10).py(7).items_center().rounded(6).cursor_pointer()
-          .disabled(Boolean(this.busy))
-          .hover((s) => s.bg(c.subtle))
-          .on_click((_e, cx) => { this.menu = false; this.menuOptions = null; this.createPr(cx); })
-          .child(div().truncate().text_size(12).text_color(c.text).child(`Create a pull request for ${this.branch}`)))));
+            .child(div().size(6).flex_none().rounded_full().bg(state.color))
+            .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
+            .when(p.additions !== undefined, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
+    };
+    return v_flex().w_full().gap(G.xl)
+      .children(groups.map(([title, rows]) => v_flex().w_full().gap(2)
+        .child(this.section(c, title, String(rows.length)))
+        .children(rows.map(row))))
+      .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
+        .child(div().text_size(12).text_color(c.dim).child(`${this.branch} has no pull request yet.`))
+        .child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) })))))
+      .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
   iconButton(id, icon, tip, onClick, c, spin) {
@@ -496,11 +489,11 @@ export class PullRequest {
   }
 
   header(c, narrow) {
-    const pr = this.pr, switcher = this.switcher(c);
+    const pr = this.pr, pill = this.listing || this.canSwitch();
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Pull request"))
+      .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child(this.listing ? "Open pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
-        .when(Boolean(switcher), (el) => el.child(switcher))
+        .when(pill, (el) => el.child(this.switchPill(c)))
         .child(this.iconButton("pr-refresh", "refresh", this.loadedAt ? `Refresh · updated ${clock(this.loadedAt)}` : "Refresh", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c, this.loading))
         .when(Boolean(pr), (el) => el.child(this.iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
   }
@@ -731,7 +724,8 @@ export class PullRequest {
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     let body;
-    if (this.pr) {
+    if (this.listing && this.openPrs.length) body = this.openPage(c);
+    else if (this.pr) {
       body = v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
         .child(this.people(c))

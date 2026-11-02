@@ -139,23 +139,23 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       centered column (max 1080, 16 px sides under 560 wide, else 32), no
       cards or uppercase labels, `canvas` behind, hierarchy from size, weight
       and tone, hairlines between list rows. Top to bottom:
-      - Header: "Pull request" (17, 20 when wide), then at the right the
-        switcher and two 26 icon buttons, refresh (spins while reading) and
-        open on GitHub.
-      - The switcher: "N open" (12) and a chevron in a hairline pill; it
-        opens a popover as wide as the panel (300 to 460; scrolls past 440)
-        of the repository's open pull requests (`gh pr list --state open`,
-        by anyone), grouped under small muted headings with a count: This
-        branch, Yours, Others. A row reads as the hero in small: the whole
-        title (13, wraps; medium and on `selected` with "Shown" at the right
-        when shown), then `#n · author ("you") · updated <age>` (11, dim),
-        then a 6 dot and its state in its color (draft, checks failing,
-        changes requested, checks running, approved, waiting for a review,
-        checks passed) and `+a −d`. A click shows it; the branch's own goes
-        back to following the branch. When the branch has none, a last row
-        offers "Create a pull request for <branch>". Hidden when the only
-        one is the one shown. Every `gh pr` action names the pull request
-        by URL.
+      - Header: "Pull request" (17, 20 when wide), then at the right a
+        hairline pill "N open" with a chevron, refresh (spins while reading)
+        and open on GitHub. The pill is hidden when the only open one is the
+        one shown.
+      - The page of open ones: the pill turns the panel to it (the title
+        reads "Open pull requests", the pill "Back to #n"); it scrolls with
+        the panel, as a popover's layer did not. The repository's open pull
+        requests (`gh pr list --state open`, by anyone) under section titles
+        with a count: This branch, Yours, Others. A row reads as the hero in
+        small: the whole title (14, wraps; medium and on `selected` with
+        "Shown" at the right when shown), then `#n · author ("you") · updated
+        <age>` (11.5, dim), then a 6 dot and its state in its color (draft,
+        checks failing, changes requested, checks running, approved, waiting
+        for a review, checks passed) and `+a −d`. A click shows it and leaves
+        the page; the branch's own goes back to following the branch. When
+        the branch has none, the page ends with "Create one for <branch>".
+        Every `gh pr` action names the pull request by URL.
       - Hero: `#n · head → base` (15, muted); the title (22, 28 wide, light,
         line height 1.25); a 6 dot and the verdict (15): ready to merge
         (green), checks failing, conflicts or changes requested (red),
