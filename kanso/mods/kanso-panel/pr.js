@@ -474,9 +474,10 @@ export class PullRequest {
             .when(p.additions !== undefined, (el) => el
               .child(div().text_size(11).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
     });
-    return popover.content(v_flex().w(width).p(G.xs).rounded(8).bg(c.popover).border_1().border_color(c.border)
-      .child(div().id(`${id}-list`).w_full().max_h(440).overflow_y_scrollbar()
-        .child(v_flex().w_full().gap(2).children(rows)))
+    // Spend's menu: the content itself is the scroll area, sized to its rows up to 440.
+    return popover.content(v_flex().w(width).max_h(440).overflow_y_scrollbar().p(G.xs).gap(2).rounded(8)
+      .bg(c.popover).border_1().border_color(c.border)
+      .children(rows)
       .when(create, (el) => el.child(div().mx(10).my(G.xs).h(1).bg(c.border))
         .child(Button.new(`${id}-create`).w_full().px(10).py(7).items_center().rounded(6).cursor_pointer()
           .disabled(Boolean(this.busy))
