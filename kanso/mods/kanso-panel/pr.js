@@ -1,7 +1,8 @@
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// The open pull request of the focused pane's branch, or any other open one in
-// that repository, by anyone (listed above it, yours first; a click shows one),
+// One pull request at a time: the focused pane's branch's own, else the newest
+// open one in that repository; a dropdown in the header lists every open one,
+// by anyone (yours first), and a click shows it,
 // read with the GitHub CLI (`gh`), in the spirit of T3 Code's pull request view and drawn the way the
 // Spend panel is: one centered column, no cards or uppercase labels, hierarchy
 // from type size, weight and tone, hairlines between rows, a breathing
@@ -30,7 +31,7 @@ const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,n
 const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
 // Every open pull request of this repository, by anyone: the list a click picks from.
 const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName";
-const OPEN_ROWS = 5;
+const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
 
@@ -40,7 +41,7 @@ const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 function tokens(t) {
   return {
     canvas: t.canvas ?? t.background, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
-    border: t.border, subtle: t.hover ?? t.raised, popover: t.popover ?? t.surface,
+    border: t.border, subtle: t.hover ?? t.raised, selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface,
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
     red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5, mono: settings().font_family ?? "JetBrains Mono",
   };
@@ -103,15 +104,17 @@ function quietLink(id, label, onClick, c, options = {}) {
 export class PullRequest {
   init(cx) {
     this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
-    this.expanded = { checks: false, files: false, list: false }; this.width = 368;
-    this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own
+    this.expanded = { checks: false, files: false }; this.width = 368;
+    this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own, else the newest
+    this.fallback = false; // shown: the newest, as the branch has none
+    this.menu = false; this.menuOptions = null;
     this.picker = null; this.candidates = null; this.query = "";
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.refresh(cx);
-    // Every minute while shown, every 20 s while a check runs; never under an open picker.
+    // Every minute while shown, every 20 s while a check runs; never under an open picker or list.
     cx.timer.every(20000, (cx) => {
-      if (this.picker) return;
+      if (this.picker || this.menu) return;
       const pending = this.checks().some((ch) => ch.state === "pending");
       if (pending || Date.now() - (this.loadedAt ?? 0) > 58000) this.refresh(cx);
     });
@@ -138,6 +141,7 @@ export class PullRequest {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed = null; this.picker = null;
       this.openPrs = []; this.selected = null; this.home = null; this.branchUrl = null; this.outside = false;
+      this.fallback = false; this.menu = false; this.menuOptions = null;
     }
     if (!cwd) return;
     this.cwd = cwd; this.on = on;
@@ -169,16 +173,23 @@ export class PullRequest {
         if (open?.code === 0 && key() === context) {
           try { this.openPrs = JSON.parse(open.stdout).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)); } catch {}
         }
+        // The branch has none: the newest open one stands in, the branch offers to create its own.
+        let fallback = false;
+        if (view.code !== 0 && !want && NO_PR.test(view.stderr || view.stdout) && this.openPrs.length) {
+          view = await this.gh(["pr", "view", this.openPrs[0].url, "--json", FIELDS]).catch(() => ({ code: 1, stdout: "", stderr: "GitHub could not be read." }));
+          if (key() !== context || this.selected !== want) return;
+          fallback = true;
+        }
         if (view.code !== 0) {
           const why = (view.stderr || view.stdout).trim();
-          if (/no (open )?pull requests? found|could not determine current branch/i.test(why)) { this.none = true; this.pr = null; this.error = null; }
+          if (NO_PR.test(why)) { this.none = true; this.pr = null; this.error = null; }
           else { this.error = { title: "GitHub could not be read.", detail: why.split("\n")[0] }; this.pr = null; }
           return;
         }
         const pr = JSON.parse(view.stdout);
         if (this.pr?.url !== pr.url) { this.diffs = null; this.openFile = null; }
-        this.pr = pr; this.none = false; this.error = null;
-        if (!want) this.branchUrl = pr.url;
+        this.pr = pr; this.none = false; this.error = null; this.fallback = fallback;
+        if (!want) this.branchUrl = fallback ? null : pr.url;
         if (!this.home && !want) this.home = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(pr.url)?.[1] ?? null;
         const repo = this.repo();
         if (repo) {
@@ -204,12 +215,12 @@ export class PullRequest {
     });
   }
 
-  // Shows another of your pull requests, from any repository (by its URL);
-  // the branch's own goes back to following the branch.
+  // Shows another open pull request (by its URL); the branch's own goes back to
+  // following the branch.
   choose(p, cx) {
-    const next = p.url === this.branchUrl ? null : p.url;
-    if (this.pr?.url === p.url && this.selected === next) return;
-    this.selected = next; this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
+    this.menu = false; this.menuOptions = null;
+    if (this.pr?.url === p.url) { cx.notify(); return; }
+    this.selected = p.url === this.branchUrl ? null : p.url; this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
     this.none = false; this.error = null; this.note = null; this.armed = null; this.picker = null;
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
@@ -383,28 +394,60 @@ export class PullRequest {
 
   // ---- drawing, as Spend draws ----
 
-  // The repository's open pull requests, by anyone: yours first, then the newest,
-  // the shown one in weight. Hidden when the only one is the one shown.
-  yours(c) {
-    const shown = this.pr?.url, me = this.viewer;
-    const list = [...(this.openPrs ?? [])].sort((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
-    if (!list.length || (list.length === 1 && list[0].url === shown)) return null;
-    const open = this.expanded.list, rows = open ? list : list.slice(0, OPEN_ROWS);
-    const mineCount = me ? list.filter((p) => p.author?.login === me).length : 0;
-    return v_flex().w_full()
-      .child(this.section(c, "Open pull requests", mineCount && mineCount < list.length ? `${list.length} · ${mineCount} yours` : String(list.length)))
-      .children(rows.map((p, i) => Button.new(`pr-open-${i}`).w_full().py(7).cursor_pointer()
-        .when(i > 0, (el) => el.border_t(1).border_color(c.border))
-        .hover((s) => s.opacity(0.75))
-        .accessibility_label(`#${p.number} ${p.title}`)
-        .on_click((_e, cx) => this.choose(p, cx))
-        .child(h_flex().w_full().items_end().gap(G.md)
-          .child(v_flex().flex_1().min_w(0).gap(2)
-            .child(div().truncate().text_size(13).text_color(c.text).when(p.url === shown, (e) => e.font_medium()).child(p.title))
-            .child(div().truncate().text_size(11).text_color(c.dim)
-              .child([`#${p.number}`, p.author?.login === me ? "yours" : p.author?.login, (p.url === this.branchUrl || p.headRefName === this.branch) && "this branch", p.isDraft && "draft"].filter(Boolean).join(" · "))))
-          .child(div().flex_none().text_size(11).text_color(p.url === shown ? c.text : c.dim).child(p.url === shown ? "shown" : ago(p.updatedAt))))))
-      .when(list.length > OPEN_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-open-more", open ? "Show fewer" : `Show ${list.length - OPEN_ROWS} more`, (cx) => { this.expanded.list = !open; cx.notify(); }, c))));
+  // The repository's open pull requests, by anyone: yours first, then the newest.
+  openList() {
+    const me = this.viewer;
+    return [...(this.openPrs ?? [])].sort((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
+  }
+
+  // The switcher, drawn as Spend's menus: a quiet "N open" trigger and a popover
+  // of rows; the shown one is selected. Hidden when the only one is the one shown.
+  switcher(c) {
+    const list = this.openList(), shown = this.pr?.url;
+    const create = (this.fallback || this.none) && Boolean(this.branch);
+    if (!list.length || (list.length === 1 && list[0].url === shown && !create)) return null;
+    const id = "pr-switch", me = this.viewer;
+    const trigger = Button.new(`${id}-trigger`).h(26).px(6).gap(4).flex_none().items_center().rounded(6).cursor_pointer()
+      .accessibility_label(`${list.length} open pull requests`).tooltip("Show another open pull request")
+      .hover((s) => s.bg(c.subtle))
+      .child(div().text_size(12).text_color(c.muted).child(`${list.length} open`))
+      .child(svg(`${ICON}chevron-down.svg`).size(12).text_color(c.dim));
+    const popover = Popover.new(id).trigger(trigger).anchor("top_right")
+      .open(this.menu)
+      .on_open_change((open, cx) => {
+        this.menu = open;
+        // Rows are built in this event, never in the render pass.
+        this.menuOptions = open ? list.map((p) => ({
+          p, label: p.title,
+          detail: [`#${p.number}`, p.author?.login === me ? "yours" : p.author?.login, (p.url === this.branchUrl || p.headRefName === this.branch) && "this branch", p.isDraft && "draft"].filter(Boolean).join(" · "),
+          meta: ago(p.updatedAt),
+        })) : null;
+        cx.notify();
+      });
+    if (!this.menu || !this.menuOptions) return popover;
+    const options = this.menuOptions;
+    return popover.content(v_flex().w(300).p(G.xs).gap(1).rounded(8).bg(c.popover).border_1().border_color(c.border)
+      .child(div().id(`${id}-list`).w_full().max_h(360).overflow_y_scrollbar()
+        .child(v_flex().w_full().gap(1).children(options.map((o, i) => {
+          const on = o.p.url === shown;
+          return Button.new(`${id}-option-${i}`).w_full().px(8).py(5).gap(G.sm).items_center().rounded(6).cursor_pointer()
+            .selected(on)
+            .when(on, (el) => el.bg(c.selected))
+            .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
+            .focus((s) => s.bg(c.selected))
+            .accessibility_label(`#${o.p.number} ${o.label}`)
+            .on_click((_e, cx) => this.choose(o.p, cx))
+            .child(v_flex().flex_1().min_w(0).gap(1)
+              .child(div().truncate().text_size(12).text_color(c.text).when(on, (e) => e.font_medium()).child(o.label))
+              .child(div().truncate().text_size(10.5).text_color(c.dim).child(o.detail)))
+            .child(div().flex_none().text_size(11).text_color(c.dim).child(o.meta));
+        }))))
+      .when(create, (el) => el.child(div().mx(8).my(G.xs).h(1).bg(c.border))
+        .child(Button.new(`${id}-create`).w_full().px(8).py(6).items_center().rounded(6).cursor_pointer()
+          .disabled(Boolean(this.busy))
+          .hover((s) => s.bg(c.subtle))
+          .on_click((_e, cx) => { this.menu = false; this.menuOptions = null; this.createPr(cx); })
+          .child(div().truncate().text_size(12).text_color(c.muted).child(`Create one for ${this.branch}`)))));
   }
 
   iconButton(id, icon, tip, onClick, c, spin) {
@@ -417,10 +460,11 @@ export class PullRequest {
   }
 
   header(c, narrow) {
-    const pr = this.pr;
+    const pr = this.pr, switcher = this.switcher(c);
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
+        .when(Boolean(switcher), (el) => el.child(switcher))
         .child(this.iconButton("pr-refresh", "refresh", this.loadedAt ? `Refresh · updated ${clock(this.loadedAt)}` : "Refresh", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c, this.loading))
         .when(Boolean(pr), (el) => el.child(this.iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
   }
@@ -492,7 +536,7 @@ export class PullRequest {
         .child(h_flex().pt(G.xs).gap(G.sm).items_center()
           .child(div().size(6).flex_none().rounded_full().bg(v.color).when(v.color === c.yellow, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 2400 })))
           .child(div().text_size(15).text_color(c.text).child(v.text)))
-        .child(div().text_size(12).text_color(c.dim).child(`${pr.author?.login ?? ""} · updated ${ago(pr.updatedAt)}`)))
+        .child(div().text_size(12).text_color(c.dim).child([pr.author?.login, `updated ${ago(pr.updatedAt)}`, this.fallback && `the newest open; ${this.branch ?? "this branch"} has none`].filter(Boolean).join(" · "))))
       .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
         .children(stats.map((s) => h_flex().items_end().gap(6)
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
@@ -651,10 +695,8 @@ export class PullRequest {
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     let body;
-    const yours = this.yours(c);
     if (this.pr) {
       body = v_flex().w_full().gap(narrow ? 36 : 48)
-        .when(Boolean(yours), (el) => el.child(yours))
         .child(this.hero(c, narrow))
         .child(this.people(c))
         .when(this.checks().length > 0, (el) => el.child(this.checksList(c)))
@@ -668,8 +710,6 @@ export class PullRequest {
       this.note ?? "Push the branch, then open one on GitHub.",
       quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
     else body = this.loading || !this.context ? this.skeleton(c, narrow) : this.waiting(c, "No folder", "Focus a pane inside a repository.");
-    // Without one shown (none on this branch, an error, still reading), the list stays below.
-    if (!this.pr && yours) body = v_flex().w_full().gap(narrow ? 36 : 48).child(body).child(yours);
 
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })

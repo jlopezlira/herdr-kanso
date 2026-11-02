@@ -133,22 +133,25 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       hidden by default. It holds whichever panel is open: `kanso-panel`
       told `files`, `changes` or `pr` (`props.panel`), `token-spend`
       (Insights) or `sdd-focused`.
-      The PR panel (`kanso-panel` with `pr`) shows the open pull request of the focused
-      pane's branch, as T3 Code does, or any other open one in that repository, drawn like the Spend panel: one
+      The PR panel (`kanso-panel` with `pr`) shows one pull request at a time: the focused
+      pane's branch's own, as T3 Code does, else the newest open one in that repository
+      ("the newest open; <branch> has none" after its author and age), drawn like the Spend panel: one
       centered column (max 1080, 16 px sides under 560 wide, else 32), no
       cards or uppercase labels, `canvas` behind, hierarchy from size, weight
       and tone, hairlines between list rows. Top to bottom:
-      - Header: "Pull request" (17, 20 when wide) and two 26 icon buttons,
-        refresh (spins while reading) and open on GitHub.
-      - Open pull requests (`gh pr list --state open`: this repository's, by
-        anyone; yours first, then newest), unless the only one is the one
-        shown. The note reads "N · M yours". A row: the title (13, medium when
-        shown) over `#n`, the author ("yours" for you), "this branch" and
-        "draft" (11, dim), and at the right its age or "shown"; 5 shown, "Show
-        N more". A click shows that one; the branch's own goes back to
-        following the branch. Every `gh pr` action names the pull request by
-        URL. With none shown (the branch has none, an error), the list sits
-        below.
+      - Header: "Pull request" (17, 20 when wide), then at the right the
+        switcher and two 26 icon buttons, refresh (spins while reading) and
+        open on GitHub.
+      - The switcher, drawn as Spend's menus: a quiet "N open" (12, muted)
+        and a chevron; it opens a popover 300 wide (rows scroll past 360) of
+        the repository's open pull requests (`gh pr list --state open`, by
+        anyone; yours first, then newest). A row: the title (12, medium and
+        on `selected` when shown) over `#n`, the author ("yours" for you),
+        "this branch" and "draft" (10.5, dim), its age at the right. A click
+        shows that one; the branch's own goes back to following the branch.
+        When the branch has none, a last row offers "Create one for
+        <branch>". Hidden when the only one is the one shown. Every `gh pr`
+        action names the pull request by URL.
       - Hero: `#n · head → base` (15, muted); the title (22, 28 wide, light,
         line height 1.25); a 6 dot and the verdict (15): ready to merge
         (green), checks failing, conflicts or changes requested (red),
