@@ -20,20 +20,40 @@ async function directory(path, on) {
     const result = JSON.parse(r.stdout || "[]");
     return Array.isArray(result) ? result : [result];
   }
-  // find streams the names. A glob of "$1"/* expands the whole directory
-  // before the loop can stop at 500, and a large folder exceeds ARG_MAX.
+  // One process and no shell: find prints each directory twice in a row (a
+  // name can't appear twice in a folder), so the type costs no extra call.
+  // Entries are not followed (-type d is false for a link to a folder); -H
+  // follows only the folder itself, as a link to it should open.
+  const fast = await exec("find", ["-H", ".", "-mindepth", "1", "-maxdepth", "1", "!", "-name", ".git",
+    "(", "-type", "d", "-print0", "-print0", "-o", "-print0", ")"], { cwd: path, on }).catch(() => null);
+  if (fast?.code === 0) {
+    const out = [], text = fast.stdout;
+    for (let at = 0, last = null; at < text.length && out.length <= PER_FOLDER + 1;) {
+      const end = text.indexOf("\0", at);
+      if (end < 0) break;
+      const name = text.slice(at + 2, end); // drop "./"
+      at = end + 1;
+      if (name === last) { out[out.length - 1].dir = true; last = null; continue; }
+      out.push({ name, dir: false }); last = name;
+    }
+    // One past the cap tells the panel the folder was cut short.
+    return out.slice(0, PER_FOLDER + 1);
+  }
+  // Fallback (no find on that machine, or a folder so large the output went
+  // past exec's limit): stream NUL-separated names. Bash's read -d keeps the
+  // stream bounded; read one extra entry to detect truncation.
   const script = `
 n=0
-find "$1" -mindepth 1 -maxdepth 1 ! -name .git -print 2>/dev/null |
-while IFS= read -r p; do
+find -H "$1" -mindepth 1 -maxdepth 1 ! -name .git -print0 2>/dev/null |
+while IFS= read -r -d '' p; do
   name=\${p##*/}
   if [ -d "$p" ] && [ ! -L "$p" ]; then kind=d; else kind=f; fi
   printf '%s\\0%s\\0' "$kind" "$name"
   n=$((n+1))
-  [ "$n" -ge 500 ] && break
+  [ "$n" -ge ${PER_FOLDER + 1} ] && break
 done
 test -d "$1"`;
-  const r = await exec("sh", ["-c", script, "files", path], { on });
+  const r = await exec("bash", ["-c", script, "files", path], { on });
   if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
   const fields = r.stdout.split("\0"), out = [];
   for (let i = 0; i + 1 < fields.length; i += 2) out.push({ name: fields[i + 1], dir: fields[i] === "d" });
@@ -171,8 +191,6 @@ export class Files {
   row({ path, entry, depth, mark }, t) {
     const open = this.folders.has(path);
     return h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer().hover(s => s.bg(t.hover))
-      .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
-      .when(!entry.dir, (el) => el.on_mouse_down("right", () => this.openWith(path)))
       .child(entry.dir ? svg(`mods/kanso-panel/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(svg(`mods/kanso-panel/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
       .child(div().flex_1().min_w(0).truncate().child(entry.name))
@@ -193,7 +211,17 @@ export class Files {
           .child(svg("mods/kanso-chrome/icons/open-with.svg").size(14)))))
       .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
-          .child(v_virtual_list("files-rows", items.length, 28, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, t))).size_full())
+          .child(v_virtual_list("files-rows", items.length, 28, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, t)))
+            // Item renderers run during native layout, where per-row handlers
+            // are forbidden. The list owns two handlers, keyed by file path.
+            .on_item_click((path, cx) => {
+              const item = items.find((item) => item.path === path);
+              if (item) item.entry.dir ? this.toggle(path, cx) : this.show(path, cx);
+            })
+            .on_item_secondary_click((path) => {
+              const item = items.find((item) => item.path === path);
+              if (item && !item.entry.dir) this.openWith(path);
+            }).size_full())
           .child(Scrollbar.vertical("files-rows").absolute().inset_0())))
         .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))

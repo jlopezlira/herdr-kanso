@@ -17,6 +17,9 @@ import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, 
 
 // Same helper as kanso-strip, kanso-tabs, kanso-spaces and kanso-panel.
 const LAYOUT_INTENT = "kanso.layout";
+// The strip writes its columns under their own key, many times a second, so
+// it never has to read back and copy the panel and rail to keep them.
+const STRIP_INTENT = "kanso.layout.strip";
 
 function walkLayout(node, id) {
   if (node?.id === id) return node;
@@ -27,9 +30,9 @@ function walkLayout(node, id) {
   return null;
 }
 
-function paintLayout(tree) {
-  const intent = shared(LAYOUT_INTENT);
-  if (!intent || !tree) return;
+function paintLayout(tree, preserveSizes = true) {
+  if (!tree) return;
+  const intent = { ...(shared(LAYOUT_INTENT) ?? {}), ...(shared(STRIP_INTENT) ?? {}) };
   if (intent.nodes) {
     const body = walkLayout(tree, "work-body");
     if (body?.children) {
@@ -37,7 +40,18 @@ function paintLayout(tree) {
       const at = body.children.findIndex(mine);
       const rest = body.children.filter((n) => !mine(n));
       const i = Math.max(0, at);
-      body.children = [...rest.slice(0, i), ...JSON.parse(JSON.stringify(intent.nodes)), ...rest.slice(i)];
+      const nodes = JSON.parse(JSON.stringify(intent.nodes));
+      // Native dividers leave px sizes before the strip's adopt timer runs.
+      // Keep those edits, but not sizes from the tree a pending strip write
+      // was based on: replaying those would undo an explicit width command.
+      const keepSize = (node) => {
+        const before = intent.sizesBefore?.[node.id], live = walkLayout(body, node.id);
+        if (before !== undefined && live?.size?.px !== undefined
+          && JSON.stringify(live.size) !== JSON.stringify(before)) node.size = { ...live.size };
+        for (const child of node.children ?? []) keepSize(child);
+      };
+      if (preserveSizes) nodes.forEach(keepSize);
+      body.children = [...rest.slice(0, i), ...nodes, ...rest.slice(i)];
     }
   }
   if ("panel" in intent) {
@@ -69,12 +83,19 @@ function commitLayout(patch) {
   return true;
 }
 
-// One PowerShell single-quoted literal. A quote inside doubles; a newline
-// would break out of the -Command string, so it is refused.
+// PowerShell also treats U+2018..U+201B as single-quote delimiters.
+// Double every delimiter so paths remain data inside -Command.
 function psQuote(s) {
   const v = String(s);
   if (/[\r\n\0]/.test(v)) throw new Error("Invalid path");
-  return `'${v.replace(/'/g, "''")}'`;
+  return `'${v.replace(/['\u2018-\u201b]/g, (quote) => quote + quote)}'`;
+}
+
+// Start-Process joins ArgumentList into a Windows command line. Quote each
+// argument there too, doubling backslashes before a quote or the closing one.
+function windowsArg(s) {
+  return '"' + String(s).replace(/(\\*)"/g, (_match, slashes) => slashes + slashes + '\\"')
+    .replace(/\\+$/g, (slashes) => slashes + slashes) + '"';
 }
 
 const MOD = "open-with";
@@ -299,11 +320,9 @@ done`;
   }
 
   spawn(cli, args) {
-    // cmd /c joins its tail and parses & | % again. Start-Process takes the
-    // path and the arguments as single-quoted PowerShell literals.
     if (this.platform === "windows") {
-      const list = args.map(psQuote).join(",");
-      const script = `Start-Process -FilePath ${psQuote(cli)} -ArgumentList @(${list})`;
+      const commandLine = args.map(windowsArg).join(" ");
+      const script = `Start-Process -FilePath ${psQuote(cli)} -ArgumentList ${psQuote(commandLine)} -ErrorAction Stop`;
       return exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", script]);
     }
     return exec("sh", ["-c", DETACH, "sh", cli, ...args]);

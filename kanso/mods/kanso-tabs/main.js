@@ -11,6 +11,9 @@ import { spaces, panes, agents, terminals, run, openOverlay, theme, window, shar
 // reads as the old one, so each writer keeps its piece in kanso.layout and
 // every write puts the strip, the panel and the rail back.
 const LAYOUT_INTENT = "kanso.layout";
+// The strip writes its columns under their own key, many times a second, so
+// it never has to read back and copy the panel and rail to keep them.
+const STRIP_INTENT = "kanso.layout.strip";
 
 function walkLayout(node, id) {
   if (node?.id === id) return node;
@@ -21,9 +24,9 @@ function walkLayout(node, id) {
   return null;
 }
 
-function paintLayout(tree) {
-  const intent = shared(LAYOUT_INTENT);
-  if (!intent || !tree) return;
+function paintLayout(tree, preserveSizes = true) {
+  if (!tree) return;
+  const intent = { ...(shared(LAYOUT_INTENT) ?? {}), ...(shared(STRIP_INTENT) ?? {}) };
   if (intent.nodes) {
     const body = walkLayout(tree, "work-body");
     if (body?.children) {
@@ -31,7 +34,18 @@ function paintLayout(tree) {
       const at = body.children.findIndex(mine);
       const rest = body.children.filter((n) => !mine(n));
       const i = Math.max(0, at);
-      body.children = [...rest.slice(0, i), ...JSON.parse(JSON.stringify(intent.nodes)), ...rest.slice(i)];
+      const nodes = JSON.parse(JSON.stringify(intent.nodes));
+      // Native dividers leave px sizes before the strip's adopt timer runs.
+      // Keep those edits, but not sizes from the tree a pending strip write
+      // was based on: replaying those would undo an explicit width command.
+      const keepSize = (node) => {
+        const before = intent.sizesBefore?.[node.id], live = walkLayout(body, node.id);
+        if (before !== undefined && live?.size?.px !== undefined
+          && JSON.stringify(live.size) !== JSON.stringify(before)) node.size = { ...live.size };
+        for (const child of node.children ?? []) keepSize(child);
+      };
+      if (preserveSizes) nodes.forEach(keepSize);
+      body.children = [...rest.slice(0, i), ...nodes, ...rest.slice(i)];
     }
   }
   if ("panel" in intent) {

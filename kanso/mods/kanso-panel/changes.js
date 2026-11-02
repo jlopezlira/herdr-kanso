@@ -85,7 +85,7 @@ export class Changes {
           const conflict = xy.includes("U") || xy === "AA" || xy === "DD";
           const s = conflict ? "U" : xy.includes("D") ? "D" : fresh || xy.includes("A") ? "A" : "M";
           const stat = stats[path] ?? { add: 0, del: 0 };
-          files.push({ path, status: s, fresh, ...stat });
+          files.push({ path, status: s, fresh, stagedDeletion: xy === "D ", ...stat });
         }
         if (key() !== context) return;
         this.root = root; this.on = on; this.hasHead = head.code === 0; this.files = files; this.limited = entries.length > 1000; this.error = null;
@@ -144,15 +144,20 @@ export class Changes {
   commit(cx) {
     if (!this.message.trim() || !this.root || this.busy || this.loading || this.context !== key()) return;
     const root = this.root, on = this.on, context = this.context, message = this.message.trim();
-    const paths = this.files.map((f) => f.path).filter(insideRoot);
+    const files = this.files.filter((f) => insideRoot(f.path));
+    const paths = files.filter((f) => !f.stagedDeletion).map((f) => f.path);
     const limited = this.limited;
-    if (!paths.length) { this.note = "Nothing to commit"; return; }
+    if (!files.length) { this.note = "Nothing to commit"; return; }
     this.busy = true; this.note = null;
     cx.spawn(async (cx) => {
       try {
         // Only the files listed here. `git add -A` would also stage everything
         // else in the worktree, including secrets that were never shown.
-        for (const args of [["add", "-A", "--", ...paths], ["commit", "-m", message]]) {
+        // A staged deletion is already absent from both disk and the index;
+        // adding it by path would fail. It still belongs in the commit.
+        const commands = paths.length ? [["--literal-pathspecs", "add", "-A", "--", ...paths]] : [];
+        commands.push(["commit", "-m", message]);
+        for (const args of commands) {
           const r = await exec("git", args, { cwd: root, on });
           if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
         }
