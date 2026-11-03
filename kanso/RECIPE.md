@@ -81,13 +81,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       Once the drag has rested 250 ms, the strip reads the sizes back from
       the layout and its ruler blocks (one under each terminal, 8 tall,
       for its width, which also draws the slab's rounded bottom since a
-      terminal paints square corners; one 1px wide at the end of work-body
+      terminal paints square corners; one 1px wide at the start of work-body
       for the height) and keeps them as
       shares, so later trees keep what you dragged. The view always starts at a
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
       start from which the rest of the row fits. When columns lie beyond an
-      edge, a 28-wide edge rail stands there in `chrome` (`hover` on hover),
+      edge, a 28-wide edge rail stands there (the right one after the side
+      panel while one is open) in `chrome` (`hover` on hover),
       so it reads as frame, not pane. At its middle, a ‹ or › (14, `muted`)
       over a stack of 20 tiles (`input`, rounded 6, 5 apart, up to 8 then
       "+N"), one per pane beyond in row order, each with its program icon
@@ -469,7 +470,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - A host argument nests at most 16 levels, and the layout tree counts each
   node and its `children` array: there is no room for a wrapper around the
   strip's columns in `work-body`, which is why the rulers sit inside the
-  columns and at the row's end instead.
+  columns and at the row's start instead.
+- Herdr's divider moves only the two nodes beside it and never a fixed one
+  (`min` = `max`). The side panel's border must have a strip column on its
+  left: the 1px height ruler stands at the row's start, and while a panel
+  shows, every layout writer puts the strip's right edge rail
+  (`strip-edge-right`) after the panel (`edgeBesidePanel`), so the panel
+  can be dragged between 280 and 900 wide.
 - A terminal block takes the keyboard on click, so `focused().pane` is null
   and implicit pane commands fail. Pass `pane` or `terminal` explicitly
   (`pane.split {pane}`, `pane.focus {terminal}`), and focus a new pane only
