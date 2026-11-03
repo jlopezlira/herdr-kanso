@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, temporary, clone } from "./helpers.mjs";
+import { load, context, temporary, clone, exec as run } from "./helpers.mjs";
 
 const names = ["Shipped", "periodRange", "comparedRange", "periodLabel", "streaks", "computeRecords", "mergeRecords", "periodQuery",
   "REPOS", "fmt", "yourWeeks", "weekAt", "sumWeeks", "heatLayout", "contributionsIn"];
@@ -99,15 +99,21 @@ test("Shipped's queries ask GitHub for sums, never lists of pull requests", asyn
   assert.match(q, /ever:search\(query:"is:pr author:@me is:merged"/);
   assert.doesNotMatch(q, /first:[1-9]/, "counts only");
   assert.match(REPOS, /repositoriesContributedTo/);
-  assert.match(REPOS, /ownerAffiliations:\[OWNER\]/);
+  assert.match(REPOS, /ORGANIZATION_MEMBER/);
 });
 
-// GitHub as the panel sees it.
+// GitHub as the panel sees it; sqlite3, git and the rest run for real.
 function github({ computing = new Set(), weeks = {} } = {}) {
   const calls = [];
   const repos = Object.keys(weeks);
-  const exec = async (command, args) => {
-    if (command !== "gh") return { code: 0, stdout: "", stderr: "" };
+  const exec = async (command, args, options) => {
+    if (command === "sleep") return { code: 0, stdout: "", stderr: "" };
+    if (command !== "gh") return run(command, args, options);
+    if (args.some((a) => a.startsWith("gists"))) {
+      if (args[1].startsWith("gists?")) return { code: 0, stdout: "", stderr: "" };
+      calls.push("gist");
+      return { code: 0, stdout: JSON.stringify({ id: "g1", files: {} }), stderr: "" };
+    }
     if (args[1] !== "graphql") {
       const name = args[1].replace(/^repos\//, "").replace(/\/stats\/contributors$/, "");
       calls.push(`stats ${name}`);
@@ -121,35 +127,37 @@ function github({ computing = new Set(), weeks = {} } = {}) {
       const day = (i, n) => { const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i); return { date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`, contributionCount: n, contributionLevel: n ? "FOURTH_QUARTILE" : "NONE", weekday: d.getDay() }; };
       const totals = { totalCommitContributions: 40, totalPullRequestContributions: 9, totalPullRequestReviewContributions: 3, totalIssueContributions: 0, restrictedContributionsCount: 100 };
       return { code: 0, stderr: "", stdout: JSON.stringify({ data: {
-        viewer: { login: "me", createdAt: "2011-01-01T00:00:00Z",
+        viewer: { login: "me", name: "Me", createdAt: "2011-01-01T00:00:00Z",
           cal: { contributionCalendar: { weeks: [{ contributionDays: [day(2, 5), day(1, 7), day(0, 2)] }] } }, cur: totals, prev: totals },
         curMerged: { issueCount: 3 }, prevMerged: { issueCount: 1 }, ever: { issueCount: 4321 },
       } }) };
     }
     calls.push("repos");
     const half = Math.ceil(repos.length / 2), node = (n) => ({ nameWithOwner: n, pushedAt: "2026-11-01T00:00:00Z" });
-    return { code: 0, stderr: "", stdout: JSON.stringify({ data: { viewer: {
+    return { code: 0, stderr: "", stdout: JSON.stringify({ data: { viewer: { databaseId: 1,
       contributed: { pageInfo: { hasNextPage: false }, nodes: repos.slice(0, half).map(node) },
-      owned: { pageInfo: { hasNextPage: false }, nodes: repos.slice(half).map(node) },
+      access: { pageInfo: { hasNextPage: false }, nodes: repos.slice(half).map(node) },
     } } }) };
   };
   return { exec, calls };
 }
 
 async function panelWith(t, gh) {
-  const home = await temporary(t);
+  const root = await temporary(t);
+  const home = join(root, "app");
   const store = {}, toasts = [];
   const host = {
-    exec: gh.exec, appHome: () => home, theme: () => ({}),
+    exec: gh.exec, appHome: () => home, home: () => join(root, "home"), spaces: () => [], panes: () => [], theme: () => ({}),
     shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; },
     readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
     writeTextFile: async (p, text) => { await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
   };
-  const mod = await shipped(host);
+  const { Store } = await load("kanso-panel/shipped-store.js", ["Store"], host);
+  const mod = await shipped({ ...host, Store });
   const { cx, drain } = context();
   cx.timer = { every() {} };
-  const settle = async () => { for (let i = 0; i < 20; i++) await drain(); };
+  const settle = async () => { for (let i = 0; i < 40; i++) await drain(); };
   return { ...mod, home, store, toasts, cx, settle };
 }
 
@@ -165,31 +173,32 @@ test("Shipped asks each repository for its sums once, and again only after a pus
   const panel = new p.Shipped();
   panel.init(p.cx); await p.settle();
 
-  assert.equal(Object.keys(panel.stats.repos).length, 3, "contributed to and owned, every organization");
+  assert.equal(Object.keys(panel.stats.repos).length, 3, "contributed to and reachable, every organization");
   assert.equal(gh.calls.filter((c) => c === "stats me/tool").length, 2, "asked again while GitHub computed it");
   const all = clone(p.sumWeeks(panel.stats, 0, Infinity));
   assert.deepEqual([all.add, all.commits], [6295, 55]);
-  const saved = JSON.parse(await readFile(join(p.home, "data/kanso-panel/shipped.json"), "utf8"));
-  assert.equal(Object.keys(saved.repos).length, 3, "kept on disk");
+  assert.ok(gh.calls.includes("gist"), "this machine published to the gist");
   assert.equal(p.toasts.length, 0, "the first reading sets records quietly");
   assert.equal(p.store["kanso.shipped.bests"].bestWeek.add, 5000);
 
-  // Later: nothing pushed since, so no repository is asked again.
+  // Later: nothing pushed since, so no repository is asked again; the store has it.
   gh.calls.length = 0;
   const again = new p.Shipped();
   again.init(p.cx); await p.settle();
-  assert.deepEqual(gh.calls.filter((c) => c.startsWith("stats")), [], "read from disk");
+  assert.deepEqual(gh.calls.filter((c) => c.startsWith("stats")), [], "read from the store");
+  assert.equal(Object.keys(again.stats.repos).length, 3);
   assert.equal(again.github[again.key()].ever.issueCount, 4321);
 });
 
 test("Shipped keeps going when GitHub keeps computing a repository", async (t) => {
-  const gh = github({ weeks: { "org/slow": [] } });
+  const gh = github({ weeks: { "org/slow": [], "org/fine": [{ w: 1793491200, a: 3, d: 0, c: 1 }] } });
   const always = gh.exec;
-  gh.exec = async (command, args) => (command === "gh" && args[1] === "repos/org/slow/stats/contributors" ? { code: 0, stdout: "{}", stderr: "" } : always(command, args));
+  gh.exec = async (command, args, options) => (command === "gh" && args[1] === "repos/org/slow/stats/contributors" ? { code: 0, stdout: "{}", stderr: "" } : always(command, args, options));
   const p = await panelWith(t, gh);
   const panel = new p.Shipped();
   panel.init(p.cx); await p.settle();
-  assert.equal(panel.waiting, 0, "it stops waiting, and asks again next time");
-  assert.equal(panel.stats.repos["org/slow"].pending, true);
+  assert.equal(panel.syncing, false, "it stops waiting, and asks again next time");
+  assert.equal(panel.syncError, null);
+  assert.ok(panel.stats.repos["org/fine"]);
   assert.ok(p.store["kanso.shipped.bests"].bestDay, "records still come from what is in");
 });

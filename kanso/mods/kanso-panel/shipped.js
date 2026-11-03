@@ -4,31 +4,28 @@
 // GitHub allows, drawn the way Spend draws what you spent (one centered
 // column, a big light number, periods with arrows, then the breakdowns).
 //
-// Only sums GitHub already keeps, read through `gh`; nothing is listed one by one:
-// - Lines and commits: each repository's contributor statistics
-//   (repos/{repo}/stats/contributors), your additions, deletions and commits
-//   per week over its whole history, one call per repository you contributed
-//   to or own, in every organization. Kept in data/kanso-panel/shipped.json and
-//   read again only for a repository pushed since.
-// - One query per period: contributions (private ones included, as your
-//   profile counts them) and reviews, merged pull requests counted by search,
-//   the last year's calendar (streak, best day, the heat map) and every pull
-//   request you ever merged, counted.
-// GitHub's statistics are weekly, so a day shows your contributions instead
-// of lines. Records are kept in shared("kanso.shipped.bests"); setting one
-// toasts once.
+// Statistics only, never one item at a time from GitHub. The store
+// (shipped-store.js, SQLite) holds your commits as your machines read them in
+// local git, shared through a private gist, and each repository's weekly
+// contributor sums from GitHub; a repository's week counts the larger of the
+// two. Each refresh reads only what changed: repositories pushed since,
+// branches that moved, machines that published. One GraphQL query of counts
+// per period adds contributions (private ones included, as your profile counts
+// them), reviews, merged pull requests, the last year's calendar (streak, best
+// day, the heat map) and every pull request you ever merged. GitHub's sums are
+// weekly, so a day leads with contributions. Records are kept in
+// shared("kanso.shipped.bests"); setting one toasts once.
 //
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, appHome, theme, shared, setShared, notify, readTextFile, writeTextFile } from "herdr";
+import { exec, theme, shared, setShared, notify } from "herdr";
+import { Store } from "./shipped-store.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 const DAY = 86400000;
 const RECORDS = "kanso.shipped.bests";
-const CACHE_DIR = "data/kanso-panel";
-const CACHE_FILE = `${CACHE_DIR}/shipped.json`;
 const REFRESH_MS = 5 * 60 * 1000;
 const PARALLEL = 6;
 const RETRIES = 6; // GitHub answers 202 while it computes a repository's statistics
@@ -222,7 +219,7 @@ export function periodQuery(cur, prev, now) {
   const span = (r) => `from:"${iso(r.start)}",to:"${iso(end(r))}"`;
   const merged = (r) => `is:pr author:@me is:merged merged:${iso(r.start)}..${iso(end(r))}`;
   const totals = "totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions totalIssueContributions restrictedContributionsCount";
-  return `query{viewer{login createdAt
+  return `query{viewer{login name createdAt
 cal:contributionsCollection(from:"${iso(now - 364 * DAY)}",to:"${iso(now)}"){contributionCalendar{weeks{contributionDays{date contributionCount contributionLevel weekday}}}}
 cur:contributionsCollection(${span(cur)}){${totals}}
 prev:contributionsCollection(${span(prev)}){${totals}}}
@@ -231,10 +228,11 @@ prevMerged:search(query:"${merged(prev)}",type:ISSUE,first:0){issueCount}
 ever:search(query:"is:pr author:@me is:merged",type:ISSUE,first:0){issueCount}}`;
 }
 
-// Every repository you contributed to or own, with when it was last pushed.
-export const REPOS = `query($after:String,$own:String){viewer{
+// Every repository you contributed to or can reach (yours, as a collaborator,
+// in your organizations), with when it was last pushed.
+export const REPOS = `query($after:String,$own:String){viewer{databaseId
 contributed:repositoriesContributedTo(first:100,after:$after,includeUserRepositories:true,contributionTypes:[COMMIT,PULL_REQUEST,PULL_REQUEST_REVIEW,REPOSITORY]){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}
-owned:repositories(first:100,after:$own,ownerAffiliations:[OWNER],orderBy:{field:PUSHED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}}}`;
+access:repositories(first:100,after:$own,affiliations:[OWNER,COLLABORATOR,ORGANIZATION_MEMBER],ownerAffiliations:[OWNER,COLLABORATOR,ORGANIZATION_MEMBER],orderBy:{field:PUSHED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}}}`;
 
 async function gh(args) {
   const r = await exec("gh", args);
@@ -254,7 +252,8 @@ export class Shipped {
   init(cx) {
     this.kind = "week"; this.offset = 0;
     this.github = {}; // by period key: the period query's data, or { error }
-    this.stats = null; this.syncing = false; this.syncError = null; this.waiting = 0; this.total = 0;
+    this.stats = null; this.syncing = false; this.syncError = null; this.phase = null; this.rhythm = {};
+    this.store = new Store();
     this.records = shared(RECORDS) ?? {}; this.fresh = new Set();
     this.loading = false; this.pending = false; this.reposOpen = false; this.width = 368;
     this.refresh(cx);
@@ -266,6 +265,7 @@ export class Shipped {
   pick(kind, offset, cx) {
     this.kind = kind; this.offset = Math.min(0, offset);
     this.refresh(cx);
+    cx.spawn(async (cx) => { await this.readRhythm(); cx.notify(); });
     cx.notify();
   }
 
@@ -281,7 +281,7 @@ export class Shipped {
           try {
             const data = await gql(periodQuery(cur, prev, now));
             this.github[key] = data;
-            this.login = data.viewer.login;
+            this.login = data.viewer.login; this.name = data.viewer.name;
             this.weeks = data.viewer.cal.contributionCalendar.weeks;
             this.days = this.weeks.flatMap((w) => w.contributionDays);
           } catch (e) {
@@ -307,70 +307,90 @@ export class Shipped {
     cx.spawn(async (cx) => {
       try { await this.sync(cx); }
       catch (e) { this.syncError = String(e?.message ?? e); }
-      finally { this.syncing = false; this.firstRead = false; this.checkRecords(); cx.notify(); }
+      finally {
+        this.syncing = false; this.phase = null; this.firstRead = false;
+        try { this.stats = await this.store.weekly(); } catch {}
+        this.rhythm = {}; await this.readRhythm();
+        this.checkRecords(); cx.notify();
+      }
     });
     cx.notify();
   }
 
-  async loadStats() {
-    if (this.stats?.login === this.login) return this.stats;
-    let stats = null;
-    try { stats = JSON.parse(await readTextFile(`${appHome()}/${CACHE_FILE}`) ?? "null"); } catch {}
-    const fresh = !(stats?.v === 2 && stats.login === this.login && stats.repos);
-    this.firstRead = fresh; // only the first read says it is adding up; later ones refresh quietly
-    this.stats = fresh ? { v: 2, login: this.login, repos: {} } : stats;
-    return this.stats;
+  // When and where you ship in the shown period (read from the store, once per period).
+  async readRhythm() {
+    const key = this.key();
+    if (this.rhythm[key] || !this.stats) return;
+    const r = periodRange(this.kind, this.offset);
+    try { this.rhythm[key] = await this.store.rhythm(r.start / 1000, r.end / 1000); } catch {}
   }
 
-  async saveStats() {
-    const path = `${appHome()}/${CACHE_FILE}`;
-    try {
-      await exec("mkdir", ["-p", `${appHome()}/${CACHE_DIR}`]);
-      await writeTextFile(path, JSON.stringify(this.stats), await readTextFile(path));
-    } catch {}
+  // Everything you sign commits with: GitHub's names for you, this machine's
+  // git identity and the ones your other machines published.
+  async identities(databaseId) {
+    const conf = await Promise.all(["user.email", "user.name"].map((k) => exec("git", ["config", "--global", k]).catch(() => null)));
+    const synced = JSON.parse((await this.store.meta("identities")) ?? "[]");
+    const mine = [this.login, this.name, `${this.login}@users.noreply.github.com`, databaseId ? `${databaseId}+${this.login}@users.noreply.github.com` : null,
+      ...conf.map((r) => (r?.code === 0 ? r.stdout.trim() : null))];
+    return { mine: [...new Set(mine.filter(Boolean))], all: [...new Set([...mine, ...synced].filter(Boolean))] };
   }
 
-  // Your repositories, then the statistics of each one that is new or was
-  // pushed since it was read. GitHub may still be computing some: those are
-  // asked again a few seconds later.
+  // GitHub's sums for the repositories pushed since they were read, this
+  // machine's git for the repositories whose branches moved, then your other
+  // machines through the gist. Each step keeps what it read in the store.
   async sync(cx) {
-    const stats = await this.loadStats();
+    await this.store.open();
+    this.stats = await this.store.weekly();
+    this.firstRead = !Object.keys(this.stats.repos).length;
+    cx.notify();
+
+    this.phase = "your repositories on GitHub"; cx.notify();
     const repos = new Map();
-    for (const field of ["contributed", "owned"]) {
+    let databaseId = null;
+    for (const field of ["contributed", "access"]) {
       let after = null;
       for (;;) {
-        const page = (await gql(REPOS, field === "contributed" ? { after } : { own: after })).viewer[field];
+        const v = (await gql(REPOS, field === "contributed" ? { after } : { own: after })).viewer;
+        databaseId = v.databaseId; const page = v[field];
         for (const n of page.nodes ?? []) if (n?.nameWithOwner) repos.set(n.nameWithOwner, n.pushedAt);
         if (!page.pageInfo.hasNextPage) break;
         after = page.pageInfo.endCursor;
       }
     }
-    for (const name of Object.keys(stats.repos)) if (!repos.has(name)) repos.set(name, stats.repos[name].pushed);
-    let due = [...repos].filter(([name, pushed]) => {
-      const had = stats.repos[name];
-      return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched);
-    });
-    this.total = repos.size;
+    const known = new Map((await this.store.ghRepos()).map((r) => [r.repo, r]));
+    for (const [name, r] of known) if (!repos.has(name)) repos.set(name, r.pushed);
+    let due = [...repos].filter(([name, pushed]) => { const had = known.get(name); return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched); });
     for (let round = 0; due.length && round < RETRIES; round++) {
       if (round) await exec("sleep", ["5"]);
-      this.waiting = due.length; cx.notify();
-      const later = [];
+      const later = [], read = [];
       for (let i = 0; i < due.length; i += PARALLEL) {
-        await Promise.all(due.slice(i, i + PARALLEL).map(async ([name, pushed]) => {
+        this.phase = `GitHub's sums, ${fmt(Math.max(0, due.length - i))} repositories to go`; cx.notify();
+        await Promise.all(due.slice(i, i + PARALLEL).map(async ([repo, pushed]) => {
           let weeks;
-          try { weeks = yourWeeks(JSON.parse(await gh(["api", `repos/${name}/stats/contributors`]) || "{}"), this.login); }
+          try { weeks = yourWeeks(JSON.parse(await gh(["api", `repos/${repo}/stats/contributors`]) || "{}"), this.login); }
           catch { weeks = []; } // gone, or not yours to read: nothing to add
-          if (weeks === null) { later.push([name, pushed]); stats.repos[name] = { ...(stats.repos[name] ?? { weeks: [] }), pending: true, fetched: stats.repos[name]?.fetched ?? 0, pushed }; return; }
-          stats.repos[name] = { fetched: Date.now(), pushed, weeks };
+          if (weeks === null) { later.push([repo, pushed]); read.push({ repo, pushed, fetched: known.get(repo)?.fetched ?? 0, pending: true }); }
+          else read.push({ repo, pushed, fetched: Date.now(), weeks });
         }));
-        this.waiting = Math.max(0, due.length - i - PARALLEL) + later.length;
-        cx.notify();
       }
-      await this.saveStats();
+      await this.store.saveGithub(read); // GitHub still computing after a while: asked again next time
       due = later;
     }
-    // Still computing after a while: they are asked again on the next refresh.
-    this.waiting = 0;
+
+    const ids = await this.identities(databaseId);
+    const idKey = JSON.stringify([...ids.all].sort());
+    if ((await this.store.meta("scanned-identities")) !== idKey) { await this.store.sql("DELETE FROM scans;"); await this.store.setMeta("scanned-identities", idKey); }
+    this.phase = "this machine's repositories"; cx.notify();
+    await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this machine's repositories, ${fmt(total - done)} to go`; cx.notify(); });
+
+    this.phase = "your other machines"; cx.notify();
+    try {
+      const synced = await this.store.syncMachines(ids.mine);
+      const before = JSON.parse((await this.store.meta("identities")) ?? "[]");
+      const learned = [...new Set([...before, ...synced.identities])];
+      if (learned.length !== before.length) await this.store.setMeta("identities", JSON.stringify(learned)); // read with them on the next refresh
+      this.machines = synced.machines;
+    } catch (e) { this.machineError = String(e?.message ?? e); }
   }
 
   // Keeps the bests, and toasts the ones just set. The sums' records wait
@@ -538,9 +558,33 @@ export class Shipped {
 
   status(c) {
     if (this.syncError) return div().text_size(12).text_color(c.red).child(`Adding up stopped: ${this.syncError}`);
-    if (!this.syncing || !this.firstRead) return null;
-    const left = this.waiting ? `, ${fmt(this.waiting)} to go` : "";
-    return div().text_size(12).text_color(c.muted).child(`Adding up your ${this.total ? fmt(this.total) + " " : ""}repositories${left}. GitHub computes some sums on demand, so the first time takes a minute.`);
+    if (!this.syncing || !this.phase) return null;
+    return div().text_size(12).text_color(this.firstRead ? c.muted : c.dim)
+      .child(`${this.firstRead ? "Adding up" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a few minutes; after that only what changed is read." : ""}`);
+  }
+
+  // When you ship (commits by hour, local time) and from which machines, in
+  // the shown period: from the commits the machines read, not GitHub's sums.
+  rhythmView(c) {
+    const r = this.rhythm[this.key()];
+    const total = r ? r.hours.reduce((a, b) => a + b, 0) : 0;
+    if (!total) return null;
+    const top = Math.max(...r.hours), peak = r.hours.indexOf(top);
+    const late = r.hours.slice(21).reduce((a, b) => a + b, 0) + r.hours.slice(0, 5).reduce((a, b) => a + b, 0);
+    const hour = (h) => `${String(h).padStart(2, "0")}:00`;
+    const note = [`most at ${hour(peak)}`, late ? `${Math.round((late / total) * 100)}% after 9 pm` : ""].filter(Boolean).join(" · ");
+    return v_flex().w_full().gap(G.md)
+      .child(this.section(c, "When you ship", note))
+      .child(h_flex().w_full().h(56).items_end().gap(2).children(r.hours.map((n, h) => div().id(`hour-${h}`).flex_1().min_w(2)
+        .h(Math.max(2, Math.round((n / top) * 56))).rounded(2).bg(n ? c.accent + (h === peak ? "ff" : "90") : c.subtle)
+        .tooltip(`${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}`))))
+      .child(h_flex().w_full().justify_between().text_size(10.5).text_color(c.dim)
+        .children(["00", "06", "12", "18", "23"].map((t) => div().child(t))))
+      .when(r.machines.length > 0, (el) => el.child(v_flex().w_full().pt(G.sm)
+        .children(r.machines.map((m, i) => h_flex().w_full().py(6).gap(G.md).items_center()
+          .when(i > 0, (e) => e.border_t_1().border_color(c.border))
+          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(m.machine))
+          .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(m.n)} commits · +${fmt(m.a)} −${fmt(m.d)}`))))));
   }
 
   render(cx) {
@@ -556,8 +600,9 @@ export class Shipped {
         .when(Boolean(status), (el) => el.child(status))
         .when(Boolean(this.days), (el) => el.child(this.streak(c, inner)))
         .when(Object.keys(this.records).length > 0, (el) => el.child(this.recordsList(c)))
+        .when(Boolean(this.rhythmView(c)), (el) => el.child(this.rhythmView(c)))
         .child(this.byRepo(c))
-        .child(div().text_size(10.5).text_color(c.dim).child("Sums GitHub keeps, through gh, across every repository and organization you contributed to or own: lines and commits from each repository's weekly contributor statistics, contributions the way your profile counts them, private ones included."));
+        .child(div().text_size(10.5).text_color(c.dim).child("Statistics only, kept in data/kanso-panel/shipped.db: your commits as every machine of yours read them (repository, hash, time, lines; no messages or code), shared between machines through a private gist, and GitHub's weekly sums for the rest. A repository's week counts the larger of the two. Contributions count the way your profile does, private ones included."));
     return v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
       .child(h_flex().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)

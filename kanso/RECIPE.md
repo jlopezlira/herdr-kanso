@@ -179,23 +179,48 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         month for the best month, beating the stored one) shows a "New
         record" chip in `accent` and toasts once. Records keep the best ever
         seen in `shared("kanso.shipped.bests")`.
+      - "When you ship": 24 bars (56 tall, radius 2) of the period's commits
+        by local hour, the peak at full `accent` and the rest at alpha 90.
+        Above them, "most at HH:00 · N% after 9 pm"; under them, the hours
+        00 06 12 18 23 in `dim`. Then one hairline row per machine:
+        `commits · +a −d`.
       - "By repository": the name, `commits · +a −d`, and a 4 tall `accent`
         bar by share; 8 rows, then "Show N more". A day shows its week.
 
-      It reads only sums GitHub keeps, through `gh`:
-      - one GraphQL query per period: the period's and the compared
-        period's contribution totals (`restrictedContributionsCount`
-        included), merged pull request counts by search, the last year's
-        calendar, and the count of every pull request you ever merged;
-      - your repositories (`repositoriesContributedTo` and the ones you
-        own), and each one's `stats/contributors`: your additions, deletions
-        and commits per week, on its default branch. A GitHub week counts
-        from Sunday, UTC, so each is placed at its Monday noon.
+      Where the numbers come from:
+      - **GitHub, through `gh`.** One GraphQL query of counts per period:
+        the period's and the compared period's contribution totals
+        (`restrictedContributionsCount` included), merged pull request
+        counts by search, the last year's calendar, and every pull request
+        you ever merged. Your repositories: `repositoriesContributedTo`,
+        plus those you reach as owner, collaborator or organization member.
+        For each, `stats/contributors` gives your additions, deletions and
+        commits per week on its default branch. A GitHub week counts from
+        Sunday, UTC, so each is placed at its Monday noon. GitHub answers
+        `{}` while it computes; that repository is asked again 5 s later,
+        up to 6 times, then on the next refresh.
+      - **This machine's git** (`shipped-store.js`). It reads the
+        repositories of your panes and spaces, the ones read before, and
+        any `.git` up to 4 levels under `~/Apps`, `~/Projects`, `~/Developer`,
+        `~/code`, `~/src`, `~/dev`, `~/work`, `~/repos`, `~/git` and
+        `~/github`. Each is named by its remote (`owner/name` on GitHub). It
+        runs `git log --all --no-merges -F --author=…` for every identity of
+        yours: GitHub login, name and noreply addresses, the global
+        `user.email` and `user.name`, and those your other machines
+        published. A repository is read again only when its refs change, and
+        all of them when the identities change.
+      - **Your other machines.** Each publishes its commits to a private
+        gist, "Kanso Shipped stats", one `shipped-<host>.json` per machine
+        (repositories, then `[repo, 12-character hash, time, adds, dels]`
+        and its identities), and reads the others'. A commit counts once by
+        repository and hash.
 
-      The sums are kept in `data/kanso-panel/shipped.json` and asked for
-      again only after a push. GitHub answers `{}` while it computes; that
-      repository is asked again 5 s later, up to 6 times, then on the next
-      refresh. The panel rereads every 5 minutes while shown.
+      Everything is kept in SQLite (`data/kanso-panel/shipped.db`, through
+      the `sqlite3` command), statistics only: commits, GitHub's weeks,
+      GitHub repositories with when each was pushed and read, scans, and
+      meta. A repository's week counts the larger of the commits' sum and
+      GitHub's. Each refresh reads only what changed. The panel rereads
+      every 5 minutes while shown; a dim line names the step it is on.
       The PR panel (`kanso-panel` with `pr`) shows one pull request at a time: the focused
       pane's branch's own while it is open, as T3 Code does (a merged or closed
       one counts as none), else the newest open one in that repository

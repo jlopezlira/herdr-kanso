@@ -12,15 +12,16 @@ checks all of this, and merging to main releases the version in
 
 ### Added
 
-- Shipped (#29): a side panel of vanity metrics for what you delivered, drawn like Spend. It covers every repository and organization on GitHub, by day, week, month or year, and shows:
+- Shipped (#29): a side panel of vanity metrics for what you delivered, drawn like Spend. It covers every repository and organization, by day, week, month or year, and shows:
   - the lines you added and removed, compared with the period before;
   - contributions (private ones included), pull requests merged, commits, reviews and repositories;
   - your totals since you joined GitHub;
   - your streak, with a heat map that fills the panel, up to a year;
   - your records (best day, best week, best month, longest streak, most commits in a week), with a toast when you set one;
+  - when in the day you ship, and from which machine;
   - a breakdown by repository.
 
-  It reads only sums GitHub keeps: contribution counts, and each repository's weekly contributor statistics, cached and read again only after a push.
+  Each machine reads its own git (every branch, every identity you commit with) into a local SQLite store of statistics only (repository, hash, time, lines, machine), and your machines share it through a private gist. GitHub's weekly contributor sums cover what no machine has cloned. A repository's week counts the larger of the two, and each refresh reads only what changed.
 
 ## [1.2.0] - 2026-11-03
 
