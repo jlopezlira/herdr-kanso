@@ -79,7 +79,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - After the tabs, a + (16 icon, 28 square) opens the shipped
         `new-menu`.
       - At the right are the panel buttons: Files, Spend, Changes, PR and
-        Shipped (trophy icon), as icons only (15, in a 26 square ghost
+        Shipped (trophy icon), then Linear where herdr-linear's mod is
+        installed in `mods/linear` (its own popup, `mod.open`, not a side
+        panel), as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
         box eases from 0 to its width and fades in over 180 ms

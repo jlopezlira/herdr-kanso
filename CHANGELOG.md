@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.1.0] - 2026-11-03
+
+### Added
+
+- Tab bar: where [herdr-linear](https://github.com/mrolafsson/herdr-linear)'s mod is installed in `mods/linear`, a Linear button opens its popup, the same as its own ⌘L. Drag it or turn it off in the Panels popup like the other buttons.
+
 ## [2.0.1] - 2026-11-03
 
 ### Changed

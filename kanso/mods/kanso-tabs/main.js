@@ -5,7 +5,7 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout } from "herdr";
+import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, readTextFile, appHome } from "herdr";
 
 // Right after layout.switch, layout() can still return the tree of the layout
 // shown before; setting it would save that tree into kanso.json. Only Kanso's
@@ -139,12 +139,17 @@ const BUILTIN = [
   // What you delivered: lines, pull requests, reviews, streak and records.
   { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
 ];
+// herdr-linear's mod (https://github.com/mrolafsson/herdr-linear) is a popup
+// sized for the window, too wide for the side panel: where it is installed,
+// its button opens it the way its own key does.
+const LINEAR = { id: "linear", label: "Linear", icon: "mods/linear/icons/project.svg", popup: "linear" };
+let linearInstalled = false;
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
 // Every panel, in order, with `on`. Panels you never placed keep their place
 // after the ones you did.
 function panelList() {
-  const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
+  const all = [...BUILTIN, ...(linearInstalled ? [LINEAR] : []), ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
   const order = list(ORDER), off = new Set(list(OFF));
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
   return all.sort((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: !off.has(p.id) }));
@@ -187,7 +192,7 @@ function find(node, id) {
 }
 
 export default class Tabs extends View {
-  init() {
+  init(_props, cx) {
     this.pressed = null;
     this.dragPanel = null;
     this.hoverPanel = null;
@@ -196,6 +201,15 @@ export default class Tabs extends View {
     try { given = props(); } catch { /* a host without props */ }
     this.arrange = Boolean(given?.arrange);
     this.panels = storedObject("panels");
+    cx?.spawn(async (cx) => {
+      try { if ((await readTextFile(`${appHome()}/mods/linear/main.js`)) !== null) { linearInstalled = true; cx.notify(); } } catch {}
+    });
+  }
+
+  // A panel button toggles its panel; a popup's opens the popup.
+  press(p, on) {
+    if (p.popup) run("mod.open", { name: p.popup });
+    else this.mount(on ? null : p.id);
   }
 
   // Which panel is open now (null: closed), read from the layout.
@@ -365,7 +379,7 @@ export default class Tabs extends View {
         .on_mouse_up("left", (_e, cx) => {
           const from = this.dragPanel; this.dragPanel = null;
           if (from && from !== p.id) movePanel(from, p.id);
-          else if (from === p.id) this.mount(on ? null : p.id);
+          else if (from === p.id) this.press(p, on);
           cx.notify();
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openPanels(); })

@@ -186,6 +186,33 @@ test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {
   assert.deepEqual(mounted, [null]);
 });
 
+test("kanso-tabs offers Linear only where it is installed, as a button that opens its popup", async () => {
+  const runs = [], store = {};
+  const host = (found) => ({
+    shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
+    appHome: () => "/home/.config/herdr-app",
+    readTextFile: async (path) => (found && path.endsWith("/linear/main.js") ? "export default class {}" : null),
+    run: (command, args) => runs.push([command, args]),
+  });
+  const started = async (found) => {
+    const mod = await load("kanso-tabs/main.js", ["Tabs", "panelList"], host(found));
+    const tabs = new mod.Tabs(), { cx, drain } = context();
+    tabs.init({}, cx); await drain();
+    return { tabs, ids: clone(mod.panelList().map((p) => p.id)) };
+  };
+  assert.ok(!(await started(false)).ids.includes("linear"));
+
+  const { tabs, ids } = await started(true);
+  assert.equal(ids.at(-1), "linear", "after the built-in panels, so you can drag it or turn it off");
+  const mounted = [];
+  tabs.mount = (id) => mounted.push(id);
+  tabs.press({ id: "linear", popup: "linear" }, false);
+  assert.deepEqual(clone(runs), [["mod.open", { name: "linear" }]]);
+  assert.deepEqual(mounted, [], "a popup, not a side panel");
+  tabs.press({ id: "files" }, false);
+  assert.deepEqual(mounted, ["files"]);
+});
+
 // Parse a single PowerShell literal independently of the production escaper.
 
 test("kanso-tabs remounts a panel kept from the separate token-spend mod as Kanso's Spend", async () => {
