@@ -140,8 +140,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       cards or uppercase labels, `canvas` behind, hierarchy from size, weight
       and tone, hairlines between list rows. Top to bottom:
       - Header: "Pull request" (17, 20 when wide), then at the right a
-        hairline pill "N open" with a chevron, refresh (spins while reading)
-        and open on GitHub. The pill is hidden when the only open one is the
+        hairline pill "N open" with a chevron, refresh (spins while reading),
+        copy link (the PR's URL to the clipboard; a check for 1.5 s) and open
+        on GitHub. The pill is hidden when the only open one is the
         one shown.
       - The page of open ones: the pill turns the panel to it (the title
         reads "Open pull requests", the pill "Back to #n"); it scrolls with
@@ -167,6 +168,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         repository allows; red while armed; disabled while draft,
         conflicting or blocked) and quiet links Ready for review or Back to
         draft, and Close. A closed PR offers Reopen.
+      - Description: the PR's body as Markdown (`TextView.markdown`,
+        selectable, 13, links open in the browser), template comments
+        stripped. Past 6 lines or 480 characters it folds to 150 tall with
+        "Show all" / "Show less". An empty body reads "No description." (dim).
       - People and labels, as T3 Code's meta rows: a 76-wide dim label,
         the values, and at the right a 22 icon button that opens T3 Code's
         candidate picker (a popover 288 wide: a search field, then the
