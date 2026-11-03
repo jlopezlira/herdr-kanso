@@ -150,7 +150,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       told `files`, `changes` or `pr` (`props.panel`), `token-spend`
       (Insights) or `sdd-focused`.
       The PR panel (`kanso-panel` with `pr`) shows one pull request at a time: the focused
-      pane's branch's own, as T3 Code does, else the newest open one in that repository
+      pane's branch's own while it is open, as T3 Code does (a merged or closed
+      one counts as none), else the newest open one in that repository
       ("the newest open; <branch> has none" after its author and age), drawn like the Spend panel: one
       centered column (max 1080, 16 px sides under 560 wide, else 32), no
       cards or uppercase labels, `canvas` behind, hierarchy from size, weight
