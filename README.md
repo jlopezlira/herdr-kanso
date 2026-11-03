@@ -236,9 +236,16 @@ real temporary Git repositories and folders. The benchmark compares a git ref
 with your working tree in isolated native Herdr windows; see
 [benchmarks/README.md](benchmarks/README.md).
 
-To release: set the new version in `kanso/mods/kanso-chrome/version.json`,
-merge, then tag that commit `vX.Y.Z` (`gh release create vX.Y.Z`). The updater
-refuses a tag whose `version.json` says another version.
+Versioning: any pull request that changes what Kanso installs (`kanso/mods`,
+`kanso/themes`, `kanso/layouts`, `kanso/keys.json`) bumps
+`kanso/mods/kanso-chrome/version.json` and adds that version's section to
+[CHANGELOG.md](CHANGELOG.md). The bump is semantic and follows from what the
+section lists: Breaking or Removed means major, Added or Deprecated means
+minor, and anything else means patch. `npm run check:version` checks this, and
+CI runs it on every pull request. Merging to main tags and releases the new
+version with its changelog section as the notes
+(`.github/workflows/release.yml`), and that release is what the updater
+offers.
 
 How every part is built, in enough detail to rebuild it:
 [kanso/RECIPE.md](kanso/RECIPE.md). `herdr-app check kanso/mods/<mod>` loads a
