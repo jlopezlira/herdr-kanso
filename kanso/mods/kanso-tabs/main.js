@@ -190,6 +190,7 @@ export default class Tabs extends View {
   init() {
     this.pressed = null;
     this.dragPanel = null;
+    this.hoverPanel = null;
     // Opened as the Panels popup: this copy draws the list, not the bar.
     let given = null;
     try { given = props(); } catch { /* a host without props */ }
@@ -337,15 +338,20 @@ export default class Tabs extends View {
     this.syncPanel(space, now, enabled);
     // A panel turned off while open closes.
     if (now && !enabled.includes(now) && !this.inFlight(now)) this.mount(null);
-    // Icons only, the name on hover. Pressed on one and let go on another,
-    // a button moves there; right-click opens the Panels popup.
+    // Icons only: the name shows beside the icon while the pointer is on it.
+    // Pressed on one and let go on another, a button moves there; right-click
+    // opens the Panels popup.
     const panelButton = (p) => {
       const on = now === p.id, target = this.dragPanel && this.dragPanel !== p.id;
-      return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(p.icon ? 0 : 8).flex_none().items_center().justify_center().rounded(6)
+      const named = !p.icon || this.hoverPanel === p.id;
+      return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(named ? 9 : 0).gap(6).flex_none().items_center().justify_center().rounded(6)
         .text_size(12).bg(on ? t.foreground + "12" : CLEAR)
         .text_color(on ? t.foreground : t.muted)
         .hover(s => s.bg(target ? t.foreground + "1a" : on ? t.foreground + "12" : t.foreground + "0a").text_color(t.foreground))
-        .tooltip(p.label)
+        .on_hover((hovered, cx) => {
+          if (hovered) this.hoverPanel = p.id; else if (this.hoverPanel === p.id) this.hoverPanel = null;
+          cx.notify();
+        })
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragPanel = p.id; cx.notify(); })
         .on_mouse_up("left", (_e, cx) => {
           const from = this.dragPanel; this.dragPanel = null;
@@ -354,7 +360,8 @@ export default class Tabs extends View {
           cx.notify();
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openPanels(); })
-        .child(p.icon ? svg(p.icon).size(15) : p.label);
+        .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(15)))
+        .when(named, (el) => el.child(p.label));
     };
     // No background and no line of its own: it sits on the frame.
     return h_flex().size_full().min_w(0).px(12).gap(2).items_center()

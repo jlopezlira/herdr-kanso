@@ -80,8 +80,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         `new-menu`.
       - At the right are the panel buttons: Files, Spend, Changes, PR and
         Shipped (trophy icon), as icons only (15, in a 26 square ghost
-        button) with the name as a tooltip, and a wash when their panel is
-        open. Pressing one and letting go on another moves it there.
+        button), and a wash when their panel is open. While the pointer is
+        on one, its name (12) shows beside the icon and the button widens
+        (`on_hover`); no tooltip. Pressing one and letting go on another moves it there.
         Right-click opens the Panels popup (`kanso-tabs` again, as an
         overlay with `props().arrange`): one 30 tall row per panel with a
         grip, its icon, its name and a switch, dragged the same way into

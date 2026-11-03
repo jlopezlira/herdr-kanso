@@ -12,7 +12,7 @@ checks all of this, and merging to main releases the version in
 
 ### Added
 
-- The panel buttons at the top right are icons, with their name on hover. Press one and let go on another to move it there. Right-click one to open Panels, where you drag them into order and turn each one on or off. The order and the switches are kept for every space.
+- The panel buttons at the top right are icons; the one under the pointer shows its name beside it. Press one and let go on another to move it there. Right-click one to open Panels, where you drag them into order and turn each one on or off. The order and the switches are kept for every space.
 
 ### Removed
 
