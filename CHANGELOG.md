@@ -8,6 +8,16 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [1.5.0] - 2026-11-03
+
+### Added
+
+- Spend is part of Kanso. It shows what your AI coding sessions cost at API list price, per model, project and task, and it ships with the layout: its button is always in the tab bar. It was the separate token-spend mod; its first start carries that mod's data over, and its keys are now under `mod:kanso-spend` (#32).
+
+### Fixed
+
+- Spend no longer docks a second panel at the window's right edge when it is installed (`"place": "none"`) (#32).
+
 ## [1.4.0] - 2026-11-03
 
 ### Added
