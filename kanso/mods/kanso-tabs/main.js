@@ -338,13 +338,21 @@ export default class Tabs extends View {
     this.syncPanel(space, now, enabled);
     // A panel turned off while open closes.
     if (now && !enabled.includes(now) && !this.inFlight(now)) this.mount(null);
-    // Icons only: the name shows beside the icon while the pointer is on it.
+    // Icons only: the name opens beside the icon while the pointer is on it.
     // Pressed on one and let go on another, a button moves there; right-click
     // opens the Panels popup.
     const panelButton = (p) => {
       const on = now === p.id, target = this.dragPanel && this.dragPanel !== p.id;
       const named = !p.icon || this.hoverPanel === p.id;
-      return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(named ? 9 : 0).gap(6).flex_none().items_center().justify_center().rounded(6)
+      // The name slides open: its box eases from 0 to the text's width
+      // (about 6.8 px a character at 12) while it fades in, natively.
+      const wide = Math.ceil(String(p.label).length * 6.8) + 10;
+      const name = div().id(`panel-name-${p.id}`).h_full().flex().items_center().overflow_hidden().flex_none()
+        .w(named ? wide : 0).opacity(named ? 1 : 0)
+        .transition("width", { duration: 180, easing: "ease-out" })
+        .transition("opacity", { duration: 180, easing: "ease-out" })
+        .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
+      return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
         .text_size(12).bg(on ? t.foreground + "12" : CLEAR)
         .text_color(on ? t.foreground : t.muted)
         .hover(s => s.bg(target ? t.foreground + "1a" : on ? t.foreground + "12" : t.foreground + "0a").text_color(t.foreground))
@@ -361,7 +369,7 @@ export default class Tabs extends View {
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openPanels(); })
         .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(15)))
-        .when(named, (el) => el.child(p.label));
+        .child(name);
     };
     // No background and no line of its own: it sits on the frame.
     return h_flex().size_full().min_w(0).px(12).gap(2).items_center()
