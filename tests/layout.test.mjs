@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load } from "./helpers.mjs";
+import { clone, context, load } from "./helpers.mjs";
 
 async function layoutFixture() {
   const nodes = [{ id: "strip-col-a", type: "column", size: { weight: 1 }, children: [
@@ -156,6 +156,18 @@ test("kanso-tabs opens and closes a custom panel from kanso.panels through commi
   tabs.mount(null); f.flush();
   assert.equal(panelBody().hidden, true);
   assert.deepEqual(panelBody().children, []);
+});
+
+test("kanso-tabs offers Specs and Insights only when readTextFile finds their main.js", async () => {
+  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], {
+    appHome: () => "/home/.config/herdr-app",
+    readTextFile: async (path) => (path.endsWith("/token-spend/main.js") ? "export default class {}" : null),
+  });
+  const tabs = new Tabs();
+  const { cx, drain } = context();
+  tabs.init({}, cx);
+  await drain();
+  assert.deepEqual(clone(tabs.installed), { insights: true });
 });
 
 // Parse a single PowerShell literal independently of the production escaper.
