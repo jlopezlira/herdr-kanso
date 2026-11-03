@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.1.0] - 2026-11-03
+
+### Added
+
+- Worktrees: a panel that finds every git worktree on your computer, in your repositories' folders and wherever agents left them (temp folders and scratchpads included), with how much disk they take and what each one holds: merged (squash merges included), commits kept on its branch, uncommitted changes, commits only there, or in use. Clean up removes, after a second press, every one that loses nothing and has been idle a day, and deletes the merged branches; one at a time or a whole repository, it says first what would be lost. Folders whose repository moved or was deleted are listed too.
+
 ## [2.0.1] - 2026-11-03
 
 ### Changed

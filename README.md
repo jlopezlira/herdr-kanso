@@ -122,6 +122,27 @@ branch, every identity you commit with, even an email GitHub can't link to
 you. They share what they read through a private gist, and Shipped keeps only
 statistics.
 
+### Clean up the worktrees agents leave behind
+
+Agents make a worktree for every task, review and audit, and seldom remove it.
+The **Worktrees** panel finds every one on your computer: under the top folders
+of your spaces (`~/Apps` for `~/Apps/acme/web`), wherever each repository says
+they are (temp folders and agent scratchpads included), and the folders left
+behind when a repository moved or was deleted. It shows how much disk they
+take, grouped by repository, and what each one holds:
+- **merged**: its work is already in the default branch or `develop`, squash
+  merges included;
+- **not merged**: its commits stay on its branch when the folder goes;
+- **uncommitted changes**, or **commits only here** (a detached HEAD no branch
+  has): the only work removing it would lose;
+- **in use today** or **open in Herdr**: left alone.
+
+**Clean up** removes, after a second press, every one that loses nothing and
+has been idle a day, and deletes the branches already merged. A row opens what
+it holds, to open it in a new tab or remove it; **Remove all** does a whole
+repository, and says first what would be lost. Records of folders already gone
+are pruned the same way.
+
 ### Every repo and worktree, one sidebar
 
 Repositories and their **nested Git worktrees** sit together, each with its
