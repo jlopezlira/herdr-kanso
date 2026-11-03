@@ -134,3 +134,46 @@ test("Pull request panel reads the description and folds it only when long", asy
   assert.equal(longBody(Array.from({ length: 10 }, (_, i) => `- item ${i}`).join("\n")), true);
   assert.equal(longBody("x".repeat(600)), true);
 });
+
+test("Pull request panel keeps finished ones in the list's Closed tab, never as the one it opens on", async () => {
+  const url = (n) => `https://github.com/o/here/pull/${n}`;
+  const openOne = { number: 8, title: "Open", url: url(8), state: "OPEN", author: { login: "you" }, headRefName: "c", updatedAt: "2026-10-05T00:00:00Z" };
+  const closed = [
+    { number: 6, title: "Merged by a colleague", url: url(6), state: "MERGED", author: { login: "ana" }, headRefName: "x", updatedAt: "2026-10-02T00:00:00Z", mergedAt: "2026-10-02T00:00:00Z" },
+    { number: 7, title: "Closed", url: url(7), state: "CLOSED", author: { login: "me" }, headRefName: "develop", updatedAt: "2026-10-04T00:00:00Z", closedAt: "2026-10-04T00:00:00Z" },
+  ];
+  const calls = [];
+  const exec = async (command, args) => {
+    calls.push([command, ...args].join(" "));
+    if (command === "git") {
+      const out = { "rev-parse": "/repo\n", branch: "develop\n", remote: "git@github.com:o/here.git\n" }[args[0]];
+      return { code: 0, stdout: out, stderr: "" };
+    }
+    if (args[0] === "pr" && args[1] === "list" && args[3] === "open") return { code: 0, stdout: JSON.stringify([openOne]), stderr: "" };
+    if (args[0] === "pr" && args[1] === "list" && args[3] === "closed") return { code: 0, stdout: JSON.stringify(closed), stderr: "" };
+    if (args[0] === "pr" && args[1] === "view") {
+      const pick = args[2] === "--json" ? closed[1] : [openOne, ...closed].find((p) => p.url === args[2]);
+      return { code: 0, stdout: JSON.stringify(pick), stderr: "" };
+    }
+    if (args[0] === "api" && args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
+    return { code: 1, stdout: "", stderr: "offline" };
+  };
+  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+    exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
+  });
+  const panel = new PullRequest();
+  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [], tab: "open", closedPrs: null });
+  const { cx, drain } = context();
+  panel.refresh(cx); await drain();
+  assert.equal(panel.pr.number, 8, "it opens on an open one");
+  assert.ok(!calls.some((c) => c.includes("--state closed")), "closed ones are read only when asked for");
+  assert.ok(panel.canSwitch(), "the list is there to reach them");
+
+  panel.listing = true;
+  panel.showTab("closed", cx); await drain();
+  assert.deepEqual([...panel.closedPrs].map((p) => p.number), [7, 6], "newest finished first, anyone's");
+  panel.choose(closed[0], cx); await drain();
+  assert.equal(panel.pr.number, 6, "a colleague's merged one opens when picked");
+  assert.equal(panel.pr.state, "MERGED");
+  assert.equal(panel.listing, false);
+});

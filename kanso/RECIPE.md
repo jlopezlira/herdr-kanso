@@ -173,6 +173,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         for a review, checks passed) and `+a −d`. A click shows it and leaves
         the page; the branch's own goes back to following the branch. When
         the branch has none, the page ends with "Create one for <branch>".
+        The page is titled "Pull requests" and starts with two tabs (26 tall,
+        12, `selected` wash on the active one): "Open N", the page above, and
+        "Closed", the repository's 30 most recently finished ones (`gh pr list
+        --state closed`, read only when that tab opens), grouped the same way,
+        each row with `merged <age>` or `closed <age>` and "Merged" (violet)
+        or "Closed without merging" (red). A finished one is shown only when
+        picked here; the pill is there whenever the pane is in a repository.
         Every `gh pr` action names the pull request by URL.
       - Hero: `#n · head → base` (15, muted); the title (22, 28 wide, light,
         line height 1.25); a 6 dot and the verdict (15): ready to merge
