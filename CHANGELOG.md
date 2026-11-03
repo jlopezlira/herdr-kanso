@@ -12,12 +12,15 @@ checks all of this, and merging to main releases the version in
 
 ### Added
 
-- Shipped: a side panel for what you delivered, drawn like Spend. By day, week, month or year, it shows:
-  - the lines that landed on main, master or develop, compared with the same point of the period before;
-  - pull requests merged, commits, and reviews;
-  - your streak, with twelve weeks of contributions;
-  - your records (best day, best week, longest streak, biggest pull request, fastest merge), with a toast when you set one;
+- Shipped: a side panel of vanity metrics for what you delivered, drawn like Spend. It covers every repository and organization on GitHub, by day, week, month or year, and shows:
+  - the lines you added and removed, compared with the period before;
+  - contributions (private ones included), pull requests merged, commits, reviews and repositories;
+  - your totals since you joined GitHub;
+  - your streak, with a heat map that fills the panel, up to a year;
+  - your records (best day, best week, best month, longest streak, most commits in a week), with a toast when you set one;
   - a breakdown by repository.
+
+  It reads only sums GitHub keeps: contribution counts, and each repository's weekly contributor statistics, cached and read again only after a push.
 
 ## [1.2.0] - 2026-11-03
 

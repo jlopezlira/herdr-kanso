@@ -1,38 +1,44 @@
 // Kanso's Shipped panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// What you delivered, drawn the way Spend draws what you spent: one centered
-// column, a big light number, periods with arrows, then the breakdowns.
+// Vanity metrics, on purpose: what you delivered, counted as generously as
+// GitHub allows, drawn the way Spend draws what you spent (one centered
+// column, a big light number, periods with arrows, then the breakdowns).
 //
-// Where it comes from:
-// - Lines and commits: `git log` in the repositories your panes and spaces are
-//   in (remembered once seen), counting only
-//   what landed on origin's main, master or develop (as of your last fetch),
-//   authored by you, without merge commits or lockfiles. A squashed branch
-//   counts once, as its squash.
-// - Pull requests merged, reviews, the contribution calendar (streak, best
-//   day) and your last 100 merged pull requests (biggest, fastest): one GitHub
-//   GraphQL query through `gh`.
-// Records are kept in shared("kanso.shipped.records"); beating one toasts once.
+// Only sums GitHub already keeps, read through `gh`; nothing is listed one by one:
+// - Lines and commits: each repository's contributor statistics
+//   (repos/{repo}/stats/contributors), your additions, deletions and commits
+//   per week over its whole history, one call per repository you contributed
+//   to or own, in every organization. Kept in data/kanso-panel/shipped.json and
+//   read again only for a repository pushed since.
+// - One query per period: contributions (private ones included, as your
+//   profile counts them) and reviews, merged pull requests counted by search,
+//   the last year's calendar (streak, best day, the heat map) and every pull
+//   request you ever merged, counted.
+// GitHub's statistics are weekly, so a day shows your contributions instead
+// of lines. Records are kept in shared("kanso.shipped.bests"); setting one
+// toasts once.
 //
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, spaces, panes, theme, shared, setShared, notify } from "herdr";
+import { exec, appHome, theme, shared, setShared, notify, readTextFile, writeTextFile } from "herdr";
 
 const ICON = "mods/kanso-chrome/icons/";
 const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 const DAY = 86400000;
-const RECORDS = "kanso.shipped.records";
+const RECORDS = "kanso.shipped.bests";
+const CACHE_DIR = "data/kanso-panel";
+const CACHE_FILE = `${CACHE_DIR}/shipped.json`;
 const REFRESH_MS = 5 * 60 * 1000;
-const HEAT_WEEKS = 12;
-const REPO_ROWS = 6;
+const PARALLEL = 6;
+const RETRIES = 6; // GitHub answers 202 while it computes a repository's statistics
+const REPO_ROWS = 8;
+const CELL_GAP = 3;
 export const PERIODS = ["day", "week", "month", "year"];
 const PERIOD_NAMES = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-// Lockfiles are written by tools, not by you.
-const NOT_YOURS = ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock", "Cargo.lock", "Gemfile.lock", "poetry.lock", "composer.lock", "go.sum", "uv.lock"];
 
 function tokens(t) {
   return {
@@ -43,16 +49,11 @@ function tokens(t) {
 }
 
 export const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-export function duration(ms) {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s} s`;
-  if (s < 3600) return `${Math.round(s / 60)} min`;
-  if (s < 86400) return `${Math.round(s / 360) / 10} h`;
-  return `${Math.round(s / 8640) / 10} d`;
-}
 const dayName = (ms) => { const d = new Date(ms); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+const monthName = (ms) => { const d = new Date(ms); return `${FULL_MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const fromIsoDay = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).getTime(); };
+const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 
 // A period in local time: kind "day" | "week" (from Monday) | "month" | "year",
 // offset 0 for the current one, -1 for the one before.
@@ -67,7 +68,7 @@ export function periodRange(kind, offset, now = Date.now()) {
 }
 
 // The span to compare with: the period before, cut at the same point when the
-// current one is still running ("vs this point last week").
+// current one is still running ("vs this point last month").
 export function comparedRange(kind, offset, now = Date.now()) {
   const prev = periodRange(kind, offset - 1, now);
   if (offset !== 0) return prev;
@@ -84,37 +85,40 @@ export function periodLabel(kind, offset, now = Date.now()) {
   return offset === 0 ? "This year" : String(s.getFullYear());
 }
 
+// Weekly sums can't be cut inside a week, so a running week compares with the whole last one.
 const comparedLabel = (kind, offset) => offset === 0
-  ? { day: "vs this time yesterday", week: "vs this point last week", month: "vs this point last month", year: "vs this point last year" }[kind]
+  ? { day: "vs this time yesterday", week: "vs last week", month: "vs this point last month", year: "vs this point last year" }[kind]
   : { day: "vs the day before", week: "vs the week before", month: "vs the month before", year: "vs the year before" }[kind];
 
-// `git log --format='%x1e%H %at' --shortstat` as [{ hash, at (ms), add, del }].
-export function parseLog(stdout) {
-  const out = [];
-  for (const chunk of String(stdout).split("\x1e").slice(1)) {
-    const [head, ...rest] = chunk.trim().split("\n");
-    const [hash, at] = head.trim().split(/\s+/);
-    const stat = rest.join(" ");
-    out.push({
-      hash, at: Number(at) * 1000,
-      add: Number(/(\d+) insertions?\(\+\)/.exec(stat)?.[1] ?? 0),
-      del: Number(/(\d+) deletions?\(-\)/.exec(stat)?.[1] ?? 0),
-    });
-  }
-  return out;
+// ---- GitHub's weekly sums ----
+// A repository's entry: { fetched (ms), pushed (ISO), weeks: [[week start ms, additions, deletions, commits]] }.
+
+// Your weeks from a stats/contributors answer (only weeks with something in
+// them); null while GitHub is still computing (it answers {} then).
+export function yourWeeks(body, login) {
+  if (!Array.isArray(body)) return null;
+  const me = body.find((e) => e?.author?.login?.toLowerCase() === String(login).toLowerCase());
+  return (me?.weeks ?? []).filter((w) => w.a || w.d || w.c).map((w) => [w.w * 1000, w.a, w.d, w.c]);
 }
 
-// Lines and commits in [start, end), in total and per repository (most first).
-export function sumLines(repos, start, end) {
+// GitHub's weeks start on Sunday, UTC. Placed at Monday noon UTC, a week lands
+// in the local Monday-to-Sunday week it mostly covers, whatever the time zone.
+export const weekAt = (w) => w + 1.5 * DAY;
+
+// Lines and commits of the weeks that land in [start, end), in total and per repository.
+export function sumWeeks(stats, start, end) {
   const byRepo = [];
   let add = 0, del = 0, commits = 0;
-  for (const r of repos) {
-    let a = 0, d = 0, n = 0;
-    for (const c of r.commits) if (c.at >= start && c.at < end) { a += c.add; d += c.del; n++; }
-    if (n) byRepo.push({ name: r.name, add: a, del: d, commits: n });
-    add += a; del += d; commits += n;
+  for (const [name, entry] of Object.entries(stats?.repos ?? {})) {
+    let a = 0, d = 0, c = 0;
+    for (const w of entry.weeks ?? []) {
+      const at = weekAt(w[0]);
+      if (at >= start && at < end) { a += w[1]; d += w[2]; c += w[3]; }
+    }
+    if (a || d || c) byRepo.push({ name, add: a, del: d, commits: c });
+    add += a; del += d; commits += c;
   }
-  byRepo.sort((x, y) => (y.add + y.del) - (x.add + x.del));
+  byRepo.sort((x, y) => (y.add + y.del) - (x.add + x.del) || y.commits - x.commits);
   return { add, del, commits, byRepo };
 }
 
@@ -122,59 +126,63 @@ export function sumLines(repos, start, end) {
 // without one yet does not break the current run.
 export function streaks(days, today) {
   let longest = { n: 0, end: null }, run = 0;
-  for (const d of days) {
+  for (const d of days ?? []) {
     if (d.contributionCount > 0) { run++; if (run > longest.n) longest = { n: run, end: d.date }; }
     else run = 0;
   }
-  let current = 0, i = days.length - 1;
+  let current = 0, i = (days ?? []).length - 1;
   if (i >= 0 && days[i].date === today && days[i].contributionCount === 0) i--;
   for (; i >= 0 && days[i].contributionCount > 0; i--) current++;
   return { current, longest };
 }
 
-// The week (from Monday) with the most lines added, over every commit read.
-function bestWeek(repos) {
-  const weeks = new Map();
-  for (const r of repos) for (const c of r.commits) {
-    const start = periodRange("week", 0, c.at).start;
-    weeks.set(start, (weeks.get(start) ?? 0) + c.add);
+// The contributions of [start, end): the calendar's days (private ones
+// included) when it reaches back that far, else the period's totals.
+export function contributionsIn(days, start, end, totals) {
+  if (days?.length && fromIsoDay(days[0].date) <= start) {
+    let n = 0;
+    for (const d of days) { const at = fromIsoDay(d.date); if (at >= start && at < end) n += d.contributionCount; }
+    return n;
   }
-  let best = null;
-  for (const [start, add] of weeks) if (add > 0 && (!best || add > best.add)) best = { add, start };
-  return best;
+  if (!totals) return null;
+  return totals.totalCommitContributions + totals.totalPullRequestContributions + totals.totalPullRequestReviewContributions
+    + totals.totalIssueContributions + totals.restrictedContributionsCount;
 }
 
-// Personal bests from what was read: { bestDay, longestStreak, bestWeek, biggestPr, fastestMerge }.
-export function computeRecords({ days, repos, recent }) {
+// Personal bests from the calendar and the weekly sums.
+export function computeRecords({ days, stats }) {
   const r = {};
-  for (const d of days) if (d.contributionCount > 0 && (!r.bestDay || d.contributionCount > r.bestDay.n)) r.bestDay = { n: d.contributionCount, date: d.date };
+  for (const d of days ?? []) if (d.contributionCount > 0 && (!r.bestDay || d.contributionCount > r.bestDay.n)) r.bestDay = { n: d.contributionCount, date: d.date };
   const { longest } = streaks(days, null);
   if (longest.n) r.longestStreak = longest;
-  const week = bestWeek(repos);
-  if (week) r.bestWeek = week;
-  for (const p of recent ?? []) {
-    if (!p?.mergedAt) continue;
-    const lines = (p.additions ?? 0) + (p.deletions ?? 0), ms = Date.parse(p.mergedAt) - Date.parse(p.createdAt);
-    const pr = { number: p.number, title: p.title, repo: p.repository?.nameWithOwner, url: p.url, at: Date.parse(p.mergedAt) };
-    if (!r.biggestPr || lines > r.biggestPr.lines) r.biggestPr = { ...pr, lines, add: p.additions, del: p.deletions };
-    if (ms > 0 && (!r.fastestMerge || ms < r.fastestMerge.ms)) r.fastestMerge = { ...pr, ms };
+  const weeks = new Map(), months = new Map();
+  for (const entry of Object.values(stats?.repos ?? {})) {
+    for (const [w, a, , c] of entry.weeks ?? []) {
+      const at = weekAt(w), week = periodRange("week", 0, at).start, month = periodRange("month", 0, at).start;
+      const row = weeks.get(week) ?? { add: 0, commits: 0 };
+      row.add += a; row.commits += c; weeks.set(week, row);
+      months.set(month, (months.get(month) ?? 0) + a);
+    }
   }
+  for (const [start, w] of weeks) {
+    if (w.add > 0 && (!r.bestWeek || w.add > r.bestWeek.add)) r.bestWeek = { add: w.add, start };
+    if (w.commits > 0 && (!r.busiestWeek || w.commits > r.busiestWeek.n)) r.busiestWeek = { n: w.commits, start };
+  }
+  for (const [start, add] of months) if (add > 0 && (!r.bestMonth || add > r.bestMonth.add)) r.bestMonth = { add, start };
   return r;
 }
 
 const BETTER = {
-  bestDay: (a, b) => a.n > b.n, longestStreak: (a, b) => a.n > b.n, bestWeek: (a, b) => a.add > b.add,
-  biggestPr: (a, b) => a.lines > b.lines, fastestMerge: (a, b) => a.ms < b.ms,
+  bestDay: (a, b) => a.n > b.n, bestWeek: (a, b) => a.add > b.add, bestMonth: (a, b) => a.add > b.add,
+  longestStreak: (a, b) => a.n > b.n, busiestWeek: (a, b) => a.n > b.n,
 };
-export const RECORD_NAMES = { bestDay: "Best day", bestWeek: "Best week", longestStreak: "Longest streak", biggestPr: "Biggest pull request", fastestMerge: "Fastest merge" };
-
-// When a record was set (ms).
-const recordAt = (k, r) => k === "bestDay" ? fromIsoDay(r.date) : k === "longestStreak" ? (r.end ? fromIsoDay(r.end) : 0) : k === "bestWeek" ? r.start : r.at ?? 0;
+export const RECORD_NAMES = { bestDay: "Best day", bestWeek: "Best week", bestMonth: "Best month", longestStreak: "Longest streak", busiestWeek: "Most commits in a week" };
+const recordAt = (k, r) => k === "bestDay" ? fromIsoDay(r.date) : k === "longestStreak" ? (r.end ? fromIsoDay(r.end) : 0) : r.start;
 
 // Keeps the best of what was stored and what was just read. `beaten`: the
-// records you just set, improving on a stored one within the last week. A
-// first reading beats nothing, and an older best found later (a repository
-// read for the first time) updates the record quietly.
+// records you just set, improving on a stored one within the last week (a
+// month for the best month). A first reading beats nothing, and an older best
+// found later (a repository read for the first time) updates it quietly.
 export function mergeRecords(stored, found, now = Date.now()) {
   const kept = { ...(stored ?? {}) }, beaten = [];
   for (const [k, better] of Object.entries(BETTER)) {
@@ -183,88 +191,72 @@ export function mergeRecords(stored, found, now = Date.now()) {
     if (!kept[k]) kept[k] = r;
     else if (better(r, kept[k])) {
       kept[k] = r;
-      if (stored?.[k] && now - recordAt(k, r) <= 7 * DAY) beaten.push(k);
+      if (stored?.[k] && now - recordAt(k, r) <= (k === "bestMonth" ? 31 : 7) * DAY) beaten.push(k);
     }
   }
   return { kept, beaten };
 }
 
 export function recordText(k, r) {
-  if (k === "bestDay") return { value: fmt(r.n), unit: r.n === 1 ? "contribution" : "contributions", when: dayName(fromIsoDay(r.date)) };
-  if (k === "longestStreak") return { value: fmt(r.n), unit: r.n === 1 ? "day" : "days", when: r.end ? `to ${dayName(fromIsoDay(r.end))}` : "" };
-  if (k === "bestWeek") return { value: `+${fmt(r.add)}`, unit: "lines", when: `week of ${dayName(r.start)}` };
-  if (k === "biggestPr") return { value: `+${fmt(r.add ?? r.lines)}`, unit: `#${r.number}`, when: r.repo ?? "" };
-  return { value: duration(r.ms), unit: `#${r.number}`, when: r.repo ?? "" };
+  if (k === "bestDay") return { value: fmt(r.n), unit: r.n === 1 ? "contribution" : "contributions", detail: dayName(fromIsoDay(r.date)) };
+  if (k === "longestStreak") return { value: fmt(r.n), unit: r.n === 1 ? "day" : "days", detail: r.end ? `to ${dayName(fromIsoDay(r.end))}` : "" };
+  if (k === "bestWeek") return { value: `+${fmt(r.add)}`, unit: "lines", detail: `week of ${dayName(r.start)}` };
+  if (k === "bestMonth") return { value: `+${fmt(r.add)}`, unit: "lines", detail: monthName(r.start) };
+  return { value: fmt(r.n), unit: "commits", detail: `week of ${dayName(r.start)}` };
 }
 
-// The GitHub half: one query for the period, the one compared with, the
-// last year's calendar and the last 100 merged pull requests.
-export function githubQuery(cur, prev, now) {
-  const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
-  const span = (r) => `from:"${iso(r.start)}",to:"${iso(Math.max(r.start, Math.min(r.end, now) - 1000))}"`;
-  const merged = (r) => `is:pr author:@me is:merged merged:${iso(r.start)}..${iso(Math.max(r.start, Math.min(r.end, now) - 1000))}`;
-  const totals = "totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions";
-  const yearAgo = now - 364 * DAY;
-  return `query{viewer{login name
-cal:contributionsCollection(from:"${iso(yearAgo)}",to:"${iso(now)}"){contributionCalendar{weeks{contributionDays{date contributionCount contributionLevel weekday}}}}
+// How many weeks of the calendar fit `width`, and how big each square is:
+// as many whole weeks as fit, up to a year, with squares of 9 to 16 that
+// fill the width.
+export function heatLayout(width) {
+  const w = Math.max(120, Math.floor(width));
+  const weeks = Math.max(4, Math.min(53, Math.floor((w + CELL_GAP) / (9 + CELL_GAP))));
+  const cell = Math.max(9, Math.min(16, Math.floor((w - (weeks - 1) * CELL_GAP) / weeks)));
+  return { weeks, cell };
+}
+
+// The per-period query: contributions now and before, merged counts, the
+// year's calendar and every merged pull request you ever had, counted.
+export function periodQuery(cur, prev, now) {
+  const end = (r) => Math.max(r.start, Math.min(r.end, now) - 1000);
+  const span = (r) => `from:"${iso(r.start)}",to:"${iso(end(r))}"`;
+  const merged = (r) => `is:pr author:@me is:merged merged:${iso(r.start)}..${iso(end(r))}`;
+  const totals = "totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions totalIssueContributions restrictedContributionsCount";
+  return `query{viewer{login createdAt
+cal:contributionsCollection(from:"${iso(now - 364 * DAY)}",to:"${iso(now)}"){contributionCalendar{weeks{contributionDays{date contributionCount contributionLevel weekday}}}}
 cur:contributionsCollection(${span(cur)}){${totals}}
 prev:contributionsCollection(${span(prev)}){${totals}}}
 curMerged:search(query:"${merged(cur)}",type:ISSUE,first:0){issueCount}
 prevMerged:search(query:"${merged(prev)}",type:ISSUE,first:0){issueCount}
-recent:search(query:"is:pr author:@me is:merged sort:updated-desc",type:ISSUE,first:100){nodes{...on PullRequest{number title url createdAt mergedAt additions deletions repository{nameWithOwner}}}}}`;
+ever:search(query:"is:pr author:@me is:merged",type:ISSUE,first:0){issueCount}}`;
 }
 
-const SEEN = "kanso.shipped.folders";
+// Every repository you contributed to or own, with when it was last pushed.
+export const REPOS = `query($after:String,$own:String){viewer{
+contributed:repositoriesContributedTo(first:100,after:$after,includeUserRepositories:true,contributionTypes:[COMMIT,PULL_REQUEST,PULL_REQUEST_REVIEW,REPOSITORY]){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}
+owned:repositories(first:100,after:$own,ownerAffiliations:[OWNER],orderBy:{field:PUSHED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}}}`;
 
-// The repositories you work in on this computer, once each (worktrees share
-// one): where your panes are now, your spaces' folders, and the repositories
-// seen before (kept, so one still counts after its panes close).
-async function findRepos() {
-  const seen = new Map();
-  const here = [
-    ...panes().filter((p) => p.cwd && !String(p.pane).includes("/")).map((p) => p.cwd),
-    ...spaces().filter((s) => !s.machine && s.folder).map((s) => s.folder),
-  ];
-  const before = Array.isArray(shared(SEEN)) ? shared(SEEN) : [];
-  const folders = [...new Set([...here, ...before])];
-  await Promise.all(folders.map(async (folder) => {
-    try {
-      const r = await exec("git", ["rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], { cwd: folder });
-      if (r.code !== 0) return;
-      const [common, top] = r.stdout.trim().split("\n");
-      if (!common || seen.has(common)) return;
-      const name = (common.endsWith("/.git") ? common.slice(0, -5) : top).replace(/\/+$/, "").split("/").pop();
-      seen.set(common, { name, cwd: folder });
-    } catch {}
-  }));
-  const repos = [...seen.values()];
-  const keep = repos.map((r) => r.cwd);
-  if (JSON.stringify(keep) !== JSON.stringify(before)) setShared(SEEN, keep);
-  return repos;
+async function gh(args) {
+  const r = await exec("gh", args);
+  if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read.");
+  return r.stdout;
 }
 
-// Your commits that landed in one repository since `since` (ms).
-async function readRepo(repo, since, people) {
-  const refs = await exec("git", ["for-each-ref", "--format=%(refname)", "refs/remotes/origin/main", "refs/remotes/origin/master", "refs/remotes/origin/develop", "refs/heads/main", "refs/heads/master"], { cwd: repo.cwd });
-  const all = refs.code === 0 ? refs.stdout.split("\n").filter(Boolean) : [];
-  const remote = all.filter((r) => r.startsWith("refs/remotes/"));
-  const use = remote.length ? remote : all;
-  if (!use.length) return [];
-  const conf = await Promise.all(["user.email", "user.name"].map((k) => exec("git", ["config", k], { cwd: repo.cwd }).catch(() => null)));
-  const who = [...new Set([...people, ...conf.map((r) => r?.code === 0 ? r.stdout.trim() : "")].filter(Boolean))];
-  if (!who.length) return [];
-  const r = await exec("git", ["log", ...use, "--no-merges", "-F", ...who.map((w) => `--author=${w}`), `--since=@${Math.floor(since / 1000)}`,
-    "--format=%x1e%H %at", "--shortstat", "--", ".", ...NOT_YOURS.map((f) => `:(exclude,glob)**/${f}`)], { cwd: repo.cwd });
-  return r.code === 0 ? parseLog(r.stdout) : [];
+async function gql(query, vars = {}) {
+  const args = ["api", "graphql", "-f", `query=${query}`];
+  for (const [k, v] of Object.entries(vars)) if (v !== null && v !== undefined) args.push("-f", `${k}=${v}`);
+  const out = JSON.parse(await gh(args));
+  if (!out.data) throw new Error(out.errors?.[0]?.message ?? "GitHub could not be read.");
+  return out.data;
 }
 
 export class Shipped {
   init(cx) {
     this.kind = "week"; this.offset = 0;
-    this.github = {}; // by period key: the query's data, or { error }
-    this.repos = null; this.since = null; this.loading = false; this.pending = false;
-    this.people = []; this.records = shared(RECORDS) ?? {}; this.fresh = new Set();
-    this.reposOpen = false;
+    this.github = {}; // by period key: the period query's data, or { error }
+    this.stats = null; this.syncing = false; this.syncError = null; this.waiting = 0; this.total = 0;
+    this.records = shared(RECORDS) ?? {}; this.fresh = new Set();
+    this.loading = false; this.pending = false; this.reposOpen = false; this.width = 368;
     this.refresh(cx);
     cx.timer.every(REFRESH_MS, (cx) => this.refresh(cx, true));
   }
@@ -277,8 +269,7 @@ export class Shipped {
     cx.notify();
   }
 
-  // GitHub first (it names you), then git in every repository. One read at a
-  // time; a request during one runs after it, reading only what is missing.
+  // The period's query; the repositories' sums are read alongside, on their own.
   refresh(cx, again = false) {
     if (this.loading) { this.pending = this.pending || again || "missing"; return; }
     this.loading = true;
@@ -286,50 +277,114 @@ export class Shipped {
       try {
         const key = this.key(), now = Date.now();
         const cur = periodRange(this.kind, this.offset, now), prev = comparedRange(this.kind, this.offset, now);
-        if (again || !this.github[key]) { this.github[key] = await this.readGithub(cur, prev, now); cx.notify(); }
-        const since = Math.min(prev.start, now - 365 * DAY);
-        if (again || this.repos === null || since < this.since) { this.repos = await this.readGit(since); this.since = since; }
+        if (again || !this.github[key]) {
+          try {
+            const data = await gql(periodQuery(cur, prev, now));
+            this.github[key] = data;
+            this.login = data.viewer.login;
+            this.weeks = data.viewer.cal.contributionCalendar.weeks;
+            this.days = this.weeks.flatMap((w) => w.contributionDays);
+          } catch (e) {
+            const why = String(e?.message ?? e);
+            this.github[key] = { error: why.includes("ENOENT") ? "Install the GitHub CLI (gh) and run `gh auth login`." : why };
+          }
+        }
         this.checkRecords();
       } catch {}
       finally {
         this.loading = false;
         cx.notify();
+        if (again || !this.stats) this.startSync(cx);
         const next = this.pending; this.pending = false;
         if (next) this.refresh(cx, next === true);
       }
     });
   }
 
-  async readGithub(cur, prev, now) {
-    let r;
-    try { r = await exec("gh", ["api", "graphql", "-f", `query=${githubQuery(cur, prev, now)}`]); }
-    catch { return { error: "Install the GitHub CLI (gh) for pull requests, reviews and the streak." }; }
-    if (r.code !== 0) return { error: (r.stderr || r.stdout).trim().split("\n")[0] || "GitHub could not be read." };
+  startSync(cx) {
+    if (this.syncing || !this.login) return;
+    this.syncing = true; this.syncError = null;
+    cx.spawn(async (cx) => {
+      try { await this.sync(cx); }
+      catch (e) { this.syncError = String(e?.message ?? e); }
+      finally { this.syncing = false; this.firstRead = false; this.checkRecords(); cx.notify(); }
+    });
+    cx.notify();
+  }
+
+  async loadStats() {
+    if (this.stats?.login === this.login) return this.stats;
+    let stats = null;
+    try { stats = JSON.parse(await readTextFile(`${appHome()}/${CACHE_FILE}`) ?? "null"); } catch {}
+    const fresh = !(stats?.v === 2 && stats.login === this.login && stats.repos);
+    this.firstRead = fresh; // only the first read says it is adding up; later ones refresh quietly
+    this.stats = fresh ? { v: 2, login: this.login, repos: {} } : stats;
+    return this.stats;
+  }
+
+  async saveStats() {
+    const path = `${appHome()}/${CACHE_FILE}`;
     try {
-      const data = JSON.parse(r.stdout).data, v = data.viewer;
-      this.people = [v.login, v.name, `${v.login}@users.noreply.github.com`].filter(Boolean);
-      this.weeks = v.cal.contributionCalendar.weeks;
-      this.days = this.weeks.flatMap((w) => w.contributionDays);
-      this.recent = data.recent.nodes;
-      return data;
-    } catch { return { error: "GitHub's answer could not be read." }; }
+      await exec("mkdir", ["-p", `${appHome()}/${CACHE_DIR}`]);
+      await writeTextFile(path, JSON.stringify(this.stats), await readTextFile(path));
+    } catch {}
   }
 
-  async readGit(since) {
-    const repos = await findRepos();
-    return Promise.all(repos.map(async (repo) => ({ name: repo.name, commits: await readRepo(repo, since, this.people).catch(() => []) })));
+  // Your repositories, then the statistics of each one that is new or was
+  // pushed since it was read. GitHub may still be computing some: those are
+  // asked again a few seconds later.
+  async sync(cx) {
+    const stats = await this.loadStats();
+    const repos = new Map();
+    for (const field of ["contributed", "owned"]) {
+      let after = null;
+      for (;;) {
+        const page = (await gql(REPOS, field === "contributed" ? { after } : { own: after })).viewer[field];
+        for (const n of page.nodes ?? []) if (n?.nameWithOwner) repos.set(n.nameWithOwner, n.pushedAt);
+        if (!page.pageInfo.hasNextPage) break;
+        after = page.pageInfo.endCursor;
+      }
+    }
+    for (const name of Object.keys(stats.repos)) if (!repos.has(name)) repos.set(name, stats.repos[name].pushed);
+    let due = [...repos].filter(([name, pushed]) => {
+      const had = stats.repos[name];
+      return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched);
+    });
+    this.total = repos.size;
+    for (let round = 0; due.length && round < RETRIES; round++) {
+      if (round) await exec("sleep", ["5"]);
+      this.waiting = due.length; cx.notify();
+      const later = [];
+      for (let i = 0; i < due.length; i += PARALLEL) {
+        await Promise.all(due.slice(i, i + PARALLEL).map(async ([name, pushed]) => {
+          let weeks;
+          try { weeks = yourWeeks(JSON.parse(await gh(["api", `repos/${name}/stats/contributors`]) || "{}"), this.login); }
+          catch { weeks = []; } // gone, or not yours to read: nothing to add
+          if (weeks === null) { later.push([name, pushed]); stats.repos[name] = { ...(stats.repos[name] ?? { weeks: [] }), pending: true, fetched: stats.repos[name]?.fetched ?? 0, pushed }; return; }
+          stats.repos[name] = { fetched: Date.now(), pushed, weeks };
+        }));
+        this.waiting = Math.max(0, due.length - i - PARALLEL) + later.length;
+        cx.notify();
+      }
+      await this.saveStats();
+      due = later;
+    }
+    // Still computing after a while: they are asked again on the next refresh.
+    this.waiting = 0;
   }
 
-  // Once both halves are in: keep the bests, and toast the ones just beaten.
+  // Keeps the bests, and toasts the ones just set. The sums' records wait
+  // until every repository is in, so a half-read one is never a "new record".
   checkRecords() {
-    if (!this.days || this.repos === null) return;
-    const { kept, beaten } = mergeRecords(shared(RECORDS), computeRecords({ days: this.days, repos: this.repos, recent: this.recent }));
+    if (!this.days) return;
+    const whole = this.stats && !this.syncing ? this.stats : null;
+    const { kept, beaten } = mergeRecords(shared(RECORDS), computeRecords({ days: this.days, stats: whole }));
     this.records = kept;
     setShared(RECORDS, kept);
     for (const k of beaten) {
       this.fresh.add(k);
       const t = recordText(k, kept[k]);
-      notify({ title: `New record: ${RECORD_NAMES[k].toLowerCase()}`, body: `${t.value} ${t.unit}${t.when ? ` · ${t.when}` : ""}`, level: "success" });
+      notify({ title: `New record: ${RECORD_NAMES[k].toLowerCase()}`, body: `${t.value} ${t.unit} · ${t.detail}`, level: "success" });
     }
   }
 
@@ -344,9 +399,9 @@ export class Shipped {
   }
 
   section(c, title, note) {
-    return h_flex().w_full().items_end().justify_between().pb(G.sm)
-      .child(div().text_size(15).text_color(c.text).child(title))
-      .child(div().text_size(12).text_color(c.dim).child(note ?? ""));
+    return h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.sm)
+      .child(div().flex_none().text_size(15).text_color(c.text).child(title))
+      .child(div().min_w(0).truncate().text_size(12).text_color(c.dim).child(note ?? ""));
   }
 
   periods(c) {
@@ -369,60 +424,74 @@ export class Shipped {
   hero(c, narrow) {
     const now = Date.now();
     const cur = periodRange(this.kind, this.offset, now), prev = comparedRange(this.kind, this.offset, now);
-    const lines = this.repos ? sumLines(this.repos, cur.start, cur.end) : null;
-    const before = this.repos ? sumLines(this.repos, prev.start, prev.end) : null;
-    const gh = this.github[this.key()];
-    const delta = lines && before && before.add > 0 ? Math.round(((lines.add - before.add) / before.add) * 100) : null;
+    // A running week compares with the whole last one: its sum can't be cut.
+    const before = this.kind === "week" && this.offset === 0 ? periodRange("week", -1, now) : prev;
+    const gh = this.github[this.key()], v = gh?.viewer;
+    const contributions = v ? contributionsIn(this.days, cur.start, cur.end, v.cur) : null;
+    const contributionsBefore = v ? contributionsIn(this.days, prev.start, prev.end, v.prev) : null;
+    const sums = this.stats ? sumWeeks(this.stats, cur.start, cur.end) : null;
+    const sumsBefore = this.stats ? sumWeeks(this.stats, before.start, before.end) : null;
+    const byDay = this.kind === "day"; // GitHub's sums are weekly: a day leads with contributions
+    const value = byDay ? contributions : sums?.add, was = byDay ? contributionsBefore : sumsBefore?.add;
+    const settled = byDay || !(this.syncing && this.firstRead);
+    const delta = settled && value !== null && value !== undefined && was > 0 ? Math.round(((value - was) / was) * 100) : null;
     // Past double, a multiple reads better than a four-digit percentage.
-    const deltaText = delta === null ? "" : delta >= 200 ? `${fmt(lines.add / before.add)}x` : `${delta >= 0 ? "+" : ""}${delta}%`;
-    const big = narrow ? 40 : 56;
+    const deltaText = delta === null ? "" : delta >= 200 ? `${fmt(value / was)}x` : `${delta >= 0 ? "+" : ""}${delta}%`;
+    const when = periodLabel(this.kind, this.offset).toLowerCase();
     const stats = [
+      byDay ? null : { value: contributions === null ? "—" : fmt(contributions), unit: "contributions" },
       { value: gh?.curMerged ? fmt(gh.curMerged.issueCount) : "—", unit: "pull requests merged" },
-      { value: lines ? fmt(lines.commits) : "—", unit: lines?.commits === 1 ? "commit landed" : "commits landed" },
-      { value: gh?.viewer ? fmt(gh.viewer.cur.totalPullRequestReviewContributions) : "—", unit: "reviews" },
-      { value: lines ? fmt(lines.byRepo.length) : "—", unit: lines?.byRepo.length === 1 ? "repository" : "repositories" },
-    ];
+      { value: sums && !byDay ? fmt(Math.max(sums.commits, v?.cur.totalCommitContributions ?? 0)) : v ? fmt(v.cur.totalCommitContributions) : "—", unit: "commits" },
+      { value: v ? fmt(v.cur.totalPullRequestReviewContributions) : "—", unit: "reviews" },
+      byDay ? null : { value: sums ? fmt(sums.byRepo.length) : "—", unit: sums?.byRepo.length === 1 ? "repository" : "repositories" },
+    ].filter(Boolean);
+    const ever = this.stats ? sumWeeks(this.stats, 0, Infinity) : null;
     return v_flex().w_full().gap(G.lg)
       .child(v_flex().w_full().gap(G.xs)
-        .child(h_flex().w_full().flex_wrap().items_end().gap(G.md)
-          .child(div().text_size(big).line_height(1).font_light().text_color(c.text).child(lines ? `+${fmt(lines.add)}` : "…"))
-          .child(div().pb(6).text_size(narrow ? 18 : 22).line_height(1).font_light().text_color(c.muted).child(lines ? `−${fmt(lines.del)}` : "")))
-        .child(h_flex().w_full().flex_wrap().gap(G.sm).items_center()
-          .child(div().text_size(13).text_color(c.muted).child(`lines shipped, ${periodLabel(this.kind, this.offset).toLowerCase()}`))
+        .child(h_flex().w_full().flex_wrap().items_end().gap_x(G.md).gap_y(G.xs)
+          .child(div().text_size(narrow ? 40 : 56).line_height(1).font_light().text_color(c.text)
+            .child(value === null || value === undefined ? "…" : byDay ? fmt(value) : `+${fmt(value)}`))
+          .when(!byDay && Boolean(sums), (el) => el.child(div().pb(6).text_size(narrow ? 18 : 22).line_height(1).font_light().text_color(c.muted).child(`−${fmt(sums.del)}`))))
+        .child(h_flex().w_full().flex_wrap().gap_x(G.sm).gap_y(2).items_center()
+          .child(div().text_size(13).text_color(c.muted).child(byDay ? `contributions, ${when}` : `lines shipped, ${when}${settled ? "" : ", still adding up"}`))
           .when(delta !== null, (el) => el.child(h_flex().gap(6).items_center()
             .child(div().size(6).rounded_full().bg(delta >= 0 ? c.green : c.red))
             .child(div().text_size(13).text_color(delta >= 0 ? c.green : c.red).child(`${deltaText} ${comparedLabel(this.kind, this.offset)}`))))))
-      .child(h_flex().w_full().flex_wrap().gap(narrow ? G.lg : 32)
-        .children(stats.map((s) => v_flex().gap(4)
+      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.lg : 32).gap_y(G.lg)
+        .children(stats.map((s) => v_flex().gap(4).min_w(64)
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
           .child(div().text_size(11).text_color(c.dim).child(s.unit)))))
-      .when(Boolean(gh?.error), (el) => el.child(div().text_size(12).text_color(c.dim).child(gh.error)));
+      .when(Boolean(gh?.ever), (el) => el.child(div().text_size(12).text_color(c.muted)
+        .child([
+          `${fmt(gh.ever.issueCount)} pull requests merged`,
+          ever?.add ? `+${fmt(ever.add)} lines and ${fmt(ever.commits)} commits in ${fmt(ever.byRepo.length)} repositories` : "",
+        ].filter(Boolean).join(", ") + `${v?.createdAt ? ` since you joined GitHub in ${new Date(v.createdAt).getFullYear()}` : ""}.`)))
+      .when(Boolean(gh?.error), (el) => el.child(div().text_size(12).text_color(c.red).child(gh.error)));
   }
 
-  // The current streak, then the last 12 weeks as GitHub draws them, in the accent.
-  streak(c) {
-    if (!this.days) return null;
-    const today = isoDay(new Date());
-    const { current, longest } = streaks(this.days, today);
+  // The current streak, then as many weeks of the calendar as fit, its
+  // squares sized to fill the width, in the accent.
+  streak(c, width) {
+    const { current, longest } = streaks(this.days, isoDay(new Date()));
     const level = { NONE: null, FIRST_QUARTILE: "40", SECOND_QUARTILE: "70", THIRD_QUARTILE: "b0", FOURTH_QUARTILE: "ff" };
-    const weeks = (this.weeks ?? []).slice(-HEAT_WEEKS);
-    const cell = (d) => {
-      const a = d ? level[d.contributionLevel] : null;
-      return div().size(11).rounded(2).bg(a ? c.accent + a : c.subtle)
-        .when(Boolean(d), (el) => el.tooltip(`${fmt(d.contributionCount)} on ${dayName(fromIsoDay(d.date))}`));
+    const { weeks: n, cell } = heatLayout(width);
+    const weeks = (this.weeks ?? []).slice(-n);
+    const radius = Math.max(2, Math.round(cell / 5));
+    const square = (d, key) => {
+      if (!d) return div().id(key).size(cell).flex_none(); // before the calendar, or still to come
+      const a = level[d.contributionLevel];
+      return div().id(key).size(cell).flex_none().rounded(radius).bg(a ? c.accent + a : c.subtle)
+        .tooltip(`${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}`);
     };
     return v_flex().w_full().gap(G.md)
       .child(this.section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
-      .child(h_flex().w_full().flex_wrap().items_end().gap(G.xl)
-        .child(v_flex().gap(4)
-          .child(h_flex().items_end().gap(G.sm)
-            .child(div().text_size(40).line_height(1).font_light().text_color(c.text).child(fmt(current)))
-            .when(current > 0, (el) => el.child(div().mb(8).size(8).rounded_full().bg(c.accent))))
-          .child(div().text_size(11).text_color(c.dim).child(current === 1 ? "day in a row" : "days in a row")))
-        .child(h_flex().gap(3).children(weeks.map((w) => {
-          const byDay = new Map(w.contributionDays.map((d) => [d.weekday, d]));
-          return v_flex().gap(3).children([0, 1, 2, 3, 4, 5, 6].map((i) => cell(byDay.get(i))));
-        }))));
+      .child(h_flex().items_end().gap(G.sm)
+        .child(div().text_size(40).line_height(1).font_light().text_color(c.text).child(fmt(current)))
+        .child(div().pb(4).text_size(12).text_color(c.dim).child(current === 1 ? "day in a row" : "days in a row")))
+      .child(h_flex().w_full().gap(CELL_GAP).children(weeks.map((w, wi) => {
+        const byDay = new Map(w.contributionDays.map((d) => [d.weekday, d]));
+        return v_flex().flex_none().gap(CELL_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
+      })));
   }
 
   recordsList(c) {
@@ -434,12 +503,11 @@ export class Shipped {
         const r = this.records[k], t = recordText(k, r), fresh = this.fresh.has(k);
         return h_flex().id(`record-${k}`).w_full().py(10).gap(G.md).items_center()
           .when(i > 0, (el) => el.border_t_1().border_color(c.border))
-          .when(Boolean(r.url), (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle)).on_click(() => exec("open", [r.url]).catch(() => exec("xdg-open", [r.url])).catch(() => {})))
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(h_flex().gap(G.sm).items_center()
-              .child(div().text_size(13).text_color(c.text).child(RECORD_NAMES[k]))
-              .when(fresh, (el) => el.child(div().px(6).py(1).rounded(6).bg(c.accent + "26").text_size(11).text_color(c.accent).child("New record"))))
-            .child(div().truncate().text_size(11.5).text_color(c.dim).child([r.title, t.when].filter(Boolean).join(" · "))))
+              .child(div().truncate().text_size(13).text_color(c.text).child(RECORD_NAMES[k]))
+              .when(fresh, (el) => el.child(div().flex_none().px(6).py(1).rounded(6).bg(c.accent + "26").text_size(11).text_color(c.accent).child("New record"))))
+            .child(div().truncate().text_size(11.5).text_color(c.dim).child(t.detail)))
           .child(h_flex().flex_none().items_end().gap(6)
             .child(div().text_size(20).line_height(1).font_light().text_color(fresh ? c.accent : c.text).child(t.value))
             .child(div().text_size(11).text_color(c.dim).child(t.unit)));
@@ -447,18 +515,20 @@ export class Shipped {
   }
 
   byRepo(c) {
-    if (!this.repos) return null;
-    const now = Date.now(), cur = periodRange(this.kind, this.offset, now);
-    const { byRepo } = sumLines(this.repos, cur.start, cur.end);
-    if (!byRepo.length) return v_flex().w_full().child(this.section(c, "By repository", "")).child(div().text_size(12).text_color(c.dim).child("Nothing landed in this period yet."));
-    const top = Math.max(...byRepo.map((r) => r.add + r.del)), rows = this.reposOpen ? byRepo : byRepo.slice(0, REPO_ROWS);
+    const now = Date.now(), cur = periodRange(this.kind, this.kind === "day" ? 0 : this.offset, now);
+    // A day's lines live in its week: the breakdown shows that week.
+    const span = this.kind === "day" ? periodRange("week", 0, cur.start) : cur;
+    const { byRepo } = sumWeeks(this.stats, span.start, span.end);
+    const note = this.kind === "day" ? `this week · ${fmt(byRepo.length)}` : fmt(byRepo.length);
+    if (!byRepo.length) return v_flex().w_full().child(this.section(c, "By repository", "")).child(div().text_size(12).text_color(c.dim).child(this.syncing ? "Adding up…" : "Nothing in this period yet."));
+    const top = Math.max(1, ...byRepo.map((r) => r.add + r.del)), rows = this.reposOpen ? byRepo : byRepo.slice(0, REPO_ROWS);
     return v_flex().w_full()
-      .child(this.section(c, "By repository", `${byRepo.length}`))
+      .child(this.section(c, "By repository", note))
       .children(rows.map((r, i) => v_flex().w_full().py(G.sm).gap(6)
         .when(i > 0, (el) => el.border_t_1().border_color(c.border))
-        .child(h_flex().w_full().gap(G.md).items_center()
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(r.name))
-          .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(r.commits)} · +${fmt(r.add)} −${fmt(r.del)}`)))
+        .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2).items_center()
+          .child(div().flex_1().min_w(120).truncate().text_size(13).text_color(c.text).child(r.name))
+          .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(r.commits)} commits · +${fmt(r.add)} −${fmt(r.del)}`)))
         .child(h_flex().w_full().h(4).rounded(2).bg(c.subtle)
           .child(div().h_full().rounded(2).bg(c.accent).w(`${(Math.max(0.02, (r.add + r.del) / top) * 100).toFixed(1)}%`)))))
       .when(byRepo.length > REPO_ROWS, (el) => el.child(h_flex().pt(G.sm).child(Button.new("shipped-repos-more").cursor_pointer()
@@ -466,25 +536,35 @@ export class Shipped {
         .child(div().text_size(12).text_color(c.muted).child(this.reposOpen ? "Show fewer" : `Show ${byRepo.length - REPO_ROWS} more`)))));
   }
 
+  status(c) {
+    if (this.syncError) return div().text_size(12).text_color(c.red).child(`Adding up stopped: ${this.syncError}`);
+    if (!this.syncing || !this.firstRead) return null;
+    const left = this.waiting ? `, ${fmt(this.waiting)} to go` : "";
+    return div().text_size(12).text_color(c.muted).child(`Adding up your ${this.total ? fmt(this.total) + " " : ""}repositories${left}. GitHub computes some sums on demand, so the first time takes a minute.`);
+  }
+
   render(cx) {
     const c = tokens(theme());
-    const narrow = (this.width || 368) < 560;
-    const loading = this.loading;
-    const body = this.repos === null && !this.github[this.key()]
+    const width = this.width || 368, narrow = width < 560;
+    const pad = narrow ? G.lg : 32;
+    const inner = Math.min(1080, width - 2 * pad);
+    const gh = this.github[this.key()], status = this.status(c);
+    const body = !gh && !this.stats
       ? v_flex().w_full().gap(G.sm).child(div().text_size(15).text_color(c.muted).child("Adding up what you shipped")).child(div().text_size(12).text_color(c.dim).child("This takes a second."))
       : v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
-        .when(Boolean(this.days), (el) => el.child(this.streak(c)))
+        .when(Boolean(status), (el) => el.child(status))
+        .when(Boolean(this.days), (el) => el.child(this.streak(c, inner)))
         .when(Object.keys(this.records).length > 0, (el) => el.child(this.recordsList(c)))
         .child(this.byRepo(c))
-        .child(div().text_size(10.5).text_color(c.dim).child("Lines and commits: git in the repositories you work in here, what landed on origin's main, master or develop as of your last fetch, without merges or lockfiles. Pull requests, reviews and the streak: GitHub, through gh."));
+        .child(div().text_size(10.5).text_color(c.dim).child("Sums GitHub keeps, through gh, across every repository and organization you contributed to or own: lines and commits from each repository's weekly contributor statistics, contributions the way your profile counts them, private ones included."));
     return v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
+      .child(h_flex().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(h_flex().w_full().items_center().justify_between().gap(G.md)
             .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Shipped"))
-            .child(this.iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: loading })))
+            .child(this.iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing })))
           .child(this.periods(c))
           .child(body)));
   }

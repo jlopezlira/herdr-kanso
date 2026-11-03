@@ -97,11 +97,18 @@ renders Markdown, including code blocks and checklists.
 
 ### See what you shipped
 
-**Shipped** is Spend's other half: what you delivered by day, week, month or
-year. It shows the lines that landed, compared with the same point of the
-period before, along with pull requests merged, commits, reviews, your streak
-with twelve weeks of contributions, your records, and where it all went, by
-repository. When you set a new record, it tells you.
+**Shipped** is Spend's other half, and its numbers are meant to make you feel
+good. It counts what you delivered across every repository and organization
+on GitHub, by day, week, month or year:
+- lines added and removed, with how much you grew against the period before;
+- contributions (private ones included), pull requests merged, commits,
+  reviews and repositories;
+- your totals since you joined GitHub;
+- your streak, with a heat map that fills the panel, up to a whole year;
+- your records, with a toast when you set a new one;
+- every repository you shipped to.
+
+It only reads sums GitHub already keeps.
 
 ### Every repo and worktree, one sidebar
 
@@ -218,8 +225,10 @@ files only inside the folders you work in.
 
 Three things reach the network. The pull request panel runs the GitHub CLI
 (`gh`) and talks to GitHub only while the panel is shown. So does Shipped,
-which reads your contributions and merged pull requests from GitHub with `gh`
-and runs `git log` in the repositories you work in, only while it is shown. The updater runs
+only while it is shown: through `gh` it reads your contribution counts and
+each of your repositories' weekly contributor statistics, which it keeps in
+`~/.config/herdr-app/data/kanso-panel/shipped.json` and asks for again only
+when a repository is pushed. The updater runs
 `git ls-remote` against this repository every 6 hours, and only when you
 choose to update downloads the release with `curl` into
 `~/.config/herdr-app/.kanso-update/`, removed when it is done. Open with runs `sh`

@@ -149,38 +149,53 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       hidden by default. It holds whichever panel is open: `kanso-panel`
       told `files`, `changes`, `pr` or `shipped` (`props.panel`), `token-spend`
       (Insights) or `sdd-focused`.
-      The Shipped panel (`kanso-panel` with `shipped`) is what you delivered,
-      drawn like Spend: "Shipped" (20) and a refresh icon; Day, Week, Month
-      and Year tabs (26 tall, `selected` wash) with previous and next arrows
-      around the period's name ("This week", "Last week", "19 Oct – 25 Oct";
-      no next past now). The hero is the lines added (56, light; 40 under 560
-      wide) with the lines removed beside it (22, `muted`), "lines shipped,
-      this week" and, against the previous period cut at the same point
-      ("vs this point last week"), a green or red 6 dot with the change as a
-      percentage, or as a multiple past double ("65x"). Under it, four light
-      28 numbers with 11 `dim` units: pull requests merged, commits landed,
-      reviews, repositories. Then "Streak": the current run of days with a
-      contribution (40, an 8 `accent` dot while it runs; today without one
-      yet does not break it), "longest N days" at the right, and the last
-      12 weeks as GitHub draws them, 11 squares 3 apart, radius 2, `accent`
-      at alpha 40/70/b0/ff by GitHub's quartile, `hover` when empty. Then
-      "Records" (best day, best week by lines, longest streak, biggest pull
-      request, fastest merge), each a hairline row with its detail in `dim`
-      and its value (20, light) at the right; one you just set (within the
-      last week, beating the stored one) shows a "New record" chip in
-      `accent` and toasts once. Records keep the best ever seen in
-      `shared("kanso.shipped.records")`. Then "By repository": name,
-      `commits · +a −d`, and a 4 tall `accent` bar by share, 6 rows then
-      "Show N more". Lines and commits come from `git log --shortstat` of
-      what landed on origin's main, master or develop, authored by you
-      (your GitHub login, name and noreply address, and each repository's
-      `user.email` and `user.name`), no merges, no lockfiles, in the
-      repositories your local panes and spaces are in (remembered in
-      `shared("kanso.shipped.folders")`). The rest is one GitHub GraphQL
-      query through `gh`: the period's and the compared period's
-      contributions and merged pull request counts, the last year's
-      calendar and your last 100 merged pull requests. It rereads every 5
-      minutes while shown.
+      The Shipped panel (`kanso-panel` with `shipped`) is vanity metrics on
+      purpose, drawn like Spend. It has:
+      - a header: "Shipped" (20) and a refresh icon;
+      - Day, Week, Month and Year tabs (26 tall, a `selected` wash on the
+        active one), with previous and next arrows around the period's name
+        ("This week", "Last week", "19 Oct – 25 Oct"). Next stops at now.
+      - the hero: the lines added (56 and light; 40 under 560 wide), with
+        the lines removed beside it (22, `muted`) and "lines shipped, this
+        week". A green or red 6 dot gives the change against the period
+        before, cut at the same point (a running week compares with the
+        whole last one). It reads as a percentage, or as a multiple past
+        double ("65x"). A day leads with its contributions instead, since
+        GitHub's sums are weekly.
+      - under the hero, light 28 numbers with 11 `dim` units: contributions,
+        pull requests merged, commits, reviews and repositories. Then a
+        `muted` line with your totals since you joined GitHub: pull requests
+        merged, lines, commits and repositories.
+      - "Streak": the current run of days with a contribution (40; today
+        without one yet does not break it), and "longest N days" at the
+        right. Then the calendar as GitHub draws it: as many whole weeks as
+        fit the width, up to 53, with squares of 9 to 16 sized to fill it,
+        3 apart. Each square is `accent` at alpha 40/70/b0/ff by GitHub's
+        quartile, `hover` when empty, with a tooltip.
+      - "Records": best day (contributions), best week and best month
+        (lines), longest streak, and most commits in a week. Each is a
+        hairline row with its detail in `dim` and its value (20, light) at
+        the right. A record you just set (within the last week, or the last
+        month for the best month, beating the stored one) shows a "New
+        record" chip in `accent` and toasts once. Records keep the best ever
+        seen in `shared("kanso.shipped.bests")`.
+      - "By repository": the name, `commits · +a −d`, and a 4 tall `accent`
+        bar by share; 8 rows, then "Show N more". A day shows its week.
+
+      It reads only sums GitHub keeps, through `gh`:
+      - one GraphQL query per period: the period's and the compared
+        period's contribution totals (`restrictedContributionsCount`
+        included), merged pull request counts by search, the last year's
+        calendar, and the count of every pull request you ever merged;
+      - your repositories (`repositoriesContributedTo` and the ones you
+        own), and each one's `stats/contributors`: your additions, deletions
+        and commits per week, on its default branch. A GitHub week counts
+        from Sunday, UTC, so each is placed at its Monday noon.
+
+      The sums are kept in `data/kanso-panel/shipped.json` and asked for
+      again only after a push. GitHub answers `{}` while it computes; that
+      repository is asked again 5 s later, up to 6 times, then on the next
+      refresh. The panel rereads every 5 minutes while shown.
       The PR panel (`kanso-panel` with `pr`) shows one pull request at a time: the focused
       pane's branch's own while it is open, as T3 Code does (a merged or closed
       one counts as none), else the newest open one in that repository
