@@ -143,6 +143,15 @@ it holds, to open it in a new tab or remove it; **Remove all** does a whole
 repository, and says first what would be lost. Records of folders already gone
 are pruned the same way.
 
+**Freed** keeps score: how much disk Clean up and Remove have freed so far, the
+worktrees, merged branches and leftovers they cleared, and a bar a day for the
+last 30 days. **Share** posts it to X, LinkedIn or Bluesky as an image, the
+same way Shipped and Spend do, with the totals only: never a repository,
+branch or folder name. **Explain it** on a worktree, or **Review the ones that
+need a look**, hands the question to your agent in a new tab: what that work
+is, whether it already lives in a branch, a remote or a pull request, and what
+to keep. The agent explains; it changes nothing.
+
 ### Every repo and worktree, one sidebar
 
 Repositories and their **nested Git worktrees** sit together, each with its

@@ -5,9 +5,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { load, context, temporary, clone, exec } from "./helpers.mjs";
 
-const names = ["Worktrees", "removable", "losses", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
+const names = ["Worktrees", "removable", "losses", "addFreed", "freedTotals", "freedDays", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "FREED", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
 const worktrees = (host = {}) => load("kanso-panel/worktrees.js", names, {
-  exec, spaces: () => [], panes: () => [], home: () => "/Users/me", run() {}, theme: () => ({}), shared: () => null, notify() {}, ...host,
+  exec, spaces: () => [], panes: () => [], home: () => "/Users/me", run() {}, theme: () => ({}), shared: () => null, setShared() {}, notify() {},
+  knownAgents: async () => [], Share: class { constructor() { this.open = false; } }, postText: (parts, fallback) => (parts.length ? parts.join(", ") + "." : fallback), ...host,
 });
 const git = async (cwd, ...args) => {
   const r = await exec("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd });
@@ -60,6 +61,40 @@ test("Worktrees says what removing loses, and only cleans up what loses nothing"
   assert.equal(losses([w({ merged: true })]), "Nothing is lost.");
 });
 
+test("Worktrees keeps what you freed, a day at a time, and shares only the totals", async () => {
+  const { addFreed, freedTotals, freedDays, freedSpec, freedText } = await worktrees();
+  const day = (d, h = 10) => new Date(2026, 10, d, h).getTime();
+  let l = addFreed(null, day(1), { kb: 2 * 1048576, worktrees: 3, branches: 2 });
+  l = addFreed(l, day(1, 18), { records: 5 });
+  l = addFreed(l, day(3), { kb: 512 * 1024, worktrees: 1, orphans: 1 });
+  const t = clone(freedTotals(l));
+  assert.deepEqual([t.kb, t.worktrees, t.records, t.branches, t.orphans], [2.5 * 1048576, 4, 5, 2, 1]);
+  assert.equal(t.since, day(1));
+  assert.equal(t.best.day, "2026-11-01");
+  const days = clone(freedDays(l, day(3), 3));
+  assert.deepEqual(days.map((d) => [d.day, d.kb]), [["2026-11-01", 2 * 1048576], ["2026-11-02", 0], ["2026-11-03", 512 * 1024]]);
+  const spec = clone(freedSpec(l, day(3)));
+  assert.deepEqual([spec.hero.big, spec.hero.small, spec.right], ["2.5", "GB", "since Nov 1"]);
+  assert.deepEqual(spec.stats.map((x) => x.value), ["4", "2", "6"]);
+  assert.equal(spec.blocks[0].kind, "bars");
+  assert.match(freedText(l), /^Freed 2\.5 GB of disk from 4 git worktrees my AI agents left behind, 2 merged branches deleted\.$/);
+  assert.doesNotMatch(JSON.stringify(spec) + freedText(l), /\/|acme|feat/, "no path, repository or branch");
+});
+
+test("Worktrees asks your agent to explain, never to change anything", async () => {
+  const { explainPrompt, reviewPrompt } = await worktrees();
+  const w = { path: "/wt/a", repo: "/src/acme", branch: "feat/x", dirty: 2, only: 0 };
+  const one = explainPrompt(w, "develop");
+  assert.match(one, /worktree of \/src\/acme, on branch feat\/x/);
+  assert.match(one, /git log develop\.\.HEAD/);
+  assert.match(one, /Do not change, commit, push or delete anything\./);
+  assert.match(explainPrompt({ orphan: true, path: "/x" }), /repository moved or was deleted/);
+  const all = reviewPrompt([w, { path: "/wt/b", repo: "/src/acme", branch: null, dirty: 0, only: 3 }], () => "main");
+  assert.match(all, /- \/wt\/a \(worktree of \/src\/acme, branch feat\/x, 2 uncommitted changes, compared with main\)/);
+  assert.match(all, /detached HEAD, 3 commits no branch has/);
+  assert.match(all, /Do not change, commit, push or delete anything yourself\./);
+});
+
 test("Worktrees finds every kind in a real repository and cleans up the safe ones", async (t) => {
   const dir = await temporary(t), root = join(dir, "Apps"), repo = join(root, "acme"), far = join(dir, "far");
   await mkdir(repo, { recursive: true }); await mkdir(far);
@@ -91,7 +126,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
 
   const notes = [], settings = { "kanso.worktrees.roots": [root] };
   const host = (extra) => worktrees({
-    home: () => dir, shared: (k) => settings[k] ?? null,
+    home: () => dir, shared: (k) => settings[k] ?? null, setShared: (k, v) => { settings[k] = v; },
     spaces: () => [{ folder: repo }], panes: () => [{ cwd: join(open, "src") }], notify: (n) => notes.push(n), ...extra,
   });
   const { cx, drain } = context();
@@ -119,7 +154,12 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.deepEqual(clone(panel.plan().map((w) => w.path.split("/").pop()).sort()), ["detached", "gone", "merged", "squashed", "unmerged"]);
   panel.cleanUp(cx); await drain();
   assert.equal(panel.note, null);
-  assert.equal(notes[0].title, "Removed 5 worktrees");
+  assert.match(notes[0].title, /^Freed \d+ KB$/);
+  assert.match(notes[0].body, /^5 removed, \d+ KB freed so far$/);
+  const { freedTotals } = await host();
+  const after = clone(freedTotals(settings["kanso.worktrees.freed"]));
+  assert.deepEqual([after.worktrees, after.records, after.branches], [4, 1, 2], "4 folders, 1 record of a gone one, the 2 merged branches");
+  assert.ok(after.kb > 0);
   assert.ok(![merged, squashed, unmerged, detached].some((p) => existsSync(p)), "folders removed");
   assert.ok(await exists(dirty) && await exists(lost) && await exists(open), "the rest stay");
   const branches = (await git(repo, "branch", "--format=%(refname:short)")).split("\n").sort();

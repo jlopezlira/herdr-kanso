@@ -199,7 +199,21 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         branch when merged, then `git worktree prune`). Under the rows:
         "Prune N folders already gone" and "Remove all N" (two presses; the
         losses in red while armed), which takes all but the ones in use,
-        open or locked.
+        open or locked;
+      - **Freed**, after the hero: what removals freed, kept by day in
+        shared `kanso.worktrees.freed` (kilobytes, worktrees, records,
+        branches, left-behind folders; totals only): the total (48 light)
+        "of disk freed so far", the three counts (24 light), and 30 bars, a
+        day each, drawn like Spend's chart (the best day in `accent` with its
+        size). A removal posts a toast with what it freed and the total;
+      - **Ask your agent**, when some would lose work: "Review the N that need
+        a look" opens your first installed agent (`knownAgents`) in a new tab
+        with them listed, to say what each holds, where else it lives (git,
+        `gh`) and what to remove, changing nothing. A row's "Explain it" does
+        the same for one, in its folder;
+      - the header's share icon, once something was freed, opens share.js's
+        row: the card (`freedSpec`) has the size freed, the three counts and
+        the days, never a repository, branch or path.
       The Shipped panel (`kanso-panel` with `shipped`) is vanity metrics on
       purpose, drawn like Spend. It has:
       - a header: "Shipped" (20), a share icon and a refresh icon. Share

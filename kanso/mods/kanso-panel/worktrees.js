@@ -20,7 +20,8 @@
 // its folder. A worktree open in Herdr is never removed.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, spaces, panes, home, run, theme, shared, notify } from "herdr";
+import { exec, spaces, panes, home, run, theme, shared, setShared, notify, knownAgents } from "herdr";
+import { Share, postText } from "./share.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const TEMP = ["/private/tmp", "/tmp"];
@@ -203,6 +204,89 @@ export function consequence(w, base) {
   return (lost.length ? `Loses ${lost.join(" and ")}.` : "Nothing is lost.") + branch;
 }
 
+// ---- What you freed -------------------------------------------------------
+// A ledger in shared `kanso.worktrees.freed`, one entry a day: kilobytes
+// freed, worktrees removed, records of gone folders pruned, branches deleted,
+// left-behind folders deleted. Totals only, no paths: it is what Share posts.
+export const FREED = "kanso.worktrees.freed";
+const dayKey = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+
+export function addFreed(ledger, at, e) {
+  const l = ledger && typeof ledger === "object" && ledger.days ? { since: ledger.since ?? at, days: { ...ledger.days } } : { since: at, days: {} };
+  const k = dayKey(at), d = l.days[k] ?? [0, 0, 0, 0, 0];
+  l.days[k] = [d[0] + (e.kb ?? 0), d[1] + (e.worktrees ?? 0), d[2] + (e.records ?? 0), d[3] + (e.branches ?? 0), d[4] + (e.orphans ?? 0)];
+  return l;
+}
+
+export function freedTotals(ledger) {
+  const t = { kb: 0, worktrees: 0, records: 0, branches: 0, orphans: 0, since: ledger?.since ?? null, best: null };
+  for (const [day, d] of Object.entries(ledger?.days ?? {})) {
+    t.kb += d[0]; t.worktrees += d[1]; t.records += d[2]; t.branches += d[3]; t.orphans += d[4];
+    if (!t.best || d[0] > t.best.kb) t.best = { day, kb: d[0] };
+  }
+  return t;
+}
+
+// Kilobytes freed on each of the last `n` days, the oldest first.
+export function freedDays(ledger, now = Date.now(), n = 30) {
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - i);
+    const k = dayKey(d.getTime());
+    out.push({ day: k, at: d.getTime(), kb: ledger?.days?.[k]?.[0] ?? 0 });
+  }
+  return out;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const shortDate = (ms) => { const d = new Date(ms); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+// "12.4 GB" as the card's big number and its unit.
+const splitSize = (kb) => { const [n, u] = fmtSize(kb).split(" "); return { big: n || "0", small: u || "KB" }; };
+
+// The share card: global numbers only, never a repository, branch or path.
+export function freedSpec(ledger, now = Date.now()) {
+  const t = freedTotals(ledger), days = freedDays(ledger, now), size = splitSize(t.kb);
+  const stats = [
+    { value: String(t.worktrees), unit: t.worktrees === 1 ? "worktree removed" : "worktrees removed" },
+    { value: String(t.branches), unit: t.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
+    { value: String(t.records + t.orphans), unit: "leftovers cleared" },
+  ];
+  return {
+    title: "Worktrees",
+    right: t.since ? `since ${shortDate(t.since)}` : "",
+    hero: { big: size.big, small: size.small, label: "of disk freed from worktrees agents left behind" },
+    stats,
+    note: "Each one checked first: nothing uncommitted lost, every commit kept on a branch.",
+    blocks: days.some((d) => d.kb) ? [{
+      kind: "bars", title: "Freed each day", right: t.best ? `best: ${fmtSize(t.best.kb)} on ${shortDate(new Date(`${t.best.day}T12:00:00`).getTime())}` : "",
+      values: days.map((d) => d.kb), ticks: [shortDate(days[0].at), "Last 30 days", shortDate(days[days.length - 1].at)],
+    }] : [],
+  };
+}
+
+export function freedText(ledger) {
+  const t = freedTotals(ledger), parts = [];
+  if (t.kb) parts.push(`Freed ${fmtSize(t.kb)} of disk from ${t.worktrees} git ${t.worktrees === 1 ? "worktree" : "worktrees"} my AI agents left behind`);
+  if (t.branches) parts.push(`${t.branches} merged ${t.branches === 1 ? "branch" : "branches"} deleted`);
+  return postText(parts, "Cleaning up after my AI agents.");
+}
+
+// ---- Asking your agent ---------------------------------------------------------
+// What a worktree holds and whether it can go, read by your agent in a new
+// tab there. Explaining changes nothing.
+export function explainPrompt(w, base) {
+  if (w.orphan) return `This folder was a git worktree whose repository moved or was deleted, so git no longer knows it. Explain what it holds: read its files, and if you can find the repository it came from (its .git file names the old location), compare them. End with a verdict: safe to delete, or what would be lost and how to keep it. Do not change, move or delete anything.`;
+  const head = w.branch ? `on branch ${w.branch}` : "with a detached HEAD";
+  const b = base || "the default branch";
+  return `This folder is a git worktree of ${w.repo}, ${head}. Explain what work it holds and whether it can be removed. Look at its uncommitted changes (git status, git diff), the commits not in ${b} (git log ${b}..HEAD), and whether that work exists anywhere else: another branch, a remote, or a pull request (gh pr list --state all --search <commit>${w.branch ? `, gh pr list --state all --head ${w.branch}` : ""}). End with a verdict: safe to remove, or exactly what would be lost and how to keep it (commit, push, open a pull request). Do not change, commit, push or delete anything.`;
+}
+
+// The ones that need a look, reviewed together.
+export function reviewPrompt(items, baseOf) {
+  const lines = items.slice(0, 40).map((w) => `- ${w.path} (${w.repo ? `worktree of ${w.repo}, ${w.branch ? `branch ${w.branch}` : "detached HEAD"}, ` : ""}${w.dirty > 0 ? `${w.dirty} uncommitted changes` : `${w.only} commits no branch has`}${baseOf(w) ? `, compared with ${baseOf(w)}` : ""})`);
+  return `These git worktrees would lose work if removed:\n${lines.join("\n")}${items.length > 40 ? `\n(and ${items.length - 40} more)` : ""}\n\nFor each one, find out what that work is and whether it already exists elsewhere: merged or squash-merged into the base branch, on another branch or remote, or in a pull request (use git and gh). Then give me a table: worktree, what it holds, where else it exists, and your recommendation (remove, or keep and why). For the ones safe to remove, end with the exact git worktree remove commands. Do not change, commit, push or delete anything yourself.`;
+}
+
 export function fmtSize(kb) {
   if (!kb) return "";
   if (kb >= 1048576) return `${(kb / 1048576).toFixed(1)} GB`;
@@ -240,7 +324,7 @@ function tokens(t) {
     canvas: t.canvas ?? t.background, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
     border: t.border, subtle: t.hover ?? t.raised, selected: t.selected ?? t.hover ?? t.raised,
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
-    red: t.ansi1, green: t.ansi2, yellow: t.ansi3,
+    red: t.ansi1, green: t.ansi2, yellow: t.ansi3, accent: t.accent ?? t.foreground,
   };
 }
 
@@ -264,6 +348,7 @@ export class Worktrees {
     this.groups = []; this.orphans = []; this.scan = 0; this.more = new Set(); this.allRepos = false;
     this.picked = null; this.armed = null; this.working = null; this.batch = null; this.phase = null; this.note = null;
     this.width = 368; this.done = false;
+    this.share = new Share("kanso-panel");
     this.refresh(cx);
   }
 
@@ -353,15 +438,24 @@ export class Worktrees {
       // Checked again now: still a folder whose .git names a record that is gone.
       const r = await exec("bash", ["-c", 'g=$(sed -n "1s/^gitdir: //p" "$1/.git" 2>/dev/null); case "$g" in */worktrees/*) ;; *) exit 4 ;; esac; case "$g" in /*) ;; *) g="$1/$g" ;; esac; [ -e "$g" ] && exit 5; rm -rf -- "$1"', "orphan", w.path]);
       if (r.code !== 0) throw new Error(r.code === 4 || r.code === 5 ? "It is a worktree again; refresh" : (r.stderr || "Cannot delete it").trim());
-      return;
+      return { kb: w.size ?? 0, orphans: 1 };
     }
     const git = (args) => exec("git", args, { cwd: w.repo });
     if (!w.missing) {
       const r = await git(["worktree", "remove", ...(w.dirty > 0 ? ["--force"] : []), w.path]);
       if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
     }
-    if (w.merged && w.branch) await git(["branch", "-D", w.branch]);
+    const branch = w.merged && w.branch ? (await git(["branch", "-D", w.branch])).code === 0 : false;
     await git(["worktree", "prune"]);
+    return w.missing ? { records: 1 } : { kb: w.size ?? 0, worktrees: 1, branches: branch ? 1 : 0 };
+  }
+
+  // Adds what a removal freed to the ledger.
+  credit(entries) {
+    let ledger = shared(FREED);
+    const at = Date.now();
+    for (const e of entries) ledger = addFreed(ledger, at, e);
+    setShared(FREED, ledger);
   }
 
   drop(w) {
@@ -375,8 +469,11 @@ export class Worktrees {
     if (w.open || w.locked || this.working) return;
     this.working = w.path; this.armed = null; this.note = null;
     cx.spawn(async (cx) => {
-      try { await this.removeOne(w); this.drop(w); }
-      catch (e) { this.note = `${name(w.path)}: ${String(e.message ?? e)}`; }
+      try {
+        const got = await this.removeOne(w);
+        this.drop(w); this.credit([got]);
+        if (got.kb) notify({ title: `Freed ${fmtSize(got.kb)}`, body: `${fmtSize(freedTotals(shared(FREED)).kb)} freed so far`, level: "success" });
+      } catch (e) { this.note = `${name(w.path)}: ${String(e.message ?? e)}`; }
       finally { this.working = null; cx.notify(); }
     });
     cx.notify();
@@ -387,7 +484,7 @@ export class Worktrees {
     if (!missing.length || this.working) return;
     this.working = missing[0].repo; this.note = null;
     cx.spawn(async (cx) => {
-      try { await this.removeOne(missing[0]); for (const w of missing) this.drop(w); }
+      try { await this.removeOne(missing[0]); for (const w of missing) this.drop(w); this.credit([{ records: missing.length }]); }
       catch (e) { this.note = `${name(missing[0].repo)}: ${String(e.message ?? e)}`; }
       finally { this.working = null; cx.notify(); }
     });
@@ -408,24 +505,26 @@ export class Worktrees {
   removeAll(items, cx) {
     if (!items.length || this.working) return;
     this.working = "all"; this.batch = new Set(items); this.armed = null; this.note = null;
-    const freed = items.reduce((n, w) => n + (w.size ?? 0), 0);
     cx.spawn(async (cx) => {
       let done = 0;
-      const failed = [];
+      const failed = [], got = [];
       const pruned = new Set();
       for (const w of items) {
         this.phase = `Removing ${done + 1} of ${items.length}`;
         this.soon(cx);
         try {
-          if (w.missing && pruned.has(w.repo)) { this.drop(w); done++; continue; }
-          await this.removeOne(w);
+          if (w.missing && pruned.has(w.repo)) { this.drop(w); done++; got.push({ records: 1 }); continue; }
+          got.push(await this.removeOne(w));
           if (w.missing) pruned.add(w.repo);
           this.drop(w); done++;
         } catch (e) { failed.push(`${name(w.path)}: ${String(e.message ?? e)}`); }
       }
+      this.credit(got);
       this.phase = null; this.working = null; this.batch = null;
       if (failed.length) this.note = `${failed.length} not removed. ${failed[0]}`;
-      notify({ title: `Removed ${done} ${done === 1 ? "worktree" : "worktrees"}`, body: freed ? `${fmtSize(freed)} freed` : undefined, level: failed.length ? "warning" : "success" });
+      const kb = got.reduce((n, e) => n + (e.kb ?? 0), 0), total = freedTotals(shared(FREED)).kb;
+      notify({ title: kb ? `Freed ${fmtSize(kb)}` : `Removed ${done} ${done === 1 ? "worktree" : "worktrees"}`,
+        body: `${done} removed${total ? `, ${fmtSize(total)} freed so far` : ""}`, level: failed.length ? "warning" : "success" });
       cx.notify();
     });
     cx.notify();
@@ -478,6 +577,7 @@ export class Worktrees {
       .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Worktrees"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(this.phase), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(this.phase)))
+        .when(freedTotals(shared(FREED)).kb > 0, (el) => el.child(this.iconButton("wt-share", "share", "Share what you freed", (cx) => this.share.toggle(cx), c, false)))
         .child(this.iconButton("wt-refresh", "refresh", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, scanning)));
   }
 
@@ -566,6 +666,8 @@ export class Worktrees {
         .child(div().w_full().text_size(12).line_height(1.45).text_color(loses ? c.red : c.muted).child(blocked || text))
         .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(tilde(w.path)))
         .child(h_flex().flex_wrap().gap_x(G.lg)
+          .when(!w.missing, (el) => el.child(quietLink(`wt-explain-${w.path}`, "Explain it", () => this.ask(`Explain ${name(w.path)}`, w.path,
+            explainPrompt(w, this.groups.find((g) => g.repo === w.repo)?.base)), c, { color: c.text })))
           .when(!w.missing, (el) => el.child(quietLink(`wt-open-${w.path}`, "Open in a new tab", () => run("tab.new", { folder: w.path }), c)))
           .when(!blocked, (el) => el.child(quietLink(`wt-rm-${w.path}`, busy ? "Removing…" : armed ? "Press again to remove" : "Remove",
             (cx) => this.arm(key, cx, (cx) => this.remove(w, cx)), c, { color: armed ? c.red : c.text, disabled: Boolean(this.working) })))));
@@ -598,6 +700,80 @@ export class Worktrees {
           (cx) => this.arm(key, cx, (cx) => { this.markOpen(); this.removeAll(items.filter(removable), cx); }), c, { color: armed ? c.red : c.muted, disabled: Boolean(this.working) }))));
   }
 
+  // A task for your agent, in a new tab in `folder`, as PR's "Ask your agent".
+  ask(title, folder, prompt) {
+    knownAgents({ on: null }).then((list) => {
+      const agent = list.find((a) => a.installed);
+      if (!agent) throw new Error("no agent is installed");
+      run("tab.new", { name: title, space: spaces().find((s) => s.active)?.id, folder, argv: agent.run, task: prompt });
+    }).catch((e) => notify({ title: "Could not start the agent", body: String(e?.message ?? e), level: "error" }));
+  }
+
+  section(c, title, note) {
+    return h_flex().w_full().items_end().justify_between().pb(G.sm)
+      .child(div().text_size(15).text_color(c.text).child(title))
+      .child(div().text_size(12).text_color(c.dim).child(note ?? ""));
+  }
+
+  // What Clean up and Remove have freed, as Spend draws its period: the total,
+  // the counts, and a bar a day for the last 30.
+  freed(c, narrow) {
+    const ledger = shared(FREED), t = freedTotals(ledger);
+    if (!t.kb && !t.records && !t.orphans) {
+      return v_flex().w_full()
+        .child(this.section(c, "Freed"))
+        .child(div().text_size(12).text_color(c.dim).child("Nothing freed yet. What Clean up and Remove free adds up here, day by day, ready to share."));
+    }
+    const days = freedDays(ledger), top = Math.max(...days.map((d) => d.kb)), height = 96;
+    const stats = [
+      { value: String(t.worktrees), unit: t.worktrees === 1 ? "worktree removed" : "worktrees removed" },
+      { value: String(t.branches), unit: t.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
+      { value: String(t.records + t.orphans), unit: "leftovers cleared" },
+    ];
+    return v_flex().w_full().gap(G.lg)
+      .child(this.section(c, "Freed", t.since ? `since ${shortDate(t.since)}` : ""))
+      .child(h_flex().flex_wrap().items_end().gap_x(G.md)
+        .child(div().text_size(narrow ? 36 : 48).line_height(1).font_light().text_color(c.text).child(fmtSize(t.kb) || "0 KB"))
+        .child(div().pb(narrow ? 4 : 7).text_size(13).text_color(c.dim).child("of disk freed so far")))
+      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.md)
+        .children(stats.map((s) => h_flex().items_end().gap(6)
+          .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(s.value))
+          .child(div().pb(2).text_size(12).text_color(c.dim).child(s.unit)))))
+      .when(top > 0, (el) => el.child(v_flex().w_full().gap(G.sm)
+        .child(h_flex().w_full().items_end()
+          .children(days.map((d) => {
+            const peak = d.kb === top, ratio = d.kb / top;
+            return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
+              .tooltip(`${shortDate(d.at)} · ${d.kb ? fmtSize(d.kb) : "nothing"}`)
+              .when(peak, (e) => e.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(fmtSize(d.kb))))
+              .child(div().w(peak ? 3 : 2).flex_none().rounded_t(1)
+                .h(d.kb ? Math.max(3, Math.round(ratio * height)) : 1)
+                .bg(peak ? c.accent : d.kb ? c.muted : c.border)
+                .opacity(peak || !d.kb ? 1 : 0.55));
+          })))
+        .child(h_flex().w_full().justify_between()
+          .child(div().text_size(10).text_color(c.dim).child(shortDate(days[0].at)))
+          .child(div().text_size(10).text_color(c.dim).child("Freed each day"))
+          .child(div().text_size(10).text_color(c.dim).child("Today")))));
+  }
+
+  // The ones that need a look, handed to your agent to sort out.
+  agent(c) {
+    const look = this.groups.flatMap((g) => g.items).filter((w) => ["changes", "lost"].includes(stateOf(w)));
+    if (!look.length) return null;
+    const baseOf = (w) => this.groups.find((g) => g.repo === w.repo)?.base;
+    return v_flex().w_full()
+      .child(this.section(c, "Ask your agent", "in a new tab"))
+      .child(div().text_size(12).text_color(c.dim).pb(G.xs)
+        .child(`${look.length} would lose work if removed. Your agent can find out what that work is and whether it already lives somewhere else.`))
+      .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.xs)
+        .child(quietLink("wt-review", `Review the ${look.length} that need a look`, () => this.ask("Worktrees review", home(), reviewPrompt(look, baseOf)), c, { size: 13, color: c.text })));
+  }
+
+  shareCard() {
+    return { spec: freedSpec(shared(FREED)), text: freedText(shared(FREED)), name: "worktrees-freed", title: "Worktrees" };
+  }
+
   render(cx) {
     const c = tokens(theme()), narrow = (this.width || 368) < 560;
     this.markOpen();
@@ -613,8 +789,11 @@ export class Worktrees {
         .child(div().text_size(15).text_color(this.note ? c.red : c.muted).child(this.note ? "The scan failed." : "No worktrees besides your checkouts."))
         .child(div().text_size(12).text_color(c.dim).child(this.note ?? "Nothing left behind either."));
     } else {
+      const ask = this.agent(c);
       body = v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
+        .child(this.freed(c, narrow))
+        .when(Boolean(ask), (el) => el.child(ask))
         .children(shown.map((g) => this.group(g.repo, name(g.repo), tilde(g.repo), g.items, c)))
         .when(groups.length > REPOS, (el) => el.child(h_flex().child(quietLink("wt-repos", this.allRepos ? "Show fewer repositories" : `Show ${groups.length - REPOS} more repositories`,
           (cx) => { this.allRepos = !this.allRepos; cx.notify(); }, c))))
@@ -627,6 +806,8 @@ export class Worktrees {
       .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(this.header(c, narrow))
+          .when(this.share.open && freedTotals(shared(FREED)).kb > 0, (el) => el.child(this.share.row(c, () => this.shareCard(),
+            "Only the totals: how much was freed, how many were removed, and the days. Never a repository, branch or folder name.", G.sm)))
           .child(body)));
   }
 }
