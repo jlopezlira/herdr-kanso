@@ -8,6 +8,17 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [1.3.0] - 2026-11-03
+
+### Added
+
+- Shipped: a side panel for what you delivered, drawn like Spend. By day, week, month or year, it shows:
+  - the lines that landed on main, master or develop, compared with the same point of the period before;
+  - pull requests merged, commits, and reviews;
+  - your streak, with twelve weeks of contributions;
+  - your records (best day, best week, longest streak, biggest pull request, fastest merge), with a toast when you set one;
+  - a breakdown by repository.
+
 ## [1.2.0] - 2026-11-03
 
 ### Added

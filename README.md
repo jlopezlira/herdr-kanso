@@ -95,6 +95,14 @@ renders Markdown, including code blocks and checklists.
 
 ![A real Git diff and the native commit message field in Kanso's Changes panel.](docs/screenshots/changes.png)
 
+### See what you shipped
+
+**Shipped** is Spend's other half: what you delivered by day, week, month or
+year. It shows the lines that landed, compared with the same point of the
+period before, along with pull requests merged, commits, reviews, your streak
+with twelve weeks of contributions, your records, and where it all went, by
+repository. When you set a new record, it tells you.
+
 ### Every repo and worktree, one sidebar
 
 Repositories and their **nested Git worktrees** sit together, each with its
@@ -208,8 +216,10 @@ The mods run `git` (the spaces list, Files, Changes), `find` (listing a folder
 on Unix, with `bash` as a fallback) and `hc machine ls` (machines). They read
 files only inside the folders you work in.
 
-Two things reach the network. The pull request panel runs the GitHub CLI
-(`gh`) and talks to GitHub only while the panel is shown. The updater runs
+Three things reach the network. The pull request panel runs the GitHub CLI
+(`gh`) and talks to GitHub only while the panel is shown. So does Shipped,
+which reads your contributions and merged pull requests from GitHub with `gh`
+and runs `git log` in the repositories you work in, only while it is shown. The updater runs
 `git ls-remote` against this repository every 6 hours, and only when you
 choose to update downloads the release with `curl` into
 `~/.config/herdr-app/.kanso-update/`, removed when it is done. Open with runs `sh`

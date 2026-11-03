@@ -77,8 +77,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         (13) shows on the active tab only when there is more than one tab.
       - After the tabs, a + (16 icon, 28 square) opens the shipped
         `new-menu`.
-      - At the right are the panel buttons: Files, Insights, Changes, PR
-        and Specs. They are ghost buttons 26 tall (icon 15, text 12) with a wash
+      - At the right are the panel buttons: Files, Insights, Changes, PR,
+        Specs and Shipped (trophy icon). They are ghost buttons 26 tall (icon 15, text 12) with a wash
         when their panel is open. Insights and Specs show only when their
         mods are installed.
     - **Panes**: an endless canvas (`kanso-strip`). Panes sit side by side
@@ -147,8 +147,40 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - Terminal padding is `[14, 10]`.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
-      told `files`, `changes` or `pr` (`props.panel`), `token-spend`
+      told `files`, `changes`, `pr` or `shipped` (`props.panel`), `token-spend`
       (Insights) or `sdd-focused`.
+      The Shipped panel (`kanso-panel` with `shipped`) is what you delivered,
+      drawn like Spend: "Shipped" (20) and a refresh icon; Day, Week, Month
+      and Year tabs (26 tall, `selected` wash) with previous and next arrows
+      around the period's name ("This week", "Last week", "19 Oct – 25 Oct";
+      no next past now). The hero is the lines added (56, light; 40 under 560
+      wide) with the lines removed beside it (22, `muted`), "lines shipped,
+      this week" and, against the previous period cut at the same point
+      ("vs this point last week"), a green or red 6 dot with the change as a
+      percentage, or as a multiple past double ("65x"). Under it, four light
+      28 numbers with 11 `dim` units: pull requests merged, commits landed,
+      reviews, repositories. Then "Streak": the current run of days with a
+      contribution (40, an 8 `accent` dot while it runs; today without one
+      yet does not break it), "longest N days" at the right, and the last
+      12 weeks as GitHub draws them, 11 squares 3 apart, radius 2, `accent`
+      at alpha 40/70/b0/ff by GitHub's quartile, `hover` when empty. Then
+      "Records" (best day, best week by lines, longest streak, biggest pull
+      request, fastest merge), each a hairline row with its detail in `dim`
+      and its value (20, light) at the right; one you just set (within the
+      last week, beating the stored one) shows a "New record" chip in
+      `accent` and toasts once. Records keep the best ever seen in
+      `shared("kanso.shipped.records")`. Then "By repository": name,
+      `commits · +a −d`, and a 4 tall `accent` bar by share, 6 rows then
+      "Show N more". Lines and commits come from `git log --shortstat` of
+      what landed on origin's main, master or develop, authored by you
+      (your GitHub login, name and noreply address, and each repository's
+      `user.email` and `user.name`), no merges, no lockfiles, in the
+      repositories your local panes and spaces are in (remembered in
+      `shared("kanso.shipped.folders")`). The rest is one GitHub GraphQL
+      query through `gh`: the period's and the compared period's
+      contributions and merged pull request counts, the last year's
+      calendar and your last 100 merged pull requests. It rereads every 5
+      minutes while shown.
       The PR panel (`kanso-panel` with `pr`) shows one pull request at a time: the focused
       pane's branch's own while it is open, as T3 Code does (a merged or closed
       one counts as none), else the newest open one in that repository
