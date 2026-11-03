@@ -12,7 +12,7 @@ checks all of this, and merging to main releases the version in
 
 ### Added
 
-- Shipped: a side panel of vanity metrics for what you delivered, drawn like Spend. It covers every repository and organization on GitHub, by day, week, month or year, and shows:
+- Shipped (#29): a side panel of vanity metrics for what you delivered, drawn like Spend. It covers every repository and organization on GitHub, by day, week, month or year, and shows:
   - the lines you added and removed, compared with the period before;
   - contributions (private ones included), pull requests merged, commits, reviews and repositories;
   - your totals since you joined GitHub;
