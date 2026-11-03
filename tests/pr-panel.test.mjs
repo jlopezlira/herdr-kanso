@@ -78,6 +78,41 @@ test("Pull request panel shows the newest open one when the branch has none, and
   assert.equal(panel.fallback, false);
 });
 
+test("Pull request panel skips the branch's merged or closed one", async () => {
+  const url = (n) => `https://github.com/o/here/pull/${n}`;
+  const done = { 6: { number: 6, title: "Merged", url: url(6), state: "MERGED" }, 7: { number: 7, title: "Closed", url: url(7), state: "CLOSED" } };
+  const openOne = { number: 8, title: "Open", url: url(8), state: "OPEN", author: { login: "you" }, headRefName: "c", updatedAt: "2026-10-05T00:00:00Z" };
+  for (const n of [6, 7]) {
+    for (const open of [[openOne], []]) {
+      const exec = async (command, args) => {
+        if (command === "git") {
+          const out = { "rev-parse": "/repo\n", branch: "develop\n", remote: "git@github.com:o/here.git\n" }[args[0]];
+          return { code: 0, stdout: out, stderr: "" };
+        }
+        if (args[0] === "pr" && args[1] === "list") return { code: 0, stdout: JSON.stringify(open), stderr: "" };
+        if (args[0] === "pr" && args[1] === "view") return { code: 0, stdout: JSON.stringify(args[2] === "--json" ? done[n] : openOne), stderr: "" };
+        if (args[0] === "api" && args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
+        return { code: 1, stdout: "", stderr: "offline" };
+      };
+      const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+        exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
+      });
+      const panel = new PullRequest();
+      Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
+      const { cx, drain } = context();
+      panel.refresh(cx); await drain();
+      assert.equal(panel.branchUrl, null, `#${n} is not the branch's any more`);
+      if (open.length) {
+        assert.equal(panel.pr.number, 8, "the newest open one stands in");
+        assert.equal(panel.fallback, true);
+      } else {
+        assert.equal(panel.pr, null, "nothing finished is shown");
+        assert.equal(panel.none, true, "the branch offers to create its own");
+      }
+    }
+  }
+});
+
 test("Pull request panel shows a quiet placeholder outside a repository, not an error", async () => {
   const exec = async (command) => command === "git" ? { code: 128, stdout: "", stderr: "not a git repository" } : { code: 1, stdout: "", stderr: "" };
   const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], { exec, key: () => "home", location: () => ({ cwd: "/home", on: null }) });

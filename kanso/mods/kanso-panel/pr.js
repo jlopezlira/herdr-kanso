@@ -182,9 +182,14 @@ export class PullRequest {
         if (open?.code === 0 && key() === context) {
           try { this.openPrs = JSON.parse(open.stdout).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)); } catch {}
         }
+        // `gh pr view` also finds the branch's merged or closed one. That one is
+        // done, so the branch counts as having none.
+        const done = (v) => { try { return ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state); } catch { return false; } };
+        const branchHasNone = !want && (view.code !== 0 ? NO_PR.test(view.stderr || view.stdout) : done(view));
+        if (branchHasNone && !this.openPrs.length) { this.none = true; this.pr = null; this.error = null; this.branchUrl = null; return; }
         // The branch has none: the newest open one stands in, the branch offers to create its own.
         let fallback = false;
-        if (view.code !== 0 && !want && NO_PR.test(view.stderr || view.stdout) && this.openPrs.length) {
+        if (branchHasNone) {
           view = await this.gh(["pr", "view", this.openPrs[0].url, "--json", FIELDS]).catch(() => ({ code: 1, stdout: "", stderr: "GitHub could not be read." }));
           if (key() !== context || this.selected !== want) return;
           fallback = true;
