@@ -155,17 +155,27 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - a header: "Shipped" (20), a share icon and a refresh icon. Share
         opens a row: "Share to" X, LinkedIn, Bluesky, and "Save image"
         (outlined buttons, 26 tall), with a `dim` note under it.
-        `shipped-card.js` draws a 1200-wide SVG card: the header with
-        @login and the period, the hero, the numbers three to a row, the
-        totals, the streak with 53 columns of the calendar, the records,
-        and when you ship. It has no repository or machine names. The SVG
-        becomes a PNG at 2x through the first renderer found: a Chromium
-        browser headless (`--screenshot`), `rsvg-convert`, `magick`, or
-        QuickLook on macOS. The PNG is saved to `~/Downloads`. For a
-        network, the image is copied (`osascript` on macOS; `wl-copy` or
-        `xclip` on Linux) and the composer opens with the text filled in.
-        The text is the big numbers and the streak plus the repository
-        link, at most 280 characters.
+        Sharing is one module for every panel, `share.js` (Spend has a
+        byte-for-byte copy, since Herdr loads a mod's files from its own
+        folder only; `npm run sync:share` copies it and a test fails when
+        they differ). A panel hands it a card spec: a title and the
+        period, a hero, numbers three to a row, a note, and blocks
+        (`streak` with 53 columns of the calendar, `list`, `bars`).
+        `shipped-card.js` makes Shipped's: @login and the period, the
+        hero, the numbers, the totals, the streak, the records and when
+        you ship. It has no repository or machine names. `share.js`
+        draws a 1200-wide SVG, which becomes a PNG at 2x through the first
+        renderer found: a Chromium browser headless (`--screenshot`),
+        `rsvg-convert`, `magick`, or QuickLook on macOS. The PNG is saved
+        to `~/Downloads`. For a network, the image is copied (`osascript`
+        on macOS; `wl-copy` or `xclip` on Linux), the composer opens with
+        the text filled in, and once the browser is in front and the page
+        had a few seconds to load (3 to 5, by network) the image is pasted
+        into it: System Events Cmd-V on macOS (needs Accessibility), `wtype`
+        or `xdotool` on Linux. It never pastes into an app you moved to.
+        When it can't paste, the toast says to paste it. The text is the
+        big numbers and the streak plus the repository link, at most 280
+        characters.
       - Day, Week, Month and Year tabs (26 tall, a `selected` wash on the
         active one), with previous and next arrows around the period's name
         ("This week", "Last week", "19 Oct – 25 Oct"). Next stops at now.
@@ -762,12 +772,13 @@ Top to bottom:
   - `config.mjs`: the sources and their roots: `~/.pi/agent/sessions`, `~/.codex/sessions` and `~/.codex/archived_sessions`, `~/.local/share/opencode` (SQLite through `node:sqlite`), and `~/.claude/projects`.
   - `adapters.mjs`: parses each harness's records into token usage. Claude Code repeats a message's usage on several lines; dedupe it by message id and request id.
   - `scan.mjs`: incremental by file size and mtime. `.jsonl.zst` archives are checked with one decompress pass before any change, and an 18 s budget applies per scan.
-  - `store.mjs`: the index in `data/kanso-spend/store.json`. Rows are day × session × harness × provider × model × project.
+  - `store.mjs`: the index in `data/kanso-spend/spend.db` (`node:sqlite`, WAL): tables `meta`, `files`, `dedup` and `tasks`, one JSON row per entry, keys stored as JSON strings (file keys hold a NUL, which SQLite text cuts). A save writes only the entries that changed, in one transaction; a read for display skips `dedup`, which only scans use. A `store.json` from before is moved in by the first writer and kept as `store.json.migrated`. Rows are day × session × harness × provider × model × project.
   - `labels.mjs`: task titles and tickets, in `labels.json`. Pi sessions reuse pi-usage's cache (`~/.prjct/pi-usage/scan.json`) when it exists.
   - `costs.mjs`: rates, periods, grouping, and all display text.
   - `demo.mjs`: the sample data.
 - **`ui.js`:** the theme token mapping and a few helpers (`toggleSwitch`, `controlInput`).
-- **`icons/`:** `refresh`, `settings`, `back` and `close`, as 24 px stroke-2 line SVGs drawn with `svg()` and tinted by text color.
+- **`share.js` and `spend-card.js`:** Share, the same as Shipped's (see `kanso-panel/share.js`, of which this is a byte-for-byte copy; `npm run sync:share`). A share icon in the header, shown only on the home view with no project or model filter; it opens the "Share to" row. `spend-card.js` turns the costs into the card: "Spend" and the period, the total "of AI work at API list price", the rise against the period before (only a rise), tasks, per task, tokens, the project and model counts, the plan note, and the chart's bars by ratio with its first and last labels. No names reach it.
+- **`icons/`:** `refresh`, `settings`, `back`, `close` and `share`, as 24 px stroke-2 line SVGs drawn with `svg()` and tinted by text color.
 - **Network:** one HTTPS GET a day to the OpenRouter catalog. **Programs:** `node`. **Files read outside the mod:** the four session folders above and, if present, `~/.prjct/pi-usage/`. **Files written:** only under `data/kanso-spend/`.
 
 ### Watch out

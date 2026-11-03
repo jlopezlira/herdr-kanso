@@ -110,11 +110,13 @@ by day, week, month or year:
 - when in the day you ship, and from which machine;
 - every repository you shipped to.
 
-**Share** turns it into an image to post on X, LinkedIn or Bluesky. The image
-has only the global numbers, never the names of your repositories or machines.
-It is copied for you to paste into the post, and the post's text is already
-written. Chrome, Chromium, Brave or Edge draws it (or `rsvg-convert`, or
-QuickLook on macOS).
+**Share** turns it into an image to post on X, LinkedIn or Bluesky, the same
+way Spend does. The image has only the global numbers, never the names of your
+repositories or machines. The composer opens with the words written and the
+image pasted in, for you to check and post. On macOS the paste needs Herdr in
+System Settings > Privacy & Security > Accessibility; without it the image
+waits on the clipboard for Cmd-V. Chrome, Chromium, Brave or Edge draws it (or
+`rsvg-convert`, or QuickLook on macOS), and a copy stays in Downloads.
 
 Your machines fill in what GitHub can't see. Each one reads its own git: every
 branch, every identity you commit with, even an email GitHub can't link to
@@ -258,9 +260,14 @@ machine: `~/.claude/projects`, `~/.codex/sessions` and
 `~/.codex/archived_sessions`, `~/.pi/agent/sessions`,
 `~/.local/share/opencode`, and `~/.prjct/pi-usage/` when it exists. It runs
 `node`, and once a day it fetches the OpenRouter model price list. It writes
-only under `~/.config/herdr-app/data/kanso-spend/`. It used to be the separate
-`token-spend` mod; its first start here carries that mod's data over, and you
-can delete `mods/token-spend`.
+only under `~/.config/herdr-app/data/kanso-spend/`, in a SQLite file
+(`spend.db`, through Node's `node:sqlite`). It used to be the separate
+`token-spend` mod; its first start here carries that mod's data over, its
+first scan moves the old `store.json` into `spend.db` (keeping the file as
+`store.json.migrated`), and you can delete `mods/token-spend`. Spend's
+**Share** posts only the totals of the unfiltered view: what the period is
+worth, tasks, tokens, how many projects and models, and the days. Never a
+project, task or session name.
 
 Specs (`sdd-focused`) is optional: install it and its button appears in the
 tab bar. Install it while another layout is shown, because the first time

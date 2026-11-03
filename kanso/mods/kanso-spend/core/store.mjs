@@ -1,8 +1,8 @@
-import { readFile, stat, unlink } from "node:fs/promises";
+import { chmod, readFile, rename, stat, unlink } from "node:fs/promises";
+import path from "node:path";
 import { defaultConfig, migrateLoadedConfig, normalizeConfig } from "./config.mjs";
 import {
   STORE_VERSION,
-  atomicWriteJson,
   backupCorruptStore,
   ensureParent,
   hashKey,
@@ -617,59 +617,217 @@ function validateLoadedStore(store) {
   return configMigration.migrated;
 }
 
-export async function loadStore(storePath, { readOnly = false } = {}) {
-  const warnings = [];
-  let errors = 0;
-  if (!readOnly) await ensureParent(storePath);
+// The store lives in SQLite (spend.db, next to where store.json was): one
+// row per scanned file, usage key and task, so a scan writes only what it
+// changed instead of rewriting every byte. A store.json from before is moved
+// in once, by the first writer, and kept as store.json.migrated.
+export function dbPathFor(storePath) {
+  return path.join(path.dirname(storePath), "spend.db");
+}
+
+let sqlite = null;
+// node:sqlite still announces itself as experimental on Node 22; the panel
+// reads stderr, so that one notice is kept out of it.
+async function sqliteModule() {
+  if (sqlite) return sqlite;
+  const emit = process.emitWarning;
+  process.emitWarning = (warning, ...rest) =>
+    (String(warning?.message ?? warning).includes("SQLite") ? undefined : emit.call(process, warning, ...rest));
+  try {
+    sqlite = await import("node:sqlite");
+  } finally {
+    process.emitWarning = emit;
+  }
+  return sqlite;
+}
+
+const COLLECTIONS = ["files", "dedup", "tasks"];
+// Keys are kept as JSON strings: file keys hold a NUL, which SQLite text
+// would cut short.
+const SCHEMA = `
+  PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL;
+  CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS files (key TEXT PRIMARY KEY, v TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS dedup (key TEXT PRIMARY KEY, v TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS tasks (key TEXT PRIMARY KEY, v TEXT NOT NULL);
+`;
+
+async function openDb(dbPath, { readOnly = false } = {}) {
+  const { DatabaseSync } = await sqliteModule();
+  const db = new DatabaseSync(dbPath, readOnly ? { readOnly: true } : {});
+  db.exec("PRAGMA busy_timeout = 5000;");
+  if (!readOnly) {
+    db.exec(SCHEMA);
+    await chmod(dbPath, 0o600).catch(() => {});
+  }
+  return db;
+}
+
+// What was last written, entry by entry, so a save skips what did not change.
+function remember(store, saved) {
+  Object.defineProperty(store, "_saved", { value: saved, enumerable: false, writable: true, configurable: true });
+}
+
+function readDb(db, { skipDedup = false } = {}) {
+  const meta = Object.fromEntries(db.prepare("SELECT k, v FROM meta").all().map((r) => [r.k, r.v]));
+  if (!meta.version) throw new Error("spend.db has no store in it");
+  const store = {
+    version: Number(meta.version),
+    config: JSON.parse(meta.config ?? "null"),
+    nextFileId: Number(meta.nextFileId),
+    files: {},
+    dedup: {},
+    tasks: {},
+    lastScanAt: meta.lastScanAt ? JSON.parse(meta.lastScanAt) : null,
+  };
+  const saved = {};
+  for (const name of COLLECTIONS) {
+    saved[name] = new Map();
+    if (name === "dedup" && skipDedup) continue;
+    for (const row of db.prepare(`SELECT key, v FROM ${name}`).all()) {
+      const key = JSON.parse(row.key);
+      store[name][key] = JSON.parse(row.v);
+      saved[name].set(key, row.v);
+    }
+  }
+  return { store, saved };
+}
+
+function writeDb(db, store, saved) {
+  const next = {};
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const setMeta = db.prepare("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v");
+    setMeta.run("version", String(store.version));
+    setMeta.run("config", JSON.stringify(store.config));
+    setMeta.run("nextFileId", String(store.nextFileId));
+    setMeta.run("lastScanAt", JSON.stringify(store.lastScanAt ?? null));
+    for (const name of COLLECTIONS) {
+      const before = saved?.[name] ?? new Map();
+      const after = new Map();
+      const put = db.prepare(`INSERT INTO ${name} (key, v) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET v = excluded.v`);
+      const drop = db.prepare(`DELETE FROM ${name} WHERE key = ?`);
+      for (const [key, value] of Object.entries(store[name])) {
+        const json = JSON.stringify(value);
+        after.set(key, json);
+        if (before.get(key) !== json) put.run(JSON.stringify(key), json);
+      }
+      for (const key of before.keys()) if (!after.has(key)) drop.run(JSON.stringify(key));
+      next[name] = after;
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return next;
+}
+
+async function readLegacy(storePath) {
   let text;
   try {
     text = await readFile(storePath, "utf8");
   } catch (error) {
-    if (error?.code === "ENOENT") {
-      return { store: emptyStore(), warnings, errors, exists: false, dirty: true };
-    }
+    if (error?.code === "ENOENT") return null;
     throw error;
   }
+  return JSON.parse(text);
+}
 
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-    const migrated = validateLoadedStore(parsed);
-    prepareStore(parsed);
-    return { store: parsed, warnings, errors, exists: true, dirty: migrated };
-  } catch (error) {
-    // Filter changes are reads, not recovery operations. Leave preservation
-    // and repair to the next lock-protected snapshot/configure operation.
-    if (readOnly) {
-      throw new Error("Spend store is corrupt; refresh to preserve and rebuild it.", { cause: error });
+async function moveAside(file) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const target = `${file}.corrupt-${stamp}`;
+  await rename(file, target);
+  for (const suffix of ["-wal", "-shm"]) await rename(`${file}${suffix}`, `${target}${suffix}`).catch(() => {});
+  return target;
+}
+
+export async function loadStore(storePath, { readOnly = false } = {}) {
+  const warnings = [];
+  let errors = 0;
+  const dbPath = dbPathFor(storePath);
+  if (!readOnly) await ensureParent(storePath);
+  const hasDb = Boolean(await fileStatOrNull(dbPath));
+
+  if (!hasDb) {
+    // Nothing in SQLite yet: a store.json from before, or nothing at all.
+    let legacy;
+    try {
+      legacy = await readLegacy(storePath);
+      if (legacy) {
+        const migrated = validateLoadedStore(legacy);
+        prepareStore(legacy);
+        if (readOnly) return { store: legacy, warnings, errors, exists: true, dirty: migrated };
+        const db = await openDb(dbPath);
+        try {
+          remember(legacy, writeDb(db, legacy, null));
+        } finally {
+          db.close();
+        }
+        await rename(storePath, `${storePath}.migrated`);
+        return { store: legacy, warnings, errors, exists: true, dirty: migrated };
+      }
+    } catch (error) {
+      if (readOnly) throw new Error("Spend store is corrupt; refresh to preserve and rebuild it.", { cause: error });
+      let backup;
+      try {
+        backup = await backupCorruptStore(storePath);
+        await unlink(storePath).catch(() => {});
+      } catch (backupError) {
+        throw new Error(
+          `spend store is corrupt and could not be preserved: ${error.message}; ${backupError.message}`,
+          { cause: backupError },
+        );
+      }
+      warnings.push(`Store was corrupt and has been preserved at ${backup}; a fresh store was started (${error.message}).`);
+      errors += 1;
+      return { store: emptyStore(), warnings, errors, exists: true, corruptBackup: backup, dirty: true };
     }
+    return { store: emptyStore(), warnings, errors, exists: false, dirty: true };
+  }
+
+  let db;
+  try {
+    db = await openDb(dbPath, { readOnly });
+    // A read for the panel needs no dedup keys: only scans consult them.
+    const { store, saved } = readDb(db, { skipDedup: readOnly });
+    const migrated = validateLoadedStore(store);
+    prepareStore(store);
+    remember(store, readOnly ? null : saved);
+    if (readOnly) Object.defineProperty(store, "_readOnly", { value: true, enumerable: false });
+    return { store, warnings, errors, exists: true, dirty: migrated };
+  } catch (error) {
+    if (readOnly) throw new Error("Spend store is corrupt; refresh to preserve and rebuild it.", { cause: error });
+    try { db?.close(); } catch { /* already closed */ }
+    db = null;
     let backup;
     try {
-      backup = await backupCorruptStore(storePath);
+      backup = await moveAside(dbPath);
     } catch (backupError) {
       throw new Error(
         `spend store is corrupt and could not be preserved: ${error.message}; ${backupError.message}`,
         { cause: backupError },
       );
     }
-    warnings.push(
-      `Store was corrupt and has been preserved at ${backup}; a fresh store was started (${error.message}).`,
-    );
+    warnings.push(`Store was corrupt and has been preserved at ${backup}; a fresh store was started (${error.message}).`);
     errors += 1;
-    return {
-      store: emptyStore(),
-      warnings,
-      errors,
-      exists: true,
-      corruptBackup: backup,
-      dirty: true,
-    };
+    return { store: emptyStore(), warnings, errors, exists: true, corruptBackup: backup, dirty: true };
+  } finally {
+    try { db?.close(); } catch { /* already closed */ }
   }
 }
 
 export async function saveStore(storePath, store) {
+  if (store._readOnly) throw new Error("a store read for display cannot be saved");
   store.lastScanAt = new Date().toISOString();
-  await atomicWriteJson(storePath, store);
+  await ensureParent(storePath);
+  const db = await openDb(dbPathFor(storePath));
+  try {
+    remember(store, writeDb(db, store, store._saved ?? null));
+  } finally {
+    db.close();
+  }
 }
 
 export async function fileStatOrNull(file) {
@@ -682,9 +840,12 @@ export async function fileStatOrNull(file) {
 }
 
 export async function removeStoreFile(storePath) {
-  await unlink(storePath).catch((error) => {
-    if (error?.code !== "ENOENT") throw error;
-  });
+  const dbPath = dbPathFor(storePath);
+  for (const file of [storePath, dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+    await unlink(file).catch((error) => {
+      if (error?.code !== "ENOENT") throw error;
+    });
+  }
 }
 
 export function dedupKeyFor(harness, ...parts) {

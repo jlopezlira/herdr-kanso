@@ -12,6 +12,8 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout } from "herdr";
 import { G, H, R, T, tokens, toggleSwitch, controlInput } from "./ui.js";
+import { Share } from "./share.js";
+import { spendSpec, spendText } from "./spend-card.js";
 
 // The folder name: change it here if you install the mod under another name.
 const MOD = "kanso-spend";
@@ -135,6 +137,7 @@ export default class TokenSpend extends View {
     this.runtimeTask = null;
     this.scan = null;
     this.costs = null;
+    this.share = new Share(MOD, `${appHome()}/${DATA_DIR}`);
     this.error = null;
     this.running = null; // "snapshot" | "prepare" | null
     this.queued = { snapshot: false, prepare: false };
@@ -447,7 +450,19 @@ export default class TokenSpend extends View {
       .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(this.header(c, narrow))
+          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
+            "Only the totals and the days: no project, task or session names. The post opens with the image in it.", G.sm)))
           .child(body)));
+  }
+
+  // Only the unfiltered totals are shared, so a filter or a detail view hides it.
+  canShare() {
+    return this.page === "home" && !this.stack.length && Boolean(this.costs?.hero?.value)
+      && this.cost.project === "all" && this.cost.model === "all";
+  }
+
+  shareCard() {
+    return { spec: spendSpec(this.costs), text: spendText(this.costs), name: `spend-${this.costs.range?.label ?? "now"}`, title: "Spend" };
   }
 
   iconButton(id, icon, tip, onClick, c, options = {}) {
@@ -479,6 +494,7 @@ export default class TokenSpend extends View {
           .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(title).child(title))))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(reading)))
+        .when(this.canShare(), (el) => el.child(this.iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
         .child(this.iconButton("spend-refresh", "refresh", tip, (cx) => this.run("snapshot", cx), c, { spin: busy, active: busy, disabled: busy }))
         .when(this.page !== "settings", (el) => el.child(this.iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c))));
   }
