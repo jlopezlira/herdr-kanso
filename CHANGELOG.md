@@ -8,6 +8,25 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.3.0] - 2026-11-04
+
+### Added
+
+- The sidebar shows what your agents are doing. Each agent's row has, at the right, how long it has been working, waiting on you or since it finished, and under its name a quiet line: while it works or waits, its own title when you gave it a name of yours; when it finishes, what it left in its folder (+12 −3 · 1 commit · PR #41). Read from the state the agent reports, its title and git, never from its conversation.
+- Sub-agents (started by an agent with `hc run`) are listed under their parent with tree lines; a click opens one in a peek.
+- Projects, Status and Threads, a switch at the top of the sidebar. Projects is the list you had. Status lists every agent in every project by what it needs from you (Needs you, Working, Done, Idle, then the other terminals), each with its project and time; a parent goes where its most urgent sub-agent would, and a finished agent you are looking at stays in Done until you leave it. Each section folds. Status carries a dot while an agent needs you and you are on another view.
+- Threads lists each conversation of the agents on this computer, named on its own: the title Claude Code gives it, or Codex's name for it, kept up to date as it goes; else the first thing you wrote. Under it, its project and the last thing you wrote. Read from the files the agents already keep, only while Threads shows; nothing is stored or sent.
+- Threads works as T3 Code's sidebar: Pinned up top, then the rest by your last message or when it started (or grouped by project), then Snoozed and Settled, folded. Settle puts a finished thread away until it has new work; Snooze hides it for an hour, three, until this evening, tomorrow or Monday, and it comes back marked Woke; Mark unread, Rename thread (empty brings its own title back), Copy folder, branch or conversation id, and Close agent (after a second click). Hover a thread for Settle and Pin; right-click any row, in any view, for the rest. Kept as labels on the terminal, so every window and a restart agree.
+- The sort button sorts in the view's terms: in Status within each section (latest change, longest in its state, project), in Threads by your last message or when it started, grouped by project or not.
+- Status and Threads rows lead with their project's square and name in its color. An agent's state is one mark everywhere, the tabs, the pane headers, the status bar and the sidebar: one circle: an arc running on a faint ring while it works, the circle closed as a brush ensō when it is done, a solid disc when it needs you, a faint ring at rest. It replaces the breathing dot. A working agent's title shimmers, a glint passing over its letters with three dots counting after it, as Claude Code's own status does; names keep one weight, so nothing jumps when an agent starts or stops.
+- Threads get more room than the other views: taller rows with space between them, read as conversations. While Threads first reads the conversations it shows the view's silhouette, as Spend does.
+- Under Show in the sort button, turn off the activity line or the switch (then the sidebar stays on Projects).
+
+### Changed
+
+- The sidebar calls its rows agents, not sessions.
+- A title that is only a path (`~/Apps/x`) no longer names a row: a shell is named after its folder, as intended.
+
 ## [2.2.0] - 2026-11-04
 
 ### Added

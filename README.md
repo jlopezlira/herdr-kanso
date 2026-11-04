@@ -213,8 +213,16 @@ the browser or go to its pane from the same row.
 ### Every repo and worktree, one sidebar
 
 Repositories and their **nested Git worktrees** sit together, each with its
-branch and sessions: agents, shells and dev servers. Group work by local or
-remote machine. Order sessions by **Needs you first**, last update, kind, screen
+branch, its agents and its other terminals (shells, dev servers). Each agent
+shows how long it has been working, waiting on you or done, and under its name
+what it is on or what it left in git; the agents it started sit under it.
+Three views at the top of the sidebar: **Projects** (each project with its
+agents), **Status** (every agent in every project by what it needs from you:
+Needs you, Working, Done, Idle) and **Threads**, your conversations as T3
+Code keeps them: each named by the title its agent gives it, kept up to date,
+with your last message; pin, settle, snooze, mark unread, rename, and a
+right-click for the rest. The sort button sorts in each view's terms. Group work by local or
+remote machine. Order agents by **Needs you first**, last update, kind, screen
 position or your own drag order. Pin the important ones and rename anything.
 
 ![Kanso's native Needs you first ordering beside a review agent asking for a decision.](docs/screenshots/attention.png)
@@ -323,13 +331,14 @@ With the mouse:
 | Drag the gutter between two panes | Resize them, sideways or up and down |
 | Hold a pane's six-dot grip and drag it onto another | Move it: the left or right quarter makes a column before or after, the middle stacks it above or below |
 | Scroll over a header or the minimap | Slide the view |
-| Use the order button at the top of the sidebar | Sort each space's sessions by last update, needs you first, kind, screen order, or your own |
-| Hover a session and click its pin | Keep it at the top of its space; drag pinned ones to order them |
+| Use the order button at the top of the sidebar | Sort each space's agents by last update, needs you first, kind, screen order, or your own; turn the activity line or the Projects, Status and Threads switch off |
+| Click Projects, Status or Threads at the top of the sidebar | See your agents by project, by what they need from you, or as conversations named on their own |
+| Hover an agent and click its pin | Keep it at the top of its space; drag pinned ones to order them |
 | Hover a panel icon at the top right | See its name; the open panel always shows it |
 | Press a panel icon and let go on another | Move it there |
 | Right-click a panel icon | Open Panels: drag them into order, and turn each one on or off |
 | Right-click a file in the Files panel | Open it in an editor, or preview it in the panel |
-| Double-click a session, a pane header, a space or a tab | Rename it (an empty name brings the automatic one back) |
+| Double-click an agent, a pane header, a space or a tab | Rename it (an empty name brings the automatic one back) |
 
 ## Privacy: what it runs
 
@@ -365,6 +374,18 @@ only when you press Send. Arrangements run `hc get` to read what each pane
 runs and keep it in `~/.config/herdr-app/data/kanso-arrange.json`. Ports runs
 `lsof`, `ps` and `hc get` on this computer only while the panel is shown, and
 `kill` only on what you confirm.
+
+The sidebar's Threads view, only while it is shown, finds the conversation
+of each agent on this computer: `hc get` names the program in front of its
+terminal, then it reads `~/.claude/sessions/<pid>.json` (Claude Code) or asks
+`lsof` which conversation file a Codex process holds, and
+`~/.codex/session_index.jsonl` for Codex's name for it. From the
+conversation file (`~/.claude/projects`, `~/.codex/sessions`) it reads, with
+`grep`, `head` and `tail`, the title the agent gave it and your first and
+last messages. Nothing is stored or sent, and the agent is never told.
+Pin, Settle, Snooze, Mark unread and Rename thread write labels on the
+terminal with `hc label`; Close agent runs `terminal.kill`, and only after a
+second click.
 
 Spend reads the session files your AI coding tools already write on this
 machine: `~/.claude/projects`, `~/.codex/sessions` and
