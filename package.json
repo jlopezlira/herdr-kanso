@@ -10,6 +10,7 @@
     "bench": "node benchmarks/macos.mjs",
     "bench:report": "node benchmarks/summarize.mjs",
     "check:version": "node scripts/check-version.mjs",
-    "sync:share": "node scripts/sync-share.mjs"
+    "sync:share": "node scripts/sync-share.mjs",
+    "sync:mods": "node scripts/sync-mods.mjs"
   }
 }

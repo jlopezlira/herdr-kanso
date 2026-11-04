@@ -218,7 +218,7 @@ Herdr users find it.
 
 ## Install
 
-Ask your agent: "add herdr.dev/layouts/jlopezlira/kanso". Or by hand, from a
+Ask your agent: "add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso". Or by hand, from a
 clone of this repository:
 
 ```sh
@@ -229,6 +229,11 @@ cp -R kanso/mods/kanso-* kanso/mods/open-with ~/.config/herdr-app/mods/
 # then add the "layout:kanso" section of kanso/keys.json to ~/.config/herdr-app/keys.json
 herdr-app do layout.switch --name kanso
 ```
+
+Only want the editor picker? **Open with** is also listed on its own: ask your
+agent to "add herdr.dev/mods/jlopezlira/herdr-kanso--open-with" to add it to the
+layout you already use, or copy `open-with/mods/open-with` to
+`~/.config/herdr-app/mods/` and merge `open-with/keys.json` into yours.
 
 `ctrl-shift-l` switches back to your previous layout. Deleting the files
 removes Kanso. Light and dark themes are included (`kanso-day`, `kanso`).
@@ -348,6 +353,11 @@ offers.
 How every part is built, in enough detail to rebuild it:
 [kanso/RECIPE.md](kanso/RECIPE.md). `herdr-app check kanso/mods/<mod>` loads a
 mod once and reports what is wrong.
+
+Mods listed on their own at herdr.dev/mods (`open-with`) have a top-level
+folder with a copy of the mod, its own `RECIPE.md`, `preview.png` and
+`keys.json`. Edit the mod in `kanso/mods/`, then `npm run sync:mods`; the tests
+fail while a copy differs.
 
 ## Credits
 
