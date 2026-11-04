@@ -34,8 +34,9 @@ test("Worktrees parses git's worktree list and the probes", async () => {
   const list = clone(parseWorktrees("worktree /r\0HEAD a\0branch refs/heads/main\0\0worktree /w1\0HEAD b\0detached\0locked\0\0worktree /w2\0HEAD c\0branch refs/heads/feat/x\0prunable gitdir file points to non-existent location\0\0"));
   assert.deepEqual(list.map((w) => [w.path, w.main, w.branch, w.detached, w.locked, w.prunable]),
     [["/r", true, "main", false, false, false], ["/w1", false, null, true, true, false], ["/w2", false, "feat/x", false, false, true]]);
-  assert.deepEqual(clone(parseProbe("recent\nonly\t1\ndirty\t3\nlast\t100\nmerged\nahead\t2\n")), { gone: false, dirty: 3, last: 100000, ahead: 2, merged: true, recent: true, only: 1 });
+  assert.deepEqual(clone(parseProbe("recent\nonly\t1\ndirty\t3\nlast\t100\nmerged\nahead\t2\n")), { gone: false, replaced: false, broken: false, dirty: 3, last: 100000, ahead: 2, merged: true, recent: true, only: 1 });
   assert.equal(parseProbe("gone\n").gone, true);
+  assert.equal(parseProbe("replaced\n").replaced, true);
   assert.deepEqual(clone(basesFrom("origin/main\nmain\norigin/master\n")), ["origin/main", "main"]);
   assert.deepEqual(clone(basesFrom("master\n")), ["master"]);
   assert.deepEqual(clone(parseDiscovery("R\t/a\nO\t/tmp/x\n\nnoise")), { repos: ["/a"], orphans: ["/tmp/x"] });
@@ -177,7 +178,18 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   const detached = join(far, "detached");
   await git(repo, "worktree", "add", "-q", "--detach", detached, "unmerged");
   const open = await add("open", "-b", "open");
+  // Clean to the scan; work lands in it before Clean up reaches it.
+  const late = await add("late", "-b", "late");
   const gone = await add("gone", "-b", "gone"); await rm(gone, { recursive: true });
+  // A worktree's folder made again as a repository of its own: git worktree
+  // remove refuses it ("is not a .git file"); only the record may go.
+  const reused = await add("reused", "-b", "reused"); await rm(reused, { recursive: true });
+  await mkdir(reused); await git(reused, "init", "-q"); await writeFile(join(reused, "keep.txt"), "mine\n");
+  // A worktree whose repository moved: its .git names the old place, so git
+  // can't read it, and nothing it says about it is true.
+  const moved = await add("moved", "-b", "moved");
+  await writeFile(join(moved, "wip.txt"), "unsaved\n");
+  await writeFile(join(moved, ".git"), `gitdir: ${join(dir, "old-place/.git/worktrees/moved")}\n`);
   // A folder whose worktree record was deleted under it.
   const orphan = join(root, "leftover");
   await mkdir(orphan); await writeFile(join(orphan, ".git"), `gitdir: ${join(dir, "deleted/.git/worktrees/leftover")}\n`);
@@ -193,7 +205,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   // Everything here was touched a moment ago: Clean up leaves it all but the record of a gone folder.
   const busy = new Worktrees();
   busy.init(cx); await drain();
-  assert.deepEqual(clone(busy.plan().map((w) => w.path.split("/").pop())), ["gone"]);
+  assert.deepEqual(clone(busy.plan().map((w) => w.path.split("/").pop()).sort()), ["gone", "reused"]);
   assert.equal(stateOf(busy.groups[0].items.find((w) => w.path.endsWith("/merged"))), "recent");
 
   settings["kanso.worktrees.idleHours"] = 0;
@@ -203,19 +215,26 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.equal(panel.groups.length, 1);
   const g = panel.groups[0], by = Object.fromEntries(g.items.map((w) => [w.path.split("/").pop(), w]));
   assert.deepEqual(Object.fromEntries(Object.entries(by).map(([k, w]) => [k, stateOf(w)])), {
-    merged: "merged", squashed: "merged", unmerged: "unmerged", dirty: "changes", lost: "lost", detached: "detached", open: "open", gone: "missing",
+    merged: "merged", squashed: "merged", unmerged: "unmerged", dirty: "changes", lost: "lost", detached: "detached", open: "open", gone: "missing", reused: "missing", moved: "broken", late: "merged",
   });
+  assert.ok(!removable(by.moved), "never in a Remove all: git can't say what it holds");
+  assert.ok(by.reused.replaced && by.reused.size === null, "reused: not measured, its space is not the worktree's");
   assert.equal(g.base, "main");
   assert.ok(by.merged.size > 0, "measured");
   assert.deepEqual(clone(panel.orphans.map((o) => o.path)), [orphan]);
 
-  assert.deepEqual(clone(panel.plan().map((w) => w.path.split("/").pop()).sort()), ["detached", "gone", "merged", "squashed", "unmerged"]);
+  assert.deepEqual(clone(panel.plan().map((w) => w.path.split("/").pop()).sort()), ["detached", "gone", "late", "merged", "reused", "squashed", "unmerged"]);
+  await writeFile(join(late, "new.txt"), "started after the scan\n");
   panel.cleanUp(cx); await drain();
-  assert.equal(panel.note, null);
+  assert.equal(panel.note, null, "no error: what changed is left alone");
+  assert.match(panel.notice, /^1 stays: it changed since the scan/);
+  assert.ok(existsSync(join(late, "new.txt")) && stateOf(by.late) === "changes", "checked again right before: its new work is kept");
   assert.match(notes[0].title, /^Freed \d+ KB$/);
-  assert.match(notes[0].body, /^5 removed, \d+ KB freed so far$/);
+  assert.match(notes[0].body, /^6 removed, \d+ KB freed so far$/);
+  assert.ok(existsSync(join(reused, ".git")) && existsSync(join(reused, "keep.txt")), "the reused folder, a repository of its own, is not touched");
+  assert.ok(!(await git(repo, "worktree", "list")).includes("/reused"), "its old record is gone");
   const after = clone(panel.hist);
-  assert.deepEqual([after.worktrees, after.records, after.branches], [4, 1, 2], "4 folders, 1 record of a gone one, the 2 merged branches");
+  assert.deepEqual([after.worktrees, after.records, after.branches], [4, 2, 2], "4 folders, 2 records (one gone, one reused), the 2 merged branches");
   assert.ok(after.kb > 0 && after.kb === after.kanso, "all freed here");
   assert.equal(Object.keys(after.diskByDay).length, 1, "the scan is kept");
 
@@ -226,7 +245,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.ok(![merged, squashed, unmerged, detached].some((p) => existsSync(p)), "folders removed");
   assert.ok(await exists(dirty) && await exists(lost) && await exists(open), "the rest stay");
   const branches = (await git(repo, "branch", "--format=%(refname:short)")).split("\n").sort();
-  assert.deepEqual(branches, ["dirty", "gone", "main", "open", "unmerged"], "merged branches go; an unmerged one keeps its commits");
+  assert.deepEqual(branches, ["dirty", "gone", "late", "main", "moved", "open", "reused", "unmerged"], "merged branches go; the others keep their commits");
 
   assert.ok(!(await git(repo, "worktree", "list")).includes("/gone"), "pruned");
 
@@ -237,10 +256,16 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.ok(!(await exists(dirty)), "uncommitted work goes only when confirmed");
   panel.remove(panel.orphans[0], cx); await drain();
   assert.ok(!(await exists(orphan)), "orphan folder deleted");
-  assert.deepEqual(clone(panel.groups[0].items.map((w) => w.path.split("/").pop()).sort()), ["lost", "open"]);
+  assert.deepEqual(clone(panel.groups[0].items.map((w) => w.path.split("/").pop()).sort()), ["late", "lost", "moved", "open"]);
 
-  // Remove all: the commit only "lost" had goes with it; the open one stays.
+  // Remove all: the commit only "lost" had and late's new file go with them; the open one and the broken link stay.
   panel.removeAll(panel.groups[0].items.filter(removable), cx); await drain();
-  assert.ok(!existsSync(lost) && existsSync(open));
-  assert.deepEqual(clone(panel.groups[0].items.map((w) => w.path.split("/").pop())), ["open"]);
+  assert.ok(!existsSync(lost) && existsSync(open) && existsSync(join(moved, "wip.txt")));
+  assert.deepEqual(clone(panel.groups[0].items.map((w) => w.path.split("/").pop()).sort()), ["moved", "open"]);
+
+  // Repaired, git reads it again, and its uncommitted file shows.
+  panel.repair(by.moved, cx); await drain();
+  assert.equal(panel.note, null);
+  assert.equal(stateOf(by.moved), "changes");
+  assert.equal(by.moved.dirty, 1);
 });

@@ -136,6 +136,14 @@ take, grouped by repository, and what each one holds:
 - **uncommitted changes**, or **commits only here** (a detached HEAD no branch
   has): the only work removing it would lose;
 - **in use today** or **open in Herdr**: left alone.
+- **repository moved**: its `.git` still names the old place, so git can't read
+  it. It is never removed; **Repair the link** (`git worktree repair`) connects
+  it again, and then it is checked like any other.
+
+Each one is checked again right before it goes: one that changed since the
+scan (new work, an agent at work there, a link that broke) stays, and the panel
+says why instead of failing. A folder made again as a repository of its own
+keeps its files; only the old worktree record goes.
 
 **Clean up** removes, after a second press, every one that loses nothing and
 has been idle a day, and deletes the branches already merged. A row opens what

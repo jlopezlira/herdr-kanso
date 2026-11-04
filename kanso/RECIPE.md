@@ -168,7 +168,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       `git worktree list --porcelain -z` then gives its worktrees wherever
       they are, and a `.git` file naming a worktree record that is gone is
       listed under "Left behind". Each worktree is probed (8 at a time, git
-      with `--no-optional-locks`): uncommitted entries, commits no branch,
+      with `--no-optional-locks`; a folder with a `.git` directory is a
+      repository of its own, whose old record alone can go; one git can't
+      read is broken and nothing else is believed): uncommitted entries, commits no branch,
       tag or remote has, commits not in the default branch or `develop`
       (origin's and local), merged when an ancestor of one or when
       `git merge-tree` into it changes nothing (squash merges), and in use
@@ -184,7 +186,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         press within 4 s confirms (red, "Press again to remove N"). It takes
         what loses nothing: merged, not merged (the branch keeps its
         commits), detached with every commit on a branch, and folders gone;
-        never one with uncommitted changes or commits only there, in use,
+        never one git can't read (its `.git` names a moved repository:
+        "Repair the link" runs `git worktree repair`), one with uncommitted
+        changes or commits only there, in use,
         open in a pane or space, or locked. Merged branches are deleted;
       - a section per repository, largest first (8, then "Show N more
         repositories"): its name (15), its folder (11.5, `dim`), count and
@@ -199,7 +203,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         branch when merged, then `git worktree prune`). Under the rows:
         "Prune N folders already gone" and "Remove all N" (two presses; the
         losses in red while armed), which takes all but the ones in use,
-        open or locked;
+        open or locked. Every removal probes it again first and skips one
+        that no longer qualifies, with a dim note instead of an error;
       - **Where the space is**, after the hero: one 10 px bar split by
         state (green can go, red needs a look, yellow in use or open, `muted`
         left behind, `border` still checking), a legend row each (dot,
