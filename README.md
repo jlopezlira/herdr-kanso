@@ -351,7 +351,10 @@ version with its changelog section as the notes
 offers.
 
 How every part is built, in enough detail to rebuild it:
-[kanso/RECIPE.md](kanso/RECIPE.md). `herdr-app check kanso/mods/<mod>` loads a
+[kanso/RECIPE.md](kanso/RECIPE.md), with Spend's brief in
+[kanso/RECIPE-spend.md](kanso/RECIPE-spend.md). The herdr.dev gallery drops a
+folder whose `RECIPE.md` is over 64 KB, and a test fails before that happens:
+move a part into its own file. `herdr-app check kanso/mods/<mod>` loads a
 mod once and reports what is wrong.
 
 Mods listed on their own at herdr.dev/mods (`open-with`) have a top-level
