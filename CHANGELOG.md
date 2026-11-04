@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.1.1] - 2026-11-03
+
+### Fixed
+
+- Spaces: a new space from This computer's + or New space is made on this computer, and the top + makes it on the active space's machine. Before, both could land on the last remote machine you focused (#36).
+
 ## [2.1.0] - 2026-11-03
 
 ### Added
