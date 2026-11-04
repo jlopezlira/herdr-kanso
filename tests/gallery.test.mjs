@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { ROOT, STANDALONE, differences } from "../scripts/sync-mods.mjs";
+
+// herdr.dev's indexer skips a whole folder whose RECIPE.md is over 64 KB
+// ("RECIPE.md exceeds 64 KB"), so Kanso dropped out of the gallery at 2.1.0.
+const RECIPE_LIMIT = 64 * 1024;
+const FOLDERS = ["kanso", ...STANDALONE];
+
+for (const folder of FOLDERS) {
+  test(`${folder}/RECIPE.md fits the gallery's 64 KB`, () => {
+    const bytes = statSync(join(ROOT, folder, "RECIPE.md")).size;
+    assert.ok(bytes <= RECIPE_LIMIT, `${folder}/RECIPE.md is ${bytes} bytes; move a part into its own file`);
+  });
+}
 
 for (const mod of STANDALONE) {
   test(`${mod} on its own is the same mod Kanso installs`, async () => {
