@@ -12,7 +12,7 @@ beside them.
   <img alt="Kanso: seven demo agents across three repositories and a nested worktree. A pinned worker, a review waiting for a decision, and a server stacked above a test agent." src="kanso/preview.png">
 </picture>
 
-> **Install:** tell your agent **`add herdr.dev/layouts/jlopezlira/kanso`**
+> **Install:** tell your agent **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 >
 > [Manual install](#install) · [Keys](#keys) · [What it runs](#privacy-what-it-runs)
 
