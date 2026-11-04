@@ -14,6 +14,9 @@
 import { exec, appHome, writeTextFile } from "herdr";
 
 export const STORE_DIR = "data/kanso-panel";
+// Two copies of the panel (or a scan and a removal) can reach the database at
+// once: each sqlite3 waits up to 10 s for the other instead of failing.
+const BUSY = ["-cmd", ".timeout 10000"];
 
 const SCHEMA = `
 PRAGMA journal_mode=WAL;
@@ -78,7 +81,7 @@ export class WorktreeStore {
   }
 
   async sql(text, json = false) {
-    const r = await exec("sqlite3", [...(json ? ["-json"] : []), this.db, text]);
+    const r = await exec("sqlite3", [...BUSY, ...(json ? ["-json"] : []), this.db, text]);
     if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
     return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
   }
@@ -89,7 +92,7 @@ export class WorktreeStore {
     const path = `${this.dir}/.worktrees-${Date.now()}-${this.batches++}.sql`;
     await writeTextFile(path, `BEGIN;\n${text}\nCOMMIT;\n`, null);
     try {
-      const r = await exec("sqlite3", [this.db, `.read '${path}'`]);
+      const r = await exec("sqlite3", [...BUSY, this.db, `.read '${path}'`]);
       if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
     } finally { await exec("rm", ["-f", path]).catch(() => {}); }
   }

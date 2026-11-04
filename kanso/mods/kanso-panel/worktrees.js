@@ -182,6 +182,21 @@ export const safe = (w) => ["merged", "detached", "unmerged", "missing"].include
 // one open in Herdr, locked, touched today or not checked yet.
 export const removable = (w) => !["open", "locked", "recent", "checking"].includes(stateOf(w));
 
+// Where the disk goes: what can go, what needs a look, what is in use, the
+// folders left behind, and what is still being checked. Sizes in KB.
+export function spaceBy(items, orphans = []) {
+  const live = items.filter((w) => !w.missing), of = (test) => live.filter(test);
+  const parts = [
+    { key: "go", label: "Can go, losing nothing", list: of(safe) },
+    { key: "look", label: "Need a look", list: of((w) => ["changes", "lost"].includes(stateOf(w))) },
+    { key: "use", label: "In use or open", list: of((w) => ["recent", "open", "locked"].includes(stateOf(w))) },
+    { key: "left", label: "Left behind", list: orphans },
+    { key: "checking", label: "Still checking", list: of((w) => stateOf(w) === "checking") },
+  ];
+  return parts.map(({ key, label, list }) => ({ key, label, count: list.length, kb: list.reduce((n, w) => n + (w.size ?? 0), 0) }))
+    .filter((p) => p.count > 0);
+}
+
 // What a Remove all would lose, in words.
 export function losses(items) {
   const dirty = items.filter((w) => w.dirty > 0), lost = items.filter((w) => stateOf(w) === "lost"), orphans = items.filter((w) => w.orphan);
@@ -233,6 +248,7 @@ const splitSize = (kb) => { const [n, u] = fmtSize(kb).split(" "); return { big:
 // What was freed when there is some; else what the worktrees take now.
 //   now: { size, worktrees, canGoSize, look } from the last scan.
 export function freedSpec(h, current, at = Date.now()) {
+  const where = (current?.space ?? []).filter((p) => p.kb > 0);
   const freed = (h?.kb ?? 0) > 0, days = lastDays(freed ? h.freedByDay : h?.diskByDay, at);
   const size = splitSize(freed ? h.kb : current?.size ?? 0), top = best(freed ? h.freedByDay : h?.diskByDay);
   const stats = freed ? [
@@ -250,11 +266,17 @@ export function freedSpec(h, current, at = Date.now()) {
     hero: { big: size.big, small: size.small, label: freed ? "of disk freed from worktrees agents left behind" : "of disk in git worktrees agents left behind" },
     stats,
     note: freed ? "Each one checked first: nothing uncommitted lost, every commit kept on a branch." : "Found and sized by Kanso, before cleaning up.",
-    blocks: days.some((d) => d.kb) ? [{
-      kind: "bars", title: freed ? "Freed each day" : "On disk each day",
-      right: top ? `${freed ? "best" : "most"}: ${fmtSize(top.kb)} on ${shortDate(new Date(`${top.day}T12:00:00`).getTime())}` : "",
-      values: days.map((d) => d.kb), ticks: [shortDate(days[0].at), "Last 30 days", shortDate(days[days.length - 1].at)],
-    }] : [],
+    blocks: [
+      ...(days.some((d) => d.kb) ? [{
+        kind: "bars", title: freed ? "Freed each day" : "On disk each day",
+        right: top ? `${freed ? "best" : "most"}: ${fmtSize(top.kb)} on ${shortDate(new Date(`${top.day}T12:00:00`).getTime())}` : "",
+        values: days.map((d) => d.kb), ticks: [shortDate(days[0].at), "Last 30 days", shortDate(days[days.length - 1].at)],
+      }] : []),
+      ...(where.length ? [{ kind: "list", title: "Where the space is now", rows: where.map((p) => {
+        const [value, unit] = fmtSize(p.kb).split(" ");
+        return { name: p.label, detail: `${p.count} ${p.count === 1 ? "folder" : "folders"}`, value, unit };
+      }) }] : []),
+    ],
   };
 }
 
@@ -757,14 +779,16 @@ export class Worktrees {
   }
 
   // Bars a day for the last 30, drawn like Spend's chart: the top day in
-  // the accent with its value.
-  bars(c, byDay, title, height = 96) {
-    const days = lastDays(byDay), top = Math.max(...days.map((d) => d.kb));
-    if (!top) return null;
+  // the accent with its value. Drawn empty too, with a line on what fills it.
+  bars(c, byDay, title, height, empty) {
+    const days = lastDays(byDay), top = Math.max(0, ...days.map((d) => d.kb));
     return v_flex().w_full().gap(G.sm)
+      .child(h_flex().w_full().items_end().justify_between()
+        .child(div().text_size(12).text_color(c.muted).child(title))
+        .child(div().text_size(11).text_color(c.dim).child(top ? `top ${fmtSize(top)}` : empty)))
       .child(h_flex().w_full().items_end()
         .children(days.map((d) => {
-          const peak = d.kb === top;
+          const peak = top > 0 && d.kb === top;
           return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
             .tooltip(`${shortDate(d.at)} · ${d.kb ? fmtSize(d.kb) : "nothing"}`)
             .when(peak, (e) => e.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(fmtSize(d.kb))))
@@ -775,8 +799,42 @@ export class Worktrees {
         })))
       .child(h_flex().w_full().justify_between()
         .child(div().text_size(10).text_color(c.dim).child(shortDate(days[0].at)))
-        .child(div().text_size(10).text_color(c.dim).child(title))
         .child(div().text_size(10).text_color(c.dim).child("Today")));
+  }
+
+  // Where the disk goes now: one bar split by state, its legend, and the
+  // repositories that take the most.
+  space(c) {
+    const items = this.groups.flatMap((g) => g.items), parts = spaceBy(items, this.orphans);
+    const total = parts.reduce((n, p) => n + p.kb, 0);
+    if (!total) return null;
+    const color = { go: c.green, look: c.red, use: c.yellow, left: c.muted, checking: c.border };
+    const pct = (kb) => `${Math.max(0.5, (kb / total) * 100).toFixed(2)}%`;
+    const repos = this.groups.map((g) => ({ name: name(g.repo), kb: g.items.reduce((n, w) => n + (w.size ?? 0), 0), count: g.items.filter((w) => !w.missing).length }))
+      .concat(this.orphans.length ? [{ name: "Left behind", kb: this.orphans.reduce((n, w) => n + (w.size ?? 0), 0), count: this.orphans.length }] : [])
+      .filter((r) => r.kb > 0).sort((a, b) => b.kb - a.kb).slice(0, 6);
+    const most = repos[0]?.kb ?? 1;
+    return v_flex().w_full().gap(G.lg)
+      .child(this.section(c, "Where the space is", fmtSize(total)))
+      .child(h_flex().w_full().h(10).rounded(5).overflow_hidden().gap(2)
+        .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : 0.85)
+          .tooltip(`${p.label}: ${fmtSize(p.kb)}`))))
+      .child(v_flex().w_full().gap(6)
+        .children(parts.map((p) => h_flex().w_full().items_center().gap(G.sm)
+          .child(div().size(8).flex_none().rounded_full().bg(color[p.key]))
+          .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.text).child(p.label))
+          .child(div().text_size(11).text_color(c.dim).child(`${p.count}`))
+          .child(div().w(64).flex_none().text_right().text_size(13).font_light().text_color(c.text).child(fmtSize(p.kb) || "0 KB"))
+          .child(div().w(36).flex_none().text_right().text_size(11).text_color(c.dim).child(`${Math.round((p.kb / total) * 100)}%`)))))
+      .when(repos.length > 1, (el) => el.child(v_flex().w_full().gap(G.sm).pt(G.sm)
+        .child(div().text_size(12).text_color(c.muted).child("The repositories that take the most"))
+        .children(repos.map((r) => v_flex().w_full().gap(4)
+          .child(h_flex().w_full().items_end().gap(G.sm)
+            .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.text).child(r.name))
+            .child(div().text_size(11).text_color(c.dim).child(`${r.count}`))
+            .child(div().w(64).flex_none().text_right().text_size(13).font_light().text_color(c.text).child(fmtSize(r.kb))))
+          .child(div().w_full().h(4).rounded(2).bg(c.border)
+            .child(div().h_full().w(`${Math.max(1, (r.kb / most) * 100).toFixed(2)}%`).rounded(2).bg(c.muted)))))));
   }
 
   // The history: what was freed (by Clean up and Remove, or by anything
@@ -786,7 +844,8 @@ export class Worktrees {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(this.section(c, "Freed"))
       .child(div().text_size(12).text_color(this.storeNote ? c.red : c.dim).child(this.storeNote ?? "Reading the history…"));
-    const freedBars = this.bars(c, h.freedByDay, "Freed each day"), diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56);
+    const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
+      , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
     const stats = [
       { value: String(h.worktrees), unit: h.worktrees === 1 ? "worktree removed" : "worktrees removed" },
       { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
@@ -806,8 +865,8 @@ export class Worktrees {
         .children(stats.map((s) => h_flex().items_end().gap(6)
           .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(s.value))
           .child(div().pb(2).text_size(12).text_color(c.dim).child(s.unit))))))
-      .when(Boolean(freedBars), (el) => el.child(freedBars))
-      .when(Boolean(diskBars), (el) => el.child(diskBars));
+      .child(freedBars)
+      .child(diskBars);
   }
 
   // The ones that need a look, handed to your agent to sort out.
@@ -829,6 +888,7 @@ export class Worktrees {
     return {
       size: [...live, ...this.orphans].reduce((n, w) => n + (w.size ?? 0), 0), worktrees: live.length,
       canGoSize: plan.reduce((n, w) => n + (w.size ?? 0), 0), look: live.filter((w) => ["changes", "lost"].includes(stateOf(w))).length,
+      space: spaceBy(this.groups.flatMap((g) => g.items), this.orphans),
     };
   }
 
@@ -852,9 +912,10 @@ export class Worktrees {
         .child(div().text_size(15).text_color(this.note ? c.red : c.muted).child(this.note ? "The scan failed." : "No worktrees besides your checkouts."))
         .child(div().text_size(12).text_color(c.dim).child(this.note ?? "Nothing left behind either."));
     } else {
-      const ask = this.agent(c);
+      const ask = this.agent(c), spaceView = this.space(c);
       body = v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
+        .when(Boolean(spaceView), (el) => el.child(spaceView))
         .child(this.freed(c, narrow))
         .when(Boolean(ask), (el) => el.child(ask))
         .children(shown.map((g) => this.group(g.repo, name(g.repo), tilde(g.repo), g.items, c)))

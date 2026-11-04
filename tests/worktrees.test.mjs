@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { load, context, temporary, clone, exec } from "./helpers.mjs";
 
-const names = ["Worktrees", "removable", "losses", "lastDays", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
+const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
 const writeTextFile = (path, text) => writeFile(path, text);
 const storeOf = (app) => load("kanso-panel/worktrees-store.js", ["WorktreeStore", "upsertSql", "rowOf", "itemOf"], { exec, appHome: () => app, writeTextFile });
 const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
@@ -104,6 +104,19 @@ test("Worktrees keeps each worktree once, rewrites it only when it changed, and 
   await store.recordScan({ worktrees: 1, size: 10, canGo: 0, canGoSize: 0, look: 0, missing: 0, orphans: 0, repos: 1 }, day(6));
   await store.recordScan({ worktrees: 1, size: 30, canGo: 0, canGoSize: 0, look: 0, missing: 0, orphans: 0, repos: 1 }, day(6) + 3600000);
   assert.deepEqual(clone(await store.history()).diskByDay, { "2026-11-06": 30 }, "a day's last scan");
+
+  // Two copies of the panel at once: the second waits for the first instead of "database is locked".
+  const other = new WorktreeStore();
+  const many = Array.from({ length: 300 }, (_, i) => ({ path: join(dir, `w${i}`), repo: "/r", size: i }));
+  await Promise.all([store.save(many, day(8)), other.save(many.map((w) => ({ ...w, size: w.size + 1 })), day(8)), store.history(), other.open(), other.history()]);
+  assert.equal((await sql("SELECT COUNT(*) n FROM worktrees WHERE gone_at IS NULL;"))[0].n, 301);
+});
+
+test("Worktrees shows where the space is, by what can be done with it", async () => {
+  const { spaceBy } = await worktrees();
+  const w = (o) => ({ probed: true, fresh: true, branch: "b", dirty: 0, ahead: 0, only: 0, merged: false, recent: false, ...o });
+  const parts = clone(spaceBy([w({ merged: true, size: 100 }), w({ size: 50 }), w({ dirty: 1, size: 30 }), w({ recent: true, size: 20 }), w({ missing: true }), w({ probed: false, size: 5 })], [{ orphan: true, size: 7 }]));
+  assert.deepEqual(parts.map((p) => [p.key, p.count, p.kb]), [["go", 2, 150], ["look", 1, 30], ["use", 1, 20], ["left", 1, 7], ["checking", 1, 5]]);
 });
 
 test("Worktrees shares the totals only: what was freed, or what they take before that", async () => {
@@ -112,7 +125,7 @@ test("Worktrees shares the totals only: what was freed, or what they take before
   assert.deepEqual(clone(lastDays({ "2026-11-01": 5, "2026-11-03": 7 }, day(3), 3)).map((d) => [d.day, d.kb]), [["2026-11-01", 5], ["2026-11-02", 0], ["2026-11-03", 7]]);
   const h = { kb: 2.5 * 1048576, kanso: 2 * 1048576, worktrees: 4, records: 5, orphans: 1, branches: 2, since: day(1),
     freedByDay: { "2026-11-01": 2 * 1048576, "2026-11-03": 512 * 1024 }, diskByDay: { "2026-11-01": 9 * 1048576 } };
-  const now = { size: 9 * 1048576, worktrees: 40, canGoSize: 1048576, look: 3 };
+  const now = { size: 9 * 1048576, worktrees: 40, canGoSize: 1048576, look: 3, space: [{ key: "go", label: "Can go, losing nothing", count: 30, kb: 1048576 }, { key: "look", label: "Need a look", count: 3, kb: 0 }] };
   const spec = clone(freedSpec(h, now, day(3)));
   assert.deepEqual([spec.hero.big, spec.hero.small, spec.right], ["2.5", "GB", "since Nov 1"]);
   assert.deepEqual(spec.stats.map((x) => x.value), ["4", "2", "6"]);
@@ -121,6 +134,7 @@ test("Worktrees shares the totals only: what was freed, or what they take before
   const before = clone(freedSpec({ ...h, kb: 0, freedByDay: {} }, now, day(3)));
   assert.deepEqual([before.hero.big, before.hero.label], ["9.0", "of disk in git worktrees agents left behind"]);
   assert.equal(before.blocks[0].title, "On disk each day");
+  assert.deepEqual(before.blocks[1].rows, [{ name: "Can go, losing nothing", detail: "30 folders", value: "1.0", unit: "GB" }], "where the space is, by state; empty states left out");
   assert.match(freedText({ kb: 0 }, now), /^My AI agents left 9\.0 GB of disk in 40 git worktrees\.$/);
   assert.doesNotMatch(JSON.stringify([spec, before]) + freedText(h, now), /\/|acme|feat/, "no path, repository or branch");
 });

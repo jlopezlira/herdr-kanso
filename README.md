@@ -148,6 +148,9 @@ seen is kept once and rewritten only when it changes, and one that disappears,
 removed here or anywhere else, stays with the size it freed. It shows how much
 disk was freed, the worktrees, merged branches and leftovers cleared, and a bar
 a day for the last 30 days, of what was freed and of what the worktrees took.
+**Where the space is** splits the disk by what can be done with it (can go,
+needs a look, in use, left behind) and ranks the repositories that take the
+most.
 The panel opens on the last scan while it checks everything again. **Share**
 posts it to X, LinkedIn or Bluesky as an image, the same way Shipped and Spend
 do, with the totals only: never a repository, branch or folder name. Before

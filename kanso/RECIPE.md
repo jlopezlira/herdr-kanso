@@ -200,8 +200,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         "Prune N folders already gone" and "Remove all N" (two presses; the
         losses in red while armed), which takes all but the ones in use,
         open or locked;
-      - **Freed**, after the hero, from `worktrees-store.js`: SQLite
+      - **Where the space is**, after the hero: one 10 px bar split by
+        state (green can go, red needs a look, yellow in use or open, `muted`
+        left behind, `border` still checking), a legend row each (dot,
+        label, count, size, share), and the 6 repositories that take the
+        most as 4 px bars against the largest;
+      - **Freed**, from `worktrees-store.js`: SQLite
         (`data/kanso-panel/worktrees.db`, through the `sqlite3` command).
+        Every `sqlite3` waits up to 10 s for a lock (`.timeout`), as two copies of the panel can write at once.
         `worktrees` has a row per worktree while it lives (a partial unique
         index on the path): a finished scan inserts the new ones and rewrites
         a row only when its repository, branch, what it holds or its size
@@ -212,8 +218,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         on the live rows, marked as not checked (no removal until the scan
         sees them again). It shows the total freed (48 light), here and
         outside, the three counts (24 light), and two charts of 30 days drawn
-        like Spend's: freed each day (96 tall) and in worktrees each day (the
-        day's last scan, 56 tall). A removal posts a toast with what it freed
+        like Spend's, drawn empty too until there is data: freed each day (96
+        tall) and in worktrees each day (the day's last scan, 56 tall). A removal posts a toast with what it freed
         and the total;
       - **Ask your agent**, when some would lose work: "Review the N that need
         a look" opens your first installed agent (`knownAgents`) in a new tab
@@ -223,8 +229,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - the header's share icon opens share.js's row: the card
         (`freedSpec`) has the size freed, the three counts and the days; before
         anything was freed, the size they take, how many, what can go and
-        what needs a look, with the disk by day. Never a repository, branch
-        or path.
+        what needs a look, with the disk by day; and where the space is now,
+        by state. Never a repository, branch or path.
       The Shipped panel (`kanso-panel` with `shipped`) is vanity metrics on
       purpose, drawn like Spend. It has:
       - a header: "Shipped" (20), a share icon and a refresh icon. Share
