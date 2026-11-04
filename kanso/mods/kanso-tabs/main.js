@@ -118,6 +118,7 @@ const PANELS = {
   files: { mod: "kanso-panel", props: { panel: "files" } }, changes: { mod: "kanso-panel", props: { panel: "changes" } }, pr: { mod: "kanso-panel", props: { panel: "pr" } },
   shipped: { mod: "kanso-panel", props: { panel: "shipped" } },
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
+  ports: { mod: "kanso-panel", props: { panel: "ports" } },
   insights: { mod: "kanso-spend" },
 };
 
@@ -141,6 +142,8 @@ const BUILTIN = [
   { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
   // Every git worktree on this computer; remove the ones agents left behind.
   { id: "worktrees", label: "Worktrees", icon: `${ICON}worktree.svg` },
+  // Dev servers listening on a port, and the ones no pane runs any more.
+  { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
@@ -168,6 +171,7 @@ function setPanelOn(id, on) {
   setShared(OFF, [...off]);
 }
 
+const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
 const openPanels = () => openOverlay({ mod: "kanso-tabs", kind: "popup", width: 240, height: 48 + panelList().length * 32, props: { arrange: true } });
 
 function panelContent(id) {
@@ -383,7 +387,11 @@ export default class Tabs extends View {
       .on_scroll_wheel(e => this.wheel(e))
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(6).overflow_x_scrollbar()
         .child(h_flex().flex_none().gap(2).items_center().children(shown.map(item)))
-        .child(button("tab-new", svg("mods/kanso-chrome/icons/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))))
+        .child(button("tab-new", svg("mods/kanso-chrome/icons/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
+          .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }))
+        // A saved arrangement of agents, opened in a new tab (kanso-arrange).
+        .child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
+          .tooltip(window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements")))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton)))
       .when(window()?.buttons, el => el.child(button("minimize", "−", () => run("window.minimize")))
         .child(button("maximize", "□", () => run("window.maximize")))

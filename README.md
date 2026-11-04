@@ -167,6 +167,49 @@ need a look**, hands the question to your agent in a new tab: what that work
 is, whether it already lives in a branch, a remote or a pull request, and what
 to keep. The agent explains; it changes nothing.
 
+### Go where you're needed
+
+**Cmd+J** takes you to the next agent waiting on you, in any space: one
+blocked on a question first, then one that finished while you weren't
+looking. Press it again for the one after. "2 agents need you" in the status
+bar does the same on a click.
+
+When an agent stops working, its pane header says what it left in its
+folder, in one quiet line: changed files with lines added and removed, the
+commits its branch has that the upstream doesn't, and its open pull request
+with a dot for the checks (green passing, yellow running, red failing). It
+comes from `git` and `gh` once per turn, never from the agent's conversation.
+
+### Hand the work to another agent
+
+**Send to an agent** (the pane header's send button, the pane menu, or
+Cmd+Alt+S) passes a pane's work to another agent: Claude writes, Codex
+reviews. Pick the agent, read the message (it starts as "Review the changes
+on branch feat/login in ~/Apps/web") and edit it. **Send** pastes it into
+that agent's terminal and presses Enter, as if you typed it there, then
+takes you to it. Nothing is added to what the agent sees, and an agent
+waiting on its own question is never typed into.
+
+### Your tab, the way you set it up
+
+**Arrangements** (the layers button beside +, or Cmd+Alt+T) keeps the tab
+you set up every morning: which program runs in each pane with the flags you
+started it with (`claude --model opus`, `codex -m gpt-5.5`, `npm run dev`),
+its folder, the columns, the stacks and their widths. Save this tab, and open
+it again in a new tab with one click. Arrangements belong to the project
+(the space's folder), so Shield can open a Sonnet lead beside an Opus
+developer while Fluenty opens something else. Kanso adds nothing of its own,
+and a resumed session's id is left out, so each agent starts fresh.
+
+### Servers left running
+
+The **Ports** panel lists the dev servers listening on this computer: the
+port, the command, its folder, how long it has run, and the pane that runs
+it. Agents start servers and leave them running when their pane closes; the
+ones no pane runs any more are marked, and **Stop** (a second press
+confirms) ends them, with a force stop for one that won't go. Open one in
+the browser or go to its pane from the same row.
+
 ### Every repo and worktree, one sidebar
 
 Repositories and their **nested Git worktrees** sit together, each with its
@@ -269,6 +312,9 @@ update those once by hand as above.
 | Cmd+Shift+Enter | Make the pane wider or narrower |
 | Cmd+Shift+O | Open the pane's folder in a code editor |
 | Cmd+Alt+P | Pin the pane: it keeps its place and stays in view |
+| Cmd+J | Go to the next agent that needs you, in any space |
+| Cmd+Alt+S | Send the pane's work to another agent |
+| Cmd+Alt+T | Arrangements: save this tab, or open a saved one |
 
 With the mouse:
 
@@ -312,6 +358,13 @@ folders of your spaces and in `/tmp`, and in each repository it finds. It keeps
 the worktrees' folders, repositories, branches, sizes and what they hold in
 `~/.config/herdr-app/data/kanso-panel/worktrees.db` (`sqlite3`), and removes
 only what you confirm. Its share image has totals only.
+
+The pane headers run `git` and `gh pr view` in an agent's folder when it
+stops working, and keep only the counts. Send to an agent runs `hc send`, and
+only when you press Send. Arrangements run `hc get` to read what each pane
+runs and keep it in `~/.config/herdr-app/data/kanso-arrange.json`. Ports runs
+`lsof`, `ps` and `hc get` on this computer only while the panel is shown, and
+`kill` only on what you confirm.
 
 Spend reads the session files your AI coding tools already write on this
 machine: `~/.claude/projects`, `~/.codex/sessions` and

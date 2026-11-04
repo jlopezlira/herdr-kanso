@@ -44,6 +44,7 @@ function items(tg) {
       () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }), "sidebar", null]] : []),
     ...(parent ? [[`Send back to ${parent.name || parent.address}`, () => run("terminal.park", { terminal: term.address }), "chevron-right", null]] : []),
     ...(info?.cwd ? [["Open with…", () => openWith(info), "open-with", "mod.open:open-with"]] : []),
+    ...(info?.terminal ? [["Send to an agent…", () => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane } }), "send", "kanso-strip.send"]] : []),
     ["Close pane", () => run("pane.close", { pane }), "close", "kanso-strip.close"],
   ];
 }

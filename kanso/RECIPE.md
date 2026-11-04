@@ -436,6 +436,17 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
+- **Cmd+J and the digest** (`kanso-strip`): `next-needs-you` picks,
+  from `agents()`, the next blocked agent after the focused one (else
+  the next done one) and runs `agent.focus`; none posts "No agent needs
+  you". The controller checks panes every 1.5 s; one that leaves
+  `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
+  commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
+  (open only, checks from `statusCheckRollup`) in shared `kanso.digest`
+  by pane, cleared when it works again or closes. The header shows it
+  after the branch: files, +/-, commits, #number with a checks dot; the
+  tooltip says it in words. The header's send button opens `kanso-send`.
+
 - **Agent status**:
   - Working: a breathing dot in `working`, a 10px glyph cycling
     `· • ● •` every 450 ms (`.frames`). It shows on the tab, in the pane
@@ -603,7 +614,22 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-menu`: the terminal right-click menu (root `terminal_menu`):
     split right, left and down through the strip, width, right-clicks
     to the program, send back, "Open with…" (when the pane has a folder),
-    close.
+    "Send to an agent…", close.
+  - `kanso-send`: a dialog (520 wide), `{pane}`: every other agent pane
+    (the one sent to last first, shared `kanso.send.last`), a textarea
+    drafted as "Review the changes on branch <b> in <folder>." (plus its
+    open pull request), and Send (Cmd+Enter): `hc send <terminal> <text>`
+    (pasted, then Enter), refused for a blocked agent, then `agent.focus`.
+  - `kanso-arrange`: a dialog (480 wide) of this project's arrangements
+    (`data/kanso-arrange.json`, keyed by the space's machine and folder).
+    Save this tab reads each pane's `hc get --json` foreground argv and
+    cwd (a shell at its prompt is a shell; Claude Code's --resume, -r,
+    --session-id, --continue, -c and Codex's `resume <id>` are dropped)
+    and the strip's columns, widths and panes per view. Opening one runs
+    `tab.new {argv, folder, name}`, then for each pane `strip.intent`,
+    `pane.focus {pane}` and `terminal.open {argv, folder, place}` beside
+    its column or under the pane above, waiting for the strip to place
+    each, and last a `strip.req` `{op: "widths"}`.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With
@@ -620,7 +646,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
     Cmd+Shift+O (`mod.open:open-with`, in `keys.json`) opens it.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
-  - `kanso-status`: status bar.
+  - `kanso-status`: status bar; "N agents need you" runs `kanso-strip.next-needs-you`.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: lazy file tree via
     `sh`, git status marks, a file shown in place: Markdown rendered, else
@@ -636,6 +662,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     sides; and `showPanel`, which mounts a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it, so it never polls the layout
     to learn whether it is visible.
+    `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
+    (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
+    terminal's shell pid (`hc get`) is in that pane, one in a folder of
+    home (not `~/Library`) with none is "No pane runs it". Read every 10 s
+    while shown; Stop is SIGTERM on a second press, then SIGKILL.
   - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
     and minimalistic forks, and all use `"place": "none"`.
 - Spend (`kanso-spend`) is included. Specs (`sdd-focused`, by José

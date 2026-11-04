@@ -1,7 +1,7 @@
 // Derived from the `workspace-status` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: no background or top border.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-status.
-// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-status; one quiet line; agents working and agents that need you.
+// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-status; one quiet line; agents working and agents that need you (a click goes to the next one, as Cmd+J).
 // Zen: one quiet line. Where you are on the left; on the right, only what needs
 // you speaks up (an agent waiting), else the agents count stays dim.
 import { View, div, svg } from "gpui-kit";
@@ -31,7 +31,8 @@ export default class WorkspaceStatus extends View {
         .when(Boolean(space?.branch), el => el.child(label("branch", space.branch))))
       .when(left && right, el => el.child(div().flex_1()))
       .when(!right, el => el)
-      .when(right && needs > 0, el => el.child(h_flex().gap(6).items_center().text_color(t.blocked)
+      .when(right && needs > 0, el => el.child(h_flex().id("needs-you").gap(6).items_center().text_color(t.blocked)
+        .cursor_pointer().tooltip(mac ? "Go to it  ⌘J" : "Go to it  Ctrl+J").on_click(() => run("kanso-strip.next-needs-you"))
         .child(div().size(6).rounded_full().bg(t.blocked))
         .child(needs === 1 ? "1 agent needs you" : `${needs} agents need you`)))
       .when(right, el => el.child(h_flex().gap(6).items_center()
