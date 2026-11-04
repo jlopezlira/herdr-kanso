@@ -19,8 +19,9 @@ import { PullRequest } from "./pr.js";
 import { Preview } from "./preview.js";
 import { Shipped } from "./shipped.js";
 import { Worktrees } from "./worktrees.js";
+import { Ports } from "./ports.js";
 
-const PANELS = { files: Files, changes: Changes, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees };
+const PANELS = { files: Files, changes: Changes, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees, ports: Ports };
 
 export default class Panel extends View {
   init(_props, cx) {

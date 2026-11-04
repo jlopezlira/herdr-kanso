@@ -8,6 +8,16 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.2.0] - 2026-11-04
+
+### Added
+
+- Cmd+J goes to the next agent waiting on you, in any space: one blocked on a question first, then one that finished while you weren't looking. Press it again for the one after. A click on "N agents need you" in the status bar does the same.
+- Pane headers say what an agent left in its folder when it stops working: changed files with lines added and removed, commits not yet upstream, and its open pull request with a dot for the checks. Read from git and gh once per turn, never from the conversation.
+- Send to an agent (the pane header's send button, the pane menu, or Cmd+Alt+S): pick another agent, edit the message, and Send pastes it into that agent's terminal and presses Enter, then takes you there. An agent waiting on its own question is never typed into.
+- Arrangements (the layers button beside +, or Cmd+Alt+T): save a tab as it is, with each pane's program and the flags you started it with, its folder, the columns, stacks and widths, and open it again in a new tab with one click. Kept per project; a resumed session's id is left out, so each agent starts fresh.
+- Ports: a panel of the dev servers listening on this computer, with the pane that runs each. The ones no pane runs any more are marked, and Stop ends them after a second press.
+
 ## [2.1.1] - 2026-11-03
 
 ### Fixed

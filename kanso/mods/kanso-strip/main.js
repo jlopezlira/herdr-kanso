@@ -40,7 +40,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
-import { spaces, panes, focused, layout, run, shared, setShared, theme, nextCommand, props, terminals, openOverlay, home } from "herdr";
+import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, terminals, openOverlay, home, exec, notify } from "herdr";
 
 // Right after layout.switch, layout() can still return the tree of the layout
 // shown before; setting it would save that tree into kanso.json. Only Kanso's
@@ -220,6 +220,89 @@ const folder = (cwd) => {
   return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
 };
 
+// ---- Who needs you next (Cmd+J) ------------------------------------------------
+
+// The next agent waiting on you, in any space: one blocked on a question
+// first, then one that finished while you weren't looking. From the focused
+// agent, the next in Herdr's order (space, tab, pane), wrapping round. The
+// focused one is never its own next, so pressing again moves on.
+export function nextNeedsYou(list, current) {
+  const rank = (a) => (a.status === "blocked" ? 0 : a.status === "done" ? 1 : 2);
+  const others = list.filter((a) => a.address !== current && rank(a) < 2);
+  if (!others.length) return null;
+  const best = Math.min(...others.map(rank));
+  const pool = others.filter((a) => rank(a) === best);
+  const at = list.findIndex((a) => a.address === current);
+  return pool.find((a) => list.indexOf(a) > at) ?? pool[0];
+}
+
+// ---- What an agent left (the header's digest) -----------------------------------
+
+// When an agent stops working, its header says in one line what is in its
+// folder now: changed files with lines added and removed, commits its branch
+// has that its upstream (or the default branch) hasn't, and the branch's open
+// pull request with its checks. Read from git and gh once per turn, never from the
+// agent's conversation. Shared, by pane, so every header copy agrees.
+const DIGEST = "kanso.digest";
+
+export function parseShortstat(text) {
+  const n = (re) => Number(re.exec(text ?? "")?.[1] ?? 0);
+  return { add: n(/(\d+) insertions?\(\+\)/), del: n(/(\d+) deletions?\(-\)/) };
+}
+
+// A pull request's checks in one word, from gh's statusCheckRollup (check
+// runs carry status and conclusion, commit statuses a state).
+const FAILED = new Set(["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
+const RUNNING = new Set(["", "PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING", "REQUESTED"]);
+export function checksOf(rollup) {
+  if (!Array.isArray(rollup) || !rollup.length) return null;
+  const states = rollup.map((r) => String(r?.conclusion || r?.state || r?.status || "").toUpperCase());
+  if (states.some((s) => FAILED.has(s))) return "failing";
+  if (states.some((s) => RUNNING.has(s))) return "running";
+  return "passing";
+}
+
+// What is in `cwd` now, or null outside a repository. `run(cmd, args)`
+// resolves with stdout, or null when the command fails.
+export async function readDigest(cwd, run) {
+  const git = (...args) => run("git", ["-C", cwd, ...args]);
+  if ((await git("rev-parse", "--is-inside-work-tree"))?.trim() !== "true") return null;
+  const [status, stat, upstream, branch] = await Promise.all([
+    git("status", "--porcelain"), git("diff", "--shortstat", "HEAD"),
+    git("rev-list", "--count", "@{upstream}..HEAD"), git("symbolic-ref", "--quiet", "--short", "HEAD")]);
+  const files = (status ?? "").split("\n").filter((l) => l.trim()).length;
+  let ahead = upstream == null ? null : Number(upstream.trim()) || 0, pushed = upstream != null;
+  if (ahead == null) {
+    const base = await git("rev-list", "--count", "origin/HEAD..HEAD");
+    ahead = base == null ? 0 : Number(base.trim()) || 0;
+  }
+  let pr = null;
+  if (branch?.trim()) {
+    const out = await run("gh", ["pr", "view", "--json", "number,state,statusCheckRollup"], cwd);
+    try {
+      const v = out ? JSON.parse(out) : null;
+      if (v?.number && v.state === "OPEN") pr = { number: v.number, state: v.state, checks: checksOf(v.statusCheckRollup) };
+    } catch { /* not a pull request */ }
+  }
+  return { files, ...parseShortstat(stat), ahead, pushed, pr };
+}
+
+// The digest in words, for the header's tooltip. Empty: nothing to say.
+export function digestTip(d) {
+  if (!d) return "";
+  const n = (k, one, many) => `${d[k]} ${d[k] === 1 ? one : many}`;
+  const parts = [];
+  if (d.files) parts.push(`${n("files", "changed file", "changed files")} (+${d.add} −${d.del})`);
+  if (d.ahead) parts.push(`${n("ahead", "commit", "commits")} ${d.pushed ? "not pushed" : "not on the default branch"}`);
+  if (d.pr) parts.push(`pull request #${d.pr.number}${d.pr.checks ? `, checks ${d.pr.checks}` : ""}`);
+  return parts.length ? `In its folder now: ${parts.join("; ")}.` : "";
+}
+
+// The dialogs: send a pane's work to another agent (kanso-send), and save or
+// open the tab's arrangement of agents (kanso-arrange).
+const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
+const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
+
 export default class Strip extends View {
   init(_props, cx) {
     const p = props() ?? {};
@@ -244,6 +327,10 @@ export default class Strip extends View {
       if (held && Date.now() - held.at > DRAG_MAX) endDrag();
       if (this.adopt()) { this.seq++; cx.notify(); }
     });
+    // The headers' digests: read when an agent stops working.
+    this.lastStatus = new Map();
+    this.digesting = new Set();
+    cx.timer.every(1500, (cx) => this.watchDigests(cx));
     cx.spawn(async (cx) => {
       for (;;) {
         let c;
@@ -498,6 +585,22 @@ export default class Strip extends View {
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(15));
   }
 
+  // What the agent left in its folder, after the branch: changed files with
+  // their lines, commits, and the pull request with a dot for its checks.
+  // The tooltip says it in words.
+  digestBadge(t, pane, d, on) {
+    const tone = on ? t.muted : t.dim;
+    const ci = { failing: t.blocked, running: t.working, passing: t.done }[d.pr?.checks] ?? null;
+    return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).gap(8).items_center().text_size(11.5).text_color(tone).tooltip(digestTip(d))
+      .when(d.files > 0, (el) => el.child(h_flex().flex_none().gap(4)
+        .child(`${d.files} ${d.files === 1 ? "file" : "files"}`)
+        .when(d.add > 0 || d.del > 0, (el) => el.child(div().text_color(t.dim).child(`+${d.add} −${d.del}`)))))
+      .when(d.ahead > 0, (el) => el.child(div().flex_none().child(`${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}`)))
+      .when(d.pr?.state === "OPEN", (el) => el.child(h_flex().flex_none().gap(4).items_center()
+        .when(Boolean(ci), (el) => el.child(div().size(6).rounded_full().bg(ci)))
+        .child(`#${d.pr.number}`)));
+  }
+
   renderHead() {
     const t = theme();
     const p = this.me();
@@ -522,6 +625,11 @@ export default class Strip extends View {
     // A pinned pane stays on its side of the view: a pin by its title says so.
     const pinned = strip && Boolean(shared(KEY)?.[p.tab]?.cols?.find((c) => c.panes?.includes(pane))?.pin);
     const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
+    // Not while it works; and only when there is something to say.
+    const d = st !== "working" ? shared(DIGEST)?.[pane] : null;
+    const digest = d && (d.files > 0 || d.ahead > 0 || d.pr?.state === "OPEN") ? d : null;
+    // Another agent to send this pane's work to.
+    const canSend = Boolean(p.terminal) && panes().some((q) => q.pane !== pane && q.terminal && (q.program?.agent || q.status));
     return h_flex().id(`pane-head-${pane}`).size_full().pl(14).pr(6).gap(10).items_center().text_size(12.5).relative()
       // The pane is a rounded slab; the header's wash follows its top corners.
       .rounded_t(RADIUS)
@@ -565,6 +673,7 @@ export default class Strip extends View {
       .child(div().flex_none().truncate().max_w(260).text_size(12.5).when(ink, (el) => el.font_medium()).text_color(ink ? t.foreground : t.muted).child(name))
       .when(Boolean(p.cwd), (el) => el.child(this.badge(t, folder(p.cwd), null, ink)))
       .when(Boolean(p.branch), (el) => el.child(this.badge(t, p.branch, "mods/kanso-chrome/icons/branch.svg", ink)))
+      .when(Boolean(digest), (el) => el.child(this.digestBadge(t, pane, digest, ink)))
       .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
       .child(div().flex_1())
       .when(st === "working" && !this.hovered, (el) => el.child(h_flex().w(12).h(12).flex_none().items_center().justify_center().text_size(10).text_color(t.working).child(div().frames(["·", "•", "●", "•"], 450))))
@@ -573,6 +682,7 @@ export default class Strip extends View {
       .when(st === "done" && !this.hovered, (el) => el.child(div().size(6).flex_none().rounded_full().bg(t.done)))
       .when(this.hovered && !drag, (el) => el
         .when(strip, (el) => el.child(this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground))))
+        .when(canSend, (el) => el.child(this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent")))
         .when(Boolean(p.cwd), (el) => el.child(this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p))))
         .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
         .child(this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
@@ -687,7 +797,61 @@ export default class Strip extends View {
 
   // ---- Actions -----------------------------------------------------------------
 
+  // An agent that stops working gets its digest read once; one that starts
+  // again loses it until the next stop. Digests of panes that are gone go.
+  watchDigests(cx) {
+    const store = shared(DIGEST) ?? {};
+    const all = panes();
+    let next = null;
+    const drop = (id) => { next ??= { ...store }; delete next[id]; };
+    for (const p of all) {
+      if (!p.terminal || !p.cwd || !p.status) continue;
+      const was = this.lastStatus.get(p.pane);
+      this.lastStatus.set(p.pane, p.status);
+      if (p.status === "working") { if (p.pane in store) drop(p.pane); continue; }
+      if ((was === "working" || (was === undefined && !(p.pane in store))) && !this.digesting.has(p.pane)) this.digest(p, cx);
+    }
+    const live = new Set(all.map((p) => p.pane));
+    for (const id of Object.keys(store)) if (!live.has(id)) drop(id);
+    for (const id of [...this.lastStatus.keys()]) if (!live.has(id)) this.lastStatus.delete(id);
+    if (next) setShared(DIGEST, next);
+  }
+
+  digest(p, cx) {
+    this.digesting.add(p.pane);
+    const on = spaces().find((s) => s.tabs.some((x) => x.id === p.tab))?.machine ?? null;
+    const run = (cmd, args, cwd) => exec(cmd, args, { cwd, on }).then((r) => (r.code === 0 ? r.stdout : null)).catch(() => null);
+    cx.spawn(async () => {
+      try {
+        const d = await readDigest(p.cwd, run);
+        // It went back to work meanwhile: what it left is no longer the news.
+        if (panes().find((q) => q.pane === p.pane)?.status === "working") return;
+        setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: d ? { ...d, at: Date.now() } : null });
+      } finally { this.digesting.delete(p.pane); }
+    });
+  }
+
+  // Cmd+J: Herdr's agent.focus brings the agent's space, tab and pane in;
+  // the strip then slides to it as it does for a notification.
+  goNeedsYou() {
+    const list = agents();
+    const current = list.find((a) => a.focused)?.address ?? focused()?.agent ?? focused()?.terminal ?? null;
+    const a = nextNeedsYou(list, current);
+    if (a) run("agent.focus", { terminal: a.address });
+    else notify({ title: "No agent needs you", level: "info", timeout: 1800 });
+  }
+
+  // The focused pane (in the model, or the block the keyboard is on).
+  focusedPane() {
+    const f = focused();
+    const all = panes();
+    return (f?.pane && all.find((p) => p.pane === f.pane)) || (f?.terminal && all.find((p) => p.terminal === f.terminal)) || null;
+  }
+
   command(name) {
+    if (name === "next-needs-you") { this.goNeedsYou(); return; }
+    if (name === "send") { const p = this.focusedPane(); if (p?.terminal) openSend(p); return; }
+    if (name === "arrange") { openArrange(); return; }
     const tab = this.tab();
     const st = tab && this.state[tab];
     if (!st) return;
@@ -924,6 +1088,12 @@ export default class Strip extends View {
       if (at) { st.cols[at.ci].w = step(W_STEPS, st.cols[at.ci].w); this.reveal(st, req.pane); }
     }
     else if (req.op === "per") this.setN(st, req.n, st.focus);
+    // An arrangement just opened: its columns' widths and panes per view.
+    else if (req.op === "widths") {
+      if (req.per) st.n = clamp(req.per, 1, N_MAX);
+      for (const c of req.cols ?? []) { const at = this.where(st, c.pane); if (at && c.w > 0) st.cols[at.ci].w = clamp(c.w, MIN_W, 1); }
+      this.clampView(st);
+    }
     else if (req.op === "pin") this.pin(st, req.pane);
     else if (req.op === "move") {
       this.move(st, req.pane, req.to, req.side);
