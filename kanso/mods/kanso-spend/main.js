@@ -8,10 +8,10 @@
 //
 // QuickJS runs every step under a time limit, so nothing heavy happens here:
 // the payload is ~35 KB of ready-made strings, and render builds < 100 rows.
-import { View, div, svg } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout } from "herdr";
-import { G, H, R, T, tokens, toggleSwitch, controlInput } from "./ui.js";
+import { G, H, R, T, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 
@@ -20,6 +20,7 @@ const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
 const PRESENTER_FILE = `mods/${MOD}/presenter.mjs`;
 const DATA_DIR = `data/${MOD}`;
+const icon = (name) => `mods/${MOD}/icons/${name}.svg`;
 const PAYLOAD_KIND = "kanso-spend-costs";
 const PAYLOAD_VERSION = 1;
 const STEP_TIMEOUT_MS = 35_000;
@@ -58,15 +59,6 @@ function projectName(value) {
   return text.split(/[\\/]/).pop() || text || "Unknown project";
 }
 
-function findNode(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = findNode(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
 /**
  * True when this mod's block is in the layout but not on screen: under a
  * hidden node, or in a stack showing another child. Herdr keeps such a copy
@@ -94,36 +86,6 @@ function formatTime(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-/** Text tabs: the selected one is full-tone text, the rest recede. */
-function quietTabs(id, items, value, onChange, c) {
-  return h_flex().id(id).flex_wrap().gap(G.lg).items_center()
-    .children(items.map((item, index) => {
-      const selected = value === item.key;
-      return Button.new(`${id}-${item.key}`).h(H.compact).items_center().cursor_pointer()
-        .selected(selected)
-        .set_position(index + 1, items.length)
-        .accessibility_label(item.label)
-        .when(!selected, (el) => el.hover((style) => style.opacity(0.7)))
-        .focus((style) => style.opacity(0.7))
-        .on_click((_event, cx) => {
-          if (!selected) onChange(item.key, cx);
-        })
-        .child(div().text_size(13).text_color(selected ? c.text : c.dim).when(selected, (el) => el.font_medium()).child(item.label));
-    }));
-}
-
-/** A text-only action for choices that should not compete with the numbers. */
-function quietLink(id, label, onClick, c, options = {}) {
-  const disabled = Boolean(options.disabled);
-  return Button.new(id).h(H.compact).items_center().cursor_pointer()
-    .disabled(disabled)
-    .accessibility_label(options.label ?? label)
-    .when(!disabled, (el) => el.hover((style) => style.opacity(0.7)))
-    .focus((style) => style.opacity(0.7))
-    .on_click((_event, cx) => { if (!disabled) onClick(cx); })
-    .child(div().text_size(options.size ?? 12).text_color(disabled ? c.border : c.mutedForeground).child(label));
 }
 
 // ---------------------------------------------------------------------------
@@ -465,17 +427,6 @@ export default class TokenSpend extends View {
     return { spec: spendSpec(this.costs), text: spendText(this.costs), name: `spend-${this.costs.range?.label ?? "now"}`, title: "Spend" };
   }
 
-  iconButton(id, icon, tip, onClick, c, options = {}) {
-    const glyph = svg(`mods/${MOD}/icons/${icon}.svg`).size(15).text_color(options.active ? c.text : c.mutedForeground);
-    return Button.new(id).size(26).flex_none().items_center().justify_center().rounded(R.control).cursor_pointer()
-      .accessibility_label(tip)
-      .tooltip(tip)
-      .when(!options.disabled, (el) => el.hover((style) => style.bg(c.subtle)))
-      .focus((style) => style.bg(c.subtle))
-      .on_click((_event, cx) => { if (!options.disabled) onClick(cx); })
-      .child(options.spin ? glyph.spin(900) : glyph);
-  }
-
   header(c, narrow) {
     const busy = Boolean(this.running);
     const updated = this.scan?.lastScanAt ? `Updated ${formatTime(this.scan.lastScanAt)}` : "";
@@ -488,15 +439,15 @@ export default class TokenSpend extends View {
     const crumb = this.page === "settings" ? "" : top ? ({ project: "Project", model: "Model", task: "Task" })[top.kind] : "";
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(h_flex().flex_1().min_w(0).items_center().gap(G.sm)
-        .when(inner, (el) => el.child(this.iconButton("spend-back", "back", "Back", (cx) => this.back(cx), c)))
+        .when(inner, (el) => el.child(iconButton("spend-back", icon("back"), "Back", (cx) => this.back(cx), c)))
         .child(v_flex().flex_1().min_w(0).gap(1)
           .when(Boolean(crumb), (el) => el.child(div().text_size(11).text_color(c.dim).child(crumb)))
           .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(title).child(title))))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(reading)))
-        .when(this.canShare(), (el) => el.child(this.iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(this.iconButton("spend-refresh", "refresh", tip, (cx) => this.run("snapshot", cx), c, { spin: busy, active: busy, disabled: busy }))
-        .when(this.page !== "settings", (el) => el.child(this.iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c))));
+        .when(this.canShare(), (el) => el.child(iconButton("spend-share", icon("share"), "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
+        .child(iconButton("spend-refresh", icon("refresh"), tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
+        .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", icon("settings"), "Settings", (cx) => this.openSettings(cx), c))));
   }
 
   /**
@@ -541,7 +492,7 @@ export default class TokenSpend extends View {
     const detail = failed ? (this.runtimeError || this.error)
       : scan?.partial ? `First read: ${scan.processed} of ${scan.total} files. This happens once.` : "This takes a second.";
     return v_flex().w_full().gap(G.sm)
-      .child(div().text_size(15).text_color(failed ? c.destructive : c.mutedForeground).child(title))
+      .child(div().text_size(15).text_color(failed ? c.red : c.muted).child(title))
       .child(div().text_size(12).text_color(c.dim).child(detail))
       .when(Boolean(failed) && !this.runtimeError, (el) => el.child(h_flex().pt(G.xs)
         .child(quietLink("spend-retry", "Try again", (cx) => this.run("snapshot", cx), c))));
@@ -558,7 +509,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(narrow ? 36 : 48)
       .opacity(this.running === "prepare" ? 0.55 : 1)
       .when(Boolean(this.error) && !this.running, (el) => el.child(h_flex().w_full().gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).text_size(12).text_color(c.destructive).truncate().tooltip(this.error)
+        .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(this.error)
           .child(`Last update failed: ${this.error}`))
         .child(quietLink("spend-retry-inline", "Try again", (cx) => this.run("snapshot", cx), c))))
       .child(this.controls(c, Boolean(top)))
@@ -591,7 +542,7 @@ export default class TokenSpend extends View {
           .child(this.menu("project", c))
           .child(this.menu("model", c)))))
       .when(filtered, (el) => el.child(h_flex().gap(G.md).items_center()
-        .child(div().text_size(12).text_color(c.mutedForeground).child(`Showing ${label}`))
+        .child(div().text_size(12).text_color(c.muted).child(`Showing ${label}`))
         .child(quietLink("ins-clear", "Show everything", (cx) => this.setCost({ project: "all", model: "all" }, cx), c))));
   }
 
@@ -605,7 +556,7 @@ export default class TokenSpend extends View {
       .accessibility_label(`${field === "project" ? "Project" : "Model"}: ${shown}`)
       .hover((style) => style.opacity(0.75))
       .focus((style) => style.opacity(0.75))
-      .child(div().max_w(170).truncate().text_size(12).text_color(value === "all" ? c.mutedForeground : c.text).child(shown))
+      .child(div().max_w(170).truncate().text_size(12).text_color(value === "all" ? c.muted : c.text).child(shown))
       .child(div().text_size(10).text_color(c.dim).child("⌄"));
     const popover = Popover.new(id).trigger(trigger)
       .open(this.openMenu === id)
@@ -656,7 +607,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().gap(G.xs)
         .child(h_flex().gap(G.md).items_center()
-          .child(div().text_size(15).text_color(c.mutedForeground).child(hero.title))
+          .child(div().text_size(15).text_color(c.muted).child(hero.title))
           .when(stepper, (el) => el
             .child(quietLink("ins-older", "‹", (cx) => this.setCost({ offset: offset - 1 }, cx), c, { size: 16, label: "Previous period" }))
             .child(quietLink("ins-newer", "›", (cx) => this.setCost({ offset: Math.min(0, offset + 1) }, cx), c, {
@@ -667,8 +618,8 @@ export default class TokenSpend extends View {
           .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).tooltip(hero.tip).child(hero.value))
           .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child("API value")))
         .when(Boolean(hero.note), (el) => el.child(div().text_size(15).text_color(c.dim).child(hero.note)))
-        .when(Boolean(hero.empty), (el) => el.child(div().text_size(15).text_color(c.mutedForeground).child(hero.empty)))
-        .when(Boolean(hero.plan), (el) => el.child(div().text_size(13).text_color(c.mutedForeground).child(hero.plan)))
+        .when(Boolean(hero.empty), (el) => el.child(div().text_size(15).text_color(c.muted).child(hero.empty)))
+        .when(Boolean(hero.plan), (el) => el.child(div().text_size(13).text_color(c.muted).child(hero.plan)))
         .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(12).text_color(c.dim)
           .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))))
       .when(!hero.empty, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
@@ -686,7 +637,7 @@ export default class TokenSpend extends View {
           .when(bar.peak, (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
           .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
             .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
-            .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.mutedForeground : c.border)
+            .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
             .opacity(bar.peak || bar.ratio === 0 ? 1 : 0.55)))))
       .child(h_flex().w_full().justify_between()
         .child(div().text_size(10).text_color(c.dim).child(chart.first))
@@ -699,9 +650,7 @@ export default class TokenSpend extends View {
     const open = Boolean(this.expanded[field]);
     const shown = open ? items : items.slice(0, LIST_ROWS);
     return v_flex().w_full().gap(G.xs)
-      .child(h_flex().w_full().items_end().justify_between().pb(G.sm)
-        .child(div().text_size(15).text_color(c.text).child(title))
-        .child(div().text_size(12).text_color(c.dim).child(count)))
+      .child(section(c, title, count))
       .when(items.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Nothing here in this period.")))
       .children(shown.map((item, index) => {
         const active = selected === item.value;
@@ -712,7 +661,7 @@ export default class TokenSpend extends View {
           .on_click((_event, cx) => this.openDetail(field, item, cx))
           .child(h_flex().w_full().items_end().gap(G.md)
             .child(div().flex_1().min_w(0).truncate().text_size(13)
-              .text_color(active || selected === "all" ? c.text : c.mutedForeground)
+              .text_color(active || selected === "all" ? c.text : c.muted)
               .when(active, (name) => name.font_medium())
               .tooltip(item.detail).child(item.name))
             .child(div().text_size(11).text_color(c.dim).child(item.tokensText))
@@ -727,9 +676,6 @@ export default class TokenSpend extends View {
 
   /** One task or session: what it cost, in what, and when. */
   taskView(c, d, narrow) {
-    const section = (title, note) => h_flex().w_full().items_end().justify_between().pb(G.sm)
-      .child(div().text_size(15).text_color(c.text).child(title))
-      .child(div().text_size(12).text_color(c.dim).child(note ?? ""));
     const row = (name, sub, usd, tokens, index) => h_flex().w_full().items_end().gap(G.md).py(7)
       .when(index > 0, (el) => el.border_t(1).border_color(c.border))
       .child(v_flex().flex_1().min_w(0).gap(2)
@@ -739,7 +685,7 @@ export default class TokenSpend extends View {
       .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(usd));
     return v_flex().w_full().gap(narrow ? 36 : 44)
       .child(v_flex().w_full().gap(G.sm)
-        .when(Boolean(d.ticket), (el) => el.child(div().text_size(12).font_medium().text_color(c.mutedForeground).child(d.ticket)))
+        .when(Boolean(d.ticket), (el) => el.child(div().text_size(12).font_medium().text_color(c.muted).child(d.ticket)))
         .child(div().w_full().text_size(15).line_height(1.45).text_color(c.text).child(d.title))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2)
           .children([d.project, d.tools, d.when].filter(Boolean).map((part) => div().text_size(12).text_color(c.dim).child(part)))))
@@ -752,10 +698,10 @@ export default class TokenSpend extends View {
             .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(part.value))
             .child(div().text_size(11).text_color(c.dim).child(part.label))))))
       .child(v_flex().w_full()
-        .child(section("Models", `${d.models.length}`))
+        .child(section(c, "Models", `${d.models.length}`))
         .children(d.models.map((m, index) => row(m.name, "", m.usdText, m.tokensText, index))))
       .child(v_flex().w_full()
-        .child(section("Sessions", d.sessionCount > d.sessions.length ? `top ${d.sessions.length} of ${d.sessionCount}` : `${d.sessionCount}`))
+        .child(section(c, "Sessions", d.sessionCount > d.sessions.length ? `top ${d.sessions.length} of ${d.sessionCount}` : `${d.sessionCount}`))
         .children(d.sessions.map((s, index) => row(s.name, s.when, s.usdText, s.tokensText, index))))
       .child(h_flex().gap(G.lg)
         .child(quietLink("ins-task-project", `Open ${d.project}`, (cx) => this.openDetail("project", { value: d.projectPath }, cx), c)));
@@ -763,43 +709,44 @@ export default class TokenSpend extends View {
 
   settingsView(c) {
     const s = this.settings;
-    const section = (title, note) => v_flex().w_full().gap(4).pb(G.md)
+    // A setting's heading: its name, and what it does under it.
+    const heading = (title, note) => v_flex().w_full().gap(4).pb(G.md)
       .child(div().text_size(15).text_color(c.text).child(title))
       .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(c.dim).child(note)));
     const busy = this.running === "configure" || (this.running === "snapshot" && this.queuedSources);
     return v_flex().w_full().gap(44)
       .child(v_flex().w_full()
-        .child(section("Sources", "Where Spend reads your sessions. Turning one off removes it from every number."))
+        .child(heading("Sources", "Where Spend reads your sessions. Turning one off removes it from every number."))
         .when(!s, (el) => el.child(div().text_size(12).text_color(c.dim).child("Loading…")))
         .children((s?.sources ?? []).map((source, index) => h_flex().w_full().items_center().gap(G.md).py(G.sm)
           .when(index > 0, (el) => el.border_t(1).border_color(c.border))
           .child(v_flex().flex_1().min_w(0).gap(2)
-            .child(div().text_size(13).text_color(source.enabled ? c.text : c.mutedForeground).child(source.label))
+            .child(div().text_size(13).text_color(source.enabled ? c.text : c.muted).child(source.label))
             .child(div().truncate().text_size(11).text_color(c.dim).tooltip(source.roots).child(source.roots)))
           .child(toggleSwitch(`ins-source-${source.id}`, source.enabled, (next, cx) => this.toggleSource(source.id, next, cx), c, {
             label: `${source.label}: ${source.enabled ? "on" : "off"}`,
           }))))
         .when(Boolean(busy), (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child("Updating sources…"))))
       .child(v_flex().w_full()
-        .child(section("Plans", "What you pay each month. Spend subtracts it from the API value to show what your plans save you."))
+        .child(heading("Plans", "What you pay each month. Spend subtracts it from the API value to show what your plans save you."))
         .children(this.planInputs.map((input, index) => h_flex().w_full().items_center().gap(G.sm).py(4)
           .child(div().flex_1().min_w(0).child(controlInput(Input.new(input.name).w_full(), c)))
           .child(div().text_size(12).text_color(c.dim).child("$"))
           .child(div().w(84).flex_none().child(controlInput(Input.new(input.amount).w_full(), c)))
           .child(div().text_size(11).text_color(c.dim).child("/ mo"))
-          .child(this.iconButton(`ins-plan-remove-${index}`, "close", "Remove plan", (cx) => this.removePlan(index, cx), c))))
+          .child(iconButton(`ins-plan-remove-${index}`, icon("close"), "Remove plan", (cx) => this.removePlan(index, cx), c))))
         .child(h_flex().w_full().gap(G.lg).items_center().pt(G.sm)
           .child(quietLink("ins-plan-add", "Add plan", (cx) => this.addPlan(cx), c))
           .child(quietLink("ins-plan-save", "Save plans", (cx) => this.savePlans(cx), c))
           .when(Boolean(this.settingsNote), (el) => el.child(div().text_size(11).text_color(c.dim).child(this.settingsNote)))))
       .child(v_flex().w_full()
-        .child(section("Prices", null))
-        .child(div().text_size(12).line_height(1.5).text_color(c.mutedForeground)
+        .child(heading("Prices", null))
+        .child(div().text_size(12).line_height(1.5).text_color(c.muted)
           .child("Claude models use Anthropic's list prices, Claude Code with its 1-hour cache writes. Other models use the OpenRouter catalog, refreshed once a day; tokens without a list price are left out, not guessed."))
         .child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`Your own per-model prices: "models" in ${s?.pricesPath ?? `${DATA_DIR}/prices.json`}`)))
       .child(v_flex().w_full()
-        .child(section("Updates", null))
-        .child(div().text_size(12).line_height(1.5).text_color(c.mutedForeground)
+        .child(heading("Updates", null))
+        .child(div().text_size(12).line_height(1.5).text_color(c.muted)
           .child("While this panel is open: every minute, or every 30 seconds while a session is active. Closed, Spend does nothing.")));
   }
 
@@ -818,7 +765,7 @@ export default class TokenSpend extends View {
         .when(index > 0, (el) => el.border_t(1).border_color(c.border))
         .child(v_flex().flex_1().min_w(0).gap(3)
           .child(h_flex().w_full().gap(G.sm).items_end()
-            .when(Boolean(s.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.mutedForeground).child(s.ticket)))
+            .when(Boolean(s.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(s.ticket)))
             .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(s.tip).child(s.title)))
           .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(s.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
         .child(v_flex().items_end().gap(2).flex_none()
@@ -842,7 +789,7 @@ export default class TokenSpend extends View {
         .child(h_flex().w_full().items_center().gap(G.lg)
           .child(v_flex().flex_1().min_w(0).gap(4)
             .child(h_flex().w_full().gap(G.sm).items_end()
-              .when(Boolean(task.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.mutedForeground).child(task.ticket)))
+              .when(Boolean(task.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(task.ticket)))
               .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(task.tip).child(task.title)))
             .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(task.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
           .child(v_flex().items_end().gap(2).flex_none()

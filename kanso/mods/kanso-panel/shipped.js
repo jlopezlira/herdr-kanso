@@ -17,15 +17,14 @@
 // shared("kanso.shipped.bests"); setting one toasts once.
 //
 // One of the kanso-panel mod's panels: it exists only while shown.
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, appHome, theme, shared, setShared, notify } from "herdr";
+import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share } from "./share.js";
+import { G, tokens, iconButton, section } from "./ui.js";
 
-const ICON = "mods/kanso-chrome/icons/";
-const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 const DAY = 86400000;
 const RECORDS = "kanso.shipped.bests";
 const REFRESH_MS = 5 * 60 * 1000;
@@ -38,14 +37,6 @@ const PERIOD_NAMES = { day: "Day", week: "Week", month: "Month", year: "Year" };
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function tokens(t) {
-  return {
-    canvas: t.canvas ?? t.background, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
-    border: t.border, subtle: t.hover ?? t.raised, selected: t.selected ?? t.hover ?? t.raised,
-    accent: t.accent ?? t.foreground, red: t.ansi1, green: t.ansi2,
-  };
-}
 
 export const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const dayName = (ms) => { const d = new Date(ms); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
@@ -104,8 +95,14 @@ export function yourWeeks(body, login) {
 // in the local Monday-to-Sunday week it mostly covers, whatever the time zone.
 export const weekAt = (w) => w + 1.5 * DAY;
 
-// Lines and commits of the weeks that land in [start, end), in total and per repository.
+// Lines and commits of the weeks that land in [start, end), in total and per
+// repository. Kept per span while the stats are the same reading: a draw asks
+// for the period, the one before and all time, on every shared write anywhere.
+const SUMS = new WeakMap();
 export function sumWeeks(stats, start, end) {
+  const memo = stats ? SUMS.get(stats) ?? SUMS.set(stats, new Map()).get(stats) : null;
+  const span = `${start}:${end}`;
+  if (memo?.has(span)) return memo.get(span);
   const byRepo = [];
   let add = 0, del = 0, commits = 0;
   for (const [name, entry] of Object.entries(stats?.repos ?? {})) {
@@ -118,7 +115,9 @@ export function sumWeeks(stats, start, end) {
     add += a; del += d; commits += c;
   }
   byRepo.sort((x, y) => (y.add + y.del) - (x.add + x.del) || y.commits - x.commits);
-  return { add, del, commits, byRepo };
+  const out = { add, del, commits, byRepo };
+  memo?.set(span, out);
+  return out;
 }
 
 // The current and longest run of days with at least one contribution. Today
@@ -439,20 +438,6 @@ export class Shipped {
 
   // ---- drawing, as Spend draws ----
 
-  iconButton(id, icon, tip, onClick, c, options = {}) {
-    const glyph = svg(`${ICON}${icon}.svg`).size(15).text_color(options.disabled ? c.border : c.muted);
-    return Button.new(id).size(26).flex_none().items_center().justify_center().rounded(6)
-      .when(!options.disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle)).on_click((_e, cx) => onClick(cx)))
-      .accessibility_label(tip).tooltip(tip)
-      .child(options.spin ? glyph.spin(900) : glyph);
-  }
-
-  section(c, title, note) {
-    return h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.sm)
-      .child(div().flex_none().text_size(15).text_color(c.text).child(title))
-      .child(div().min_w(0).truncate().text_size(12).text_color(c.dim).child(note ?? ""));
-  }
-
   periods(c) {
     const tab = (kind) => {
       const on = this.kind === kind;
@@ -465,9 +450,9 @@ export class Shipped {
     return h_flex().w_full().flex_wrap().gap(G.sm).items_center().justify_between()
       .child(h_flex().gap(G.xs).items_center().children(PERIODS.map(tab)))
       .child(h_flex().gap(G.xs).items_center()
-        .child(this.iconButton("shipped-prev", "chevron-left", "Previous period", (cx) => this.pick(this.kind, this.offset - 1, cx), c))
+        .child(iconButton("shipped-prev", "chevron-left", "Previous period", (cx) => this.pick(this.kind, this.offset - 1, cx), c))
         .child(div().min_w(96).text_center().text_size(12).text_color(c.text).child(periodLabel(this.kind, this.offset)))
-        .child(this.iconButton("shipped-next", "chevron-right", "Next period", (cx) => this.pick(this.kind, this.offset + 1, cx), c, { disabled: this.offset >= 0 })));
+        .child(iconButton("shipped-next", "chevron-right", "Next period", (cx) => this.pick(this.kind, this.offset + 1, cx), c, { disabled: this.offset >= 0 })));
   }
 
   // The shown period in numbers, for the hero and the share card.
@@ -544,7 +529,7 @@ export class Shipped {
         .tooltip(`${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}`);
     };
     return v_flex().w_full().gap(G.md)
-      .child(this.section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
+      .child(section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
       .child(h_flex().items_end().gap(G.sm)
         .child(div().text_size(40).line_height(1).font_light().text_color(c.text).child(fmt(current)))
         .child(div().pb(4).text_size(12).text_color(c.dim).child(current === 1 ? "day in a row" : "days in a row")))
@@ -558,7 +543,7 @@ export class Shipped {
     const keys = Object.keys(RECORD_NAMES).filter((k) => this.records[k]);
     if (!keys.length) return null;
     return v_flex().w_full()
-      .child(this.section(c, "Records", this.fresh.size ? `${this.fresh.size} new` : "your bests"))
+      .child(section(c, "Records", this.fresh.size ? `${this.fresh.size} new` : "your bests"))
       .children(keys.map((k, i) => {
         const r = this.records[k], t = recordText(k, r), fresh = this.fresh.has(k);
         return h_flex().id(`record-${k}`).w_full().py(10).gap(G.md).items_center()
@@ -580,10 +565,10 @@ export class Shipped {
     const span = this.kind === "day" ? periodRange("week", 0, cur.start) : cur;
     const { byRepo } = sumWeeks(this.stats, span.start, span.end);
     const note = this.kind === "day" ? `this week · ${fmt(byRepo.length)}` : fmt(byRepo.length);
-    if (!byRepo.length) return v_flex().w_full().child(this.section(c, "By repository", "")).child(div().text_size(12).text_color(c.dim).child(this.syncing ? "Adding up…" : "Nothing in this period yet."));
+    if (!byRepo.length) return v_flex().w_full().child(section(c, "By repository", "")).child(div().text_size(12).text_color(c.dim).child(this.syncing ? "Adding up…" : "Nothing in this period yet."));
     const top = Math.max(1, ...byRepo.map((r) => r.add + r.del)), rows = this.reposOpen ? byRepo : byRepo.slice(0, REPO_ROWS);
     return v_flex().w_full()
-      .child(this.section(c, "By repository", note))
+      .child(section(c, "By repository", note))
       .children(rows.map((r, i) => v_flex().w_full().py(G.sm).gap(6)
         .when(i > 0, (el) => el.border_t_1().border_color(c.border))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2).items_center()
@@ -612,7 +597,7 @@ export class Shipped {
     const top = Math.max(...r.hours), peak = r.hours.indexOf(top), note = rhythmNote(r.hours);
     const hour = (h) => `${String(h).padStart(2, "0")}:00`;
     return v_flex().w_full().gap(G.md)
-      .child(this.section(c, "When you ship", note))
+      .child(section(c, "When you ship", note))
       .child(h_flex().w_full().h(56).items_end().gap(2).children(r.hours.map((n, h) => div().id(`hour-${h}`).flex_1().min_w(2)
         .h(Math.max(2, Math.round((n / top) * 56))).rounded(2).bg(n ? c.accent + (h === peak ? "ff" : "90") : c.subtle)
         .tooltip(`${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}`))))
@@ -630,7 +615,7 @@ export class Shipped {
     const width = this.width || 368, narrow = width < 560;
     const pad = narrow ? G.lg : 32;
     const inner = Math.min(1080, width - 2 * pad);
-    const gh = this.github[this.key()], status = this.status(c);
+    const gh = this.github[this.key()], status = this.status(c), rhythm = this.rhythmView(c);
     const body = !gh && !this.stats
       ? v_flex().w_full().gap(G.sm).child(div().text_size(15).text_color(c.muted).child("Adding up what you shipped")).child(div().text_size(12).text_color(c.dim).child("This takes a second."))
       : v_flex().w_full().gap(narrow ? 36 : 48)
@@ -638,7 +623,7 @@ export class Shipped {
         .when(Boolean(status), (el) => el.child(status))
         .when(Boolean(this.days), (el) => el.child(this.streak(c, inner)))
         .when(Object.keys(this.records).length > 0, (el) => el.child(this.recordsList(c)))
-        .when(Boolean(this.rhythmView(c)), (el) => el.child(this.rhythmView(c)))
+        .when(Boolean(rhythm), (el) => el.child(rhythm))
         .child(this.byRepo(c))
         .child(div().text_size(10.5).text_color(c.dim).child("Statistics only, kept in data/kanso-panel/shipped.db: your commits as every machine of yours read them (repository, hash, time, lines; no messages or code), shared between machines through a private gist, and GitHub's weekly sums for the rest. A repository's week counts the larger of the two. Contributions count the way your profile does, private ones included."));
     return v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
@@ -648,8 +633,8 @@ export class Shipped {
           .child(h_flex().w_full().items_center().justify_between().gap(G.md)
             .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Shipped"))
             .child(h_flex().gap(G.xs).items_center()
-              .child(this.iconButton("shipped-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: !this.days }))
-              .child(this.iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
+              .child(iconButton("shipped-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: !this.days }))
+              .child(iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
           .when(Boolean(this.share.open), (el) => el.child(this.share.row(c, () => this.shareCard(),
             "Only the totals, streak, records and hours: no repository or machine names. The post opens with the image in it.", G.sm)))
           .child(this.periods(c))

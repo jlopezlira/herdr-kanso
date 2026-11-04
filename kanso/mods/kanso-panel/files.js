@@ -63,6 +63,8 @@ test -d "$1"`;
 // The panel exists only while it is shown (kanso-tabs mounts it on demand),
 // so it always works: no idle state to keep.
 export class Files {
+  constructor() { this.rev = 0; } // bumped whenever the rows would differ: the tree is rebuilt only then
+
   init(cx) {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.refresh(cx);
@@ -98,6 +100,7 @@ export class Files {
     if (key() !== context || (path && !this.folders.has(path))) return;
     const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
     this.entries.set(path, entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)));
+    this.rev++;
     if (entries.length > PER_FOLDER || used + entries.length > TOTAL) this.limited = true;
   }
 
@@ -107,6 +110,7 @@ export class Files {
     if (context !== this.context) {
       this.context = context; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set();
       this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
+      this.rev++;
     }
     if (!cwd) return;
     this.loading = true;
@@ -124,13 +128,14 @@ export class Files {
           }
         }
         if (key() !== context) return;
-        this.marks = marks; this.error = null; this.watch(cwd, cx);
+        this.marks = marks; this.rev++; this.error = null; this.watch(cwd, cx);
       } catch (e) { if (key() === context) this.error = String(e); }
       finally { this.loading = false; cx.notify(); }
     });
   }
 
   toggle(path, cx) {
+    this.rev++;
     if (this.folders.has(path)) {
       for (const folder of [...this.folders]) if (folder === path || folder.startsWith(path + "/")) {
         this.folders.delete(folder);
@@ -176,6 +181,13 @@ export class Files {
     });
   }
 
+  // The tree's rows, built again only when something in them changed (`rev`):
+  // a draw comes with every shared write anywhere, the rows run to 5,000.
+  rows() {
+    if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0, []) };
+    return this.shown.items;
+  }
+
   // Plain rows, so a frame builds elements only for the ones on screen.
   flat(prefix, depth, out) {
     if (out.length >= TOTAL || depth > 40) return out;
@@ -200,7 +212,7 @@ export class Files {
   render(cx) {
     if (key() !== this.context) this.refresh(cx);
     const t = theme();
-    const items = this.file ? [] : this.flat("", 0, []);
+    const items = this.file ? [] : this.rows();
     return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))

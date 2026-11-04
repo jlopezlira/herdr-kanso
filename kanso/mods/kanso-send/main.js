@@ -9,9 +9,10 @@
 //
 // Opened from a pane header's send button, the pane menu or Cmd+Alt+S, with
 // props.pane: the pane whose work it is.
-import { View, div, svg, image } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { panes, spaces, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home } from "herdr";
+import { panes, spaces, shared, setShared, hc, run, props, closeOverlay, theme, home } from "herdr";
+import { programIcon, givenNames, nameOf } from "./marks.js";
 
 const LAST = "kanso.send.last"; // the agent you sent to last, picked first next time
 
@@ -20,12 +21,6 @@ const tilde = (cwd) => {
   const h = home();
   return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
 };
-
-// A pane's name as its header shows it: yours, else the program's.
-export function nameOf(p, given) {
-  const prog = p?.program;
-  return given?.get(p?.terminal) || (prog?.agent || prog?.shell) && prog.name || p?.title || prog?.name || "Pane";
-}
 
 // The agents you can send to: every other pane running one, in any space,
 // the one you sent to last first, then the order Herdr lists them in.
@@ -63,7 +58,7 @@ export default class Send extends View {
     const text = this.text.trim();
     const target = panes().find((q) => q.terminal === this.to);
     if (!text || !target || this.sending) return;
-    if (target.status === "blocked") { this.error = `${this.name(target)} is waiting on its own question. Answer it first, then send.`; cx.notify(); return; }
+    if (target.status === "blocked") { this.error = `${nameOf(target, givenNames())} is waiting on its own question. Answer it first, then send.`; cx.notify(); return; }
     this.sending = true; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
       const r = await hc(["send", target.terminal, text]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
@@ -75,29 +70,25 @@ export default class Send extends View {
     });
   }
 
-  name(p) {
-    const given = new Map();
-    for (const t of terminals()) { const n = t?.labels?.["kanso.name"]; if (n) given.set(t.address, n); }
-    return nameOf(p, given);
-  }
-
   render() {
     const t = theme();
     const p = props() ?? {};
     const list = targetsOf(panes(), p.pane, shared(LAST));
     if (!list.some((q) => q.terminal === this.to)) this.to = list[0]?.terminal ?? null;
-    const spaceOf = (q) => spaces().find((s) => s.tabs.some((x) => x.id === q.tab));
+    // Read once per draw: the names you gave, every space.
+    const given = givenNames(), sp = spaces();
+    const name = (q) => nameOf(q, given);
+    const spaceOf = (q) => sp.find((s) => s.tabs.some((x) => x.id === q.tab));
     const label = (text) => div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(text);
     const dot = (st) => ({ working: t.working, blocked: t.blocked, done: t.done }[st] ?? t.idle);
-    const icon = (prog) => !prog?.icon ? div().size(15) : prog.tint ? svg(prog.icon).size(15).flex_none().text_color(t.muted) : image(prog.icon).w(15).h(15).flex_none();
     const row = (q) => {
       const on = q.terminal === this.to;
       const where = [spaceOf(q)?.name, q.branch].filter(Boolean).join(" on ");
       return h_flex().id(`to-${q.pane}`).h(34).px(10).gap(10).items_center().rounded(7).cursor_pointer()
         .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
         .on_click((_e, cx) => { this.to = q.terminal; this.error = null; cx.notify(); })
-        .child(icon(q.program))
-        .child(div().flex_none().max_w(200).truncate().text_size(12.8).text_color(t.foreground).when(on, (el) => el.font_medium()).child(this.name(q)))
+        .child(programIcon(q.program, 15, t.muted) ?? div().size(15))
+        .child(div().flex_none().max_w(200).truncate().text_size(12.8).text_color(t.foreground).when(on, (el) => el.font_medium()).child(name(q)))
         .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(where))
         .child(h_flex().flex_none().gap(6).items_center().text_size(11.5).text_color(q.status === "blocked" ? t.blocked : t.dim)
           .when(q.status === "blocked", (el) => el.child("Needs you"))
@@ -109,7 +100,7 @@ export default class Send extends View {
       .when(!enabled, (el) => el.opacity(0.45))
       .when(enabled, (el) => el.cursor_pointer().hover((s) => s.opacity(0.88)).on_click((_e, cx) => action(cx)))
       .child(text);
-    const from = this.from ? `From ${this.name(this.from)}${this.from.cwd ? `, in ${tilde(this.from.cwd)}` : ""}` : "";
+    const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${tilde(this.from.cwd)}` : ""}` : "";
     const ready = Boolean(this.to) && Boolean(this.text.trim()) && !this.sending;
     return v_flex().id("kanso-send").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {

@@ -6,6 +6,7 @@ import { cpus, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import vm from "node:vm";
+import { modScript } from "../scripts/mod-source.mjs";
 
 // Compares Kanso at a git ref (--base, default origin/main) with your working
 // tree: folder listing, the Files tree drawn by a real Herdr window, and the
@@ -49,7 +50,8 @@ const save = () => writeFileSync(join(output, "raw.json"), JSON.stringify(result
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const quantile = (list, q) => [...list].sort((a, b) => a - b)[Math.min(list.length - 1, Math.ceil(list.length * q) - 1)] ?? 0;
 const median = (list) => quantile(list, 0.5);
-const stripped = (text) => text.replace(/^import .*;\n/gm, "").replace(/export default /g, "").replace(/export /g, "");
+// A mod's file as one script, its own-folder imports inlined from the same variant.
+const stripped = (variant, file) => modScript(source(variant, file), (name) => source(variant, join(file, "..", name)));
 
 async function listing() {
   for (const count of (quick ? [1000, 50000] : [100, 1000, 10000, 50000])) {
@@ -60,7 +62,7 @@ async function listing() {
     // user's environment, 8 MiB of output at most.
     const listers = {};
     for (const variant of variants) {
-      const code = stripped(source(variant, "kanso/mods/kanso-panel/files.js"));
+      const code = stripped(variant, "kanso/mods/kanso-panel/files.js");
       const ctx = vm.createContext({ window: () => ({ platform: "macos" }), exec: (command, argv, options = {}) => new Promise((resolve, reject) => {
         const child = spawn(command, argv, { cwd: options.cwd });
         const out = [], err = [];
@@ -98,7 +100,7 @@ function layout() {
         setShared: (key, value) => { const text = JSON.stringify(value); bytes += Buffer.byteLength(text); sharedWrites++; state[key] = JSON.parse(text); },
         run: (_command, value) => { const text = JSON.stringify(value.layout); bytes += Buffer.byteLength(text); writes++; tree = JSON.parse(text); },
       });
-      const Strip = vm.runInContext(`${stripped(source(variant, "kanso/mods/kanso-strip/main.js"))}; Strip`, ctx);
+      const Strip = vm.runInContext(`${stripped(variant, "kanso/mods/kanso-strip/main.js")}; Strip`, ctx);
       const strip = new Strip(); strip.sets = [];
       const nodes = Array.from({ length: count }, (_, i) => ({ id: `strip-${i}`, type: "column", size: { weight: 1 }, children: [
         { id: `head-${i}`, type: "block", size: { px: 34 }, content: { mod: "kanso-strip", props: { pane: `p${i}`, terminal: `t${i}`, strip: true } } },

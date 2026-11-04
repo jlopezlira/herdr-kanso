@@ -103,28 +103,42 @@ export function readThread(kind, titleLine, head, recent, tail, name = null) {
   };
 }
 
+// One terminal's conversation, or null: where it is (`hc get`, then
+// LOCATE), its size, and when the file grew, what it says (READ).
+async function findThread({ address, app }, known, home) {
+  let got = null;
+  try { const r = await hc(["get", address, "--json"]); if (r.code === 0) got = JSON.parse(r.stdout); } catch { return null; }
+  const pid = got?.foreground?.pid;
+  if (!pid) return null;
+  const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
+  const where = parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
+  if (!where) return null;
+  const size = Number((await exec("sh", ["-c", "wc -c < \"$1\"", "sh", where.file])).stdout.trim());
+  if (!size) return null;
+  if (known?.file === where.file && known.size === size && known.name === where.name) return known;
+  const r = await exec("sh", ["-c", READ, "sh", where.file]);
+  if (r.code !== 0 && !r.stdout) return null;
+  const [titleLine, head, recent, tail] = r.stdout.split(`\n${RS}\n`);
+  return { kind, file: where.file, name: where.name, size, ...readThread(kind, titleLine, head, recent, tail, where.name) };
+}
+
+// How many terminals are looked at at once: each takes three or four processes.
+const AT_ONCE = 4;
+
 // The open conversations of these terminals ({ address, app }, on this
 // computer), by terminal. `known`: the last answer; a file whose size
 // hasn't changed since is not read again.
 export async function findThreads(list, known = {}) {
   const home = (await exec("sh", ["-c", "printf %s \"$HOME\""])).stdout;
   const out = {};
-  for (const { address, app } of list) {
-    let got = null;
-    try { const r = await hc(["get", address, "--json"]); if (r.code === 0) got = JSON.parse(r.stdout); } catch { continue; }
-    const pid = got?.foreground?.pid;
-    if (!pid) continue;
-    const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
-    const where = parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
-    if (!where) continue;
-    const size = Number((await exec("sh", ["-c", "wc -c < \"$1\"", "sh", where.file])).stdout.trim());
-    if (!size) continue;
-    const was = known[address];
-    if (was?.file === where.file && was.size === size && was.name === where.name) { out[address] = was; continue; }
-    const r = await exec("sh", ["-c", READ, "sh", where.file]);
-    if (r.code !== 0 && !r.stdout) continue;
-    const [titleLine, head, recent, tail] = r.stdout.split(`\n${RS}\n`);
-    out[address] = { kind, file: where.file, name: where.name, size, ...readThread(kind, titleLine, head, recent, tail, where.name) };
-  }
+  let next = 0;
+  const lane = async () => {
+    while (next < list.length) {
+      const item = list[next++];
+      const thread = await findThread(item, known[item.address], home);
+      if (thread) out[item.address] = thread;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
   return out;
 }

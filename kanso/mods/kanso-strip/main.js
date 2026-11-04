@@ -38,16 +38,11 @@
 // Resizing is Herdr's own divider drag; the strip reads the result back
 // (see "Resizing" below) with the help of 1px ruler blocks that measure.
 
-import { View, div, svg, image } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
-import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, terminals, openOverlay, home, exec, notify } from "herdr";
-import { stateMark } from "./marks.js";
-
-
-// Right after layout.switch, layout() can still return the tree of the layout
-// shown before; setting it would save that tree into kanso.json. Only Kanso's
-// tree has the strip map, so only that tree is written.
-const isKansoTree = (n) => n?.id === "strip-map" || (n?.children ?? []).some(isKansoTree);
+import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
+import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
+import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout } from "./layout.js";
 
 // How many panes the view holds at once (`st.n`, 1 to 8; you choose). A new
 // column takes 1/n of the view; dragging the divider between two columns
@@ -82,75 +77,9 @@ const TAB_BLOCK = {
     radius: RADIUS, gap: GAP, lone: false } },
 };
 
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const step = (list, v) => list[(list.findIndex((s) => Math.abs(s - v) < EPS) + 1) % list.length];
 const nonce = () => Date.now() + Math.random();
-
-// Shared with the other layout writers (kanso-tabs, kanso-spaces, kanso-panel,
-// open-with). layout.set replaces the whole tree, and a set that has not landed
-// still reads as the old one, so each writer keeps its piece here and every
-// write puts all three back: the strip's columns, the open panel, the rail.
-const LAYOUT_INTENT = "kanso.layout";
-// The strip writes its columns under their own key, many times a second, so
-// it never has to read back and copy the panel and rail to keep them.
-const STRIP_INTENT = "kanso.layout.strip";
-
-function walkLayout(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = walkLayout(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
-// The strip puts its own columns in place itself; this puts back what the
-// other writers keep in the intent: the open panel and the rail.
-function paintOthers(tree) {
-  const intent = shared(LAYOUT_INTENT);
-  if (!intent) return;
-  if ("panel" in intent) {
-    const body = walkLayout(tree, "panel-body");
-    const wrap = walkLayout(tree, "panel") ?? body;
-    if (body) {
-      const child = intent.panel ?? null; // never changed here; layout.set copies it
-      body.children = child ? [child] : [];
-      if (child) body.active = child.id;
-      else delete body.active;
-      if (wrap) wrap.hidden = !child;
-    }
-  }
-  if (intent.rail) {
-    const sidebar = (tree.children ?? []).find((n) => n.id === "sidebar");
-    if (sidebar) {
-      tree.resizable = intent.rail.open;
-      sidebar.min = intent.rail.min;
-    }
-  }
-}
-
-// A side panel's left border is Herdr's divider, which moves only the two
-// nodes beside it, so a fixed-width neighbor pins it. While a panel shows,
-// the strip's right edge rail (28 px, fixed) stands after the panel instead
-// of before it, and a strip column keeps the border draggable.
-function edgeBesidePanel(tree) {
-  const kids = walkLayout(tree, "work-body")?.children;
-  const at = kids ? kids.findIndex((n) => n.id === "strip-edge-right") : -1;
-  if (at < 0) return;
-  const [edge] = kids.splice(at, 1);
-  const panel = kids[at];
-  const beside = panel && (panel.id === "panel-body" || panel.id === "panel") && !panel.hidden;
-  kids.splice(beside ? at + 1 : at, 0, edge);
-}
 
 // A header's wheel events arrive faster than the controller renders. Each one
 // carries only its own delta, so keep the sum of the ones not yet applied.
@@ -185,20 +114,7 @@ const nodeId = (c) => (c.panes.length === 1 ? `strip-${c.panes[0]}` : `strip-col
 const PX = "strip.px";
 const DRAG_MAX = 12000; // ms a held pane stays held with nobody dropping it (let go over a gutter)
 
-// A pane's name: the one you gave its terminal (the `kanso.name` label, set
-// by a double-click on a header or a sidebar row), else the program's.
-const givenNames = () => {
-  const out = new Map();
-  for (const term of terminals()) { const n = term?.labels?.["kanso.name"]; if (n) out.set(term.address, n); }
-  return out;
-};
-const nameOf = (info, given) => {
-  const prog = info?.program;
-  return given?.get(info?.terminal) || (prog?.agent || prog?.shell) && prog.name || info?.title || prog?.name || "Pane";
-};
-// A program's icon from the app's program table (null when it has none), and
-// the same with an empty square of its size in that case.
-const programIcon = (prog, size, color) => !prog?.icon ? null : prog.tint ? svg(prog.icon).size(size).flex_none().text_color(color) : image(prog.icon).w(size).h(size).flex_none();
+// A program's icon (marks.js), or an empty square of its size.
 const iconOf = (prog, size, color) => programIcon(prog, size, color) ?? div().size(size);
 // Where on a pane the pointer is: the left and right quarters mean a column
 // of its own before or after; the middle, stacked above (upper half) or
@@ -210,10 +126,9 @@ const zoneOf = (e, fallback = "below") => {
 };
 const endDrag = () => { setShared("strip.drop", null); setShared("strip.drag", null); };
 
-// The header (a {pane} copy): the terminal label that holds a name you gave
-// it, the rename dialog's width (kanso-prompt, as in the sidebar), how wide
-// the folder and branch may grow, and a folder shown from home.
-const NAME_LABEL = "kanso.name";
+// The header (a {pane} copy): the rename dialog's width (kanso-prompt, as in
+// the sidebar), how wide the folder and branch may grow, and a folder shown
+// from home.
 const PROMPT_W = 420;
 const BADGE_MAX_W = 220;
 const folder = (cwd) => {
@@ -354,13 +269,12 @@ export default class Strip extends View {
   // bare rail the nearest one.
   renderEdge() {
     const t = theme(), p = props();
-    const all = panes();
-    const ids = (p.panes ?? [p.edge]).filter((id) => all.some((q) => q.pane === id));
+    const byId = new Map(panes().map((q) => [q.pane, q]));
+    const ids = (p.panes ?? [p.edge]).filter((id) => byId.has(id));
     const left = p.side === "left";
     const chevron = left ? "\u2039" : "\u203a";
     const show = (id) => setShared("strip.req", { op: "focus", pane: id, n: nonce() });
     const given = givenNames();
-    const name = (info) => nameOf(info, given), icon = iconOf;
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
     const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).loop("opacity", { from: 0.35, to: 1, period: 1800 })
@@ -368,12 +282,12 @@ export default class Strip extends View {
       : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
     const MAX_TILES = 8;
     const tile = (id) => {
-      const info = all.find((q) => q.pane === id), d = dot(info?.status, 7);
+      const info = byId.get(id), d = dot(info?.status, 7);
       return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(t.input)
         .flex().items_center().justify_center()
         .hover((h) => h.bg(t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
-        .child(icon(info?.program, 12, t.muted))
+        .child(iconOf(info?.program, 12, t.muted))
         .when(Boolean(d), (el) => el.child(d.absolute().top(-2).right(-2).border(1).border_color(t.chrome)));
     };
     const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
@@ -381,12 +295,12 @@ export default class Strip extends View {
       .children(ids.slice(0, MAX_TILES).map(tile))
       .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
     const rowOf = (id) => {
-      const info = all.find((q) => q.pane === id), d = dot(info?.status, 6);
+      const info = byId.get(id), d = dot(info?.status, 6);
       return h_flex().id(`edge-row-${id}`).h(26).px(8).gap(8).items_center().rounded(6).cursor_pointer()
         .hover((h) => h.bg(t.hover))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
-        .child(icon(info?.program, 13, t.muted))
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(name(info)))
+        .child(iconOf(info?.program, 13, t.muted))
+        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(nameOf(info, given)))
         .when(Boolean(d), (el) => el.child(d));
     };
     const card = v_flex().w(220).p(6).gap(1).rounded(8).bg(t.chrome).shadow_md()
@@ -502,8 +416,8 @@ export default class Strip extends View {
   // the pane. In the strip (props.strip) it also slides the view on wheel,
   // holds the pane on its grip and is the top of the pane's drop card. The
   // app's own `{tab}` block (one pane, TAB_BLOCK) uses the same copy.
-  me() {
-    return panes().find((p) => p.pane === props()?.pane);
+  me(all) {
+    return all.find((p) => p.pane === props()?.pane);
   }
 
   // A double-click on the header opens the rename dialog Herdr uses for
@@ -605,7 +519,8 @@ export default class Strip extends View {
 
   renderHead() {
     const t = theme();
-    const p = this.me();
+    const all = panes(); // read once: each read copies every pane
+    const p = this.me(all);
     if (!p) return div();
     const name = nameOf(p, givenNames());
     const pic = programIcon(p.program, 15, t.muted);
@@ -631,7 +546,7 @@ export default class Strip extends View {
     const d = st !== "working" ? shared(DIGEST)?.[pane] : null;
     const digest = d && (d.files > 0 || d.ahead > 0 || d.pr?.state === "OPEN") ? d : null;
     // Another agent to send this pane's work to.
-    const canSend = Boolean(p.terminal) && panes().some((q) => q.pane !== pane && q.terminal && (q.program?.agent || q.status));
+    const canSend = Boolean(p.terminal) && all.some((q) => q.pane !== pane && q.terminal && (q.program?.agent || q.status));
     return h_flex().id(`pane-head-${pane}`).size_full().pl(14).pr(6).gap(10).items_center().text_size(12.5).relative()
       // The pane is a rounded slab; the header's wash follows its top corners.
       .rounded_t(RADIUS)
@@ -780,7 +695,6 @@ export default class Strip extends View {
   }
 
 
-  // Slides the view the least that shows a pane whole (niri's "never center").
   // Slides the view the least that shows a pane whole (niri's "never center"),
   // to a column's start.
   reveal(st, id) {
@@ -936,7 +850,10 @@ export default class Strip extends View {
   adopt() {
     const tab = this.tab(), st = tab && this.state[tab];
     if (!st || !this.appliedSizes) return false;
-    const body = find(layout(), "work-body");
+    // A divider is dragged with the window in front: behind other windows,
+    // the tree (copied on every read) is left alone.
+    if (window()?.active === false) return false;
+    const body = walkLayout(layout(), "work-body");
     if (!body?.children) return false;
     const text = JSON.stringify(this.sizesOf(body.children));
     if (text === this.appliedSizes) { this.drift = null; return false; }
@@ -1184,7 +1101,7 @@ export default class Strip extends View {
     const tabBlock = nodes.length === 1 && nodes[0] === TAB_BLOCK;
     if (!tabBlock && now - (this.sets.at(-1) ?? 0) < WRITE_MS) { this.dirty = true; return false; }
     const tree = layout();
-    const body = find(tree, "work-body");
+    const body = walkLayout(tree, "work-body");
     if (!body?.children || !isKansoTree(tree)) return false;
     const mine = (n) => n.id === "main" || String(n.id).startsWith("strip-");
     if (tabBlock && body.children.filter(mine).length === 1 && body.children.find(mine)?.content?.tab) {
@@ -1208,8 +1125,7 @@ export default class Strip extends View {
       const at = Math.max(0, body.children.findIndex(mine));
       const rest = body.children.filter((n) => !mine(n));
       body.children = [...rest.slice(0, at), ...nodes, ...rest.slice(at)];
-      paintOthers(tree);
-      edgeBesidePanel(tree);
+      paintLayout(tree, { nodes: false }); // the columns are in place: the panel and the rail
       run("layout.set", { layout: tree });
     } catch { this.halted = now; this.applied = null; return false; }
     finally { this.writing = false; }
@@ -1280,7 +1196,7 @@ export default class Strip extends View {
       this.save();
 
       if (this.pendingFocus) {
-        if (showsTerminal(find(layout(), "work-body"), this.pendingFocus)) {
+        if (showsTerminal(walkLayout(layout(), "work-body"), this.pendingFocus)) {
           run("pane.focus", { terminal: this.pendingFocus });
           this.pendingFocus = null;
         }

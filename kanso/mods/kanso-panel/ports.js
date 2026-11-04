@@ -7,24 +7,13 @@
 // marks the ones no pane owns any more. Open one in the browser, go to its
 // pane, or stop it: a second press confirms, SIGTERM first, then a force stop
 // for one that won't go. Only this computer; nothing is read but lsof and ps.
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, hc, panes, terminals, home, run, theme } from "herdr";
+import { tilde } from "./lib.js";
+import { G, Armed, tokens, quietLink, iconButton } from "./ui.js";
 
-const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-const ARM_MS = 4000;
 const EVERY_MS = 10000;
-const ICON = "mods/kanso-chrome/icons/";
-
-function tokens(t) {
-  return {
-    canvas: t.canvas ?? t.background, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
-    border: t.border, subtle: t.hover ?? t.raised, primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
-    red: t.ansi1, green: t.ansi2, yellow: t.ansi3,
-  };
-}
-
-const tilde = (p) => { const h = home(); return h && String(p).startsWith(h) ? `~${String(p).slice(h.length)}` : String(p); };
 
 // `lsof -F pcn` of the listening sockets: pid -> { pid, command, ports }.
 export function parseListen(text) {
@@ -101,8 +90,10 @@ export const shortArgs = (args) => {
 const age = (secs) => secs < 3600 ? `${Math.max(1, Math.round(secs / 60))} min` : secs < 86400 ? `${Math.round(secs / 3600)} h` : `${Math.round(secs / 86400)} d`;
 
 export class Ports {
+  constructor() { this.armed = new Armed(); } // Stop asks for a second press
+
   init(cx) {
-    this.list = null; this.armed = null; this.note = null; this.stopping = new Set(); this.forced = new Set(); this.width = 368;
+    this.list = null; this.note = null; this.stopping = new Set(); this.forced = new Set(); this.width = 368;
     this.refresh(cx);
     cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }
@@ -145,12 +136,6 @@ export class Ports {
     });
   }
 
-  arm(key, cx, act) {
-    if (this.armed === key && Date.now() - this.armedAt <= ARM_MS) { this.armed = null; act(cx); return; }
-    this.armed = key; this.armedAt = Date.now(); cx.notify();
-    cx.timer.after(ARM_MS + 50, (cx) => { if (this.armed === key) { this.armed = null; cx.notify(); } });
-  }
-
   // SIGTERM, or SIGKILL for one asked to stop that is still here.
   stop(items, cx) {
     for (const s of items) this.stopping.add(s.pid);
@@ -166,12 +151,6 @@ export class Ports {
     });
   }
 
-  link(id, label, onClick, c, color) {
-    return Button.new(id).h(22).items_center().cursor_pointer().hover((s) => s.opacity(0.7))
-      .on_click((_e, cx) => onClick(cx))
-      .child(div().text_size(12).text_color(color ?? c.muted).child(label));
-  }
-
   // Which pane runs it, by the name its header shows.
   paneOf(address) {
     const p = panes().find((q) => q.terminal === address);
@@ -180,7 +159,7 @@ export class Ports {
   }
 
   row(s, c) {
-    const key = `stop:${s.pid}`, armed = this.armed === key, busy = this.stopping.has(s.pid);
+    const key = `stop:${s.pid}`, armed = this.armed.is(key), busy = this.stopping.has(s.pid);
     const owner = s.owner ? this.paneOf(s.owner) : null;
     const stopLabel = busy ? "Stopping…" : armed ? (s.force ? "Press again to force stop" : "Press again to stop") : s.force ? "Force stop" : "Stop";
     return v_flex().w_full().px(G.md).py(10).gap(4).rounded(6).hover((st) => st.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
@@ -193,20 +172,18 @@ export class Ports {
         .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : "No pane runs it"))
         .when(Boolean(s.cwd), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(tilde(s.cwd)))))
       .child(h_flex().flex_wrap().gap_x(G.lg)
-        .child(this.link(`pt-open-${s.pid}`, "Open in the browser", (cx) => cx.open_url(`http://localhost:${s.ports[0]}`), c, c.text))
-        .when(Boolean(owner?.pane), (el) => el.child(this.link(`pt-go-${s.pid}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
-        .child(this.link(`pt-stop-${s.pid}`, stopLabel, (cx) => { if (!busy) this.arm(key, cx, (cx) => this.stop([s], cx)); }, c, armed ? c.red : c.muted)));
+        .child(quietLink(`pt-open-${s.pid}`, "Open in the browser", (cx) => cx.open_url(`http://localhost:${s.ports[0]}`), c, { color: c.text }))
+        .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${s.pid}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
+        .child(quietLink(`pt-stop-${s.pid}`, stopLabel, (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.stop([s], cx)); }, c, { color: armed ? c.red : c.muted })));
   }
 
   render(cx) {
     const c = tokens(theme()), narrow = (this.width || 368) < 560;
     const list = this.list ?? [], loose = list.filter((s) => !s.owner);
-    const armedAll = this.armed === "all";
+    const armedAll = this.armed.is("all");
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Ports"))
-      .child(Button.new("pt-refresh").size(26).flex_none().items_center().justify_center().rounded(6).cursor_pointer()
-        .tooltip("Read again").hover((s) => s.bg(c.subtle)).on_click((_e, cx) => this.refresh(cx))
-        .child(svg(`${ICON}refresh.svg`).size(15).text_color(c.muted)));
+      .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx), c, { spin: this.reading }));
     const hero = v_flex().gap(G.xs)
       .child(div().text_size(15).text_color(c.muted).child("Listening on this computer"))
       .child(h_flex().items_end().gap(G.md)
@@ -218,7 +195,7 @@ export class Ports {
       .when(loose.length > 0, (el) => el.child(h_flex().pt(G.md).gap(G.lg).items_center().flex_wrap()
         .child(Button.new("pt-stop-all").h(30).px(14).flex_none().items_center().rounded(6).cursor_pointer()
           .bg(armedAll ? c.red : c.primary).hover((s) => s.opacity(0.85))
-          .on_click((_e, cx) => this.arm("all", cx, (cx) => this.stop(loose, cx)))
+          .on_click((_e, cx) => this.armed.press("all", cx, (cx) => this.stop(loose, cx)))
           .child(div().text_size(12).font_medium().text_color(armedAll ? "#ffffff" : c.primaryText)
             .child(armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} with no pane`)))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
