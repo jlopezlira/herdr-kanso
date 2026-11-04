@@ -111,8 +111,9 @@ test("kanso-strip/main.js never writes another layout's tree", async () => {
 });
 
 // Herdr's divider moves only the two nodes beside it: nothing fixed may stand
-// just before the side panel, or its border cannot be dragged.
-const helpers = ["kanso-strip/main.js", "kanso-tabs/main.js", "kanso-panel/lib.js", "open-with/main.js", "kanso-spaces/main.js"];
+// just before the side panel, or its border cannot be dragged. One file for
+// every writer (layout.js, copied into each mod).
+const helpers = ["kanso-tabs/layout.js", "kanso-strip/layout.js", "kanso-panel/layout.js", "open-with/layout.js", "kanso-spaces/layout.js"];
 for (const file of helpers) {
   test(`${file} puts the strip's right edge rail after a shown panel`, async () => {
     const { edgeBesidePanel } = await load(file, ["edgeBesidePanel"], {});

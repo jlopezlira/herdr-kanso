@@ -1,10 +1,11 @@
 // Added by José Gutiérrez (minimalistic): agents nested under their space. Pure drawing helpers; the
-// fold state lives in main.js. statusMark and agentIcon mirror sdd-focused/lib/ui.js
-// (Herdr doesn't let one mod import another's files): keep them in step.
-import { div, svg, image } from "gpui-kit";
+// fold state lives in main.js.
+import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { run, terminals, openOverlay } from "herdr";
-import { stateMark } from "./marks.js";
+import { run, openOverlay } from "herdr";
+import { stateMark, programIcon, NAME_LABEL } from "./marks.js";
+
+export { NAME_LABEL };
 
 const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px avatar, the gap
 // A row flush with the list's 10px inset (the Status and Threads views).
@@ -15,10 +16,9 @@ const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
 // What you told Kanso about a terminal lives as labels on the terminal
 // itself, in herdr-core, so it survives a restart and every Kanso mod reads
-// the same: `kanso.name` is the name you gave it (double-click its row or
-// its pane header), `kanso.pin` its place among the pinned sessions (the
-// pin on its row). By address.
-export const NAME_LABEL = "kanso.name";
+// the same: `kanso.name` (marks.js) is the name you gave it (double-click
+// its row or its pane header), `kanso.pin` its place among the pinned
+// sessions (the pin on its row). By address.
 export const PIN_LABEL = "kanso.pin";
 // A conversation's place in the Threads view, as T3 Code keeps its threads:
 // `kanso.settled` "<ms>:<turn>" (put away when its turn was that one),
@@ -28,16 +28,6 @@ export const SETTLED_LABEL = "kanso.settled";
 export const SNOOZE_LABEL = "kanso.snooze";
 export const UNREAD_LABEL = "kanso.unread";
 export const THREAD_LABEL = "kanso.thread";
-export function labelsOf() {
-  const out = new Map();
-  for (const term of terminals()) if (term?.labels) out.set(term.address, term.labels);
-  return out;
-}
-export function givenNames() {
-  const out = new Map();
-  for (const [address, labels] of labelsOf()) if (labels[NAME_LABEL]) out.set(address, labels[NAME_LABEL]);
-  return out;
-}
 
 // ---- Order ----------------------------------------------------------------------
 
@@ -203,9 +193,13 @@ export function nest(rows, all = []) {
   const out = [], seen = new Set();
   const sub = (k) => ({ address: k.address, pane: null, tab: null, sub: true, status: subStatus(k.status),
     program: k.program, title: k.name || k.template || k.program?.name || k.address, name: k.labels?.[NAME_LABEL] || undefined, seq: 0 });
+  // Each parent's children once: its rows first, then its live terminals without a pane.
+  const children = new Map();
+  const under = (addr) => { let list = children.get(addr); if (!list) children.set(addr, list = []); return list; };
+  for (const a of rows) if (a.parent) under(a.parent).push(a);
+  for (const k of all) if (k.parent && k.state === "live" && !listed.has(k.address)) under(k.parent).push(sub(k));
   const walk = (addr, lead) => {
-    const kids = [...rows.filter((k) => k.parent === addr && !seen.has(k.address)),
-      ...all.filter((k) => k.parent === addr && k.state === "live" && !listed.has(k.address) && !seen.has(k.address)).map(sub)];
+    const kids = (children.get(addr) ?? []).filter((k) => !seen.has(k.address));
     kids.forEach((k, i) => {
       const last = i === kids.length - 1;
       seen.add(k.address);
@@ -325,17 +319,12 @@ export function snoozePresets(now) {
   return out.map((p) => ({ ...p, when: p.id.endsWith("h") ? hhmm(p.until) : `${new Date(p.until).toDateString().slice(0, 3)} ${hhmm(p.until)}` }));
 }
 
-export function agentIcon(p, size, color) {
-  if (!p?.icon) return null;
-  return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
-}
-
 // An agent's state in the sidebar: the mark Kanso draws everywhere
 // (marks.js), 15px, the idle ring included; with no status, a blank of the
-// same width so the rows line up. Compact or not, needs you is the disc:
-// a header says "Needs you" in words where it has room.
+// same width so the rows line up. Needs you is the disc: a header says
+// "Needs you" in words where it has room.
 const ENSO = 15;
-export function statusMark(t, status, _compact = false) {
+export function statusMark(t, status) {
   return stateMark(t, status, ENSO, { idle: true }) ?? div().size(ENSO).flex_none();
 }
 
@@ -366,7 +355,7 @@ export function agentFold(id, mine, open, onToggle, t) {
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
     .when(!open, (el) => el
-      .when(Boolean(top) && top !== "idle", (el) => el.child(statusMark(t, top, true)))
+      .when(Boolean(top) && top !== "idle", (el) => el.child(statusMark(t, top)))
       .child(div().child(String(mine.length))))
     .child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none());
 }
@@ -428,7 +417,7 @@ function shimmer(text, t, address) {
 const ROW = 32, TWO = 50, ROOMY = 64;
 export function agentRow(a, indent, t, row, more = {}) {
   const project = more.project ?? null;
-  const pic = project ? null : agentIcon(a.program, a.sub ? 13 : 15, t.foreground);
+  const pic = project ? null : programIcon(a.program, a.sub ? 13 : 15, t.foreground);
   const live = a.status === "working" || a.status === "blocked" || more.strong;
   const ink = a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -468,7 +457,7 @@ export function agentRow(a, indent, t, row, more = {}) {
       .on_click((_e, cx) => { cx.stop_propagation(); x.act(cx); })
       .child(svg(`mods/kanso-chrome/icons/${x.icon}.svg`).size(13))))
     .when(Boolean(more.time) && !actions.length && !(row?.hovered && row?.pin && !pinned), (el) => el.child(div().flex_none().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.dim).child(more.time)))
-    .child(statusMark(t, a.status, true));
+    .child(statusMark(t, a.status));
   const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
     .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
     .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))

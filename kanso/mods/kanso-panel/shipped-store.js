@@ -14,7 +14,7 @@
 //   a commit on several machines counts once, by its hash;
 // - GitHub's weekly contributor statistics, for what no machine has cloned.
 // A repository's week counts the larger of what the machines and GitHub saw.
-import { exec, appHome, home, spaces, panes, readTextFile, writeTextFile } from "herdr";
+import { exec, appHome, home, spaces, panes, writeTextFile } from "herdr";
 
 export const STORE_DIR = "data/kanso-panel";
 const GIST_DESCRIPTION = "Kanso Shipped stats";

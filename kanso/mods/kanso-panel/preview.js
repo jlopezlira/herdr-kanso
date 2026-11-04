@@ -5,8 +5,8 @@
 // is a live view of the file. Props: { path, on } (the machine, null here).
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
-import { readTextFile, watchFolder, theme, home, openOverlay } from "herdr";
-import { codeState, markdownView, isMarkdown, showPanel } from "./lib.js";
+import { readTextFile, watchFolder, theme, openOverlay } from "herdr";
+import { codeState, markdownView, isMarkdown, showPanel, tilde } from "./lib.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).pop();
@@ -53,9 +53,8 @@ export class Preview {
   }
 
   shortFolder() {
-    const dir = folderOf(this.path), h = home();
-    if (this.on) return `${this.on}: ${dir}`;
-    return dir === h ? "~" : dir.startsWith(h + "/") ? "~" + dir.slice(h.length) : dir;
+    const dir = folderOf(this.path);
+    return this.on ? `${this.on}: ${dir}` : tilde(dir);
   }
 
   render() {

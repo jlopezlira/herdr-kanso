@@ -8,6 +8,13 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.3.1] - 2026-11-04
+
+### Changed
+
+- Less work per frame. The sidebar reads each space's place once per look instead of once per space, lists sub-agents from one map instead of a search per row, and reads the strip's columns once per draw; Threads reads four conversations at a time instead of one after another; the strip leaves the layout tree alone while the window is behind others; Shipped adds up a period's weeks once per reading instead of three times per draw; the PR panel reads its checks once per reading; Files rebuilds its rows only when they changed; Send reads the names you gave once per draw.
+- One copy of what the mods share, kept in step by `npm run sync:share` and a test: the layout writers' helpers (`layout.js`, in kanso-tabs, kanso-strip, kanso-spaces, kanso-panel and open-with), the panels' kit (`ui.js`: colors, spacing, quiet links, icon buttons, section heads, loading silhouettes and the second press that confirms, in kanso-panel and kanso-spend) and, in `marks.js`, a program's icon and a pane's name along with the state mark (now in kanso-send too). Spend's unused drawing helpers are gone.
+
 ## [2.3.0] - 2026-11-04
 
 ### Added

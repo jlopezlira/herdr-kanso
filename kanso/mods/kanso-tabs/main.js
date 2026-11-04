@@ -3,106 +3,11 @@
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-tabs; a Specs panel button with the pending count and a needs-you dot (sdd.badge).
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs dropped; panel buttons are icons with their name on hover, dragged into any order, and turned on or off in a Panels popup (right-click one); trackpad scrolling moves one tab per swipe.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
-import { View, div, svg, image } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout } from "herdr";
-import { stateMark } from "./marks.js";
-
-
-// Right after layout.switch, layout() can still return the tree of the layout
-// shown before; setting it would save that tree into kanso.json. Only Kanso's
-// tree has the strip map, so only that tree is written.
-const isKansoTree = (n) => n?.id === "strip-map" || (n?.children ?? []).some(isKansoTree);
-
-// Same helper as kanso-strip, kanso-spaces, kanso-panel and open-with.
-// layout.set replaces the whole tree, and a set that has not landed still
-// reads as the old one, so each writer keeps its piece in kanso.layout and
-// every write puts the strip, the panel and the rail back.
-const LAYOUT_INTENT = "kanso.layout";
-// The strip writes its columns under their own key, many times a second, so
-// it never has to read back and copy the panel and rail to keep them.
-const STRIP_INTENT = "kanso.layout.strip";
-
-function walkLayout(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = walkLayout(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
-function paintLayout(tree, preserveSizes = true) {
-  if (!tree) return;
-  const intent = { ...(shared(LAYOUT_INTENT) ?? {}), ...(shared(STRIP_INTENT) ?? {}) };
-  if (intent.nodes) {
-    const body = walkLayout(tree, "work-body");
-    if (body?.children) {
-      const mine = (n) => n.id === "main" || String(n.id).startsWith("strip-");
-      const at = body.children.findIndex(mine);
-      const rest = body.children.filter((n) => !mine(n));
-      const i = Math.max(0, at);
-      const nodes = JSON.parse(JSON.stringify(intent.nodes));
-      // Native dividers leave px sizes before the strip's adopt timer runs.
-      // Keep those edits, but not sizes from the tree a pending strip write
-      // was based on: replaying those would undo an explicit width command.
-      const keepSize = (node) => {
-        const before = intent.sizesBefore?.[node.id], live = walkLayout(body, node.id);
-        if (before !== undefined && live?.size?.px !== undefined
-          && JSON.stringify(live.size) !== JSON.stringify(before)) node.size = { ...live.size };
-        for (const child of node.children ?? []) keepSize(child);
-      };
-      if (preserveSizes) nodes.forEach(keepSize);
-      body.children = [...rest.slice(0, i), ...nodes, ...rest.slice(i)];
-    }
-  }
-  if ("panel" in intent) {
-    const body = walkLayout(tree, "panel-body");
-    const wrap = walkLayout(tree, "panel") ?? body;
-    if (body) {
-      const child = intent.panel ? JSON.parse(JSON.stringify(intent.panel)) : null;
-      body.children = child ? [child] : [];
-      if (child) body.active = child.id;
-      else delete body.active;
-      if (wrap) wrap.hidden = !child;
-    }
-  }
-  if (intent.rail) {
-    const sidebar = (tree.children ?? []).find((n) => n.id === "sidebar");
-    if (sidebar) {
-      tree.resizable = intent.rail.open;
-      sidebar.min = intent.rail.min;
-    }
-  }
-  edgeBesidePanel(tree);
-}
-
-// A side panel's left border is Herdr's divider, which moves only the two
-// nodes beside it, so a fixed-width neighbor pins it. While a panel shows,
-// the strip's right edge rail (28 px, fixed) stands after the panel instead
-// of before it, and a strip column keeps the border draggable.
-function edgeBesidePanel(tree) {
-  const kids = walkLayout(tree, "work-body")?.children;
-  const at = kids ? kids.findIndex((n) => n.id === "strip-edge-right") : -1;
-  if (at < 0) return;
-  const [edge] = kids.splice(at, 1);
-  const panel = kids[at];
-  const beside = panel && (panel.id === "panel-body" || panel.id === "panel") && !panel.hidden;
-  kids.splice(beside ? at + 1 : at, 0, edge);
-}
-
-function rememberLayout(patch) {
-  setShared(LAYOUT_INTENT, { ...(shared(LAYOUT_INTENT) ?? {}), ...patch });
-}
-
-function commitLayout(patch) {
-  rememberLayout(patch);
-  const tree = layout();
-  if (!tree) return false;
-  paintLayout(tree);
-  if (isKansoTree(tree)) run("layout.set", { layout: tree });
-  return true;
-}
+import { stateMark, programIcon } from "./marks.js";
+import { walkLayout, commitLayout } from "./layout.js";
 
 function storedObject(key) {
   try {
@@ -185,15 +90,6 @@ function panelContent(id) {
 
 const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
 const CLEAR = "#00000000";
-
-function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = find(child, id);
-    if (found) return found;
-  }
-  return null;
-}
 
 export default class Tabs extends View {
   init() {
@@ -333,12 +229,12 @@ export default class Tabs extends View {
           else run("tab.select", { id: c.id });
         })
         .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }))
-        .when(Boolean(program?.icon), el => el.child((program.tint ? svg(program.icon).size(15).text_color(t.muted) : image(program.icon).size(15)).opacity(c.active ? 1 : 0.8)))
+        .when(Boolean(program?.icon), el => el.child(programIcon(program, 15, t.muted).opacity(c.active ? 1 : 0.8)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(["working", "blocked", "done"].includes(c.status), el => el.child(stateMark(t, c.status)))
         .when(c.active && shown.length > 1, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).hover(s => s.text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/kanso-chrome/icons/close.svg").size(13))));
     };
-    const panel = find(tree, "panel"), body = find(tree, "panel-body");
+    const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");
     const now = this.openPanel(panel, body);
     const shownPanels = panelList().filter((p) => p.on);
     const enabled = shownPanels.map((p) => p.id);

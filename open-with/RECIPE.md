@@ -72,7 +72,8 @@ files next to it are one build of it.
 
 ## Built from
 
-- **One mod**, `mods/open-with/`: `main.js` and `mod.json`
+- **One mod**, `mods/open-with/`: `main.js`, `layout.js` (how the preview
+  panel is mounted, the same file Kanso's layout writers share) and `mod.json`
   (`{ "place": "none", "title": "Open with", "overlay": { "kind": "popup",
   "at": "top", "offset": 40, "width": 380 } }`).
 - **One key**, in `keys.json`: `"global": { "cmd-shift-o":

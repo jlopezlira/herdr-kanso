@@ -448,9 +448,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   tooltip says it in words. The header's send button opens `kanso-send`.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
-  status bar and the sidebar draw it from one file, kanso-spaces/marks.js
-  `stateMark` (`npm run sync:share` copies it into kanso-tabs, kanso-strip
-  and kanso-status; a test checks the copies). An ensō, the brush circle
+  status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
+  `stateMark` (with `programIcon` and `nameOf`; `npm run sync:share` copies it
+  into kanso-tabs, kanso-strip, kanso-status and kanso-send; a test checks
+  the copies). An ensō, the brush circle
   (`kanso-chrome/icons/enso*.svg`, tinted), 13px (12 in the status bar, 15
   in the sidebar):
   - Working: the idle ring as a faint track (r 5.6 in 16, 1.5 stroke at
@@ -775,8 +776,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     request panel, read with `gh pr view`, `gh pr diff` and one GraphQL
     query for unresolved review threads; `preview.js`: one file by full
     path, `{path, on}`, drawn the same way, read again whenever its folder
-    changes, with Open with, read-again and close buttons) and `lib.js`
-    holds what they share (where the focused pane is, diff rows, the two
+    changes, with Open with, read-again and close buttons); `lib.js`
+    holds what they share (where the focused pane is, diff rows, folders
+    from home, the two
     file renderers: `codeState` is a read-only `EditorState` in the
     terminal's font with the theme's ANSI hues, `markdownView` is the
     SDK's `TextView.markdown`, selectable, in a scrolling column with 16 px
@@ -790,6 +792,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     while shown; Stop is SIGTERM on a second press, then SIGKILL.
   - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
     and minimalistic forks, and all use `"place": "none"`.
+  - Herdr loads a mod's files from its own folder only, so what several mods
+    need is one file copied into each: `layout.js` (the layout writers, from
+    kanso-tabs into kanso-strip, kanso-spaces, kanso-panel and open-with),
+    `ui.js` (the panels' kit, from kanso-panel into kanso-spend), `share.js`
+    and `marks.js`. `npm run sync:share` copies them; a test fails when a
+    copy differs.
 - Spend (`kanso-spend`) is included. Specs (`sdd-focused`, by José
   Gutiérrez, from the minimalistic layout) was offered when installed, up to
   1.5; Kanso no longer shows it.

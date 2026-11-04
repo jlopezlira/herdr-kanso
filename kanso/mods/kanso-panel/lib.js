@@ -1,95 +1,26 @@
-// Shared by the three panels of the kanso-panel mod (files, changes, pull request).
+// Shared by the panels of the kanso-panel mod: where the focused pane is,
+// diff rows, files shown, folders from home, work in parallel, the panel stack.
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
-import { spaces, panes, focused, layout, run, theme, settings, shared, setShared } from "herdr";
+import { spaces, panes, focused, layout, theme, settings, home } from "herdr";
+import { walkLayout, commitLayout } from "./layout.js";
 
-// Right after layout.switch, layout() can still return the tree of the layout
-// shown before; setting it would save that tree into kanso.json. Only Kanso's
-// tree has the strip map, so only that tree is written.
-const isKansoTree = (n) => n?.id === "strip-map" || (n?.children ?? []).some(isKansoTree);
-
-// Same helper as kanso-strip, kanso-tabs, kanso-spaces and open-with.
-const LAYOUT_INTENT = "kanso.layout";
-// The strip writes its columns under their own key, many times a second, so
-// it never has to read back and copy the panel and rail to keep them.
-const STRIP_INTENT = "kanso.layout.strip";
-
-function walkLayout(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = walkLayout(child, id);
-    if (found) return found;
-  }
-  return null;
+// A folder from home: "~", "~/Apps/web", or as it is elsewhere.
+export function tilde(path) {
+  if (!path) return "";
+  const h = home();
+  return path === h ? "~" : path.startsWith(`${h}/`) ? `~${path.slice(h.length)}` : path;
 }
 
-function paintLayout(tree, preserveSizes = true) {
-  if (!tree) return;
-  const intent = { ...(shared(LAYOUT_INTENT) ?? {}), ...(shared(STRIP_INTENT) ?? {}) };
-  if (intent.nodes) {
-    const body = walkLayout(tree, "work-body");
-    if (body?.children) {
-      const mine = (n) => n.id === "main" || String(n.id).startsWith("strip-");
-      const at = body.children.findIndex(mine);
-      const rest = body.children.filter((n) => !mine(n));
-      const i = Math.max(0, at);
-      const nodes = JSON.parse(JSON.stringify(intent.nodes));
-      // Native dividers leave px sizes before the strip's adopt timer runs.
-      // Keep those edits, but not sizes from the tree a pending strip write
-      // was based on: replaying those would undo an explicit width command.
-      const keepSize = (node) => {
-        const before = intent.sizesBefore?.[node.id], live = walkLayout(body, node.id);
-        if (before !== undefined && live?.size?.px !== undefined
-          && JSON.stringify(live.size) !== JSON.stringify(before)) node.size = { ...live.size };
-        for (const child of node.children ?? []) keepSize(child);
-      };
-      if (preserveSizes) nodes.forEach(keepSize);
-      body.children = [...rest.slice(0, i), ...nodes, ...rest.slice(i)];
-    }
-  }
-  if ("panel" in intent) {
-    const body = walkLayout(tree, "panel-body");
-    const wrap = walkLayout(tree, "panel") ?? body;
-    if (body) {
-      const child = intent.panel ? JSON.parse(JSON.stringify(intent.panel)) : null;
-      body.children = child ? [child] : [];
-      if (child) body.active = child.id;
-      else delete body.active;
-      if (wrap) wrap.hidden = !child;
-    }
-  }
-  if (intent.rail) {
-    const sidebar = (tree.children ?? []).find((n) => n.id === "sidebar");
-    if (sidebar) {
-      tree.resizable = intent.rail.open;
-      sidebar.min = intent.rail.min;
-    }
-  }
-  edgeBesidePanel(tree);
+// Runs `work` on every item, `n` at a time.
+export async function pool(items, n, work) {
+  let next = 0;
+  const lane = async () => { while (next < items.length) { const i = next++; await work(items[i], i); } };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, lane));
 }
 
-// A side panel's left border is Herdr's divider, which moves only the two
-// nodes beside it, so a fixed-width neighbor pins it. While a panel shows,
-// the strip's right edge rail (28 px, fixed) stands after the panel instead
-// of before it, and a strip column keeps the border draggable.
-function edgeBesidePanel(tree) {
-  const kids = walkLayout(tree, "work-body")?.children;
-  const at = kids ? kids.findIndex((n) => n.id === "strip-edge-right") : -1;
-  if (at < 0) return;
-  const [edge] = kids.splice(at, 1);
-  const panel = kids[at];
-  const beside = panel && (panel.id === "panel-body" || panel.id === "panel") && !panel.hidden;
-  kids.splice(beside ? at + 1 : at, 0, edge);
-}
-
-function commitLayout(patch) {
-  setShared(LAYOUT_INTENT, { ...(shared(LAYOUT_INTENT) ?? {}), ...patch });
-  const tree = layout();
-  if (!tree) return false;
-  paintLayout(tree);
-  if (isKansoTree(tree)) run("layout.set", { layout: tree });
-  return true;
-}
+// The terminal's font, for diffs and code.
+export const monoFont = () => settings().font_family ?? "JetBrains Mono";
 
 // A relative path that stays inside its root: no absolute path, no ".." segment.
 export function insideRoot(path) {
@@ -137,7 +68,7 @@ export function codeState(path, text) {
   const t = theme(), e = ext(path) || "txt";
   return EditorState.new({ language: LANG[e] ?? e, readonly: true,
     value: text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) + "\n… (file truncated)" : text,
-    font_family: settings().font_family, font_size: 12,
+    font_family: monoFont(), font_size: 12,
     syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
 }
 

@@ -32,7 +32,6 @@ export default class WorkspaceStatus extends View {
       .when(left, el => el.child(label(space?.machine ? "server" : "monitor", space?.machine ?? "This computer"))
         .when(Boolean(space?.branch), el => el.child(label("branch", space.branch))))
       .when(left && right, el => el.child(div().flex_1()))
-      .when(!right, el => el)
       .when(right && needs > 0, el => el.child(h_flex().id("needs-you").gap(6).items_center().text_color(t.blocked)
         .cursor_pointer().tooltip(mac ? "Go to it  ⌘J" : "Go to it  Ctrl+J").on_click(() => run("kanso-strip.next-needs-you"))
         .child(stateMark(t, "blocked", 12))

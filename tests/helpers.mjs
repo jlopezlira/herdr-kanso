@@ -5,16 +5,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
+import { modScript } from "../scripts/mod-source.mjs";
 
 const runFile = promisify(execFile);
 export const clone = (value) => JSON.parse(JSON.stringify(value));
 const mods = new URL("../kanso/mods/", import.meta.url);
 
-// Load the actual mod logic with the desktop host supplied by each fixture.
+// Load the actual mod logic (its own-folder imports included) with the
+// desktop host supplied by each fixture.
 export async function load(file, names, host = {}) {
-  const source = (await readFile(new URL(file, mods), "utf8"))
-    .replace(/^import .*;\n/gm, "")
-    .replace(/export default /g, "").replace(/export /g, "");
+  const dir = file.slice(0, file.lastIndexOf("/") + 1);
+  const read = async (name) => readFile(new URL(name, mods), "utf8");
+  // Siblings are read up front: the inliner is synchronous.
+  const sources = new Map([[file, await read(file)]]);
+  const pending = [file];
+  while (pending.length) {
+    const text = sources.get(pending.pop());
+    for (const m of text.matchAll(/^import\s+(?:\{[^}]*\}\s+from\s+)?["'](\.\/[^"']+)["'];/gm)) {
+      const sibling = `${dir}${m[1].slice(2)}`;
+      if (!sources.has(sibling)) { sources.set(sibling, await read(sibling)); pending.push(sibling); }
+    }
+  }
+  const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
   return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, ...host });
 }
 
