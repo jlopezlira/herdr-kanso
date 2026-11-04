@@ -8,7 +8,10 @@ import { SHARED } from "../scripts/sync-share.mjs";
 // herdr.dev's indexer skips a whole folder whose RECIPE.md is over 64 KB
 // ("RECIPE.md exceeds 64 KB"), so Kanso dropped out of the gallery at 2.1.0.
 const RECIPE_LIMIT = 64 * 1024;
-const FOLDERS = ["kanso", ...STANDALONE];
+// Mods listed on their own that Kanso doesn't install (Kanso has its own
+// version of what they do): their shared files are checked below.
+const OWN = ["markdown-panel"];
+const FOLDERS = ["kanso", ...STANDALONE, ...OWN];
 
 for (const folder of FOLDERS) {
   test(`${folder}/RECIPE.md fits the gallery's 64 KB`, () => {
@@ -23,6 +26,17 @@ for (const { source, copies } of SHARED) {
       assert.equal(readFileSync(join(ROOT, copy), "utf8"), readFileSync(join(ROOT, source), "utf8"), "run npm run sync:share");
     });
   }
+}
+
+for (const mod of OWN) {
+  test(`${mod} is a folder the gallery lists as a mod`, () => {
+    const dir = join(ROOT, mod);
+    for (const f of ["RECIPE.md", "preview.png", `mods/${mod}/main.js`, `mods/${mod}/mod.json`]) {
+      assert.ok(existsSync(join(dir, f)), `${mod}/${f} is missing`);
+    }
+    assert.ok(!existsSync(join(dir, "layouts")), "a mod folder has no layouts/");
+    assert.ok(!existsSync(join(ROOT, "kanso", "mods", mod)), "Kanso doesn't install it: Herdr would dock a second copy");
+  });
 }
 
 for (const mod of STANDALONE) {

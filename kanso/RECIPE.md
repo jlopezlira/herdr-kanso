@@ -771,12 +771,22 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-status`: status bar; "N agents need you" runs `kanso-strip.next-needs-you`.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: lazy file tree via
-    `sh`, git status marks, a file shown in place: Markdown rendered, else
-    read-only code; `changes.js`: git diff and commit; `pr.js`: the pull
-    request panel, read with `gh pr view`, `gh pr diff` and one GraphQL
-    query for unresolved review threads; `preview.js`: one file by full
-    path, `{path, on}`, drawn the same way, read again whenever its folder
-    changes, with Open with, read-again and close buttons); `lib.js`
+    `sh`, git status marks, a file shown in place as read-only code, a
+    Markdown file sent to `preview.js` with `back: "files"`; `changes.js`:
+    git diff and commit; `pr.js`: the pull request panel, read with `gh pr
+    view`, `gh pr diff` and one GraphQL query for unresolved review
+    threads; `preview.js`: one file by full path, `{path, on, back}`, read
+    again whenever its folder changes, with Open with, read-again and close
+    buttons: code read-only, Markdown as `doc.js` `MarkdownDoc`, formatted
+    and edited in place (a double-click opens one block, a table as cells;
+    saved after 700 ms, only when the file on disk is still what was read,
+    else a conflict you resolve; "Source" edits the whole file; links to
+    other Markdown files open here). `blocks.js` splits and joins the
+    blocks. kanso-tabs watches `data/kanso-open` and shows the newest path
+    left there (`markdown-handler.sh install`, macOS: a small app that
+    becomes the handler for `.md` files, only when you run it). The
+    markdown-panel mod is the same editor in a window; `doc.js`, `blocks.js`
+    and the handler are its copies, kept by `npm run sync:share`); `lib.js`
     holds what they share (where the focused pane is, diff rows, folders
     from home, the two
     file renderers: `codeState` is a read-only `EditorState` in the

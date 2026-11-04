@@ -5,7 +5,7 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout } from "herdr";
+import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder } from "herdr";
 import { stateMark, programIcon } from "./marks.js";
 import { walkLayout, commitLayout } from "./layout.js";
 
@@ -91,8 +91,15 @@ function panelContent(id) {
 const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
 const CLEAR = "#00000000";
 
+// Reads and removes the paths waiting in the inbox; returns the newest.
+export async function takeOpens(dir) {
+  const r = await exec("sh", ["-c", 'for f in "$1"/*.path; do [ -f "$f" ] || continue; cat "$f"; printf "\\0"; rm -f "$f"; done', "sh", dir]);
+  const paths = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter((p) => p.startsWith("/"));
+  return paths.pop() ?? null;
+}
+
 export default class Tabs extends View {
-  init() {
+  init(_props, cx) {
     this.pressed = null;
     this.dragPanel = null;
     this.hoverPanel = null;
@@ -101,6 +108,32 @@ export default class Tabs extends View {
     try { given = props(); } catch { /* a host without props */ }
     this.arrange = Boolean(given?.arrange);
     this.panels = storedObject("panels");
+    if (!this.arrange && cx) this.watchOpens(cx);
+  }
+
+  // Markdown opened from outside Herdr (Cmd-click on a path in a terminal,
+  // Finder) when you chose Kanso Markdown as the app for .md files
+  // (markdown-handler.sh): it leaves each path in data/kanso-open, and the
+  // newest one is shown in the preview panel.
+  watchOpens(cx) {
+    const dir = `${appHome()}/data/kanso-open`;
+    cx.spawn(async (cx) => {
+      try {
+        await exec("mkdir", ["-p", dir]);
+        for (;;) {
+          const path = await takeOpens(dir);
+          if (path) this.preview(path);
+          await watchFolder(dir);
+        }
+      } catch { /* no inbox: nothing opens from outside */ }
+    });
+  }
+
+  preview(path) {
+    if (!walkLayout(layout(), "panel-body")) return;
+    this.want = "preview";
+    this.mountedAt = Date.now();
+    commitLayout({ panel: { id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path, on: null } } } });
   }
 
   // Which panel is open now (null: closed), read from the layout.
@@ -140,8 +173,9 @@ export default class Tabs extends View {
     // token-spend): mounted again with the one this version ships.
     else if (mounted && child?.id) {
       const want = panelContent(child.id);
-      // A panel Kanso no longer has (Specs): closed.
-      if (!want) { this.mount(null); return; }
+      // A panel Kanso no longer has (Specs): closed. A file's preview is
+      // opened by Files or Open with, with its own props, not by a button.
+      if (!want) { if (child.id !== "preview") this.mount(null); return; }
       if (want?.mod && child.content?.mod && child.content.mod !== want.mod) this.mount(hidden ? null : child.id);
     }
   }
@@ -240,8 +274,8 @@ export default class Tabs extends View {
     const enabled = shownPanels.map((p) => p.id);
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
-    // A panel turned off while open closes.
-    if (now && !enabled.includes(now) && !this.inFlight(now)) this.mount(null);
+    // A panel turned off while open closes (a file's preview has no button to turn off).
+    if (now && now !== "preview" && !enabled.includes(now) && !this.inFlight(now)) this.mount(null);
     // Icons only: the name opens beside the icon while the pointer is on it,
     // and stays open on the panel that is open.
     // Pressed on one and let go on another, a button moves there; right-click
