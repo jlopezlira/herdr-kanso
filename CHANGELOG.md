@@ -8,6 +8,14 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.5.0] - 2026-11-04
+
+### Added
+
+- What each agent says it is on. Under its name, the step it reports while it works ("Wait for PR #1025 checks to finish", "Running the tests") and, when it finishes, its last words; at rest, what it said last in a fainter tone. Read from the state report the agent already sends Herdr, nothing is asked of it or configured in it: Claude Code sends it; an agent that doesn't shows its title or what it left in git, as before. Every agent's row keeps its second line, so the list never jumps.
+- A step that takes long shows its time after the line, from three minutes on the same one (a CI run, a deploy, a tool that doesn't answer); past fifteen it is in the needs-you color.
+- What still runs under an agent that stopped: a count before its mark, the commands and their times on hover (a monitor loop, a server it started), from one `ps` every 5 s while the window is in front; its MCP servers and keep-awake don't count.
+
 ## [2.4.0] - 2026-11-04
 
 ### Added

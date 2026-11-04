@@ -10,7 +10,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover } from "gpui-base";
-import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration } from "./agents.js";
+import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said } from "./agents.js";
 import { findThreads } from "./threads.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
@@ -134,6 +134,10 @@ export default class Spaces extends View {
     this.showActivity = localStorage.getItem("spaces.activity") !== "off";
     this.sectionsFolded = new Set(stored("spaces.sections", []));
     this.since = stored("spaces.since", {});
+    // What each agent says it is on and since when (agents.js
+    // `trackSteps`), and what still runs under each (`checkTasks`).
+    this.steps = {};
+    this.tasks = {};
     this.held = null;
     this.hoverRow = null;
     this.migrate();
@@ -147,8 +151,39 @@ export default class Spaces extends View {
     // windows, look every 5 s instead of every 0.5 s; nothing is missed, the
     // next look compares against the last one.
     cx.timer.every(500, (cx) => this.checkNew(cx));
+    // What runs under each agent: one `ps` every 5 s in front, 30 s behind.
+    cx.timer.every(5000, (cx) => this.checkTasks(cx));
     // The times beside the rows count in minutes.
     cx.timer.every(30000, (cx) => cx.notify());
+  }
+
+  // What still runs under each agent on this computer (agents.js `tasksOf`,
+  // from its process: the terminal's foreground, else its shell). Each task
+  // keeps the start it was first seen with, so a look that finds the same
+  // ones changes nothing.
+  checkTasks(cx) {
+    const now = Date.now();
+    if (this.psBusy || window().platform === "windows") return;
+    if (!window().active && now - (this.psAt ?? 0) < 30000) return;
+    const mine = terminals().filter((k) => k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
+    if (!mine.length) { if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); } return; }
+    this.psAt = now;
+    this.psBusy = true;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("ps", ["-axo", "pid=,ppid=,etime=,command="]);
+        if (r.code !== 0) return;
+        const next = {};
+        for (const k of mine) {
+          const had = this.tasks[k.address] ?? [];
+          const list = tasksOf(r.stdout, k.foreground?.pid ?? k.pid, Boolean(k.foreground?.pid))
+            .map((x) => ({ pid: x.pid, command: x.command, start: had.find((h) => h.pid === x.pid)?.start ?? now - x.ms }));
+          if (list.length) next[k.address] = list;
+        }
+        const key = (m) => JSON.stringify(Object.entries(m).map(([addr, l]) => [addr, l.map((x) => [x.pid, x.command])]));
+        if (key(next) !== key(this.tasks)) { this.tasks = next; cx.notify(); }
+      } catch {} finally { this.psBusy = false; }
+    });
   }
 
   // One-time fixes to how this rail was left by older versions. Kept out of
@@ -196,8 +231,12 @@ export default class Spaces extends View {
     const was = this.lastSeen ?? {};
     if (cur?.address !== this.held?.address) this.held = cur ? { address: cur.address, done: cur.status === "done" || was[cur.address] === "done" } : null;
     this.lastSeen = Object.fromEntries(list.map((a) => [a.address, a.status]));
-    this.tidyLabels(list, now);
-    if (!next) return;
+    const terms = new Map(terminals().map((k) => [k.address, k]));
+    this.tidyLabels(list, now, terms);
+    // What each says it is on, from its record (the report and its time).
+    const steps = trackSteps(this.steps, list.map((a) => { const k = terms.get(a.address); return { address: a.address, status: a.status, msg: k?.report?.msg, status_ms: k?.status_ms }; }), now);
+    if (steps) this.steps = steps;
+    if (!next) { if (steps) cx.notify(); return; }
     // A turn ended or began: what was said changed.
     if (this.view === "threads") this.threadsAt = 0;
     this.since = next;
@@ -207,9 +246,9 @@ export default class Spaces extends View {
 
   // As T3 Code: looking at a thread marked unread, or woken from a snooze,
   // reads it; new work brings a settled one back. Each label goes once
-  // (`tidying` holds it until herdr-core echoes the change).
-  tidyLabels(list, now) {
-    const terms = new Map(terminals().map((k) => [k.address, k]));
+  // (`tidying` holds it until herdr-core echoes the change). `terms`:
+  // terminals() by address, read once by the caller.
+  tidyLabels(list, now, terms) {
     this.tidying ??= new Map();
     for (const a of list) {
       const k = terms.get(a.address), l = k?.labels ?? {};
@@ -396,21 +435,35 @@ export default class Spaces extends View {
   // What a row shows besides its name: the time in its state, the line of
   // activity (when you keep it on), its tree lines, its space (Agents view).
   more(e, ctx, project = null) {
+    const a = e.a, show = this.showActivity !== false && !a.sub;
     return {
       lines: e.lines,
-      time: e.a.sub ? null : elapsed(e.a, this.since ?? {}, ctx.now),
-      activity: this.showActivity === false || e.a.sub ? null : activityOf(e.a, ctx.digests[e.a.pane]),
+      time: a.sub ? null : elapsed(a, this.since ?? {}, ctx.now),
+      activity: show ? activityOf(a, ctx.digests[a.pane]) : null,
+      // An agent's row keeps its second line, so the list never jumps.
+      steady: show && Boolean(a.status),
+      ...this.extras(a, ctx, show),
       project,
     };
   }
 
-  // Every listed terminal in every space with its name, pin and starter
-  // (`parent`, for sub-agents), from the labels and records in herdr-core.
+  // A long step's time and what still runs under the agent, for any view's row.
+  extras(a, ctx, show = true) {
+    return {
+      faint: a.status === "idle",
+      step: show ? stepOf(a, this.steps, ctx.now) : null,
+      tasks: a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
+    };
+  }
+
+  // Every listed terminal in every space with its name, pin, starter
+  // (`parent`, for sub-agents) and what it says it is on (`msg`, the
+  // agent's report), from the labels and records in herdr-core.
   listed(ps, sp, terms) {
     const byAddress = new Map(terms.map((k) => [k.address, k]));
     return withTerminals(agents(), ps, sp).map((a) => {
       const k = byAddress.get(a.address), l = k?.labels, pin = l?.[PIN_LABEL];
-      return { ...a, parent: k?.parent ?? null, labels: l ?? {}, turn: k?.turn ?? 0, name: l?.[NAME_LABEL] || undefined, pin: pin != null && pin !== "" && !Number.isNaN(Number(pin)) ? Number(pin) : null };
+      return { ...a, parent: k?.parent ?? null, labels: l ?? {}, turn: k?.turn ?? 0, msg: k?.report?.msg ?? null, name: l?.[NAME_LABEL] || undefined, pin: pin != null && pin !== "" && !Number.isNaN(Number(pin)) ? Number(pin) : null };
     });
   }
 
@@ -842,8 +895,10 @@ export default class Spaces extends View {
         badge: up ? "Woke" : null,
         strong: unread || up,
         project: project(a.space),
-        activity: th?.prompt ? `You: ${th.prompt}` : null,
+        // What the agent says it is on, or said last; else the last thing you wrote.
+        activity: said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         roomy: true,
+        ...this.extras(a, ctx),
       });
     };
     return sections.flatMap((s, i) => {

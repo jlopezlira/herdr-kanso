@@ -507,11 +507,24 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     (address -> state and ms), taken every 0.5 s outside render; an agent
     first seen after a start takes its tab's `working_since` or
     `changed_at`, else shows no time. On hover the pin takes the time's
-    place. Under the name, a second line (12px `muted`, the row 50 tall
-    instead of 32): while working or blocked, the agent's own title when
-    the row shows a name you gave it (else the title is the name already);
-    when done, the pane's digest from shared `kanso.digest` in a few words
-    ("+12 −3 · 1 commit · PR #41 failing"). Nothing else gets a line.
+    place. Under the name, a second line (12px `muted`; every agent's row
+    is 50 tall instead of 32, with or without words, so the list never
+    jumps): what the agent says it is on, the first line of the `msg` in
+    its report (`terminals()[].report.msg`, OSC 7501: Claude Code sends
+    the step it is on while it works and its last words when it finishes;
+    at rest, those last words in `dim`). Without one: while working or
+    blocked, the agent's own title when the row shows a name you gave it
+    (else the title is the name already); when done, the pane's digest from
+    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 failing"). After the
+    line, a working agent three minutes on the same step shows its time
+    (`dim`; past fifteen, `blocked`), counted from when the `msg` changed
+    or was first seen (`trackSteps`, `stepOf`; `status_ms` is not it). Before the mark
+    of an agent that isn't working, a count in a pill (18 tall, `foreground`
+    at 12%) when something still runs under it: the direct children of its
+    process (`foreground.pid`, else its shell's one child) from one `ps
+    -axo pid=,ppid=,etime=,command=` every 5 s in front, 30 s behind, less
+    MCP servers and caffeinate; the commands (Claude Code's `eval '…'`
+    wrapper unwrapped) and times in its tooltip (`tasksOf`).
   - Sub-agents (`terminals()` with a `parent`) are listed under their
     parent, depth first, with tree lines: one 23-wide column per level, a
     1px `input` line under the parent's icon centre and an elbow into the

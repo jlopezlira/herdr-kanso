@@ -163,10 +163,21 @@ export function digestLine(d) {
   return parts.length ? parts.join(" · ") : null;
 }
 
-// The line under a row's name, or null for one line. Working or waiting on
-// you: its own title, when the row shows a name you gave it (else the title
-// already is the name). Just finished: what it left in its folder.
+// What the agent says it is on: the message it reports with its state
+// (OSC 7501 `msg`: Claude Code sends the step it is on while it works and
+// its last words when it finishes), its first line.
+export function said(a) {
+  const line = String(a.msg ?? "").split(/\r?\n/).find((l) => l.trim()) ?? "";
+  return line.replace(/\s+/g, " ").trim() || null;
+}
+
+// The line under a row's name, or null for one line. What the agent says
+// it is on, or said last. Without that, working or waiting on you: its own
+// title, when the row shows a name you gave it (else the title already is
+// the name); just finished: what it left in its folder.
 export function activityOf(a, digest) {
+  const msg = said(a);
+  if (msg) return msg;
   if (a.status === "working" || a.status === "blocked") {
     // Its title only when it says more than the name: "fury" under "Fury"
     // says nothing.
@@ -176,6 +187,72 @@ export function activityOf(a, digest) {
   }
   if (a.status === "done") return digestLine(digest);
   return null;
+}
+
+// How long each agent has been on the same step: `steps` maps address ->
+// { msg, at }, stamped when what it says changes, or when first seen (the
+// record's `status_ms` is not the step's time). Returns the new map, or
+// null when nothing changed.
+export function trackSteps(steps, list, now) {
+  let next = null;
+  const listed = new Set();
+  for (const a of list) {
+    if (!a.status) continue;
+    listed.add(a.address);
+    const msg = said(a), was = steps[a.address];
+    if (was && was.msg === msg) continue;
+    next ??= { ...steps };
+    next[a.address] = { msg, at: now };
+  }
+  for (const k of Object.keys(steps)) if (!listed.has(k)) { next ??= { ...steps }; delete next[k]; }
+  return next;
+}
+
+// A step that is taking long: a working agent on the same one for three
+// minutes (a CI run, a deploy, a tool that doesn't answer) shows its time;
+// past fifteen it is marked. { time, stuck } or null.
+export const LONG_STEP = 3 * 60000, STUCK = 15 * 60000;
+export function stepOf(a, steps, now) {
+  if (a.status !== "working") return null;
+  const s = steps?.[a.address];
+  if (!s?.msg || s.at == null) return null;
+  const ms = now - s.at;
+  return ms >= LONG_STEP ? { time: duration(ms), stuck: ms >= STUCK } : null;
+}
+
+// What runs under an agent, from `ps -axo pid=,ppid=,etime=,command=`: its
+// direct children less its own helpers (MCP servers, caffeinate), each
+// { pid, ms (running for), command (as typed) }. `pid` is the agent's
+// process (the terminal's foreground); without one (`fg` false) it is the
+// terminal's shell, whose one child is the agent.
+const HELPER = /\bmcp\b|^caffeinate\b/i;
+export function tasksOf(text, pid, fg = true) {
+  const rows = [];
+  for (const line of text.split("\n")) {
+    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
+    if (m) rows.push({ pid: +m[1], ppid: +m[2], etime: m[3], command: m[4] });
+  }
+  let root = pid;
+  if (!fg) { const kid = rows.find((r) => r.ppid === pid); if (!kid) return []; root = kid.pid; }
+  return rows.filter((r) => r.ppid === root && !HELPER.test(r.command))
+    .map((r) => ({ pid: r.pid, ms: etimeMs(r.etime), command: unwrap(r.command) }));
+}
+
+// ps's elapsed time, "[[dd-]hh:]mm:ss", in ms.
+export function etimeMs(s) {
+  const [d, rest] = s.includes("-") ? s.split("-") : ["0", s];
+  const parts = rest.split(":").map(Number);
+  while (parts.length < 3) parts.unshift(0);
+  return ((Number(d) * 24 + parts[0]) * 3600 + parts[1] * 60 + parts[2]) * 1000;
+}
+
+// The command as typed: Claude Code runs each one as `zsh -c source
+// <snapshot> … && eval '<command>' < /dev/null …`; a plain `sh -c` loses
+// its shell.
+export function unwrap(command) {
+  const ev = command.match(/\beval '((?:[^']|'\\'')*)'/);
+  const inner = ev ? ev[1].replace(/'\\''/g, "'") : command.replace(/^(?:\/\S*\/)?(?:zsh|bash|sh)\s+-l?c\s+/, "");
+  return inner.replace(/\s+/g, " ").trim();
 }
 
 // A sub-agent's state: a sub-agent without a pane isn't in agents(), so
@@ -407,12 +484,18 @@ function shimmer(text, t, address) {
 // reorder its section), hovered, hover(h, cx), pin(cx) (toggles the pin) }.
 // `row` may also carry `actions` ([{ id, icon, tip, act(cx) }], shown on
 // hover in the time's place) and `menu(cx)` (a right-click).
-// `more`: { lines (a sub-agent's tree lines), time, activity, badge (a word
-// in a pill, "Woke"), strong (full ink: unread), project
-// ({ name, fill }: in the Status and Threads views, which mix projects,
-// the project's own avatar leads the row and its name in its color opens
-// the second line), label (the Threads view's own name; a double-click
-// renames the thread, over its own title, instead of the terminal) }.
+// `more`: { lines (a sub-agent's tree lines), time, activity, steady (an
+// agent's row keeps its second line even when there is nothing to say, so
+// the list never jumps), faint (the line in `dim`: what a resting agent
+// said last), step ({ time, stuck }: the time on a long step after the
+// line, marked when stuck), tasks ([{ command, time }]: what still runs
+// under an agent that isn't working, a count before its mark, the
+// commands in its tooltip), badge (a word in a pill, "Woke"), strong (full
+// ink: unread), project ({ name, fill }: in the Status and Threads views,
+// which mix projects, the project's own avatar leads the row and its name
+// in its color opens the second line), label (the Threads view's own
+// name; a double-click renames the thread, over its own title, instead of
+// the terminal) }.
 // Each event has one handler: a second one would replace the first.
 const ROW = 32, TWO = 50, ROOMY = 64;
 export function agentRow(a, indent, t, row, more = {}) {
@@ -423,7 +506,8 @@ export function agentRow(a, indent, t, row, more = {}) {
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
   const pinned = a.pin != null, drag = row?.drag;
   const lines = more.lines ?? [];
-  const two = Boolean(more.activity) || Boolean(project);
+  const two = Boolean(more.activity) || Boolean(project) || Boolean(more.steady);
+  const tasks = a.status === "working" ? [] : more.tasks ?? [];
   // Threads read as conversations and get more room (`more.roomy`).
   const h = two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
   const showPin = Boolean(row?.pin) && (pinned || row.hovered);
@@ -457,11 +541,18 @@ export function agentRow(a, indent, t, row, more = {}) {
       .on_click((_e, cx) => { cx.stop_propagation(); x.act(cx); })
       .child(svg(`mods/kanso-chrome/icons/${x.icon}.svg`).size(13))))
     .when(Boolean(more.time) && !actions.length && !(row?.hovered && row?.pin && !pinned), (el) => el.child(div().flex_none().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.dim).child(more.time)))
+    // Something still runs under an agent that isn't working: how many,
+    // the commands and their times on hover.
+    .when(tasks.length > 0, (el) => el.child(div().id(`tasks-${a.address}`).flex_none().h(18).px(6).rounded_full().bg(t.foreground + "12")
+      .flex().items_center().text_size(11).text_color(t.muted).tooltip(tasks.map((x) => `${x.command.length > 90 ? x.command.slice(0, 89) + "\u2026" : x.command} \u00b7 ${x.time}`).join("\n"))
+      .child(String(tasks.length))))
     .child(statusMark(t, a.status));
   const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
     .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
     .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))
-    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(more.activity)));
+    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(more.faint ? t.dim : t.muted).child(more.activity)))
+    // On the same step for a while: its time after the line, marked when stuck.
+    .when(Boolean(more.step), (el) => el.child(div().flex_none().pl(5).text_color(more.step.stuck ? t.blocked : t.dim).child(more.step.time)));
   const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
   return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
     .items_center().rounded(8).cursor_pointer()

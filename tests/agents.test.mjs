@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
-const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus"];
+const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "etimeMs", "unwrap"];
 const lib = () => load("kanso-spaces/agents.js", NAMES);
 const MIN = 60000;
 
@@ -49,6 +49,59 @@ test("What a row says under its name", async () => {
   assert.equal(activityOf({ status: "idle" }, { files: 2, add: 12, del: 3 }), null, "once seen, one line");
   assert.equal(activityOf({ status: "done" }, { files: 0, ahead: 0, pr: null }), null, "it left nothing");
   assert.equal(digestLine({ files: 1, add: 0, del: 0, ahead: 2, pr: { number: 41, checks: "failing" } }), "1 file · 2 commits · PR #41 failing");
+});
+
+test("What the agent says it is on comes first, its first line", async () => {
+  const { activityOf, said } = await lib();
+  const program = { key: "claude", name: "Claude Code" };
+  assert.equal(said({ msg: "  \n Wait for PR #1025 checks\n  to finish " }), "Wait for PR #1025 checks");
+  assert.equal(said({ msg: "   " }), null);
+  assert.equal(activityOf({ status: "working", title: "Release notes", program, msg: "Running the tests" }), "Running the tests", "over its title");
+  assert.equal(activityOf({ status: "done", msg: "Gallery updated at the same link. Awaiting your word." }, { files: 2, add: 12, del: 3 }),
+    "Gallery updated at the same link. Awaiting your word.", "its last words over the digest");
+  assert.equal(activityOf({ status: "done", msg: "" }, { files: 2, add: 12, del: 3 }), "+12 −3", "no words: the digest");
+  assert.equal(activityOf({ status: "idle", msg: "All green." }), "All green.", "resting: what it said last");
+});
+
+test("A long step shows its time; stuck past fifteen minutes", async () => {
+  const { trackSteps, stepOf } = await lib();
+  const a = (address, status, msg, status_ms) => ({ address, status, msg, status_ms });
+  let steps = trackSteps({}, [a("t1", "working", "Wait for CI", 1000), a("t2", "working", null), a("t3", null, "x")], 5000);
+  assert.deepEqual(clone(steps), { t1: { msg: "Wait for CI", at: 5000 }, t2: { msg: null, at: 5000 } }, "first seen: counted from now; no status, no step");
+  assert.equal(trackSteps(steps, [a("t1", "working", "Wait for CI", 1000), a("t2", "working", null)], 9000), null, "the same step: nothing changed");
+  steps = trackSteps(steps, [a("t1", "working", "Merge it", 9000)], 9000);
+  assert.deepEqual(clone(steps), { t1: { msg: "Merge it", at: 9000 } }, "a new step is stamped now; a gone agent is dropped");
+  assert.equal(stepOf({ address: "t1", status: "working" }, steps, 9000 + 2 * MIN), null, "two minutes: nothing yet");
+  assert.deepEqual(clone(stepOf({ address: "t1", status: "working" }, steps, 9000 + 9 * MIN)), { time: "9m", stuck: false });
+  assert.deepEqual(clone(stepOf({ address: "t1", status: "working" }, steps, 9000 + 20 * MIN)), { time: "20m", stuck: true });
+  assert.equal(stepOf({ address: "t1", status: "done" }, steps, 9000 + 20 * MIN), null, "only while working");
+  assert.equal(stepOf({ address: "t2", status: "working" }, { t2: { msg: null, at: 0 } }, 20 * MIN), null, "no step to time");
+});
+
+test("What still runs under an agent: its children, less its helpers", async () => {
+  const { tasksOf, etimeMs, unwrap } = await lib();
+  const ps = [
+    "96083     1    05:03:28 /bin/zsh -l",
+    "48343 96083    05:03:21 claude --resume 51fb0c9a",
+    "48384 48343    05:03:18 /Users/jj/.local/node/bin/node /opt/homebrew/bin/railway mcp",
+    "67833 48343       01:31 caffeinate -i -t 300",
+    "70001 48343       08:34 /bin/zsh -c source /Users/jj/.claude/shell-snapshots/snap.sh 2>/dev/null || true && eval 'f=/tmp/x.output; until grep -q \"written\\|rror\" \"$f\" 2>/dev/null; do sleep 3; done; cat \"$f\"' < /dev/null && pwd -P >| /tmp/cwd",
+    "70002 70001       00:02 sleep 3",
+    "70003 48343    01-02:00:05 /Applications/Herdr.app/Contents/MacOS/Herdr",
+  ].join("\n");
+  const tasks = tasksOf(ps, 48343);
+  assert.deepEqual(clone(tasks.map((x) => [x.pid, x.ms, x.command])), [
+    [70001, 514000, 'f=/tmp/x.output; until grep -q "written\\|rror" "$f" 2>/dev/null; do sleep 3; done; cat "$f"'],
+    [70003, (26 * 3600 + 5) * 1000, "/Applications/Herdr.app/Contents/MacOS/Herdr"],
+  ], "the monitor loop as typed and the app it started; not the MCP server, caffeinate or the loop's own sleep");
+  assert.deepEqual(clone(tasksOf(ps, 96083, false).map((x) => x.pid)), [70001, 70003], "from the shell: under its one child");
+  assert.deepEqual(clone(tasksOf(ps, 11111, false)), [], "a shell with nothing under it");
+  assert.equal(etimeMs("01:31"), 91000);
+  assert.equal(etimeMs("05:53:18"), (5 * 3600 + 53 * 60 + 18) * 1000);
+  assert.equal(etimeMs("01-05:28:18"), (29 * 3600 + 28 * 60 + 18) * 1000);
+  assert.equal(unwrap("/bin/sh -c npm test -- --watch"), "npm test -- --watch");
+  assert.equal(unwrap("bash -lc 'pnpm dev'"), "'pnpm dev'");
+  assert.equal(unwrap("/bin/zsh -c x && eval 'echo '\\''hi'\\''' < /dev/null"), "echo 'hi'", "a quote inside the command");
 });
 
 test("Sub-agents go under their parent, with tree lines", async () => {
