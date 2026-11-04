@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { ROOT, STANDALONE, differences } from "../scripts/sync-mods.mjs";
+import { SHARED } from "../scripts/sync-share.mjs";
 
 // herdr.dev's indexer skips a whole folder whose RECIPE.md is over 64 KB
 // ("RECIPE.md exceeds 64 KB"), so Kanso dropped out of the gallery at 2.1.0.
@@ -14,6 +15,14 @@ for (const folder of FOLDERS) {
     const bytes = statSync(join(ROOT, folder, "RECIPE.md")).size;
     assert.ok(bytes <= RECIPE_LIMIT, `${folder}/RECIPE.md is ${bytes} bytes; move a part into its own file`);
   });
+}
+
+for (const { source, copies } of SHARED) {
+  for (const copy of copies) {
+    test(`${copy} is the same file as ${source}`, () => {
+      assert.equal(readFileSync(join(ROOT, copy), "utf8"), readFileSync(join(ROOT, source), "utf8"), "run npm run sync:share");
+    });
+  }
 }
 
 for (const mod of STANDALONE) {

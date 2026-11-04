@@ -41,6 +41,8 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, terminals, openOverlay, home, exec, notify } from "herdr";
+import { stateMark } from "./marks.js";
+
 
 // Right after layout.switch, layout() can still return the tree of the layout
 // shown before; setting it would save that tree into kanso.json. Only Kanso's
@@ -676,10 +678,10 @@ export default class Strip extends View {
       .when(Boolean(digest), (el) => el.child(this.digestBadge(t, pane, digest, ink)))
       .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
       .child(div().flex_1())
-      .when(st === "working" && !this.hovered, (el) => el.child(h_flex().w(12).h(12).flex_none().items_center().justify_center().text_size(10).text_color(t.working).child(div().frames(["·", "•", "●", "•"], 450))))
+      .when(st === "working" && !this.hovered, (el) => el.child(stateMark(t, "working")))
       .when(st === "blocked", (el) => el.child(h_flex().flex_none().gap(6).items_center().text_size(11.5).font_medium().text_color(t.foreground)
-        .child(div().size(7).rounded_full().bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })).child("Needs you")))
-      .when(st === "done" && !this.hovered, (el) => el.child(div().size(6).flex_none().rounded_full().bg(t.done)))
+        .child(stateMark(t, "blocked")).child("Needs you")))
+      .when(st === "done" && !this.hovered, (el) => el.child(stateMark(t, "done")))
       .when(this.hovered && !drag, (el) => el
         .when(strip, (el) => el.child(this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground))))
         .when(canSend, (el) => el.child(this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent")))

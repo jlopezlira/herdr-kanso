@@ -10,8 +10,9 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover } from "gpui-base";
-import { agentRow, agentFold, withTerminals, labelsOf, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved } from "./agents.js";
-import { spaces, machines, panes, agents, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration } from "./agents.js";
+import { findThreads } from "./threads.js";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
 // Right after layout.switch, layout() can still return the tree of the layout
 // shown before; setting it would save that tree into kanso.json. Only Kanso's
@@ -116,8 +117,8 @@ function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
-const TREE_ROW = 30;
-const PLAIN_ROW = 32;
+const TREE_ROW = 32;
+const PLAIN_ROW = 36;
 const GUIDE_X = 19; // under the parent's avatar centre: 8px row padding + half its 22px width
 const ELBOW_W = 11;
 const GUIDE_OVERLAP = 4; // the line reaches up into the row above, so it never breaks
@@ -154,12 +155,25 @@ function setRail(open, width) {
 // that draws space avatars): one strong color per hue, light and dark alike.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 
+// The sidebar's three views, by what each is called on the switch. Each
+// says how it is arranged by its own shape, never by a caption: Projects is
+// a tree under each project's square, Status opens each section with the
+// ensō of its state, Threads reads as an inbox of conversations.
+const VIEWS = {
+  spaces: { label: "Projects" },
+  agents: { label: "Status" },
+  threads: { label: "Threads" },
+};
+const label = (address, key, value) => hc(["label", address, `${key}=${value ?? ""}`]).catch(() => {});
+
 export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
 export default class Spaces extends View {
   init(_props, cx) {
+    // Opened as a row's right-click menu (props().menu): nothing else to run.
+    if (props()?.menu) { this.confirmClose = false; return; }
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -177,11 +191,30 @@ export default class Spaces extends View {
     this.machines = [];
     this.folded = new Set(storedArray("machines.folded"));
     this.agentsFolded = new Set(storedArray("spaces.agentsFolded"));
-    // How sessions are listed (ORDERS), and your own order per space.
+    // How a space's agents are listed (ORDERS), and your own order per space.
     const order = localStorage.getItem("spaces.order");
     this.order = order in ORDERS ? order : DEFAULT_ORDER;
+    // Each view sorts in its own terms: Status within its sections, Threads
+    // its conversations (and whether they are grouped by project).
+    const statusOrder = localStorage.getItem("spaces.statusOrder");
+    this.statusOrder = statusOrder in STATUS_ORDERS ? statusOrder : "latest";
+    const threadOrder = localStorage.getItem("spaces.threadOrder");
+    this.threadOrder = threadOrder in THREAD_ORDERS ? threadOrder : "said";
+    this.threadGroup = localStorage.getItem("spaces.threadGroup") === "on";
+    this.shelvesOpen = new Set(storedArray("spaces.shelvesOpen"));
     this.custom = storedObject("spaces.custom");
     this.orderOpen = false;
+    // What you chose to see: the Spaces or the Agents view, the switch
+    // between them, and the line of activity under each agent. Each agent's
+    // state and since when, kept across restarts (agents.js `track`).
+    const view = localStorage.getItem("spaces.view");
+    this.view = view in VIEWS ? view : "spaces";
+    this.threads = null; // terminal -> its conversation (threads.js), once read
+    this.showSwitch = localStorage.getItem("spaces.switch") !== "off";
+    this.showActivity = localStorage.getItem("spaces.activity") !== "off";
+    this.sectionsFolded = new Set(storedArray("spaces.sections"));
+    this.since = storedObject("spaces.since");
+    this.held = null;
     this.hoverRow = null;
     this.migrate();
     this.refreshMachines(cx);
@@ -194,6 +227,8 @@ export default class Spaces extends View {
     // windows, look every 5 s instead of every 0.5 s; nothing is missed, the
     // next look compares against the last one.
     cx.timer.every(500, (cx) => this.checkNew(cx));
+    // The times beside the rows count in minutes.
+    cx.timer.every(30000, (cx) => cx.notify());
   }
 
   // One-time fixes to how this rail was left by older versions. Kept out of
@@ -217,11 +252,50 @@ export default class Spaces extends View {
     const now = Date.now();
     if (!window().active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
+    this.trackAgents(now, cx);
+    // The Threads view reads the conversations while it shows: every 15 s
+    // with the window in front, every minute behind it.
+    if (this.view === "threads" && now - (this.threadsAt ?? 0) > (window().active ? 15000 : 60000)) this.refreshThreads(cx);
     const sp = spaces();
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     const due = this.due(now, sp, panes());
     if (due.size) this.refreshGit(due, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
+  }
+
+  // Since when each agent is in its state, and the done agent you are
+  // looking at (it stays in Done in the Agents view until you leave it).
+  trackAgents(now, cx) {
+    const list = agents();
+    const tabs = new Map(spaces().flatMap((s) => s.tabs ?? []).map((tb) => [tb.id, tb]));
+    const next = track(this.since, list, now, (id) => tabs.get(id));
+    const cur = list.find((a) => a.focused);
+    // Looking turns done into idle at once: what it was a moment ago counts.
+    const was = this.lastSeen ?? {};
+    if (cur?.address !== this.held?.address) this.held = cur ? { address: cur.address, done: cur.status === "done" || was[cur.address] === "done" } : null;
+    this.lastSeen = Object.fromEntries(list.map((a) => [a.address, a.status]));
+    this.tidyLabels(list, now);
+    if (!next) return;
+    // A turn ended or began: what was said changed.
+    if (this.view === "threads") this.threadsAt = 0;
+    this.since = next;
+    localStorage.setItem("spaces.since", JSON.stringify(next));
+    cx.notify();
+  }
+
+  // As T3 Code: looking at a thread marked unread, or woken from a snooze,
+  // reads it; new work brings a settled one back. Each label goes once
+  // (`tidying` holds it until herdr-core echoes the change).
+  tidyLabels(list, now) {
+    const terms = new Map(terminals().map((k) => [k.address, k]));
+    this.tidying ??= new Map();
+    for (const a of list) {
+      const k = terms.get(a.address), l = k?.labels ?? {};
+      const drop = (key) => { const id = `${a.address}:${key}`; if (now - (this.tidying.get(id) ?? 0) < 3000) return; this.tidying.set(id, now); label(a.address, key); };
+      if (a.focused && isUnread(l)) drop(UNREAD_LABEL);
+      if (a.focused && woke({ labels: l }, now)) drop(SNOOZE_LABEL);
+      if (backFromSettled({ ...a, labels: l, turn: k?.turn })) drop(SETTLED_LABEL);
+    }
   }
 
   // Places whose git could have changed: new ones (a new space, a cd), where a
@@ -373,18 +447,19 @@ export default class Spaces extends View {
     return list.map((a, i) => [a, i]).sort((x, y) => (x[0].tab_index - y[0].tab_index) || (pos(x[0]) - pos(y[0])) || (x[1] - y[1])).map(([a]) => a);
   }
 
-  // The rows of a space. In the "as on screen" order, the panes that share
-  // a strip column (stacked one over another) are held together in one soft
-  // slab, so the sidebar shows what is linked on screen.
-  stacked(mine, indent, t, space) {
+  // The rows of a space, each agent with its sub-agents under it
+  // (`entries`, from agents.js `nest`). In the "as on screen" order, the
+  // panes that share a strip column (stacked one over another) are held
+  // together in one soft slab, so the sidebar shows what is linked on screen.
+  stacked(entries, mine, indent, t, space, ctx) {
     const state = shared("strip.state") ?? {};
-    const colOf = (a) => { if (this.order !== "screen" || a.pin != null) return null; const c = (state[a.tab]?.cols ?? []).find((k) => k.panes?.includes(a.pane)); return c && c.panes.length > 1 ? `${a.tab}:${c.panes[0]}` : null; };
+    const colOf = ({ a }) => { if (this.order !== "screen" || a.pin != null || !a.pane) return null; const c = (state[a.tab]?.cols ?? []).find((k) => k.panes?.includes(a.pane)); return c && c.panes.length > 1 ? `${a.tab}:${c.panes[0]}` : null; };
     const out = [];
-    for (let i = 0; i < mine.length;) {
-      const key = colOf(mine[i]);
+    for (let i = 0; i < entries.length;) {
+      const key = colOf(entries[i]);
       let j = i + 1;
-      while (key && j < mine.length && colOf(mine[j]) === key) j++;
-      const rows = mine.slice(i, j).map((a) => agentRow(a, indent, t, this.rowOf(a, mine, space)));
+      while (key && j < entries.length && colOf(entries[j]) === key) j++;
+      const rows = entries.slice(i, j).map((e) => agentRow(e.a, indent, t, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null, this.more(e, ctx)));
       if (key && rows.length > 1) out.push(v_flex().id(`stack-${key}`).flex_none().rounded(6).bg(t.foreground + "08").children(rows));
       else out.push(...rows);
       i = j;
@@ -392,11 +467,32 @@ export default class Spaces extends View {
     return out;
   }
 
+  // What a row shows besides its name: the time in its state, the line of
+  // activity (when you keep it on), its tree lines, its space (Agents view).
+  more(e, ctx, project = null) {
+    return {
+      lines: e.lines,
+      time: e.a.sub ? null : elapsed(e.a, this.since ?? {}, ctx.now),
+      activity: this.showActivity === false || e.a.sub ? null : activityOf(e.a, ctx.digests[e.a.pane]),
+      project,
+    };
+  }
+
+  // Every listed terminal in every space with its name, pin and starter
+  // (`parent`, for sub-agents), from the labels and records in herdr-core.
+  listed(ps, sp, terms) {
+    const byAddress = new Map(terms.map((k) => [k.address, k]));
+    return withTerminals(agents(), ps, sp).map((a) => {
+      const k = byAddress.get(a.address), l = k?.labels, pin = l?.[PIN_LABEL];
+      return { ...a, parent: k?.parent ?? null, labels: l ?? {}, turn: k?.turn ?? 0, name: l?.[NAME_LABEL] || undefined, pin: pin != null && pin !== "" && !Number.isNaN(Number(pin)) ? Number(pin) : null };
+    });
+  }
+
   // ---- Order: pins, your order, the chosen order -------------------------------
 
-  setOrder(mode, cx) {
-    this.order = mode;
-    localStorage.setItem("spaces.order", mode);
+  setOrder(key, value, cx) {
+    this[key] = value;
+    localStorage.setItem(`spaces.${key}`, key === "threadGroup" ? (value ? "on" : "off") : value);
     this.orderOpen = false;
     cx.notify();
   }
@@ -441,6 +537,7 @@ export default class Spaces extends View {
         if (changed) cx.notify();
       },
       pin: () => this.togglePin(a, mine),
+      menu: this.rowFor(a).menu,
       drag: section ? {
         target: ok && this.overAgent === a.address ? side() : null,
         down: () => { this.draggedAgent = { address: a.address, space, section, at: mine.indexOf(a) }; this.overAgent = null; },
@@ -449,41 +546,82 @@ export default class Spaces extends View {
     };
   }
 
-  // The order picker in the sidebar's top row: the SDK's Popover over a
-  // list of the orders, a check on the current one.
+  // Turning the switch or the activity line on or off; with the switch off,
+  // the sidebar stays on Spaces.
+  setShown(key, on, cx) {
+    if (key === "switch") { this.showSwitch = on; if (!on) this.setView("spaces"); }
+    else this.showActivity = on;
+    localStorage.setItem(`spaces.${key}`, on ? "on" : "off");
+    cx.notify();
+  }
+
+  setView(view, cx) {
+    this.view = view;
+    localStorage.setItem("spaces.view", view);
+    if (view === "threads" && cx) this.refreshThreads(cx);
+  }
+
+  // The conversations of the agents on this computer, read in the
+  // background (threads.js); a file that hasn't grown isn't read again.
+  refreshThreads(cx) {
+    this.threadsAt = Date.now();
+    if (this.readingThreads) return;
+    this.readingThreads = true;
+    // Agents on this computer (another machine's files are not here).
+    const list = agents().filter((a) => !a.address.includes("/")).map((a) => ({ address: a.address, app: a.app }));
+    cx.spawn(async (cx) => {
+      try { this.threads = await findThreads(list, this.threads ?? {}); } catch { this.threads ??= {}; }
+      finally { this.readingThreads = false; }
+      cx.notify();
+    });
+  }
+
+  // The order and view picker in the sidebar's top row: the SDK's Popover.
+  // What it sorts follows the view: in Projects each space's agents, in
+  // Status the agents within each section, in Threads the conversations
+  // (and whether they are grouped by project). Then what to show.
   orderPicker(t) {
+    const view = this.showSwitch === false ? "spaces" : this.view;
+    const [orders, current, key, head] = view === "agents" ? [STATUS_ORDERS, this.statusOrder, "statusOrder", "In each section, by"]
+      : view === "threads" ? [THREAD_ORDERS, this.threadOrder, "threadOrder", "Threads, pinned first, then by"]
+      : [ORDERS, this.order, "order", "Agents, pinned first, then by"];
+    const plain = current === Object.keys(orders)[0] || (view === "spaces" && current === DEFAULT_ORDER);
     const trigger = div().id("spaces-order").size(28).flex_none().rounded(6).flex().items_center().justify_center().cursor_pointer()
-      .text_color(this.order === DEFAULT_ORDER ? t.dim : t.muted).tooltip(`Order: ${ORDERS[this.order]}`)
+      .text_color(plain ? t.dim : t.muted).tooltip(`Sort: ${orders[current]}`)
       .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .child(svg("mods/kanso-chrome/icons/sort.svg").size(14));
-    const item = (mode) => h_flex().id(`spaces-order-${mode}`).h(28).px(8).gap(8).items_center().rounded(6).cursor_pointer().text_size(12.5)
-      .text_color(mode === this.order ? t.foreground : t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_click((_e, cx) => this.setOrder(mode, cx))
-      .child(div().flex_1().child(ORDERS[mode]))
-      .when(mode === this.order, (el) => el.child(div().text_size(11).child("\u2713")));
+    const tick = (on) => (el) => el.when(on, (el) => el.child(div().text_size(11).child("\u2713")));
+    const line = (id, text, on, act) => h_flex().id(id).h(30).px(8).gap(8).items_center().rounded(6).cursor_pointer().text_size(12.5)
+      .text_color(on ? t.foreground : t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .on_click((_e, cx) => act(cx)).child(div().flex_1().child(text)).map(tick(on));
+    const title = (text) => div().h(26).px(8).flex().items_center().text_size(11.5).text_color(t.dim).child(text);
     return Popover.new("spaces-order-popover").trigger(trigger).anchor("top_left")
       .open(this.orderOpen).on_open_change((open, cx) => { this.orderOpen = open; cx.notify(); })
-      .content(v_flex().w(200).p(4).gap(1).rounded(8).bg(t.popover).border_1().border_color(t.border)
-        .child(div().h(24).px(8).flex().items_center().text_size(11).text_color(t.dim).child("Sessions, pinned first, then by"))
-        .children(Object.keys(ORDERS).map(item)));
+      .content(v_flex().w(232).p(5).gap(1).rounded(10).bg(t.popover).border_1().border_color(t.border)
+        .child(title(head))
+        .children(Object.keys(orders).map((mode) => line(`spaces-order-${mode}`, orders[mode], mode === current, (cx) => this.setOrder(key, mode, cx))))
+        .when(view === "threads", (el) => el.child(line("spaces-group", "Grouped by project", this.threadGroup, (cx) => this.setOrder("threadGroup", !this.threadGroup, cx))))
+        .child(div().mx(8).my(5).h(1).bg(t.border))
+        .child(title("Show"))
+        .child(line("spaces-show-activity", "What each agent is on", this.showActivity !== false, (cx) => this.setShown("activity", this.showActivity === false, cx)))
+        .child(line("spaces-show-switch", "Projects, Status and Threads", this.showSwitch !== false, (cx) => this.setShown("switch", this.showSwitch === false, cx))));
   }
 
   // The rows, under a header per machine once one isn't this computer.
-  // A session's name is the terminal's `kanso.name` label when it has one
+  // An agent's name is the terminal's `kanso.name` label when it has one
   // (a double-click on the row opens the rename dialog).
-  grouped(t, collapsed, sp, ps) {
+  grouped(t, collapsed, sp, ps, ctx) {
     const rows = this.ordered(sp, ps);
     const live = machines();
-    const labels = labelsOf();
-    const all = withTerminals(agents(), ps, sp).map((a) => {
-      const l = labels.get(a.address), pin = l?.[PIN_LABEL];
-      return { ...a, name: l?.[NAME_LABEL] || undefined, pin: pin != null && pin !== "" && !Number.isNaN(Number(pin)) ? Number(pin) : null };
-    });
+    const all = this.listed(ps, sp, ctx.terms);
     const draw = (r) => {
       if (collapsed) return this.compact(r, t);
       const mine = orderSessions(this.inStripOrder(all.filter((a) => a.space === r.w.id)), this.order, this.custom[r.w.id] ?? []);
+      const entries = nest(mine, ctx.terms);
       const open = !this.agentsFolded.has(r.w.id);
-      return [this.row(r, t, mine), ...(open ? this.stacked(mine, r.tree ? CHILD_PAD : 0, t, r.w.id) : [])];
+      // A breath of space between projects (a worktree stays close to its checkout).
+      const gap = r.tree || r === rows[0] ? [] : [div().h(10).flex_none()];
+      return [...gap, this.row(r, t, entries.map((e) => e.a)), ...(open ? this.stacked(entries, mine, r.tree ? CHILD_PAD : 0, t, r.w.id, ctx) : [])];
     };
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].sort();
     const loading = m => {
@@ -584,7 +722,7 @@ export default class Spaces extends View {
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(6)
+      .rounded(8)
       .cursor_pointer()
       .when(on, (el) => el.bg(wash))
       .when(!on, (el) => el.hover((s) => s.bg(washHover)))
@@ -615,7 +753,7 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(rt.muted)))
           .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(fill + "26").items_center().justify_center().text_size(12).font_semibold().text_color(fill).child(w.name[0]?.toUpperCase() ?? "?")))
-          .child(div().flex_shrink(0).max_w(150).truncate().text_color(tree && !on ? rt.muted : rt.foreground).when(on, (el) => el.font_medium()).child(w.name))
+          .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? rt.muted : rt.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, rt) : div().flex_1())
           .when(mine.length > 0, (el) => el.child(this.fold(w, mine, rt))),
       );
@@ -649,8 +787,209 @@ export default class Spaces extends View {
     );
   }
 
+  // The Status view: every agent in every space by what it needs from you
+  // (agents.js `bySection`). Each section opens with the ensō of its state
+  // in that state's color, its name and its count, after a breath of space:
+  // the mark says how the list is arranged. A header folds its section.
+  agentsView(t, sp, ps, ctx) {
+    const entries = nest(this.inStripOrder(this.listed(ps, sp, ctx.terms)), ctx.terms);
+    const held = this.held?.done ? this.held.address : null;
+    const sections = bySection(entries, this.since ?? {}, held, this.statusOrder);
+    if (!sections.length) return [this.empty(t, "No agents yet", "Start one from + in the tab bar; it shows here by what it needs from you.")];
+    const project = this.projectOf(sp, t);
+    return sections.flatMap((s, i) => {
+      const open = !this.sectionsFolded.has(s.id);
+      const count = s.entries.filter((e) => !e.lines.length).length;
+      const head = this.sectionHead(t, `section-${s.id}`, i, open, () => {
+        open ? this.sectionsFolded.add(s.id) : this.sectionsFolded.delete(s.id);
+        localStorage.setItem("spaces.sections", JSON.stringify([...this.sectionsFolded]));
+      }, s.id === "other" ? null : statusMark(t, s.id, true), s.label, count, s.id === "blocked" ? t.blocked : t.foreground);
+      const rows = open ? s.entries.map((e) => agentRow(e.a, FLUSH, t, this.rowFor(e.a), this.more(e, ctx, e.lines.length ? null : project(e.a.space)))) : [];
+      return [head, ...rows];
+    });
+  }
+
+  // A section's header: [mark] name count ........ chevron. 13px semibold,
+  // the first flush with the top, the rest after 14px of space; no rules.
+  sectionHead(t, id, i, open, toggle, mark, name, count, ink) {
+    return h_flex().id(id).h(i ? 44 : 32).pt(i ? 12 : 0).px(12).flex_none().gap(10).items_center()
+      .cursor_pointer().text_size(13).font_semibold().text_color(ink)
+      .on_click((_e, cx) => { toggle(); cx.notify(); })
+      .when(Boolean(mark), (el) => el.child(mark))
+      .child(div().child(name))
+      .when(count != null, (el) => el.child(div().font_normal().text_color(t.dim).child(String(count))))
+      .child(div().flex_1())
+      .child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim));
+  }
+
+  // While Threads reads the conversations: the view's own silhouette, as
+  // Spend loads (the rows' square, title, time and second line in the
+  // faintest tone, breathing slowly; one native loop on the whole shape).
+  silhouette(t) {
+    const block = (w, h, radius = 3) => div().w(w).h(h).flex_none().rounded(radius).bg(t.border);
+    const row = (i) => h_flex().h(64).mb(6).px(12).gap(12).items_center()
+      .child(v_flex().h(64).pt(11).flex_none().child(block(20, 20, 6)))
+      .child(v_flex().flex_1().min_w(0).gap(9)
+        .child(h_flex().items_center().child(block([132, 104, 150, 92, 118][i], 10)).child(div().flex_1()).child(block(22, 8)))
+        .child(block([170, 138, 120, 160, 100][i], 8)));
+    return v_flex().w_full().loop("opacity", { from: 0.35, to: 0.8, period: 1800 }).children([0, 1, 2, 3, 4].map(row));
+  }
+
+  // An empty view: what will show here and how to get there, two lines.
+  empty(t, title, body) {
+    return v_flex().px(10).py(12).gap(4)
+      .child(div().text_size(13).font_medium().text_color(t.foreground).child(title))
+      .child(div().text_size(12).text_color(t.muted).child(body));
+  }
+
+  // A project as the Status and Threads rows show it: its name and its
+  // avatar's color (the same square as in Projects).
+  projectOf(sp, t) {
+    const byId = new Map(sp.map((s) => [s.id, s]));
+    return (id) => { const w = byId.get(id); return w ? { name: w.name, fill: this.fill(w, t) } : null; };
+  }
+
+  // What a row in any view answers to besides a click: hover (for its
+  // actions) and a right-click, the thread menu. `actions`: Threads' quick
+  // ones on hover.
+  rowFor(a, actions = null, extra = {}) {
+    return {
+      hovered: this.hoverRow === a.address,
+      hover: (h, cx) => { if (h ? this.hoverRow !== a.address : this.hoverRow === a.address) { this.hoverRow = h ? a.address : null; cx.notify(); } },
+      menu: () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 460, at: "pointer",
+        props: { menu: { address: a.address, view: this.view, title: extra.title ?? null, session: extra.session ?? null } } }),
+      actions,
+      ...extra.row,
+    };
+  }
+
+  // Projects | Status | Threads, under the top row. Status carries a dot
+  // while an agent needs you and you are on another view.
+  viewSwitch(t, sp) {
+    const asks = sp.some((s) => s.status === "blocked");
+    const seg = (view) => {
+      const on = this.view === view;
+      return h_flex().id(`spaces-view-${view}`).flex_1().h(28).gap(6).items_center().justify_center().rounded(7).cursor_pointer()
+        .text_size(12.5).font_medium().text_color(on ? t.foreground : t.muted).border_1().border_color(on ? t.border : t.foreground + "00")
+        .when(on, (el) => el.bg(t.raised ?? t.selected))
+        .when(!on, (el) => el.hover((s) => s.text_color(t.foreground)))
+        .on_click((_e, cx) => { this.setView(view, cx); cx.notify(); })
+        .child(div().child(VIEWS[view].label))
+        .when(view === "agents" && asks && !on, (el) => el.child(div().size(6).rounded_full().bg(t.blocked)));
+    };
+    return h_flex().mx(18).mt(4).mb(14).p(3).gap(2).flex_none().rounded(10).bg(t.foreground + "0a").children(Object.keys(VIEWS).map(seg));
+  }
+
+  // The Threads view, as T3 Code's sidebar: the conversations of the agents
+  // on this computer, each named on its own (the title its agent gives it,
+  // kept up to date as it goes, else the first thing you wrote; Rename puts
+  // yours over it). Pinned up top; then the rest by your last message (or
+  // when they started), woken ones first, or one group per project; then,
+  // folded, Snoozed and Settled. Each row: the title, the time, its state;
+  // under it the project in its color and the last thing you wrote. Hovered:
+  // Settle (or bring back) and Pin; right-click for the rest.
+  threadsView(t, sp, ps, ctx) {
+    if (!this.threads) return [this.silhouette(t)];
+    const project = this.projectOf(sp, t);
+    const rows = this.listed(ps, sp, ctx.terms)
+      .filter((a) => !a.address.includes("/") && (this.threads[a.address] || a.program?.agent || a.status))
+      .map((a) => ({ a, th: this.threads[a.address] ?? null }));
+    if (!rows.length) return [this.empty(t, "No conversations open", "Start Claude Code or Codex in a tab; each conversation shows here, named on its own.")];
+    const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
+    const row = ({ a, th }) => {
+      const when = (this.threadOrder === "started" ? th?.began : th?.said ?? th?.at) ?? this.since?.[a.address]?.at;
+      const unread = isUnread(a.labels), up = woke(a, ctx.now), settled = Boolean(settledOf(a.labels)) && !backFromSettled(a);
+      const snoozed = snoozedUntil(a.labels) > ctx.now;
+      const free = a.status !== "working" && a.status !== "blocked";
+      const actions = [
+        settled ? { id: "unsettle", icon: "undo", tip: "Bring back", act: () => label(a.address, SETTLED_LABEL) }
+          : free && a.pin == null ? { id: "settle", icon: "check", tip: "Settle", act: () => label(a.address, SETTLED_LABEL, `${Date.now()}:${a.turn ?? 0}`) } : null,
+        { id: "pin", icon: "pin", tip: a.pin != null ? "Unpin" : "Pin to the top", act: () => this.pinThread(a) },
+      ].filter(Boolean);
+      return agentRow(a, FLUSH, t, this.rowFor(a, actions, { title: th?.title ?? null, session: th?.file ?? null }), {
+        label: a.labels?.[THREAD_LABEL] || th?.title || agentLabel(a),
+        time: snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : when ? duration(Math.max(0, ctx.now - when)) : null,
+        badge: up ? "Woke" : null,
+        strong: unread || up,
+        project: project(a.space),
+        activity: th?.prompt ? `You: ${th.prompt}` : null,
+        roomy: true,
+      });
+    };
+    return sections.flatMap((s, i) => {
+      const folds = Boolean(s.folds);
+      const open = folds ? this.shelvesOpen.has(s.id) : !this.sectionsFolded.has(`thread-${s.id}`);
+      const toggle = () => {
+        if (folds) { open ? this.shelvesOpen.delete(s.id) : this.shelvesOpen.add(s.id); localStorage.setItem("spaces.shelvesOpen", JSON.stringify([...this.shelvesOpen])); }
+        else { open ? this.sectionsFolded.add(`thread-${s.id}`) : this.sectionsFolded.delete(`thread-${s.id}`); localStorage.setItem("spaces.sections", JSON.stringify([...this.sectionsFolded])); }
+      };
+      const p = s.project ? project(s.project) : null;
+      const mark = p ? h_flex().size(18).flex_none().rounded(5).bg(p.fill + "2e").items_center().justify_center().text_size(10.5).font_semibold().text_color(p.fill).child(p.name[0]?.toUpperCase() ?? "?")
+        : s.id === "pinned" ? svg("mods/kanso-chrome/icons/pin.svg").size(13).flex_none().text_color(t.muted)
+        : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(14).flex_none().text_color(t.muted)
+        : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(14).flex_none().text_color(t.muted) : null;
+      // The ungrouped active list needs no header: it is the inbox itself.
+      const head = s.id === "active" ? (i ? [div().h(12).flex_none()] : [])
+        : [this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, p ? p.name : s.label, s.rows.length, folds ? t.muted : t.foreground)];
+      return [...head, ...(open || s.id === "active" ? s.rows.map(row) : [])];
+    });
+  }
+
+  // Pinning a thread puts it last among the pinned; again unpins it.
+  pinThread(a) {
+    if (a.pin != null) { label(a.address, PIN_LABEL); return; }
+    const last = Math.max(0, ...terminals().map((k) => Number(k.labels?.[PIN_LABEL]) || 0));
+    label(a.address, PIN_LABEL, last + 1);
+  }
+
+  // A row's right-click menu, opened as this mod's own popup: what T3 Code
+  // offers on a thread, in Herdr's terms, kept as labels on the terminal in
+  // herdr-core (so every window and a restart agree). Close ends the
+  // agent's terminal after a second click; no conversation file is touched.
+  menuView(t) {
+    const m = props().menu, close = () => closeOverlay(props().overlay);
+    const k = terminals().find((x) => x.address === m.address);
+    const p = panes().find((x) => x.terminal === m.address);
+    const a = agents().find((x) => x.address === m.address);
+    const l = k?.labels ?? {}, now = Date.now();
+    const pinned = l[PIN_LABEL] != null && l[PIN_LABEL] !== "";
+    const settled = Boolean(settledOf(l)), snoozed = snoozedUntil(l) > now;
+    const free = a?.status !== "working" && a?.status !== "blocked";
+    const item = (id, text, act, { icon = null, hint = null, ink = t.foreground, keep = false } = {}) =>
+      h_flex().id(`menu-${id}`).h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
+        .hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); })
+        .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
+        .child(div().flex_1().truncate().child(text))
+        .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
+    const rule = () => div().mx(8).my(4).h(1).bg(t.border);
+    const copy = (text) => (cx) => cx.write_to_clipboard?.(text);
+    const session = m.session ? m.session.split("/").pop().replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
+    const title = m.title ?? l[THREAD_LABEL] ?? null;
+    return v_flex().id("spaces-menu").w_full().p(5).gap(1).bg(t.popover).text_size(13)
+      .when(Boolean(p), (el) => el.child(item("open", "Open", () => run("pane.focus", { pane: p.pane }), { icon: "chevron-right" })))
+      .child(item("pin", pinned ? "Unpin" : "Pin to the top", () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }), { icon: "pin" }))
+      .when(settled, (el) => el.child(item("unsettle", "Bring back", () => label(m.address, SETTLED_LABEL), { icon: "undo" })))
+      .when(!settled && free, (el) => el.child(item("settle", "Settle", () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`), { icon: "check" })))
+      .when(snoozed, (el) => el.child(item("wake", "Wake now", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })))
+      .when(!snoozed, (el) => el.child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Snooze"))
+        .children(snoozePresets(now).map((x) => item(`snooze-${x.id}`, x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when }))))
+      .child(item("unread", isUnread(l) ? "Mark read" : "Mark unread", () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1"), { icon: "enso" }))
+      .child(item("rename", m.view === "threads" ? "Rename thread\u2026" : "Rename\u2026",
+        () => renameTerminal(m.address, m.view === "threads" ? (l[THREAD_LABEL] || title || "") : (l[NAME_LABEL] || a?.title || ""), m.view === "threads")))
+      .child(rule())
+      .when(Boolean(p?.cwd), (el) => el.child(item("copy-path", "Copy folder", copy(p.cwd), { icon: "copy" })))
+      .when(Boolean(p?.branch), (el) => el.child(item("copy-branch", "Copy branch", copy(p.branch), { icon: "branch" })))
+      .when(Boolean(session), (el) => el.child(item("copy-id", "Copy conversation id", copy(session), { icon: "copy" })))
+      .child(rule())
+      .child(this.confirmClose
+        ? item("close", "Click again to close it", () => run("terminal.kill", { terminal: m.address }), { icon: "close", ink: t.blocked })
+        : item("close", a ? "Close agent" : "Close terminal", (cx) => { this.confirmClose = true; }, { icon: "close", ink: t.blocked, keep: true }));
+  }
+
   render() {
     const t = theme();
+    if (props()?.menu) return this.menuView(t);
     const collapsed = shared("sidebar.collapsed") === true;
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
     const sp = spaces();
@@ -680,6 +1019,10 @@ export default class Spaces extends View {
       setRail(collapsed, collapsed ? (shared("sidebar.width") ?? SIDEBAR_W) : collapsedW());
     };
     const active = sp.find((p) => p.active);
+    // Read once per draw: every terminal's record, the panes' digests, now.
+    const ctx = { terms: terminals(), digests: shared("kanso.digest") ?? {}, now: Date.now() };
+    const switchShown = this.showSwitch !== false;
+    const view = !collapsed && switchShown ? this.view : "spaces";
     const plus = quiet("space-new", "plus", "New space", () => run("space.new", { machine: active?.machine ?? "" }));
     const hide = quiet("sidebar-toggle", "sidebar", collapsed ? "Show sidebar" : "Hide sidebar", toggle);
     const search = quiet("search", "search", "Search", () => run("mod.open", { name: "picker" }));
@@ -701,8 +1044,9 @@ export default class Spaces extends View {
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
-      .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
+      .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
+      .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : view === "threads" ? 6 : 1).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.draggedAgent = null; cx.notify(); })
-        .children(this.grouped(t, collapsed, sp, ps)));
+        .children(view === "agents" ? this.agentsView(t, sp, ps, ctx) : view === "threads" ? this.threadsView(t, sp, ps, ctx) : this.grouped(t, collapsed, sp, ps, ctx)));
   }
 }

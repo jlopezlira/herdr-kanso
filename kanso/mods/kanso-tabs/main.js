@@ -6,6 +6,8 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout } from "herdr";
+import { stateMark } from "./marks.js";
+
 
 // Right after layout.switch, layout() can still return the tree of the layout
 // shown before; setting it would save that tree into kanso.json. Only Kanso's
@@ -333,8 +335,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }))
         .when(Boolean(program?.icon), el => el.child((program.tint ? svg(program.icon).size(15).text_color(t.muted) : image(program.icon).size(15)).opacity(c.active ? 1 : 0.8)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(c.status === "working", el => el.child(h_flex().w(12).h(12).flex_none().items_center().justify_center().text_size(10).text_color(t.working).child(div().frames(["\u00b7", "\u2022", "\u25cf", "\u2022"], 450))))
-        .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded_full().bg(t[c.status])))
+        .when(["working", "blocked", "done"].includes(c.status), el => el.child(stateMark(t, c.status)))
         .when(c.active && shown.length > 1, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).hover(s => s.text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/kanso-chrome/icons/close.svg").size(13))));
     };
     const panel = find(tree, "panel"), body = find(tree, "panel-body");

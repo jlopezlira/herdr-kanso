@@ -447,23 +447,30 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   after the branch: files, +/-, commits, #number with a checks dot; the
   tooltip says it in words. The header's send button opens `kanso-send`.
 
-- **Agent status**:
-  - Working: a breathing dot in `working`, a 10px glyph cycling
-    `· • ● •` every 450 ms (`.frames`). It shows on the tab, in the pane
-    header, on the agent row and on the status bar dot. It is never a
-    spinning icon.
-  - Blocked: a `blocked` dot. The pane header adds the text "Needs you",
-    the status bar says "N agent(s) need you", and a collapsed space shows
-    its corner dot.
-  - Done: a 6 `done` dot (tab, header, corner dot).
-  - Idle: a 7 ring in `idle` on agent rows, with nothing on the tab or
-    header.
+- **Agent status**, one mark everywhere: the tabs, the pane headers, the
+  status bar and the sidebar draw it from one file, kanso-spaces/marks.js
+  `stateMark` (`npm run sync:share` copies it into kanso-tabs, kanso-strip
+  and kanso-status; a test checks the copies). An ensō, the brush circle
+  (`kanso-chrome/icons/enso*.svg`, tinted), 13px (12 in the status bar, 15
+  in the sidebar):
+  - Working: the idle ring as a faint track (r 5.6 in 16, 1.5 stroke at
+    22%) with a 100° arc running on it (1.7 stroke, round caps;
+    `icons/working.svg`), in `working`, turning once every 0.9 s
+    (`.spin(900)`). No other spinner for an agent's state.
+  - Blocked: a solid `blocked` disc with a bold `chrome` "!". The pane
+    header adds the text "Needs you", the status bar says "N agent(s) need
+    you", and a collapsed space shows its corner dot.
+  - Done: the circle closed, in `done`.
+  - Idle: a thin even ring in `idle` at 70%, on sidebar rows (and in the
+    status bar when nothing works); nothing on the tab or header.
+  - The 7px corner dots on avatars (the collapsed rail, the strip's edge
+    tabs) stay dots: a badge, too small for a mark.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
   - Drag a space to reorder it (a 2px `accent` line shows where it lands).
     Double-click a space to rename it (Herdr's `space.rename` prompt).
-  - Double-click a session row to rename the terminal: the same dialog
+  - Double-click an agent row to rename the terminal: the same dialog
     Herdr opens for a space or a tab (`kanso-prompt`, 420 wide, with the
     name it shows now selected; Enter saves, Esc leaves it). The name is
     the terminal's own `kanso.name` label in herdr-core (`hc label <t>
@@ -472,7 +479,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     drop cards show the same name. Herdr has no terminal rename of its
     own; labels are its metadata.
     Right-click opens the shipped space menu.
-  - Click a session row to focus its pane. Sessions are listed as T3 Code
+  - Click an agent row to focus its pane. Agents are listed as T3 Code
     lists its threads: the pinned ones first, in the order you drag them,
     then the rest in the order chosen with the order button at the top of
     the sidebar (a Popover over the list, a check on the current one,
@@ -481,8 +488,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     idle, then last update), by kind (agents by their program, then
     shells, then the rest), as on screen (the strip's order, tab by tab,
     with the panes stacked in one column held together in one soft slab,
-    `foreground` at 3%, radius 6), or your own order (drag a session where
-    you want it; per space, localStorage `spaces.custom`; new sessions
+    `foreground` at 3%, radius 6), or your own order (drag an agent where
+    you want it; per space, localStorage `spaces.custom`; new ones
     join at the end by last update). The pin is the `kanso.pin` label on
     the terminal (its number is its place; pinning adds it last among the
     pinned, a drag among the pinned renumbers them through `hc label`),
@@ -490,6 +497,120 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     unpins. A drag only reorders within its section (the pinned, or your
     order) and shows a 2px `accent` line where it lands; moving a pane in
     the strip is the header grip's job.
+  - Each agent row carries its activity (kanso-spaces/agents.js `track`,
+    `elapsed`, `activityOf`). At the right, before the state mark, the time
+    in its state (11px `dim`, 28 wide, right-aligned): how long it has been
+    working, waiting on you, or since it finished ("<1m", "4m", "2h", "3d";
+    seen/idle: none). Done and idle are one phase, so looking at a finished
+    agent keeps its time. Stamps are kept in localStorage `spaces.since`
+    (address -> state and ms), taken every 0.5 s outside render; an agent
+    first seen after a start takes its tab's `working_since` or
+    `changed_at`, else shows no time. On hover the pin takes the time's
+    place. Under the name, a second line (12px `muted`, the row 50 tall
+    instead of 32): while working or blocked, the agent's own title when
+    the row shows a name you gave it (else the title is the name already);
+    when done, the pane's digest from shared `kanso.digest` in a few words
+    ("+12 −3 · 1 commit · PR #41 failing"). Nothing else gets a line.
+  - Sub-agents (`terminals()` with a `parent`) are listed under their
+    parent, depth first, with tree lines: one 23-wide column per level, a
+    1px `input` line under the parent's icon centre and an elbow into the
+    row; a 26-tall row, 13px icon, `dim` name, its state (error counts as
+    blocked, done as idle). One with a pane moves under its parent; one
+    without comes from terminals() while live, and a click peeks at it
+    (`terminal.peek`).
+  - Rows: Projects and Status alike, 32 tall (50 with a second line, 2px
+    between its lines), 1px between rows; Threads, read as conversations,
+    64 tall with 5px between the lines and 6px between rows. Radius 8, 12px
+    gaps inside; the name
+    13.5px medium always (a weight that changed with the state would
+    reflow the name), `foreground` while the agent waits on you, is
+    focused or is unread, else `muted`. A working agent's title shimmers
+    as Claude Code's own status line does: drawn in `muted`, with the same
+    text in `foreground` showing through three windows (44, 26 and 12 px
+    wide at 35%, 60% and full) that slide across it and back while their
+    copy of the text slides the other way (`.loop` on `left`, linear, 2.2
+    to 3.2 s, its own pace per agent), so a glint passes over the letters
+    in place; after it three dots count (`.frames`, "", ".", "..", "...",
+    380 ms). Nothing in the row is laid out again. A row waiting on you sits on
+    `blocked` at 8%; the focused one on `foreground` at 7%. Projects:
+    space rows 36 tall, the name 13.5px semibold, 10px between projects.
+  - Projects | Status | Threads: a switch under the top row (three
+    segments, 28 tall, in a 3px-padded `foreground` 4% track, radius 10,
+    14px of space under it;
+    the chosen one on `raised` with a 1px `border`, semibold; a 6px
+    `blocked` dot on Status while a space needs you and another view
+    shows; localStorage `spaces.view`: `spaces`, `agents`, `threads`). No
+    caption: each view says how it is arranged by its shape.
+  - Status and Threads mix projects, so each of their rows leads with the
+    project's square (20px, radius 6, its avatar color at 18%, the initial
+    in that color) and opens its second line with the project's name in
+    that color, medium.
+  - Status lists every agent in every space in sections: Needs you,
+    Working, Done, Idle, Terminals (no status). A section's header (13px
+    semibold; 44 tall with 12px above it, the first 32): the ensō of its
+    state, its name (Needs you in `blocked`), its count in `dim`, a
+    chevron; it folds the section (localStorage `spaces.sections`). A
+    parent and its sub-agents go together where the most urgent of them
+    would; the done agent you are looking at stays in Done until you leave
+    it. Within a section, by the sort button: latest change first (the
+    default), longest in its state first, or by project (localStorage
+    `spaces.statusOrder`). Empty: "No agents yet" and "Start one from + in
+    the tab bar; it shows here by what it needs from you." The collapsed
+    rail always shows spaces.
+  - Threads (kanso-spaces/threads.js) lists the conversation of each agent
+    on this computer, two lines a row: its title, the time since your last
+    message and its state; under it, its space and your last message in
+    quotes. The title is the agent's own name for the conversation, read
+    again as it changes: Claude Code's last `ai-title` record in the
+    conversation file, Codex's `thread_name` in
+    `~/.codex/session_index.jsonl`; else the first thing you typed; else
+    the row's name; a title you gave it (Rename thread, label
+    `kanso.thread`) goes over all of them. Which conversation:
+    `hc get <terminal> --json` gives the foreground pid; Claude Code's
+    `~/.claude/sessions/<pid>.json` gives `sessionId` and `cwd`, and the
+    file is `~/.claude/projects/<cwd, each non-alphanumeric as ->/<id>.jsonl`;
+    for Codex, `lsof` on the pid (or its children) finds the open
+    `rollout-*.jsonl`. What you typed leaves out tool results, sidechains,
+    meta records, text starting with `<` or `/`, "[Request interrupted",
+    "This session is being continued" and "# AGENTS.md"; only the first
+    and last 4 MB of a file are searched. Laid out as T3 Code's sidebar
+    (agents.js `threadSections`): Pinned (a pin glyph; by pin number),
+    then the rest with no header, woken ones first, then by the sort
+    button: your last message (else the last record; the default) or when
+    the conversation started (localStorage `spaces.threadOrder`); "Grouped
+    by project" (`spaces.threadGroup`) makes one section per project
+    instead, headed by its square and name. Then Snoozed (a clock; by when
+    they wake, showing that time) and Settled (a check; latest first),
+    both folded until opened (`spaces.shelvesOpen`). Looking at one or its
+    agent finishing moves nothing. The thread's state lives as labels on
+    its terminal in herdr-core: `kanso.pin` (shared with Projects),
+    `kanso.settled` "<ms>:<turn>", `kanso.snooze` "<ms>", `kanso.unread`
+    "1", `kanso.thread`. A settled one comes back by itself when it works,
+    waits on you, or a turn ran since; a snoozed one waiting on you wakes
+    at once, and one whose time came shows "Woke" (an `accent` pill) in
+    full ink until you look at it; looking also reads an unread one (the
+    labels are removed then, outside render). Hovered, a row offers
+    Settle (or Bring back) and Pin in the time's place. Right-click on a
+    row in any view opens its menu (this mod as a 252px popup at the
+    pointer): Open, Pin to the top / Unpin, Settle / Bring back, Wake now
+    or Snooze (In 1 hour, In 3 hours, This evening at 18:00 while ahead,
+    Tomorrow 9:00, Monday 9:00, each with its time), Mark unread / read,
+    Rename thread… (Threads) or Rename…, Copy folder, Copy branch, Copy
+    conversation id, and Close agent, which asks a second click ("Click
+    again to close it") and runs `terminal.kill`; no conversation file is
+    touched. Read only while Threads shows: on showing it, every 15 s with
+    the window in front, every minute behind it, and when an agent's state
+    changes; a file whose size hasn't changed is not read again. While
+    reading the first time, as Spend loads: the view's own silhouette, five
+    rows of the square, title, time and second line as `border` blocks,
+    the whole shape breathing between 35% and 80% every 1.8 s.
+  - The sort button's popover follows the view: Projects, "Agents, pinned
+    first, then by" and its orders; Status, "In each section, by"; Threads,
+    "Threads, pinned first, then by" and "Grouped by project". Then a rule
+    and "Show" with two checks, "What
+    each agent is on" (localStorage `spaces.activity`) and "Projects,
+    Status and Threads" (`spaces.switch`; off, the view goes back to
+    Projects).
   - Every terminal in the space is listed, not only the agents that report
     a status to Herdr: after those come the rest (Codex and other models'
     CLIs, shells, servers) with their program's icon, their title (a shell's
@@ -784,8 +905,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   it again.
 - With the panel closed, no process started by Files, Changes or Insights is
   running.
-- A working agent shows a breathing dot (not a spinner) on its tab, header
-  and agent row. A blocked one shows "Needs you" in its header and in the
+- A working agent shows the same turning arc on its tab, header,
+  agent row and the status bar. A blocked one shows "Needs you" in its header and in the
   status bar.
 - Collapsed, the sidebar is 76 wide, its edge does not drag, and the traffic
   lights sit inside it. Opened, it drags between 200 and 480 and reopens at
