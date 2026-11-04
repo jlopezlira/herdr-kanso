@@ -222,7 +222,10 @@ the browser or go to its pane from the same row.
 Repositories and their **nested Git worktrees** sit together, each with its
 branch, its agents and its other terminals (shells, dev servers). Each agent
 shows how long it has been working, waiting on you or done, and under its name
-what it is on or what it left in git; the agents it started sit under it.
+what it says it is on: the step it reports as it works and its last words when
+it finishes (else its title, or what it left in git). A step that takes long
+shows its time; a count says what still runs under an agent that stopped; the
+agents it started sit under it.
 Three views at the top of the sidebar: **Projects** (each project with its
 agents), **Status** (every agent in every project by what it needs from you:
 Needs you, Working, Done, Idle) and **Threads**, your conversations as T3
