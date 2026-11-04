@@ -187,6 +187,8 @@ test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {
   tabs.mount = (id) => mounted.push(id);
   tabs.reconcile({ id: "s1" }, null, { id: "panel-body", children: [{ id: "specs", type: "block", content: { mod: "sdd-focused" } }] }, "specs");
   assert.deepEqual(mounted, [null]);
+  tabs.reconcile({ id: "s1" }, null, { id: "panel-body", children: [{ id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path: "/repo/PLAN.md" } } }] }, "preview");
+  assert.deepEqual(mounted, [null], "a file's preview stays open");
 });
 
 // Parse a single PowerShell literal independently of the production escaper.

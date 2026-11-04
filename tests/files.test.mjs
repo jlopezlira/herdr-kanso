@@ -63,7 +63,7 @@ test("Files reports truncation only above 500 entries", async (t) => {
   assert.equal(panel.limited, true);
 });
 
-test("Files virtual rows use list-level handlers for open, expand and context menu", async () => {
+test("Files virtual rows use list-level handlers for open, expand and context menu; Markdown opens to read and edit", async () => {
   let deferred = false, list;
   function element() {
     const handlers = {};
@@ -86,25 +86,28 @@ test("Files virtual rows use list-level handlers for open, expand and context me
   const { Files } = await load("kanso-panel/files.js", ["Files"], {
     div: element, svg: element, h_flex: element, v_flex: element,
     Scrollbar: { vertical: element }, theme: () => ({}), key: () => "fixture",
+    isMarkdown: (path) => /\.md$/.test(path),
     v_virtual_list: (_id, count, _height, key, render) => {
       const el = element(); list = { count, key, render, el }; return el;
     },
   });
   const panel = new Files();
   Object.assign(panel, { context: "fixture", root: "/repo", folders: new Set(), marks: {},
-    entries: new Map([["", [{ name: "directory", dir: true }, { name: "file.txt", dir: false }]]]),
+    entries: new Map([["", [{ name: "directory", dir: true }, { name: "file.txt", dir: false }, { name: "PLAN.md", dir: false }]]]),
   });
   const actions = [];
   panel.toggle = (path) => actions.push(["toggle", path]);
   panel.show = (path) => actions.push(["show", path]);
   panel.openWith = (path) => actions.push(["openWith", path]);
+  panel.read = (path) => actions.push(["read", path]);
   panel.render({});
   deferred = true;
-  assert.equal(list.render({ start: 0, end: list.count }).length, 2);
+  assert.equal(list.render({ start: 0, end: list.count }).length, 3);
   deferred = false;
   list.el.handlers.on_item_click(list.key(0), {});
   list.el.handlers.on_item_click(list.key(1), {});
+  list.el.handlers.on_item_click(list.key(2), {});
   list.el.handlers.on_item_secondary_click(list.key(0), {}, {});
   list.el.handlers.on_item_secondary_click(list.key(1), {}, {});
-  assert.deepEqual(actions, [["toggle", "directory"], ["show", "file.txt"], ["openWith", "file.txt"]]);
+  assert.deepEqual(actions, [["toggle", "directory"], ["show", "file.txt"], ["read", "PLAN.md"], ["openWith", "file.txt"]]);
 });

@@ -90,8 +90,15 @@ be previewed in the panel, with no editor at all.
 ### Read the diff, make the commit
 
 The **Changes** panel puts changed files, inline diffs and a commit message next
-to your agents while they keep working. The **Files** panel previews code and
-renders Markdown, including code blocks and checklists.
+to your agents while they keep working. The **Files** panel previews code, and
+opens a Markdown file formatted, to read and edit where it reads: double-click
+a paragraph, a list, a heading or a table to edit just that block; what you
+type is saved as you go, and never over a change an agent made meanwhile. On
+macOS, `sh ~/.config/herdr-app/mods/kanso-tabs/markdown-handler.sh install`
+makes `.md` files open there from a Cmd-click in a terminal or Finder (and
+`uninstall` gives them back); nothing changes until you run it. The same
+editor is a window over any layout as the
+[markdown-panel](markdown-panel/RECIPE.md) mod.
 
 ![A real Git diff and the native commit message field in Kanso's Changes panel.](docs/screenshots/changes.png)
 

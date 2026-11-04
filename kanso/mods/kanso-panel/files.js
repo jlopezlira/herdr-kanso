@@ -5,10 +5,11 @@
 // A lazy file browser for the focused pane's folder, with bounded read-only previews.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
-import { exec, readTextFile, watchFolder, theme, window, openOverlay } from "herdr";
-import { location, key, codeState, markdownView, isMarkdown, insideRoot } from "./lib.js";
+import { exec, readTextFile, watchFolder, theme, window, openOverlay, shared, setShared } from "herdr";
+import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
 
 const PER_FOLDER = 500, TOTAL = 5000;
+const RETURN = "kanso.files.return";
 
 async function directory(path, on) {
   if (!on && window()?.platform === "windows") {
@@ -67,6 +68,12 @@ export class Files {
 
   init(cx) {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
+    // Back from a Markdown file: the folders that were open, for the same place.
+    const back = shared(RETURN);
+    if (back) {
+      setShared(RETURN, null);
+      if (back.context === key()) { this.context = back.context; ({ cwd: this.root, on: this.on } = location()); this.folders = new Set(back.folders ?? []); }
+    }
     this.refresh(cx);
     cx.timer.every(10000, cx => this.refresh(cx));
   }
@@ -163,6 +170,14 @@ export class Files {
     openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { file: `${this.root}/${path}`, folder: this.root, machine: this.on } });
   }
 
+  // A Markdown file opens in the preview panel, to read and edit, with a way
+  // back here; the open folders are kept for that return.
+  read(path) {
+    if (!insideRoot(path)) return;
+    setShared(RETURN, { context: this.context, folders: [...this.folders] });
+    showPanel("preview", { mod: "kanso-panel", props: { panel: "preview", path: `${this.root}/${path}`, on: this.on, back: "files" } });
+  }
+
   show(path, cx) {
     this.code?.release(); this.code = null; this.text = null; this.file = path; this.fileError = null;
     if (!path || !cx) return;
@@ -228,7 +243,10 @@ export class Files {
             // are forbidden. The list owns two handlers, keyed by file path.
             .on_item_click((path, cx) => {
               const item = items.find((item) => item.path === path);
-              if (item) item.entry.dir ? this.toggle(path, cx) : this.show(path, cx);
+              if (!item) return;
+              if (item.entry.dir) this.toggle(path, cx);
+              else if (isMarkdown(path)) this.read(path);
+              else this.show(path, cx);
             })
             .on_item_secondary_click((path) => {
               const item = items.find((item) => item.path === path);

@@ -8,6 +8,14 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.4.0] - 2026-11-04
+
+### Added
+
+- Markdown, edited where it reads. A Markdown file opened from Files (or from Open with) shows formatted in the side panel; a double-click on a paragraph, a list, a heading or a table opens just that block to edit, a heading without its #, a table as a grid of cells, and the rest stays formatted. What you type is saved as you go, and only when the file on disk is still what was read: a change an agent made meanwhile is never overwritten, you choose which stays. "Source" edits the whole file as Markdown; a link to another Markdown file opens it in place, to any other file offers Open with; Back returns to Files with the folders you had open. Front matter reads as a code block.
+- Kanso Markdown (macOS): `sh mods/kanso-tabs/markdown-handler.sh install` makes `.md` files open in Herdr from a Cmd-click on a path in a terminal or a double click in Finder, formatted and editable; `uninstall` gives them back to the app they had. Nothing changes until you run it.
+- The markdown-panel mod, listed on its own in the gallery: the same editor in a window over any layout, Cmd+Shift+M, with the Markdown files of the focused pane's folder.
+
 ## [2.3.1] - 2026-11-04
 
 ### Changed
