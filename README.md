@@ -143,11 +143,15 @@ it holds, to open it in a new tab or remove it; **Remove all** does a whole
 repository, and says first what would be lost. Records of folders already gone
 are pruned the same way.
 
-**Freed** keeps score: how much disk Clean up and Remove have freed so far, the
-worktrees, merged branches and leftovers they cleared, and a bar a day for the
-last 30 days. **Share** posts it to X, LinkedIn or Bluesky as an image, the
-same way Shipped and Spend do, with the totals only: never a repository,
-branch or folder name. **Explain it** on a worktree, or **Review the ones that
+**Freed** keeps score, from a history in SQLite: every worktree the panel has
+seen is kept once and rewritten only when it changes, and one that disappears,
+removed here or anywhere else, stays with the size it freed. It shows how much
+disk was freed, the worktrees, merged branches and leftovers cleared, and a bar
+a day for the last 30 days, of what was freed and of what the worktrees took.
+The panel opens on the last scan while it checks everything again. **Share**
+posts it to X, LinkedIn or Bluesky as an image, the same way Shipped and Spend
+do, with the totals only: never a repository, branch or folder name. Before
+anything is freed, it shares what the worktrees take. **Explain it** on a worktree, or **Review the ones that
 need a look**, hands the question to your agent in a new tab: what that work
 is, whether it already lives in a branch, a remote or a pull request, and what
 to keep. The agent explains; it changes nothing.
@@ -286,6 +290,12 @@ file names or code. Open with runs `sh`
 to find installed editors (app folders, `command -v`, `flatpak`); on macOS it
 opens an editor with `open -a` and caches each app's icon under
 `~/.config/herdr-app/data/open-with/`.
+
+Worktrees runs `find`, `git` and `du` on this machine only: under the top
+folders of your spaces and in `/tmp`, and in each repository it finds. It keeps
+the worktrees' folders, repositories, branches, sizes and what they hold in
+`~/.config/herdr-app/data/kanso-panel/worktrees.db` (`sqlite3`), and removes
+only what you confirm. Its share image has totals only.
 
 Spend reads the session files your AI coding tools already write on this
 machine: `~/.claude/projects`, `~/.codex/sessions` and
