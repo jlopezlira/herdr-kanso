@@ -1,0 +1,42 @@
+<!doctype html>
+<!--
+  Source of og.png, the 1280x640 social preview. Regenerate from site/ with:
+    python3 -m http.server 8765 &
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+      --virtual-time-budget=5000 --window-size=1280,640 --screenshot=og.png http://localhost:8765/og-card.html
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;700&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; background: #161615; }
+  body { position: relative; font-family: "Geist", -apple-system, sans-serif; color: #ece8de; }
+  body::before {
+    content: ""; position: absolute; inset: -200px auto auto -160px; width: 900px; height: 700px;
+    background:
+      radial-gradient(closest-side at 40% 50%, rgba(163,176,154,.22), transparent 70%),
+      radial-gradient(closest-side at 70% 40%, rgba(196,176,126,.14), transparent 70%);
+  }
+  .text { position: absolute; left: 72px; top: 64px; width: 560px; }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+  h1 { margin: 74px 0 0; font-size: 82px; line-height: .98; font-weight: 700; letter-spacing: -.045em; }
+  h1 span { display: block; }
+  p { margin: 26px 0 0; font-size: 24px; line-height: 1.4; color: #b5b1a7; width: 480px; }
+  .code { position: absolute; left: 72px; bottom: 58px; padding: 14px 18px; border: 1px solid #3b3a36; border-radius: 8px;
+    background: #1b1b19; font: 500 16.5px "Geist Mono", ui-monospace, monospace; color: #ece8de; }
+  .shot { position: absolute; left: 690px; top: 86px; width: 900px; border-radius: 12px; overflow: hidden;
+    border: 1px solid #3b3a36; box-shadow: 0 30px 90px -20px rgba(163,176,154,.35), 0 20px 60px rgba(0,0,0,.6); }
+  .shot img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <div class="text">
+    <div class="brand"><img src="assets/enso.svg" width="34" height="34" alt="">kansō</div>
+    <h1><span>More agents.</span><span>Less babysitting.</span></h1>
+    <p>Every agent readable, the one waiting on you first.</p>
+  </div>
+  <div class="code">add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso</div>
+  <div class="shot"><img src="shots/hero.png" alt=""></div>
+</body>
+</html>
