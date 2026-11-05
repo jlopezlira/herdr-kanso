@@ -21,7 +21,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, knownAgents, notify, run, theme } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
-import { G, BREATH, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -397,7 +397,7 @@ export class PullRequest {
     const empty = { labels: "This repository has no labels.", assignees: "Nobody has access to this repository.", reviewers: "Nobody else has access to this repository." }[kind];
     const noMatch = kind === "labels" ? "No label matches that." : "Nobody with access matches that.";
     const list = v_flex().gap(1)
-      .when(!this.candidates && !this.pickerError, (el) => el.child(v_flex().loop("opacity", BREATH)
+      .when(!this.candidates && !this.pickerError, (el) => el.child(breathe(v_flex())
         .children([90, 120, 70, 104].map((w, i) => h_flex().id(`${id}-ghost-${i}`).px(8).py(7).gap(G.sm).child(div().size(8).rounded_full().bg(c.border)).child(div().w(w).h(9).rounded(3).bg(c.border))))))
       .when(Boolean(this.pickerError), (el) => el.child(div().p(8).text_size(11.5).text_color(c.dim).child(`${kind === "labels" ? "The labels" : "The people with access"} could not be read. ${this.pickerError}`)))
       .when(Boolean(this.candidates) && shown.length === 0, (el) => el.child(div().p(8).text_size(11.5).text_color(c.dim).child(q ? noMatch : empty)))
@@ -565,7 +565,7 @@ export class PullRequest {
 
   skeleton(c, narrow) {
     const { block, row } = ghost(c);
-    return v_flex().w_full().gap(narrow ? 36 : 48).loop("opacity", BREATH)
+    return breathe(v_flex().w_full().gap(narrow ? 36 : 48))
       .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
         .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
       .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
@@ -621,7 +621,7 @@ export class PullRequest {
         .child(div().text_size(15).text_color(c.muted).child(`${this.local(pr.url) ? "" : `${this.repo()?.o}/${this.repo()?.r} `}#${pr.number} · ${pr.headRefName} → ${pr.baseRefName}`))
         .child(div().w_full().text_size(narrow ? 22 : 28).line_height(1.25).font_light().text_color(c.text).child(pr.title))
         .child(h_flex().pt(G.xs).gap(G.sm).items_center()
-          .child(div().size(6).flex_none().rounded_full().bg(v.color).when(v.color === c.yellow, (el) => el.loop("opacity", { from: 0.35, to: 1, period: 2400 })))
+          .child(div().size(6).flex_none().rounded_full().bg(v.color).when(v.color === c.yellow, (el) => breathe(el, PULSE)))
           .child(div().text_size(15).text_color(c.text).child(v.text)))
         .child(div().text_size(12).text_color(c.dim).child([pr.author?.login, `updated ${ago(pr.updatedAt)}`, this.fallback && `the newest open; ${this.branch ?? "this branch"} has none`].filter(Boolean).join(" · "))))
       .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)

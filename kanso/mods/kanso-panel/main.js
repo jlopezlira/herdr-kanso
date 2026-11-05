@@ -11,7 +11,7 @@
 // init(cx, props) and render(cx); what they share (where the focused pane is, diff
 // rows) is in lib.js. Herdr lets a mod import its own files, not another's:
 // this is why the three live together.
-import { View } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { props } from "herdr";
 import { Files } from "./files.js";
 import { Changes } from "./changes.js";
@@ -29,9 +29,13 @@ export default class Panel extends View {
     const Impl = PANELS[p.panel] ?? Files;
     this.panel = new Impl();
     this.panel.init(cx, p);
+    // A panel comes in with a fade: clear on its first frame, in full on the
+    // next, and GPUI eases between them.
+    this.shown = false;
+    cx.timer.after(16, (cx) => { this.shown = true; cx.notify(); });
   }
 
   render(cx) {
-    return this.panel.render(cx);
+    return div().size_full().opacity(this.shown ? 1 : 0).transition("opacity", { duration: 180, easing: "ease-out" }).child(this.panel.render(cx));
   }
 }

@@ -3,11 +3,40 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
-import { stateMark, programIcon, NAME_LABEL } from "./marks.js";
+import { stateMark, programIcon, moving, NAME_LABEL } from "./marks.js";
 
 export { NAME_LABEL };
 
 const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px avatar, the gap
+
+// Motion, all of it native (GPUI animates; no script runs per frame): a
+// group of rows folds and unfolds by height, and a selection is one pill
+// that glides to the chosen row, at the same pace, so a fold and the pill
+// riding on it move together.
+export const FOLD = { duration: 220, easing: "ease-out" };
+export const FOLD_MS = FOLD.duration + 40; // rows stay drawn this long after a fold, so the close is seen
+
+// The pill under a chosen row: absolute in a `relative()` list, drawn before
+// the rows, `top` and `height` easing to wherever the row is now. `inset`:
+// the list's side padding, so the pill spans the rows.
+export function pill(id, y, h, color, inset = 8) {
+  return div().id(id).absolute().left(inset).right(inset).top(y).h(h).rounded(8).bg(color)
+    .transition("top", FOLD).transition("height", FOLD);
+}
+
+// A row's height, before it is drawn: the lists add their rows' heights up
+// to know where a pill goes (agentRow draws with the same number).
+export function agentRowH(a, more = {}) {
+  const two = Boolean(more.activity) || Boolean(more.project) || Boolean(more.steady);
+  return two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
+}
+
+// Where segment `i` of `n` equal ones sits inside a switch `width` wide with
+// `pad` around them and `gap` between: the sliding thumb's left and width.
+export function segmentAt(width, i, n, pad = 3, gap = 2) {
+  const w = (width - 2 * pad - gap * (n - 1)) / n;
+  return { left: pad + i * (w + gap), width: w };
+}
 // A row flush with the list's 10px inset (the Status and Threads views).
 export const FLUSH = 10 - AGENT_PAD;
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
@@ -457,10 +486,12 @@ function guide(l, h, t) {
 // window slides one way while its copy of the text slides the other, by
 // the same native `.loop`, so the lit letters stay in place. Nothing is
 // laid out again: the row never moves. Each title has its own pace, so
-// several at work never shine in step.
+// several at work never shine in step. Behind other windows the title
+// simply rests, in the same box (marks.js `moving`).
 const GLINT = [[44, 0.35], [26, 0.6], [12, 1]];
 const REACH = 240; // past the longest title the row can show
 function shimmer(text, t, address) {
+  if (!moving()) return h_flex().flex_1().min_w(0).items_center().child(div().truncate().text_color(t.foreground).child(text));
   const pace = 2200 + ([...address].reduce((n, c) => n + c.charCodeAt(0), 0) % 7) * 160;
   const lit = ([w, strength]) => div().absolute().top(0).bottom(0).w(w).overflow_hidden().opacity(strength)
     .loop("left", { from: -w, to: REACH, period: pace, easing: "linear" })
@@ -509,7 +540,7 @@ export function agentRow(a, indent, t, row, more = {}) {
   const two = Boolean(more.activity) || Boolean(project) || Boolean(more.steady);
   const tasks = a.status === "working" ? [] : more.tasks ?? [];
   // Threads read as conversations and get more room (`more.roomy`).
-  const h = two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
+  const h = agentRowH(a, more);
   const showPin = Boolean(row?.pin) && (pinned || row.hovered);
   // Hovered, a row may offer its quick actions (Threads: Settle, Pin) in the time's place.
   const actions = row?.hovered ? row.actions ?? [] : [];
@@ -556,8 +587,8 @@ export function agentRow(a, indent, t, row, more = {}) {
   const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
   return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
     .items_center().rounded(8).cursor_pointer()
+    // The focused row's wash is the list's pill (main.js), which glides here.
     .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
-    .when(a.focused, (el) => el.bg(t.foreground + "12"))
     .hover((s) => s.bg(t.foreground + "0c"))
     .on_click(() => (a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })))
     .on_mouse_down("left", (e) => { if (e.click_count === 2) renameTerminal(a.address, more.label ?? agentLabel(a), Boolean(more.label)); else drag?.down(); })
