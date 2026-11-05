@@ -346,6 +346,7 @@ With the mouse:
 | Scroll over a header or the minimap | Slide the view |
 | Use the order button at the top of the sidebar | Sort each space's agents by last update, needs you first, kind, screen order, or your own; turn the activity line or the Projects, Status and Threads switch off |
 | Click Projects, Status or Threads at the top of the sidebar | See your agents by project, by what they need from you, or as conversations named on their own |
+| Click the gear at the end of the tab bar, or ⌃⇧, | Kanso settings: every key (⌃1-9 spaces, ⌘⌥1-9 tabs, ⌃⇧1-9 panels, ⌘1-9 pane columns, ⌃⌥P/S/T views), rebound by pressing; hide the panels and pieces you don't use; read what's new |
 | Hover an agent and click its pin | Keep it at the top of its space; drag pinned ones to order them |
 | Hover a panel icon at the top right | See its name; the open panel always shows it |
 | Press a panel icon and let go on another | Move it there |

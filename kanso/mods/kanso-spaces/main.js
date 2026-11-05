@@ -14,7 +14,7 @@ import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SET
 import { moving } from "./marks.js";
 import { findThreads } from "./threads.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand } from "herdr";
 
 // A value kept in localStorage, when it is the same shape as `fallback`.
 function stored(key, fallback) {
@@ -137,8 +137,11 @@ export default class Spaces extends View {
     const view = localStorage.getItem("spaces.view");
     this.view = view in VIEWS ? view : "spaces";
     this.threads = null; // terminal -> its conversation (threads.js), once read
-    this.showSwitch = localStorage.getItem("spaces.switch") !== "off";
-    this.showActivity = localStorage.getItem("spaces.activity") !== "off";
+    // The switch and the activity line are pieces Kanso settings can hide
+    // (`kanso.hidden`); a choice made here before 2.7 moves there once.
+    for (const [key, id] of [["switch", "sidebar.switch"], ["activity", "sidebar.activity"]]) {
+      if (localStorage.getItem(`spaces.${key}`) === "off") { this.hide(id, true); localStorage.removeItem(`spaces.${key}`); }
+    }
     this.sectionsFolded = new Set(stored("spaces.sections", []));
     this.since = stored("spaces.since", {});
     // What each agent says it is on and since when (agents.js
@@ -166,6 +169,22 @@ export default class Spaces extends View {
     cx.timer.every(5000, (cx) => this.checkTasks(cx));
     // The times beside the rows count in minutes.
     cx.timer.every(30000, (cx) => cx.notify());
+    // Keys (keys.json): ⌃1-9 goes to a space by position, ⌃⌥P/S/T to a view.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        let c;
+        try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
+        this.command(String(c).replace(/^kanso-spaces\./, ""), cx);
+      }
+    });
+  }
+
+  // A key's command. A space that isn't there is nothing to do, not an
+  // error: Herdr's own space.select would say "no such space".
+  command(c, cx) {
+    const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
+    if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
+    else if (view) { this.setView(view[1], cx); cx.notify(); }
   }
 
   // What still runs under each agent on this computer (agents.js `tasksOf`,
@@ -232,6 +251,19 @@ export default class Spaces extends View {
     const due = this.due(now, sp, ps, placesOf(sp, ps), active);
     if (due.size) this.refreshGit(due, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
+    if (now - (this.prunedAt ?? 0) > 30000) { this.prunedAt = now; this.prune(sp, now); }
+  }
+
+  // What this view keeps between looks, trimmed to what still exists, so a
+  // day of spaces coming and going leaves nothing behind: git and its times
+  // by place, each space's first sight and measured height, labels in flight.
+  prune(sp, now) {
+    const ids = new Set(sp.map((s) => s.id));
+    const places = new Set(Object.values(this.at ?? {}));
+    for (const k of Object.keys(this.git)) if (!places.has(k)) { delete this.git[k]; delete this.checked[k]; this.unsure.delete(k); }
+    for (const map of [this.born, this.foldH]) for (const id of Object.keys(map)) if (!ids.has(id)) delete map[id];
+    for (const id of [...this.shown]) if (!ids.has(id)) this.shown.delete(id);
+    if (this.tidying) for (const [k, at] of this.tidying) if (now - at > 10000) this.tidying.delete(k);
   }
 
   // Since when each agent is in its state, and the done agent you are
@@ -547,10 +579,17 @@ export default class Spaces extends View {
   // Turning the switch or the activity line on or off; with the switch off,
   // the sidebar stays on Spaces.
   setShown(key, on, cx) {
-    if (key === "switch") { this.showSwitch = on; if (!on) this.setView("spaces"); }
-    else this.showActivity = on;
-    localStorage.setItem(`spaces.${key}`, on ? "on" : "off");
+    if (key === "switch" && !on) this.setView("spaces");
+    this.hide(key === "switch" ? "sidebar.switch" : "sidebar.activity", !on);
     cx.notify();
+  }
+
+  // A piece on or off the `kanso.hidden` list (Kanso settings keeps the same list).
+  hide(id, off) {
+    const set = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+    if (off === set.has(id)) return;
+    off ? set.add(id) : set.delete(id);
+    setShared("kanso.hidden", [...set]);
   }
 
   setView(view, cx) {
@@ -1010,15 +1049,15 @@ export default class Spaces extends View {
         : s.id === "pinned" ? svg("mods/kanso-chrome/icons/pin.svg").size(13).flex_none().text_color(t.muted)
         : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(14).flex_none().text_color(t.muted)
         : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(14).flex_none().text_color(t.muted) : null;
-      // The ungrouped active list needs no header: it is the inbox itself.
       const tape = ctx.tape, rowH = agentRowH({}, { roomy: true, project: true });
-      if (s.id === "active") {
-        if (i) take(tape, 12);
-        const head = i ? [div().h(12).flex_none()] : [];
-        return [...head, ...s.rows.map((r) => { const y = take(tape, rowH); if (r.a.focused) { tape.agent = y; tape.agentH = rowH; } return row(r); })];
+      // Alone, the active list is the inbox itself and needs no header;
+      // beside Pinned, Snoozed or Settled it gets one too, so each state
+      // reads apart.
+      if (s.id === "active" && sections.length === 1) {
+        return s.rows.map((r) => { const y = take(tape, rowH); if (r.a.focused) { tape.agent = y; tape.agentH = rowH; } return row(r); });
       }
       take(tape, i ? 44 : 32);
-      const head = [this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, p ? p.name : s.label, s.rows.length, folds ? t.muted : t.foreground)];
+      const head = [this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, p ? p.name : s.label ?? "Active", s.rows.length, folds ? t.muted : t.foreground)];
       const rows = this.unfolded(`thread-${s.id}`, open, ctx.now) ? s.rows.map(row) : [];
       const box = this.foldBox(`thread-${s.id}`, open, rows, ctx.now, 6);
       if (box.length) {
@@ -1124,6 +1163,9 @@ export default class Spaces extends View {
     const active = sp.find((p) => p.active);
     // Read once per draw: every terminal's record, the panes' digests, the
     // strip's columns, where each space is, now.
+    const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+    this.showSwitch = !hidden.has("sidebar.switch");
+    this.showActivity = !hidden.has("sidebar.activity");
     const switchShown = this.showSwitch !== false;
     const view = !collapsed && switchShown ? this.view : "spaces";
     // `tape`: where the list's chosen rows end up (see `take`), for the pills.

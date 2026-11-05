@@ -8,6 +8,25 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.7.0] - 2026-11-05
+
+### Added
+
+- New keys: ⌘⌥1-9 shows a tab by position (those keys doubled ⌘1-9 before), ⌃⇧1-9 opens or closes a panel by its place in the bar, ⌃⌥P, ⌃⌥S and ⌃⌥T switch the sidebar's view. One modifier per kind of thing: ⌘ the pane columns, ⌃ the spaces, ⌘⌥ the tabs, ⌃⇧ the panels, ⌃⌥ the views; none of them lands on Herdr's own keys on any platform.
+- Threads: beside Pinned, Snoozed or Settled, the active conversations get their own header, "Active", with a count, folding like the others; alone, the list stays the bare inbox.
+- Kanso settings, a dialog from the gear at the end of the tab bar, after the panel buttons (fixed there: not a panel, so it is neither dragged nor turned off), or ⌃⇧,. Keys: every key Kanso binds, by what it does, the one place the keys show; click one and press another in its place, add one, Backspace drops it, Reset puts back what Kanso ships; a key something else already uses says so and takes a second press. What you press goes to Herdr's keys.json, applies at once and stays yours through updates. Mods: each side panel in the bar's order, moved with arrows, with its switch, and switches for the pieces you can do without (the view switch, the activity line, Arrangements, Add machine, the agents count, the palette key, the minimap). What's new: this changelog, newest first, with the version you have marked.
+- A watch on the mod runtime. After a long day of hot reloads Herdr's runtime can run out of memory, and from then on panels and bars fail to load until the window restarts; the footer asks Herdr every minute and, when that happens, a toast restarts the window with one click (terminals and agents live in herdr-core and stay).
+
+### Changed
+
+- The strip's minimap has no tooltip any more; the keys are listed in Kanso settings instead.
+- What the sidebar keeps between looks (git by place, each space's first sight and measured height, labels in flight, tab widths) is trimmed to what still exists, every 30 seconds, so nothing grows over a long day.
+
+### Fixed
+
+- A command no longer runs twice after Kanso updates itself (or any hot reload of a mod): the replaced build's command loop kept waiting for keys beside the new one, so a key or a toast's click could act in both; every loop now checks it is the live build before acting.
+- ⌃1-9 past the last space does nothing instead of showing "space.select failed: no such space": the key goes through Kanso, which looks first.
+
 ## [2.6.0] - 2026-11-05
 
 ### Added

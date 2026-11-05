@@ -4,10 +4,15 @@
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), Herdr's mark beside the traffic lights; an "Update Kanso" row for Kanso's own releases (update.js).
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, shared, updates, agents, home, window, nextCommand } from "herdr";
+import { theme, run, props, shared, updates, agents, home, window, nextCommand, openOverlay, exec, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 
 const basename = (path) => path.replace(/\/+$/, "").split("/").pop();
+// Kanso's own settings (kanso-settings): keys, what shows, what's new. The
+// tab bar holds the button; ⌃⇧, lands here (kanso-chrome.settings).
+const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
+// The pieces you turned off in Kanso settings (`kanso.hidden`).
+const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
 
 export default class WorkspaceChrome extends View {
   // Only the footer copy looks for Kanso releases (update.js); the top bar's never does.
@@ -19,11 +24,39 @@ export default class WorkspaceChrome extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         let c;
-        try { c = await nextCommand(); } catch { break; }
+        try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
         if (c === "update") this.updater.install(cx);
         else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
+        else if (c === "settings") openSettings();
+        else if (c === "settings-mods") openSettings("mods");
+        else if (c === "settings-news") openSettings("news");
+        else if (c === "restart") this.restart();
       }
     });
+    cx.timer.every(60000, (cx) => this.watch(cx));
+  }
+
+  // The mod runtime can run out of memory after a long day of hot reloads
+  // (something of each replaced build stays behind): from then on panels and
+  // bars fail to load until the window restarts. The footer asks Herdr every
+  // minute and offers the restart in a toast; terminals and agents live in
+  // herdr-core and stay.
+  watch(cx) {
+    cx.spawn(async (cx) => {
+      let errors = [];
+      try { const r = await exec("sh", ["-c", 'HERDR_APP_HOME="$1" herdr-app status', "_", appHome()]); errors = JSON.parse(r.stdout).errors ?? []; } catch { return; }
+      if (!errors.some((e) => /out of memory/i.test(String(e)))) { this.warned = false; return; }
+      if (this.warned) return;
+      this.warned = true;
+      notify({ title: "Herdr's mod runtime is out of memory", level: "error", action: { name: "kanso-chrome.restart" },
+        body: "Panels and bars won't load again until the window restarts. Click to restart it now; your terminals and agents stay in herdr-core." });
+    });
+  }
+
+  // A new window on the same home, started apart from this one, then this one quits.
+  restart() {
+    exec("sh", ["-c", '(sleep 1; HERDR_APP_HOME="$1" nohup herdr-app >/dev/null 2>&1 &) >/dev/null 2>&1', "_", appHome()]).catch(() => {});
+    run("app.quit");
   }
 
   render() {
@@ -64,7 +97,7 @@ export default class WorkspaceChrome extends View {
           .when(ready && !collapsed, el => el.child(dot()))
           .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
         // A server, not a second "+": the rail already has one for New space.
-        .child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add machine", () => run("mod.open", { name: "machine-add" })))
+        .when(!hidden().has("footer.machine"), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add machine", () => run("mod.open", { name: "machine-add" }))))
         .child(div().h(8).flex_none())
         .child(chip);
     }
