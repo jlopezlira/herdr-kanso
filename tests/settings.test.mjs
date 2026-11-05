@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, clone } from "./helpers.mjs";
 
-const actions = () => load("kanso-settings/actions.js", ["GROUPS", "ofRow", "familyPattern", "familyChords", "conflictsOf", "rebound"]);
+const actions = () => load("kanso-settings/actions.js", ["GROUPS", "HERDRS", "ofRow", "familyPattern", "familyChords", "conflictsOf", "rebound"]);
 
 test("A family row owns its nine actions and shows one pattern", async () => {
   const { ofRow, familyPattern, familyChords } = await actions();
@@ -36,8 +36,10 @@ test("A new key says what it takes over, and keys.json comes back changed only w
   assert.equal(over["layout:kanso"]["cmd-d"], "kanso-strip.close", "a key taken over points at the new action");
 });
 
-test("Every key Kanso ships has a row on the Keys page, and Reset knows them all", async () => {
-  const { GROUPS, ofRow } = await actions();
+test("The Keys page lists Kanso's own keys only, and Reset knows them all", async () => {
+  const { GROUPS, HERDRS, ofRow } = await actions();
+  const herdr = JSON.parse(readFileSync(new URL("./herdr-keys.macos.json", import.meta.url), "utf8"));
+  const herdrChords = new Set(Object.values(herdr).filter((v) => v && typeof v === "object").flatMap((sec) => Object.keys(sec)));
   const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
   const shipped = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
   assert.deepEqual(clone(DEFAULT_KEYS), shipped, "regenerate kanso-settings/defaults.js from kanso/keys.json");
@@ -45,7 +47,10 @@ test("Every key Kanso ships has a row on the Keys page, and Reset knows them all
     for (const [chord, action] of Object.entries(map)) {
       if (action === "terminal") continue;
       const rows = GROUPS.filter((g) => g.section === section).flatMap((g) => g.actions);
-      assert.ok(rows.some((r) => ofRow(r, action)), `${chord} = ${action} has no row on the Keys page`);
+      const listed = rows.some((r) => ofRow(r, action));
+      if (HERDRS.test(action)) { assert.ok(!listed, `${action} is Herdr's command: not on Kanso's Keys page`); assert.ok(herdrChords.has(chord), `${chord} = ${action} is not on Herdr's key`); continue; }
+      assert.ok(listed, `${chord} = ${action} has no row on the Keys page`);
+      if (section === "layout:kanso") assert.ok(!herdrChords.has(chord), `${chord} = ${action}: Kanso's own key on one of Herdr's`);
     }
   }
 });
@@ -69,4 +74,36 @@ test("A chord reads as glyphs on macOS and as names elsewhere", async () => {
   assert.equal(glyphs("cmd-alt-left"), "⌥⌘←");
   assert.equal(glyphs("cmd-shift--"), "⇧⌘-");
   assert.equal(glyphs("cmd-shift-s", false), "Shift+Win+S");
+});
+
+// Herdr's own keys (herdr-app defaults/keys.macos.json, Apache-2.0) and the
+// ones macOS keeps for itself: Kanso's keys never give either another
+// meaning. Where Kanso takes one of Herdr's, it is the same command done
+// the strip's way (a split, going to or swapping a pane, close, zoom as the
+// width, a space that is there); everything else is a chord of Kanso's own.
+const SAME_AS_HERDR = {
+  "pane.split": /^kanso-strip\.new-(right|down)$/,
+  "pane.close": /^kanso-strip\.close$/,
+  "pane.go": /^kanso-strip\.go-/,
+  "pane.swap": /^(kanso-strip\.move-|terminal$)/,
+  "pane.zoom": /^kanso-strip\.width$/,
+  "space.select": /^kanso-spaces\.space-\d$/,
+  "app.settings": /^kanso-spend\.settings$/,
+};
+const MACOS = ["cmd-alt-d", "cmd-alt-h", "cmd-h", "cmd-m", "cmd-q", "cmd-tab", "cmd-space", "cmd-alt-escape", "cmd-shift-3", "cmd-shift-4", "cmd-shift-5", "ctrl-up", "ctrl-down", "ctrl-left", "ctrl-right", "cmd-`"];
+
+test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
+  const herdr = JSON.parse(readFileSync(new URL("./herdr-keys.macos.json", import.meta.url), "utf8"));
+  const kanso = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
+  const theirs = new Map(Object.values(herdr).filter((v) => v && typeof v === "object").flatMap((sec) => Object.entries(sec)));
+  const wrong = [];
+  for (const [section, keys] of Object.entries(kanso)) {
+    for (const [chord, action] of Object.entries(keys)) {
+      if (MACOS.includes(chord)) wrong.push(`${section} ${chord} is macOS's`);
+      if (!theirs.has(chord)) continue;
+      const herdrAction = String(theirs.get(chord)).split(":")[0];
+      if (!SAME_AS_HERDR[herdrAction]?.test(action)) wrong.push(`${section} ${chord}: Herdr's ${herdrAction}, Kanso's ${action}`);
+    }
+  }
+  assert.deepEqual(wrong, []);
 });

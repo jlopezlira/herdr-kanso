@@ -20,7 +20,9 @@ export default class WorkspaceChrome extends View {
     if (!props()?.footer) return;
     this.updater = new Updater();
     this.updater.start(cx);
-    // The "available" toast's click: kanso-chrome.update; kanso-chrome.check looks now.
+    // The footer's row installs; the toast and keys go to the tab bar
+    // (kanso-tabs.update, .check, .settings), which is always on screen.
+    // These names stay for keys bound to them before.
     cx.spawn(async (cx) => {
       for (;;) {
         let c;

@@ -112,7 +112,8 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.equal(f.updater.available(), "1.1.0");
   assert.equal(f.toasts.length, 1);
   assert.match(f.toasts[0].title, /Kanso 1\.1\.0 is available/);
-  assert.equal(f.toasts[0].action.name, "kanso-chrome.update");
+  assert.equal(f.toasts[0].action.name, "kanso-tabs.update", "the tab bar installs: it is on screen even with the sidebar hidden");
+  assert.equal(f.toasts[0].timeout, 30000, "long enough to be seen");
   assert.deepEqual(f.resizes, [192], "the footer grows a row for it");
 
   // Another check does not toast the same version again.

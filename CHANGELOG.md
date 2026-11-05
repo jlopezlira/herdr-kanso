@@ -8,6 +8,22 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.8.0] - 2026-11-05
+
+### Added
+
+- **Credits** in Kanso settings: Herdr (herdr.dev) with its mark, Kanso's repository, and the people who make it with their GitHub avatars (shipped with Kanso, no network needed), each opened in the browser.
+- When a Kanso release waits, the gear at the end of the tab bar carries a dot and opens on What's new, which has an Update button.
+
+### Fixed
+
+- Kanso's keys no longer take Herdr's or macOS's keys for something else. ⌘1-9 select a tab again (columns moved to ⌃⌥1-9), ⌘[ and ⌘] go to the previous and next agent, ⇧⌘[ and ⇧⌘] to the previous and next tab, ⌘W closes the tab; panes still go and move with ⌥⌘ and the arrows and close with ⇧⌘W. A new pane to the left is ⌥⇧⌘D (⌥⌘D shows and hides the Dock, so it never arrived), and ⌥⌘H/J/K/L are gone (⌥⌘H hides the other apps). Where Kanso keeps one of Herdr's keys it is the same command done the strip's way: ⌘D, ⇧⌘D, ⇧⌘W, ⌥⌘ arrows, ⇧⌘↩, ⌃1-9. In Spend's panel, Esc goes back (⌘[ is Herdr's again). ⌘⌥1-9 no longer select a tab: Herdr's ⌘1-9 do. A key you rebound in Kanso settings stays yours.
+- Kanso's update notice works with the sidebar hidden. The check and its toast lived in the sidebar's footer, which does not run while the sidebar is hidden; the tab bar, always on screen, now checks too, and the toast's click installs from it. The toast stays 30 seconds instead of 5. ⌃⇧, (Kanso settings) goes to the tab bar as well, for the same reason.
+
+### Changed
+
+- Kanso settings lists Kanso's own keys only, and says so. The tab bar comes first, drawn as you see it: each panel's icon and name in your order with its key under it (⌃⇧1 for the first, and so on), then the gear with ⌃⇧,. The rest is in short lists by what you do (Sidebar, Panes, Moving along the strip, Spend); click a row and press the new key. A family reads ⌃⌥1–9. Splitting, closing, going to and moving panes, tabs and spaces are Herdr's commands on Herdr's keys, set in Herdr's general settings; where the strip does one of them its own way it keeps Herdr's key for it.
+
 ## [2.7.1] - 2026-11-05
 
 ### Changed

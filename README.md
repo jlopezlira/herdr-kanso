@@ -306,11 +306,12 @@ removes Kanso. Light and dark themes are included (`kanso-day`, `kanso`).
 
 Kanso updates itself, apart from Herdr. Herdr's own updates keep their dot on
 Settings; Kanso's show as their own row, **Update Kanso to X**, above
-Settings, and a toast once per version. When Herdr starts, and every 5 minutes
-after, the sidebar footer looks up this repository's `vX.Y.Z` tags with
+Settings, a dot on the gear at the end of the tab bar, and a toast once per
+version, even with the sidebar hidden. When Herdr starts, and every 5 minutes
+after, the tab bar looks up this repository's `vX.Y.Z` tags with
 `git ls-remote`, which is one small request with no API quota, so a release
-shows within minutes. `herdr-app do kanso-chrome.check` (or a key bound to
-`kanso-chrome.check`) looks right away and says whether you are up to date. Clicking the row (or
+shows within minutes. `herdr-app do kanso-tabs.check` (or a key bound to
+`kanso-tabs.check`) looks right away and says whether you are up to date. Clicking the row (or
 the toast) downloads that release, runs `herdr-app check` on each mod, and
 only then swaps the mod folders whole and copies the themes. Your layout and
 keys change only where the release changed them: a key you set yourself is
@@ -346,7 +347,7 @@ With the mouse:
 | Scroll over a header or the minimap | Slide the view |
 | Use the order button at the top of the sidebar | Sort each space's agents by last update, needs you first, kind, screen order, or your own; turn the activity line or the Projects, Status and Threads switch off |
 | Click Projects, Status or Threads at the top of the sidebar | See your agents by project, by what they need from you, or as conversations named on their own |
-| Click the gear at the end of the tab bar, or ⌃⇧, | Kanso settings: every key (⌃1-9 spaces, ⌘⌥1-9 tabs, ⌃⇧1-9 panels, ⌘1-9 pane columns, ⌃⌥P/S/T views), rebound by pressing; hide the panels and pieces you don't use; read what's new |
+| Click the gear at the end of the tab bar, or ⌃⇧, | Kanso settings: Kanso's own keys only (⌃⇧1-9 panels, ⌃⌥1-9 pane columns, ⌃⌥P/S/T views; panes, tabs and spaces keep Herdr's keys), rebound by pressing; hide the panels and pieces you don't use; read what's new; see who makes it |
 | Hover an agent and click its pin | Keep it at the top of its space; drag pinned ones to order them |
 | Hover a panel icon at the top right | See its name; the open panel always shows it |
 | Press a panel icon and let go on another | Move it there |
