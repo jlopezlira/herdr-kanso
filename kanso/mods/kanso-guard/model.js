@@ -166,3 +166,36 @@ export function digestHistory(text, now = Date.now(), low = null) {
     totals: { recycles: num(t.recycles) ?? 0, restarts: num(t.restarts) ?? 0, reaped: num(t.reaped) ?? 0, freedMB: num(t.freedMB) ?? 0, since: num(t.since) },
   };
 }
+
+/** About what a recycled Claude agent weighs once it is back, in MB. */
+export const FRESH_MB = 230;
+
+/**
+ * The agents in three groups: ready (idle, can be recycled, heaviest first),
+ * working, and the rest (each with why it can't be recycled).
+ */
+export function groupAgents(agents = []) {
+  const bySize = (a, b) => (num(b.mb) ?? 0) - (num(a.mb) ?? 0);
+  const ready = agents.filter((a) => a.recyclable).sort(bySize);
+  const working = agents.filter((a) => !a.recyclable && a.status === "working").sort(bySize);
+  const other = agents.filter((a) => !a.recyclable && a.status !== "working").sort(bySize);
+  return { ready, working, other };
+}
+
+/** Roughly what recycling these gives back, in MB. */
+export const freedEstimate = (list) => list.reduce((sum, a) => sum + Math.max(0, (num(a.mb) ?? 0) - FRESH_MB), 0);
+
+/**
+ * batch.json as what the panel shows, or null when there is nothing to say:
+ * a batch running (started in the last 15 minutes) or one finished in the
+ * last 10.
+ */
+export function parseBatch(text, now = Date.now()) {
+  let b;
+  try { b = JSON.parse(text ?? ""); } catch { return null; }
+  if (!b || typeof b !== "object" || !num(b.at) || !num(b.total)) return null;
+  const done = Array.isArray(b.done) ? b.done : [];
+  if (b.finished ? now - (num(b.finishedAt) ?? b.at) > 10 * 60_000 : now - b.at > 15 * 60_000) return null;
+  const freed = done.reduce((sum, d) => sum + (d.ok ? Math.max(0, (num(d.beforeMB) ?? 0) - (num(d.afterMB) ?? num(d.beforeMB) ?? 0)) : 0), 0);
+  return { at: b.at, total: b.total, done, current: b.current ?? null, finished: Boolean(b.finished), ok: done.filter((d) => d.ok).length, freed, skippedFocused: b.skippedFocused ?? null, overMB: num(b.overMB) ?? 0 };
+}

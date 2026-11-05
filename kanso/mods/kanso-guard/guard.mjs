@@ -30,7 +30,9 @@ import { fileURLToPath } from "node:url";
 
 const HOME = homedir();
 const APP_HOME = process.env.HERDR_APP_HOME || join(HOME, ".config/herdr-app");
-const DATA = join(APP_HOME, "data/kanso-guard");
+// Another herdr-core session (HC_SESSION, e.g. a demo) keeps its own record,
+// so trying the guard there never shows up in your Memory panel.
+const DATA = join(APP_HOME, "data/kanso-guard", ...(process.env.HC_SESSION && process.env.HC_SESSION !== "default" ? ["sessions", process.env.HC_SESSION.replace(/[^\w.-]/g, "_")] : []));
 const SELF = fileURLToPath(import.meta.url);
 const LABEL = "dev.kanso.guard";
 const PLIST = join(HOME, "Library/LaunchAgents", `${LABEL}.plist`);
@@ -273,6 +275,7 @@ async function recycle(pid, reason, { manual = false } = {}) {
   for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
   if (!gone) {
     event("error", `${name} did not exit; left as it was`, { pid, terminal: term });
+    lastOutcome = { ok: false, why: "it did not exit; left as it was" };
     return false;
   }
   // The shell must be back in front before anything is typed into it.
@@ -285,12 +288,14 @@ async function recycle(pid, reason, { manual = false } = {}) {
   if (!ready) {
     event("error", `${name} exited, but its shell is busy; start it with: ${line}`, { pid, terminal: term, session: s.sessionId });
     await notify(`${name} needs a manual restart`, `It exited, but its terminal is busy. Run: claude --resume ${s.sessionId}`);
+    lastOutcome = { ok: false, why: "it exited, but its terminal was busy; see Events for the command" };
     return false;
   }
   await sleep(1000); // the prompt draws after the shell takes the terminal back
   if (!(await run("hc", ["send", term, line], 20_000)).ok) {
     event("error", `${name} exited, but its terminal did not take the restart; run: ${line}`, { pid, terminal: term, session: s.sessionId });
     await notify(`${name} needs a manual restart`, `Run in its terminal: claude --resume ${s.sessionId}`);
+    lastOutcome = { ok: false, why: "its terminal did not take the restart; see Events" };
     return false;
   }
   // Attached when a process in that terminal holds the same conversation.
@@ -304,14 +309,44 @@ async function recycle(pid, reason, { manual = false } = {}) {
   if (!after) {
     event("error", `${name} was ended but did not come back on its conversation; run: ${line}`, { pid, terminal: term, session: s.sessionId });
     await notify(`${name} did not resume`, `Run in its terminal: claude --resume ${s.sessionId}`);
+    lastOutcome = { ok: false, why: "it did not come back on its conversation; see Events" };
     return false;
   }
   const now = (await footprints([after])).get(after) ?? 0;
   event("recycle", `${name} recycled: ${before} MB to ${now} MB (${reason})`, { pid, newPid: after, terminal: term, session: s.sessionId, beforeMB: before, afterMB: now, freedMB: Math.max(0, before - now) });
+  lastOutcome = { ok: true, beforeMB: before, afterMB: now };
   if (!manual) await notify(`${name} restarted`, `It held ${before} MB; the same conversation goes on in a fresh process (${now} MB).`);
   return true;
 }
-function skip(pid, why) { console.log(`not recycled (${pid}): ${why}`); event("skip", `Not recycled: ${why}`, { pid }); return false; }
+let lastOutcome = null; // why the last recycle stopped, or what it freed: for the batch's report
+function skip(pid, why) { lastOutcome = { ok: false, why }; console.log(`not recycled (${pid}): ${why}`); event("skip", `Not recycled: ${why}`, { pid }); return false; }
+
+// Every idle agent that can be recycled (only those from `overMB`), heaviest
+// first, one after another, never the one you are on. data/kanso-guard/
+// batch.json says how far it got, for the Memory panel.
+async function recycleBatch(overMB = 0) {
+  const snap = await sample();
+  const st = await run("herdr-app", ["status"], 10_000);
+  let focused = null;
+  try { focused = JSON.parse(st.stdout).agent ?? null; } catch {}
+  const list = snap.agents.filter((a) => a.recyclable && a.mb >= overMB && a.terminal !== focused).sort((a, b) => b.mb - a.mb);
+  const batch = { at: Date.now(), overMB, total: list.length, current: null, done: [], skippedFocused: snap.agents.some((a) => a.recyclable && a.mb >= overMB && a.terminal === focused) ? focused : null, finished: false };
+  const save = () => writeJSON(join(DATA, "batch.json"), batch);
+  save();
+  event("recycle-batch", list.length ? `Recycling ${list.length} ${list.length === 1 ? "agent" : "agents"}${overMB ? ` over ${overMB} MB` : ""}` : "Nothing to recycle");
+  for (const a of list) {
+    batch.current = a.name; save();
+    lastOutcome = null;
+    const ok = await recycle(a.pid, overMB ? `all over ${overMB} MB, asked from Memory` : "all idle, asked from Memory", { manual: true });
+    batch.done.push({ name: a.name, terminal: a.terminal, ok, beforeMB: lastOutcome?.beforeMB ?? a.mb, afterMB: lastOutcome?.afterMB ?? null, why: ok ? null : lastOutcome?.why ?? "not recycled" });
+    batch.current = null; save();
+  }
+  batch.finished = true; batch.finishedAt = Date.now(); save();
+  const freed = batch.done.reduce((s, d) => s + (d.ok ? Math.max(0, d.beforeMB - (d.afterMB ?? d.beforeMB)) : 0), 0);
+  const okN = batch.done.filter((d) => d.ok).length;
+  if (list.length) event("recycle-batch", `Recycled ${okN} of ${list.length}, ${freed} MB freed`);
+  if (list.length) await notify("Agents recycled", `${okN} of ${list.length}, ${freed} MB freed. Same conversations, fresh processes.`);
+}
 
 // ---- the window ---------------------------------------------------------------------
 
@@ -435,6 +470,7 @@ function totals() {
     if (e.kind === "recycle") { t.recycles++; t.freedMB += e.freedMB ?? 0; }
     else if (e.kind === "restart") t.restarts++;
     else if (e.kind === "reap" && e.pid) t.reaped++;
+    // a batch's own lines are summaries; each agent in it is counted above
   }
   return t;
 }
@@ -592,6 +628,7 @@ if (isMain) {
   };
   if (cmd === "check") await check();
   else if (cmd === "sample") await check({ act: false });
+  else if (cmd === "recycle-all") await manual(() => recycleBatch(Number(arg) || 0));
   else if (cmd === "recycle") await manual(async () => { process.exitCode = (await recycle(Number(arg), "asked from Memory", { manual: true })) ? 0 : 1; });
   else if (cmd === "restart-window") await manual(() => restartWindow("Asked from Memory"));
   else if (cmd === "reap") await manual(async () => { await reap(await processes(), await windowPid(), { manual: true }); });
@@ -605,5 +642,5 @@ if (isMain) {
       for (const a of n.agents) console.log(`  ${String(a.mb).padStart(5)} MB  ${a.kind.padEnd(6)} ${a.terminal.padEnd(5)} ${a.status === "idle" ? `idle ${a.idleMin}m` : "working"}  ${a.name}${a.why ? `  (${a.why})` : ""}`);
       for (const e of n.events.slice(0, 8)) console.log(`  ${new Date(e.at).toLocaleTimeString()} ${e.kind}: ${e.text}`);
     }
-  } else { console.log("usage: guard.mjs check|recycle <pid>|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
+  } else { console.log("usage: guard.mjs check|recycle <pid>|recycle-all [overMB]|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
 }

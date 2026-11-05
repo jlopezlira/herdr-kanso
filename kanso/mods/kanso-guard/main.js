@@ -11,7 +11,9 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, appHome, theme, nextCommand, readTextFile, layout } from "herdr";
 import { G, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory } from "./model.js";
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch } from "./model.js";
+
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 // The folder name: change it here if you install the mod under another name.
 const MOD = "kanso-guard";
@@ -58,6 +60,8 @@ export default class Memory extends View {
     this.historyAt = 0;
     this.reading = false;
     this.range = "day";
+    this.batch = null; // parseBatch(): a recycle-all running or just done
+    this.batchSeen = 0; // a finished batch you dismissed
     this.showAll = false;
     this.armed = new Armed();
     this.busy = {}; // action key -> { at, done(data) }
@@ -131,11 +135,19 @@ export default class Memory extends View {
           this.historyAt = Date.now();
         } catch { /* keep the last one */ }
       }
+      let batch = null;
+      try { batch = parseBatch(await readTextFile(`${dir}/batch.json`)); } catch { /* none */ }
       this.reading = false;
       if (this.closed || !this.awake) return;
       this.now = now;
       this.digest = digest;
+      this.batch = batch && batch.at !== this.batchSeen ? batch : null;
       this.settle();
+      // While a batch runs, follow it closely.
+      if (this.batch && !this.batch.finished) {
+        this.timers.push(readCx.timer.after(4000, (timerCx) => this.read(timerCx)));
+        while (this.timers.length > 12) { try { this.timers.shift()?.cancel(); } catch { /* already gone */ } }
+      }
       readCx.notify();
     });
   }
@@ -144,6 +156,10 @@ export default class Memory extends View {
   settle() {
     const data = this.now?.data;
     for (const [key, b] of Object.entries(this.busy)) {
+      if (key === "batch") { // a batch takes minutes: done when its file says so
+        if ((this.batch?.finished && this.batch.at >= b.at - 5000) || Date.now() - b.at > 20 * 60_000) delete this.busy[key];
+        continue;
+      }
       if (Date.now() - b.at > BUSY_MS || (data && b.done(data, this.now.state))) delete this.busy[key];
     }
   }
@@ -186,6 +202,9 @@ export default class Memory extends View {
   turnOn(cx) { this.act("install", ["install"], (_d, state) => state === "ok", cx); }
 
   recycle(a, cx) { this.act(`recycle:${a.pid}`, ["recycle", String(a.pid)], (data) => !data.agents.some((x) => x.pid === a.pid), cx); }
+
+  /** Every ready agent (only those from `overMB`), one after another. */
+  recycleAll(overMB, cx) { this.batchSeen = 0; this.act("batch", ["recycle-all", String(overMB || 0)], () => false, cx); }
 
   restartWindow(cx) {
     const pid = this.now?.data?.window?.pid;
@@ -337,34 +356,88 @@ export default class Memory extends View {
 
   agents(c, data) {
     const list = data.agents;
-    const shown = this.showAll ? list : list.slice(0, AGENT_ROWS);
+    const { ready, working, other } = groupAgents(list);
     const limit = data.limits.agentMB;
+    const over = num(data.limits.pressureAgentMB) ?? 500;
+    const heavy = ready.filter((a) => a.mb >= over);
+    const batchBusy = Boolean(this.busy.batch) || Boolean(this.batch && !this.batch.finished);
+    const counts = [
+      ready.length ? `${ready.length} ready` : null,
+      working.length ? `${working.length} working` : null,
+      other.length ? `${other.length} can't be recycled` : null,
+    ].filter(Boolean).join(" · ");
+    const armedAll = this.armed.is("all"), armedHeavy = this.armed.is("heavy");
+    const actions = h_flex().w_full().flex_wrap().gap_x(G.xl).gap_y(G.sm).items_center()
+      .child(quietLink("guard-recycle-all",
+        armedAll ? `Press again to recycle ${ready.length}` : `Recycle all ${ready.length} idle · about ${size(freedEstimate(ready))} back`,
+        (cx) => this.armed.press("all", cx, (cx) => this.recycleAll(0, cx)), c,
+        { color: armedAll ? c.red : c.text, size: 13, label: "Recycle every idle agent" }))
+      .when(heavy.length > 0 && heavy.length < ready.length, (el) => el.child(quietLink("guard-recycle-heavy",
+        armedHeavy ? `Press again to recycle ${heavy.length}` : `Only the ${heavy.length} over ${size(over)}`,
+        (cx) => this.armed.press("heavy", cx, (cx) => this.recycleAll(over, cx)), c,
+        { color: armedHeavy ? c.red : c.muted, size: 13 })));
+    return v_flex().w_full().gap(G.xl)
+      .child(v_flex().w_full().gap(G.sm)
+        .child(section(c, "Agents", list.length ? size(agentsMB(data)) : ""))
+        .when(list.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("None running.")))
+        .when(Boolean(counts), (el) => el.child(div().text_size(12).text_color(c.dim).child(counts)))
+        .when(Boolean(this.batch), (el) => el.child(this.batchView(c)))
+        .when(!batchBusy && ready.length > 0, (el) => el.child(actions)))
+      .when(ready.length > 0, (el) => el.child(this.group(c, "Ready to recycle", ready, { limit, action: !batchBusy })))
+      .when(working.length > 0, (el) => el.child(this.group(c, "Working", working, { limit })))
+      .when(other.length > 0, (el) => el.child(this.group(c, "Can't be recycled", other, { limit, reason: true })));
+  }
+
+  /** A recycle-all: how far it got, agent by agent. */
+  batchView(c) {
+    const b = this.batch;
+    const head = b.finished
+      ? (b.total ? `Recycled ${b.ok} of ${b.total} · ${size(b.freed)} back` : "Nothing was ready to recycle")
+      : `Recycling ${Math.min(b.done.length + 1, b.total)} of ${b.total}${b.current ? ` · ${b.current}` : ""}`;
+    return v_flex().w_full().gap(G.xs).py(G.sm)
+      .child(h_flex().w_full().items_center().gap(G.sm)
+        .when(!b.finished, (el) => el.child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE)))
+        .child(div().flex_1().min_w(0).text_size(13).text_color(c.text).child(head))
+        .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; cx.notify(); }, c, { size: 11.5 }))))
+      .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(2).id(`guard-batch-${i}`)
+        .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
+        .child(div().flex_none().text_size(12).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
+          .child(d.ok ? `${size(d.beforeMB)} → ${size(d.afterMB ?? d.beforeMB)}` : String(d.why ?? "not recycled")))))
+      .when(Boolean(b.skippedFocused), (el) => el.child(div().text_size(11).text_color(c.dim).child(`The agent you are on (${b.skippedFocused}) was left as it is.`)));
+  }
+
+  group(c, title, list, { limit, action = false, reason = false }) {
+    const open = this.showAll || list.length <= AGENT_ROWS;
+    const shown = open ? list : list.slice(0, AGENT_ROWS);
     return v_flex().w_full()
-      .child(section(c, "Agents", list.length ? size(agentsMB(data)) : ""))
-      .when(list.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("None running.")))
-      .children(shown.map((a, index) => {
-        const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
-        const spark = sparkFor(this.digest?.sparks, a);
-        const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;
-        return h_flex().w_full().items_center().gap(G.md).py(G.sm)
-          .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-          .child(v_flex().flex_1().min_w(0).gap(3).when(!a.recyclable && Boolean(a.why), (el) => el.tooltip(a.why))
-            .child(h_flex().w_full().items_center().gap(G.sm)
-              .when(a.status === "working", (el) => el.child(breathe(div().size(5).flex_none().rounded_full().bg(c.accent), PULSE)))
-              .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(a.name || a.kind || String(a.pid))))
-            .child(h_flex().w_full().flex_wrap().gap_x(G.md)
-              .children(agentMeta(a).map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
-          .child(v_flex().flex_none().items_end().gap(2)
-            .child(h_flex().items_center().gap(G.md)
-              .when(Boolean(spark), (el) => el.child(this.spark(c, spark.ratios)))
-              .child(div().text_size(15).font_light().text_color(over ? c.yellow : c.text).whitespace_nowrap().child(size(a.mb))))
-            .when(Boolean(a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
-              busy ? "Recycling…" : armed ? "Press again" : "Recycle",
-              (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.recycle(a, cx)); }, c,
-              { color: armed ? c.red : c.muted, size: 11.5, label: `Recycle ${a.name || a.pid}` }))));
-      }))
+      .child(h_flex().w_full().items_end().justify_between().pb(G.xs)
+        .child(div().text_size(12).text_color(c.muted).child(title))
+        .child(div().text_size(11.5).text_color(c.dim).child(`${list.length} · ${size(list.reduce((s, a) => s + (a.mb ?? 0), 0))}`)))
+      .children(shown.map((a, index) => this.agentRow(c, a, index, { limit, action, reason })))
       .when(list.length > AGENT_ROWS, (el) => el.child(h_flex().pt(G.sm)
-        .child(quietLink("guard-agents-more", this.showAll ? "Show fewer" : `Show ${list.length - AGENT_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
+        .child(quietLink(`guard-more-${title}`, this.showAll ? "Show fewer" : `Show ${list.length - AGENT_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
+  }
+
+  agentRow(c, a, index, { limit, action, reason }) {
+    const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
+    const spark = sparkFor(this.digest?.sparks, a);
+    const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;
+    return h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)
+      .child(v_flex().flex_1().min_w(0).gap(3)
+        .child(h_flex().w_full().items_center().gap(G.sm)
+          .when(a.status === "working", (el) => el.child(breathe(div().size(5).flex_none().rounded_full().bg(c.accent), PULSE)))
+          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(reason ? c.muted : c.text).child(a.name || a.kind || String(a.pid))))
+        .child(h_flex().w_full().flex_wrap().gap_x(G.md)
+          .children(agentMeta(a).map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part))))
+        .when(reason && Boolean(a.why), (el) => el.child(div().text_size(11).text_color(c.dim).child(a.why))))
+      .child(v_flex().flex_none().items_end().gap(2)
+        .child(h_flex().items_center().gap(G.md)
+          .when(Boolean(spark), (el) => el.child(this.spark(c, spark.ratios)))
+          .child(div().text_size(15).font_light().text_color(over ? c.yellow : reason ? c.muted : c.text).whitespace_nowrap().child(size(a.mb))))
+        .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
+          busy ? "Recycling…" : armed ? "Press again" : "Recycle",
+          (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.recycle(a, cx)); }, c,
+          { color: armed ? c.red : c.muted, size: 11.5, label: `Recycle ${a.name || a.pid}` }))));
   }
 
   heaviest(c, data) {

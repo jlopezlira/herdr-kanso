@@ -180,3 +180,24 @@ test("guard: history keeps a day by the minute and at most 40 agents", async () 
   assert.ok(Object.keys(h.agents).length <= 40);
   assert.ok(JSON.stringify(h).length < 1024 * 1024);
 });
+
+test("guard panel: agents grouped, estimate, batch progress", async () => {
+  const m = await load("kanso-guard/model.js", ["groupAgents", "freedEstimate", "parseBatch", "FRESH_MB"]);
+  const agents = [
+    { pid: 1, mb: 300, status: "idle", recyclable: true },
+    { pid: 2, mb: 800, status: "idle", recyclable: true },
+    { pid: 3, mb: 500, status: "working", recyclable: false, why: "It is working" },
+    { pid: 4, mb: 150, status: "idle", recyclable: false, kind: "grok", why: "Only Claude Code agents can be resumed automatically" },
+  ];
+  const g = m.groupAgents(agents);
+  assert.deepEqual(g.ready.map((a) => a.pid), [2, 1]);
+  assert.deepEqual(g.working.map((a) => a.pid), [3]);
+  assert.deepEqual(g.other.map((a) => a.pid), [4]);
+  assert.equal(m.freedEstimate(g.ready), (800 - m.FRESH_MB) + (300 - m.FRESH_MB));
+  const now = Date.now();
+  const running = m.parseBatch(JSON.stringify({ at: now - 60_000, total: 3, current: "b", done: [{ name: "a", ok: true, beforeMB: 800, afterMB: 220 }], finished: false }), now);
+  assert.equal(running.finished, false);
+  assert.equal(running.freed, 580);
+  assert.equal(m.parseBatch(JSON.stringify({ at: now - 3_600_000, total: 1, done: [], finished: true, finishedAt: now - 3_600_000 }), now), null);
+  assert.equal(m.parseBatch("not json", now), null);
+});
