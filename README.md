@@ -212,7 +212,10 @@ port, the command, its folder, how long it has run, and the pane that runs
 it. Agents start servers and leave them running when their pane closes; the
 ones no pane runs any more are marked, and **Stop** (a second press
 confirms) ends them, with a force stop for one that won't go. Open one in
-the browser or go to its pane from the same row.
+the browser or go to its pane from the same row. With the memory guard on,
+each row shows the memory it holds, and the panel keeps a history: how many
+ran at once over 24 hours, 7 or 30 days (the ones with no pane marked), what
+opened today, what ended and how, and what stopping them gave back.
 
 ### Weeks without a restart
 
@@ -396,8 +399,9 @@ The pane headers run `git` and `gh pr view` in an agent's folder when it
 stops working, and keep only the counts. Send to an agent runs `hc send`, and
 only when you press Send. Arrangements run `hc get` to read what each pane
 runs and keep it in `~/.config/herdr-app/data/kanso-arrange.json`. Ports runs
-`lsof`, `ps` and `hc get` on this computer only while the panel is shown, and
-`kill` only on what you confirm.
+`lsof`, `ps` and `hc get` on this computer only while the panel is shown,
+reads the guard's `~/.config/herdr-app/data/kanso-guard/ports.json`, and stops
+only what you confirm (through the guard, or with `kill` without it).
 
 The sidebar's Threads view, only while it is shown, finds the conversation
 of each agent on this computer: `hc get` names the program in front of its

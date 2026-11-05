@@ -175,12 +175,17 @@ const KIND = (argv0 = "", agent = "") => {
 };
 
 /** Every agent in a Herdr terminal on this computer, with what we know of it. */
+// Each terminal's shell pid -> its address, filled by agentsNow (for Ports' owners).
+let shellPids = new Map();
+
 async function agentsNow(procs, fp) {
   const ls = await hcJSON(["ls"]);
   const out = [];
+  shellPids = new Map();
   for (const t of ls?.terminals ?? []) {
     if (t.state !== "live" || t.address.includes("/")) continue; // this computer's only
     const g = await hcJSON(["get", t.address], 5000);
+    if (g?.pid) shellPids.set(Number(g.pid), t.address);
     const pid = g?.foreground?.pid ?? null;
     if (!pid) continue;
     const proc = procs.find((p) => p.pid === pid);
@@ -577,6 +582,159 @@ function totals() {
   return t;
 }
 
+// ---- dev servers (the Ports panel's history) ---------------------------------------
+
+/** pid -> { command, ports } from `lsof -F pcn` of the listening sockets. */
+export function parseListen(text) {
+  const out = new Map();
+  let cur = null;
+  for (const line of String(text ?? "").split("\n")) {
+    const k = line[0], v = line.slice(1);
+    if (k === "p") { cur = { pid: Number(v), command: "", ports: [] }; out.set(cur.pid, cur); }
+    else if (k === "c" && cur) cur.command = v;
+    else if (k === "n" && cur) { const port = Number(v.slice(v.lastIndexOf(":") + 1)); if (port && !cur.ports.includes(port)) cur.ports.push(port); }
+  }
+  for (const x of out.values()) x.ports.sort((a, b) => a - b);
+  return out;
+}
+
+const shortArgs = (command) => { const [cmd, ...rest] = String(command).split(" "); return [cmd.split("/").pop(), ...rest].join(" ").slice(0, 120); };
+
+/** The process and everything under it, from the ps listing. */
+function treeOf(root, procs) {
+  const kids = new Map();
+  for (const p of procs) { if (!kids.has(p.ppid)) kids.set(p.ppid, []); kids.get(p.ppid).push(p); }
+  const out = [], seen = new Set(), stack = [procs.find((p) => p.pid === root)].filter(Boolean);
+  while (stack.length) { const p = stack.pop(); if (seen.has(p.pid)) continue; seen.add(p.pid); out.push(p); stack.push(...(kids.get(p.pid) ?? [])); }
+  return out;
+}
+
+/** The dev servers listening now: a terminal's, or started in a folder of your home (not ~/Library). */
+/** Each terminal's shell pid, from herdr-core (when no agent sample filled them). */
+async function loadShells() {
+  shellPids = new Map();
+  for (const t of (await hcJSON(["ls"]))?.terminals ?? []) {
+    if (t.state !== "live" || t.address.includes("/")) continue;
+    const g = await hcJSON(["get", t.address], 5000);
+    if (g?.pid) shellPids.set(Number(g.pid), t.address);
+  }
+}
+
+/** The dev servers listening now, or null when lsof could not say (nothing is concluded then). */
+async function serversNow(procs) {
+  const ls = await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], 10_000);
+  // lsof exits 1 with no output when nothing listens; anything else unexplained is a failure.
+  if (ls.timedOut || (!ls.ok && (ls.stderr.trim() || ls.stdout.trim()))) return null;
+  const listen = parseListen(ls.stdout);
+  const pids = [...listen.keys()];
+  const cwds = new Map();
+  if (pids.length) {
+    let pid = null;
+    for (const line of (await run("lsof", ["-a", "-d", "cwd", "-p", pids.join(","), "-F", "pn"], 10_000)).stdout.split("\n")) {
+      if (line[0] === "p") pid = Number(line.slice(1)); else if (line[0] === "n" && pid != null) cwds.set(pid, line.slice(1));
+    }
+  }
+  const byPid = new Map(procs.map((p) => [p.pid, p]));
+  const ownerOf = (pid) => { for (let p = pid, hops = 0; p > 1 && hops < 64; p = byPid.get(p)?.ppid ?? 0, hops++) if (shellPids.has(p)) return shellPids.get(p); return null; };
+  const out = [];
+  for (const l of listen.values()) {
+    const proc = byPid.get(l.pid);
+    if (!proc) continue;
+    const cwd = cwds.get(l.pid) ?? null, owner = ownerOf(l.pid);
+    const mine = cwd && cwd.startsWith(`${HOME}/`) && !cwd.startsWith(`${HOME}/Library/`);
+    if (!owner && !mine) continue;
+    const startedAt = Date.parse(proc.lstart) || null;
+    out.push({
+      key: `${l.pid}@${startedAt}`, pid: l.pid, ports: l.ports, command: l.command, args: shortArgs(proc.command), cwd,
+      project: cwd ? cwd.split("/").filter(Boolean).pop() : null, owner, mb: treeOf(l.pid, procs).reduce((t, p) => t + p.rssMB, 0),
+      startedAt, lstart: proc.lstart,
+    });
+  }
+  return out.sort((a, b) => Boolean(a.owner) - Boolean(b.owner) || a.ports[0] - b.ports[0]);
+}
+
+/** ports.json after this minute's look at `now` (the servers listening). */
+export function updatePorts(prev, now, at = Date.now()) {
+  const p = prev?.v === 1 ? prev : { v: 1, minutes: [], hours: [], servers: [], totals: { opened: 0, stopped: 0, exited: 0, freedMB: 0, since: at } };
+  p.totals ??= { opened: 0, stopped: 0, exited: 0, freedMB: 0, since: at };
+  const byKey = new Map((p.servers ?? []).map((x) => [x.key, x]));
+  const live = new Set(now.map((x) => x.key));
+  for (const x of now) {
+    let rec = byKey.get(x.key);
+    if (rec?.ended) { // listening again after a look that missed it: it never ended
+      if (rec.ended.how === "exited") p.totals.exited = Math.max(0, p.totals.exited - 1);
+      if (rec.ended.how !== "stopped") rec.ended = null;
+    }
+    if (!rec) {
+      rec = { key: x.key, pid: x.pid, ports: x.ports, command: x.command, args: x.args, cwd: x.cwd, project: x.project, startedAt: x.startedAt, firstSeen: at, lastSeen: at, peakMB: x.mb, owner: x.owner, everLoose: !x.owner, ended: null };
+      byKey.set(x.key, rec);
+      p.totals.opened++;
+    }
+    rec.lastSeen = at; rec.ports = x.ports; rec.peakMB = Math.max(rec.peakMB ?? 0, x.mb);
+    if (x.owner) rec.owner = x.owner; else rec.everLoose = true;
+    x.firstSeen = rec.firstSeen;
+  }
+  // Gone since the last look, and not stopped from Ports: it exited on its own.
+  for (const rec of byKey.values()) {
+    if (!rec.ended && !live.has(rec.key)) { rec.ended = { at, how: "exited", freedMB: 0 }; p.totals.exited++; }
+  }
+  // At most 300: every running one, then the latest ended within 30 days.
+  const all = [...byKey.values()].filter((r) => !r.ended || at - r.ended.at < 30 * DAY);
+  const running = all.filter((r) => !r.ended), ended = all.filter((r) => r.ended).sort((a, b) => b.ended.at - a.ended.at);
+  p.servers = [...running, ...ended.slice(0, Math.max(0, 300 - running.length))].sort((a, b) => b.firstSeen - a.firstSeen);
+  p.now = now.map(({ lstart, ...x }) => x);
+  const active = now.length, loose = now.filter((x) => !x.owner).length, mb = now.reduce((t, x) => t + x.mb, 0);
+  p.minutes = (p.minutes ?? []).filter((r) => at - r[0] < DAY);
+  p.minutes.push([at, active, loose, mb]);
+  const hourAt = Math.floor(at / HOUR) * HOUR;
+  p.hours = (p.hours ?? []).filter((r) => at - r[0] < 90 * DAY);
+  const last = p.hours[p.hours.length - 1];
+  if (last && last[0] === hourAt) { last[1] = Math.max(last[1], active); last[2] = Math.max(last[2], loose); last[3] = Math.max(last[3], mb); }
+  else p.hours.push([hourAt, active, loose, mb]);
+  p.at = at;
+  return p;
+}
+
+async function samplePorts(procs) {
+  const path = join(DATA, "ports.json");
+  const now = await serversNow(procs);
+  if (now) writeJSON(path, updatePorts(readJSON(path), now));
+}
+
+/** Stops a dev server Ports lists: TERM (KILL with `force`), and records what it gave back. */
+async function stopServer(pid, force = false, shownStart = null) {
+  const path = join(DATA, "ports.json");
+  await loadShells();
+  const procs = await processes();
+  const now = await serversNow(procs);
+  if (!now) { console.log("lsof could not list the servers"); return false; }
+  const x = now.find((s) => s.pid === pid);
+  if (!x) { console.log(`not a dev server Ports lists: ${pid}`); return false; }
+  // The row's start (from ps's elapsed time, to the minute): a pid reused by another process is left alone.
+  if (shownStart && x.startedAt && Math.abs(x.startedAt - shownStart) > 2 * MIN) { console.log(`pid ${pid} is another process now`); return false; }
+  const tree = treeOf(pid, procs).map((p) => ({ pid: p.pid, lstart: p.lstart, mb: p.rssMB }));
+  await run("kill", [force ? "-KILL" : "-TERM", String(pid)]);
+  let after = null;
+  for (let i = 0; i < 10; i++) {
+    await sleep(500);
+    after = new Map((await processes()).map((p) => [p.pid, p.lstart]));
+    if (after.get(pid) !== x.lstart) break;
+  }
+  const gone = (t) => after.get(t.pid) !== t.lstart;
+  if (!gone(tree[0])) { event("skip", `${x.project ?? "A dev server"} did not stop yet${force ? "" : "; Stop again forces it"}`, { pid }); return false; }
+  const freed = tree.filter(gone).reduce((t, p) => t + p.mb, 0);
+  // Recorded as listening first (one stopped before its first minute's look
+  // still counts as opened), then as stopped.
+  const p = updatePorts(readJSON(path), now);
+  const rec = p.servers.find((r) => r.key === x.key);
+  if (rec) rec.ended = { at: Date.now(), how: "stopped", freedMB: freed };
+  p.now = (p.now ?? []).filter((s) => s.key !== x.key);
+  p.totals.stopped++; p.totals.freedMB += freed;
+  writeJSON(path, p);
+  event("stop", `Stopped the dev server in ${x.project ?? "a folder"}${x.owner ? "" : " (no pane ran it)"}: ${freed} MB back`, { pid, freedMB: freed });
+  return true;
+}
+
 // ---- one check ----------------------------------------------------------------------------
 
 async function sample() {
@@ -668,6 +826,7 @@ async function check({ act = true, locked = false } = {}) {
     const hist = addToHistory(readJSON(histPath), [Date.now(), snap.machine.freePct, snap.machine.swapMB, snap.win.mb, agentsMB], snap.agents);
     hist.totals = totals();
     writeJSON(histPath, hist);
+    await samplePorts(snap.procs);
     const helpers = snap.procs.filter((p) => snap.win.pid && p.ppid === snap.win.pid && isHelper(p.command) && p.ageMin >= 3).length;
     writeNow(snap, state, helpers);
     if (act) {
@@ -730,6 +889,7 @@ if (isMain) {
   };
   if (cmd === "check") await check();
   else if (cmd === "sample") await check({ act: false });
+  else if (cmd === "stop-server") await manual(async () => { const [p, start] = String(arg).split("@"); process.exitCode = (await stopServer(Number(p), process.argv[4] === "force", Number(start) || null)) ? 0 : 1; });
   else if (cmd === "close") await manual(async () => { process.exitCode = (await closeAgent(Number(arg), "asked from Memory")) ? 0 : 1; });
   else if (cmd === "close-stale") await manual(() => closeStale(arg !== undefined && Number.isFinite(Number(arg)) ? Number(arg) : limits.staleIdleMin));
   else if (cmd === "recycle-all") await manual(() => recycleBatch(Number(arg) || 0));
@@ -746,5 +906,5 @@ if (isMain) {
       for (const a of n.agents) console.log(`  ${String(a.mb).padStart(5)} MB  ${a.kind.padEnd(6)} ${a.terminal.padEnd(5)} ${a.status === "idle" ? `idle ${a.idleMin}m` : "working"}  ${a.name}${a.why ? `  (${a.why})` : ""}`);
       for (const e of n.events.slice(0, 8)) console.log(`  ${new Date(e.at).toLocaleTimeString()} ${e.kind}: ${e.text}`);
     }
-  } else { console.log("usage: guard.mjs check|recycle <pid>|recycle-all [overMB]|close <pid>|close-stale [minIdle]|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
+  } else { console.log("usage: guard.mjs check|recycle <pid>|recycle-all [overMB]|close <pid>|close-stale [minIdle]|stop-server <pid> [force]|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
 }

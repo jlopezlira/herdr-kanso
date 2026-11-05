@@ -8,6 +8,13 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.1.0] - 2026-11-05
+
+### Added
+
+- Ports keeps a history, from the memory guard (which now also records, every minute, the dev servers listening on this computer). Each row shows how long its server has run and the memory it holds; the panel adds how many ran at once over 24 hours, 7 or 30 days with the ones no pane ran marked, how many opened today, how many you stopped and the memory that gave back, and the servers opened today or recently ended (how long each ran, how it ended, its largest size). Stop goes through the guard, which measures what each server gives back; without the guard Stop sends the signal itself and the panel offers to turn the guard on.
+- Ports has a share button, as Spend, Shipped and Memory do. The card brags about the dev servers your agents left running after their panes closed that you found and stopped, and the memory that gave back, or else how many your agents opened this week, with what runs now, the most at once and a week's chart. No ports, folders, projects or commands leave with it.
+
 ## [3.0.0] - 2026-11-05
 
 ### Removed
