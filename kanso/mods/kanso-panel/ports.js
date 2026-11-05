@@ -217,7 +217,8 @@ export class Ports {
   // is let go uncounted.
   async countStopped() {
     if (!this.asked?.size) return;
-    const ps = await exec("ps", ["-axo", "pid=,lstart="]).then((r) => r.stdout).catch(() => null);
+    // A failed or empty listing proves nothing: the stops wait for the next one.
+    const ps = await exec("ps", ["-axo", "pid=,lstart="]).then((r) => (r.code === 0 && r.stdout.trim() ? r.stdout : null)).catch(() => null);
     if (ps === null) return;
     let n = 0, kb = 0;
     for (const [pid, { tree, at }] of this.asked) {
