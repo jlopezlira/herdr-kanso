@@ -10,17 +10,28 @@
     button.addEventListener("click", function () {
       var done = function () {
         label.textContent = "Copied";
+        announce("Copied the install line.");
         button.classList.add("is-done");
         clearTimeout(timer);
         timer = setTimeout(function () { label.textContent = "Copy"; button.classList.remove("is-done"); }, 1800);
       };
       if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(done, function () { select(box); });
+        navigator.clipboard.writeText(text).then(done, function () { failed(box); });
       } else {
-        select(box);
+        failed(box);
       }
     });
   });
+  var status = document.querySelector("[data-copy-status]");
+  function announce(text) { if (status) { status.textContent = ""; status.textContent = text; } }
+  // Nothing was copied: the line is selected so you can copy it yourself.
+  function failed(box) {
+    select(box);
+    var label = box.querySelector("[data-copy-label]");
+    label.textContent = "Press Cmd+C";
+    announce("Could not copy. The install line is selected; press Cmd+C to copy it.");
+    setTimeout(function () { label.textContent = "Copy"; }, 2400);
+  }
   function select(box) {
     var range = document.createRange();
     range.selectNodeContents(box.querySelector("[data-copy-text]"));

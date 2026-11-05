@@ -266,3 +266,12 @@ h3 { margin: 0; color: var(--text); font-size: 19px; font-weight: 600; letter-sp
 /* Grid and flex children may shrink below their content (the install line scrolls inside its box). */
 .steps li, .tile, .tile-text, .grid > *, .cards > *, .facts li > div { min-width: 0; }
 body { overflow-x: clip; }
+
+/* Phones: the headline scales inside the padding, the pill wraps, the install line wraps instead of hiding its end. */
+@media (max-width: 640px) {
+  h1 { font-size: clamp(34px, 11.4vw, 46px); max-width: none; }
+  .pill { flex-wrap: wrap; justify-content: center; max-width: 100%; padding: 6px 12px; font-size: 13px; line-height: 1.4; border-radius: 14px; }
+  .code code { white-space: normal; overflow-wrap: anywhere; }
+}
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.window-panel a { display: block; cursor: zoom-in; }

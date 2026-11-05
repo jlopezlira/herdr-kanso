@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kansō: more agents, less babysitting</title>
-<meta name="description" content="Every agent gets a readable pane, the one waiting on you comes first, and idle sessions recycle on the same conversation so your machine lasts weeks. A layout for Herdr.">
+<meta name="description" content="Every agent gets a readable pane, the one waiting on you comes first, and idle Claude Code sessions recycle on the same conversation so your machine lasts weeks. A layout for Herdr.">
 <meta property="og:title" content="kansō: more agents, less babysitting">
-<meta property="og:description" content="Every agent gets a readable pane, the one waiting on you comes first, and idle sessions recycle on the same conversation so your machine lasts weeks. Free and open source, for Herdr.">
+<meta property="og:description" content="Every agent gets a readable pane, the one waiting on you comes first, and idle Claude Code sessions recycle on the same conversation so your machine lasts weeks. Free and open source, for Herdr.">
 <meta property="og:image" content="https://jlopezlira.github.io/herdr-kanso/og.png">
 <meta property="og:url" content="https://jlopezlira.github.io/herdr-kanso/">
 <meta name="twitter:card" content="summary_large_image">
@@ -41,7 +41,7 @@
     <a class="pill" href="#ports"><span class="pill-tag">New in 3.1</span>Ports keeps a history of the servers your agents leave running</a>
     <!-- The headline and subline: change them here. -->
     <h1>More agents.<br>Less babysitting.</h1>
-    <p class="lede">Every agent gets a readable pane, the one waiting on you comes first, and idle sessions recycle on the same conversation so your machine lasts weeks.</p>
+    <p class="lede">Every agent gets a readable pane, the one waiting on you comes first, and idle Claude Code sessions recycle on the same conversation so your machine lasts weeks.</p>
     <div class="actions">
       <a class="button button-primary" href="#install">Install kansō</a>
       <a class="button" href="https://github.com/jlopezlira/herdr-kanso">
@@ -53,8 +53,7 @@
 
     <figure class="window window-hero">
       <picture>
-        <source media="(prefers-color-scheme: light)" srcset="shots/hero-light.png">
-        <img src="shots/hero.png" width="1920" height="1200" alt="kansō in Herdr: a projects sidebar with agents grouped by repository, three agents side by side on the strip, one of them waiting for a decision, and a status bar that says 2 agents need you.">
+        <img src="shots/hero-1280.png" srcset="shots/hero-1280.png 1280w, shots/hero.png 1920w" sizes="(max-width: 1228px) 100vw, 1180px" width="1920" height="1200" alt="kansō in Herdr: a projects sidebar with agents grouped by repository, three agents side by side on the strip, one of them waiting for a decision, and a status bar that says 2 agents need you.">
       </picture>
     </figure>
   </section>
@@ -69,7 +68,7 @@
 
   <section class="block" id="install">
     <h2>Installed in one sentence</h2>
-    <p class="sub">No config files to write. Your agent does it, and Herdr keeps it up to date.</p>
+    <p class="sub">No config files to write. Your agent does it, and kansō tells you when an update is ready.</p>
     <ol class="steps">
       <li>
         <span class="step-n">1</span>
@@ -88,7 +87,7 @@
       <li>
         <span class="step-n">3</span>
         <h3>Let them all run</h3>
-        <p>Open as many agents as you like. kansō shows who needs you, what they changed and what they left running.</p>
+        <p>Open as many agents as you like. Turn on the guard in Memory once, and kansō keeps long sessions light.</p>
       </li>
     </ol>
   </section>
@@ -107,25 +106,25 @@
       </article>
 
       <article class="tile">
-        <figure class="window window-panel"><img src="shots/memory-panel.png" loading="lazy" width="760" height="1150" alt="The Memory panel: memory free, the window and agents' size, recycles and memory given back."></figure>
+        <figure class="window window-panel"><a href="shots/memory-panel.png" aria-label="Open the full-size screenshot"><img src="shots/memory-panel.png" loading="lazy" width="760" height="1150" alt="The Memory panel: memory free, the window and agents' size, recycles and memory given back."></a></figure>
         <h3>Memory</h3>
-        <p>Every agent's size and history. Recycle or close the idle ones in one click.</p>
+        <p>Every agent's size and history. Recycle or close the idle ones from the panel.</p>
       </article>
 
       <article class="tile" id="ports">
-        <figure class="window window-panel"><img src="shots/ports-panel.png" loading="lazy" width="760" height="1150" alt="The Ports panel: dev servers listening, one with no pane, and a chart of servers over the day."></figure>
+        <figure class="window window-panel"><a href="shots/ports-panel.png" aria-label="Open the full-size screenshot"><img src="shots/ports-panel.png" loading="lazy" width="760" height="1150" alt="The Ports panel: dev servers listening, one with no pane, and a chart of servers over the day."></a></figure>
         <h3>Ports</h3>
         <p>Dev servers your agents started, which pane runs each one, and the ones left behind.</p>
       </article>
 
       <article class="tile">
-        <figure class="window window-panel"><img src="shots/spend-panel.png" loading="lazy" width="760" height="1150" alt="The Spend panel: 238 dollars of AI work at API list price over 30 days."></figure>
+        <figure class="window window-panel"><a href="shots/spend-panel.png" aria-label="Open the full-size screenshot"><img src="shots/spend-panel.png" loading="lazy" width="760" height="1150" alt="The Spend panel: 238 dollars of AI work at API list price over 30 days."></a></figure>
         <h3>Spend</h3>
         <p>What your AI work is worth at list price, per project, model and task.</p>
       </article>
 
       <article class="tile">
-        <figure class="window window-panel"><img src="shots/worktrees-panel.png" loading="lazy" width="760" height="1150" alt="The Worktrees panel: 1.9 GB in worktrees and 14.7 GB of disk freed."></figure>
+        <figure class="window window-panel"><a href="shots/worktrees-panel.png" aria-label="Open the full-size screenshot"><img src="shots/worktrees-panel.png" loading="lazy" width="760" height="1150" alt="The Worktrees panel: 1.9 GB in worktrees and 14.7 GB of disk freed."></a></figure>
         <h3>Worktrees</h3>
         <p>Every worktree agents made, what removing it would lose, and the disk it gives back.</p>
       </article>
@@ -133,10 +132,10 @@
   </section>
 
   <section class="block spotlight" id="memory">
-    <h2>Weeks without a restart</h2>
+    <h2>Agent sessions that last weeks</h2>
     <p class="sub">Agents that stay open for weeks grow. kansō's guard checks every minute and cleans up without losing a conversation.</p>
     <ul class="facts">
-      <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Recycles bloated agents</strong>An idle agent past 900 MB exits and comes back on the same conversation, in a fresh process.</div></li>
+      <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Recycles bloated agents</strong>A Claude agent idle for 20 minutes and past 900 MB exits and comes back on the same conversation, in a fresh process.</div></li>
       <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>Never under your hands</strong>Not the agent you are on, not while you type, never one that is working.</div></li>
       <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>Names what holds the memory</strong>When the machine runs low you get a notice with the heaviest processes.</div></li>
     </ul>
@@ -181,6 +180,7 @@
   </div>
 </footer>
 
+<p class="sr-only" role="status" aria-live="polite" data-copy-status></p>
 <script src="main.js"></script>
 </body>
 </html>
