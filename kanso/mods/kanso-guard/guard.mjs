@@ -325,7 +325,7 @@ async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) 
   return true;
 }
 let lastOutcome = null; // why the last recycle stopped, or what it freed: for the batch's report
-function skip(pid, why) { lastOutcome = { ok: false, why }; console.log(`not recycled (${pid}): ${why}`); event("skip", `Not recycled: ${why}`, { pid }); return false; }
+function skip(pid, why, verb = "recycled") { lastOutcome = { ok: false, why }; console.log(`not ${verb} (${pid}): ${why}`); event("skip", `Not ${verb}: ${why}`, { pid }); return false; }
 
 // Every idle agent that can be recycled (only those from `overMB`), heaviest
 // first, one after another, never the one you are on. data/kanso-guard/
@@ -373,36 +373,57 @@ async function paneOf(term) {
 }
 
 /**
- * Ends an idle agent and closes its pane. A Claude agent leaves with /exit,
- * so its conversation is saved and `claude --resume <session>` brings it
- * back any time; the event keeps that command. Never the agent you are on,
- * never one that is working.
+ * Ends an idle Claude agent and closes its pane. It leaves with /exit, so its
+ * conversation is saved and `claude --resume <session>` brings it back any
+ * time; the event keeps that command. Only a Claude agent with its session
+ * record (Codex and Grok have no idle state to trust), never the agent you
+ * are on, never one that is working or was used since it was picked
+ * (`minIdle`), and the pane only while that terminal still holds what it held.
  */
-async function closeAgent(pid, why) {
-  const snap = await sample();
-  const a = snap.agents.find((x) => x.pid === pid);
-  if (!a) return skip(pid, "it is no longer running");
-  if (a.status === "working") return skip(pid, "it is working");
-  if (snap.focused === undefined) return skip(pid, "the window did not say which agent you are on");
-  if (snap.focused === a.terminal) return skip(pid, "it is the agent you are on");
-  const resume = a.session ? `cd ${shq(a.cwd ?? HOME)} && claude --resume ${a.session}` : null;
-  if (a.kind === "claude") {
-    if (!a.session) return skip(pid, "its session record was not found");
-    const again = readJSON(join(SESSIONS, `${pid}.json`));
-    if (again?.status !== "idle") return skip(pid, "it started working again");
-    if (!(await run("hc", ["send", a.terminal, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
-    let gone = false;
-    for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
-    if (!gone) { lastOutcome = { ok: false, why: "it did not exit; left as it was" }; event("error", `${a.name} did not exit; left as it was`, { pid }); return false; }
+async function closeAgent(pid, why, minIdle = 0) {
+  const no = (reason) => skip(pid, reason, "closed");
+  const procs = await processes();
+  const s = claudeSession(pid, procs);
+  if (!s) return no("only a Claude agent with its session record can be closed from here");
+  if (s.status !== "idle") return no("it is working");
+  const idleMin = Math.floor((Date.now() - (s.statusUpdatedAt ?? Date.now())) / MIN);
+  if (idleMin < minIdle) return no("it was used since it was picked");
+  const ls = await hcJSON(["ls"]);
+  let term = null, g = null;
+  for (const t of ls?.terminals ?? []) {
+    if (t.state !== "live" || t.address.includes("/")) continue;
+    const x = await hcJSON(["get", t.address], 5000);
+    if (x?.foreground?.pid === pid) { term = t.address; g = x; break; }
   }
-  const pane = await paneOf(a.terminal);
-  const closed = pane
-    ? (await run("herdr-app", ["do", "pane.close", "--pane", pane], 15_000)).ok
-    : (await run("hc", ["kill", a.terminal], 15_000)).ok;
-  if (!closed) await run("hc", ["kill", a.terminal], 15_000);
-  lastOutcome = { ok: true, beforeMB: a.mb, afterMB: 0 };
-  event("close", `${a.name} closed after ${a.idleMin ? `${Math.round(a.idleMin / 60)} h idle` : "being idle"}, ${a.mb} MB back (${why})${resume ? `; to reopen: ${resume}` : ""}`,
-    { pid, terminal: a.terminal, session: a.session, resume, freedMB: a.mb, beforeMB: a.mb });
+  if (!term) return no("it is not in a Herdr terminal");
+  const name = g.labels?.["kanso.name"] || s.name || term;
+  const pane = await paneOf(term);
+  const mb = (await footprints([pid])).get(pid) ?? 0;
+  const resume = `cd ${shq(s.cwd ?? HOME)} && claude --resume ${s.sessionId}`;
+  // Right before /exit: not the one you are on, the same idle spell, the same process in front.
+  const on = await focusedTerminal();
+  if (on === undefined) return no("the window did not say which agent you are on");
+  if (on === term) return no("it is the agent you are on");
+  const again = readJSON(join(SESSIONS, `${pid}.json`));
+  if (again?.status !== "idle" || again.statusUpdatedAt !== s.statusUpdatedAt) return no("it started working again");
+  const still = await hcJSON(["get", term], 5000);
+  if (still?.foreground?.pid !== pid || still.pid !== g.pid) return no("its terminal changed");
+  if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return no("its terminal did not take /exit");
+  let gone = false;
+  for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
+  if (!gone) { lastOutcome = { ok: false, why: "it did not exit; left as it was" }; event("error", `${name} did not exit; left as it was`, { pid }); return false; }
+  // Its shell is back in front and nothing else started there; still not the one you are on.
+  const after = await hcJSON(["get", term], 5000);
+  if (!after || after.pid !== g.pid || (after.foreground?.pid && after.foreground.pid !== g.pid) || (await focusedTerminal()) === term || (pane && (await paneOf(term)) !== pane)) {
+    lastOutcome = { ok: false, why: "it exited, but its terminal changed; the pane was left open" };
+    event("close", `${name} exited (${mb} MB back) but its pane was left open: its terminal changed; to reopen: ${resume}`, { pid, terminal: term, session: s.sessionId, resume, freedMB: mb, beforeMB: mb });
+    return false;
+  }
+  let closed = pane ? (await run("herdr-app", ["do", "pane.close", "--pane", pane], 15_000)).ok : false;
+  if (!closed) closed = (await run("hc", ["kill", term], 15_000)).ok;
+  lastOutcome = { ok: true, beforeMB: mb, afterMB: 0 };
+  event("close", `${name} closed after ${Math.round(idleMin / 60)} h idle, ${mb} MB back (${why})${closed ? "" : "; its pane could not be closed"}; to reopen: ${resume}`,
+    { pid, terminal: term, session: s.sessionId, resume, freedMB: mb, beforeMB: mb });
   return true;
 }
 
@@ -418,7 +439,7 @@ async function closeStale(minIdle) {
   for (const a of list) {
     batch.current = a.name; save();
     lastOutcome = null;
-    const ok = await closeAgent(a.pid, `not used for ${Math.round(a.idleMin / 60)} h, asked from Memory`);
+    const ok = await closeAgent(a.pid, `not used for ${Math.round(a.idleMin / 60)} h, asked from Memory`, minIdle);
     batch.done.push({ name: a.name, terminal: a.terminal, ok, beforeMB: a.mb, afterMB: ok ? 0 : null, why: ok ? null : lastOutcome?.why ?? "not closed" });
     batch.current = null; save();
     await check({ act: false, locked: true });
@@ -544,11 +565,11 @@ export function addToHistory(h, row, agents, at = Date.now()) {
 
 /** What the guard has done, from its event log. */
 function totals() {
-  const t = { recycles: 0, closed: 0, restarts: 0, reaped: 0, freedMB: 0, since: null };
+  const t = { recycles: 0, closed: 0, restarts: 0, reaped: 0, freedMB: 0, recycledMB: 0, closedMB: 0, since: null };
   for (const e of recentEvents(3000)) {
     t.since = e.at;
-    if (e.kind === "recycle") { t.recycles++; t.freedMB += e.freedMB ?? 0; }
-    else if (e.kind === "close") { t.closed = (t.closed ?? 0) + 1; t.freedMB += e.freedMB ?? 0; }
+    if (e.kind === "recycle") { t.recycles++; t.recycledMB += e.freedMB ?? 0; t.freedMB += e.freedMB ?? 0; }
+    else if (e.kind === "close") { t.closed++; t.closedMB += e.freedMB ?? 0; t.freedMB += e.freedMB ?? 0; }
     else if (e.kind === "restart") t.restarts++;
     else if (e.kind === "reap" && e.pid) t.reaped++;
     // a batch's own lines are summaries; each agent in it is counted above

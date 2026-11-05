@@ -163,7 +163,7 @@ export function digestHistory(text, now = Date.now(), low = null) {
   return {
     series,
     sparks: agentSparks(history, now),
-    totals: { recycles: num(t.recycles) ?? 0, closed: num(t.closed) ?? 0, restarts: num(t.restarts) ?? 0, reaped: num(t.reaped) ?? 0, freedMB: num(t.freedMB) ?? 0, since: num(t.since) },
+    totals: { recycles: num(t.recycles) ?? 0, closed: num(t.closed) ?? 0, recycledMB: num(t.recycledMB) ?? num(t.freedMB) ?? 0, closedMB: num(t.closedMB) ?? 0, restarts: num(t.restarts) ?? 0, reaped: num(t.reaped) ?? 0, freedMB: num(t.freedMB) ?? 0, since: num(t.since) },
   };
 }
 
@@ -211,4 +211,12 @@ export function parseBatch(text, now = Date.now()) {
 export function staleAgents(agents = [], minIdle = 2880, focused = null) {
   return agents.filter((a) => a.kind === "claude" && a.status === "idle" && (num(a.idleMin) ?? 0) >= minIdle && (!focused || a.terminal !== focused))
     .sort((a, b) => (num(b.idleMin) ?? 0) - (num(a.idleMin) ?? 0));
+}
+
+/** An idle threshold in words: "2 days", "36 hours". */
+export function idleWords(min) {
+  const n = num(min) ?? 0;
+  if (n >= 1440 && n % 1440 === 0) return `${n / 1440} ${n === 1440 ? "day" : "days"}`;
+  if (n >= 60) return `${Math.round(n / 60)} hours`;
+  return `${Math.round(n)} min`;
 }

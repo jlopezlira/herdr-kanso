@@ -13,7 +13,7 @@ import { exec, appHome, theme, nextCommand, readTextFile, layout } from "herdr";
 import { G, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { memorySpec, memoryText } from "./memory-card.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents } from "./model.js";
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords } from "./model.js";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -209,7 +209,7 @@ export default class Memory extends View {
   recycleAll(overMB, cx) { this.batchSeen = 0; this.act("batch", ["recycle-all", String(overMB || 0)], () => false, cx); }
 
   /** Ends one idle agent and closes its pane. */
-  close(a, cx) { this.act(`close:${a.pid}`, ["close", String(a.pid)], (data) => !data.agents.some((x) => x.pid === a.pid), cx); }
+  closeAgent(a, cx) { this.act(`close:${a.pid}`, ["close", String(a.pid)], (data) => !data.agents.some((x) => x.pid === a.pid), cx); }
 
   /** Every Claude agent not used for `minIdle` minutes. */
   closeStale(minIdle, cx) { this.batchSeen = 0; this.act("batch", ["close-stale", String(minIdle)], () => false, cx); }
@@ -400,7 +400,7 @@ export default class Memory extends View {
         (cx) => this.armed.press("heavy", cx, (cx) => this.recycleAll(over, cx)), c,
         { color: armedHeavy ? c.red : c.muted, size: 13 })))
       .when(stale.length > 0, (el) => el.child(quietLink("guard-close-stale",
-        armedStale ? `Press again to close ${stale.length}` : `Close the ${stale.length} not used for ${span(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`,
+        armedStale ? `Press again to close ${stale.length}` : `Close the ${stale.length} not used for ${idleWords(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`,
         (cx) => this.armed.press("stale", cx, (cx) => this.closeStale(staleMin, cx)), c,
         { color: armedStale ? c.red : c.muted, size: 13, label: "Close agents not used for a long time" })));
     return v_flex().w_full().gap(G.xl)
@@ -453,7 +453,7 @@ export default class Memory extends View {
     const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
     const closeKey = `close:${a.pid}`, armedClose = this.armed.is(closeKey), closing = Boolean(this.busy[closeKey]);
     // Close: any idle agent but the one you are on, and not while a batch runs.
-    const closable = action !== null && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
+    const closable = a.kind === "claude" && Boolean(a.session) && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
     const spark = sparkFor(this.digest?.sparks, a);
     const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;
     return h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)
@@ -472,7 +472,7 @@ export default class Memory extends View {
         .child(h_flex().gap(G.md).items_center()
           .when(closable || closing, (el) => el.child(quietLink(`guard-close-${a.pid}`,
             closing ? "Closing…" : armedClose ? "Press again to close" : "Close",
-            (cx) => { if (!closing) this.armed.press(closeKey, cx, (cx) => this.close(a, cx)); }, c,
+            (cx) => { if (!closing) this.armed.press(closeKey, cx, (cx) => this.closeAgent(a, cx)); }, c,
             { color: armedClose ? c.red : c.dim, size: 11.5, label: `Close ${a.name || a.pid}` })))
           .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
             busy ? "Recycling…" : armed ? "Press again" : "Recycle",

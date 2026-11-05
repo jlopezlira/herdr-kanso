@@ -30,6 +30,8 @@ export function memoryWins(data, digest) {
     recycles: num(t.recycles) ?? 0,
     restarts: num(t.restarts) ?? 0,
     freedMB: num(t.freedMB) ?? 0,
+    recycledMB: num(t.recycledMB) ?? 0,
+    closed: num(t.closed) ?? 0,
     since: num(t.since),
   };
 }
@@ -42,8 +44,8 @@ export function memorySpec(data, digest) {
   const stats = [
     { value: String(w.agents), unit: w.agents === 1 ? "agent open" : "agents open" },
     w.recycles ? { value: String(w.recycles), unit: w.recycles === 1 ? "recycle" : "recycles" } : null,
+    w.closed ? { value: String(w.closed), unit: w.closed === 1 ? "closed" : "closed" } : null,
     w.freedMB ? { value: size(w.freedMB), unit: "given back" } : null,
-    w.freePct !== null ? { value: `${Math.round(w.freePct)}%`, unit: "memory free now" } : null,
     w.windowMB !== null ? { value: size(w.windowMB), unit: "Herdr window" } : null,
     { value: String(w.restarts), unit: w.restarts === 1 ? "window restart" : "window restarts" },
   ].filter(Boolean).slice(0, 6);
@@ -55,7 +57,7 @@ export function memorySpec(data, digest) {
     hero: {
       big: long.big, small: long.small,
       label: `my longest agent session, still open, with ${w.agents} ${w.agents === 1 ? "agent" : "agents"}${on}`,
-      delta: w.freedMB ? { up: true, text: `${size(w.freedMB)} given back by recycling, same conversations` } : null,
+      delta: w.recycledMB ? { up: true, text: `${size(w.recycledMB)} given back by recycling, same conversations` } : null,
     },
     stats,
     note: "",
@@ -72,7 +74,6 @@ export function memoryText(data, digest) {
   const w = memoryWins(data, digest);
   const long = longSpan(w.longestMin);
   const parts = [`${w.agents} coding ${w.agents === 1 ? "agent" : "agents"} open${w.totalMB ? ` on a ${size(w.totalMB)} machine` : ""}, the oldest for ${long.big} ${long.small}`];
-  if (w.recycles) parts.push(`${w.recycles} ${w.recycles === 1 ? "recycle" : "recycles"} gave back ${size(w.freedMB)} without losing a conversation`);
-  if (w.freePct !== null) parts.push(`still ${Math.round(w.freePct)}% free`);
+  if (w.recycles) parts.push(`${w.recycles} ${w.recycles === 1 ? "recycle" : "recycles"} gave back ${size(w.recycledMB)} without losing a conversation`);
   return postText(parts, "Weeks-long agent sessions, memory in check.");
 }
