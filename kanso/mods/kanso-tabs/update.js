@@ -153,9 +153,18 @@ export class Updater {
     return compareVersions(latest, this.installed) > 0 ? latest : null;
   }
 
+  // Read on every check, not once: a copy can start while its new files are in
+  // place and version.json is not yet, and would offer what is installed.
+  async readInstalled() {
+    try {
+      const v = JSON.parse(await readTextFile(`${appHome()}/mods/kanso-chrome/version.json`) ?? "{}").version;
+      if (parseVersion(v)) this.installed = v;
+    } catch {}
+  }
+
   start(cx) {
     cx.spawn(async (cx) => {
-      try { this.installed = JSON.parse(await readTextFile(`${appHome()}/mods/kanso-chrome/version.json`) ?? "{}").version ?? null; } catch {}
+      await this.readInstalled();
       this.finished();
       await this.check(cx, true); // on every start, whenever the last look was
       this.fit();
@@ -186,6 +195,7 @@ export class Updater {
   // `report`: say so when there is nothing new or GitHub can't be reached
   // (kanso-tabs.check); the timer stays quiet.
   async check(cx, force = false, report = false) {
+    if (!this.busy) await this.readInstalled();
     const { checked } = this.state();
     if (this.busy || (!force && checked && Date.now() - checked < EVERY)) return;
     let r = null;

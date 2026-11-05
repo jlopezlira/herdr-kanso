@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.8.1] - 2026-11-05
+
+### Fixed
+
+- The gear and the footer no longer offer the Kanso release you already have. The updater read the installed version once, when its copy started; a copy that started while new files were landing and version.json was not yet read the old version and kept offering the new one. It now reads it on every check, so the dot and the row go away by themselves within five minutes.
+
 ## [2.8.0] - 2026-11-05
 
 ### Added
