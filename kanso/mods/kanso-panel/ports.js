@@ -21,26 +21,42 @@ const TALLY = "kanso.ports.tally";
 const loadTally = () => { try { return readTally(localStorage.getItem(TALLY)); } catch { return readTally(null); } };
 const saveTally = (t) => { try { localStorage.setItem(TALLY, JSON.stringify(t)); } catch { /* not kept */ } };
 
-// Resident memory of each pid with everything under it (a dev server's
-// workers), in MB, from `ps -axo pid=,ppid=,rss=`.
-export function treeMB(text, pids) {
-  const kids = new Map(), rss = new Map();
+// Each root's process tree (a dev server and its workers) from
+// `ps -axo pid=,ppid=,rss=,lstart=`: root -> [{ pid, kb, start }], every
+// process once even when two roots share it.
+export function processTrees(text, roots) {
+  const kids = new Map(), info = new Map();
   for (const line of String(text ?? "").split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)/.exec(line);
+    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
     if (!m) continue;
     const [pid, ppid, kb] = [Number(m[1]), Number(m[2]), Number(m[3])];
-    rss.set(pid, kb);
+    info.set(pid, { pid, kb, start: m[4].replace(/\s+/g, " ") });
     if (!kids.has(ppid)) kids.set(ppid, []);
     kids.get(ppid).push(pid);
   }
-  const out = new Map();
-  for (const root of pids) {
-    let kb = 0;
-    const seen = new Set(), stack = [root];
-    while (stack.length) { const p = stack.pop(); if (seen.has(p)) continue; seen.add(p); kb += rss.get(p) ?? 0; stack.push(...(kids.get(p) ?? [])); }
-    out.set(root, Math.round(kb / 1024));
+  const seen = new Set(), out = new Map();
+  for (const root of roots) {
+    const tree = [], stack = [root];
+    while (stack.length) {
+      const p = stack.pop();
+      if (seen.has(p) || !info.has(p)) continue;
+      seen.add(p); tree.push(info.get(p)); stack.push(...(kids.get(p) ?? []));
+    }
+    out.set(root, tree);
   }
   return out;
+}
+
+// Of a stopped server's tree, what exited (its pid gone, or reused by a
+// process that started later), from `ps -axo pid=,lstart=`: { rootGone, kb }.
+export function exited(tree, psText) {
+  const alive = new Map();
+  for (const line of String(psText ?? "").split("\n")) {
+    const m = /^\s*(\d+)\s+(.+?)\s*$/.exec(line);
+    if (m) alive.set(Number(m[1]), m[2].replace(/\s+/g, " "));
+  }
+  const gone = (p) => alive.get(p.pid) !== p.start;
+  return { rootGone: tree.length > 0 && gone(tree[0]), kb: tree.filter(gone).reduce((t, p) => t + p.kb, 0) };
 }
 
 const EVERY_MS = 10000;
@@ -166,7 +182,7 @@ export class Ports {
     if (this.reading) return;
     this.reading = true;
     cx.spawn(async (cx) => {
-      try { this.list = await this.read(); this.note = null; this.countStopped(); }
+      try { this.list = await this.read(); this.note = null; await this.countStopped(); }
       catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list ??= []; }
       finally { this.reading = false; cx.notify(); }
     });
@@ -177,31 +193,39 @@ export class Ports {
     for (const s of items) this.stopping.add(s.pid);
     cx.notify();
     cx.spawn(async (cx) => {
-      // Their memory, before they go: what the share card counts as given back.
-      const before = await exec("ps", ["-axo", "pid=,ppid=,rss="]).then((r) => treeMB(r.stdout, items.map((s) => s.pid))).catch(() => new Map());
-      this.asked ??= new Map(); // pid -> its MB, until it is gone
-      for (const s of items) if (!this.asked.has(s.pid)) this.asked.set(s.pid, before.get(s.pid) ?? 0);
+      // The share card counts servers left with no pane: each one's processes
+      // (pid, start, memory) before the stop, counted once it has exited.
+      const loose = items.filter((s) => !s.owner);
+      this.asked ??= new Map(); // root pid -> { tree, at }
+      if (loose.length) {
+        const trees = await exec("ps", ["-axo", "pid=,ppid=,rss=,lstart="]).then((r) => processTrees(r.stdout, loose.map((s) => s.pid))).catch(() => new Map());
+        for (const s of loose) if (!this.asked.has(s.pid) && trees.get(s.pid)?.length) this.asked.set(s.pid, { tree: trees.get(s.pid), at: Date.now() });
+      }
       for (const s of items) await exec("kill", [s.force ? "-KILL" : "-TERM", String(s.pid)]).catch(() => null);
       this.forced ??= new Set();
       for (const s of items) this.forced.add(s.pid);
       await cx.sleep(900);
       try { this.list = await this.read(); } catch { /* the timer reads again */ }
-      this.countStopped();
+      await this.countStopped();
       for (const s of items) this.stopping.delete(s.pid);
       cx.notify();
     });
   }
 
-  // A server you stopped counts once, when it no longer listens (a slow one
-  // may take until the next read). One still there after a minute is let go.
-  countStopped() {
-    if (!this.asked?.size || !this.list) return;
-    let n = 0, mb = 0;
-    for (const [pid, size] of this.asked) {
-      if (this.list.some((x) => x.pid === pid)) continue;
-      n++; mb += size; this.asked.delete(pid);
+  // A server you stopped counts once its own process has exited, with the
+  // memory of what of it exited. One still running a minute after the stop
+  // is let go uncounted.
+  async countStopped() {
+    if (!this.asked?.size) return;
+    const ps = await exec("ps", ["-axo", "pid=,lstart="]).then((r) => r.stdout).catch(() => null);
+    if (ps === null) return;
+    let n = 0, kb = 0;
+    for (const [pid, { tree, at }] of this.asked) {
+      const e = exited(tree, ps);
+      if (e.rootGone) { n++; kb += e.kb; this.asked.delete(pid); }
+      else if (Date.now() - at > 60_000) this.asked.delete(pid);
     }
-    if (n) saveTally(addToTally(loadTally(), n, mb));
+    if (n) saveTally(addToTally(loadTally(), n, Math.round(kb / 1024)));
   }
 
   // Which pane runs it, by the name its header shows.

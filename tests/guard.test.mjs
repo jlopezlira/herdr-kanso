@@ -221,14 +221,17 @@ test("guard panel: stale agents to close, oldest first, never the focused one", 
 
 test("ports share card: counts and sizes only, the tally adds up", async () => {
   const card = await load("kanso-panel/ports-card.js", ["portsSpec", "portsText", "readTally", "addToTally"]);
-  const ports = await load("kanso-panel/ports.js", ["treeMB"], { panes: () => [], terminals: () => [], home: () => "/h", theme: () => ({}) });
+  const ports = await load("kanso-panel/ports.js", ["processTrees", "exited"], { panes: () => [], terminals: () => [], home: () => "/h", theme: () => ({}) });
   const t = card.addToTally(card.addToTally(card.readTally(null), 2, 900, 1000), 1, 300, 2000);
   assert.deepEqual(clone(t), { stopped: 3, freedMB: 1200, since: 1000 });
   const list = [{ pid: 1, ports: [5173], owner: "t1", args: "vite --port 5173", cwd: "/h/secret" }, { pid: 2, ports: [3000], owner: null, args: "next dev", cwd: "/h/x" }];
   const spec = JSON.stringify(card.portsSpec(list, t)) + card.portsText(list, t);
   for (const leak of ["5173", "3000", "secret", "vite", "next dev"]) assert.ok(!spec.includes(leak), `no ${leak} in the card`);
   assert.match(card.portsText(list, t), /3 dev servers my agents left running, found and stopped: 1\.2 GB back/);
-  const mb = ports.treeMB("10 1 102400\n11 10 51200\n12 11 51200\n20 1 1024\n", [10, 20]);
-  assert.equal(mb.get(10), 200);
-  assert.equal(mb.get(20), 1);
+  const trees = ports.processTrees("10 1 102400 Thu Nov  5 10:00:00 2026\n11 10 51200 Thu Nov  5 10:00:01 2026\n12 10 51200 Thu Nov  5 10:00:02 2026\n20 1 1024 Thu Nov  5 10:00:03 2026\n", [10, 11, 20]);
+  assert.equal(trees.get(10).length, 3, "the server and its workers");
+  assert.equal(trees.get(11).length, 0, "a worker already counted under its server is not counted again");
+  const e = ports.exited(trees.get(10), "11 Thu Nov  5 10:00:01 2026\n12 Thu Nov  5 11:00:00 2026\n");
+  assert.deepEqual(clone(e), { rootGone: true, kb: 102400 + 51200 }, "the root exited, a worker survives, a pid reused counts as exited");
+  assert.equal(ports.exited(trees.get(20), "20 Thu Nov  5 10:00:03 2026\n").rootGone, false, "still running: not counted");
 });
