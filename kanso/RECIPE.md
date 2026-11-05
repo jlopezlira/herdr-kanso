@@ -55,9 +55,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       `vX.Y.Z` tag than `version.json` exists, an "Update Kanso to X" row
       (refresh icon, 6 `accent` dot) sits above Settings and the footer
       grows to 192 while it shows (back to 156 after; a size you set is kept).
-      Tags are read with `git ls-remote` on start and every 5 minutes (and on
-      `kanso-chrome.check`, which also toasts "Kanso is up to date"); one toast per version,
-      whose click runs `kanso-chrome.update`. Updating downloads the tag into
+      The tab bar and footer read tags (`git ls-remote`) on start, every 5
+      min and on `kanso-tabs.check` ("up to date" toast); one 30 s toast per
+      version runs `kanso-tabs.update`; a dot on the gear. Updating downloads the tag into
       `.kanso-update/`, refuses it unless its `version.json` matches, runs
       `herdr-app check` on each mod, merges `keys.json` three-way against the
       installed release's (your own keys stay), replaces the layout only if
@@ -473,13 +473,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   tabs `left`/`width`; 220 ms) to the chosen space, agent or tab; rows fold
   by `height` (220 ms, measured) and a new row grows in; a header's tools
   slide out by `width`; a panel fades in.
-- **Keys** (keys.json `layout:kanso`): ⌃1-9 a space, ⌘⌥1-9 a tab, ⌃⇧1-9 a
-  panel by its place, ⌃⌥P/S/T a view, ⌘1-9 a pane column, ⌃⇧, Kanso
-  settings; an empty key is quiet. No key hints in the window; Kanso
-  settings lists the keys.
+- **Keys** (keys.json `layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
+  panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
+  settings; an empty key is quiet. Herdr/macOS keys only for the same
+  command. No hints on screen.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
-  rebinds the above (to keys.json), Mods orders (arrows,
-  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new is the changelog.
+  rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
+  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new the log, Credits who.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.

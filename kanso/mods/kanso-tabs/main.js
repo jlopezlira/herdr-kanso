@@ -8,6 +8,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand } from "herdr";
 import { stateMark, programIcon } from "./marks.js";
 import { walkLayout, commitLayout } from "./layout.js";
+import { Updater } from "./update.js";
 
 function storedObject(key) {
   try {
@@ -38,6 +39,7 @@ function customPanels() {
 // turned off. Both are shared, so the Panels popup and every bar agree.
 const ORDER = "kanso.panels.order", OFF = "kanso.panels.off";
 const ICON = "mods/kanso-chrome/icons/";
+const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
 const BUILTIN = [
   { id: "files", label: "Files", icon: `${ICON}file.svg` },
   // Spend (kanso-spend): costs per model, project and task.
@@ -110,13 +112,21 @@ export default class Tabs extends View {
     this.panels = storedObject("panels");
     if (!this.arrange && cx) {
       this.watchOpens(cx);
+      // Kanso's releases (update.js): the bar is always on screen, the
+      // sidebar's footer may not be.
+      this.updater = new Updater();
+      this.updater.start(cx);
       // Keys (keys.json): ⌘⌥1-9 shows a tab by position, ⌃⇧1-9 opens or
       // closes a panel by its place in the bar.
       cx.spawn(async (cx) => {
         for (;;) {
           let c;
           try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
-          this.command(String(c).replace(/^kanso-tabs\./, ""));
+          const name = String(c).replace(/^kanso-tabs\./, "");
+          if (name === "update") this.updater.install(cx);
+          else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
+          else if (name === "settings" || name.startsWith("settings-")) openSettings(name.slice(9) || "keys"); // settings-mods, -news, -credits
+          else this.command(name);
           cx.notify();
         }
       });
@@ -285,9 +295,10 @@ export default class Tabs extends View {
     const shownPanels = allPanels.filter((p) => p.on);
     const enabled = shownPanels.map((p) => p.id);
     // Kanso settings lists the panels from here (it can't import this file).
-    const roster = allPanels.map((p) => ({ id: p.id, label: p.label }));
+    const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ?? null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
     const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+    const update = this.updater?.available() ?? null;
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
     // A panel turned off while open closes (a file's preview has no button to turn off).
@@ -322,7 +333,7 @@ export default class Tabs extends View {
           else if (from === p.id) this.mount(on ? null : p.id);
           cx.notify();
         })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page: "mods" } }); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openSettings("mods"); })
         .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(15)))
         .child(name);
     };
@@ -342,9 +353,11 @@ export default class Tabs extends View {
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Kanso settings: keys, what shows, what's new. Fixed at the end of
         // the bar, after the panels; not one of them, so it is neither dragged nor turned off.
-        .child(button("kanso-settings", svg("mods/kanso-chrome/icons/settings.svg").size(15),
-          () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page: "keys" } }))
-          .ml(4).tooltip(window()?.platform === "macos" ? "Kanso settings  ⌃⇧," : "Kanso settings  Ctrl+Shift+,")))
+        // A dot on it while a Kanso release waits; then it opens on What's new.
+        .child(button("kanso-settings", div().relative().child(svg("mods/kanso-chrome/icons/settings.svg").size(15))
+            .when(Boolean(update), (el) => el.child(div().absolute().top(-2).right(-3).size(6).rounded_full().bg(t.accent))),
+          () => openSettings(update ? "news" : "keys"))
+          .ml(4).tooltip(update ? `Kanso ${update} is available` : window()?.platform === "macos" ? "Kanso settings  ⌃⇧," : "Kanso settings  Ctrl+Shift+,")))
       .when(window()?.buttons, el => el.child(button("minimize", "−", () => run("window.minimize")))
         .child(button("maximize", "□", () => run("window.maximize")))
         .child(button("close-window", svg("mods/kanso-chrome/icons/close.svg").size(13), () => run("window.close"))));

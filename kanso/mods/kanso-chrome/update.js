@@ -3,9 +3,11 @@
 // Not Herdr's: the app updates itself and shows its dot on Settings. This
 // updates only Kanso's files. A release is a vX.Y.Z tag whose
 // mods/kanso-chrome/version.json says X.Y.Z. When Herdr starts and every 5
-// minutes after (and on kanso-chrome.check) the footer asks
-// GitHub for the tags (`git ls-remote`, no API quota); a newer one shows an
-// "Update Kanso" row and one toast per version. Updating downloads that tag,
+// minutes after (and on kanso-tabs.check) the tab bar and the footer ask
+// GitHub for the tags (`git ls-remote`, no API quota; one look per 4 minutes
+// between them); a newer one shows an "Update Kanso" row in the footer, a dot
+// on the gear and one toast per version, which stays 30 s and installs from
+// the tab bar, so a hidden sidebar misses nothing. Updating downloads that tag,
 // checks each mod loads (`herdr-app check`), then swaps each mod folder whole
 // (the old one keeps running until its new folder is in place), copies the
 // themes and the preview, and touches the layout and your keys only where the
@@ -182,7 +184,7 @@ export class Updater {
   }
 
   // `report`: say so when there is nothing new or GitHub can't be reached
-  // (kanso-chrome.check); the timer stays quiet.
+  // (kanso-tabs.check); the timer stays quiet.
   async check(cx, force = false, report = false) {
     const { checked } = this.state();
     if (this.busy || (!force && checked && Date.now() - checked < EVERY)) return;
@@ -200,8 +202,9 @@ export class Updater {
       this.setState({ notified: v });
       notify({
         title: `Kanso ${v} is available`,
-        body: `You have ${this.installed}. Update it from the sidebar; Herdr's own updates stay under Settings.`,
-        action: { name: "kanso-chrome.update" },
+        body: `You have ${this.installed}. Click to update; Herdr's own updates stay under Settings.`,
+        action: { name: "kanso-tabs.update" },
+        timeout: 30000,
       });
     }
   }
