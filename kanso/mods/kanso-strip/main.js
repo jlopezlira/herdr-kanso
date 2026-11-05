@@ -41,7 +41,7 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
-import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
+import { stateMark, programIcon, givenNames, nameOf, moving, NAME_LABEL } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout } from "./layout.js";
 
 // How many panes the view holds at once (`st.n`, 1 to 8; you choose). A new
@@ -69,6 +69,11 @@ const SETTLE = 250; // ms without the dragged sizes changing before the strip ad
 
 const GAP = 6; // the soft gutter between panes, in the frame's tone: no lines
 const RADIUS = 8;
+// A header's action button (15px glyph in 5px of padding), the space between
+// them (the header's own gap), and how the group slides open.
+const TOOL = 25;
+const TOOL_GAP = 10;
+const TOOLS_EASE = { duration: 160, easing: "ease-out" };
 const TAB_BLOCK = {
   id: "main", type: "block", background: "chrome",
   content: { tab: "active", pane: {
@@ -277,8 +282,8 @@ export default class Strip extends View {
     const given = givenNames();
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
-    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).loop("opacity", { from: 0.35, to: 1, period: 1800 })
-      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })
+    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).when(moving(), (el) => el.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
+      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).when(moving(), (el) => el.loop("opacity", { from: 0.45, to: 1, period: 1600 }))
       : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
     const MAX_TILES = 8;
     const tile = (id) => {
@@ -553,7 +558,7 @@ export default class Strip extends View {
       // Pinned: the accent's tint, a little stronger when it's also the selected one.
       .when(pinned && st !== "blocked", (el) => el.bg(t.accent + (on ? "40" : "24")))
       .when(st === "blocked", (el) => el.bg(t.blocked + "66")
-        .child(div().absolute().left_0().bottom_0().w_full().h(2).bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })))
+        .child(div().absolute().left_0().bottom_0().w_full().h(2).bg(t.blocked).when(moving(), (el) => el.loop("opacity", { from: 0.45, to: 1, period: 1600 }))))
       .when(on && !pinned && st !== "blocked", (el) => el.bg(t.selected))
       // Where the held pane lands lights up in the accent, header and card as
       // one: the left or right half for a column before or after, the whole
@@ -593,19 +598,38 @@ export default class Strip extends View {
       .when(Boolean(digest), (el) => el.child(this.digestBadge(t, pane, digest, ink)))
       .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
       .child(div().flex_1())
-      .when(st === "working" && !this.hovered, (el) => el.child(stateMark(t, "working")))
+      .child(this.tools(t, p, { strip, pinned, canSend, pin, shown: this.hovered && !drag }))
+      .when(st === "working", (el) => el.child(stateMark(t, "working")))
       .when(st === "blocked", (el) => el.child(h_flex().flex_none().gap(6).items_center().text_size(11.5).font_medium().text_color(t.foreground)
         .child(stateMark(t, "blocked")).child("Needs you")))
-      .when(st === "done" && !this.hovered, (el) => el.child(stateMark(t, "done")))
-      .when(this.hovered && !drag, (el) => el
-        .when(strip, (el) => el.child(this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground))))
-        .when(canSend, (el) => el.child(this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent")))
-        .when(Boolean(p.cwd), (el) => el.child(this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p))))
-        .child(this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
-        .child(this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
-        .child(this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))
-        .child(this.button(t, `ph-x-${pane}`, "close", "pane.close", { pane })))
+      .when(st === "done", (el) => el.child(stateMark(t, "done")))
       .when(strip && !pinned, (el) => el.child(this.grip(t, pane)));
+  }
+
+  // The header's actions, slid out to the left of the state mark while the
+  // pointer rests on the header, natively: the group is always in the row,
+  // 0 wide and clear until then, so it eases open instead of appearing. Its
+  // width is known (TOOL wide each, TOOL_GAP apart, TOOL_GAP before the
+  // mark), so the mark never moves.
+  tools(t, p, { strip, pinned, canSend, pin, shown }) {
+    const pane = p.pane;
+    const list = [
+      strip ? this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground)) : null,
+      canSend ? this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent") : null,
+      p.cwd ? this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p)) : null,
+      this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }),
+      this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }),
+      this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }),
+      this.button(t, `ph-x-${pane}`, "close", "pane.close", { pane }),
+    ].filter(Boolean);
+    const wide = list.length * TOOL + (list.length - 1) * TOOL_GAP;
+    return h_flex().id(`ph-tools-${pane}`).flex_none().h_full().items_center().gap(TOOL_GAP).overflow_hidden()
+      .w(shown ? wide : 0).opacity(shown ? 1 : 0)
+      .transition("width", TOOLS_EASE).transition("opacity", TOOLS_EASE)
+      // The row puts its gap on both sides of the group; closed, one of them
+      // is taken back, so the mark stands where it did without the group.
+      .ml(-TOOL_GAP)
+      .children(list);
   }
 
   // ---- The model ---------------------------------------------------------------

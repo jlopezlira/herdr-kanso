@@ -11,7 +11,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout } from "herdr";
-import { G, H, R, T, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section } from "./ui.js";
+import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 
@@ -462,8 +462,7 @@ export default class TokenSpend extends View {
       .child(block([120, 96, 140, 84, 110, 72][i % 6], 9))
       .child(div().flex_1())
       .child(block(48, 11));
-    return v_flex().w_full().gap(narrow ? 36 : 48)
-      .loop("opacity", { from: 0.35, to: 0.8, period: 1800 })
+    return breathe(v_flex().w_full().gap(narrow ? 36 : 48))
       .child(h_flex().w_full().gap(G.lg).items_center()
         .children([44, 52, 34, 52].map((w) => block(w, 10))))
       .child(v_flex().gap(G.md)
@@ -754,7 +753,7 @@ export default class TokenSpend extends View {
   live(c, sessions) {
     return v_flex().w_full()
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)
-        .child(div().size(6).flex_none().rounded_full().bg(c.accent).loop("opacity", { from: 0.35, to: 1, period: 2400 }))
+        .child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE))
         .child(div().text_size(15).text_color(c.text).child("Active now")))
       .children(sessions.map((s, index) => Button.new(`ins-live-${index}`).w_full().cursor_pointer()
         .hover((style) => style.opacity(0.75))

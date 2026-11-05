@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
-const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "etimeMs", "unwrap"];
+const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "segmentAt", "etimeMs", "unwrap"];
 const lib = () => load("kanso-spaces/agents.js", NAMES);
 const MIN = 60000;
 
@@ -199,4 +199,14 @@ test("Threads as T3 Code keeps them: pinned, active, snoozed, settled", async ()
   const presets = clone(snoozePresets(now).map((p) => p.id));
   assert.deepEqual(presets, ["1h", "3h", "evening", "tomorrow", "monday"]);
   assert.equal(snoozePresets(Date.parse("2026-11-04T17:30:00")).some((p) => p.id === "evening"), false, "this evening only while it is ahead");
+});
+
+test("The view switch's thumb: where each of three equal segments sits", async () => {
+  const { segmentAt } = await lib();
+  // 240 wide, 3px around, 2px between: (240 - 6 - 4) / 3 = 76.67 each.
+  const first = segmentAt(240, 0, 3), last = segmentAt(240, 2, 3);
+  assert.equal(first.left, 3);
+  assert.ok(Math.abs(first.width - 76.667) < 0.01);
+  assert.ok(Math.abs(last.left + last.width - 237) < 0.01, "the last ends 3px before the edge");
+  assert.deepEqual(clone(segmentAt(100, 1, 2, 0, 0)), { left: 50, width: 50 }, "no padding, no gap: halves");
 });

@@ -90,6 +90,7 @@ function panelContent(id) {
 
 const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
 const CLEAR = "#00000000";
+const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chosen tab, as the sidebar's
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
@@ -249,13 +250,24 @@ export default class Tabs extends View {
     const stop = (_e, cx) => cx.stop_propagation();
     const button = (id, label, action) => div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.foreground + "0a").text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(action).child(label);
+    // The pill under the chosen tab: the tabs' widths (measured as they are
+    // drawn, kept) say where it goes, and it eases there natively.
+    this.tabW ??= {};
+    let at = null, x = 0;
+    for (const c of shown) { const w = this.tabW[c.id]; if (c.active && w) at = { left: x, width: w }; x += (w ?? 0) + 2; }
+    const tabPill = at && shown.every((c) => this.tabW[c.id])
+      ? div().id("tab-pill").absolute().top(0).left(at.left).w(at.width).h(TAB_H).rounded(6).bg(t.foreground + "12").transition("left", GLIDE).transition("width", GLIDE)
+      : null;
     const item = (c, i) => {
       const program = ps.find(p => p.tab === c.id && p.program?.agent)?.program ?? ps.find(p => p.tab === c.id)?.program;
       const name = c.name;
       return h_flex().id(`tab-${c.id}`).h(TAB_H).px(10).gap(6).rounded(6).items_center().flex_none().text_size(12.5)
-        .bg(c.active ? t.foreground + "12" : CLEAR)
         .text_color(c.active ? t.foreground : t.muted)
-        .hover(s => s.bg(c.active ? t.foreground + "12" : t.foreground + "0a").text_color(t.foreground))
+        // The chosen tab's wash is the pill under the tabs, which glides to
+        // it; until every tab is measured the tab wears it itself.
+        .when(c.active && !tabPill, el => el.bg(t.foreground + "12"))
+        .hover(s => s.bg(t.foreground + "0a").text_color(t.foreground))
+        .on_size_change((s, cx) => { if (Math.abs((this.tabW[c.id] ?? 0) - s.width) >= 0.5) { this.tabW[c.id] = s.width; cx.notify(); } })
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
@@ -317,7 +329,7 @@ export default class Tabs extends View {
       .on_mouse_up("left", () => { this.pressed = null; this.dragPanel = null; })
       .on_scroll_wheel(e => this.wheel(e))
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(6).overflow_x_scrollbar()
-        .child(h_flex().flex_none().gap(2).items_center().children(shown.map(item)))
+        .child(h_flex().flex_none().gap(2).items_center().relative().when(Boolean(tabPill), (el) => el.child(tabPill)).children(shown.map(item)))
         .child(button("tab-new", svg("mods/kanso-chrome/icons/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
           .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }))
         // A saved arrangement of agents, opened in a new tab (kanso-arrange).

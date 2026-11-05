@@ -10,7 +10,8 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover } from "gpui-base";
-import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said } from "./agents.js";
+import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
+import { moving } from "./marks.js";
 import { findThreads } from "./threads.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
@@ -43,6 +44,12 @@ const ELBOW_W = 11;
 const GUIDE_OVERLAP = 4; // the line reaches up into the row above, so it never breaks
 const CHILD_PAD = GUIDE_X + ELBOW_W + 6 - 8; // icon starts 6px after the elbow, inside the 8px row padding
 const rowHeight = ({ tree }) => (tree ? TREE_ROW : PLAIN_ROW);
+// Where the chosen rows are. A list is built in order and every item's
+// height is known before it is drawn, so as the items are added up (`take`)
+// the list learns where the active space and the focused agent sit
+// (`tape.space`, `tape.agent`, with their heights) and puts a pill under
+// each, which glides there (agents.js `pill`). `gap`: the list's own.
+const take = (tape, h) => { const y = tape.y; tape.y += h + tape.gap; return y; };
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
@@ -140,6 +147,10 @@ export default class Spaces extends View {
     this.tasks = {};
     this.held = null;
     this.hoverRow = null;
+    // Folding: the group of rows on the move (`toggleFold`) and the height
+    // each group measured last, so a fold knows where it ends.
+    this.folding = null;
+    this.foldH = {};
     this.migrate();
     this.refreshMachines(cx);
     // `hc machine ls` is a process: every 30 s while the window is in front,
@@ -206,6 +217,9 @@ export default class Spaces extends View {
   checkNew(cx) {
     const now = Date.now();
     const active = window().active;
+    // Coming forward or going behind redraws every mod once, so motion
+    // resumes or stops everywhere (marks.js `moving`).
+    if (active !== this.front) { this.front = active; setShared("kanso.front", active); }
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
     // Read once per look: each read copies every record.
@@ -417,19 +431,24 @@ export default class Spaces extends View {
   // (`entries`, from agents.js `nest`). In the "as on screen" order, the
   // panes that share a strip column (stacked one over another) are held
   // together in one soft slab, so the sidebar shows what is linked on screen.
+  // Returns the rows (`out`), their height together (`h`, 1px apart, a slab's
+  // rows touching) and where the focused one starts (`focus`, `focusH`).
   stacked(entries, mine, indent, t, space, ctx) {
     const colOf = ({ a }) => { if (this.order !== "screen" || a.pin != null || !a.pane) return null; const c = (ctx.strip[a.tab]?.cols ?? []).find((k) => k.panes?.includes(a.pane)); return c && c.panes.length > 1 ? `${a.tab}:${c.panes[0]}` : null; };
     const out = [];
+    let y = 0, focus = null, focusH = 0;
     for (let i = 0; i < entries.length;) {
       const key = colOf(entries[i]);
       let j = i + 1;
       while (key && j < entries.length && colOf(entries[j]) === key) j++;
-      const rows = entries.slice(i, j).map((e) => agentRow(e.a, indent, t, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null, this.more(e, ctx)));
-      if (key && rows.length > 1) out.push(v_flex().id(`stack-${key}`).flex_none().rounded(6).bg(t.foreground + "08").children(rows));
-      else out.push(...rows);
+      const rows = entries.slice(i, j).map((e) => { const m = this.more(e, ctx); return { a: e.a, h: agentRowH(e.a, m), el: agentRow(e.a, indent, t, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null, m) }; });
+      const slab = key && rows.length > 1;
+      for (const r of rows) { if (r.a.focused) { focus = y; focusH = r.h; } y += r.h + (slab ? 0 : 1); }
+      if (slab) { y += 1; out.push(v_flex().id(`stack-${key}`).flex_none().rounded(6).bg(t.foreground + "08").children(rows.map((r) => r.el))); }
+      else out.push(...rows.map((r) => r.el));
       i = j;
     }
-    return out;
+    return { out, h: Math.max(0, y - 1), focus, focusH };
   }
 
   // What a row shows besides its name: the time in its state, the line of
@@ -593,6 +612,7 @@ export default class Spaces extends View {
     const rows = this.ordered(sp, ctx.places);
     const live = machines();
     const all = this.listed(ps, sp, ctx.terms);
+    const tape = ctx.tape;
     const draw = (r) => {
       if (collapsed) return this.compact(r, t);
       const mine = orderSessions(this.inStripOrder(all.filter((a) => a.space === r.w.id), ctx.strip), this.order, this.custom[r.w.id] ?? []);
@@ -600,7 +620,16 @@ export default class Spaces extends View {
       const open = !this.agentsFolded.has(r.w.id);
       // A breath of space between projects (a worktree stays close to its checkout).
       const gap = r.tree || r === rows[0] ? [] : [div().h(10).flex_none()];
-      return [...gap, this.row(r, t, entries.map((e) => e.a)), ...(open ? this.stacked(entries, mine, r.tree ? CHILD_PAD : 0, t, r.w.id, ctx) : [])];
+      if (gap.length) take(tape, 10);
+      const rowY = take(tape, rowHeight(r));
+      if (r.w.active) { tape.space = rowY; tape.spaceH = rowHeight(r); }
+      const st = this.unfolded(r.w.id, open, ctx.now) ? this.stacked(entries, mine, r.tree ? CHILD_PAD : 0, t, r.w.id, ctx) : null;
+      const box = st ? this.foldBox(r.w.id, open, st.out, ctx.now) : [];
+      if (box.length) {
+        const boxY = take(tape, open ? (this.foldH[r.w.id] ?? st.h) : 0);
+        if (open && st.focus != null) { tape.agent = boxY + st.focus; tape.agentH = st.focusH; }
+      }
+      return [...gap, this.row(r, t, entries.map((e) => e.a)), ...box];
     };
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].sort();
     const loading = m => {
@@ -608,7 +637,7 @@ export default class Spaces extends View {
       return state === "loading" || (!state && this.machines.some(k => k.name === m && k.state === "connected"))
         || rows.length < sp.length && sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
+    const loadingRow = m => { take(tape, 28); return div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…"); };
     if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : rows.flatMap(draw);
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
@@ -616,6 +645,7 @@ export default class Spaces extends View {
       const machine = this.machines.find(k => k.name === m);
       const connected = !m || machine?.state === "connected";
       const folded = this.folded.has(m);
+      take(tape, 26);
       const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
         .cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => {
@@ -634,7 +664,7 @@ export default class Spaces extends View {
         .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => run("space.new", { machine: m ?? "" }))
         .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
-      return [head, ...(folded ? [] : mine.length ? mine.flatMap(draw) : [loading(m) ? loadingRow(m) : empty])];
+      return [head, ...(folded ? [] : mine.length ? mine.flatMap(draw) : [loading(m) ? loadingRow(m) : (take(tape, 28), empty)])];
     });
   }
 
@@ -673,12 +703,50 @@ export default class Spaces extends View {
   // A space's agents fold toggle; the state is kept across restarts.
   fold(w, mine, t) {
     const open = !this.agentsFolded.has(w.id);
-    return agentFold(w.id, mine, open, (cx) => { this.setAgentsFolded(w.id, open); cx.notify(); }, t);
+    return agentFold(w.id, mine, open, (cx) => { this.setAgentsFolded(w.id, open, cx); cx.notify(); }, t);
   }
 
-  setAgentsFolded(id, folded) {
+  setAgentsFolded(id, folded, cx = null) {
+    if (folded === this.agentsFolded.has(id)) return;
     folded ? this.agentsFolded.add(id) : this.agentsFolded.delete(id);
     localStorage.setItem("spaces.agentsFolded", JSON.stringify([...this.agentsFolded]));
+    if (cx) this.toggleFold(id, !folded, cx);
+  }
+
+  // ---- Folding -----------------------------------------------------------------
+  // A group of rows folds and unfolds by height, natively: the rows sit in a
+  // box clipped to the height they measured last (`foldH`), and the box's
+  // height eases between 0 and that. Opening draws the box at 0 on its first
+  // frame and at its height on the next (`phase`), so the ease has a start;
+  // closing keeps the rows drawn for FOLD_MS, so the ease has an end to show.
+  // A group whose rows change while open measures again and eases to the new
+  // height: a new agent's row grows into place instead of pushing the list.
+  toggleFold(id, open, cx) {
+    this.folding = { id, open, phase: 0, at: Date.now() };
+    const tick = (cx) => { if (this.folding?.id !== id) return; if (this.folding.phase === 0) this.folding.phase = 1; cx.notify(); };
+    cx.timer.after(16, tick);
+    cx.timer.after(FOLD_MS, (cx) => { if (this.folding?.id === id && !this.folding.open) cx.notify(); });
+  }
+
+  // Whether a group's rows are drawn now: open, or still closing.
+  unfolded(id, open, now) {
+    return open || (this.folding?.id === id && !this.folding.open && now - this.folding.at < FOLD_MS);
+  }
+
+  // The box for a group's rows (`unfolded` said to draw them). `gap`: the
+  // list's own, so the rows sit as they would in it.
+  foldBox(id, open, rows, now, gap = 1) {
+    if (!rows.length) return [];
+    const mine = this.folding?.id === id;
+    const closing = !open && mine;
+    const start = open && mine && this.folding.open && this.folding.phase === 0;
+    const h = this.foldH[id];
+    const inner = v_flex().w_full().flex_none().gap(gap).children(rows)
+      .on_size_change((s, cx) => { if (this.foldH[id] !== s.height) { this.foldH[id] = s.height; cx.notify(); } });
+    return [v_flex().id(`fold-${id}`).w_full().flex_none().overflow_hidden()
+      .h(closing || start ? 0 : h ?? "auto").opacity(closing || start ? 0 : 1)
+      .transition("height", FOLD).transition("opacity", FOLD)
+      .child(inner)];
   }
 
   // A space's avatar color: the theme's own hue (quiet in Kanso), else a fixed one.
@@ -690,8 +758,8 @@ export default class Spaces extends View {
   row({ w, i, g, tree }, t, mine = []) {
     const on = w.active;
     const fill = this.fill(w, t);
-    // A wash of the text color, so a loud theme accent never paints the row.
-    const wash = t.foreground + "14";
+    // A wash of the text color, so a loud theme accent never paints the row;
+    // the wash under the space you are in is the list's pill, which glides here.
     const washHover = t.foreground + "0c";
     return v_flex()
       .relative()
@@ -702,8 +770,7 @@ export default class Spaces extends View {
       .justify_center()
       .rounded(8)
       .cursor_pointer()
-      .when(on, (el) => el.bg(wash))
-      .when(!on, (el) => el.hover((s) => s.bg(washHover)))
+      .hover((s) => s.bg(washHover))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.border_t(2).border_color(t.accent))
       .on_mouse_down("left", (e) => {
         this.pressed = i;
@@ -718,7 +785,7 @@ export default class Spaces extends View {
         else {
           // Like a desktop app's project list: the row itself folds. Arriving at a
           // space opens it; clicking the space you're in folds or opens it.
-          if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false);
+          if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false, cx);
           if (!on) run("space.select", { id: w.id });
         }
         cx.notify();
@@ -775,15 +842,33 @@ export default class Spaces extends View {
     const sections = bySection(entries, this.since ?? {}, held, this.statusOrder);
     if (!sections.length) return [this.empty(t, "No agents yet", "Start one from + in the tab bar; it shows here by what it needs from you.")];
     const project = this.projectOf(sp, t);
+    const tape = ctx.tape;
     return sections.flatMap((s, i) => {
+      const id = `section-${s.id}`;
       const open = !this.sectionsFolded.has(s.id);
       const count = s.entries.filter((e) => !e.lines.length).length;
-      const head = this.sectionHead(t, `section-${s.id}`, i, open, () => {
+      take(tape, i ? 44 : 32);
+      const head = this.sectionHead(t, id, i, open, (cx) => {
         open ? this.sectionsFolded.add(s.id) : this.sectionsFolded.delete(s.id);
         localStorage.setItem("spaces.sections", JSON.stringify([...this.sectionsFolded]));
+        this.toggleFold(id, !open, cx);
       }, s.id === "other" ? null : statusMark(t, s.id), s.label, count, s.id === "blocked" ? t.blocked : t.foreground);
-      const rows = open ? s.entries.map((e) => agentRow(e.a, FLUSH, t, this.rowFor(e.a), this.more(e, ctx, e.lines.length ? null : project(e.a.space)))) : [];
-      return [head, ...rows];
+      const rows = [];
+      let h = 0, focus = null, focusH = 0;
+      if (this.unfolded(id, open, ctx.now)) {
+        for (const e of s.entries) {
+          const m = this.more(e, ctx, e.lines.length ? null : project(e.a.space)), rh = agentRowH(e.a, m);
+          if (e.a.focused) { focus = h; focusH = rh; }
+          rows.push(agentRow(e.a, FLUSH, t, this.rowFor(e.a), m));
+          h += rh + 1;
+        }
+      }
+      const box = this.foldBox(id, open, rows, ctx.now);
+      if (box.length) {
+        const boxY = take(tape, open ? (this.foldH[id] ?? Math.max(0, h - 1)) : 0);
+        if (open && focus != null) { tape.agent = boxY + focus; tape.agentH = focusH; }
+      }
+      return [head, ...box];
     });
   }
 
@@ -792,7 +877,7 @@ export default class Spaces extends View {
   sectionHead(t, id, i, open, toggle, mark, name, count, ink) {
     return h_flex().id(id).h(i ? 44 : 32).pt(i ? 12 : 0).px(12).flex_none().gap(10).items_center()
       .cursor_pointer().text_size(13).font_semibold().text_color(ink)
-      .on_click((_e, cx) => { toggle(); cx.notify(); })
+      .on_click((_e, cx) => { toggle(cx); cx.notify(); })
       .when(Boolean(mark), (el) => el.child(mark))
       .child(div().child(name))
       .when(count != null, (el) => el.child(div().font_normal().text_color(t.dim).child(String(count))))
@@ -810,7 +895,7 @@ export default class Spaces extends View {
       .child(v_flex().flex_1().min_w(0).gap(9)
         .child(h_flex().items_center().child(block([132, 104, 150, 92, 118][i], 10)).child(div().flex_1()).child(block(22, 8)))
         .child(block([170, 138, 120, 160, 100][i], 8)));
-    return v_flex().w_full().loop("opacity", { from: 0.35, to: 0.8, period: 1800 }).children([0, 1, 2, 3, 4].map(row));
+    return v_flex().w_full().when(moving(), (el) => el.loop("opacity", { from: 0.35, to: 0.8, period: 1800 })).children([0, 1, 2, 3, 4].map(row));
   }
 
   // An empty view: what will show here and how to get there, two lines.
@@ -848,19 +933,30 @@ export default class Spaces extends View {
 
   // Projects | Status | Threads, under the top row. Status carries a dot
   // while an agent needs you and you are on another view.
+  // The chosen one sits on a raised thumb that slides to it, natively. The
+  // thumb needs the switch's width (measured, kept); until the first measure
+  // the chosen segment is raised on its own.
   viewSwitch(t, sp) {
     const asks = sp.some((s) => s.status === "blocked");
+    const views = Object.keys(VIEWS);
+    const at = this.switchW ? segmentAt(this.switchW, views.indexOf(this.view), views.length) : null;
     const seg = (view) => {
       const on = this.view === view;
       return h_flex().id(`spaces-view-${view}`).flex_1().h(28).gap(6).items_center().justify_center().rounded(7).cursor_pointer()
-        .text_size(12.5).font_medium().text_color(on ? t.foreground : t.muted).border_1().border_color(on ? t.border : t.foreground + "00")
-        .when(on, (el) => el.bg(t.raised ?? t.selected))
+        .text_size(12.5).font_medium().text_color(on ? t.foreground : t.muted)
+        .when(on && !at, (el) => el.bg(t.raised ?? t.selected).border_1().border_color(t.border))
         .when(!on, (el) => el.hover((s) => s.text_color(t.foreground)))
         .on_click((_e, cx) => { this.setView(view, cx); cx.notify(); })
         .child(div().child(VIEWS[view].label))
         .when(view === "agents" && asks && !on, (el) => el.child(div().size(6).rounded_full().bg(t.blocked)));
     };
-    return h_flex().mx(18).mt(4).mb(14).p(3).gap(2).flex_none().rounded(10).bg(t.foreground + "0a").children(Object.keys(VIEWS).map(seg));
+    const thumb = at ? div().id("spaces-view-thumb").absolute().top(3).left(at.left).w(at.width).h(28).rounded(7)
+      .bg(t.raised ?? t.selected).border_1().border_color(t.border)
+      .transition("left", { duration: 200, easing: "ease-out" }) : null;
+    return h_flex().relative().mx(18).mt(4).mb(14).p(3).gap(2).flex_none().rounded(10).bg(t.foreground + "0a")
+      .on_size_change((s, cx) => { if (Math.abs((this.switchW ?? 0) - s.width) >= 1) { this.switchW = s.width; cx.notify(); } })
+      .when(Boolean(thumb), (el) => el.child(thumb))
+      .children(views.map(seg));
   }
 
   // The Threads view, as T3 Code's sidebar: the conversations of the agents
@@ -904,9 +1000,10 @@ export default class Spaces extends View {
     return sections.flatMap((s, i) => {
       const folds = Boolean(s.folds);
       const open = folds ? this.shelvesOpen.has(s.id) : !this.sectionsFolded.has(`thread-${s.id}`);
-      const toggle = () => {
+      const toggle = (cx) => {
         if (folds) { open ? this.shelvesOpen.delete(s.id) : this.shelvesOpen.add(s.id); localStorage.setItem("spaces.shelvesOpen", JSON.stringify([...this.shelvesOpen])); }
         else { open ? this.sectionsFolded.add(`thread-${s.id}`) : this.sectionsFolded.delete(`thread-${s.id}`); localStorage.setItem("spaces.sections", JSON.stringify([...this.sectionsFolded])); }
+        this.toggleFold(`thread-${s.id}`, !open, cx);
       };
       const p = s.project ? project(s.project) : null;
       const mark = p ? h_flex().size(18).flex_none().rounded(5).bg(p.fill + "2e").items_center().justify_center().text_size(10.5).font_semibold().text_color(p.fill).child(p.name[0]?.toUpperCase() ?? "?")
@@ -914,9 +1011,22 @@ export default class Spaces extends View {
         : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(14).flex_none().text_color(t.muted)
         : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(14).flex_none().text_color(t.muted) : null;
       // The ungrouped active list needs no header: it is the inbox itself.
-      const head = s.id === "active" ? (i ? [div().h(12).flex_none()] : [])
-        : [this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, p ? p.name : s.label, s.rows.length, folds ? t.muted : t.foreground)];
-      return [...head, ...(open || s.id === "active" ? s.rows.map(row) : [])];
+      const tape = ctx.tape, rowH = agentRowH({}, { roomy: true, project: true });
+      if (s.id === "active") {
+        if (i) take(tape, 12);
+        const head = i ? [div().h(12).flex_none()] : [];
+        return [...head, ...s.rows.map((r) => { const y = take(tape, rowH); if (r.a.focused) { tape.agent = y; tape.agentH = rowH; } return row(r); })];
+      }
+      take(tape, i ? 44 : 32);
+      const head = [this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, p ? p.name : s.label, s.rows.length, folds ? t.muted : t.foreground)];
+      const rows = this.unfolded(`thread-${s.id}`, open, ctx.now) ? s.rows.map(row) : [];
+      const box = this.foldBox(`thread-${s.id}`, open, rows, ctx.now, 6);
+      if (box.length) {
+        const boxY = take(tape, open ? (this.foldH[`thread-${s.id}`] ?? s.rows.length * (rowH + 6) - 6) : 0);
+        const k = s.rows.findIndex((r) => r.a.focused);
+        if (open && k >= 0) { tape.agent = boxY + k * (rowH + 6); tape.agentH = rowH; }
+      }
+      return [...head, ...box];
     });
   }
 
@@ -1014,9 +1124,11 @@ export default class Spaces extends View {
     const active = sp.find((p) => p.active);
     // Read once per draw: every terminal's record, the panes' digests, the
     // strip's columns, where each space is, now.
-    const ctx = { terms: terminals(), digests: shared("kanso.digest") ?? {}, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
     const switchShown = this.showSwitch !== false;
     const view = !collapsed && switchShown ? this.view : "spaces";
+    // `tape`: where the list's chosen rows end up (see `take`), for the pills.
+    const tape = { y: 0, gap: view === "threads" ? 6 : 1, space: null, agent: null };
+    const ctx = { terms: terminals(), digests: shared("kanso.digest") ?? {}, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now(), tape };
     const plus = quiet("space-new", "plus", "New space", () => run("space.new", { machine: active?.machine ?? "" }));
     const hide = quiet("sidebar-toggle", "sidebar", collapsed ? "Show sidebar" : "Hide sidebar", toggle);
     const search = quiet("search", "search", "Search", () => run("mod.open", { name: "picker" }));
@@ -1039,8 +1151,22 @@ export default class Spaces extends View {
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
-      .child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : view === "threads" ? 6 : 1).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
-        .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.draggedAgent = null; cx.notify(); })
-        .children(view === "agents" ? this.agentsView(t, sp, ps, ctx) : view === "threads" ? this.threadsView(t, sp, ps, ctx) : this.grouped(t, collapsed, sp, ps, ctx)));
+      .child(this.list(t, collapsed, view, ctx,
+        view === "agents" ? this.agentsView(t, sp, ps, ctx) : view === "threads" ? this.threadsView(t, sp, ps, ctx) : this.grouped(t, collapsed, sp, ps, ctx)));
+  }
+
+  // The scrolling list, with the pills under the active space and the
+  // focused agent drawn first (the items are built before this runs, so the
+  // tape knows where they are). A pill keeps its identity per view, so a
+  // change of view places it rather than sliding it across.
+  list(t, collapsed, view, ctx, items) {
+    const { tape } = ctx;
+    const pills = collapsed ? [] : [
+      ...(tape.space != null ? [pill("pill-space", tape.space, tape.spaceH, t.foreground + "14")] : []),
+      ...(tape.agent != null ? [pill(`pill-agent-${view}`, tape.agent, tape.agentH, t.foreground + "12")] : []),
+    ];
+    return v_flex().relative().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : tape.gap).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
+      .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.draggedAgent = null; cx.notify(); })
+      .children([...pills, ...items]);
   }
 }

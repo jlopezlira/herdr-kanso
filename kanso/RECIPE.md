@@ -466,6 +466,18 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     status bar when nothing works); nothing on the tab or header.
   - The 7px corner dots on avatars (the collapsed rail, the strip's edge
     tabs) stay dots: a badge, too small for a mark.
+- **Motion**, all native (GPUI eases; no script runs per frame) and only
+  while the window is in front: marks.js `moving()` (ui.js `breathe()` in
+  the panels) turns every spin, loop and shimmer off behind other windows,
+  where a loop would keep the window drawing 30 frames a second for nobody;
+  kanso-spaces redraws every mod when the window comes forward or goes
+  behind (`kanso.front`). The view switch's thumb slides (`left`, 200 ms
+  ease-out); the wash under the chosen space, agent and tab is one pill per
+  list, absolute under the rows, gliding by `top` and `height` (220 ms) to
+  where the list, adding its rows' heights up as it is built, says the row
+  is (the tabs measure their widths); a group of rows folds by `height`
+  (220 ms, to the height it measured) and a new row grows into place; a
+  header's tools slide out by `width` left of the mark; a panel fades in.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.

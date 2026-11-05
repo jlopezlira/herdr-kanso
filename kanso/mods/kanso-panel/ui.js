@@ -11,6 +11,7 @@
 // run sync:share` copies it and a test fails when a copy differs.
 import { div, svg } from "gpui-kit";
 import { h_flex, Button, Toggle } from "gpui-base";
+import { window } from "herdr";
 
 /** The spacing rhythm: 4 / 8 / 12 / 16 / 24. */
 export const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
@@ -24,6 +25,15 @@ export const T = { page: 20, card: 13.5, metric: 22, value: 12.5, body: 11.5, sm
 export const ARM_MS = 4000;
 /** The loading silhouette breathes: one native loop on the whole shape. */
 export const BREATH = { from: 0.35, to: 0.8, period: 1800 };
+/** A dot that pulses to say "in use now". */
+export const PULSE = { from: 0.35, to: 1, period: 2400 };
+/**
+ * Breathes or pulses `el` natively, only while the window is in front: a
+ * native loop keeps the window drawing about 30 frames a second, and behind
+ * other windows nobody watches. (kanso-spaces redraws every mod when the
+ * window comes forward or goes behind.)
+ */
+export const breathe = (el, policy = BREATH) => (window()?.active !== false ? el.loop("opacity", policy) : el);
 const ICONS = "mods/kanso-chrome/icons/";
 
 /** The panels' colors, one name each, from Herdr's theme. */
@@ -74,7 +84,7 @@ export function iconButton(id, icon, tip, onClick, c, { spin = false, disabled =
   return Button.new(id).size(26).flex_none().items_center().justify_center().rounded(R.control)
     .accessibility_label(tip).tooltip(tip)
     .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle)).focus((s) => s.bg(c.subtle)).on_click((_e, cx) => onClick(cx)))
-    .child(spin ? glyph.spin(900) : glyph);
+    .child(spin && window()?.active !== false ? glyph.spin(900) : glyph);
 }
 
 /** A section's head: its name, and a note at the right. */

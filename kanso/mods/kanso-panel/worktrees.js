@@ -24,7 +24,7 @@ import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } fr
 import { Share, postText } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
 import { tilde, pool } from "./lib.js";
-import { G, BREATH, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
 
@@ -690,7 +690,7 @@ export class Worktrees {
 
   skeleton(c, narrow) {
     const { block, row } = ghost(c);
-    return v_flex().w_full().gap(narrow ? 36 : 48).loop("opacity", BREATH)
+    return breathe(v_flex().w_full().gap(narrow ? 36 : 48))
       .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
         .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
       .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
@@ -759,7 +759,7 @@ export class Worktrees {
           .child(div().w_full().truncate().text_size(14).text_color(c.text).when(picked, (e) => e.font_medium()).child(name(w.path)))
           .when(Boolean(meta), (el) => el.child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta)))
           .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
-            .child(div().size(6).flex_none().rounded_full().bg(v.color).when(Boolean(v.pulse), (el) => el.loop("opacity", { from: 0.35, to: 1, period: 2400 })))
+            .child(div().size(6).flex_none().rounded_full().bg(v.color).when(Boolean(v.pulse), (el) => breathe(el, PULSE)))
             .child(div().min_w(0).truncate().text_size(12).text_color(v.quiet || v.color === c.dim ? c.muted : v.color).child(busy ? "Removing…" : v.text))))
         .child(div().flex_none().text_size(15).font_light().text_color(c.text).child(fmtSize(w.size))));
     if (!picked) return button;

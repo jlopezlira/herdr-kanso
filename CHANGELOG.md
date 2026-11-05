@@ -8,6 +8,16 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.6.0] - 2026-11-05
+
+### Added
+
+- Motion, native and only where something changed: the Projects, Status and Threads switch slides its thumb to the view you chose; the wash under the space, the agent and the tab you are on is one pill that glides to the row or tab you click, changing height with it; a project's agents, a Status section and a Threads shelf fold and unfold by height, and a new agent's row grows into place instead of pushing the list; a pane header's tools slide out beside its state mark while the pointer rests on it; a side panel fades in. GPUI animates all of it; no script runs per frame.
+
+### Changed
+
+- Nothing moves while Herdr is behind other windows. A working agent's ring, the shimmer on its name, the breathing silhouettes and pulsing dots run only with the window in front; behind it they stand still, so an idle window draws no frames (a native loop keeps a window drawing about 30 frames a second for as long as it is on screen, and the default layout's spinner does). Motion resumes the moment the window comes forward.
+
 ## [2.5.0] - 2026-11-04
 
 ### Added
