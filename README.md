@@ -235,8 +235,8 @@ right-click for the rest. The sort button sorts in each view's terms. Group work
 remote machine. Order agents by **Needs you first**, last update, kind, screen
 position or your own drag order. Pin the important ones and rename anything.
 What changes eases into place natively (the view switch slides, the selection
-glides to the row you click, agents fold by height), and nothing moves while
-Herdr is behind other windows, so an idle window draws no frames.
+glides to the row you click, agents fold by height), and a working agent's
+ring keeps turning behind other windows, so a glance tells you it still is.
 
 ![Kanso's native Needs you first ordering beside a review agent asking for a decision.](docs/screenshots/attention.png)
 

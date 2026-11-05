@@ -466,9 +466,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     status bar when nothing works); nothing on the tab or header.
   - The 7px corner dots on avatars (the collapsed rail, the strip's edge
     tabs) stay dots: a badge, too small for a mark.
-- **Motion**, native, only with the window in front: marks.js `moving()`
-  and ui.js `breathe()` still every spin, loop and shimmer behind other
-  windows; `kanso.front` flips so every mod redraws. The view switch's
+- **Motion**, native, and never stopped behind other windows (a still ring
+  there reads as a stalled agent; what the window saves behind others is
+  work: Git, machines, processes less often). The view switch's
   thumb slides (`left`, 200 ms); one pill per list glides (`top`/`height`;
   tabs `left`/`width`; 220 ms) to the chosen space, agent or tab; rows fold
   by `height` (220 ms, measured) and a new row grows in; a header's tools
@@ -707,8 +707,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Files, Changes and PR are idle whenever they aren't the shown panel.
     PR rereads every minute while shown, every 20 s while a check runs.
 - **Background**:
-  - While the window is behind others, the spaces list checks git every 5 s
-    instead of every 0.5 s.
+  - Git runs only while Spaces shows (0.5 s in front, 5 s behind); the
+    `ps` under agents skips Threads.
   - `hc machine ls` runs every 30 s with the window in front, and every
     2 min with it behind.
 

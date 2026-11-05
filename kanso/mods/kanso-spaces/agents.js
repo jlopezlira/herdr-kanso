@@ -3,7 +3,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
-import { stateMark, programIcon, moving, NAME_LABEL } from "./marks.js";
+import { stateMark, programIcon, NAME_LABEL } from "./marks.js";
 
 export { NAME_LABEL };
 
@@ -486,12 +486,11 @@ function guide(l, h, t) {
 // window slides one way while its copy of the text slides the other, by
 // the same native `.loop`, so the lit letters stay in place. Nothing is
 // laid out again: the row never moves. Each title has its own pace, so
-// several at work never shine in step. Behind other windows the title
-// simply rests, in the same box (marks.js `moving`).
+// several at work never shine in step. It keeps shining behind other
+// windows, like every mark (marks.js).
 const GLINT = [[44, 0.35], [26, 0.6], [12, 1]];
 const REACH = 240; // past the longest title the row can show
 function shimmer(text, t, address) {
-  if (!moving()) return h_flex().flex_1().min_w(0).items_center().child(div().truncate().text_color(t.foreground).child(text));
   const pace = 2200 + ([...address].reduce((n, c) => n + c.charCodeAt(0), 0) % 7) * 160;
   const lit = ([w, strength]) => div().absolute().top(0).bottom(0).w(w).overflow_hidden().opacity(strength)
     .loop("left", { from: -w, to: REACH, period: pace, easing: "linear" })
