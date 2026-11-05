@@ -21,7 +21,7 @@ beside them.
 - **Read every agent.** Terminals sit on a horizontal strip and keep their
   width. A new pane opens beside the one you are in and the view glides to it.
   Nothing gets squeezed into a grid.
-- **Review without leaving.** Files, Changes and pull requests open beside your
+- **Review without leaving.** Files and pull requests open beside your
   agents: diffs, CI, unresolved threads, merge. One click starts an agent on a
   pull request's feedback.
 - **Take over in one key.** Cmd+Shift+O opens the agent's folder, its worktree
@@ -87,10 +87,9 @@ be previewed in the panel, with no editor at all.
 
 </details>
 
-### Read the diff, make the commit
+### Read your files
 
-The **Changes** panel puts changed files, inline diffs and a commit message next
-to your agents while they keep working. The **Files** panel previews code, and
+The **Files** panel previews code, and
 opens a Markdown file formatted, to read and edit where it reads: double-click
 a paragraph, a list, a heading or a table to edit just that block; what you
 type is saved as you go, and never over a change an agent made meanwhile. On
@@ -99,8 +98,6 @@ makes `.md` files open there from a Cmd-click in a terminal or Finder (and
 `uninstall` gives them back); nothing changes until you run it. The same
 editor is a window over any layout as the
 [markdown-panel](markdown-panel/RECIPE.md) mod.
-
-![A real Git diff and the native commit message field in Kanso's Changes panel.](docs/screenshots/changes.png)
 
 ### See what you shipped
 
@@ -216,6 +213,18 @@ it. Agents start servers and leave them running when their pane closes; the
 ones no pane runs any more are marked, and **Stop** (a second press
 confirms) ends them, with a force stop for one that won't go. Open one in
 the browser or go to its pane from the same row.
+
+### Weeks without a restart
+
+The **Memory** panel shows what the memory guard sees in a long session: how
+much of the machine is free, with a chart over 24 hours, 7 or 30 days; the
+window, herdr-core and every agent's footprint, each agent with its last 14
+days; the heaviest processes on the machine; and what the guard did about it.
+An idle Claude agent that grew too large is **recycled**: ended with `/exit`
+and started again in the same terminal with `--resume`, so the conversation
+carries on in a fresh process. From the panel you can recycle one, restart the
+window or end hung helpers (a second press confirms each), and turn the guard
+on when it is off.
 
 ### Every repo and worktree, one sidebar
 
@@ -357,7 +366,7 @@ With the mouse:
 
 ## Privacy: what it runs
 
-The mods run `git` (the spaces list, Files, Changes), `find` (listing a folder
+The mods run `git` (the spaces list, Files), `find` (listing a folder
 on Unix, with `bash` as a fallback) and `hc machine ls` (machines). They read
 files only inside the folders you work in.
 
@@ -416,6 +425,12 @@ first scan moves the old `store.json` into `spend.db` (keeping the file as
 worth, tasks, tokens, how many projects and models, and the days. Never a
 project, task or session name.
 
+The Memory panel reads two files the guard writes,
+`~/.config/herdr-app/data/kanso-guard/now.json` and `history.json`, and starts
+nothing to read them. Its actions run the guard
+(`mods/kanso-guard/guard.mjs`, with `node`) detached; the guard itself runs
+from launchd once a minute, after its `install`.
+
 ## Development
 
 ```sh
@@ -441,7 +456,8 @@ offers.
 
 How every part is built, in enough detail to rebuild it:
 [kanso/RECIPE.md](kanso/RECIPE.md), with Spend's brief in
-[kanso/RECIPE-spend.md](kanso/RECIPE-spend.md). The herdr.dev gallery drops a
+[kanso/RECIPE-spend.md](kanso/RECIPE-spend.md) and Memory's in
+[kanso/RECIPE-guard.md](kanso/RECIPE-guard.md). The herdr.dev gallery drops a
 folder whose `RECIPE.md` is over 64 KB, and a test fails before that happens:
 move a part into its own file. `herdr-app check kanso/mods/<mod>` loads a
 mod once and reports what is wrong.

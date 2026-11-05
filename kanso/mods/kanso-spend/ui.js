@@ -1,14 +1,16 @@
 // Kanso's panel kit, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
 // What the side panels draw alike (Files, Changes, PR, Shipped, Worktrees
-// and Ports in kanso-panel; Spend in kanso-spend): one centered column, no
-// cards, hierarchy from type size and tone, hairlines between rows, quiet
-// text actions, a breathing silhouette while loading, and a second press to
-// confirm anything that removes. Every color comes from Herdr's theme.
+// and Ports in kanso-panel; Spend in kanso-spend; Memory in kanso-guard):
+// one centered column, no cards, hierarchy from type size and tone,
+// hairlines between rows, quiet text actions, a breathing silhouette while
+// loading, and a second press to confirm anything that removes. Every color
+// comes from Herdr's theme.
 //
 // Herdr loads a mod's files from its own folder only, so this file is kept
-// byte for byte in kanso-panel/ (the one you edit) and kanso-spend/: `npm
-// run sync:share` copies it and a test fails when a copy differs.
+// byte for byte in kanso-panel/ (the one you edit), kanso-spend/,
+// kanso-settings/ and kanso-guard/: `npm run sync:share` copies it and a
+// test fails when a copy differs.
 import { div, svg } from "gpui-kit";
 import { h_flex, Button, Toggle } from "gpui-base";
 

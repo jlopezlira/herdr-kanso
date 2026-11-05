@@ -63,5 +63,9 @@ export const DEFAULT_KEYS = {
     "cmd-r": "kanso-spend.refresh",
     "cmd-,": "kanso-spend.settings",
     "escape": "kanso-spend.back"
+  },
+  "mod:kanso-guard": {
+    "cmd-r": "kanso-guard.refresh",
+    "escape": "kanso-guard.back"
   }
 };

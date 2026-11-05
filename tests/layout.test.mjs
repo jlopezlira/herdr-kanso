@@ -26,8 +26,8 @@ async function layoutFixture() {
 }
 
 const writers = [
-  ["kanso-tabs/main.js", "Tabs", (x) => new x.Tabs().mount("changes")],
-  ["kanso-panel/lib.js", "showPanel", (x) => x.showPanel("changes", { mod: "kanso-panel" })],
+  ["kanso-tabs/main.js", "Tabs", (x) => new x.Tabs().mount("pr")],
+  ["kanso-panel/lib.js", "showPanel", (x) => x.showPanel("pr", { mod: "kanso-panel" })],
   ["open-with/main.js", "showPreview", (x) => x.showPreview("/repo/readme.md", null)],
   ["kanso-spaces/main.js", "setRail", (x) => x.setRail(false, 76)],
 ];
@@ -164,18 +164,18 @@ test("kanso-tabs shows its panels in the order you drag them, without the ones y
   const host = { shared: (k) => store[k], setShared: (k, v) => { store[k] = v; } };
   const { panelList, movePanel, setPanelOn } = await load("kanso-tabs/main.js", ["panelList", "movePanel", "setPanelOn"], host);
   const ids = () => clone(panelList().filter((p) => p.on).map((p) => p.id));
-  assert.deepEqual(ids(), ["files", "insights", "changes", "pr", "shipped", "worktrees", "ports"], "Spend, Worktrees and Ports ship with Kanso; no Specs");
+  assert.deepEqual(ids(), ["files", "insights", "pr", "shipped", "worktrees", "ports", "memory"], "Spend, Worktrees, Ports and Memory ship with Kanso; no Specs");
   movePanel("shipped", "files");
-  assert.deepEqual(ids(), ["shipped", "files", "insights", "changes", "pr", "worktrees", "ports"], "dropped on Files: takes its place");
+  assert.deepEqual(ids(), ["shipped", "files", "insights", "pr", "worktrees", "ports", "memory"], "dropped on Files: takes its place");
   movePanel("files", "pr");
-  assert.deepEqual(ids(), ["shipped", "insights", "changes", "pr", "files", "worktrees", "ports"], "dragged right");
-  setPanelOn("changes", false);
-  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports"]);
-  assert.equal(panelList().find((p) => p.id === "changes").on, false, "still listed in the popup, off");
-  setPanelOn("changes", true);
-  assert.deepEqual(ids(), ["shipped", "insights", "changes", "pr", "files", "worktrees", "ports"], "back where it was");
-  store["kanso.panels.order"] = ["files", "insights", "changes", "pr", "shipped"];
-  assert.deepEqual(clone(ids().slice(-2)), ["worktrees", "ports"], "panels added after you placed yours come after them");
+  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "memory"], "dragged right");
+  setPanelOn("pr", false);
+  assert.deepEqual(ids(), ["shipped", "insights", "files", "worktrees", "ports", "memory"]);
+  assert.equal(panelList().find((p) => p.id === "pr").on, false, "still listed in the popup, off");
+  setPanelOn("pr", true);
+  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "memory"], "back where it was");
+  store["kanso.panels.order"] = ["files", "insights", "pr", "shipped"];
+  assert.deepEqual(clone(ids().slice(-3)), ["worktrees", "ports", "memory"], "panels added after you placed yours come after them");
   store["kanso.panels"] = [{ id: "workflow", label: "Workflow", mod: "herdr-workflow" }];
   assert.equal(ids().at(-1), "workflow", "a custom panel you never placed comes last");
 });
@@ -187,6 +187,9 @@ test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {
   tabs.mount = (id) => mounted.push(id);
   tabs.reconcile({ id: "s1" }, null, { id: "panel-body", children: [{ id: "specs", type: "block", content: { mod: "sdd-focused" } }] }, "specs");
   assert.deepEqual(mounted, [null]);
+  tabs.reconcile({ id: "s1" }, null, { id: "panel-body", children: [{ id: "changes", type: "block", content: { mod: "kanso-panel", props: { panel: "changes" } } }] }, "changes");
+  assert.deepEqual(mounted, [null, null], "Changes, left open by an older Kanso, closes");
+  mounted.length = 1;
   tabs.reconcile({ id: "s1" }, null, { id: "panel-body", children: [{ id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path: "/repo/PLAN.md" } } }] }, "preview");
   assert.deepEqual(mounted, [null], "a file's preview stays open");
 });

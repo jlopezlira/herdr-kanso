@@ -8,6 +8,21 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.0.0] - 2026-11-05
+
+### Removed
+
+- The Changes panel (changed files, diffs and a commit message). Agents commit on their own and the PR panel shows the diff, so it went unused while it took a place in the tab bar. A Changes panel left open closes by itself; Files and PR stay.
+
+### Added
+
+- **Memory**, a panel and a guard for sessions that last weeks. The guard (`kanso-guard/guard.mjs`, run by launchd every minute once you turn it on from the panel) samples the machine, the Herdr window, herdr-core and every agent, and keeps 24 hours by the minute, 90 days by the hour and 14 days per agent. It recycles a Claude Code agent that grew past 900 MB, or the heaviest ones when the machine runs low (under 20% free or over 5 GB swapped): only one idle for 20 minutes, not the one you are on, never while you type, at most once in 6 hours. It is ended with /exit and started again in the same terminal on the same conversation (`--resume`), with its model and permissions and without its first prompt; an agent that does not leave on its own is left alone. It restarts the Herdr window past 1.2 GB or when its mod runtime runs out of memory (terminals and agents stay in herdr-core), only after a minute without input, at most 3 times an hour. It ends the helpers Kanso starts when they hang and tells you when memory runs low, naming what holds it. The panel shows all of it, with the history and every agent's size, its agents grouped into ready to recycle, working and can't be recycled (with why). It recycles one agent, all the idle ones or only the heavy ones (agent by agent, as it goes, never the one you are on), closes an agent you no longer use or every one idle for 2 days (its conversation stays on disk, with the command to reopen it in Events), restarts the window and cleans up hung helpers. A share button turns the session into a card for X, LinkedIn or Bluesky: how long your agents have been open, how many on how much memory, and what recycling gave back; no names, folders or sessions.
+
+### Fixed
+
+- A command that hangs no longer piles up copies of itself: the window's health check, the machines list and the update check each wait for the last one to answer, and the update check never asks for credentials and gives up on a stalled connection.
+- The Threads view no longer reads transcript lines over 16 KB (a pasted image, in base64) into the mod runtime's memory.
+
 ## [2.8.1] - 2026-11-05
 
 ### Fixed

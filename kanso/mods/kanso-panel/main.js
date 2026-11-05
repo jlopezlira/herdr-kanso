@@ -1,7 +1,7 @@
 // Kanso's side panels, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// One mod, six panels: `props.panel` is "files" (a lazy file browser),
-// "changes" (git status, diffs and a commit), "pr" (the branch's pull
+// One mod, several panels: `props.panel` is "files" (a lazy file browser),
+// "pr" (the branch's pull
 // request, or another of your open ones picked from a list), "shipped" (what
 // you delivered: lines, pull requests, reviews, streak and records), "worktrees"
 // (every git worktree on this computer, and removing the ones left behind) or "preview" (one file, rendered: Markdown as the SDK draws it,
@@ -14,14 +14,13 @@
 import { View, div } from "gpui-kit";
 import { props } from "herdr";
 import { Files } from "./files.js";
-import { Changes } from "./changes.js";
 import { PullRequest } from "./pr.js";
 import { Preview } from "./preview.js";
 import { Shipped } from "./shipped.js";
 import { Worktrees } from "./worktrees.js";
 import { Ports } from "./ports.js";
 
-const PANELS = { files: Files, changes: Changes, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees, ports: Ports };
+const PANELS = { files: Files, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees, ports: Ports };
 
 export default class Panel extends View {
   init(_props, cx) {

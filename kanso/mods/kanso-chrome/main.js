@@ -44,9 +44,12 @@ export default class WorkspaceChrome extends View {
   // minute and offers the restart in a toast; terminals and agents live in
   // herdr-core and stay.
   watch(cx) {
+    if (this.watching) return; // the last look has not answered yet
+    this.watching = true;
     cx.spawn(async (cx) => {
       let errors = [];
       try { const r = await exec("sh", ["-c", 'HERDR_APP_HOME="$1" herdr-app status', "_", appHome()]); errors = JSON.parse(r.stdout).errors ?? []; } catch { return; }
+      finally { this.watching = false; }
       if (!errors.some((e) => /out of memory/i.test(String(e)))) { this.warned = false; return; }
       if (this.warned) return;
       this.warned = true;
