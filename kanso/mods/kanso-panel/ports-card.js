@@ -1,54 +1,50 @@
 // Ports' share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// What the Ports panel lets you brag about: the dev servers agents left
-// running after their panes closed, found and stopped, and the memory that
-// gave back; and what runs now, every one accounted for. Never a port,
-// folder or command: only counts and sizes.
+// What the Ports panel lets you brag about, from the guard's ports.json: the
+// dev servers agents left running after their panes closed that you found
+// and stopped, and the memory that gave back; else how many your agents
+// opened this week. Never a port, folder, project or command: only counts
+// and sizes.
 import { postText } from "./share.js";
+import { size, portStats, activeSeries } from "./ports-model.js";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const size = (mb) => (mb < 1000 ? `${Math.max(0, Math.round(mb))} MB` : `${(mb / 1024).toFixed(1).replace(/\.0$/, "")} GB`);
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-/** The tally kept across sessions: { stopped, freedMB, since }. */
-export function readTally(raw) {
-  try {
-    const t = JSON.parse(raw ?? "null");
-    if (t && typeof t === "object") return { stopped: Number(t.stopped) || 0, freedMB: Number(t.freedMB) || 0, since: Number(t.since) || null };
-  } catch { /* none yet */ }
-  return { stopped: 0, freedMB: 0, since: null };
-}
-
-/** The tally after `n` servers holding `mb` were stopped. */
-export const addToTally = (t, n, mb, now = Date.now()) => ({ stopped: t.stopped + n, freedMB: t.freedMB + Math.max(0, mb), since: t.since ?? now });
-
-/** The card spec: `list` is what listens now (with `owner`), `tally` what was stopped. */
-export function portsSpec(list, tally) {
-  const loose = list.filter((s) => !s.owner).length;
-  const since = tally.since ? new Date(tally.since) : null;
-  const brag = tally.stopped > 0;
+/** The card spec, from parsePorts()'s data. */
+export function portsSpec(data, now = Date.now()) {
+  const s = portStats(data, now);
+  const brag = s.stoppedLoose > 0;
+  const week = activeSeries(data, "week", now);
+  const stats = [
+    { value: String(s.running), unit: "running now" },
+    { value: String(s.weekPeak), unit: "at once at the peak" },
+    brag ? { value: String(s.openedWeek), unit: "opened this week" } : null,
+    { value: String(brag ? s.leftBehind : s.leftWeek), unit: "left with no pane" },
+    !brag && s.freedMB ? { value: size(s.freedMB), unit: "given back" } : null,
+  ].filter(Boolean);
   return {
     title: "Ports",
-    right: since ? `since ${MONTHS[since.getMonth()]} ${since.getDate()}` : "",
+    right: brag ? "last 30 days" : "last 7 days",
     hero: brag
-      ? { big: String(tally.stopped), small: tally.stopped === 1 ? "server" : "servers", label: "left running by agents after their panes closed, found and stopped",
-          delta: tally.freedMB ? { up: true, text: `${size(tally.freedMB)} of memory given back` } : null }
-      : { big: String(list.length), small: list.length === 1 ? "server" : "servers", label: !list.length ? "listening now" : loose ? "listening now" : "listening now, every one in a pane", delta: null },
-    stats: [
-      { value: String(list.length), unit: list.length === 1 ? "dev server now" : "dev servers now" },
-      { value: String(list.length - loose), unit: "in a pane" },
-      { value: String(loose), unit: "left behind" },
-    ],
+      ? { big: String(s.stoppedLoose), small: s.stoppedLoose === 1 ? "server" : "servers", label: "left running by agents after their panes closed, found and stopped",
+          delta: s.stoppedLooseMB ? { up: true, text: `${size(s.stoppedLooseMB)} of memory given back` } : null }
+      : { big: String(s.openedWeek), small: s.openedWeek === 1 ? "dev server" : "dev servers", label: "opened by my agents", delta: null },
+    stats,
     note: "",
-    blocks: [],
+    // The week's chart once it holds two days or more (24 two-hour buckets).
+    blocks: !week.empty && week.filled >= 24 ? [{
+      kind: "bars", title: "Dev servers running, last 7 days", right: `peak ${week.peak}`,
+      values: week.bars.map((b) => b.active), ticks: [week.first, week.last],
+    }] : [],
   };
 }
 
 /** The post's words. */
-export function portsText(list, tally) {
+export function portsText(data, now = Date.now()) {
+  const s = portStats(data, now);
   const parts = [];
-  if (tally.stopped) parts.push(`${plural(tally.stopped, "dev server", "dev servers")} my agents left running, found and stopped${tally.freedMB ? `: ${size(tally.freedMB)} back` : ""}`);
-  const loose = list.filter((s) => !s.owner).length;
-  parts.push(!list.length ? "no dev server running now" : `${plural(list.length, "server", "servers")} running now${loose ? `, ${loose} with no pane` : ", every one in a pane"}`);
+  if (s.stoppedLoose) parts.push(`${plural(s.stoppedLoose, "dev server", "dev servers")} my agents left running, found and stopped${s.stoppedLooseMB ? `: ${size(s.stoppedLooseMB)} back` : ""}`);
+  if (s.openedWeek) parts.push(`${plural(s.openedWeek, "dev server", "dev servers")} opened this week, ${s.weekPeak} at once at the peak`);
+  parts.push(!s.running ? "none running now" : `${s.running} running now${s.loose ? `, ${s.loose} with no pane` : ", every one in a pane"}`);
   return postText(parts, "Every dev server accounted for.");
 }

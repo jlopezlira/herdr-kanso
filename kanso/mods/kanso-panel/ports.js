@@ -1,4 +1,5 @@
-// Ports: the dev servers listening on this computer, and the ones nobody owns.
+// Ports: the dev servers listening on this computer, the ones nobody owns,
+// and how many came and went.
 //
 // Agents start servers (npm run dev, vite, a Django runserver) and leave them
 // running when their pane closes, as they leave worktrees behind. This lists
@@ -6,58 +7,32 @@
 // which pane runs it (its process descends from that terminal's shell), and
 // marks the ones no pane owns any more. Open one in the browser, go to its
 // pane, or stop it: a second press confirms, SIGTERM first, then a force stop
-// for one that won't go. Only this computer; nothing is read but lsof and ps.
+// for one that won't go. The rows are read live (lsof and ps, every 10 s);
+// how long each has run, its memory and the history (24 hours, 7 and 30
+// days, what ended and how) come from the memory guard's ports.json, and a
+// stop goes through the guard, which measures what it gives back. Without
+// the guard the rows still work and Stop sends the signal itself.
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, hc, panes, terminals, home, run, theme } from "herdr";
+import { exec, hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
 import { tilde } from "./lib.js";
-import { G, Armed, tokens, quietLink, iconButton } from "./ui.js";
+import { G, Armed, tokens, quietLink, quietTabs, iconButton, section } from "./ui.js";
 import { Share } from "./share.js";
-import { portsSpec, portsText, readTally, addToTally } from "./ports-card.js";
+import { portsSpec, portsText } from "./ports-card.js";
+import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
 
-// What Stop has given back over time, for the share card: this computer's
-// own count, kept with the window's other local settings.
-const TALLY = "kanso.ports.tally";
-const loadTally = () => { try { return readTally(localStorage.getItem(TALLY)); } catch { return readTally(null); } };
-const saveTally = (t) => { try { localStorage.setItem(TALLY, JSON.stringify(t)); } catch { /* not kept */ } };
-
-// Each root's process tree (a dev server and its workers) from
-// `ps -axo pid=,ppid=,rss=,lstart=`: root -> [{ pid, kb, start }], every
-// process once even when two roots share it.
-export function processTrees(text, roots) {
-  const kids = new Map(), info = new Map();
-  for (const line of String(text ?? "").split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
-    if (!m) continue;
-    const [pid, ppid, kb] = [Number(m[1]), Number(m[2]), Number(m[3])];
-    info.set(pid, { pid, kb, start: m[4].replace(/\s+/g, " ") });
-    if (!kids.has(ppid)) kids.set(ppid, []);
-    kids.get(ppid).push(pid);
-  }
-  const seen = new Set(), out = new Map();
-  for (const root of roots) {
-    const tree = [], stack = [root];
-    while (stack.length) {
-      const p = stack.pop();
-      if (seen.has(p) || !info.has(p)) continue;
-      seen.add(p); tree.push(info.get(p)); stack.push(...(kids.get(p) ?? []));
-    }
-    out.set(root, tree);
-  }
-  return out;
-}
-
-// Of a stopped server's tree, what exited (its pid gone, or reused by a
-// process that started later), from `ps -axo pid=,lstart=`: { rootGone, kb }.
-export function exited(tree, psText) {
-  const alive = new Map();
-  for (const line of String(psText ?? "").split("\n")) {
-    const m = /^\s*(\d+)\s+(.+?)\s*$/.exec(line);
-    if (m) alive.set(Number(m[1]), m[2].replace(/\s+/g, " "));
-  }
-  const gone = (p) => alive.get(p.pid) !== p.start;
-  return { rootGone: tree.length > 0 && gone(tree[0]), kb: tree.filter(gone).reduce((t, p) => t + p.kb, 0) };
-}
+// The guard's files: change the name here if it is installed under another.
+const GUARD = "kanso-guard";
+const PORTS_FILE = `data/${GUARD}/ports.json`;
+const GUARD_FILE = `mods/${GUARD}/guard.mjs`;
+const RUNTIME_FILE = `mods/${GUARD}/runtime.json`;
+const HISTORY_MS = 30_000; // the guard writes once a minute
+const BUSY_MS = 90_000;
+const LIST_ROWS = 12;
+// One detached shell stops the servers through the guard one after another:
+// $0 is node, $1 guard.mjs, then a pid each ("pid:force" for a force stop).
+export const STOP_LOOP = 'g="$1"; shift; for a in "$@"; do case "$a" in *:force) "$0" "$g" stop-server "${a%:force}" force;; *) "$0" "$g" stop-server "$a";; esac; done';
+const DETACHED = 'nohup "$0" "$@" >/dev/null 2>&1 &';
 
 const EVERY_MS = 10000;
 
@@ -138,14 +113,19 @@ const age = (secs) => secs < 3600 ? `${Math.max(1, Math.round(secs / 60))} min` 
 export class Ports {
   constructor() { this.armed = new Armed(); this.share = new Share("kanso-panel"); } // Stop asks for a second press
 
-  // What the share card holds: counts and sizes, never a port, folder or command.
+  // What the share card holds: counts and sizes, never a port, folder, project or command.
+  canShare() { return Boolean(this.hist?.data); }
+
   shareCard() {
-    const list = this.list ?? [], tally = loadTally();
-    return { spec: portsSpec(list, tally), text: portsText(list, tally), name: "ports", title: "Ports" };
+    const data = this.hist.data;
+    return { spec: portsSpec(data), text: portsText(data), name: "ports", title: "Ports" };
   }
 
   init(cx) {
     this.list = null; this.note = null; this.stopping = new Set(); this.forced = new Set(); this.width = 368;
+    this.hist = null; // parsePorts(): { state, data }
+    this.digest = null; // what the history draws, worked out once per read
+    this.histAt = 0; this.range = "day"; this.tab = null; this.showAll = false; this.busy = {};
     this.refresh(cx);
     cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }
@@ -173,60 +153,101 @@ export class Ports {
       exec("ps", ["-axo", "pid=,ppid=,etime=,args="]).then((r) => r.stdout),
       this.shells()]);
     const list = servers(listen, parseCwds(cwdOut), parsePs(psOut), shells, home());
-    // One asked to stop that is still here gets a force stop next.
-    for (const s of list) if (this.forced?.has(s.pid)) s.force = true;
+    const now = Date.now();
+    for (const s of list) {
+      // One asked to stop that is still here gets a force stop next.
+      if (this.forced?.has(s.pid)) s.force = true;
+      // What the guard knows of it: since when, its memory, its project.
+      const h = historyOf(s, this.hist?.data, now);
+      if (h) Object.assign(s, { mb: h.mb, startedAt: h.startedAt, project: h.project });
+    }
     return list;
   }
 
-  refresh(cx) {
-    if (this.reading) return;
+  /** ports.json, down to what the panel draws. A file read, no process. */
+  async readHistory() {
+    const text = await readTextFile(`${appHome()}/${PORTS_FILE}`).catch(() => null);
+    const now = Date.now();
+    const hist = parsePorts(text, now);
+    this.hist = hist;
+    this.histAt = now;
+    this.digest = hist.data ? {
+      series: Object.fromEntries(RANGES.map((r) => [r.key, activeSeries(hist.data, r.key, now)])),
+      stats: portStats(hist.data, now),
+      lists: historyLists(hist.data, now),
+    } : null;
+    if (this.busy.install && (hist.state === "ok" || now - this.busy.install > BUSY_MS)) delete this.busy.install;
+  }
+
+  // The live rows every 10 s; the history when it is due or asked for.
+  refresh(cx, { history = false, then = null } = {}) {
+    if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
     cx.spawn(async (cx) => {
-      try { this.list = await this.read(); this.note = null; await this.countStopped(); }
-      catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list ??= []; }
-      finally { this.reading = false; cx.notify(); }
+      try {
+        if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
+        this.list = await this.read(); this.note = null;
+      } catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list ??= []; }
+      finally { this.reading = false; then?.(); cx.notify(); }
     });
   }
 
-  // SIGTERM, or SIGKILL for one asked to stop that is still here.
+  // The guard can stop a server when it is installed and keeps ports.json.
+  async guardReady() {
+    if (!this.hist?.data) return false;
+    if (this.guardFile === undefined) this.guardFile = (await exec("test", ["-f", `${appHome()}/${GUARD_FILE}`]).catch(() => null))?.code === 0;
+    return this.guardFile;
+  }
+
+  // The node the guard runs on, as its runtime.json says.
+  async node() {
+    if (this.nodeBin) return this.nodeBin;
+    const raw = await readTextFile(`${appHome()}/${RUNTIME_FILE}`).catch(() => null);
+    let node = "node";
+    try { const v = JSON.parse(raw ?? "{}")?.node; if (typeof v === "string" && v.trim()) node = v.trim(); } catch { /* the default */ }
+    return (this.nodeBin = node);
+  }
+
+  // Through the guard, detached (it measures each server's processes, sends
+  // SIGTERM or SIGKILL and keeps what it gave back); without it, the signal
+  // straight away. Rows are read again after 1.5 s, the history after a few.
   stop(items, cx) {
     for (const s of items) this.stopping.add(s.pid);
     cx.notify();
     cx.spawn(async (cx) => {
-      // The share card counts servers left with no pane: each one's processes
-      // (pid, start, memory) before the stop, counted once it has exited.
-      const loose = items.filter((s) => !s.owner);
-      this.asked ??= new Map(); // root pid -> { tree, at }
-      if (loose.length) {
-        const trees = await exec("ps", ["-axo", "pid=,ppid=,rss=,lstart="]).then((r) => processTrees(r.stdout, loose.map((s) => s.pid))).catch(() => new Map());
-        for (const s of loose) if (!this.asked.has(s.pid) && trees.get(s.pid)?.length) this.asked.set(s.pid, { tree: trees.get(s.pid), at: Date.now() });
+      const viaGuard = await this.guardReady();
+      if (viaGuard) {
+        const args = items.map((s) => (s.force ? `${s.pid}:force` : String(s.pid)));
+        await exec("sh", ["-c", DETACHED, "sh", "-c", STOP_LOOP, await this.node(), `${appHome()}/${GUARD_FILE}`, ...args]).catch(() => null);
+      } else {
+        for (const s of items) await exec("kill", [s.force ? "-KILL" : "-TERM", String(s.pid)]).catch(() => null);
       }
-      for (const s of items) await exec("kill", [s.force ? "-KILL" : "-TERM", String(s.pid)]).catch(() => null);
-      this.forced ??= new Set();
       for (const s of items) this.forced.add(s.pid);
-      await cx.sleep(900);
+      await cx.sleep(1500);
       try { this.list = await this.read(); } catch { /* the timer reads again */ }
-      await this.countStopped();
-      for (const s of items) this.stopping.delete(s.pid);
+      const done = () => { for (const s of items) this.stopping.delete(s.pid); };
+      if (!viaGuard) done();
+      else {
+        // The guard takes a moment per server: the rest show "Stopping…" until it has written.
+        for (const s of items) if (!this.list.some((x) => x.pid === s.pid)) this.stopping.delete(s.pid);
+        cx.timer.after(4000, (cx) => this.refresh(cx, { history: true, then: done }));
+        cx.timer.after(10_000, (cx) => this.refresh(cx, { history: true }));
+      }
       cx.notify();
     });
   }
 
-  // A server you stopped counts once its own process has exited, with the
-  // memory of what of it exited. One still running a minute after the stop
-  // is let go uncounted.
-  async countStopped() {
-    if (!this.asked?.size) return;
-    // A failed or empty listing proves nothing: the stops wait for the next one.
-    const ps = await exec("ps", ["-axo", "pid=,lstart="]).then((r) => (r.code === 0 && r.stdout.trim() ? r.stdout : null)).catch(() => null);
-    if (ps === null) return;
-    let n = 0, kb = 0;
-    for (const [pid, { tree, at }] of this.asked) {
-      const e = exited(tree, ps);
-      if (e.rootGone) { n++; kb += e.kb; this.asked.delete(pid); }
-      else if (Date.now() - at > 60_000) this.asked.delete(pid);
-    }
-    if (n) saveTally(addToTally(loadTally(), n, Math.round(kb / 1024)));
+  // Starts the guard (a launchd job once installed), then reads its file again.
+  turnOn(cx) {
+    if (this.busy.install && Date.now() - this.busy.install < BUSY_MS) return;
+    this.busy.install = Date.now();
+    cx.notify();
+    cx.spawn(async (cx) => {
+      await exec("sh", ["-c", DETACHED, await this.node(), `${appHome()}/${GUARD_FILE}`, "install"]).catch(() => { delete this.busy.install; });
+      this.guardFile = undefined;
+      for (const ms of [3000, 8000, 20_000]) cx.timer.after(ms, (cx) => this.refresh(cx, { history: true }));
+      cx.notify();
+    });
   }
 
   // Which pane runs it, by the name its header shows.
@@ -240,58 +261,147 @@ export class Ports {
     const key = `stop:${s.pid}`, armed = this.armed.is(key), busy = this.stopping.has(s.pid);
     const owner = s.owner ? this.paneOf(s.owner) : null;
     const stopLabel = busy ? "Stopping…" : armed ? (s.force ? "Press again to force stop" : "Press again to stop") : s.force ? "Force stop" : "Stop";
+    const since = s.startedAt ?? Date.now() - s.secs * 1000;
     return v_flex().w_full().px(G.md).py(10).gap(4).rounded(6).hover((st) => st.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
       .child(h_flex().w_full().items_center().gap(G.md)
         .child(div().flex_none().text_size(17).font_light().text_color(c.text).child(s.ports.map((p) => `:${p}`).join(" ")))
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.muted).child(shortArgs(s.args)))
-        .child(div().flex_none().text_size(11.5).text_color(c.dim).child(age(s.secs))))
+        .when(typeof s.mb === "number", (el) => el.child(div().flex_none().text_size(12.5).text_color(c.muted).child(size(s.mb))))
+        .child(div().flex_none().text_size(11.5).text_color(c.dim).tooltip(`Since ${clock(since)}`).child(age(s.secs))))
       .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
         .child(div().size(6).flex_none().rounded_full().bg(owner ? c.green : c.yellow))
         .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : "No pane runs it"))
-        .when(Boolean(s.cwd), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(tilde(s.cwd)))))
+        .when(Boolean(s.cwd || s.project), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(s.cwd ? tilde(s.cwd) : s.project))))
       .child(h_flex().flex_wrap().gap_x(G.lg)
         .child(quietLink(`pt-open-${s.pid}`, "Open in the browser", (cx) => cx.open_url(`http://localhost:${s.ports[0]}`), c, { color: c.text }))
         .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${s.pid}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
         .child(quietLink(`pt-stop-${s.pid}`, stopLabel, (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.stop([s], cx)); }, c, { color: armed ? c.red : c.muted })));
   }
 
-  render(cx) {
-    const c = tokens(theme()), narrow = (this.width || 368) < 560;
-    const list = this.list ?? [], loose = list.filter((s) => !s.owner);
+  hero(c, list, narrow) {
+    const loose = list.filter((s) => !s.owner);
     const armedAll = this.armed.is("all");
-    const header = h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Ports"))
-      .child(h_flex().gap(G.xs).items_center()
-        .child(iconButton("pt-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: this.list === null, active: this.share.open }))
-        .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx), c, { spin: this.reading })));
-    const hero = v_flex().gap(G.xs)
-      .child(div().text_size(15).text_color(c.muted).child("Listening on this computer"))
-      .child(h_flex().items_end().gap(G.md)
-        .child(div().text_size(narrow ? 48 : 64).line_height(1).font_light().text_color(c.text).child(String(list.length)))
-        .child(div().pb(narrow ? 6 : 9).text_size(13).text_color(c.dim).child(list.length === 1 ? "server" : "servers")))
-      .child(div().text_size(15).text_color(c.dim).child(loose.length
-        ? `${loose.length} ${loose.length === 1 ? "runs" : "run"} with no pane: left behind when its pane closed.`
-        : "Every one runs in a pane."))
-      .when(loose.length > 0, (el) => el.child(h_flex().pt(G.md).gap(G.lg).items_center().flex_wrap()
+    const held = list.reduce((t, s) => t + (typeof s.mb === "number" ? s.mb : 0), 0);
+    const st = this.digest?.stats;
+    const stats = [
+      { value: String(loose.length), unit: "with no pane", hot: loose.length > 0 },
+      held > 0 ? { value: size(held), unit: "held now" } : null,
+      st ? { value: String(st.openedToday), unit: "opened today" } : null,
+      st ? { value: String(st.stopped), unit: "stopped by you", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
+      st && st.freedMB > 0 ? { value: size(st.freedMB), unit: "given back", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
+    ].filter(Boolean);
+    return v_flex().w_full().gap(G.xl)
+      .child(v_flex().gap(G.xs)
+        .child(div().text_size(15).text_color(c.muted).child("Listening on this computer"))
+        .child(h_flex().items_end().gap(G.md)
+          .child(div().text_size(narrow ? 48 : 64).line_height(1).font_light().text_color(c.text).child(String(list.length)))
+          .child(div().pb(narrow ? 6 : 9).text_size(13).text_color(c.dim).child(list.length === 1 ? "server" : "servers"))))
+      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
+        .children(stats.map((s) => h_flex().items_end().gap(6).when(Boolean(s.tip), (el) => el.tooltip(s.tip))
+          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.yellow : c.text).child(s.value))
+          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
+      .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
         .child(Button.new("pt-stop-all").h(30).px(14).flex_none().items_center().rounded(6).cursor_pointer()
           .bg(armedAll ? c.red : c.primary).hover((s) => s.opacity(0.85))
           .on_click((_e, cx) => this.armed.press("all", cx, (cx) => this.stop(loose, cx)))
           .child(div().text_size(12).font_medium().text_color(armedAll ? "#ffffff" : c.primaryText)
             .child(armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} with no pane`)))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
+  }
+
+  // Without a fresh ports.json: one quiet line, and the way to start the guard.
+  guardOff(c) {
+    const state = this.hist?.state, busy = Boolean(this.busy.install);
+    const at = this.hist?.data?.at;
+    return h_flex().w_full().gap(G.lg).items_center().flex_wrap()
+      .child(div().text_size(12).text_color(state === "stale" ? c.red : c.dim)
+        .child(state === "stale" ? `History stopped at ${clock(at)}` : state === "bad" ? "History unreadable" : "No history"))
+      .child(quietLink("pt-guard-on", busy ? "Turning on…" : "Turn on the guard", (cx) => this.turnOn(cx), c, { color: c.text, disabled: busy }));
+  }
+
+  chart(c) {
+    const series = this.digest?.series?.[this.range];
+    const height = 72;
+    const anyLoose = (series?.bars ?? []).some((b) => b.loose > 0);
+    return v_flex().w_full().gap(G.sm)
+      .child(h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
+        .child(quietTabs("pt-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
+        .child(div().text_size(12).text_color(c.dim).child(series && !series.empty ? `peak ${series.peak} at once` : "")))
+      .child(h_flex().w_full().h(height + 18).items_end()
+        .children((series?.bars ?? []).map((bar) => {
+          const total = bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height));
+          const looseH = bar.loose ? Math.min(total, Math.max(2, Math.round(bar.looseRatio * height))) : 0;
+          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4).tooltip(bar.tip)
+            .when(Boolean(bar.mark), (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
+            .child(v_flex().w(bar.mark ? 3 : 2).flex_none()
+              .when(total - looseH > 0, (el) => el.child(div().w_full().h(total - looseH).rounded_t(1)
+                .bg(bar.mark ? c.accent : bar.empty ? c.border : c.muted).opacity(bar.mark || bar.empty ? 1 : 0.55)))
+              .when(looseH > 0, (el) => el.child(div().w_full().h(looseH).when(total === looseH, (d) => d.rounded_t(1)).bg(c.yellow))));
+        })))
+      .child(h_flex().w_full().justify_between().items_center()
+        .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
+        .child(h_flex().gap(G.xs).items_center()
+          .child(div().text_size(10).text_color(c.dim).child("Servers"))
+          .when(anyLoose, (el) => el.child(div().size(5).ml(G.sm).rounded_full().bg(c.yellow)).child(div().text_size(10).text_color(c.dim).child("no pane"))))
+        .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
+  }
+
+  // What opened today, or what ended: the guard's last 30 days.
+  history(c) {
+    const lists = this.digest?.lists;
+    const tabs = [
+      lists?.opened.length ? { key: "opened", label: "Opened today", rows: lists.opened } : null,
+      lists?.ended.length ? { key: "ended", label: "Recently ended", rows: lists.ended } : null,
+    ].filter(Boolean);
+    if (!tabs.length) return null;
+    const tab = tabs.find((t) => t.key === this.tab) ?? tabs[0];
+    const open = this.showAll || tab.rows.length <= LIST_ROWS;
+    const shown = open ? tab.rows : tab.rows.slice(0, LIST_ROWS);
+    const head = tabs.length > 1
+      ? h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.sm)
+        .child(quietTabs("pt-list", tabs.map((t) => ({ key: t.key, label: t.label })), tab.key, (key, cx) => { this.tab = key; this.showAll = false; cx.notify(); }, c))
+        .child(div().text_size(12).text_color(c.dim).child(String(tab.rows.length)))
+      : section(c, tab.label, String(tab.rows.length));
+    return v_flex().w_full()
+      .child(head)
+      .children(shown.map((r) => h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)
+        .child(v_flex().flex_1().min_w(0).gap(3)
+          .child(div().w_full().truncate().text_size(13).text_color(c.text).child(r.name))
+          .child(h_flex().w_full().flex_wrap().gap_x(G.md)
+            .children([r.ports, r.opened, r.ran].filter(Boolean).map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))
+            .when(Boolean(r.how), (el) => el.child(div().text_size(11).text_color(r.loose ? c.yellow : c.dim).whitespace_nowrap().child(r.how)))))
+        .child(div().flex_none().text_size(15).font_light().text_color(c.text).whitespace_nowrap().tooltip("Its largest").child(r.peak))))
+      .when(tab.rows.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
+        .child(quietLink("pt-more", this.showAll ? "Show fewer" : `Show ${tab.rows.length - LIST_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
+  }
+
+  render(cx) {
+    const c = tokens(theme()), narrow = (this.width || 368) < 560;
+    const list = this.list ?? [];
+    const state = this.hist?.state;
+    const header = h_flex().w_full().items_center().justify_between().gap(G.md)
+      .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Ports"))
+      .child(h_flex().gap(G.xs).items_center()
+        .when(this.canShare(), (el) => el.child(iconButton("pt-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
+        .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx, { history: true }), c, { spin: this.reading })));
+    const history = this.history(c);
     const body = this.list === null
       ? div().text_size(13).text_color(c.dim).child("Reading the ports")
-      : !list.length
-        ? v_flex().gap(G.sm).child(div().text_size(15).text_color(c.muted).child("No dev server is running."))
-          .child(div().text_size(12).text_color(c.dim).child("Servers started from your projects show here, with the pane that runs them."))
-        : v_flex().w_full().gap(narrow ? 32 : 40).child(hero).child(v_flex().w_full().gap(2).children(list.map((s) => this.row(s, c))));
+      : v_flex().w_full().gap(narrow ? 32 : 44)
+        .child(this.hero(c, list, narrow))
+        .when(state !== undefined && state !== "ok", (el) => el.child(this.guardOff(c)))
+        .when(Boolean(this.digest), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(this.chart(c))))
+        .when(list.length > 0, (el) => el.child(v_flex().w_full().gap(2)
+          .child(section(c, "Running", ""))
+          .children(list.map((s) => this.row(s, c)))))
+        .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(history)));
     return v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
       .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(header)
-          .when(this.share.open && this.list !== null, (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only counts and sizes: no ports, folders or commands. The post opens with the image in it.", G.sm)))
+          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
+            "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it.", G.sm)))
           .child(body)
           .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)))
           .child(div().text_size(10.5).text_color(c.dim).child("Programs of yours listening on a TCP port, started in a pane or from a folder in your home. This computer only."))));

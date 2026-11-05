@@ -219,19 +219,161 @@ test("guard panel: stale agents to close, oldest first, never the focused one", 
   assert.deepEqual(m.staleAgents(agents, 2880).map((a) => a.pid), [2, 1]);
 });
 
-test("ports share card: counts and sizes only, the tally adds up", async () => {
-  const card = await load("kanso-panel/ports-card.js", ["portsSpec", "portsText", "readTally", "addToTally"]);
-  const ports = await load("kanso-panel/ports.js", ["processTrees", "exited"], { panes: () => [], terminals: () => [], home: () => "/h", theme: () => ({}) });
-  const t = card.addToTally(card.addToTally(card.readTally(null), 2, 900, 1000), 1, 300, 2000);
-  assert.deepEqual(clone(t), { stopped: 3, freedMB: 1200, since: 1000 });
-  const list = [{ pid: 1, ports: [5173], owner: "t1", args: "vite --port 5173", cwd: "/h/secret" }, { pid: 2, ports: [3000], owner: null, args: "next dev", cwd: "/h/x" }];
-  const spec = JSON.stringify(card.portsSpec(list, t)) + card.portsText(list, t);
-  for (const leak of ["5173", "3000", "secret", "vite", "next dev"]) assert.ok(!spec.includes(leak), `no ${leak} in the card`);
-  assert.match(card.portsText(list, t), /3 dev servers my agents left running, found and stopped: 1\.2 GB back/);
-  const trees = ports.processTrees("10 1 102400 Thu Nov  5 10:00:00 2026\n11 10 51200 Thu Nov  5 10:00:01 2026\n12 10 51200 Thu Nov  5 10:00:02 2026\n20 1 1024 Thu Nov  5 10:00:03 2026\n", [10, 11, 20]);
-  assert.equal(trees.get(10).length, 3, "the server and its workers");
-  assert.equal(trees.get(11).length, 0, "a worker already counted under its server is not counted again");
-  const e = ports.exited(trees.get(10), "11 Thu Nov  5 10:00:01 2026\n12 Thu Nov  5 11:00:00 2026\n");
-  assert.deepEqual(clone(e), { rootGone: true, kb: 102400 + 51200 }, "the root exited, a worker survives, a pid reused counts as exited");
-  assert.equal(ports.exited(trees.get(20), "20 Thu Nov  5 10:00:03 2026\n").rootGone, false, "still running: not counted");
+// Ports' history, from the guard's ports.json.
+const portsModel = () => load("kanso-panel/ports-model.js", ["STALE_MS", "parsePorts", "historyOf", "activeSeries", "portStats", "historyLists", "lasted"]);
+const portsSample = (at = NOW - 30_000) => {
+  const minutes = [], hours = [];
+  for (let i = 1; i <= 24 * 60; i += 1) minutes.push([NOW - i * MIN, i === 300 ? 5 : 2, i === 300 ? 2 : 1, 900]);
+  for (let i = 1; i <= 10 * 24; i += 1) hours.push([NOW - i * HOUR, i === 50 ? 7 : 3, 1, 1200]);
+  return {
+    v: 1, at,
+    now: [
+      { key: "41@1", pid: 41, ports: [5173], command: "node", args: "vite --port 5173", cwd: "/h/secret-app", project: "secret-app", owner: "t2", mb: 300, startedAt: NOW - 3 * HOUR, firstSeen: NOW - 3 * HOUR },
+      { key: "42@1", pid: 42, ports: [3000], command: "node", args: "next dev", cwd: "/h/other", project: "other", owner: null, mb: 500, startedAt: NOW - 2 * DAY, firstSeen: NOW - 2 * DAY },
+    ],
+    minutes, hours,
+    servers: [
+      { key: "41@1", pid: 41, ports: [5173], command: "node", args: "vite", project: "secret-app", startedAt: NOW - 3 * HOUR, firstSeen: NOW - 3 * HOUR, lastSeen: NOW - MIN, peakMB: 320, owner: "t2", everLoose: false, ended: null },
+      { key: "42@1", pid: 42, ports: [3000], command: "node", args: "next dev", project: "other", startedAt: NOW - 2 * DAY, firstSeen: NOW - 2 * DAY, lastSeen: NOW - MIN, peakMB: 600, owner: null, everLoose: true, ended: null },
+      { key: "43@1", pid: 43, ports: [8000], command: "python3", args: "manage.py runserver", project: "django-thing", startedAt: NOW - 5 * HOUR, firstSeen: NOW - 5 * HOUR, lastSeen: NOW - 4 * HOUR, peakMB: 140, owner: null, everLoose: true, ended: { at: NOW - 4 * HOUR, how: "stopped", freedMB: 130 } },
+      { key: "44@1", pid: 44, ports: [4321], command: "node", args: "astro dev", project: "blog", startedAt: NOW - 3 * DAY, firstSeen: NOW - 3 * DAY, lastSeen: NOW - 2 * DAY, peakMB: 210, owner: "t5", everLoose: false, ended: { at: NOW - 2 * DAY, how: "exited" } },
+      { key: "45@1", pid: 45, ports: [9000], command: "node", args: "x", project: "old", startedAt: NOW - 20 * DAY, firstSeen: NOW - 20 * DAY, lastSeen: NOW - 19 * DAY, peakMB: 90, owner: null, everLoose: true, ended: { at: NOW - 19 * DAY, how: "stopped", freedMB: 80 } },
+    ],
+    totals: { opened: 30, stopped: 6, exited: 9, freedMB: 2400, since: NOW - 25 * DAY },
+  };
+};
+
+test("Ports tells a working guard's ports.json from one that is missing, stopped or unreadable", async () => {
+  const { parsePorts, STALE_MS } = await portsModel();
+  assert.equal(parsePorts(null, NOW).state, "off");
+  assert.equal(parsePorts("{nope", NOW).state, "bad");
+  assert.equal(parsePorts(JSON.stringify({ v: 2, at: NOW }), NOW).state, "bad", "a format it does not know");
+  assert.equal(parsePorts(JSON.stringify(portsSample(NOW - STALE_MS - 1)), NOW).state, "stale");
+  const { state, data } = parsePorts(JSON.stringify(portsSample()), NOW);
+  assert.equal(state, "ok");
+  assert.equal(data.now.length, 2);
+  assert.equal(data.servers[4].ended.how, "stopped");
+  assert.equal(data.servers.find((s) => s.pid === 44).ended.freedMB, 0, "an exit gives nothing back");
+  const bare = parsePorts(JSON.stringify({ v: 1, at: NOW, now: [null, { nope: 1 }], minutes: [[NOW, 1, 0, 1], "x"] }), NOW).data;
+  assert.deepEqual(clone([bare.now, bare.servers, bare.hours, bare.minutes.length, bare.totals.stopped]), [[], [], [], 1, 0], "missing or broken parts read as empty");
+});
+
+test("Ports finds a live row's history by pid and start, not by a reused pid", async () => {
+  const { parsePorts, historyOf } = await portsModel();
+  const data = parsePorts(JSON.stringify(portsSample()), NOW).data;
+  assert.equal(historyOf({ pid: 41, secs: 3 * 3600 + 30 }, data, NOW).mb, 300);
+  assert.equal(historyOf({ pid: 41, secs: 60 }, data, NOW), null, "same pid, started later: another process");
+  assert.equal(historyOf({ pid: 99, secs: 60 }, data, NOW), null);
+});
+
+test("Ports' chart keeps each bucket's most at once and its part with no pane", async () => {
+  const { parsePorts, activeSeries } = await portsModel();
+  const data = parsePorts(JSON.stringify(portsSample()), NOW).data;
+  const day = activeSeries(data, "day", NOW);
+  assert.equal(day.bars.length, 96);
+  assert.equal(day.peak, 5);
+  assert.equal(day.bars.filter((b) => b.mark).length, 1);
+  const mark = day.bars.find((b) => b.mark);
+  assert.deepEqual(clone([mark.active, mark.loose, mark.ratio, mark.looseRatio]), [5, 2, 1, 0.4]);
+  assert.equal(day.bars[95].ratio, 0.4, "the rest at 2 of 5");
+  assert.equal(day.first, "15:00");
+  const week = activeSeries(data, "week", NOW);
+  assert.equal(week.bars.length, 84);
+  assert.equal(week.peak, 7, "the week reads the hours");
+  assert.equal(week.filled, 84);
+  const month = activeSeries(data, "month", NOW);
+  assert.equal(month.first, "Oct 6");
+  assert.ok(month.bars.slice(0, 60).every((b) => b.empty), "no hours before ten days ago");
+  assert.equal(activeSeries(null, "day", NOW).empty, true);
+});
+
+test("Ports' numbers and lists: opened today, what ended and how", async () => {
+  const { parsePorts, portStats, historyLists } = await portsModel();
+  const data = parsePorts(JSON.stringify(portsSample()), NOW).data;
+  const s = portStats(data, NOW);
+  assert.deepEqual(clone([s.running, s.loose, s.heldMB, s.openedToday, s.openedWeek, s.weekPeak, s.leftBehind, s.stoppedLoose, s.stoppedLooseMB, s.stopped, s.freedMB]),
+    [2, 1, 800, 2, 4, 7, 3, 2, 210, 6, 2400]);
+  const l = historyLists(data, NOW);
+  assert.deepEqual(clone(l.opened.map((r) => r.name)), ["secret-app", "django-thing"], "newest first");
+  assert.deepEqual(clone(l.opened[1]), { key: "43@1", name: "django-thing", ports: ":8000", opened: "opened 10:00", ran: "ran 1 h", how: "stopped by you · 130 MB back", loose: false, peak: "140 MB" });
+  assert.equal(l.opened[0].ran, "running");
+  assert.deepEqual(clone(l.ended.map((r) => [r.name, r.how])), [["django-thing", "stopped by you · 130 MB back"], ["blog", "exited"], ["old", "stopped by you · 80 MB back"]]);
+});
+
+test("ports share card: counts and sizes only, a brag once you stopped what agents left", async () => {
+  const card = await load("kanso-panel/ports-card.js", ["portsSpec", "portsText"]);
+  const { parsePorts } = await portsModel();
+  const data = parsePorts(JSON.stringify(portsSample()), NOW).data;
+  const spec = card.portsSpec(data, NOW), words = card.portsText(data, NOW);
+  const all = JSON.stringify(spec) + words;
+  for (const leak of ["5173", "3000", "8000", "secret", "other", "django", "blog", "vite", "next dev", "runserver", "/h/"]) assert.ok(!all.includes(leak), `no ${leak} in the card`);
+  assert.deepEqual(clone([spec.hero.big, spec.hero.small, spec.hero.delta.text]), ["2", "servers", "210 MB of memory given back"]);
+  assert.deepEqual(clone(spec.stats.map((x) => x.unit)), ["running now", "at once at the peak", "opened this week", "left with no pane"]);
+  assert.equal(spec.blocks[0].kind, "bars");
+  assert.equal(spec.blocks[0].values.length, 84);
+  assert.match(words, /^2 dev servers my agents left running, found and stopped: 210 MB back/);
+
+  // Nothing stopped yet, one day of hours: the week's openings, no chart.
+  const quiet = portsSample();
+  quiet.servers = quiet.servers.filter((s) => !s.ended);
+  quiet.hours = quiet.hours.slice(0, 20);
+  const q = card.portsSpec(parsePorts(JSON.stringify(quiet), NOW).data, NOW);
+  assert.deepEqual(clone([q.hero.big, q.hero.label, q.right]), ["2", "opened by my agents", "last 7 days"]);
+  assert.ok(q.stats.some((x) => x.unit === "given back"));
+  assert.equal(q.blocks.length, 0, "less than two days reads as a blank");
+});
+
+test("Ports stops a server through the guard, detached, and by itself without it", async () => {
+  const calls = [];
+  const files = { "/app/data/kanso-guard/ports.json": JSON.stringify(portsSample(Date.now())), "/app/mods/kanso-guard/runtime.json": "{\"node\": \"/opt/node\"}" };
+  const host = {
+    appHome: () => "/app", home: () => "/h", theme: () => ({}), panes: () => [], terminals: () => [],
+    readTextFile: async (path) => files[path] ?? null,
+    exec: async (command, args) => { calls.push([command, ...args]); return { code: 0, stdout: "", stderr: "" }; },
+  };
+  const { Ports, STOP_LOOP } = await load("kanso-panel/ports.js", ["Ports", "STOP_LOOP"], host);
+  const pending = [], timers = [];
+  const cx = {
+    notify() {}, sleep: async () => {},
+    spawn(fn) { const p = fn(cx); pending.push(p); return { cancel() {} }; },
+    timer: { every: () => ({ cancel() {} }), after: (ms, fn) => { timers.push(ms); return { cancel() {} }; } },
+  };
+  const drain = async () => { while (pending.length) await pending.shift(); };
+  const view = new Ports();
+  view.init(cx);
+  await drain();
+  assert.equal(view.hist.state, "ok");
+  assert.equal(view.digest.series.day.peak, 5);
+  calls.length = 0;
+  view.stop([{ pid: 42, owner: null }, { pid: 43, owner: null, force: true }], cx);
+  await drain();
+  const guard = calls.find((c) => c[0] === "sh");
+  assert.deepEqual(clone(guard), ["sh", "-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', "sh", "-c", STOP_LOOP, "/opt/node", "/app/mods/kanso-guard/guard.mjs", "42", "43:force"]);
+  assert.ok(!calls.some((c) => c[0] === "kill"), "no signal of its own");
+  assert.ok(timers.includes(4000), "reads the history again after a few seconds");
+
+  delete files["/app/data/kanso-guard/ports.json"];
+  const bare = new Ports();
+  bare.init(cx);
+  await drain();
+  assert.equal(bare.hist.state, "off");
+  calls.length = 0;
+  bare.stop([{ pid: 42, owner: null }], cx);
+  await drain();
+  assert.deepEqual(clone(calls.find((c) => c[0] === "kill")), ["kill", "-TERM", "42"], "no guard: the signal itself");
+});
+
+test("guard: dev server history (opened, exited, minutes and hours)", async () => {
+  process.env.HERDR_APP_HOME ??= (await import("node:fs")).mkdtempSync(`${(await import("node:os")).tmpdir()}/kg-`);
+  const g = await import("../kanso/mods/kanso-guard/guard.mjs");
+  const a = { key: "1@1", pid: 1, ports: [3000], command: "node", args: "next dev", cwd: "/h/p", project: "p", owner: null, mb: 200, startedAt: 1 };
+  const b = { ...a, key: "2@2", pid: 2, ports: [5173], owner: "t1", mb: 100 };
+  let p = g.updatePorts(null, [a, b], 1_000_000);
+  assert.deepEqual([p.totals.opened, p.now.length, p.minutes[0].slice(1)], [2, 2, [2, 1, 300]]);
+  p = g.updatePorts(p, [{ ...a, mb: 260 }], 1_060_000);
+  assert.equal(p.totals.exited, 1);
+  assert.equal(p.servers.find((s) => s.key === "2@2").ended.how, "exited");
+  assert.equal(p.servers.find((s) => s.key === "1@1").peakMB, 260);
+  assert.equal(p.servers.find((s) => s.key === "1@1").everLoose, true);
+  assert.equal(p.hours.length, 1);
 });
