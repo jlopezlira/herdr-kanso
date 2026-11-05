@@ -218,3 +218,17 @@ test("guard panel: stale agents to close, oldest first, never the focused one", 
   assert.deepEqual(m.staleAgents(agents, 2880, "t1").map((a) => a.pid), [2]);
   assert.deepEqual(m.staleAgents(agents, 2880).map((a) => a.pid), [2, 1]);
 });
+
+test("ports share card: counts and sizes only, the tally adds up", async () => {
+  const card = await load("kanso-panel/ports-card.js", ["portsSpec", "portsText", "readTally", "addToTally"]);
+  const ports = await load("kanso-panel/ports.js", ["treeMB"], { panes: () => [], terminals: () => [], home: () => "/h", theme: () => ({}) });
+  const t = card.addToTally(card.addToTally(card.readTally(null), 2, 900, 1000), 1, 300, 2000);
+  assert.deepEqual(clone(t), { stopped: 3, freedMB: 1200, since: 1000 });
+  const list = [{ pid: 1, ports: [5173], owner: "t1", args: "vite --port 5173", cwd: "/h/secret" }, { pid: 2, ports: [3000], owner: null, args: "next dev", cwd: "/h/x" }];
+  const spec = JSON.stringify(card.portsSpec(list, t)) + card.portsText(list, t);
+  for (const leak of ["5173", "3000", "secret", "vite", "next dev"]) assert.ok(!spec.includes(leak), `no ${leak} in the card`);
+  assert.match(card.portsText(list, t), /3 dev servers my agents left running, found and stopped: 1\.2 GB back/);
+  const mb = ports.treeMB("10 1 102400\n11 10 51200\n12 11 51200\n20 1 1024\n", [10, 20]);
+  assert.equal(mb.get(10), 200);
+  assert.equal(mb.get(20), 1);
+});

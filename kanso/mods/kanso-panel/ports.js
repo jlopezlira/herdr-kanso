@@ -12,6 +12,36 @@ import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, hc, panes, terminals, home, run, theme } from "herdr";
 import { tilde } from "./lib.js";
 import { G, Armed, tokens, quietLink, iconButton } from "./ui.js";
+import { Share } from "./share.js";
+import { portsSpec, portsText, readTally, addToTally } from "./ports-card.js";
+
+// What Stop has given back over time, for the share card: this computer's
+// own count, kept with the window's other local settings.
+const TALLY = "kanso.ports.tally";
+const loadTally = () => { try { return readTally(localStorage.getItem(TALLY)); } catch { return readTally(null); } };
+const saveTally = (t) => { try { localStorage.setItem(TALLY, JSON.stringify(t)); } catch { /* not kept */ } };
+
+// Resident memory of each pid with everything under it (a dev server's
+// workers), in MB, from `ps -axo pid=,ppid=,rss=`.
+export function treeMB(text, pids) {
+  const kids = new Map(), rss = new Map();
+  for (const line of String(text ?? "").split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)/.exec(line);
+    if (!m) continue;
+    const [pid, ppid, kb] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    rss.set(pid, kb);
+    if (!kids.has(ppid)) kids.set(ppid, []);
+    kids.get(ppid).push(pid);
+  }
+  const out = new Map();
+  for (const root of pids) {
+    let kb = 0;
+    const seen = new Set(), stack = [root];
+    while (stack.length) { const p = stack.pop(); if (seen.has(p)) continue; seen.add(p); kb += rss.get(p) ?? 0; stack.push(...(kids.get(p) ?? [])); }
+    out.set(root, Math.round(kb / 1024));
+  }
+  return out;
+}
 
 const EVERY_MS = 10000;
 
@@ -90,7 +120,13 @@ export const shortArgs = (args) => {
 const age = (secs) => secs < 3600 ? `${Math.max(1, Math.round(secs / 60))} min` : secs < 86400 ? `${Math.round(secs / 3600)} h` : `${Math.round(secs / 86400)} d`;
 
 export class Ports {
-  constructor() { this.armed = new Armed(); } // Stop asks for a second press
+  constructor() { this.armed = new Armed(); this.share = new Share("kanso-panel"); } // Stop asks for a second press
+
+  // What the share card holds: counts and sizes, never a port, folder or command.
+  shareCard() {
+    const list = this.list ?? [], tally = loadTally();
+    return { spec: portsSpec(list, tally), text: portsText(list, tally), name: "ports", title: "Ports" };
+  }
 
   init(cx) {
     this.list = null; this.note = null; this.stopping = new Set(); this.forced = new Set(); this.width = 368;
@@ -130,7 +166,7 @@ export class Ports {
     if (this.reading) return;
     this.reading = true;
     cx.spawn(async (cx) => {
-      try { this.list = await this.read(); this.note = null; }
+      try { this.list = await this.read(); this.note = null; this.countStopped(); }
       catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list ??= []; }
       finally { this.reading = false; cx.notify(); }
     });
@@ -141,14 +177,31 @@ export class Ports {
     for (const s of items) this.stopping.add(s.pid);
     cx.notify();
     cx.spawn(async (cx) => {
+      // Their memory, before they go: what the share card counts as given back.
+      const before = await exec("ps", ["-axo", "pid=,ppid=,rss="]).then((r) => treeMB(r.stdout, items.map((s) => s.pid))).catch(() => new Map());
+      this.asked ??= new Map(); // pid -> its MB, until it is gone
+      for (const s of items) if (!this.asked.has(s.pid)) this.asked.set(s.pid, before.get(s.pid) ?? 0);
       for (const s of items) await exec("kill", [s.force ? "-KILL" : "-TERM", String(s.pid)]).catch(() => null);
       this.forced ??= new Set();
       for (const s of items) this.forced.add(s.pid);
       await cx.sleep(900);
       try { this.list = await this.read(); } catch { /* the timer reads again */ }
+      this.countStopped();
       for (const s of items) this.stopping.delete(s.pid);
       cx.notify();
     });
+  }
+
+  // A server you stopped counts once, when it no longer listens (a slow one
+  // may take until the next read). One still there after a minute is let go.
+  countStopped() {
+    if (!this.asked?.size || !this.list) return;
+    let n = 0, mb = 0;
+    for (const [pid, size] of this.asked) {
+      if (this.list.some((x) => x.pid === pid)) continue;
+      n++; mb += size; this.asked.delete(pid);
+    }
+    if (n) saveTally(addToTally(loadTally(), n, mb));
   }
 
   // Which pane runs it, by the name its header shows.
@@ -183,7 +236,9 @@ export class Ports {
     const armedAll = this.armed.is("all");
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Ports"))
-      .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx), c, { spin: this.reading }));
+      .child(h_flex().gap(G.xs).items_center()
+        .child(iconButton("pt-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: this.list === null, active: this.share.open }))
+        .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx), c, { spin: this.reading })));
     const hero = v_flex().gap(G.xs)
       .child(div().text_size(15).text_color(c.muted).child("Listening on this computer"))
       .child(h_flex().items_end().gap(G.md)
@@ -210,6 +265,8 @@ export class Ports {
       .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(header)
+          .when(this.share.open && this.list !== null, (el) => el.child(this.share.row(c, () => this.shareCard(),
+            "Only counts and sizes: no ports, folders or commands. The post opens with the image in it.", G.sm)))
           .child(body)
           .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)))
           .child(div().text_size(10.5).text_color(c.dim).child("Programs of yours listening on a TCP port, started in a pane or from a folder in your home. This computer only."))));

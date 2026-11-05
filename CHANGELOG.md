@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.1.0] - 2026-11-05
+
+### Added
+
+- Ports has a share button, as Spend, Shipped and Memory do. The card brags about the dev servers your agents left running after their panes closed that you found and stopped there, and the memory that gave back (each server with its workers, counted once it no longer listens, kept on this computer), with what listens now and how many run in a pane. No ports, folders or commands leave with it.
+
 ## [3.0.0] - 2026-11-05
 
 ### Removed
