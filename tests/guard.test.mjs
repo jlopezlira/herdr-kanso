@@ -158,3 +158,25 @@ test("Memory starts the guard detached for an action and reads its files again",
   view.sleep();
   assert.equal(view.now, null, "hidden, it keeps nothing");
 });
+
+// The daemon's pure parts. HERDR_APP_HOME points it at a scratch folder.
+test("guard: resume command keeps safe options and refuses what it can't rebuild", async () => {
+  process.env.HERDR_APP_HOME = (await import("node:fs")).mkdtempSync(`${(await import("node:os")).tmpdir()}/kg-`);
+  const g = await import("../kanso/mods/kanso-guard/guard.mjs");
+  assert.deepEqual(g.resumeArgv(["claude", "--model", "haiku", "fix it"], "S"), ["claude", "--model", "haiku", "--resume", "S"]);
+  assert.deepEqual(g.resumeArgv(["claude", "--resume", "old", "--fork-session", "--dangerously-skip-permissions"], "S"), ["claude", "--dangerously-skip-permissions", "--resume", "S"]);
+  assert.equal(g.resumeArgv(["claude", "--disallowedTools", "Bash", "Edit"], "S"), null);
+  assert.equal(g.resumeArgv(["node", "/x/cli.js"], "S"), null);
+  assert.equal(g.sameStart("Sun Nov  1 06:12:52 2026", new Date(Date.UTC(2026, 10, 1, 6, 12, 52)).toString().slice(0, 24)), true);
+  assert.equal(g.sameStart("Sun Nov  1 06:12:52 2026", new Date(Date.UTC(2026, 10, 1, 6, 42, 52)).toString().slice(0, 24)), false);
+});
+
+test("guard: history keeps a day by the minute and at most 40 agents", async () => {
+  const g = await import("../kanso/mods/kanso-guard/guard.mjs");
+  let h = null;
+  const t0 = Date.UTC(2026, 10, 1);
+  for (let i = 0; i < 1500; i++) h = g.addToHistory(h, [t0 + i * 60_000, 50, 1000, 300, 3000], i < 60 ? Array.from({ length: 50 }, (_, k) => ({ session: `s${k}-${i % 2}`, name: "a", kind: "claude", mb: 300 })) : [], t0 + i * 60_000);
+  assert.ok(h.minutes.length <= 1440);
+  assert.ok(Object.keys(h.agents).length <= 40);
+  assert.ok(JSON.stringify(h).length < 1024 * 1024);
+});

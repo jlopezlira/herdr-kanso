@@ -148,7 +148,7 @@ function claudeSession(pid, procs) {
   const p = procs.find((x) => x.pid === pid);
   if (!p) return null;
   // The record names when its process started; a reused pid does not match.
-  if (s.procStart && !sameStart(s.procStart, p.lstart)) return null;
+  if (!s.procStart || !sameStart(s.procStart, p.lstart)) return null; // no proof: not this process
   return s;
 }
 
@@ -156,9 +156,7 @@ function claudeSession(pid, procs) {
 export function sameStart(procStart, lstart) {
   const utc = Date.parse(`${procStart.replace(/\s+/g, " ")} UTC`), local = Date.parse(lstart);
   if (Number.isNaN(utc) || Number.isNaN(local)) return false;
-  // Same second, give or take a whole number of half hours (a time zone).
-  const d = Math.abs(utc - local);
-  return d <= 14 * HOUR && Math.abs(d - Math.round(d / 1_800_000) * 1_800_000) <= 2000;
+  return Math.abs(utc - local) <= 1500;
 }
 
 const KIND = (argv0 = "", agent = "") => {
@@ -174,7 +172,7 @@ async function agentsNow(procs, fp) {
   const ls = await hcJSON(["ls"]);
   const out = [];
   for (const t of ls?.terminals ?? []) {
-    if (t.state !== "live") continue;
+    if (t.state !== "live" || t.address.includes("/")) continue; // this computer's only
     const g = await hcJSON(["get", t.address], 5000);
     const pid = g?.foreground?.pid ?? null;
     if (!pid) continue;
@@ -193,6 +191,7 @@ async function agentsNow(procs, fp) {
     };
     a.why = kind !== "claude" ? "Only Claude Code agents can be resumed automatically"
       : !s ? "Its session record was not found"
+      : !resumeArgv(g.foreground.argv ?? [], s.sessionId) ? "Started with options that can't be carried over"
       : g.pid === pid ? "No shell behind it to start it again"
       : status !== "idle" ? "It is working" : null;
     a.recyclable = a.why === null;
@@ -203,24 +202,33 @@ async function agentsNow(procs, fp) {
 
 // ---- recycling an agent ------------------------------------------------------------
 
-// Options that carry over into the fresh process; anything else (a prompt,
-// another session, print mode) is left out. Each takes a value unless listed
-// in FLAGS.
-const KEEP_VALUE = new Set(["--model", "--permission-mode", "--add-dir", "--mcp-config", "--settings", "--agent", "--agents", "--effort", "--fallback-model", "--allowedTools", "--allowed-tools", "--disallowedTools", "--disallowed-tools", "--append-system-prompt", "--system-prompt", "--plugin-dir", "--setting-sources", "--name"]);
+// Options that carry over into the fresh process, each with its one value
+// or none. A first prompt, another session or print mode is left out. Any
+// other option (one that takes several values, one this does not know) or a
+// launcher in front of claude means the command can't be rebuilt faithfully:
+// that agent is not recycled.
+const KEEP_VALUE = new Set(["--model", "--permission-mode", "--settings", "--agent", "--effort", "--fallback-model", "--append-system-prompt", "--system-prompt", "--plugin-dir", "--setting-sources", "--name"]);
 const KEEP_FLAG = new Set(["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--verbose", "--chrome", "--no-chrome", "--ide", "--strict-mcp-config", "--brief", "--debug"]);
-const DROP_VALUE = new Set(["--resume", "-r", "--session-id", "--from-pr", "--teleport", "--output-format", "--input-format"]);
+const DROP_VALUE = new Set(["--resume", "-r", "--session-id"]);
+const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
 
+/** The command that resumes `session` the way argv ran, or null when it can't. */
 export function resumeArgv(argv, session) {
+  if (!argv.length || argv[0].split("/").pop() !== "claude") return null;
   const keep = [];
+  let positional = false;
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
-    const [flag, inline] = a.startsWith("--") && a.includes("=") ? [a.slice(0, a.indexOf("=")), true] : [a, false];
-    if (KEEP_FLAG.has(flag)) { keep.push(a); continue; }
-    if (KEEP_VALUE.has(flag)) { keep.push(a); if (!inline && i + 1 < argv.length) keep.push(argv[++i]); continue; }
-    if (DROP_VALUE.has(flag)) { if (!inline) i++; continue; }
-    // --continue, --fork-session, -p/--print, a positional prompt, unknown options: left out.
+    if (positional || !a.startsWith("-")) { positional = true; continue; } // the first prompt, and anything after it
+    const eq = a.startsWith("--") ? a.indexOf("=") : -1;
+    const flag = eq > 0 ? a.slice(0, eq) : a;
+    if (KEEP_FLAG.has(flag) && eq < 0) keep.push(a);
+    else if (KEEP_VALUE.has(flag)) { if (eq > 0) keep.push(a); else if (i + 1 < argv.length) keep.push(a, argv[++i]); else return null; }
+    else if (DROP_VALUE.has(flag)) { if (eq < 0) i++; }
+    else if (DROP_FLAG.has(flag)) { /* left out */ }
+    else return null;
   }
-  return [argv[0] || "claude", ...keep, "--resume", session];
+  return [argv[0], ...keep, "--resume", session];
 }
 const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replace(/'/g, `'\\''`)}'`);
 
@@ -232,7 +240,7 @@ async function recycle(pid, reason, { manual = false } = {}) {
   const ls = await hcJSON(["ls"]);
   let term = null, g = null;
   for (const t of ls?.terminals ?? []) {
-    if (t.state !== "live") continue;
+    if (t.state !== "live" || t.address.includes("/")) continue; // this computer's only
     const x = await hcJSON(["get", t.address], 5000);
     if (x?.foreground?.pid === pid) { term = t.address; g = x; break; }
   }
@@ -249,12 +257,15 @@ async function recycle(pid, reason, { manual = false } = {}) {
   }
 
   const before = (await footprints([pid])).get(pid) ?? 0;
-  const argv = resumeArgv(g.foreground.argv ?? ["claude"], s.sessionId);
+  const argv = resumeArgv(g.foreground.argv ?? [], s.sessionId);
+  if (!argv) return skip(pid, "it was started with options that can't be carried over");
   const line = `cd ${shq(s.cwd ?? g.foreground.cwd)} && ${argv.map(shq).join(" ")}`;
 
   // Right before /exit: still idle, still the same idle spell.
   const again = readJSON(join(SESSIONS, `${pid}.json`));
   if (again?.status !== "idle" || again.statusUpdatedAt !== s.statusUpdatedAt) return skip(pid, "it started working again");
+  const still = await hcJSON(["get", term], 5000);
+  if (still?.foreground?.pid !== pid || still.pid !== g.pid || !claudeSession(pid, await processes())) return skip(pid, "its terminal changed");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
   let gone = false;
   for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
@@ -266,7 +277,7 @@ async function recycle(pid, reason, { manual = false } = {}) {
   let ready = false;
   for (let i = 0; i < 20 && !ready; i++) {
     const x = await hcJSON(["get", term], 5000);
-    ready = x && (!x.foreground?.pid || x.foreground.pid === x.pid);
+    ready = x && x.pid === g.pid && (!x.foreground?.pid || x.foreground.pid === g.pid);
     if (!ready) await sleep(500);
   }
   if (!ready) {
@@ -274,7 +285,12 @@ async function recycle(pid, reason, { manual = false } = {}) {
     await notify(`${name} needs a manual restart`, `It exited, but its terminal is busy. Run: claude --resume ${s.sessionId}`);
     return false;
   }
-  await run("hc", ["send", term, line], 20_000);
+  await sleep(1000); // the prompt draws after the shell takes the terminal back
+  if (!(await run("hc", ["send", term, line], 20_000)).ok) {
+    event("error", `${name} exited, but its terminal did not take the restart; run: ${line}`, { pid, terminal: term, session: s.sessionId });
+    await notify(`${name} needs a manual restart`, `Run in its terminal: claude --resume ${s.sessionId}`);
+    return false;
+  }
   // Attached when a process in that terminal holds the same conversation.
   let after = null;
   for (let i = 0; i < 30 && !after; i++) {
@@ -399,7 +415,26 @@ export function addToHistory(h, row, agents, at = Date.now()) {
     e.points = e.points.filter((p) => at - p[0] < 14 * DAY);
     if (!e.points.length) delete h.agents[k];
   }
+  // At most 40 agents (the latest seen), so the file stays far under the
+  // 1 MiB the panel can read: about 450 KB at the most.
+  const keys = Object.keys(h.agents);
+  if (keys.length > 40) {
+    const last = (k) => h.agents[k].points[h.agents[k].points.length - 1][0];
+    for (const k of keys.sort((a, b) => last(b) - last(a)).slice(40)) delete h.agents[k];
+  }
   return h;
+}
+
+/** What the guard has done, from its event log. */
+function totals() {
+  const t = { recycles: 0, restarts: 0, reaped: 0, freedMB: 0, since: null };
+  for (const e of recentEvents(3000)) {
+    t.since = e.at;
+    if (e.kind === "recycle") { t.recycles++; t.freedMB += e.freedMB ?? 0; }
+    else if (e.kind === "restart") t.restarts++;
+    else if (e.kind === "reap" && e.pid) t.reaped++;
+  }
+  return t;
 }
 
 // ---- one check ----------------------------------------------------------------------------
@@ -462,28 +497,37 @@ async function recycleDue(snap) {
   }
 }
 
-function lock() {
+/** One guard at a time, for checks and actions alike. Taken from an owner
+ *  only once that process is gone. Returns the release, or null. */
+async function lock(waitMs = 0) {
   const path = join(DATA, "lock");
-  try {
-    const held = readJSON(path);
-    if (held?.pid && held.pid !== process.pid) {
-      let alive = true; try { process.kill(held.pid, 0); } catch { alive = false; }
-      if (alive && Date.now() - held.at < 15 * MIN) return null;
+  const until = Date.now() + waitMs;
+  for (;;) {
+    try {
+      writeFileSync(path, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: "wx" });
+      return () => { try { if (readJSON(path)?.pid === process.pid) rmSync(path, { force: true }); } catch {} };
+    } catch {
+      const held = readJSON(path);
+      let alive = false;
+      if (held?.pid) { try { process.kill(held.pid, 0); alive = true; } catch {} }
+      if (!alive && (held || Date.now() - statSync(path).mtimeMs > 10_000)) { rmSync(path, { force: true }); continue; }
+      if (Date.now() >= until) return null;
+      await sleep(1000);
     }
-  } catch {}
-  writeJSON(path, { pid: process.pid, at: Date.now() });
-  return () => { try { if (readJSON(path)?.pid === process.pid) rmSync(path, { force: true }); } catch {} };
+  }
 }
 
-async function check({ act = true } = {}) {
-  const release = lock();
+async function check({ act = true, locked = false } = {}) {
+  const release = locked ? () => {} : await lock();
   if (!release) return;
   try {
     const state = readJSON(join(DATA, "state.json")) ?? {};
     const snap = await sample();
     const agentsMB = snap.agents.reduce((s, a) => s + a.mb, 0);
     const histPath = join(DATA, "history.json");
-    writeJSON(histPath, addToHistory(readJSON(histPath), [Date.now(), snap.machine.freePct, snap.machine.swapMB, snap.win.mb, agentsMB], snap.agents));
+    const hist = addToHistory(readJSON(histPath), [Date.now(), snap.machine.freePct, snap.machine.swapMB, snap.win.mb, agentsMB], snap.agents);
+    hist.totals = totals();
+    writeJSON(histPath, hist);
     const helpers = snap.procs.filter((p) => snap.win.pid && p.ppid === snap.win.pid && isHelper(p.command) && p.ageMin >= 3).length;
     writeNow(snap, state, helpers);
     if (act) {
@@ -539,11 +583,16 @@ async function uninstall() {
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === (await import("node:fs")).realpathSync(process.argv[1]);
 if (isMain) {
   const [cmd = "check", arg] = process.argv.slice(2);
+  const manual = async (fn) => {
+    const release = await lock(120_000);
+    if (!release) { console.log("another guard is busy; try again"); process.exitCode = 1; return; }
+    try { await fn(); await check({ act: false, locked: true }); } finally { release(); }
+  };
   if (cmd === "check") await check();
   else if (cmd === "sample") await check({ act: false });
-  else if (cmd === "recycle") { const ok = await recycle(Number(arg), "asked from Memory", { manual: true }); await check({ act: false }); process.exitCode = ok ? 0 : 1; }
-  else if (cmd === "restart-window") { await restartWindow("Asked from Memory"); }
-  else if (cmd === "reap") { const procs = await processes(); await reap(procs, await windowPid(), { manual: true }); await check({ act: false }); }
+  else if (cmd === "recycle") await manual(async () => { process.exitCode = (await recycle(Number(arg), "asked from Memory", { manual: true })) ? 0 : 1; });
+  else if (cmd === "restart-window") await manual(() => restartWindow("Asked from Memory"));
+  else if (cmd === "reap") await manual(async () => { await reap(await processes(), await windowPid(), { manual: true }); });
   else if (cmd === "install") { await install(); }
   else if (cmd === "uninstall") { await uninstall(); }
   else if (cmd === "status") {

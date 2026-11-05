@@ -118,7 +118,7 @@ export default class Memory extends View {
 
   /** Reads now.json, and history.json once a minute. Files only, no process. */
   read(cx) {
-    if (this.closed || this.reading) return;
+    if (this.closed || !this.awake || this.reading) return; // hidden: nothing is read
     this.reading = true;
     cx.spawn(async (readCx) => {
       const dir = `${appHome()}/${DATA_DIR}`;
@@ -168,11 +168,11 @@ export default class Memory extends View {
       } catch {
         delete this.busy[key];
       }
-      if (this.closed) return;
+      if (this.closed || !this.awake) return; // hidden meanwhile: nothing scheduled
       for (const ms of [3000, 8000, 20_000]) {
         this.timers.push(actCx.timer.after(ms, (timerCx) => { this.historyAt = 0; this.read(timerCx); }));
       }
-      if (this.timers.length > 12) this.timers = this.timers.slice(-12);
+      while (this.timers.length > 12) { try { this.timers.shift()?.cancel(); } catch { /* already gone */ } }
       actCx.notify();
     });
   }
