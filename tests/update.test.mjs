@@ -157,6 +157,20 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.deepEqual(f.resizes, [192, 156], "and gives the room back");
 });
 
+test("A copy that started before version.json arrived stops offering what is installed", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+  assert.equal(f.updater.available(), "1.1.0");
+  // The release's files land by another way (a manual install); the copy keeps running.
+  await writeFile(join(f.home, "mods/kanso-chrome/version.json"), '{ "version": "1.1.0" }\n');
+  await f.updater.check(cx); // the next tick, inside the 4 minutes another copy already looked
+  assert.equal(f.updater.installed, "1.1.0");
+  assert.equal(f.updater.available(), null, "no dot on the gear, no row in the footer");
+  assert.equal(f.toasts.length, 1);
+});
+
 test("A release that kept the layout leaves yours as it is", async (t) => {
   const f = await fixture(t, { layoutChanged: false });
   const { cx, drain } = context();
