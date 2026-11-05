@@ -8,6 +8,13 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.7.1] - 2026-11-05
+
+### Changed
+
+- Motion keeps going behind other windows. A working agent's ring, the shimmer on its name, the breathing silhouettes and the pulsing dots no longer stop when Herdr loses the keyboard: on a screen you glance at while working elsewhere, a mark that stands still reads as an agent that stalled. What Kanso still saves behind other windows is work (Git every 5 s, machines and processes less often), not motion.
+- Work follows the shown view: Git status runs only while Spaces shows, and the process listing under each agent skips the Threads view. Panels were already idle unless shown.
+
 ## [2.7.0] - 2026-11-05
 
 ### Added

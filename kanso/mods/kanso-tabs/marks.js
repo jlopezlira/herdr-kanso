@@ -7,18 +7,15 @@
 // working spins the open ring, blocked is a disc with a mark (needs you),
 // done the closed ring, idle (where asked for) a faint ring.
 //
-// Motion runs only while the window is in front. Every native loop, spin
-// and shimmer keeps the window drawing about 30 frames a second for as long
-// as it is on screen; behind other windows nobody watches, so the marks
-// stand still and Herdr draws nothing until something changes. kanso-spaces
-// redraws every mod when the window comes forward or goes behind.
+// Motion is native (spin, loop) and keeps going behind other windows: a
+// ring that stops the moment the window loses the keyboard reads as an
+// agent that stalled, on the screen the person glances at while they work
+// elsewhere. What Kanso saves behind other windows is work, not motion.
 import { div, svg, image } from "gpui-kit";
 import { terminals, window } from "herdr";
 
 const ICONS = "mods/kanso-chrome/icons/";
 const TURN = 900;
-
-export const moving = () => window()?.active !== false;
 
 // A key as a small cap beside a name (Kanso settings lists the keys; the
 // rest of the window draws none).
@@ -43,7 +40,7 @@ export function glyphs(chord, mac = window()?.platform !== "linux" && window()?.
 
 export function stateMark(t, status, size = 13, { idle = false } = {}) {
   const enso = (name, color) => svg(`${ICONS}${name}.svg`).size(size).flex_none().text_color(color);
-  if (status === "working") { const ring = enso("working", t.working); return moving() ? ring.spin(TURN) : ring; }
+  if (status === "working") return enso("working", t.working).spin(TURN);
   if (status === "blocked") return div().size(size).flex_none().rounded_full().bg(t.blocked)
     .text_size(Math.round(size * 0.68)).font_bold().text_color(t.chrome).flex().items_center().justify_center().child("!");
   if (status === "done") return enso("enso", t.done);

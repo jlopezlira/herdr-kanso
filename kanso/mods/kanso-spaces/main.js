@@ -11,7 +11,6 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover } from "gpui-base";
 import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
-import { moving } from "./marks.js";
 import { findThreads } from "./threads.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand } from "herdr";
@@ -193,7 +192,7 @@ export default class Spaces extends View {
   // ones changes nothing.
   checkTasks(cx) {
     const now = Date.now();
-    if (this.psBusy || window().platform === "windows") return;
+    if (this.psBusy || window().platform === "windows" || this.shownView() === "threads") return;
     if (!window().active && now - (this.psAt ?? 0) < 30000) return;
     const mine = terminals().filter((k) => k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
     if (!mine.length) { if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); } return; }
@@ -216,6 +215,12 @@ export default class Spaces extends View {
     });
   }
 
+  // The view on screen (render's choice): collapsed, or without the switch,
+  // the rail shows spaces whatever was chosen. Work runs for this view only.
+  shownView() {
+    return shared("sidebar.collapsed") === true || this.showSwitch === false ? "spaces" : this.view;
+  }
+
   // One-time fixes to how this rail was left by older versions. Kept out of
   // render so drawing never changes state.
   migrate() {
@@ -236,9 +241,6 @@ export default class Spaces extends View {
   checkNew(cx) {
     const now = Date.now();
     const active = window().active;
-    // Coming forward or going behind redraws every mod once, so motion
-    // resumes or stops everywhere (marks.js `moving`).
-    if (active !== this.front) { this.front = active; setShared("kanso.front", active); }
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
     // Read once per look: each read copies every record.
@@ -248,8 +250,9 @@ export default class Spaces extends View {
     // with the window in front, every minute behind it.
     if (this.view === "threads" && now - (this.threadsAt ?? 0) > (active ? 15000 : 60000)) this.refreshThreads(cx);
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
+    // Git shows on space rows only: the Agents and Threads views don't ask.
     const due = this.due(now, sp, ps, placesOf(sp, ps), active);
-    if (due.size) this.refreshGit(due, cx);
+    if (due.size && this.shownView() === "spaces") this.refreshGit(due, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
     if (now - (this.prunedAt ?? 0) > 30000) { this.prunedAt = now; this.prune(sp, now); }
   }
@@ -934,7 +937,7 @@ export default class Spaces extends View {
       .child(v_flex().flex_1().min_w(0).gap(9)
         .child(h_flex().items_center().child(block([132, 104, 150, 92, 118][i], 10)).child(div().flex_1()).child(block(22, 8)))
         .child(block([170, 138, 120, 160, 100][i], 8)));
-    return v_flex().w_full().when(moving(), (el) => el.loop("opacity", { from: 0.35, to: 0.8, period: 1800 })).children([0, 1, 2, 3, 4].map(row));
+    return v_flex().w_full().loop("opacity", { from: 0.35, to: 0.8, period: 1800 }).children([0, 1, 2, 3, 4].map(row));
   }
 
   // An empty view: what will show here and how to get there, two lines.
