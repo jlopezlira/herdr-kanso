@@ -8,8 +8,8 @@
 // in the digit's place.
 //
 // `section`: the keys.json section the action lives in. Kanso's layout keys
-// are in "layout:kanso"; Spend's own, while its panel has the keyboard, in
-// "mod:kanso-spend".
+// are in "layout:kanso"; Spend's and Memory's own, while their panel has the
+// keyboard, in "mod:kanso-spend" and "mod:kanso-guard".
 export const GROUPS = [
   // Drawn as the tab bar itself (main.js `barKeys`): each panel's icon with
   // its key by place, then the gear.
@@ -44,6 +44,10 @@ export const GROUPS = [
     { action: "kanso-spend.refresh", label: "Read again" },
     { action: "kanso-spend.settings", label: "Spend's settings" },
     { action: "kanso-spend.back", label: "Back" },
+  ] },
+  { name: "Memory, while its panel has the keyboard", section: "mod:kanso-guard", actions: [
+    { action: "kanso-guard.refresh", label: "Check now" },
+    { action: "kanso-guard.back", label: "Back" },
   ] },
 ];
 

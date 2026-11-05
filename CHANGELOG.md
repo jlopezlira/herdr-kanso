@@ -8,6 +8,17 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [2.9.0] - 2026-11-05
+
+### Added
+
+- **Memory**, a panel and a guard for sessions that last weeks. The guard (`kanso-guard/guard.mjs`, run by launchd every minute once you turn it on from the panel) samples the machine, the Herdr window, herdr-core and every agent, and keeps 24 hours by the minute, 90 days by the hour and 14 days per agent. It recycles a Claude Code agent that grew past 900 MB, or the heaviest ones when the machine runs low (under 20% free or over 5 GB swapped): only one idle for 20 minutes, not the one you are on, never while you type, at most once in 6 hours. It is ended with /exit and started again in the same terminal on the same conversation (`--resume`), with its model and permissions and without its first prompt; an agent that does not leave on its own is left alone. It restarts the Herdr window past 1.2 GB or when its mod runtime runs out of memory (terminals and agents stay in herdr-core), only after a minute without input, at most 3 times an hour. It ends the helpers Kanso starts when they hang and tells you when memory runs low, naming what holds it. The panel shows all of it, with the history, every agent's size and a Recycle per agent, Restart window and Clean helpers.
+
+### Fixed
+
+- A command that hangs no longer piles up copies of itself: the window's health check, the machines list and the update check each wait for the last one to answer, and the update check never asks for credentials and gives up on a stalled connection.
+- The Threads view no longer reads transcript lines over 16 KB (a pasted image, in base64) into the mod runtime's memory.
+
 ## [2.8.1] - 2026-11-05
 
 ### Fixed

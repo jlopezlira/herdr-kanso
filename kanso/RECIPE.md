@@ -79,7 +79,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - After the tabs, a + (16 icon, 28 square) opens the shipped
         `new-menu`.
       - At the right are the panel buttons: Files, Spend, Changes, PR,
-        Shipped (trophy icon) and Worktrees (fork icon), as icons only (15, in a 26 square ghost
+        Shipped, Worktrees, Ports and Memory, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
         box eases from 0 to its width and fades in over 180 ms
@@ -159,7 +159,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
       told `files`, `changes`, `pr`, `shipped` or `worktrees` (`props.panel`), `kanso-spend`
-      (Spend). A panel Kanso no longer has (Specs, before 2.0) closes.
+      (Spend), `kanso-guard` (Memory). A panel Kanso no longer has (Specs, before 2.0) closes.
       The Worktrees panel (`kanso-panel` with `worktrees`, `worktree.svg`) is
       drawn like PR and Spend. It searches the top folders of your spaces
       under your home and the temp folders (or exactly shared
@@ -832,10 +832,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Herdr loads a mod's files from its own folder only, so what several mods
     need is one file copied into each: `layout.js` (the layout writers, from
     kanso-tabs into kanso-strip, kanso-spaces, kanso-panel and open-with),
-    `ui.js` (the panels' kit, from kanso-panel into kanso-spend), `share.js`
+    `ui.js` (the panels' kit, from kanso-panel into the other panels), `share.js`
     and `marks.js`. `npm run sync:share` copies them; a test fails when a
     copy differs.
-- Spend (`kanso-spend`) is included. Specs (`sdd-focused`, by José
+- Spend and Memory are included. Specs (`sdd-focused`, by José
   Gutiérrez, from the minimalistic layout) was offered when installed, up to
   1.5; Kanso no longer shows it.
 - **Herdr functions**: `spaces`, `panes`, `agents`, `terminals`, `machines`,
@@ -980,7 +980,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - Dragging a grip onto the right half of another header moves that pane
   after it; onto the left half, before it. Ctrl+drag does the same.
 
-## Spend (`kanso-spend`)
+## Spend and Memory
 
-The Spend panel has its own brief, in the same order as this one:
-[RECIPE-spend.md](RECIPE-spend.md). Build it from there.
+Their briefs, in this one's order: [RECIPE-spend.md](RECIPE-spend.md),
+[RECIPE-guard.md](RECIPE-guard.md).

@@ -1,0 +1,558 @@
+#!/usr/bin/env node
+// Kanso's memory guard, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
+//
+// Keeps a session that lasts weeks from taking the machine down. launchd runs
+// `guard.mjs check` every 60 s (`guard.mjs install` sets that up; the Memory
+// panel offers it). Each check:
+//   - samples the machine, the Herdr window, herdr-core and every agent, and
+//     keeps the history the Memory panel draws (data/kanso-guard/);
+//   - restarts the Herdr window when it grows past its limit or its mod
+//     runtime runs out of memory (terminals and agents live in herdr-core and
+//     keep running), never while you type in it, and at most 3 times an hour;
+//   - ends helpers the window started that hang (each answers in seconds);
+//   - recycles a Claude Code agent that grew past its limit, or the heaviest
+//     one when the machine runs low: only one idle for a while, in a Herdr
+//     terminal with its shell behind it. It is ended with /exit and started
+//     again there on the same conversation (`--resume <session>`), so a
+//     conversation compacted for weeks lives on in a fresh process;
+//   - tells you when the machine runs low, naming what holds the memory.
+// It never ends a working agent, a terminal or herdr-core, and never kills an
+// agent that does not leave on its own.
+//
+// Commands: check | recycle <pid> | restart-window | reap | install |
+// uninstall | status
+
+import { execFile } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HOME = homedir();
+const APP_HOME = process.env.HERDR_APP_HOME || join(HOME, ".config/herdr-app");
+const DATA = join(APP_HOME, "data/kanso-guard");
+const SELF = fileURLToPath(import.meta.url);
+const LABEL = "dev.kanso.guard";
+const PLIST = join(HOME, "Library/LaunchAgents", `${LABEL}.plist`);
+const SESSIONS = join(HOME, ".claude/sessions");
+const MB = 1024 * 1024;
+const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
+
+// Limits; data/kanso-guard/settings.json overrides any of them.
+const DEFAULTS = {
+  windowMB: 1200,        // the window's footprint that restarts it
+  graceMin: 15,          // longest wait for you to stop typing in it
+  agentMB: 900,          // a Claude agent this heavy is due for a recycle
+  agentIdleMin: 20,      // ...once it has been idle this long
+  pressureAgentMB: 500,  // with the machine low, agents from this size are due
+  lowFreePct: 20,        // the machine is low below this much free
+  lowSwapMB: 5000,       // ...or with this much swapped (macOS keeps "free" up by swapping)
+  noticeEveryMin: 20,    // at most one low-memory notice this often
+  recycle: true,         // false: agents are only watched
+};
+const limits = { ...DEFAULTS, ...(readJSON(join(DATA, "settings.json")) ?? {}) };
+
+process.env.PATH = [join(HOME, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin", process.env.PATH ?? ""].join(":");
+mkdirSync(DATA, { recursive: true });
+
+// ---- small tools --------------------------------------------------------------
+
+function readJSON(path) { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; } }
+function writeJSON(path, value) { const tmp = `${path}.${process.pid}.tmp`; writeFileSync(tmp, JSON.stringify(value)); renameSync(tmp, path); }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Runs a program with a deadline; never throws. */
+function run(cmd, args, timeout = 10_000) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { timeout, killSignal: "SIGKILL", maxBuffer: 32 * MB, env: process.env }, (error, stdout, stderr) => {
+      resolve({ ok: !error, code: error ? (error.code ?? 1) : 0, stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), timedOut: Boolean(error?.killed) });
+    });
+  });
+}
+
+function event(kind, text, extra = {}) {
+  const e = { at: Date.now(), kind, text, ...extra };
+  appendFileSync(join(DATA, "events.jsonl"), `${JSON.stringify(e)}\n`);
+  return e;
+}
+function recentEvents(n = 40) {
+  try {
+    const lines = readFileSync(join(DATA, "events.jsonl"), "utf8").trim().split("\n");
+    if (lines.length > 3000) writeFileSync(join(DATA, "events.jsonl"), `${lines.slice(-2000).join("\n")}\n`);
+    return lines.slice(-n).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).reverse();
+  } catch { return []; }
+}
+
+async function notify(title, body) {
+  await run("osascript", ["-e", "on run a", "-e", "display notification (item 2 of a) with title (item 1 of a)", "-e", "end run", title, body], 5000);
+}
+
+// "dd-hh:mm:ss" / "hh:mm:ss" / "mm:ss" as minutes.
+export function etimeMinutes(e) {
+  const [d, rest] = e.includes("-") ? e.split("-") : ["0", e];
+  const p = rest.split(":").map(Number);
+  const [h, m] = p.length === 3 ? [p[0], p[1]] : [0, p[0]];
+  return Number(d) * 1440 + h * 60 + m;
+}
+
+// ---- what is running ----------------------------------------------------------
+
+async function processes() {
+  const r = await run("ps", ["-axo", "pid=,ppid=,rss=,etime=,lstart=,command="], 10_000);
+  const list = [];
+  for (const line of r.stdout.split("\n")) {
+    // lstart is five words: "Thu Nov  5 12:36:01 2026".
+    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\w+\s+\w+\s+\d+\s+[\d:]+\s+\d+)\s+(.*)$/.exec(line);
+    if (!m) continue;
+    const command = m[6];
+    const exe = command.split(" ")[0];
+    list.push({ pid: Number(m[1]), ppid: Number(m[2]), rssMB: Math.round(Number(m[3]) / 1024), ageMin: etimeMinutes(m[4]), lstart: m[5].replace(/\s+/g, " "), command, name: exe.split("/").pop() });
+  }
+  return list;
+}
+
+/** Physical footprint (what Activity Monitor calls Memory) in MB, per pid. */
+async function footprints(pids) {
+  const out = new Map();
+  const want = [...new Set(pids.filter(Boolean))];
+  if (!want.length) return out;
+  const file = join(tmpdir(), `kanso-guard-fp-${process.pid}.json`);
+  await run("footprint", [...want.flatMap((p) => ["-p", String(p)]), "--noCategories", "-j", file], 20_000);
+  const j = readJSON(file);
+  rmSync(file, { force: true });
+  for (const p of j?.processes ?? []) out.set(Number(p.pid), Math.round(Number(p.footprint ?? 0) / MB));
+  return out;
+}
+
+async function windowPid() {
+  const r = await run("lsof", ["-t", join(APP_HOME, "herdr-app.sock")], 5000);
+  const pid = Number(r.stdout.trim().split("\n")[0]);
+  return pid > 0 ? pid : null;
+}
+
+async function windowOOM() {
+  const r = await run("herdr-app", ["status"], 10_000);
+  if (!r.ok) return false;
+  try { return (JSON.parse(r.stdout).errors ?? []).some((e) => /out of memory/i.test(JSON.stringify(e))); } catch { return false; }
+}
+
+async function hcJSON(args, timeout = 8000) {
+  const r = await run("hc", [...args, "--json"], timeout);
+  try { return r.ok ? JSON.parse(r.stdout) : null; } catch { return null; }
+}
+
+/** A Claude session record, only when it belongs to this very process. */
+function claudeSession(pid, procs) {
+  const s = readJSON(join(SESSIONS, `${pid}.json`));
+  if (!s?.sessionId) return null;
+  const p = procs.find((x) => x.pid === pid);
+  if (!p) return null;
+  // The record names when its process started; a reused pid does not match.
+  if (s.procStart && !sameStart(s.procStart, p.lstart)) return null;
+  return s;
+}
+
+// Claude Code writes its start in UTC, ps in local time; both to the second.
+export function sameStart(procStart, lstart) {
+  const utc = Date.parse(`${procStart.replace(/\s+/g, " ")} UTC`), local = Date.parse(lstart);
+  if (Number.isNaN(utc) || Number.isNaN(local)) return false;
+  // Same second, give or take a whole number of half hours (a time zone).
+  const d = Math.abs(utc - local);
+  return d <= 14 * HOUR && Math.abs(d - Math.round(d / 1_800_000) * 1_800_000) <= 2000;
+}
+
+const KIND = (argv0 = "", agent = "") => {
+  const a = `${agent} ${argv0}`.toLowerCase();
+  if (/claude/.test(a)) return "claude";
+  if (/codex/.test(a)) return "codex";
+  if (/grok/.test(a)) return "grok";
+  return "other";
+};
+
+/** Every agent in a Herdr terminal on this computer, with what we know of it. */
+async function agentsNow(procs, fp) {
+  const ls = await hcJSON(["ls"]);
+  const out = [];
+  for (const t of ls?.terminals ?? []) {
+    if (t.state !== "live") continue;
+    const g = await hcJSON(["get", t.address], 5000);
+    const pid = g?.foreground?.pid ?? null;
+    if (!pid) continue;
+    const proc = procs.find((p) => p.pid === pid);
+    // Codex runs under node: what it is shows in its arguments.
+    const kind = KIND((g.foreground.argv ?? []).slice(0, 2).join(" "), t.agent);
+    if (kind === "other") continue;
+    const s = kind === "claude" ? claudeSession(pid, procs) : null;
+    const status = s ? (s.status === "idle" ? "idle" : "working") : (t.status === "working" ? "working" : "idle");
+    const idleMin = s && s.status === "idle" ? Math.floor((Date.now() - (s.statusUpdatedAt ?? Date.now())) / MIN) : (status === "idle" ? 0 : null);
+    const a = {
+      pid, kind, terminal: t.address, where: t.where ?? null, cwd: g.foreground.cwd ?? t.cwd,
+      name: g.labels?.["kanso.name"] || s?.name || t.where || t.address,
+      mb: fp.get(pid) ?? proc?.rssMB ?? 0, status, idleMin, session: s?.sessionId ?? null,
+      ageMin: proc?.ageMin ?? null, shellPid: g.pid, argv: g.foreground.argv ?? [],
+    };
+    a.why = kind !== "claude" ? "Only Claude Code agents can be resumed automatically"
+      : !s ? "Its session record was not found"
+      : g.pid === pid ? "No shell behind it to start it again"
+      : status !== "idle" ? "It is working" : null;
+    a.recyclable = a.why === null;
+    out.push(a);
+  }
+  return out;
+}
+
+// ---- recycling an agent ------------------------------------------------------------
+
+// Options that carry over into the fresh process; anything else (a prompt,
+// another session, print mode) is left out. Each takes a value unless listed
+// in FLAGS.
+const KEEP_VALUE = new Set(["--model", "--permission-mode", "--add-dir", "--mcp-config", "--settings", "--agent", "--agents", "--effort", "--fallback-model", "--allowedTools", "--allowed-tools", "--disallowedTools", "--disallowed-tools", "--append-system-prompt", "--system-prompt", "--plugin-dir", "--setting-sources", "--name"]);
+const KEEP_FLAG = new Set(["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--verbose", "--chrome", "--no-chrome", "--ide", "--strict-mcp-config", "--brief", "--debug"]);
+const DROP_VALUE = new Set(["--resume", "-r", "--session-id", "--from-pr", "--teleport", "--output-format", "--input-format"]);
+
+export function resumeArgv(argv, session) {
+  const keep = [];
+  for (let i = 1; i < argv.length; i++) {
+    const a = argv[i];
+    const [flag, inline] = a.startsWith("--") && a.includes("=") ? [a.slice(0, a.indexOf("=")), true] : [a, false];
+    if (KEEP_FLAG.has(flag)) { keep.push(a); continue; }
+    if (KEEP_VALUE.has(flag)) { keep.push(a); if (!inline && i + 1 < argv.length) keep.push(argv[++i]); continue; }
+    if (DROP_VALUE.has(flag)) { if (!inline) i++; continue; }
+    // --continue, --fork-session, -p/--print, a positional prompt, unknown options: left out.
+  }
+  return [argv[0] || "claude", ...keep, "--resume", session];
+}
+const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replace(/'/g, `'\\''`)}'`);
+
+async function recycle(pid, reason, { manual = false } = {}) {
+  const procs = await processes();
+  const s = claudeSession(pid, procs);
+  if (!s) return skip(pid, "its Claude session record was not found for this process");
+  if (s.status !== "idle") return skip(pid, "it is working");
+  const ls = await hcJSON(["ls"]);
+  let term = null, g = null;
+  for (const t of ls?.terminals ?? []) {
+    if (t.state !== "live") continue;
+    const x = await hcJSON(["get", t.address], 5000);
+    if (x?.foreground?.pid === pid) { term = t.address; g = x; break; }
+  }
+  if (!term) return skip(pid, "it is not in a Herdr terminal");
+  if (g.pid === pid) return skip(pid, "no shell behind it would start it again");
+  const name = g.labels?.["kanso.name"] || s.name || term;
+  const recent = recentEvents(400).find((e) => e.kind === "recycle" && e.session === s.sessionId && Date.now() - e.at < 6 * HOUR);
+  if (recent && !manual) return skip(pid, "it was recycled less than 6 hours ago");
+  // Never under your hands: not the agent you are on, not while you type.
+  if (!manual) {
+    const focused = await run("herdr-app", ["status"], 10_000);
+    try { if (JSON.parse(focused.stdout).agent === term) return skip(pid, "it is the agent you are on"); } catch {}
+    if ((await idleSeconds()) < 120) return skip(pid, "you are typing");
+  }
+
+  const before = (await footprints([pid])).get(pid) ?? 0;
+  const argv = resumeArgv(g.foreground.argv ?? ["claude"], s.sessionId);
+  const line = `cd ${shq(s.cwd ?? g.foreground.cwd)} && ${argv.map(shq).join(" ")}`;
+
+  // Right before /exit: still idle, still the same idle spell.
+  const again = readJSON(join(SESSIONS, `${pid}.json`));
+  if (again?.status !== "idle" || again.statusUpdatedAt !== s.statusUpdatedAt) return skip(pid, "it started working again");
+  if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
+  let gone = false;
+  for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
+  if (!gone) {
+    event("error", `${name} did not exit; left as it was`, { pid, terminal: term });
+    return false;
+  }
+  // The shell must be back in front before anything is typed into it.
+  let ready = false;
+  for (let i = 0; i < 20 && !ready; i++) {
+    const x = await hcJSON(["get", term], 5000);
+    ready = x && (!x.foreground?.pid || x.foreground.pid === x.pid);
+    if (!ready) await sleep(500);
+  }
+  if (!ready) {
+    event("error", `${name} exited, but its shell is busy; start it with: ${line}`, { pid, terminal: term, session: s.sessionId });
+    await notify(`${name} needs a manual restart`, `It exited, but its terminal is busy. Run: claude --resume ${s.sessionId}`);
+    return false;
+  }
+  await run("hc", ["send", term, line], 20_000);
+  // Attached when a process in that terminal holds the same conversation.
+  let after = null;
+  for (let i = 0; i < 30 && !after; i++) {
+    await sleep(1000);
+    const x = await hcJSON(["get", term], 5000);
+    const np = x?.foreground?.pid;
+    if (np && np !== x.pid && readJSON(join(SESSIONS, `${np}.json`))?.sessionId === s.sessionId) after = np;
+  }
+  if (!after) {
+    event("error", `${name} was ended but did not come back on its conversation; run: ${line}`, { pid, terminal: term, session: s.sessionId });
+    await notify(`${name} did not resume`, `Run in its terminal: claude --resume ${s.sessionId}`);
+    return false;
+  }
+  const now = (await footprints([after])).get(after) ?? 0;
+  event("recycle", `${name} recycled: ${before} MB to ${now} MB (${reason})`, { pid, newPid: after, terminal: term, session: s.sessionId, beforeMB: before, afterMB: now, freedMB: Math.max(0, before - now) });
+  if (!manual) await notify(`${name} restarted`, `It held ${before} MB; the same conversation goes on in a fresh process (${now} MB).`);
+  return true;
+}
+function skip(pid, why) { console.log(`not recycled (${pid}): ${why}`); event("skip", `Not recycled: ${why}`, { pid }); return false; }
+
+// ---- the window ---------------------------------------------------------------------
+
+async function idleSeconds() {
+  const r = await run("ioreg", ["-c", "IOHIDSystem"], 5000);
+  const m = /"HIDIdleTime" = (\d+)/.exec(r.stdout);
+  return m ? Math.floor(Number(m[1]) / 1e9) : 0;
+}
+
+async function restartWindow(reason) {
+  const pid = await windowPid();
+  if (!pid) return false;
+  event("restart", `Window restarted: ${reason}`, { pid });
+  await run("herdr-app", ["do", "app.quit"], 10_000);
+  for (let i = 0; i < 20; i++) { if (!(await run("kill", ["-0", String(pid)], 2000)).ok) break; await sleep(500); }
+  if ((await run("kill", ["-0", String(pid)], 2000)).ok) { await run("kill", ["-TERM", String(pid)]); await sleep(2000); }
+  if ((await run("kill", ["-0", String(pid)], 2000)).ok) await run("kill", ["-KILL", String(pid)]);
+  await sleep(1000);
+  const app = [join(HOME, "Applications/Herdr.app"), "/Applications/Herdr.app"].find((p) => existsSync(p));
+  const env = ["--env", `HERDR_APP_HOME=${APP_HOME}`];
+  if (app) await run("open", ["-g", "-n", ...env, app], 10_000);
+  else execFile("sh", ["-c", "nohup herdr-app >/dev/null 2>&1 &"], { env: { ...process.env, HERDR_APP_HOME: APP_HOME } });
+  await notify("Herdr window restarted", `${reason}. Your terminals and agents kept running.`);
+  return true;
+}
+
+async function guardWindow(win, state) {
+  if (!win.pid) { state.overSince = null; return; }
+  const reason = win.mb > limits.windowMB ? `It used ${win.mb} MB (limit ${limits.windowMB})` : win.oom ? "Its mod runtime ran out of memory" : null;
+  if (!reason) { state.overSince = null; return; }
+  state.overSince ??= Date.now();
+  // At most 3 restarts an hour: past that, something restarts it bloated.
+  state.restarts = (state.restarts ?? []).filter((t) => Date.now() - t < HOUR);
+  if (state.restarts.length >= 3) {
+    if (!state.paused) { state.paused = true; event("error", `Window restarts paused: 3 in the last hour and still ${reason.toLowerCase()}`); await notify("Herdr keeps outgrowing its limit", "Automatic restarts are paused for an hour. Open Memory in Kanso to see what grows."); }
+    return;
+  }
+  state.paused = false;
+  if (state.restarts.length && Date.now() - state.restarts[state.restarts.length - 1] < 10 * MIN) return;
+  // Only after a minute without input: never under your hands, even past the
+  // grace period (which only ends the notices).
+  const typing = (await idleSeconds()) < 60;
+  if (typing) {
+    if (Date.now() - state.overSince < limits.graceMin * MIN && (!state.overNoticed || Date.now() - state.overNoticed > 10 * MIN)) {
+      state.overNoticed = Date.now();
+      await notify("Herdr will restart its window", `${reason}. It restarts when you pause for a minute; terminals keep running.`);
+    }
+    return;
+  }
+  if (await restartWindow(reason)) { state.restarts.push(Date.now()); state.overSince = null; }
+}
+
+// ---- hung helpers -------------------------------------------------------------------
+
+// What the Kanso mods start, by signature. Each answers in seconds.
+const HELPERS = [
+  /^git --no-optional-locks status /, /^lsof -nP -iTCP -sTCP:LISTEN/, /^ps -axo pid=,ppid=,etime=,/,
+  /^gh pr (view|list) .*--json /, /(^| )ls-remote --tags --refs https:\/\/github\.com\/jlopezlira\/herdr-kanso/,
+  /^hc machine ls --json/, /herdr-app status/, /said\(\) \{/, /kanso-spend\/presenter\.mjs/,
+];
+export const isHelper = (command) => HELPERS.some((re) => re.test(command));
+
+async function reap(procs, winPid, { manual = false } = {}) {
+  let n = 0;
+  for (const p of procs) {
+    const mine = (winPid && p.ppid === winPid) || (p.ppid === 1 && p.command.includes(join(APP_HOME, "mods/kanso-spend/presenter.mjs")));
+    const patience = /presenter\.mjs/.test(p.command) ? 10 : 3;
+    if (!mine || !isHelper(p.command) || p.ageMin < patience) continue;
+    if ((await run("kill", ["-TERM", String(p.pid)])).ok) { n++; event("reap", `Ended a hung helper after ${p.ageMin} min: ${p.command.slice(0, 100)}`, { pid: p.pid }); }
+  }
+  // Half-written copies of shared.json a crashed window left behind.
+  await run("find", [APP_HOME, "-maxdepth", "1", "-name", "shared.json.tmp.*", "-mmin", "+60", "-delete"], 5000);
+  if (manual && !n) event("reap", "No hung helpers");
+  return n;
+}
+
+// ---- history ---------------------------------------------------------------------------
+
+export function addToHistory(h, row, agents, at = Date.now()) {
+  h ??= {};
+  h.v = 1;
+  h.minutes = (h.minutes ?? []).filter((r) => at - r[0] < DAY);
+  h.minutes.push(row);
+  const [, free, swap, win, agentsMB] = row;
+  const hourAt = Math.floor(at / HOUR) * HOUR;
+  h.hours = (h.hours ?? []).filter((r) => at - r[0] < 90 * DAY);
+  const last = h.hours[h.hours.length - 1];
+  if (last && last[0] === hourAt) {
+    const n = (h.hourN ?? 1) + 1;
+    last[1] = Math.min(last[1], free); last[2] = Math.round(((last[2] * (n - 1)) + free) / n);
+    last[3] = Math.max(last[3], swap); last[4] = Math.max(last[4], win); last[5] = Math.max(last[5], agentsMB);
+    h.hourN = n;
+  } else { h.hours.push([hourAt, free, free, swap, win, agentsMB]); h.hourN = 1; }
+  h.agents ??= {};
+  for (const a of agents) {
+    const key = a.session ?? `${a.kind}:${a.name}`;
+    const e = (h.agents[key] ??= { name: a.name, kind: a.kind, points: [] });
+    e.name = a.name;
+    const p = e.points[e.points.length - 1];
+    if (p && p[0] === hourAt) p[1] = Math.max(p[1], a.mb); else e.points.push([hourAt, a.mb]);
+  }
+  for (const [k, e] of Object.entries(h.agents)) {
+    e.points = e.points.filter((p) => at - p[0] < 14 * DAY);
+    if (!e.points.length) delete h.agents[k];
+  }
+  return h;
+}
+
+// ---- one check ----------------------------------------------------------------------------
+
+async function sample() {
+  const procs = await processes();
+  const [memsize, level, swapText] = await Promise.all([
+    run("sysctl", ["-n", "hw.memsize"]), run("sysctl", ["-n", "kern.memorystatus_level"]), run("sysctl", ["-n", "vm.swapusage"]),
+  ]);
+  const swapUsed = Number(/used = ([\d.]+)M/.exec(swapText.stdout)?.[1] ?? 0);
+  const swapTotal = Number(/total = ([\d.]+)M/.exec(swapText.stdout)?.[1] ?? 0);
+  const winPid = await windowPid();
+  const corePids = procs.filter((p) => /\/herdr-core$/.test(p.command.split(" ")[0]) && !/ connect\b/.test(p.command)).map((p) => p.pid);
+  const heavy = [...procs].sort((a, b) => b.rssMB - a.rssMB).slice(0, 14).map((p) => p.pid);
+  const fp0 = await footprints([winPid, ...corePids, ...heavy]);
+  const agents = await agentsNow(procs, fp0);
+  const missing = agents.filter((a) => !fp0.has(a.pid)).map((a) => a.pid);
+  if (missing.length) for (const [k, v] of await footprints(missing)) { fp0.set(k, v); const a = agents.find((x) => x.pid === k); if (a) a.mb = v; }
+  const win = { pid: winPid, mb: winPid ? fp0.get(winPid) ?? 0 : 0, oom: winPid ? await windowOOM() : false, limitMB: limits.windowMB };
+  const agentPids = new Set(agents.map((a) => a.pid));
+  const heaviest = heavy.map((pid) => procs.find((p) => p.pid === pid)).filter(Boolean)
+    .map((p) => ({ pid: p.pid, name: p.command.startsWith("claude") || /^\d+\.\d+\.\d+$/.test(p.name) ? "claude" : p.name, mb: fp0.get(p.pid) ?? p.rssMB, ageMin: p.ageMin, agent: agentPids.has(p.pid) }))
+    .sort((a, b) => b.mb - a.mb).slice(0, 8);
+  return {
+    procs, win, agents, heaviest,
+    machine: { totalMB: Math.round(Number(memsize.stdout) / MB), freePct: Number(level.stdout) || 0, swapMB: Math.round(swapUsed), swapTotalMB: Math.round(swapTotal) },
+    core: { mb: corePids.reduce((s, p) => s + (fp0.get(p) ?? 0), 0) },
+  };
+}
+
+function writeNow(snap, state, helpers) {
+  writeJSON(join(DATA, "now.json"), {
+    v: 1, at: Date.now(), machine: snap.machine, window: snap.win, core: snap.core,
+    agents: snap.agents.map(({ shellPid, argv, ...a }) => a).sort((a, b) => b.mb - a.mb),
+    heaviest: snap.heaviest, helpers, limits, paused: Boolean(state.paused), events: recentEvents(40),
+  });
+}
+
+async function pressure(snap, state) {
+  const { freePct, swapMB } = snap.machine;
+  if (!isLow(snap.machine)) return;
+  if (state.lowNoticed && Date.now() - state.lowNoticed < limits.noticeEveryMin * MIN) return;
+  state.lowNoticed = Date.now();
+  const top = snap.heaviest.slice(0, 4).map((p) => `${p.name} ${p.mb} MB`).join(", ");
+  event("low", `Memory low: ${freePct}% free, ${swapMB} MB swapped. Heaviest: ${top}`);
+  await notify(`Memory low: ${freePct}% free, ${(swapMB / 1024).toFixed(1)} GB swapped`, `Heaviest: ${top}`);
+}
+
+const isLow = (m) => m.freePct < limits.lowFreePct || m.swapMB > limits.lowSwapMB;
+
+async function recycleDue(snap) {
+  if (!limits.recycle) return;
+  const low = isLow(snap.machine);
+  const due = snap.agents
+    .filter((a) => a.recyclable && a.idleMin >= limits.agentIdleMin && (a.mb > limits.agentMB || (low && a.mb > limits.pressureAgentMB)))
+    .sort((a, b) => b.mb - a.mb);
+  for (const a of due) {
+    const why = a.mb > limits.agentMB ? `${a.mb} MB, over ${limits.agentMB}` : `machine low: ${snap.machine.freePct}% free, ${snap.machine.swapMB} MB swapped`;
+    if (await recycle(a.pid, why)) return; // one per check
+  }
+}
+
+function lock() {
+  const path = join(DATA, "lock");
+  try {
+    const held = readJSON(path);
+    if (held?.pid && held.pid !== process.pid) {
+      let alive = true; try { process.kill(held.pid, 0); } catch { alive = false; }
+      if (alive && Date.now() - held.at < 15 * MIN) return null;
+    }
+  } catch {}
+  writeJSON(path, { pid: process.pid, at: Date.now() });
+  return () => { try { if (readJSON(path)?.pid === process.pid) rmSync(path, { force: true }); } catch {} };
+}
+
+async function check({ act = true } = {}) {
+  const release = lock();
+  if (!release) return;
+  try {
+    const state = readJSON(join(DATA, "state.json")) ?? {};
+    const snap = await sample();
+    const agentsMB = snap.agents.reduce((s, a) => s + a.mb, 0);
+    const histPath = join(DATA, "history.json");
+    writeJSON(histPath, addToHistory(readJSON(histPath), [Date.now(), snap.machine.freePct, snap.machine.swapMB, snap.win.mb, agentsMB], snap.agents));
+    const helpers = snap.procs.filter((p) => snap.win.pid && p.ppid === snap.win.pid && isHelper(p.command) && p.ageMin >= 3).length;
+    writeNow(snap, state, helpers);
+    if (act) {
+      await guardWindow(snap.win, state);
+      await reap(snap.procs, snap.win.pid);
+      await recycleDue(snap);
+      await pressure(snap, state);
+      writeNow(snap, state, 0);
+    }
+    writeJSON(join(DATA, "state.json"), state);
+  } finally { release(); }
+}
+
+// ---- install ------------------------------------------------------------------------------
+
+async function install() {
+  mkdirSync(join(HOME, "Library/LaunchAgents"), { recursive: true });
+  const x = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  writeFileSync(PLIST, `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${LABEL}</string>
+  <key>ProgramArguments</key><array><string>${x(process.execPath)}</string><string>${x(SELF)}</string><string>check</string></array>
+  <key>EnvironmentVariables</key><dict><key>HERDR_APP_HOME</key><string>${x(APP_HOME)}</string></dict>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+  <key>Nice</key><integer>10</integer>
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardOutPath</key><string>${x(join(DATA, "launchd.log"))}</string>
+  <key>StandardErrorPath</key><string>${x(join(DATA, "launchd.log"))}</string>
+</dict>
+</plist>
+`);
+  const uid = String(process.getuid());
+  await run("launchctl", ["bootout", `gui/${uid}/${LABEL}`], 10_000);
+  const r = await run("launchctl", ["bootstrap", `gui/${uid}`, PLIST], 10_000);
+  event(r.ok ? "skip" : "error", r.ok ? "Guard turned on: a check every minute" : `Guard could not start: ${r.stderr.trim()}`);
+  console.log(r.ok ? `kanso-guard on: ${process.execPath} ${SELF} check, every 60 s` : r.stderr);
+}
+
+async function uninstall() {
+  await run("launchctl", ["bootout", `gui/${process.getuid()}/${LABEL}`], 10_000);
+  rmSync(PLIST, { force: true });
+  event("skip", "Guard turned off");
+  console.log("kanso-guard off (history kept in data/kanso-guard)");
+}
+
+// ---- main --------------------------------------------------------------------------------------
+
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === (await import("node:fs")).realpathSync(process.argv[1]);
+if (isMain) {
+  const [cmd = "check", arg] = process.argv.slice(2);
+  if (cmd === "check") await check();
+  else if (cmd === "sample") await check({ act: false });
+  else if (cmd === "recycle") { const ok = await recycle(Number(arg), "asked from Memory", { manual: true }); await check({ act: false }); process.exitCode = ok ? 0 : 1; }
+  else if (cmd === "restart-window") { await restartWindow("Asked from Memory"); }
+  else if (cmd === "reap") { const procs = await processes(); await reap(procs, await windowPid(), { manual: true }); await check({ act: false }); }
+  else if (cmd === "install") { await install(); }
+  else if (cmd === "uninstall") { await uninstall(); }
+  else if (cmd === "status") {
+    const n = readJSON(join(DATA, "now.json"));
+    if (!n) console.log("no sample yet");
+    else {
+      console.log(`${new Date(n.at).toLocaleString()}  free ${n.machine.freePct}%  swap ${n.machine.swapMB} MB  window ${n.window.mb} MB  core ${n.core.mb} MB`);
+      for (const a of n.agents) console.log(`  ${String(a.mb).padStart(5)} MB  ${a.kind.padEnd(6)} ${a.terminal.padEnd(5)} ${a.status === "idle" ? `idle ${a.idleMin}m` : "working"}  ${a.name}${a.why ? `  (${a.why})` : ""}`);
+      for (const e of n.events.slice(0, 8)) console.log(`  ${new Date(e.at).toLocaleTimeString()} ${e.kind}: ${e.text}`);
+    }
+  } else { console.log("usage: guard.mjs check|recycle <pid>|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
+}

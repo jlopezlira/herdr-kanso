@@ -6,7 +6,7 @@
 //   the bar. Click a key and press a new one in its place, Backspace while
 //   pressing drops it, Reset goes back to what Kanso ships. A key something else already uses
 //   says so and takes a second press. What you press is written to Herdr's
-//   keys.json (`layout:kanso`, `mod:kanso-spend`), which Herdr applies at
+//   keys.json (`layout:kanso`, `mod:kanso-spend`, `mod:kanso-guard`), which Herdr applies at
 //   once and the updater keeps as yours.
 // - Mods: the side panels and the pieces of Kanso you can do without, each
 //   with a switch. Panels follow the same list as the tab bar's Panels

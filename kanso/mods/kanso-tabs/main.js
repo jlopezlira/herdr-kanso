@@ -28,6 +28,7 @@ const PANELS = {
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
   insights: { mod: "kanso-spend" },
+  memory: { mod: "kanso-guard" },
 };
 
 function customPanels() {
@@ -53,6 +54,8 @@ const BUILTIN = [
   { id: "worktrees", label: "Worktrees", icon: `${ICON}worktree.svg` },
   // Dev servers listening on a port, and the ones no pane runs any more.
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
+  // Memory (kanso-guard): what the guard sees, recycles and restarts in a long session.
+  { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
