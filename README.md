@@ -1,16 +1,29 @@
-# Kanso
+<p align="center">
+  <a href="https://jlopezlira.github.io/herdr-kanso/"><img src="docs/logo.svg" width="96" height="96" alt="Kanso"></a>
+</p>
 
-**Your agents in a row, not a grid.**
+<h1 align="center">Kanso</h1>
 
-Kanso is a layout for [Herdr](https://herdr.dev) made for running many coding
-agents and still reading everything they write. Every terminal keeps its width
-on a strip you slide along. The diff, the pull request and your editor sit
-beside them.
+<p align="center"><b>More agents. Less babysitting.</b></p>
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/hero-light.png">
-  <img alt="Kanso: seven demo agents across three repositories and a nested worktree. A pinned worker, a review waiting for a decision, and a server stacked above a test agent." src="kanso/preview.png">
-</picture>
+<p align="center">Every agent gets a readable pane, the one waiting on you comes first, and idle sessions recycle on the same conversation so your machine lasts weeks. A layout for <a href="https://herdr.dev">Herdr</a>.</p>
+
+<p align="center">
+  <a href="https://jlopezlira.github.io/herdr-kanso/">Website</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#keys">Keys</a> ·
+  <a href="#privacy-what-it-runs">What it runs</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
+<p align="center">
+  <a href="https://jlopezlira.github.io/herdr-kanso/">
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="site/shots/hero-light.png">
+      <img alt="Kanso in the Herdr app: a sidebar of projects and their agents, and agents side by side on the strip, one asking for a decision." src="site/shots/hero.png">
+    </picture>
+  </a>
+</p>
 
 > **Install:** tell your agent **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 >
