@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const root = new URL("../", import.meta.url);
 // Each shared file (relative to the repo), and where it is copied.
 export const SHARED = [
-  { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js"] },
+  { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js"] },
   // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
   { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js"] },
   // An agent's state mark, program icon and name, the same in the tabs, headers, status bar, sidebar and Send.

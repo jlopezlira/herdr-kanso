@@ -163,7 +163,7 @@ export function digestHistory(text, now = Date.now(), low = null) {
   return {
     series,
     sparks: agentSparks(history, now),
-    totals: { recycles: num(t.recycles) ?? 0, restarts: num(t.restarts) ?? 0, reaped: num(t.reaped) ?? 0, freedMB: num(t.freedMB) ?? 0, since: num(t.since) },
+    totals: { recycles: num(t.recycles) ?? 0, closed: num(t.closed) ?? 0, restarts: num(t.restarts) ?? 0, reaped: num(t.reaped) ?? 0, freedMB: num(t.freedMB) ?? 0, since: num(t.since) },
   };
 }
 
@@ -204,5 +204,11 @@ export function parseBatch(text, now = Date.now()) {
   const ended = b.finished ? (num(b.finishedAt) ?? beat) : beat;
   if ((b.finished || interrupted) && now - ended > 10 * 60_000) return null;
   const freed = done.reduce((sum, d) => sum + (d.ok ? Math.max(0, (num(d.beforeMB) ?? 0) - (num(d.afterMB) ?? num(d.beforeMB) ?? 0)) : 0), 0);
-  return { at: b.at, total: b.total, done, current: b.current ?? null, finished: Boolean(b.finished) || interrupted, interrupted, error: b.error ?? null, ok: done.filter((d) => d.ok).length, freed, skippedFocused: b.skippedFocused ?? null, overMB: num(b.overMB) ?? 0 };
+  return { kind: b.kind === "close" ? "close" : "recycle", at: b.at, total: b.total, done, current: b.current ?? null, finished: Boolean(b.finished) || interrupted, interrupted, error: b.error ?? null, ok: done.filter((d) => d.ok).length, freed, skippedFocused: b.skippedFocused ?? null, overMB: num(b.overMB) ?? 0 };
+}
+
+/** Claude agents not used for `minIdle` minutes (by their own idle time), never the one you are on: what "Close" takes. */
+export function staleAgents(agents = [], minIdle = 2880, focused = null) {
+  return agents.filter((a) => a.kind === "claude" && a.status === "idle" && (num(a.idleMin) ?? 0) >= minIdle && (!focused || a.terminal !== focused))
+    .sort((a, b) => (num(b.idleMin) ?? 0) - (num(a.idleMin) ?? 0));
 }

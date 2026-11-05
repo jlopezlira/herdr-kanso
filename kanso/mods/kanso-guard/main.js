@@ -11,7 +11,9 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, appHome, theme, nextCommand, readTextFile, layout } from "herdr";
 import { G, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch } from "./model.js";
+import { Share } from "./share.js";
+import { memorySpec, memoryText } from "./memory-card.js";
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents } from "./model.js";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -60,6 +62,7 @@ export default class Memory extends View {
     this.historyAt = 0;
     this.reading = false;
     this.range = "day";
+    this.share = new Share(MOD, `${appHome()}/${DATA_DIR}/share`);
     this.batch = null; // parseBatch(): a recycle-all running or just done
     this.batchSeen = 0; // a finished batch you dismissed
     this.showAll = false;
@@ -205,6 +208,12 @@ export default class Memory extends View {
   /** Every ready agent (only those from `overMB`), one after another. */
   recycleAll(overMB, cx) { this.batchSeen = 0; this.act("batch", ["recycle-all", String(overMB || 0)], () => false, cx); }
 
+  /** Ends one idle agent and closes its pane. */
+  close(a, cx) { this.act(`close:${a.pid}`, ["close", String(a.pid)], (data) => !data.agents.some((x) => x.pid === a.pid), cx); }
+
+  /** Every Claude agent not used for `minIdle` minutes. */
+  closeStale(minIdle, cx) { this.batchSeen = 0; this.act("batch", ["close-stale", String(minIdle)], () => false, cx); }
+
   restartWindow(cx) {
     const pid = this.now?.data?.window?.pid;
     this.act("restart", ["restart-window"], (data) => data.window?.pid !== pid, cx);
@@ -239,7 +248,16 @@ export default class Memory extends View {
       .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(this.header(c, narrow))
+          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
+            "Only counts and sizes: no agent names, folders or sessions. The post opens with the image in it.", G.sm)))
           .child(body)));
+  }
+
+  // A card needs a live picture; the history makes it better but is optional.
+  canShare() { return this.now?.state === "ok" && Boolean(this.now.data); }
+
+  shareCard() {
+    return { spec: memorySpec(this.now.data, this.digest), text: memoryText(this.now.data, this.digest), name: "memory", title: "Memory" };
   }
 
   header(c, narrow) {
@@ -248,7 +266,9 @@ export default class Memory extends View {
     const tip = busy ? "Checking…" : at ? `Check now · checked ${clock(at)}` : "Check now";
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Memory"))
-      .child(iconButton("guard-refresh", "refresh", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy }));
+      .child(h_flex().gap(G.xs).items_center().flex_none()
+        .when(this.canShare(), (el) => el.child(iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
+        .child(iconButton("guard-refresh", "refresh", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
   }
 
   /** Loading: the view's own shape, breathing. */
@@ -304,6 +324,7 @@ export default class Memory extends View {
       { value: size(data.core.mb), unit: "core" },
       { value: size(agentsMB(data)), unit: `${data.agents.length} ${data.agents.length === 1 ? "agent" : "agents"}` },
       totals ? { value: String(totals.recycles), unit: totals.recycles === 1 ? "recycle" : "recycles" } : null,
+      totals && totals.closed ? { value: String(totals.closed), unit: "closed" } : null,
       totals ? { value: String(totals.restarts), unit: totals.restarts === 1 ? "restart" : "restarts" } : null,
       totals && totals.freedMB > 0 ? { value: size(totals.freedMB), unit: "freed", tip: totals.since ? `Since ${clock(totals.since)}` : null } : null,
     ].filter(Boolean);
@@ -366,23 +387,29 @@ export default class Memory extends View {
       working.length ? `${working.length} working` : null,
       other.length ? `${other.length} can't be recycled` : null,
     ].filter(Boolean).join(" · ");
-    const armedAll = this.armed.is("all"), armedHeavy = this.armed.is("heavy");
+    const armedAll = this.armed.is("all"), armedHeavy = this.armed.is("heavy"), armedStale = this.armed.is("stale");
+    const staleMin = num(data.limits.staleIdleMin) ?? 2880;
+    const stale = staleAgents(list, staleMin, data.focused);
     const actions = h_flex().w_full().flex_wrap().gap_x(G.xl).gap_y(G.sm).items_center()
-      .child(quietLink("guard-recycle-all",
+      .when(batchable.length > 0, (el) => el.child(quietLink("guard-recycle-all",
         armedAll ? `Press again to recycle ${batchable.length}` : `Recycle all ${batchable.length} idle · about ${size(freedEstimate(batchable))} back`,
         (cx) => this.armed.press("all", cx, (cx) => this.recycleAll(0, cx)), c,
-        { color: armedAll ? c.red : c.text, size: 13, label: "Recycle every idle agent" }))
+        { color: armedAll ? c.red : c.text, size: 13, label: "Recycle every idle agent" })))
       .when(heavy.length > 0 && heavy.length < batchable.length, (el) => el.child(quietLink("guard-recycle-heavy",
         armedHeavy ? `Press again to recycle ${heavy.length}` : `Only the ${heavy.length} over ${size(over)}`,
         (cx) => this.armed.press("heavy", cx, (cx) => this.recycleAll(over, cx)), c,
-        { color: armedHeavy ? c.red : c.muted, size: 13 })));
+        { color: armedHeavy ? c.red : c.muted, size: 13 })))
+      .when(stale.length > 0, (el) => el.child(quietLink("guard-close-stale",
+        armedStale ? `Press again to close ${stale.length}` : `Close the ${stale.length} not used for ${span(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`,
+        (cx) => this.armed.press("stale", cx, (cx) => this.closeStale(staleMin, cx)), c,
+        { color: armedStale ? c.red : c.muted, size: 13, label: "Close agents not used for a long time" })));
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().w_full().gap(G.sm)
         .child(section(c, "Agents", list.length ? size(agentsMB(data)) : ""))
         .when(list.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("None running.")))
         .when(Boolean(counts), (el) => el.child(div().text_size(12).text_color(c.dim).child(counts)))
         .when(Boolean(this.batch), (el) => el.child(this.batchView(c)))
-        .when(!batchBusy && batchable.length > 0, (el) => el.child(actions))
+        .when(!batchBusy && (batchable.length > 0 || stale.length > 0), (el) => el.child(actions))
         .when(!batchBusy && ready.length > 0 && batchable.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Only the agent you are on is idle; it is never recycled in bulk."))))
       .when(ready.length > 0, (el) => el.child(this.group(c, "Ready to recycle", ready, { limit, action: !batchBusy })))
       .when(working.length > 0, (el) => el.child(this.group(c, "Working", working, { limit })))
@@ -392,11 +419,12 @@ export default class Memory extends View {
   /** A recycle-all: how far it got, agent by agent. */
   batchView(c) {
     const b = this.batch;
+    const closing = b.kind === "close";
     const head = b.error ? b.error
       : b.interrupted ? `Stopped after ${b.done.length} of ${b.total} · ${size(b.freed)} back`
       : b.finished
-      ? (b.total ? `Recycled ${b.ok} of ${b.total} · ${size(b.freed)} back` : "Nothing was ready to recycle")
-      : `Recycling ${Math.min(b.done.length + 1, b.total)} of ${b.total}${b.current ? ` · ${b.current}` : ""}`;
+      ? (b.total ? `${closing ? "Closed" : "Recycled"} ${b.ok} of ${b.total} · ${size(b.freed)} back` : `Nothing was ready to ${closing ? "close" : "recycle"}`)
+      : `${closing ? "Closing" : "Recycling"} ${Math.min(b.done.length + 1, b.total)} of ${b.total}${b.current ? ` · ${b.current}` : ""}`;
     return v_flex().w_full().gap(G.xs).py(G.sm)
       .child(h_flex().w_full().items_center().gap(G.sm)
         .when(!b.finished, (el) => el.child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE)))
@@ -405,7 +433,7 @@ export default class Memory extends View {
       .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(2).id(`guard-batch-${i}`)
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
         .child(div().flex_none().text_size(12).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
-          .child(d.ok ? `${size(d.beforeMB)} → ${size(d.afterMB ?? d.beforeMB)}` : String(d.why ?? "not recycled")))))
+          .child(d.ok ? (closing ? `${size(d.beforeMB)} back` : `${size(d.beforeMB)} → ${size(d.afterMB ?? d.beforeMB)}`) : String(d.why ?? "not done")))))
       .when(Boolean(b.skippedFocused), (el) => el.child(div().text_size(11).text_color(c.dim).child(`The agent you are on (${b.skippedFocused}) was left as it is.`)));
   }
 
@@ -423,6 +451,9 @@ export default class Memory extends View {
 
   agentRow(c, a, index, { limit, action, reason }) {
     const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
+    const closeKey = `close:${a.pid}`, armedClose = this.armed.is(closeKey), closing = Boolean(this.busy[closeKey]);
+    // Close: any idle agent but the one you are on, and not while a batch runs.
+    const closable = action !== null && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
     const spark = sparkFor(this.digest?.sparks, a);
     const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;
     return h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)
@@ -438,10 +469,15 @@ export default class Memory extends View {
         .child(h_flex().items_center().gap(G.md)
           .when(Boolean(spark), (el) => el.child(this.spark(c, spark.ratios)))
           .child(div().text_size(15).font_light().text_color(over ? c.yellow : reason ? c.muted : c.text).whitespace_nowrap().child(size(a.mb))))
-        .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
-          busy ? "Recycling…" : armed ? "Press again" : "Recycle",
-          (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.recycle(a, cx)); }, c,
-          { color: armed ? c.red : c.muted, size: 11.5, label: `Recycle ${a.name || a.pid}` }))));
+        .child(h_flex().gap(G.md).items_center()
+          .when(closable || closing, (el) => el.child(quietLink(`guard-close-${a.pid}`,
+            closing ? "Closing…" : armedClose ? "Press again to close" : "Close",
+            (cx) => { if (!closing) this.armed.press(closeKey, cx, (cx) => this.close(a, cx)); }, c,
+            { color: armedClose ? c.red : c.dim, size: 11.5, label: `Close ${a.name || a.pid}` })))
+          .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
+            busy ? "Recycling…" : armed ? "Press again" : "Recycle",
+            (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.recycle(a, cx)); }, c,
+            { color: armed ? c.red : c.muted, size: 11.5, label: `Recycle ${a.name || a.pid}` })))));
   }
 
   heaviest(c, data) {
@@ -454,7 +490,7 @@ export default class Memory extends View {
   }
 
   events(c, data) {
-    const tone = { error: c.red, recycle: c.text, restart: c.text, reap: c.muted, low: c.yellow, skip: c.dim };
+    const tone = { error: c.red, recycle: c.text, close: c.text, restart: c.text, reap: c.muted, low: c.yellow, skip: c.dim };
     return v_flex().w_full().gap(G.xs)
       .child(section(c, "Events", ""))
       .children(data.events.slice(0, EVENT_ROWS).map((e) => h_flex().w_full().items_start().gap(G.md).py(3)

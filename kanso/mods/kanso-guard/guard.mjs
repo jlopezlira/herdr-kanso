@@ -49,6 +49,7 @@ const DEFAULTS = {
   lowSwapMB: 5000,       // ...or with this much swapped (macOS keeps "free" up by swapping)
   noticeEveryMin: 20,    // at most one low-memory notice this often
   recycle: true,         // false: agents are only watched
+  staleIdleMin: 2880,    // "Close the ones not used for..." in Memory (2 days)
 };
 const limits = { ...DEFAULTS, ...(readJSON(join(DATA, "settings.json")) ?? {}) };
 
@@ -360,6 +361,73 @@ async function recycleBatch(overMB = 0) {
   if (list.length) await notify("Agents recycled", `${okN} of ${list.length}, ${freed} MB freed. Same conversations, fresh processes.`);
 }
 
+// ---- closing an agent you no longer use --------------------------------------------
+
+/** The pane that shows a terminal in the window, or null. */
+async function paneOf(term) {
+  const r = await run("herdr-app", ["ls"], 10_000);
+  try {
+    for (const sp of JSON.parse(r.stdout).spaces ?? []) for (const tab of sp.tabs ?? []) for (const t of tab.terminals ?? []) if (t.terminal === term) return t.pane ?? null;
+  } catch {}
+  return null;
+}
+
+/**
+ * Ends an idle agent and closes its pane. A Claude agent leaves with /exit,
+ * so its conversation is saved and `claude --resume <session>` brings it
+ * back any time; the event keeps that command. Never the agent you are on,
+ * never one that is working.
+ */
+async function closeAgent(pid, why) {
+  const snap = await sample();
+  const a = snap.agents.find((x) => x.pid === pid);
+  if (!a) return skip(pid, "it is no longer running");
+  if (a.status === "working") return skip(pid, "it is working");
+  if (snap.focused === undefined) return skip(pid, "the window did not say which agent you are on");
+  if (snap.focused === a.terminal) return skip(pid, "it is the agent you are on");
+  const resume = a.session ? `cd ${shq(a.cwd ?? HOME)} && claude --resume ${a.session}` : null;
+  if (a.kind === "claude") {
+    if (!a.session) return skip(pid, "its session record was not found");
+    const again = readJSON(join(SESSIONS, `${pid}.json`));
+    if (again?.status !== "idle") return skip(pid, "it started working again");
+    if (!(await run("hc", ["send", a.terminal, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
+    let gone = false;
+    for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
+    if (!gone) { lastOutcome = { ok: false, why: "it did not exit; left as it was" }; event("error", `${a.name} did not exit; left as it was`, { pid }); return false; }
+  }
+  const pane = await paneOf(a.terminal);
+  const closed = pane
+    ? (await run("herdr-app", ["do", "pane.close", "--pane", pane], 15_000)).ok
+    : (await run("hc", ["kill", a.terminal], 15_000)).ok;
+  if (!closed) await run("hc", ["kill", a.terminal], 15_000);
+  lastOutcome = { ok: true, beforeMB: a.mb, afterMB: 0 };
+  event("close", `${a.name} closed after ${a.idleMin ? `${Math.round(a.idleMin / 60)} h idle` : "being idle"}, ${a.mb} MB back (${why})${resume ? `; to reopen: ${resume}` : ""}`,
+    { pid, terminal: a.terminal, session: a.session, resume, freedMB: a.mb, beforeMB: a.mb });
+  return true;
+}
+
+/** Every idle agent not used for `minIdle` minutes (Claude's own idle time), oldest first. */
+async function closeStale(minIdle) {
+  const snap = await sample();
+  const list = snap.agents.filter((a) => a.kind === "claude" && a.status === "idle" && (a.idleMin ?? 0) >= minIdle && a.terminal !== snap.focused)
+    .sort((a, b) => (b.idleMin ?? 0) - (a.idleMin ?? 0));
+  const batch = { kind: "close", at: Date.now(), beat: Date.now(), owner: process.pid, overMB: 0, minIdle, total: list.length, current: null, done: [], skippedFocused: null, finished: false };
+  const save = () => { batch.beat = Date.now(); writeJSON(join(DATA, "batch.json"), batch); };
+  if (snap.focused === undefined) { batch.finished = true; batch.finishedAt = Date.now(); batch.error = "The window did not say which agent you are on, so nothing was closed."; save(); return; }
+  save();
+  for (const a of list) {
+    batch.current = a.name; save();
+    lastOutcome = null;
+    const ok = await closeAgent(a.pid, `not used for ${Math.round(a.idleMin / 60)} h, asked from Memory`);
+    batch.done.push({ name: a.name, terminal: a.terminal, ok, beforeMB: a.mb, afterMB: ok ? 0 : null, why: ok ? null : lastOutcome?.why ?? "not closed" });
+    batch.current = null; save();
+    await check({ act: false, locked: true });
+  }
+  batch.finished = true; batch.finishedAt = Date.now(); save();
+  const okN = batch.done.filter((d) => d.ok).length;
+  if (list.length) event("close-batch", `Closed ${okN} of ${list.length} agents not used for ${Math.round(minIdle / 60)} h`);
+}
+
 // ---- the window ---------------------------------------------------------------------
 
 async function idleSeconds() {
@@ -476,10 +544,11 @@ export function addToHistory(h, row, agents, at = Date.now()) {
 
 /** What the guard has done, from its event log. */
 function totals() {
-  const t = { recycles: 0, restarts: 0, reaped: 0, freedMB: 0, since: null };
+  const t = { recycles: 0, closed: 0, restarts: 0, reaped: 0, freedMB: 0, since: null };
   for (const e of recentEvents(3000)) {
     t.since = e.at;
     if (e.kind === "recycle") { t.recycles++; t.freedMB += e.freedMB ?? 0; }
+    else if (e.kind === "close") { t.closed = (t.closed ?? 0) + 1; t.freedMB += e.freedMB ?? 0; }
     else if (e.kind === "restart") t.restarts++;
     else if (e.kind === "reap" && e.pid) t.reaped++;
     // a batch's own lines are summaries; each agent in it is counted above
@@ -640,6 +709,8 @@ if (isMain) {
   };
   if (cmd === "check") await check();
   else if (cmd === "sample") await check({ act: false });
+  else if (cmd === "close") await manual(async () => { process.exitCode = (await closeAgent(Number(arg), "asked from Memory")) ? 0 : 1; });
+  else if (cmd === "close-stale") await manual(() => closeStale(arg !== undefined && Number.isFinite(Number(arg)) ? Number(arg) : limits.staleIdleMin));
   else if (cmd === "recycle-all") await manual(() => recycleBatch(Number(arg) || 0));
   else if (cmd === "recycle") await manual(async () => { process.exitCode = (await recycle(Number(arg), "asked from Memory", { manual: true })) ? 0 : 1; });
   else if (cmd === "restart-window") await manual(() => restartWindow("Asked from Memory"));
@@ -654,5 +725,5 @@ if (isMain) {
       for (const a of n.agents) console.log(`  ${String(a.mb).padStart(5)} MB  ${a.kind.padEnd(6)} ${a.terminal.padEnd(5)} ${a.status === "idle" ? `idle ${a.idleMin}m` : "working"}  ${a.name}${a.why ? `  (${a.why})` : ""}`);
       for (const e of n.events.slice(0, 8)) console.log(`  ${new Date(e.at).toLocaleTimeString()} ${e.kind}: ${e.text}`);
     }
-  } else { console.log("usage: guard.mjs check|recycle <pid>|recycle-all [overMB]|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
+  } else { console.log("usage: guard.mjs check|recycle <pid>|recycle-all [overMB]|close <pid>|close-stale [minIdle]|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
 }

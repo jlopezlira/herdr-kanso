@@ -205,3 +205,16 @@ test("guard panel: agents grouped, estimate, batch progress", async () => {
   assert.equal(cut.interrupted, true);
   assert.deepEqual(m.groupAgents(agents, "t9").ready.batchable.map((a) => a.pid), [2, 1]);
 });
+
+test("guard panel: stale agents to close, oldest first, never the focused one", async () => {
+  const m = await load("kanso-guard/model.js", ["staleAgents"]);
+  const agents = [
+    { pid: 1, kind: "claude", status: "idle", idleMin: 5000, terminal: "t1" },
+    { pid: 2, kind: "claude", status: "idle", idleMin: 9000, terminal: "t2" },
+    { pid: 3, kind: "claude", status: "working", idleMin: null, terminal: "t3" },
+    { pid: 4, kind: "grok", status: "idle", idleMin: 0, terminal: "t4" },
+    { pid: 5, kind: "claude", status: "idle", idleMin: 100, terminal: "t5" },
+  ];
+  assert.deepEqual(m.staleAgents(agents, 2880, "t1").map((a) => a.pid), [2]);
+  assert.deepEqual(m.staleAgents(agents, 2880).map((a) => a.pid), [2, 1]);
+});
