@@ -153,7 +153,8 @@ export default class Memory extends View {
    * again a few seconds later, and once more after that.
    */
   act(key, args, done, cx) {
-    if (this.closed || this.busy[key]) return;
+    // One action at a time: two recycles never race each other.
+    if (this.closed || this.busy[key] || Object.keys(this.busy).some((k) => k !== "check")) return;
     this.busy[key] = { at: Date.now(), done };
     cx.notify();
     cx.spawn(async (actCx) => {

@@ -249,12 +249,6 @@ async function recycle(pid, reason, { manual = false } = {}) {
   const name = g.labels?.["kanso.name"] || s.name || term;
   const recent = recentEvents(400).find((e) => e.kind === "recycle" && e.session === s.sessionId && Date.now() - e.at < 6 * HOUR);
   if (recent && !manual) return skip(pid, "it was recycled less than 6 hours ago");
-  // Never under your hands: not the agent you are on, not while you type.
-  if (!manual) {
-    const focused = await run("herdr-app", ["status"], 10_000);
-    try { if (JSON.parse(focused.stdout).agent === term) return skip(pid, "it is the agent you are on"); } catch {}
-    if ((await idleSeconds()) < 120) return skip(pid, "you are typing");
-  }
 
   const before = (await footprints([pid])).get(pid) ?? 0;
   const argv = resumeArgv(g.foreground.argv ?? [], s.sessionId);
@@ -264,6 +258,14 @@ async function recycle(pid, reason, { manual = false } = {}) {
   // Right before /exit: still idle, still the same idle spell.
   const again = readJSON(join(SESSIONS, `${pid}.json`));
   if (again?.status !== "idle" || again.statusUpdatedAt !== s.statusUpdatedAt) return skip(pid, "it started working again");
+  // Never under your hands: not the agent you are on, not while you type.
+  if (!manual) {
+    const st = await run("herdr-app", ["status"], 10_000);
+    let on = null;
+    try { on = JSON.parse(st.stdout).agent ?? null; } catch { return skip(pid, "the window did not say which agent you are on"); }
+    if (on === term) return skip(pid, "it is the agent you are on");
+    if ((await idleSeconds()) < 120) return skip(pid, "you are typing");
+  }
   const still = await hcJSON(["get", term], 5000);
   if (still?.foreground?.pid !== pid || still.pid !== g.pid || !claudeSession(pid, await processes())) return skip(pid, "its terminal changed");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
@@ -532,10 +534,10 @@ async function check({ act = true, locked = false } = {}) {
     writeNow(snap, state, helpers);
     if (act) {
       await guardWindow(snap.win, state);
-      await reap(snap.procs, snap.win.pid);
+      const ended = await reap(snap.procs, snap.win.pid);
       await recycleDue(snap);
       await pressure(snap, state);
-      writeNow(snap, state, 0);
+      writeNow(snap, state, Math.max(0, helpers - ended));
     }
     writeJSON(join(DATA, "state.json"), state);
   } finally { release(); }
