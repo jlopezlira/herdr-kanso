@@ -103,7 +103,7 @@ export default class Memory extends View {
   /** Hidden: no timer, nothing kept. */
   sleep() {
     this.awake = false;
-    for (const handle of [this.ticker, ...this.timers]) {
+    for (const handle of [this.ticker, this.batchTimer, ...this.timers]) {
       try { handle?.cancel(); } catch { /* already gone */ }
     }
     this.ticker = null;
@@ -115,7 +115,7 @@ export default class Memory extends View {
 
   close() {
     this.closed = true;
-    for (const handle of [this.ticker, this.commandTask, ...this.timers]) {
+    for (const handle of [this.ticker, this.batchTimer, this.commandTask, ...this.timers]) {
       try { handle?.cancel(); } catch { /* already gone */ }
     }
   }
@@ -144,10 +144,9 @@ export default class Memory extends View {
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
       this.settle();
       // While a batch runs, follow it closely.
-      if (this.batch && !this.batch.finished) {
-        this.timers.push(readCx.timer.after(4000, (timerCx) => this.read(timerCx)));
-        while (this.timers.length > 12) { try { this.timers.shift()?.cancel(); } catch { /* already gone */ } }
-      }
+      // One follow-up timer at most, never a chain per read.
+      try { this.batchTimer?.cancel(); } catch { /* already gone */ }
+      this.batchTimer = this.batch && !this.batch.finished ? readCx.timer.after(4000, (timerCx) => { this.batchTimer = null; this.read(timerCx); }) : null;
       readCx.notify();
     });
   }
@@ -356,10 +355,11 @@ export default class Memory extends View {
 
   agents(c, data) {
     const list = data.agents;
-    const { ready, working, other } = groupAgents(list);
+    const { ready, working, other } = groupAgents(list, data.focused);
+    const batchable = ready.batchable;
     const limit = data.limits.agentMB;
     const over = num(data.limits.pressureAgentMB) ?? 500;
-    const heavy = ready.filter((a) => a.mb >= over);
+    const heavy = batchable.filter((a) => a.mb >= over);
     const batchBusy = Boolean(this.busy.batch) || Boolean(this.batch && !this.batch.finished);
     const counts = [
       ready.length ? `${ready.length} ready` : null,
@@ -369,10 +369,10 @@ export default class Memory extends View {
     const armedAll = this.armed.is("all"), armedHeavy = this.armed.is("heavy");
     const actions = h_flex().w_full().flex_wrap().gap_x(G.xl).gap_y(G.sm).items_center()
       .child(quietLink("guard-recycle-all",
-        armedAll ? `Press again to recycle ${ready.length}` : `Recycle all ${ready.length} idle · about ${size(freedEstimate(ready))} back`,
+        armedAll ? `Press again to recycle ${batchable.length}` : `Recycle all ${batchable.length} idle · about ${size(freedEstimate(batchable))} back`,
         (cx) => this.armed.press("all", cx, (cx) => this.recycleAll(0, cx)), c,
         { color: armedAll ? c.red : c.text, size: 13, label: "Recycle every idle agent" }))
-      .when(heavy.length > 0 && heavy.length < ready.length, (el) => el.child(quietLink("guard-recycle-heavy",
+      .when(heavy.length > 0 && heavy.length < batchable.length, (el) => el.child(quietLink("guard-recycle-heavy",
         armedHeavy ? `Press again to recycle ${heavy.length}` : `Only the ${heavy.length} over ${size(over)}`,
         (cx) => this.armed.press("heavy", cx, (cx) => this.recycleAll(over, cx)), c,
         { color: armedHeavy ? c.red : c.muted, size: 13 })));
@@ -382,7 +382,8 @@ export default class Memory extends View {
         .when(list.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("None running.")))
         .when(Boolean(counts), (el) => el.child(div().text_size(12).text_color(c.dim).child(counts)))
         .when(Boolean(this.batch), (el) => el.child(this.batchView(c)))
-        .when(!batchBusy && ready.length > 0, (el) => el.child(actions)))
+        .when(!batchBusy && batchable.length > 0, (el) => el.child(actions))
+        .when(!batchBusy && ready.length > 0 && batchable.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Only the agent you are on is idle; it is never recycled in bulk."))))
       .when(ready.length > 0, (el) => el.child(this.group(c, "Ready to recycle", ready, { limit, action: !batchBusy })))
       .when(working.length > 0, (el) => el.child(this.group(c, "Working", working, { limit })))
       .when(other.length > 0, (el) => el.child(this.group(c, "Can't be recycled", other, { limit, reason: true })));
@@ -391,14 +392,16 @@ export default class Memory extends View {
   /** A recycle-all: how far it got, agent by agent. */
   batchView(c) {
     const b = this.batch;
-    const head = b.finished
+    const head = b.error ? b.error
+      : b.interrupted ? `Stopped after ${b.done.length} of ${b.total} · ${size(b.freed)} back`
+      : b.finished
       ? (b.total ? `Recycled ${b.ok} of ${b.total} · ${size(b.freed)} back` : "Nothing was ready to recycle")
       : `Recycling ${Math.min(b.done.length + 1, b.total)} of ${b.total}${b.current ? ` · ${b.current}` : ""}`;
     return v_flex().w_full().gap(G.xs).py(G.sm)
       .child(h_flex().w_full().items_center().gap(G.sm)
         .when(!b.finished, (el) => el.child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE)))
         .child(div().flex_1().min_w(0).text_size(13).text_color(c.text).child(head))
-        .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; cx.notify(); }, c, { size: 11.5 }))))
+        .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; delete this.busy.batch; cx.notify(); }, c, { size: 11.5 }))))
       .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(2).id(`guard-batch-${i}`)
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
         .child(div().flex_none().text_size(12).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
@@ -428,7 +431,8 @@ export default class Memory extends View {
           .when(a.status === "working", (el) => el.child(breathe(div().size(5).flex_none().rounded_full().bg(c.accent), PULSE)))
           .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(reason ? c.muted : c.text).child(a.name || a.kind || String(a.pid))))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md)
-          .children(agentMeta(a).map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part))))
+          .children([...agentMeta(a), ...(a.terminal && a.terminal === this.now?.data?.focused ? ["you are on it"] : [])]
+            .map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part))))
         .when(reason && Boolean(a.why), (el) => el.child(div().text_size(11).text_color(c.dim).child(a.why))))
       .child(v_flex().flex_none().items_end().gap(2)
         .child(h_flex().items_center().gap(G.md)

@@ -174,9 +174,11 @@ export const FRESH_MB = 230;
  * The agents in three groups: ready (idle, can be recycled, heaviest first),
  * working, and the rest (each with why it can't be recycled).
  */
-export function groupAgents(agents = []) {
+export function groupAgents(agents = [], focused = null) {
   const bySize = (a, b) => (num(b.mb) ?? 0) - (num(a.mb) ?? 0);
   const ready = agents.filter((a) => a.recyclable).sort(bySize);
+  // What "Recycle all" takes: everyone ready but the agent you are on.
+  ready.batchable = ready.filter((a) => !focused || a.terminal !== focused);
   const working = agents.filter((a) => !a.recyclable && a.status === "working").sort(bySize);
   const other = agents.filter((a) => !a.recyclable && a.status !== "working").sort(bySize);
   return { ready, working, other };
@@ -193,9 +195,14 @@ export const freedEstimate = (list) => list.reduce((sum, a) => sum + Math.max(0,
 export function parseBatch(text, now = Date.now()) {
   let b;
   try { b = JSON.parse(text ?? ""); } catch { return null; }
-  if (!b || typeof b !== "object" || !num(b.at) || !num(b.total)) return null;
+  if (!b || typeof b !== "object" || !num(b.at) || num(b.total) === null) return null;
   const done = Array.isArray(b.done) ? b.done : [];
-  if (b.finished ? now - (num(b.finishedAt) ?? b.at) > 10 * 60_000 : now - b.at > 15 * 60_000) return null;
+  // A running batch saves at least once per agent; one silent for 5 minutes
+  // was cut short (the guard stopped or the machine slept).
+  const beat = num(b.beat) ?? b.at;
+  const interrupted = !b.finished && now - beat > 5 * 60_000;
+  const ended = b.finished ? (num(b.finishedAt) ?? beat) : beat;
+  if ((b.finished || interrupted) && now - ended > 10 * 60_000) return null;
   const freed = done.reduce((sum, d) => sum + (d.ok ? Math.max(0, (num(d.beforeMB) ?? 0) - (num(d.afterMB) ?? num(d.beforeMB) ?? 0)) : 0), 0);
-  return { at: b.at, total: b.total, done, current: b.current ?? null, finished: Boolean(b.finished), ok: done.filter((d) => d.ok).length, freed, skippedFocused: b.skippedFocused ?? null, overMB: num(b.overMB) ?? 0 };
+  return { at: b.at, total: b.total, done, current: b.current ?? null, finished: Boolean(b.finished) || interrupted, interrupted, error: b.error ?? null, ok: done.filter((d) => d.ok).length, freed, skippedFocused: b.skippedFocused ?? null, overMB: num(b.overMB) ?? 0 };
 }

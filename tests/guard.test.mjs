@@ -200,4 +200,8 @@ test("guard panel: agents grouped, estimate, batch progress", async () => {
   assert.equal(running.freed, 580);
   assert.equal(m.parseBatch(JSON.stringify({ at: now - 3_600_000, total: 1, done: [], finished: true, finishedAt: now - 3_600_000 }), now), null);
   assert.equal(m.parseBatch("not json", now), null);
+  assert.equal(m.parseBatch(JSON.stringify({ at: now, total: 0, done: [], finished: true, finishedAt: now }), now).total, 0);
+  const cut = m.parseBatch(JSON.stringify({ at: now - 7 * 60_000, beat: now - 6 * 60_000, total: 3, done: [], finished: false }), now);
+  assert.equal(cut.interrupted, true);
+  assert.deepEqual(m.groupAgents(agents, "t9").ready.batchable.map((a) => a.pid), [2, 1]);
 });

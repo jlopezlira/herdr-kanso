@@ -30,9 +30,7 @@ import { fileURLToPath } from "node:url";
 
 const HOME = homedir();
 const APP_HOME = process.env.HERDR_APP_HOME || join(HOME, ".config/herdr-app");
-// Another herdr-core session (HC_SESSION, e.g. a demo) keeps its own record,
-// so trying the guard there never shows up in your Memory panel.
-const DATA = join(APP_HOME, "data/kanso-guard", ...(process.env.HC_SESSION && process.env.HC_SESSION !== "default" ? ["sessions", process.env.HC_SESSION.replace(/[^\w.-]/g, "_")] : []));
+const DATA = join(APP_HOME, "data/kanso-guard");
 const SELF = fileURLToPath(import.meta.url);
 const LABEL = "dev.kanso.guard";
 const PLIST = join(HOME, "Library/LaunchAgents", `${LABEL}.plist`);
@@ -130,6 +128,12 @@ async function windowPid() {
   const r = await run("lsof", ["-t", join(APP_HOME, "herdr-app.sock")], 5000);
   const pid = Number(r.stdout.trim().split("\n")[0]);
   return pid > 0 ? pid : null;
+}
+
+/** The terminal of the agent you are on, from the window; undefined when it can't say. */
+async function focusedTerminal() {
+  const r = await run("herdr-app", ["status"], 10_000);
+  try { return r.ok ? (JSON.parse(r.stdout).agent ?? null) : undefined; } catch { return undefined; }
 }
 
 async function windowOOM() {
@@ -234,7 +238,7 @@ export function resumeArgv(argv, session) {
 }
 const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replace(/'/g, `'\\''`)}'`);
 
-async function recycle(pid, reason, { manual = false } = {}) {
+async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) {
   const procs = await processes();
   const s = claudeSession(pid, procs);
   if (!s) return skip(pid, "its Claude session record was not found for this process");
@@ -261,12 +265,13 @@ async function recycle(pid, reason, { manual = false } = {}) {
   const again = readJSON(join(SESSIONS, `${pid}.json`));
   if (again?.status !== "idle" || again.statusUpdatedAt !== s.statusUpdatedAt) return skip(pid, "it started working again");
   // Never under your hands: not the agent you are on, not while you type.
-  if (!manual) {
-    const st = await run("herdr-app", ["status"], 10_000);
-    let on = null;
-    try { on = JSON.parse(st.stdout).agent ?? null; } catch { return skip(pid, "the window did not say which agent you are on"); }
+  // A batch you started checks focus only (you just clicked, so you are not
+  // typing into an agent).
+  if (!manual || focusOnly) {
+    const on = await focusedTerminal();
+    if (on === undefined) return skip(pid, "the window did not say which agent you are on");
     if (on === term) return skip(pid, "it is the agent you are on");
-    if ((await idleSeconds()) < 120) return skip(pid, "you are typing");
+    if (!manual && (await idleSeconds()) < 120) return skip(pid, "you are typing");
   }
   const still = await hcJSON(["get", term], 5000);
   if (still?.foreground?.pid !== pid || still.pid !== g.pid || !claudeSession(pid, await processes())) return skip(pid, "its terminal changed");
@@ -326,20 +331,27 @@ function skip(pid, why) { lastOutcome = { ok: false, why }; console.log(`not rec
 // batch.json says how far it got, for the Memory panel.
 async function recycleBatch(overMB = 0) {
   const snap = await sample();
-  const st = await run("herdr-app", ["status"], 10_000);
-  let focused = null;
-  try { focused = JSON.parse(st.stdout).agent ?? null; } catch {}
-  const list = snap.agents.filter((a) => a.recyclable && a.mb >= overMB && a.terminal !== focused).sort((a, b) => b.mb - a.mb);
-  const batch = { at: Date.now(), overMB, total: list.length, current: null, done: [], skippedFocused: snap.agents.some((a) => a.recyclable && a.mb >= overMB && a.terminal === focused) ? focused : null, finished: false };
-  const save = () => writeJSON(join(DATA, "batch.json"), batch);
+  const focused = snap.focused;
+  const batch = { at: Date.now(), beat: Date.now(), owner: process.pid, overMB, total: 0, current: null, done: [], skippedFocused: null, finished: false };
+  const save = () => { batch.beat = Date.now(); writeJSON(join(DATA, "batch.json"), batch); };
+  if (focused === undefined) {
+    batch.finished = true; batch.finishedAt = Date.now(); batch.error = "The window did not say which agent you are on, so nothing was recycled.";
+    save(); event("error", batch.error); return;
+  }
+  const want = snap.agents.filter((a) => a.recyclable && a.mb >= overMB);
+  const list = want.filter((a) => a.terminal !== focused).sort((a, b) => b.mb - a.mb);
+  batch.total = list.length;
+  batch.skippedFocused = want.some((a) => a.terminal === focused) ? focused : null;
   save();
   event("recycle-batch", list.length ? `Recycling ${list.length} ${list.length === 1 ? "agent" : "agents"}${overMB ? ` over ${overMB} MB` : ""}` : "Nothing to recycle");
   for (const a of list) {
     batch.current = a.name; save();
     lastOutcome = null;
-    const ok = await recycle(a.pid, overMB ? `all over ${overMB} MB, asked from Memory` : "all idle, asked from Memory", { manual: true });
+    const ok = await recycle(a.pid, overMB ? `all over ${overMB} MB, asked from Memory` : "all idle, asked from Memory", { manual: true, focusOnly: true });
     batch.done.push({ name: a.name, terminal: a.terminal, ok, beforeMB: lastOutcome?.beforeMB ?? a.mb, afterMB: lastOutcome?.afterMB ?? null, why: ok ? null : lastOutcome?.why ?? "not recycled" });
     batch.current = null; save();
+    // The panel's picture stays fresh while the batch holds the lock.
+    await check({ act: false, locked: true });
   }
   batch.finished = true; batch.finishedAt = Date.now(); save();
   const freed = batch.done.reduce((s, d) => s + (d.ok ? Math.max(0, d.beforeMB - (d.afterMB ?? d.beforeMB)) : 0), 0);
@@ -497,7 +509,7 @@ async function sample() {
     .map((p) => ({ pid: p.pid, name: p.command.startsWith("claude") || /^\d+\.\d+\.\d+$/.test(p.name) ? "claude" : p.name, mb: fp0.get(p.pid) ?? p.rssMB, ageMin: p.ageMin, agent: agentPids.has(p.pid) }))
     .sort((a, b) => b.mb - a.mb).slice(0, 8);
   return {
-    procs, win, agents, heaviest,
+    procs, win, agents, heaviest, focused: await focusedTerminal(),
     machine: { totalMB: Math.round(Number(memsize.stdout) / MB), freePct: Number(level.stdout) || 0, swapMB: Math.round(swapUsed), swapTotalMB: Math.round(swapTotal) },
     core: { mb: corePids.reduce((s, p) => s + (fp0.get(p) ?? 0), 0) },
   };
@@ -505,7 +517,7 @@ async function sample() {
 
 function writeNow(snap, state, helpers) {
   writeJSON(join(DATA, "now.json"), {
-    v: 1, at: Date.now(), machine: snap.machine, window: snap.win, core: snap.core,
+    v: 1, at: Date.now(), machine: snap.machine, window: snap.win, core: snap.core, focused: snap.focused ?? null,
     agents: snap.agents.map(({ shellPid, argv, ...a }) => a).sort((a, b) => b.mb - a.mb),
     heaviest: snap.heaviest, helpers, limits, paused: Boolean(state.paused), events: recentEvents(40),
   });
