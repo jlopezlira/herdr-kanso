@@ -1,8 +1,8 @@
 <p align="center">
-  <a href="https://jlopezlira.github.io/herdr-kanso/"><img src="docs/logo.svg" width="96" height="96" alt="Kanso"></a>
+  <a href="https://jlopezlira.github.io/herdr-kanso/"><img src="docs/logo.svg" width="96" height="96" alt="kansō"></a>
 </p>
 
-<h1 align="center">Kanso</h1>
+<h1 align="center">kansō</h1>
 
 <p align="center"><b>More agents. Less babysitting.</b></p>
 
