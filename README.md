@@ -4,9 +4,9 @@
 
 <h1 align="center">kansō</h1>
 
-<p align="center"><b>More agents. Less babysitting.</b></p>
+<p align="center"><b>Run them all. Miss nothing.</b></p>
 
-<p align="center">Every agent gets a readable pane, the one waiting on you comes first, and idle sessions recycle on the same conversation so your machine lasts weeks. A layout for <a href="https://herdr.dev">Herdr</a>.</p>
+<p align="center">Every agent in view, the one that needs you first, and a machine that holds up for weeks. A layout for <a href="https://herdr.dev">Herdr</a>.</p>
 
 <p align="center">
   <a href="https://jlopezlira.github.io/herdr-kanso/">Website</a> ·
