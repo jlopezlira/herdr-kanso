@@ -256,7 +256,7 @@ export default class Strip extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         let c;
-        try { c = await nextCommand(); } catch { break; }
+        try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
         this.command(String(c).replace(/^kanso-strip\./, ""));
         this.seq++;
         cx.notify();
@@ -545,7 +545,9 @@ export default class Strip extends View {
     const side = drop?.to === pane ? drop.side : null;
     const ink = on || st === "blocked"; // full ink: the selected pane, and one that needs you
     // A pinned pane stays on its side of the view: a pin by its title says so.
-    const pinned = strip && Boolean(shared(KEY)?.[p.tab]?.cols?.find((c) => c.panes?.includes(pane))?.pin);
+    const cols = strip ? shared(KEY)?.[p.tab]?.cols ?? [] : [];
+    const col = cols.findIndex((c) => c.panes?.includes(pane));
+    const pinned = Boolean(cols[col]?.pin);
     const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
     // Not while it works; and only when there is something to say.
     const d = st !== "working" ? shared(DIGEST)?.[pane] : null;
@@ -1240,6 +1242,8 @@ export default class Strip extends View {
         .children(c.panes.map((id, r) => div().id(`strip-cell-${id}`).w(w).h(k > 1 ? 2 : 4).rounded_full()
           .bg(at?.ci === i && at?.ri !== r ? t.muted : tone)));
     });
+    // Turned off in Kanso settings: the model above still runs, nothing is drawn.
+    if ((shared("kanso.hidden") ?? []).includes?.("strip.minimap")) return div();
     const n = st.n ?? DEFAULT_N;
     const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
       .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)
@@ -1248,7 +1252,6 @@ export default class Strip extends View {
       .child(label);
     return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()
       .on_mouse_up("left", () => { if (shared("strip.drag")) endDrag(); }) // a held pane let go here goes back
-      .tooltip("⌘1-9 go to · ⌘[ ⌘] previous, next · ⌘D new · ⌘W close · ⌘⇧[ ⌘⇧] move · ⌘⇧- ⌘⇧= panes per view")
       .on_scroll_wheel((ev) => this.wheel(ev, st))
       .children(pills)
       .child(div().w(8))

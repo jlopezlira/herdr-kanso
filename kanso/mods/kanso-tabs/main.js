@@ -5,7 +5,7 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder } from "herdr";
+import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand } from "herdr";
 import { stateMark, programIcon } from "./marks.js";
 import { walkLayout, commitLayout } from "./layout.js";
 
@@ -79,7 +79,6 @@ function setPanelOn(id, on) {
 }
 
 const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
-const openPanels = () => openOverlay({ mod: "kanso-tabs", kind: "popup", width: 240, height: 48 + panelList().length * 32, props: { arrange: true } });
 
 function panelContent(id) {
   if (PANELS[id]) return { ...PANELS[id] };
@@ -109,7 +108,33 @@ export default class Tabs extends View {
     try { given = props(); } catch { /* a host without props */ }
     this.arrange = Boolean(given?.arrange);
     this.panels = storedObject("panels");
-    if (!this.arrange && cx) this.watchOpens(cx);
+    if (!this.arrange && cx) {
+      this.watchOpens(cx);
+      // Keys (keys.json): ⌘⌥1-9 shows a tab by position, ⌃⇧1-9 opens or
+      // closes a panel by its place in the bar.
+      cx.spawn(async (cx) => {
+        for (;;) {
+          let c;
+          try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
+          this.command(String(c).replace(/^kanso-tabs\./, ""));
+          cx.notify();
+        }
+      });
+    }
+  }
+
+  // A key's command; a tab or panel that isn't there is nothing to do.
+  command(name) {
+    const tab = /^tab-(\d)$/.exec(name), panel = /^panel-(\d)$/.exec(name);
+    if (tab) {
+      const tabs = spaces().find((s) => s.active)?.tabs ?? [];
+      if (Number(tab[1]) <= tabs.length) run("tab.select", { index: Number(tab[1]) });
+    } else if (panel) {
+      const p = panelList().filter((x) => x.on)[Number(panel[1]) - 1];
+      if (!p) return;
+      const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
+      this.mount(now === p.id ? null : p.id);
+    }
   }
 
   // Markdown opened from outside Herdr (Cmd-click on a path in a terminal,
@@ -213,34 +238,7 @@ export default class Tabs extends View {
     this.wheelSum = 0;
   }
 
-  // The Panels popup: every panel, dragged into order, each with its switch.
-  arrangeView() {
-    const t = theme();
-    const stop = (_e, cx) => cx.stop_propagation();
-    const row = (p) => {
-      const target = this.dragPanel && this.dragPanel !== p.id;
-      return h_flex().id(`arrange-${p.id}`).h(30).px(8).gap(8).items_center().rounded(6).flex_none()
-        .bg(this.dragPanel === p.id ? t.foreground + "12" : CLEAR)
-        .hover((s) => s.bg(target ? t.foreground + "1a" : t.foreground + "0a"))
-        .on_mouse_down("left", (_e, cx) => { this.dragPanel = p.id; cx.notify(); })
-        .on_mouse_up("left", (_e, cx) => { const from = this.dragPanel; this.dragPanel = null; if (from && from !== p.id) movePanel(from, p.id); cx.notify(); })
-        .child(svg(`${ICON}grip-vertical.svg`).size(13).text_color(t.dim))
-        .child(p.icon ? svg(p.icon).size(15).text_color(p.on ? t.foreground : t.dim) : div().size(15))
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(p.on ? t.foreground : t.muted).child(p.label))
-        .child(div().id(`arrange-on-${p.id}`).w(28).h(16).p(2).flex_none().rounded_full()
-          .bg(p.on ? t.accent : t.foreground + "1f")
-          .on_mouse_down("left", stop)
-          .on_click((_e, cx) => { setPanelOn(p.id, !p.on); cx.notify(); })
-          .child(div().size(12).rounded_full().bg(p.on ? (t.background ?? t.canvas) : t.muted).when(p.on, (el) => el.ml(12))));
-    };
-    return v_flex().size_full().p(6).gap(2)
-      .on_mouse_up("left", (_e, cx) => { this.dragPanel = null; cx.notify(); })
-      .child(div().px(8).pt(4).pb(6).text_size(11).text_color(t.dim).child("Panels: drag to order"))
-      .children(panelList().map(row));
-  }
-
   render() {
-    if (this.arrange) return this.arrangeView();
     const t = theme();
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
@@ -253,6 +251,7 @@ export default class Tabs extends View {
     // The pill under the chosen tab: the tabs' widths (measured as they are
     // drawn, kept) say where it goes, and it eases there natively.
     this.tabW ??= {};
+    for (const id of Object.keys(this.tabW)) if (!shown.some((c) => c.id === id)) delete this.tabW[id]; // tabs gone take their width with them
     let at = null, x = 0;
     for (const c of shown) { const w = this.tabW[c.id]; if (c.active && w) at = { left: x, width: w }; x += (w ?? 0) + 2; }
     const tabPill = at && shown.every((c) => this.tabW[c.id])
@@ -282,8 +281,13 @@ export default class Tabs extends View {
     };
     const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");
     const now = this.openPanel(panel, body);
-    const shownPanels = panelList().filter((p) => p.on);
+    const allPanels = panelList();
+    const shownPanels = allPanels.filter((p) => p.on);
     const enabled = shownPanels.map((p) => p.id);
+    // Kanso settings lists the panels from here (it can't import this file).
+    const roster = allPanels.map((p) => ({ id: p.id, label: p.label }));
+    if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
+    const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
     // A panel turned off while open closes (a file's preview has no button to turn off).
@@ -291,8 +295,8 @@ export default class Tabs extends View {
     // Icons only: the name opens beside the icon while the pointer is on it,
     // and stays open on the panel that is open.
     // Pressed on one and let go on another, a button moves there; right-click
-    // opens the Panels popup.
-    const panelButton = (p) => {
+    // opens Kanso settings on Mods, where the order and the switches live.
+    const panelButton = (p, k) => {
       const on = now === p.id, target = this.dragPanel && this.dragPanel !== p.id;
       const named = !p.icon || on || this.hoverPanel === p.id;
       // The name slides open: its box eases from 0 to the text's width
@@ -318,7 +322,7 @@ export default class Tabs extends View {
           else if (from === p.id) this.mount(on ? null : p.id);
           cx.notify();
         })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openPanels(); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page: "mods" } }); })
         .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(15)))
         .child(name);
     };
@@ -333,9 +337,14 @@ export default class Tabs extends View {
         .child(button("tab-new", svg("mods/kanso-chrome/icons/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
           .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }))
         // A saved arrangement of agents, opened in a new tab (kanso-arrange).
-        .child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
-          .tooltip(window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements")))
-      .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton)))
+        .when(!hidden.has("tabs.arrange"), (el) => el.child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
+          .tooltip(window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements"))))
+      .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
+        // Kanso settings: keys, what shows, what's new. Fixed at the end of
+        // the bar, after the panels; not one of them, so it is neither dragged nor turned off.
+        .child(button("kanso-settings", svg("mods/kanso-chrome/icons/settings.svg").size(15),
+          () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page: "keys" } }))
+          .ml(4).tooltip(window()?.platform === "macos" ? "Kanso settings  ⌃⇧," : "Kanso settings  Ctrl+Shift+,")))
       .when(window()?.buttons, el => el.child(button("minimize", "−", () => run("window.minimize")))
         .child(button("maximize", "□", () => run("window.maximize")))
         .child(button("close-window", svg("mods/kanso-chrome/icons/close.svg").size(13), () => run("window.close"))));

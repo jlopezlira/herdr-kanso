@@ -131,6 +131,7 @@ export default class TokenSpend extends View {
         let command;
         try {
           command = await nextCommand();
+          commandCx.notify(); // a replaced build (hot reload, update) stops here, before acting
         } catch {
           break;
         }

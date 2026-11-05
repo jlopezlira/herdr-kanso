@@ -20,6 +20,27 @@ const TURN = 900;
 
 export const moving = () => window()?.active !== false;
 
+// A key as a small cap beside a name (Kanso settings lists the keys; the
+// rest of the window draws none).
+export function keycap(t, text, faint = false) {
+  return div().flex_none().h(16).px(5).rounded(4).bg(t.foreground + (faint ? "0c" : "14")).flex().items_center().justify_center()
+    .text_size(10.5).font_medium().text_color(faint ? t.dim : t.foreground).whitespace_nowrap().child(text);
+}
+
+// A chord as keys.json spells it ("cmd-shift-s"), as a person reads it: on
+// macOS the glyphs in their order (⌃⌥⇧⌘S), elsewhere "Ctrl+Alt+Shift+S".
+const MAC = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘", fn: "fn" };
+const OTHER = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Win", fn: "Fn" };
+const NAMES = { space: "Space", left: "←", right: "→", up: "↑", down: "↓", enter: "↩", escape: "Esc", tab: "⇥", backspace: "⌫", delete: "⌦", home: "Home", end: "End", pageup: "PgUp", pagedown: "PgDn" };
+const ORDER = ["ctrl", "alt", "shift", "cmd", "fn"];
+export function glyphs(chord, mac = window()?.platform !== "linux" && window()?.platform !== "windows") {
+  const parts = String(chord).split("-");
+  const key = parts.pop() === "" ? "-" : parts.length && chord.endsWith("--") ? "-" : chord.split("-").pop();
+  const mods = ORDER.filter((m) => parts.includes(m));
+  const name = NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key);
+  return mac ? `${mods.map((m) => MAC[m]).join("")}${name}` : [...mods.map((m) => OTHER[m]), name].join("+");
+}
+
 export function stateMark(t, status, size = 13, { idle = false } = {}) {
   const enso = (name, color) => svg(`${ICONS}${name}.svg`).size(size).flex_none().text_color(color);
   if (status === "working") { const ring = enso("working", t.working); return moving() ? ring.spin(TURN) : ring; }

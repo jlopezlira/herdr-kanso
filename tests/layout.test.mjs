@@ -264,4 +264,10 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
     ["space.new", { machine: "odin" }],
     ["space.new", { machine: "" }],
   ]);
+
+  // ⌃1-9 goes through Kanso: a space that isn't there is nothing, not an error.
+  calls.length = 0;
+  view.command("space-2", cx);
+  view.command("space-4", cx);
+  assert.deepEqual(calls, [["space.select", { index: 2 }]]);
 });

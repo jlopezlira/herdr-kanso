@@ -466,18 +466,20 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     status bar when nothing works); nothing on the tab or header.
   - The 7px corner dots on avatars (the collapsed rail, the strip's edge
     tabs) stay dots: a badge, too small for a mark.
-- **Motion**, all native (GPUI eases; no script runs per frame) and only
-  while the window is in front: marks.js `moving()` (ui.js `breathe()` in
-  the panels) turns every spin, loop and shimmer off behind other windows,
-  where a loop would keep the window drawing 30 frames a second for nobody;
-  kanso-spaces redraws every mod when the window comes forward or goes
-  behind (`kanso.front`). The view switch's thumb slides (`left`, 200 ms
-  ease-out); the wash under the chosen space, agent and tab is one pill per
-  list, absolute under the rows, gliding by `top` and `height` (220 ms) to
-  where the list, adding its rows' heights up as it is built, says the row
-  is (the tabs measure their widths); a group of rows folds by `height`
-  (220 ms, to the height it measured) and a new row grows into place; a
-  header's tools slide out by `width` left of the mark; a panel fades in.
+- **Motion**, native, only with the window in front: marks.js `moving()`
+  and ui.js `breathe()` still every spin, loop and shimmer behind other
+  windows; `kanso.front` flips so every mod redraws. The view switch's
+  thumb slides (`left`, 200 ms); one pill per list glides (`top`/`height`;
+  tabs `left`/`width`; 220 ms) to the chosen space, agent or tab; rows fold
+  by `height` (220 ms, measured) and a new row grows in; a header's tools
+  slide out by `width`; a panel fades in.
+- **Keys** (keys.json `layout:kanso`): ⌃1-9 a space, ⌘⌥1-9 a tab, ⌃⇧1-9 a
+  panel by its place, ⌃⌥P/S/T a view, ⌘1-9 a pane column, ⌃⇧, Kanso
+  settings; an empty key is quiet. No key hints in the window; Kanso
+  settings lists the keys.
+- **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
+  rebinds the above (to keys.json), Mods orders (arrows,
+  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new is the changelog.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
