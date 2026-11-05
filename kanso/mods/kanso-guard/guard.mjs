@@ -610,8 +610,22 @@ function treeOf(root, procs) {
 }
 
 /** The dev servers listening now: a terminal's, or started in a folder of your home (not ~/Library). */
+/** Each terminal's shell pid, from herdr-core (when no agent sample filled them). */
+async function loadShells() {
+  shellPids = new Map();
+  for (const t of (await hcJSON(["ls"]))?.terminals ?? []) {
+    if (t.state !== "live" || t.address.includes("/")) continue;
+    const g = await hcJSON(["get", t.address], 5000);
+    if (g?.pid) shellPids.set(Number(g.pid), t.address);
+  }
+}
+
+/** The dev servers listening now, or null when lsof could not say (nothing is concluded then). */
 async function serversNow(procs) {
-  const listen = parseListen((await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], 10_000)).stdout);
+  const ls = await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], 10_000);
+  // lsof exits 1 with no output when nothing listens; anything else unexplained is a failure.
+  if (ls.timedOut || (!ls.ok && (ls.stderr.trim() || ls.stdout.trim()))) return null;
+  const listen = parseListen(ls.stdout);
   const pids = [...listen.keys()];
   const cwds = new Map();
   if (pids.length) {
@@ -647,6 +661,10 @@ export function updatePorts(prev, now, at = Date.now()) {
   const live = new Set(now.map((x) => x.key));
   for (const x of now) {
     let rec = byKey.get(x.key);
+    if (rec?.ended) { // listening again after a look that missed it: it never ended
+      if (rec.ended.how === "exited") p.totals.exited = Math.max(0, p.totals.exited - 1);
+      if (rec.ended.how !== "stopped") rec.ended = null;
+    }
     if (!rec) {
       rec = { key: x.key, pid: x.pid, ports: x.ports, command: x.command, args: x.args, cwd: x.cwd, project: x.project, startedAt: x.startedAt, firstSeen: at, lastSeen: at, peakMB: x.mb, owner: x.owner, everLoose: !x.owner, ended: null };
       byKey.set(x.key, rec);
@@ -660,7 +678,10 @@ export function updatePorts(prev, now, at = Date.now()) {
   for (const rec of byKey.values()) {
     if (!rec.ended && !live.has(rec.key)) { rec.ended = { at, how: "exited", freedMB: 0 }; p.totals.exited++; }
   }
-  p.servers = [...byKey.values()].filter((r) => !r.ended || at - r.ended.at < 30 * DAY).sort((a, b) => b.firstSeen - a.firstSeen).slice(0, 300);
+  // At most 300: every running one, then the latest ended within 30 days.
+  const all = [...byKey.values()].filter((r) => !r.ended || at - r.ended.at < 30 * DAY);
+  const running = all.filter((r) => !r.ended), ended = all.filter((r) => r.ended).sort((a, b) => b.ended.at - a.ended.at);
+  p.servers = [...running, ...ended.slice(0, Math.max(0, 300 - running.length))].sort((a, b) => b.firstSeen - a.firstSeen);
   p.now = now.map(({ lstart, ...x }) => x);
   const active = now.length, loose = now.filter((x) => !x.owner).length, mb = now.reduce((t, x) => t + x.mb, 0);
   p.minutes = (p.minutes ?? []).filter((r) => at - r[0] < DAY);
@@ -676,16 +697,21 @@ export function updatePorts(prev, now, at = Date.now()) {
 
 async function samplePorts(procs) {
   const path = join(DATA, "ports.json");
-  writeJSON(path, updatePorts(readJSON(path), await serversNow(procs)));
+  const now = await serversNow(procs);
+  if (now) writeJSON(path, updatePorts(readJSON(path), now));
 }
 
 /** Stops a dev server Ports lists: TERM (KILL with `force`), and records what it gave back. */
-async function stopServer(pid, force = false) {
+async function stopServer(pid, force = false, shownStart = null) {
   const path = join(DATA, "ports.json");
+  await loadShells();
   const procs = await processes();
   const now = await serversNow(procs);
+  if (!now) { console.log("lsof could not list the servers"); return false; }
   const x = now.find((s) => s.pid === pid);
   if (!x) { console.log(`not a dev server Ports lists: ${pid}`); return false; }
+  // The row's start (from ps's elapsed time, to the minute): a pid reused by another process is left alone.
+  if (shownStart && x.startedAt && Math.abs(x.startedAt - shownStart) > 2 * MIN) { console.log(`pid ${pid} is another process now`); return false; }
   const tree = treeOf(pid, procs).map((p) => ({ pid: p.pid, lstart: p.lstart, mb: p.rssMB }));
   await run("kill", [force ? "-KILL" : "-TERM", String(pid)]);
   let after = null;
@@ -697,12 +723,12 @@ async function stopServer(pid, force = false) {
   const gone = (t) => after.get(t.pid) !== t.lstart;
   if (!gone(tree[0])) { event("skip", `${x.project ?? "A dev server"} did not stop yet${force ? "" : "; Stop again forces it"}`, { pid }); return false; }
   const freed = tree.filter(gone).reduce((t, p) => t + p.mb, 0);
-  const p = updatePorts(readJSON(path), now.filter((s) => s.pid !== pid));
+  // Recorded as listening first (one stopped before its first minute's look
+  // still counts as opened), then as stopped.
+  const p = updatePorts(readJSON(path), now);
   const rec = p.servers.find((r) => r.key === x.key);
-  if (rec) {
-    if (rec.ended?.how === "exited") p.totals.exited--; // this look counted it as exited
-    rec.ended = { at: Date.now(), how: "stopped", freedMB: freed };
-  }
+  if (rec) rec.ended = { at: Date.now(), how: "stopped", freedMB: freed };
+  p.now = (p.now ?? []).filter((s) => s.key !== x.key);
   p.totals.stopped++; p.totals.freedMB += freed;
   writeJSON(path, p);
   event("stop", `Stopped the dev server in ${x.project ?? "a folder"}${x.owner ? "" : " (no pane ran it)"}: ${freed} MB back`, { pid, freedMB: freed });
@@ -863,7 +889,7 @@ if (isMain) {
   };
   if (cmd === "check") await check();
   else if (cmd === "sample") await check({ act: false });
-  else if (cmd === "stop-server") await manual(async () => { process.exitCode = (await stopServer(Number(arg), process.argv[4] === "force")) ? 0 : 1; });
+  else if (cmd === "stop-server") await manual(async () => { const [p, start] = String(arg).split("@"); process.exitCode = (await stopServer(Number(p), process.argv[4] === "force", Number(start) || null)) ? 0 : 1; });
   else if (cmd === "close") await manual(async () => { process.exitCode = (await closeAgent(Number(arg), "asked from Memory")) ? 0 : 1; });
   else if (cmd === "close-stale") await manual(() => closeStale(arg !== undefined && Number.isFinite(Number(arg)) ? Number(arg) : limits.staleIdleMin));
   else if (cmd === "recycle-all") await manual(() => recycleBatch(Number(arg) || 0));

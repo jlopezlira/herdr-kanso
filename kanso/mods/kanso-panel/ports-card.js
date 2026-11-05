@@ -28,7 +28,7 @@ export function portsSpec(data, now = Date.now()) {
     hero: brag
       ? { big: String(s.stoppedLoose), small: s.stoppedLoose === 1 ? "server" : "servers", label: "left running by agents after their panes closed, found and stopped",
           delta: s.stoppedLooseMB ? { up: true, text: `${size(s.stoppedLooseMB)} of memory given back` } : null }
-      : { big: String(s.openedWeek), small: s.openedWeek === 1 ? "dev server" : "dev servers", label: "opened by my agents", delta: null },
+      : { big: String(s.openedWeek), small: s.openedWeek === 1 ? "dev server" : "dev servers", label: "opened in the last 7 days", delta: null },
     stats,
     note: "",
     // The week's chart once it holds two days or more (24 two-hour buckets).

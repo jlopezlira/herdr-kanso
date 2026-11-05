@@ -217,7 +217,8 @@ export class Ports {
     cx.spawn(async (cx) => {
       const viaGuard = await this.guardReady();
       if (viaGuard) {
-        const args = items.map((s) => (s.force ? `${s.pid}:force` : String(s.pid)));
+        // pid@start: the guard stops it only if that pid is still the process this row showed.
+        const args = items.map((s) => `${s.pid}@${Math.round(Date.now() - (s.secs ?? 0) * 1000)}${s.force ? ":force" : ""}`);
         await exec("sh", ["-c", DETACHED, "sh", "-c", STOP_LOOP, await this.node(), `${appHome()}/${GUARD_FILE}`, ...args]).catch(() => null);
       } else {
         for (const s of items) await exec("kill", [s.force ? "-KILL" : "-TERM", String(s.pid)]).catch(() => null);

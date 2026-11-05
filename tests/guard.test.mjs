@@ -318,7 +318,7 @@ test("ports share card: counts and sizes only, a brag once you stopped what agen
   quiet.servers = quiet.servers.filter((s) => !s.ended);
   quiet.hours = quiet.hours.slice(0, 20);
   const q = card.portsSpec(parsePorts(JSON.stringify(quiet), NOW).data, NOW);
-  assert.deepEqual(clone([q.hero.big, q.hero.label, q.right]), ["2", "opened by my agents", "last 7 days"]);
+  assert.deepEqual(clone([q.hero.big, q.hero.label, q.right]), ["2", "opened in the last 7 days", "last 7 days"]);
   assert.ok(q.stats.some((x) => x.unit === "given back"));
   assert.equal(q.blocks.length, 0, "less than two days reads as a blank");
 });
@@ -345,10 +345,14 @@ test("Ports stops a server through the guard, detached, and by itself without it
   assert.equal(view.hist.state, "ok");
   assert.equal(view.digest.series.day.peak, 5);
   calls.length = 0;
-  view.stop([{ pid: 42, owner: null }, { pid: 43, owner: null, force: true }], cx);
+  view.stop([{ pid: 42, owner: null, secs: 60 }, { pid: 43, owner: null, force: true, secs: 120 }], cx);
   await drain();
-  const guard = calls.find((c) => c[0] === "sh");
-  assert.deepEqual(clone(guard), ["sh", "-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', "sh", "-c", STOP_LOOP, "/opt/node", "/app/mods/kanso-guard/guard.mjs", "42", "43:force"]);
+  const guard = clone(calls.find((c) => c[0] === "sh"));
+  const [a42, a43] = guard.slice(-2);
+  assert.deepEqual(guard.slice(0, -2), ["sh", "-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', "sh", "-c", STOP_LOOP, "/opt/node", "/app/mods/kanso-guard/guard.mjs"]);
+  assert.match(a42, /^42@\d+$/, "each pid with the start the row showed");
+  assert.match(a43, /^43@\d+:force$/);
+  assert.ok(Math.abs(Date.now() - 60_000 - Number(a42.slice(3))) < 5000);
   assert.ok(!calls.some((c) => c[0] === "kill"), "no signal of its own");
   assert.ok(timers.includes(4000), "reads the history again after a few seconds");
 
@@ -376,4 +380,17 @@ test("guard: dev server history (opened, exited, minutes and hours)", async () =
   assert.equal(p.servers.find((s) => s.key === "1@1").peakMB, 260);
   assert.equal(p.servers.find((s) => s.key === "1@1").everLoose, true);
   assert.equal(p.hours.length, 1);
+});
+
+test("guard: a server missed by one look and back is still running; running ones are never dropped", async () => {
+  process.env.HERDR_APP_HOME ??= (await import("node:fs")).mkdtempSync(`${(await import("node:os")).tmpdir()}/kg-`);
+  const g = await import("../kanso/mods/kanso-guard/guard.mjs");
+  const a = { key: "1@1", pid: 1, ports: [3000], command: "node", args: "x", cwd: "/h/p", project: "p", owner: null, mb: 10, startedAt: 1 };
+  let p = g.updatePorts(null, [a], 1000);
+  p = g.updatePorts(p, [], 2000);
+  p = g.updatePorts(p, [a], 3000);
+  assert.deepEqual(clone([p.totals.opened, p.totals.exited, p.servers[0].ended]), [1, 0, null]);
+  const many = Array.from({ length: 301 }, (_, i) => ({ ...a, key: `${i}@${i}`, pid: i }));
+  p = g.updatePorts(g.updatePorts(null, many, 1000), many, 2000);
+  assert.equal(p.totals.opened, 301);
 });
