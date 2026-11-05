@@ -21,7 +21,7 @@ beside them.
 - **Read every agent.** Terminals sit on a horizontal strip and keep their
   width. A new pane opens beside the one you are in and the view glides to it.
   Nothing gets squeezed into a grid.
-- **Review without leaving.** Files, Changes and pull requests open beside your
+- **Review without leaving.** Files and pull requests open beside your
   agents: diffs, CI, unresolved threads, merge. One click starts an agent on a
   pull request's feedback.
 - **Take over in one key.** Cmd+Shift+O opens the agent's folder, its worktree
@@ -87,10 +87,9 @@ be previewed in the panel, with no editor at all.
 
 </details>
 
-### Read the diff, make the commit
+### Read your files
 
-The **Changes** panel puts changed files, inline diffs and a commit message next
-to your agents while they keep working. The **Files** panel previews code, and
+The **Files** panel previews code, and
 opens a Markdown file formatted, to read and edit where it reads: double-click
 a paragraph, a list, a heading or a table to edit just that block; what you
 type is saved as you go, and never over a change an agent made meanwhile. On
@@ -99,8 +98,6 @@ makes `.md` files open there from a Cmd-click in a terminal or Finder (and
 `uninstall` gives them back); nothing changes until you run it. The same
 editor is a window over any layout as the
 [markdown-panel](markdown-panel/RECIPE.md) mod.
-
-![A real Git diff and the native commit message field in Kanso's Changes panel.](docs/screenshots/changes.png)
 
 ### See what you shipped
 
@@ -369,7 +366,7 @@ With the mouse:
 
 ## Privacy: what it runs
 
-The mods run `git` (the spaces list, Files, Changes), `find` (listing a folder
+The mods run `git` (the spaces list, Files), `find` (listing a folder
 on Unix, with `bash` as a fallback) and `hc machine ls` (machines). They read
 files only inside the folders you work in.
 

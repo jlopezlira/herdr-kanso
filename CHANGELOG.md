@@ -8,7 +8,11 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
-## [2.9.0] - 2026-11-05
+## [3.0.0] - 2026-11-05
+
+### Removed
+
+- The Changes panel (changed files, diffs and a commit message). Agents commit on their own and the PR panel shows the diff, so it went unused while it took a place in the tab bar. A Changes panel left open closes by itself; Files and PR stay.
 
 ### Added
 

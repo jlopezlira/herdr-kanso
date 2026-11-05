@@ -78,7 +78,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         (13) shows on the active tab only when there is more than one tab.
       - After the tabs, a + (16 icon, 28 square) opens the shipped
         `new-menu`.
-      - At the right are the panel buttons: Files, Spend, Changes, PR,
+      - At the right are the panel buttons: Files, Spend, PR,
         Shipped, Worktrees, Ports and Memory, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
@@ -158,7 +158,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - Terminal padding is `[14, 10]`.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
-      told `files`, `changes`, `pr`, `shipped` or `worktrees` (`props.panel`), `kanso-spend`
+      told `files`, `pr`, `shipped` or `worktrees` (`props.panel`), `kanso-spend`
       (Spend), `kanso-guard` (Memory). A panel Kanso no longer has (Specs, before 2.0) closes.
       The Worktrees panel (`kanso-panel` with `worktrees`, `worktree.svg`) is
       drawn like PR and Spend. It searches the top folders of your spaces
@@ -704,7 +704,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     file watches and processes stop.
   - The open panel is remembered per space and restored when you switch
     spaces.
-  - Files, Changes and PR are idle whenever they aren't the shown panel.
+  - Files and PR are idle whenever they aren't the shown panel.
     PR rereads every minute while shown, every 20 s while a check runs.
 - **Background**:
   - Git runs only while Spaces shows (0.5 s in front, 5 s behind); the
@@ -846,7 +846,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   `app.settings`, `app.palette`, `mod.open` (`picker`, `machine-add`,
   `open-with`), `terminal.open`.
 - **Shipped overlays used**: `menu`, `new-menu`, `picker`, `machine-add`.
-- **Programs run**: `git` (spaces, Files, Changes), `sh` (Files listing),
+- **Programs run**: `git` (spaces, Files), `sh` (Files listing),
   `hc` (machines) and, for Open with, `sh`, `open`, `plutil` and `sips`
   (macOS) and the chosen editor. The PR panel runs `gh` (GitHub's API) and
   `git`, only while it is shown. Nothing else reaches the network.
@@ -948,7 +948,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - With no panel open, `panel-body` in the layout file has no children. After
   clicking Files it holds exactly one `files` block, and closing it empties
   it again.
-- With the panel closed, no process started by Files, Changes or Insights is
+- With the panel closed, no process started by Files or Insights is
   running.
 - A working agent shows the same turning arc on its tab, header,
   agent row and the status bar. A blocked one shows "Needs you" in its header and in the

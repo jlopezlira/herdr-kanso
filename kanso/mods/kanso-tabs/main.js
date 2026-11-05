@@ -1,7 +1,7 @@
 // Derived from the `tabs` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: segmented tab pill, outlined Files and Changes buttons, no bar background.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-tabs; a Specs panel button with the pending count and a needs-you dot (sdd.badge).
-// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs dropped; panel buttons are icons with their name on hover, dragged into any order, and turned on or off in a Panels popup (right-click one); trackpad scrolling moves one tab per swipe.
+// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs and Changes dropped; panel buttons are icons with their name on hover, dragged into any order, and turned on or off in a Panels popup (right-click one); trackpad scrolling moves one tab per swipe.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -23,7 +23,7 @@ function storedObject(key) {
 // you aren't looking at runs.
 // Each panel's block content: Files, Changes and PR are one mod (kanso-panel) told which panel it is.
 const PANELS = {
-  files: { mod: "kanso-panel", props: { panel: "files" } }, changes: { mod: "kanso-panel", props: { panel: "changes" } }, pr: { mod: "kanso-panel", props: { panel: "pr" } },
+  files: { mod: "kanso-panel", props: { panel: "files" } }, pr: { mod: "kanso-panel", props: { panel: "pr" } },
   shipped: { mod: "kanso-panel", props: { panel: "shipped" } },
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
@@ -45,7 +45,6 @@ const BUILTIN = [
   { id: "files", label: "Files", icon: `${ICON}file.svg` },
   // Spend (kanso-spend): costs per model, project and task.
   { id: "insights", label: "Spend", icon: `${ICON}chart.svg` },
-  { id: "changes", label: "Changes", icon: `${ICON}changes.svg` },
   // The open pull request of the focused branch: status, checks, reviews, threads, files, agent tasks.
   { id: "pr", label: "PR", icon: `${ICON}pull-request.svg` },
   // What you delivered: lines, pull requests, reviews, streak and records.
@@ -212,7 +211,7 @@ export default class Tabs extends View {
     // token-spend): mounted again with the one this version ships.
     else if (mounted && child?.id) {
       const want = panelContent(child.id);
-      // A panel Kanso no longer has (Specs): closed. A file's preview is
+      // A panel Kanso no longer has (Specs, Changes): closed. A file's preview is
       // opened by Files or Open with, with its own props, not by a button.
       if (!want) { if (child.id !== "preview") this.mount(null); return; }
       if (want?.mod && child.content?.mod && child.content.mod !== want.mod) this.mount(hidden ? null : child.id);
