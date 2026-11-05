@@ -1,6 +1,6 @@
 # Kanso
 
-Your agents in a row, not a grid. Kanso puts terminals on a horizontal strip:
+More agents. Less babysitting. Kanso puts terminals on a horizontal strip:
 a new agent opens beside the one you're in, at its own width, and the view
 slides to it. Nothing gets squeezed, so you can read what each one is doing.
 Next to them: your repos and worktrees, the diff, the pull request with its CI
