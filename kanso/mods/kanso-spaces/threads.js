@@ -35,7 +35,9 @@ done`;
 // a person (tool results left out), its last few KB. Files grow to tens of
 // MB, so only their first and last 4 MB are searched (Claude Code writes
 // the title again every few turns; the whole file only when the end has none).
-const READ = String.raw`f="$1"; said() { grep -h -e '"type":"user"' -e '"user_message"' | grep -v '"tool_result"'; }
+// Lines over 16 KB (a pasted image, in base64) are left out: they would only
+// fill the mod runtime's heap.
+const READ = String.raw`f="$1"; said() { grep -h -e '"type":"user"' -e '"user_message"' | grep -v '"tool_result"' | awk 'length($0) < 16000'; }
 t=$(tail -c 4000000 "$f" | grep -h '"type":"ai-title"' | tail -1)
 [ -n "$t" ] || t=$(grep -h '"type":"ai-title"' "$f" | tail -1)
 printf '%s\n\036\n' "$t"

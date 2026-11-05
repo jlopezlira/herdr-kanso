@@ -1,0 +1,328 @@
+#!/bin/zsh
+# kanso-guard: keeps a long Herdr session from taking the machine down.
+#
+# launchd runs `kanso-guard check` every 60 s (`kanso-guard install` sets it
+# up). Each check:
+#   1. writes one sample line (memory free, swap, Herdr window, herdr-core,
+#      the heaviest processes) to ~/.local/state/kanso-guard/samples.tsv, so
+#      the next time memory runs out there is a record of what grew;
+#   2. restarts the Herdr window when it grows past HERDR_MAX_MB or its mod
+#      runtime reports "out of memory". Terminals and agents live in
+#      herdr-core and keep running; only the window is replaced. While you
+#      are typing in it, the restart waits (up to GRACE_MIN minutes);
+#   3. ends helpers Kanso started (git, gh, lsof, ps, the spend presenter,
+#      the digest reader) that were left behind by a window that went away;
+#   4. recycles Claude Code agents that grew past AGENT_MAX_MB: only one that
+#      has been idle for AGENT_IDLE_MIN minutes, in a Herdr terminal. It is
+#      ended with /exit and started again in the same terminal with the same
+#      arguments plus `--resume <its session>`, so the conversation (and its
+#      compactions) carries on in a fresh process. One per check;
+#   5. when the machine itself runs low, notifies you with the processes that
+#      hold the most memory and how long they have been running.
+# It never ends a working agent, a terminal or herdr-core.
+#
+# Settings (environment, or ~/.config/kanso-guard.env):
+#   HERDR_MAX_MB=1200   window footprint that triggers a restart
+#   GRACE_MIN=15        longest wait for you to stop typing before restarting
+#   LOW_FREE_PCT=20     machine memory free (%) that triggers a notice
+#   NOTICE_EVERY_MIN=20 at most one low-memory notice per this many minutes
+#   AGENT_MAX_MB=900    agent footprint that makes it due for a recycle
+#   AGENT_IDLE_MIN=20   how long it must have been idle first
+#   AGENT_RECYCLE=1     0 turns recycling off (agents are still sampled)
+#
+# Commands: check | install | uninstall | status | log [n] | agents | recycle <pid>
+
+setopt null_glob
+export PATH="$HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+[[ -r "$HOME/.config/kanso-guard.env" ]] && source "$HOME/.config/kanso-guard.env"
+: ${HERDR_MAX_MB:=1200} ${GRACE_MIN:=15} ${LOW_FREE_PCT:=20} ${NOTICE_EVERY_MIN:=20}
+: ${AGENT_MAX_MB:=900} ${AGENT_IDLE_MIN:=20} ${AGENT_RECYCLE:=1}
+: ${HERDR_APP_HOME:=$HOME/.config/herdr-app}
+export HERDR_APP_HOME
+
+STATE="$HOME/.local/state/kanso-guard"
+SAMPLES="$STATE/samples.tsv"
+EVENTS="$STATE/events.log"
+LABEL="dev.kanso.guard"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+BIN="$HOME/.local/bin/kanso-guard"
+SELF=${0:A}
+mkdir -p "$STATE"
+
+now() { date +%s; }
+stamp() { date "+%Y-%m-%d %H:%M:%S"; }
+event() { print -r -- "$(stamp) $*" >> "$EVENTS"; }
+notify() { # title, body
+  /usr/bin/osascript -e 'on run a' -e 'display notification (item 2 of a) with title (item 1 of a)' -e 'end run' "$1" "$2" >/dev/null 2>&1
+}
+# Physical footprint in MB (what Activity Monitor calls Memory: resident plus
+# compressed), or 0 when the process is gone.
+footprint_mb() {
+  local line
+  line=$(/usr/bin/footprint -p "$1" 2>/dev/null | sed -n 's/.*Footprint: \([0-9.]*\) \([KMG]B\).*/\1 \2/p' | head -1)
+  [[ -z "$line" ]] && { print 0; return; }
+  local n=${line% *} u=${line#* }
+  case $u in KB) print $(( ${n%.*} / 1024 ));; GB) print $(( ${n%.*} * 1024 ));; *) print ${n%.*};; esac
+}
+# Seconds a pid has been running, from ps etime ([[dd-]hh:]mm:ss).
+age_s() {
+  local e d=0 h=0 m=0 s=0 rest
+  e=$(ps -o etime= -p "$1" 2>/dev/null | tr -d ' ') || return
+  [[ -z "$e" ]] && { print 0; return; }
+  if [[ $e == *-* ]]; then d=${e%%-*}; rest=${e#*-}; else rest=$e; fi
+  local -a p; p=(${(s.:.)rest})
+  case ${#p} in 3) h=$p[1] m=$p[2] s=$p[3];; 2) m=$p[1] s=$p[2];; 1) s=$p[1];; esac
+  print $(( 10#$d*86400 + 10#$h*3600 + 10#$m*60 + 10#$s ))
+}
+human_age() { local s=$1; (( s >= 86400 )) && { print "$((s/86400))d$(( (s%86400)/3600 ))h"; return; }; (( s >= 3600 )) && { print "$((s/3600))h$(( (s%3600)/60 ))m"; return; }; print "$((s/60))m"; }
+idle_s() { /usr/sbin/ioreg -c IOHIDSystem | awk '/HIDIdleTime/ {print int($NF/1e9); exit}'; }
+front_pid() { lsappinfo info -only pid "$(lsappinfo front)" 2>/dev/null | sed -n 's/.*pid = \([0-9]*\).*/\1/p' | head -1; }
+# The window serving HERDR_APP_HOME (a demo window on another home is not it).
+herdr_pid() {
+  local pid; pid=$(lsof -t "$HERDR_APP_HOME/herdr-app.sock" 2>/dev/null | head -1)
+  [[ -z "$pid" && "$HERDR_APP_HOME" == "$HOME/.config/herdr-app" ]] && pid=$(pgrep -x herdr-app | head -1)
+  print -r -- "$pid"
+}
+# herdr-core's processes (server and holders; not the window's `connect`).
+core_pids() { ps -axo pid=,command= | awk '$2 ~ /\/herdr-core$/ && $3 != "connect" {print $1}'; }
+
+# ---- 1. sample ---------------------------------------------------------------
+sample() {
+  FREE=$(sysctl -n kern.memorystatus_level 2>/dev/null || print 100)
+  SWAP=$(sysctl -n vm.swapusage | awk '{gsub("M","",$6); print int($6)}')
+  APP=$(herdr_pid)
+  APP_MB=0; [[ -n "$APP" ]] && APP_MB=$(footprint_mb "$APP")
+  CORE_MB=0
+  for p in $(core_pids); do (( CORE_MB += $(footprint_mb $p) )); done
+  # The heaviest processes by resident memory (cheap), as name:MB.
+  TOP=$(ps -axo rss=,pid=,comm= | sort -rn | head -6 | awk '{n=$3; sub(".*/","",n); printf "%s(%s):%dMB ", n, $2, $1/1024}')
+  [[ -s "$SAMPLES" ]] || print -r -- "time	free_pct	swap_mb	herdr_app_mb	herdr_core_mb	top" > "$SAMPLES"
+  print -r -- "$(stamp)	$FREE	$SWAP	$APP_MB	$CORE_MB	$TOP" >> "$SAMPLES"
+  # Keep about a week (10k lines at one a minute).
+  if (( $(wc -l < "$SAMPLES") > 12000 )); then
+    { head -1 "$SAMPLES"; tail -10000 "$SAMPLES"; } > "$SAMPLES.tmp" && mv "$SAMPLES.tmp" "$SAMPLES"
+  fi
+}
+
+# ---- 2. the Herdr window -------------------------------------------------------
+mods_oom() {
+  herdr-app status 2>/dev/null | /usr/bin/grep -qi "out of memory"
+}
+
+restart_window() { # reason
+  local pid=$(herdr_pid)
+  [[ -z "$pid" ]] && return
+  event "restart window pid=$pid ($1)"
+  herdr-app do app.quit >/dev/null 2>&1
+  for i in {1..20}; do kill -0 $pid 2>/dev/null || break; sleep 0.5; done
+  if kill -0 $pid 2>/dev/null; then kill -TERM $pid 2>/dev/null; sleep 2; fi
+  kill -0 $pid 2>/dev/null && kill -KILL $pid 2>/dev/null
+  sleep 1
+  local app; for app in "$HOME/Applications/Herdr.app" "/Applications/Herdr.app"; do [[ -d $app ]] && break; app=""; done
+  local -a env; env=(--env "HERDR_APP_HOME=$HERDR_APP_HOME"); [[ -n "$HC_SESSION" ]] && env+=(--env "HC_SESSION=$HC_SESSION")
+  if [[ -n "$app" ]]; then open -g -n $env "$app"
+  else (HERDR_APP_HOME="$HERDR_APP_HOME" nohup herdr-app >/dev/null 2>&1 &); fi
+  rm -f "$STATE/over_since"
+  notify "Herdr window restarted" "$1. Your terminals and agents kept running."
+}
+
+guard_window() {
+  [[ -z "$APP" ]] && { rm -f "$STATE/over_since"; return; }
+  local reason=""
+  if (( APP_MB > HERDR_MAX_MB )); then reason="The window used ${APP_MB} MB (limit ${HERDR_MAX_MB})"
+  elif mods_oom; then reason="Its mod runtime ran out of memory"; fi
+  [[ -z "$reason" ]] && { rm -f "$STATE/over_since"; return; }
+
+  local since; since=$(cat "$STATE/over_since" 2>/dev/null)
+  [[ -z "$since" ]] && { since=$(now); print $since > "$STATE/over_since"; event "over: $reason"; }
+  local waited=$(( $(now) - since ))
+  # Not while you are typing in it: when it is behind another app, after a
+  # minute without input, or once the grace period is over.
+  local front=$(front_pid) idle=$(idle_s)
+  if [[ "$front" != "$APP" ]] || (( idle >= 60 )) || (( waited >= GRACE_MIN * 60 )); then
+    restart_window "$reason"
+  elif [[ ! -e "$STATE/over_noticed" ]] || (( $(now) - $(stat -f %m "$STATE/over_noticed") > 600 )); then
+    touch "$STATE/over_noticed"
+    notify "Herdr will restart its window" "$reason. It restarts when you pause for a minute; terminals keep running."
+  fi
+}
+
+# ---- 3. helpers left behind ---------------------------------------------------
+# Only commands with Kanso's own signatures, started by the window (or left
+# by one that went away: parent launchd), running over 3 minutes: each of
+# them answers in seconds, so one that old is hung. Nothing you started
+# yourself matches these.
+reap() {
+  local pid ppid cmd
+  ps -axo pid=,ppid=,command= | while read -r pid ppid cmd; do
+    (( ppid == 1 )) || [[ "$ppid" == "$APP" ]] || continue
+    case "$cmd" in
+      *kanso-spend/presenter.mjs*|*"said() {"*|"git --no-optional-locks status --porcelain=v2"*|"lsof -nP -iTCP -sTCP:LISTEN -F pcn"*|"ps -axo pid=,ppid=,etime=,"*|"gh pr view --json number,title,body"*|"gh pr list --state open --limit 100 --json"*|"git ls-remote --tags --refs https://github.com/jlopezlira/herdr-kanso"*|*"ls-remote --tags --refs https://github.com/jlopezlira/herdr-kanso"*|"hc machine ls --json"*|*"herdr-app status"*) ;;
+      *) continue ;;
+    esac
+    (( $(age_s $pid) > 180 )) || continue
+    kill -TERM $pid 2>/dev/null && event "ended hung helper $pid (parent $ppid): ${cmd[1,120]}"
+  done
+  # Half-written copies of shared.json a crashed window left behind.
+  find "$HERDR_APP_HOME" -maxdepth 1 -name 'shared.json.tmp.*' -mmin +60 -delete 2>/dev/null
+}
+
+# ---- 4. agents that grew ---------------------------------------------------------
+# Claude Code writes ~/.claude/sessions/<pid>.json: session id, cwd, status
+# (busy/idle) and when that status began.
+CLAUDE_SESSIONS="$HOME/.claude/sessions"
+
+# pid footprint_mb idle_min session cwd, one line per live Claude agent.
+agent_rows() {
+  local f pid
+  for f in $CLAUDE_SESSIONS/<->.json; do
+    pid=${${f:t}%.json}
+    kill -0 $pid 2>/dev/null || continue
+    jq -r --arg mb "$(footprint_mb $pid)" --argjson now "$(now)" \
+      '[.pid, ($mb|tonumber), (if .status=="idle" then (($now*1000 - (.statusUpdatedAt // ($now*1000))) / 60000 | floor) else -1 end), .sessionId, .cwd, (.name // "")] | @tsv' "$f" 2>/dev/null
+  done
+}
+
+# The Herdr terminal whose program is this pid (address), from herdr-core.
+terminal_of() {
+  local t
+  for t in $(hc ls --json 2>/dev/null | jq -r '.terminals[] | select(.state=="live") | .address'); do
+    [[ "$(hc get $t --json 2>/dev/null | jq -r '.foreground.pid // empty')" == "$1" ]] && { print -r -- $t; return 0; }
+  done
+  return 1
+}
+
+# End the agent and start it again on its session, in the same terminal.
+recycle() { # pid [reason]
+  local pid=$1 reason=${2:-asked}
+  local f="$CLAUDE_SESSIONS/$pid.json"
+  [[ -r $f ]] || { print "no Claude session for pid $pid"; return 1; }
+  local sid=$(jq -r .sessionId $f) cwd=$(jq -r .cwd $f) st=$(jq -r .status $f) name=$(jq -r '.name // ""' $f)
+  [[ "$st" == idle ]] || { print "pid $pid is $st, not idle"; return 1; }
+  local t; t=$(terminal_of $pid) || { print "pid $pid is not in a Herdr terminal"; return 1; }
+  # Only where a shell stays behind to start it again.
+  [[ "$(hc get $t --json | jq -r .pid)" == "$pid" ]] && { print "pid $pid is the terminal's own program; nothing would restart it"; return 1; }
+  # Its own arguments, without a previous resume/continue, plus this session.
+  local -a argv; argv=("${(@f)$(hc get $t --json | jq -r '.foreground.argv[]')}")
+  local -a keep; local i=2
+  while (( i <= ${#argv} )); do
+    case ${argv[i]} in
+      --resume|-r|--session-id) (( i += 2 )); continue ;;
+      --resume=*|--continue|-c) (( i += 1 )); continue ;;
+    esac
+    keep+=(${argv[i]}); (( i += 1 ))
+  done
+  local cmd="cd ${(q)cwd} && ${(q)argv[1]} ${(j: :)${(@q)keep}} --resume ${(q)sid}"
+  cmd=${cmd//  / }
+  local before=$(footprint_mb $pid)
+  event "recycle $name pid=$pid term=$t ${before}MB ($reason): $cmd"
+  hc send $t "/exit" >/dev/null 2>&1
+  for i in {1..30}; do kill -0 $pid 2>/dev/null || break; sleep 1; done
+  if kill -0 $pid 2>/dev/null; then kill -TERM $pid 2>/dev/null; sleep 3; fi
+  kill -0 $pid 2>/dev/null && { event "recycle gave up: pid $pid still running"; return 1; }
+  sleep 1
+  hc send $t "$cmd" >/dev/null 2>&1
+  notify "Agent ${name:-$t} restarted" "It held ${before} MB after a long session; the same conversation was resumed in a fresh process."
+  print "recycled pid $pid in $t (${before} MB)"
+}
+
+recycle_due() {
+  (( AGENT_RECYCLE )) || return 0
+  local pid mb idle sid cwd name
+  agent_rows | sort -t$'\t' -k2 -rn | while IFS=$'\t' read -r pid mb idle sid cwd name; do
+    (( mb > AGENT_MAX_MB && idle >= AGENT_IDLE_MIN )) || continue
+    recycle $pid "${mb} MB, idle ${idle} min" && break
+  done
+  return 0
+}
+
+agents_report() {
+  print "pid\tMB\tidle_min\tname\tcwd"
+  agent_rows | awk -F'\t' '{printf "%s\t%s\t%s\t%s\t%s\n",$1,$2,($3<0?"busy":$3),$6,$5}' | sort -t$'\t' -k2 -rn
+}
+
+# ---- 5. the machine -------------------------------------------------------------
+pressure() {
+  (( FREE >= LOW_FREE_PCT )) && return
+  local last; last=$(stat -f %m "$STATE/low_noticed" 2>/dev/null || print 0)
+  (( $(now) - last < NOTICE_EVERY_MIN * 60 )) && return
+  touch "$STATE/low_noticed"
+  # The four heaviest by footprint among the top resident ones, with their age.
+  local body="" pid name mb
+  for pid in $(ps -axo rss=,pid= | sort -rn | head -8 | awk '{print $2}'); do
+    mb=$(footprint_mb $pid); (( mb > 0 )) || continue
+    name=$(ps -o comm= -p $pid | sed 's#.*/##')
+    [[ "$name" == 2.* ]] && name="claude"
+    body+="$name ${mb}MB $(human_age $(age_s $pid)), "
+  done
+  body=$(print -r -- "$body" | tr ',' '\n' | sort -t' ' -k2 -rn | head -4 | paste -sd',' - | sed 's/,/, /g')
+  event "low memory: free=${FREE}% swap=${SWAP}MB; $body"
+  notify "Memory low: ${FREE}% free, ${SWAP} MB swapped" "Heaviest: $body"
+}
+
+check() {
+  # One check at a time (launchd won't overlap, a manual run might).
+  local lock="$STATE/lock"
+  if ! mkdir "$lock" 2>/dev/null; then
+    (( $(now) - $(stat -f %m "$lock") > 120 )) && rmdir "$lock" 2>/dev/null
+    return 0
+  fi
+  sample
+  guard_window
+  reap
+  recycle_due
+  pressure
+  rmdir "$lock" 2>/dev/null
+  return 0
+}
+
+install() {
+  mkdir -p "$HOME/.local/bin" "$HOME/Library/LaunchAgents"
+  cp -f "$SELF" "$BIN" && chmod 755 "$BIN"
+  cat > "$PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array><string>$BIN</string><string>check</string></array>
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+  <key>Nice</key><integer>10</integer>
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardOutPath</key><string>$STATE/launchd.log</string>
+  <key>StandardErrorPath</key><string>$STATE/launchd.log</string>
+</dict>
+</plist>
+PLIST
+  launchctl bootout "gui/$UID/$LABEL" 2>/dev/null
+  launchctl bootstrap "gui/$UID" "$PLIST" && print "kanso-guard installed: checks every 60 s. Log: $STATE"
+}
+
+uninstall() {
+  launchctl bootout "gui/$UID/$LABEL" 2>/dev/null
+  rm -f "$PLIST" "$BIN"
+  print "kanso-guard removed (samples kept in $STATE)"
+}
+
+status() {
+  launchctl print "gui/$UID/$LABEL" 2>/dev/null | awk '/state =|last exit code|run interval/' | sed 's/^[[:space:]]*//'
+  print "limits: window ${HERDR_MAX_MB} MB, notice below ${LOW_FREE_PCT}% free"
+  print -r -- "-- last samples"; tail -5 "$SAMPLES" 2>/dev/null | cut -f1-5
+  print -r -- "-- last events"; tail -8 "$EVENTS" 2>/dev/null
+  return 0
+}
+
+case "${1:-check}" in
+  check) check ;;
+  install) install ;;
+  uninstall) uninstall ;;
+  status) status ;;
+  log) tail -${2:-40} "$SAMPLES" | column -ts $'\t' ;;
+  agents) agents_report | column -ts $'\t' ;;
+  recycle) [[ -n "$2" ]] || { print "usage: kanso-guard recycle <pid>"; exit 2; }; recycle "$2" ;;
+  *) print "usage: kanso-guard check|install|uninstall|status|log [n]"; exit 2 ;;
+esac

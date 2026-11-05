@@ -197,9 +197,13 @@ export class Updater {
   async check(cx, force = false, report = false) {
     if (!this.busy) await this.readInstalled();
     const { checked } = this.state();
-    if (this.busy || (!force && checked && Date.now() - checked < EVERY)) return;
+    if (this.busy || this.checking || (!force && checked && Date.now() - checked < EVERY)) return;
     let r = null;
-    try { r = await exec("git", ["ls-remote", "--tags", "--refs", this.source.remote]); } catch {}
+    // One look at a time; a remote that stalls gives up instead of waiting
+    // (no credential prompt, under 1 KB/s for 20 s), so none stack up.
+    this.checking = true;
+    try { r = await exec("git", ["-c", "core.askPass=true", "-c", "credential.interactive=never", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20", "ls-remote", "--tags", "--refs", this.source.remote]); } catch {}
+    finally { this.checking = false; }
     if (r?.code !== 0) { // offline: the next tick tries again
       if (report) notify({ title: "Kanso could not check for updates", body: "GitHub could not be reached.", level: "warning" });
       return;

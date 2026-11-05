@@ -352,9 +352,13 @@ export default class Spaces extends View {
     return [key, ...(repo ? [...keys].filter((k) => this.git[k]?.repo === repo) : [])];
   }
 
+  // One look at a time: a herdr-core that hangs must not stack them up.
   refreshMachines(cx) {
+    if (this.machinesBusy) return;
+    this.machinesBusy = true;
     cx.spawn(async cx => {
       try { const r = await hc(["machine", "ls", "--json"]); if (r.code === 0) this.machines = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary); } catch {}
+      finally { this.machinesBusy = false; }
       cx.notify();
     });
   }
