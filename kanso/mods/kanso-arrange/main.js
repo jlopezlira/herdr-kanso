@@ -17,6 +17,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "herdr";
 import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
+import { listKey, moveTo } from "./listkeys.js";
 const ARM_MS = 4000;
 
 // Every saved arrangement, this project's first, then the other projects'
@@ -161,7 +162,16 @@ export default class Arrange extends View {
     const note = (text, tone) => div().pt(10).text_size(11.5).line_height(1.45).text_color(tone ?? t.dim).child(text);
     const shell = v_flex().id("kanso-arrange").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {
-        if (e.key !== "escape") return;
+        // The list: j/k (or the arrows) along it, gg/G, Enter opens the
+        // one you are on. Not in the save view, whose name field takes letters.
+        const move = this.view !== "save" ? listKey(e, this.keys ??= {}) : (e.key === "escape" ? "escape" : null);
+        if (!move) return;
+        if (move !== "escape") {
+          const order = this.order ?? [];
+          if (move === "enter") { if (!this.busy && order[this.at ?? 0]) this.open(order[this.at ?? 0], cx); }
+          else if (move !== "pending") this.at = moveTo(move, this.at ?? 0, order.length);
+          cx.stop_propagation(); cx.notify(); return;
+        }
         if (this.view === "save") { this.view = "list"; this.target = null; cx.notify(); } else closeOverlay(p.overlay);
         cx.stop_propagation();
       });
@@ -193,11 +203,14 @@ export default class Arrange extends View {
 
     const list = this.list ?? [];
     const others = this.others ?? [];
+    this.order = [...list, ...others];
+    const at = this.order[Math.min(this.at ?? 0, Math.max(0, this.order.length - 1))];
     const row = (a) => {
       const key = `rm:${a.from}:${a.name}`, armed = this.armed === key, id = `${a.from}:${a.name}`;
       const from = a.from === projectOf(this.space) ? null : originOf(a);
       const n = a.cols.reduce((s, c) => s + c.panes.length, 0);
       return h_flex().id(`ar-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
+        .when(a === at, (el) => el.bg(t.selected))
         .when(!this.busy, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.open(a, cx)))
         .child(svg("mods/kanso-chrome/icons/layers.svg").size(15).flex_none().text_color(t.muted))
         .child(v_flex().flex_1().min_w(0).gap(2)

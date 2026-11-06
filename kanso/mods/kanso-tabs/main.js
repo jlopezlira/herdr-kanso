@@ -359,7 +359,7 @@ export default class Tabs extends View {
         .child(button("kanso-settings", div().relative().child(svg("mods/kanso-chrome/icons/settings.svg").size(15))
             .when(Boolean(update), (el) => el.child(div().absolute().top(-2).right(-3).size(6).rounded_full().bg(t.accent))),
           () => openSettings(update ? "news" : "keys"))
-          .ml(4).tooltip(update ? `Kanso ${update} is available` : window()?.platform === "macos" ? "Kanso settings  ⌃⇧," : "Kanso settings  Ctrl+Shift+,")))
+          .ml(4).tooltip(update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,")))
       .when(window()?.buttons, el => el.child(button("minimize", "−", () => run("window.minimize")))
         .child(button("maximize", "□", () => run("window.maximize")))
         .child(button("close-window", svg("mods/kanso-chrome/icons/close.svg").size(13), () => run("window.close"))));

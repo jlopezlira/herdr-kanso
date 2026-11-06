@@ -514,7 +514,7 @@ function shimmer(text, t, address) {
 // waiting on you also sits on a wash of its color, the focused one on a
 // wash of the text color. Clicking goes to its pane (a sub-agent without
 // one opens in a peek); a double-click renames it.
-// `row`: { drag: { target, down, up } | null (the row can be dragged to
+// `row`: { kbd (the keyboard's ring is on it), drag: { target, down, up } | null (the row can be dragged to
 // reorder its section), hovered, hover(h, cx), pin(cx) (toggles the pin) }.
 // `row` may also carry `actions` ([{ id, icon, tip, act(cx) }], shown on
 // hover in the time's place) and `menu(cx)` (a right-click).
@@ -599,6 +599,8 @@ export function agentRow(a, indent, t, row, more = {}) {
     .items_center().rounded(8).cursor_pointer()
     // The focused row's wash is the list's pill (main.js), which glides here.
     .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
+    // The keyboard's ring, when the list is driven by keys (main.js navRow).
+    .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
     .on_click(() => (a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })))
     .on_mouse_down("left", (e) => { if (e.click_count === 2) renameTerminal(a.address, more.label ?? agentLabel(a), Boolean(more.label)); else drag?.down(); })

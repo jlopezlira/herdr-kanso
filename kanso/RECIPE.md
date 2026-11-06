@@ -426,7 +426,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Themes**: `kanso` (dark) and `kanso-day` (light), in `themes/`.
   - Dark: background `#1b1b19`, foreground `#d8d4cb`, chrome and canvas
     `#161615`, border `#272725`, input `#353430`, muted `#949086`, dim
-    `#6b6862`, accent `#a3b09a`, working `#c4b07e`, blocked `#c99189`, done
+    `#6b6862`, accent `#da627d`, working `#c4b07e`, blocked `#c99189`, done
     `#98ad8f`.
   - Light: background `#f4f1eb`, foreground `#3c3934`, chrome `#e3dfd6`,
     working `#8f7d52`, blocked `#9a6e68`, done `#6d7d62`.
@@ -475,8 +475,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   slide out by `width`; a panel fades in.
 - **Keys** (keys.json `layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
-  settings; an empty key is quiet. Herdr/macOS keys only for the same
-  command. No hints on screen.
+  settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
+  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
   rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
   `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new the log, Credits who.
@@ -664,8 +664,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and right. Cmd+Shift+Enter (or the header's zoom button) cycles its width
     1/4, 1/3, 1/2, 2/3, 1.
   - Cmd+Shift+- and Cmd+Shift+= show fewer or more panes per view (every
-    column becomes 1/n, the focused one stays in view); Cmd+Shift+0 evens
-    the columns out at the current count. `kanso-strip.per-N` sets N directly.
+    column 1/n); Cmd+Shift+0 evens them out. `kanso-strip.per-N` sets N.
   - Cmd+Alt+Up/Down (or K/J) move the focus within a stacked column.
   - Kept as alternatives: Cmd+Alt+Left/Right or H/L (focus), with Shift
     (move), Cmd+Alt+1-9, Cmd+Alt+Home/End, Cmd+Alt+C (centre). There is no
@@ -760,6 +759,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     args}` (runs it with `name`, as Herdr's prompt) or `label: {terminal,
     key}` (`hc label <terminal> <key>=<text>`; empty removes the label).
     Opened as a dialog 420 wide.
+  - `kanso-help` (⌘?): keys() as a keyboard. `kanso-dojo`: vim game window.
   - `kanso-menu`: the terminal right-click menu (root `terminal_menu`):
     split right, left and down through the strip, width, right-clicks
     to the program, send back, "Open with…" (when the pane has a folder),

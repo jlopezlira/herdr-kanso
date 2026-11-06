@@ -40,7 +40,8 @@
     sel.addRange(range);
   }
 
-  // Star count, cached for an hour; the buttons work without it.
+  // Star count: the last one known shows at once, and GitHub is asked every
+  // visit for the current one; the buttons work without it.
   var slots = document.querySelectorAll("[data-stars]");
   var show = function (n) {
     if (typeof n !== "number" || n < 1) return;
@@ -48,19 +49,14 @@
     slots.forEach(function (s) { s.textContent = text; s.hidden = false; });
   };
   var key = "kanso-stars";
-  var cached = null;
-  try { cached = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) {}
-  if (cached && Date.now() - cached.at < 3600e3) {
-    show(cached.n);
-  } else {
-    fetch("https://api.github.com/repos/jlopezlira/herdr-kanso", { headers: { Accept: "application/vnd.github+json" } })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (repo) {
-        if (!repo) return;
-        show(repo.stargazers_count);
-        try { localStorage.setItem(key, JSON.stringify({ n: repo.stargazers_count, at: Date.now() })); } catch (e) {}
-      })
-      .catch(function () {});
-  }
+  try { var cached = JSON.parse(localStorage.getItem(key) || "null"); if (cached) show(cached.n); } catch (e) {}
+  fetch("https://api.github.com/repos/jlopezlira/herdr-kanso", { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (repo) {
+      if (!repo) return;
+      show(repo.stargazers_count);
+      try { localStorage.setItem(key, JSON.stringify({ n: repo.stargazers_count, at: Date.now() })); } catch (e) {}
+    })
+    .catch(function () {});
 
 })();

@@ -14,15 +14,18 @@
 // stops being asleep; what did not come back stays asleep.
 //
 // Opened from the sidebar's menus, a pane header's moon, or on its own (the
-// list of what sleeps). Props: `sleep` { scope: "tab" | "project", space,
-// tab }, `wake` { from, name }, `wakeAll` (a project key). The tabs live in
+// list of what sleeps). Props: `sleep` { scope: "agent" | "tab" | "project",
+// space, tab, pane }, `wake` { from, name }, `wakeAll` (a project key). One
+// agent sleeps on its own: its pane closes and the rest of the tab stays;
+// it wakes back into that tab when the tab is still there. The tabs live in
 // data/kanso-sleep/sleep.db (store.js); shared "kanso.asleep" tells the
 // sidebar what sleeps.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile, exec } from "herdr";
 import { Store, idle } from "./store.js";
-import { base, tilde, shq, SHELLS, captureTab, describe, programOf, projectOf, folderOfKey, openTab } from "./tabkit.js";
+import { listKey, moveTo } from "./listkeys.js";
+import { base, tilde, shq, SHELLS, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 
 const ARM_MS = 4000;
 
@@ -140,7 +143,7 @@ export default class Sleep extends View {
     const ask = props() ?? {};
     this.space = spaces().find((s) => s.id === ask.sleep?.space) ?? spaces().find((s) => s.active) ?? null;
     this.store = new Store();
-    if (ask.sleep) this.startSleep(cx, ask.sleep.scope === "project", ask.sleep.tab);
+    if (ask.sleep) this.startSleep(cx, ask.sleep.scope === "project", ask.sleep.tab, ask.sleep.scope === "agent" ? ask.sleep.pane : null);
     cx.spawn(async (cx) => {
       try { await this.refresh(true); }
       catch (e) { this.asleep = []; this.error = String(e?.message ?? e); cx.notify(); return; }
@@ -170,7 +173,8 @@ export default class Sleep extends View {
   // record, ~/.claude/sessions/<pid>.json) and the command that resumes it:
   // { tab, capture, blocker, error }. Anything it can't read stops it.
   async readTab(tab) {
-    const tabPanes = panes().filter((p) => p.tab === tab.id && p.terminal);
+    // One agent alone (`this.onlyPane`): its pane, not the whole tab.
+    const tabPanes = panes().filter((p) => p.tab === tab.id && p.terminal && (!this.onlyPane || p.pane === this.onlyPane));
     const recs = new Map(), extra = new Map();
     let error = this.space?.machine ? "Sleep works on this computer's agents for now" : null;
     await Promise.all(tabPanes.map(async (p) => {
@@ -190,28 +194,35 @@ export default class Sleep extends View {
       extra.set(term, { resume: ses?.sessionId ?? null, name: who, pid: fg.pid, terminal: term, wake: again });
     }
     for (const p of tabPanes) if (!extra.has(p.terminal)) extra.set(p.terminal, { terminal: p.terminal });
-    const capture = captureTab(shared("strip.state")?.[tab.id], tabPanes, recs, extra);
-    if (!coversTab(capture, tabPanes.map((p) => p.terminal))) error ??= "a pane of it is still being placed; try again in a moment";
+    const capture = this.onlyPane
+      ? { per: null, cols: tabPanes.map((p) => ({ w: 1, panes: [{ argv: commandOf(recs.get(p.terminal)), cwd: recs.get(p.terminal)?.foreground?.cwd || p.cwd || null, ...(extra.get(p.terminal) ?? {}) }] })) }
+      : captureTab(shared("strip.state")?.[tab.id], tabPanes, recs, extra);
+    if (this.onlyPane && !capture.cols[0]?.panes[0]?.pid) error ??= "only a Claude agent can sleep on its own; this pane runs something else";
+    if (!this.onlyPane && !coversTab(capture, tabPanes.map((p) => p.terminal))) error ??= "a pane of it is still being placed; try again in a moment";
     return { tab, capture, blocker: sleepBlocker(recs), error };
   }
 
   async readTabs(tabs) {
     const all = this.space?.tabs ?? [];
     const read = await Promise.all(tabs.map((t) => this.readTab(t)));
-    read.forEach((r) => { r.name = r.tab.named ? r.tab.name : `Tab ${all.indexOf(r.tab) + 1}`; });
+    read.forEach((r) => { r.name = this.onlyPane ? (r.capture.cols[0]?.panes[0]?.name ?? "Agent") : r.tab.named ? r.tab.name : `Tab ${all.indexOf(r.tab) + 1}`; });
     return read.filter((r) => r.capture.cols.length);
   }
 
   // The sleep view, for one tab (the one you are on by default) or (`whole`)
   // every tab of the project; each tab sleeps under its own name.
-  startSleep(cx, whole = false, tabId = null) {
+  startSleep(cx, whole = false, tabId = null, pane = null) {
     const all = this.space?.tabs ?? [];
     const tabs = whole ? all : all.filter((t) => (tabId ? t.id === tabId : t.active));
-    this.view = "sleep"; this.whole = whole; this.sleepers = null; this.error = null; this.sleepTabs = tabs;
+    this.view = "sleep"; this.whole = whole; this.onlyPane = pane; this.sleepers = null; this.error = null; this.sleepTabs = tabs;
     const tab = tabs[0];
     this.name.set_value(tab?.named ? tab.name : `Tab ${all.indexOf(tab) + 1}`);
     cx.notify();
-    cx.spawn(async (cx) => { this.sleepers = await this.readTabs(tabs); cx.notify(); });
+    cx.spawn(async (cx) => {
+      this.sleepers = await this.readTabs(tabs);
+      if (pane && this.sleepers[0]) this.name.set_value(this.sleepers[0].name);
+      cx.notify();
+    });
   }
 
   // Read again at the press (what the view showed may be old), saved as
@@ -244,7 +255,8 @@ export default class Sleep extends View {
         const agents = cap.cols.flatMap((c) => c.panes).filter((p) => p.pid);
         const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, ...(p.pid ? { pid: p.pid } : {}) });
         const entry = { name: r.name, space: this.space?.name ?? null, per: cap.per, saved: Date.now(),
-          cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map(kept) })) };
+          cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map(kept) })),
+          ...(this.onlyPane ? { into: { tab: r.tab.named ? r.tab.name : null, tabId: r.tab.id } } : {}) };
         const left = [], sent = [];
         let id = null;
         try {
@@ -287,8 +299,16 @@ export default class Sleep extends View {
         let note = null;
         try { await this.store.settle(id); } catch (e) { note = `${r.name} is asleep but could not be marked so (${String(e?.message ?? e)}); it shows to wake in 10 minutes.`; }
         await this.refresh();
-        // A pane opened in the tab while it went to sleep keeps it open.
         const known = new Set(cap.cols.flatMap((c) => c.panes).map((p) => p.terminal));
+        // One agent alone: its pane goes, the rest of the tab stays (the tab
+        // closes only when that pane was all it had).
+        if (this.onlyPane) {
+          if (note) notes.push(note);
+          if (panes().some((p) => p.tab === r.tab.id && p.terminal && !known.has(p.terminal))) for (const t of known) run("terminal.kill", { terminal: t });
+          else run("tab.close", { id: r.tab.id, confirmed: true });
+          continue;
+        }
+        // A pane opened in the tab while it went to sleep keeps it open.
         if (note || panes().some((p) => p.tab === r.tab.id && p.terminal && !known.has(p.terminal))) {
           // The tab stays for what is new in it; what slept ends, so it
           // doesn't run here and again on wake.
@@ -431,9 +451,13 @@ export default class Sleep extends View {
       const space = spaces().find((sp) => projectOf(sp) === a.from) ?? null;
       const folder = folderOfKey(a.from), machine = String(a.from).slice(0, String(a.from).indexOf(":")) || undefined;
       const create = space ? null : { name: a.space || base(folder) || "~", folder, key: a.from, ...(machine ? { machine } : {}) };
+      // One agent that slept alone goes back into its tab when it is still
+      // there; else (and a tab that slept) it opens as a tab of its own.
+      const home = a.into && space ? (space.tabs ?? []).find((x) => x.id === a.into.tabId) ?? (a.into.tab ? (space.tabs ?? []).find((x) => x.name === a.into.tab) : null) : null;
       let ids, failure = null;
       try {
-        ids = await openTab({ ...wakeable(a), name: a.name }, cx, { space, create, progress: (t) => { this.busy = `${a.name}: ${t}`; cx.notify(); } });
+        if (home) { this.busy = `${a.name}: back into ${home.name || "its tab"}`; cx.notify(); ids = [[await openInto(wakeable(a).cols[0].panes[0], cx, home.id)]]; }
+        else ids = await openTab({ ...wakeable(a), name: a.into?.tab || a.name }, cx, { space, create, progress: (t) => { this.busy = `${a.name}: ${t}`; cx.notify(); } });
       } catch (e) { ids = e?.opened ?? []; failure = e; }
       const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ p, pane: ids[ci]?.[ri] ?? null })));
       // Every pane that did not open stays asleep, agent or not; an agent
@@ -501,7 +525,17 @@ export default class Sleep extends View {
     const note = (text, tone) => div().pt(10).text_size(11.5).line_height(1.45).text_color(tone ?? t.dim).child(text);
     const shell = v_flex().id("kanso-sleep").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {
-        if (e.key !== "escape") return;
+        // The list of what sleeps: j/k (or the arrows) along it, gg/G,
+        // Enter wakes the one you are on. Not in the sleep view, whose
+        // name field takes letters.
+        const move = this.view === "list" ? listKey(e, this.keys ??= {}) : (e.key === "escape" ? "escape" : null);
+        if (!move) return;
+        if (move !== "escape") {
+          const order = this.order ?? [];
+          if (move === "enter") { if (!this.busy && order[this.at ?? 0]) this.wake(order[this.at ?? 0], cx); }
+          else if (move !== "pending") this.at = moveTo(move, this.at ?? 0, order.length);
+          cx.stop_propagation(); cx.notify(); return;
+        }
         if (this.busy) { cx.stop_propagation(); return; }
         if (this.view === "sleep" && (props()?.sleep == null)) { this.view = "list"; this.error = null; cx.notify(); }
         else closeOverlay(p.overlay);
@@ -510,7 +544,7 @@ export default class Sleep extends View {
 
     if (this.view === "sleep") {
       const list = this.sleepers ?? [];
-      const whole = this.whole;
+      const whole = this.whole, alone = Boolean(this.onlyPane);
       const panesOf = (r) => r.capture.cols.flatMap((c) => c.panes);
       const others = [...new Set(list.flatMap(panesOf).filter((q) => !q.pid && q.argv).map((q) => programOf(q.argv)))];
       const stop = list.find((r) => r.blocker || r.error);
@@ -520,7 +554,10 @@ export default class Sleep extends View {
       let i = 0;
       const ready = list.length > 0 && !stop && !this.busy;
       return shell
-        .child(head(whole ? `Sleep ${project}` : "Sleep this tab", whole ? "Every tab's agents exit and the tabs close. Wake opens them again, each agent on its conversation." : "Its agents exit and the tab closes. Wake opens it again, each agent on its conversation."))
+        .child(head(whole ? `Sleep ${project}` : alone ? "Sleep this agent" : "Sleep this tab",
+          whole ? "Every tab's agents exit and the tabs close. Wake opens them again, each agent on its conversation."
+          : alone ? "It exits and its pane closes; the rest of the tab stays. Wake opens it again in that tab, on its conversation."
+          : "Its agents exit and the tab closes. Wake opens it again, each agent on its conversation."))
         .when(!whole, (el) => el
           .child(div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child("Name"))
           .child(Input.new(this.name).h(36).px(10).rounded(9).border_1().border_color(t.input).bg(t.background).text_size(12.8).text_color(t.foreground)))
@@ -541,11 +578,14 @@ export default class Sleep extends View {
     // The list: what sleeps, by project, newest first.
     const asleep = this.asleep ?? [];
     const groups = [...asleep.reduce((m, a) => m.set(a.from, [...(m.get(a.from) ?? []), a]), new Map())];
+    this.order = groups.flatMap(([, tabs]) => tabs);
+    const atId = this.order[Math.min(this.at ?? 0, Math.max(0, this.order.length - 1))]?.id;
     const spaceName = (from, list) => spaces().find((sp) => projectOf(sp) === from)?.name ?? list[0]?.space ?? (base(folderOfKey(from)) || "~");
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
     const row = (a) => {
       const id = `${a.from}:${a.name}`, key = `forget:${id}`, armed = this.armed === key;
       return h_flex().id(`zz-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
+        .when(a.id === atId, (el) => el.bg(t.selected))
         .when(!this.busy, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.wake(a, cx)))
         .child(svg("mods/kanso-chrome/icons/moon.svg").size(15).flex_none().text_color(t.muted))
         .child(v_flex().flex_1().min_w(0).gap(2)

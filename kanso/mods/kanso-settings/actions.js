@@ -15,7 +15,7 @@ export const GROUPS = [
   // its key by place, then the gear.
   { name: "Panels", section: "layout:kanso", bar: true, actions: [
     { family: "kanso-tabs.panel-", label: "Open or close a panel" },
-    { action: "kanso-tabs.settings", label: "Kanso settings" },
+    { action: "kanso-tabs.settings", label: "kansō settings" },
   ] },
   { name: "Sidebar", section: "layout:kanso", actions: [
     { action: "kanso-spaces.view-spaces", label: "Projects" },
@@ -28,6 +28,18 @@ export const GROUPS = [
     { action: "kanso-strip.send", label: "Send the pane's work to an agent" },
     { action: "kanso-strip.pin", label: "Pin the pane to its side" },
     { action: "kanso-strip.arrange", label: "Arrangements" },
+  ] },
+  // Vim's h j k l, with ⌘⌥ (⌘⌥h past the first column is the sidebar's
+  // list, where j/k, gg/G, Enter and Esc move as in vim).
+  { name: "Vim keys", section: "layout:kanso", actions: [
+    { action: "kanso-strip.vim-left", label: "Pane to the left, or the sidebar's list" },
+    { action: "kanso-strip.vim-down", label: "Pane below" },
+    { action: "kanso-strip.vim-up", label: "Pane above" },
+    { action: "kanso-strip.vim-right", label: "Pane to the right" },
+    { action: "kanso-strip.vim-move-left", label: "Move the pane left" },
+    { action: "kanso-strip.vim-move-down", label: "Move the pane down" },
+    { action: "kanso-strip.vim-move-up", label: "Move the pane up" },
+    { action: "kanso-strip.vim-move-right", label: "Move the pane right" },
   ] },
   { name: "Moving along the strip", section: "layout:kanso", actions: [
     { family: "kanso-strip.col-", label: "Go to a column" },
@@ -53,8 +65,8 @@ export const GROUPS = [
 
 // Herdr's commands the strip does its own way, on Herdr's own keys (a split,
 // closing, going to or swapping a pane, zoom as the column's width, a space
-// that is there). Not Kanso's keys: the Keys page leaves them out.
-export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right)|width)|kanso-spaces\.space-\d)$/;
+// that is there, help as kansō's help). Not kansō's own keys: the Keys page leaves them out.
+export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right|up|down)|width)|kanso-spaces\.space-\d|mod\.open:kanso-help)$/;
 
 // Whether a bound action belongs to a row: its own, or one of a family's nine.
 export const ofRow = (row, action) => (row.family ? new RegExp(`^${row.family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[1-9]$`).test(action) : action === row.action);

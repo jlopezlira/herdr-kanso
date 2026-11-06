@@ -111,7 +111,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.equal(f.updater.installed, "1.0.0");
   assert.equal(f.updater.available(), "1.1.0");
   assert.equal(f.toasts.length, 1);
-  assert.match(f.toasts[0].title, /Kanso 1\.1\.0 is available/);
+  assert.match(f.toasts[0].title, /kansō 1\.1\.0 is available/);
   assert.equal(f.toasts[0].action.name, "kanso-tabs.update", "the tab bar installs: it is on screen even with the sidebar hidden");
   assert.equal(f.toasts[0].timeout, 30000, "long enough to be seen");
   assert.deepEqual(f.resizes, [192], "the footer grows a row for it");
@@ -150,7 +150,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.deepEqual(await readdir(f.home).then((n) => n.filter((x) => x.startsWith("."))), [], "nothing staged left");
   assert.equal(f.updater.available(), null);
   const done = f.toasts.at(-1);
-  assert.equal(done.title, "Kanso updated to 1.1.0");
+  assert.equal(done.title, "kansō updated to 1.1.0");
   assert.equal(done.level, "success");
   assert.match(done.body, /layouts\/kanso\.json\.old-/);
   assert.equal(f.store["kanso.update"].done, null, "reported once");
@@ -217,15 +217,15 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
   await u.check(cx, false, false);
   assert.equal(asked, 1, "the timer does not look twice within minutes");
   await u.check(cx, true, true);
-  assert.equal(toasts.at(-1).title, "Kanso is up to date", "asked: it says so");
+  assert.equal(toasts.at(-1).title, "kansō is up to date", "asked: it says so");
 
   tags = "x\trefs/tags/v1.3.1\ny\trefs/tags/v1.4.0\n";
   await u.check(cx, true, false);
-  assert.equal(toasts.at(-1).title, "Kanso 1.4.0 is available");
+  assert.equal(toasts.at(-1).title, "kansō 1.4.0 is available");
   await u.check(cx, true, true);
-  assert.equal(toasts.filter((n) => n.title === "Kanso 1.4.0 is available").length, 2, "asked again: told again");
+  assert.equal(toasts.filter((n) => n.title === "kansō 1.4.0 is available").length, 2, "asked again: told again");
 
   offline = true;
   await u.check(cx, true, true);
-  assert.equal(toasts.at(-1).title, "Kanso could not check for updates");
+  assert.equal(toasts.at(-1).title, "kansō could not check for updates");
 });

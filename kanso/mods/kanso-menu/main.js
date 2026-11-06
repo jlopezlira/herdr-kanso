@@ -8,6 +8,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, theme, terminals, panes, spaces, shared, setShared, keys } from "herdr";
+import { listKey, moveTo } from "./listkeys.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 
@@ -70,11 +71,12 @@ export default class KansoMenu extends View {
     const list = items(props()?.target ?? {});
     return v_flex().id("kanso-menu").track_focus(this.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
       .on_key_down((e, cx) => {
-        if (e.key === "down") this.at = (this.at + 1) % list.length;
-        else if (e.key === "up") this.at = (this.at + list.length - 1) % list.length;
-        else if (e.key === "enter") this.choose(this.at);
-        else if (e.key === "escape") closeOverlay(props().overlay);
-        else return;
+        const move = listKey(e, this.keys ??= {});
+        if (!move) return;
+        if (move === "enter") this.choose(this.at);
+        else if (move === "escape") closeOverlay(props().overlay);
+        else this.at = moveTo(move, this.at, list.length);
+        cx.stop_propagation();
         cx.notify();
       })
       .children(list.map((it, i) => v_flex()

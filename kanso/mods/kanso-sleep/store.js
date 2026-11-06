@@ -26,7 +26,7 @@ UPDATE asleep SET layout=json_set(layout,'$.id',lower(hex(randomblob(8)))) WHERE
 // A tab's row: what it opens (columns, panes, each Claude agent's
 // conversation) as JSON. Never over a row of that name.
 export function insertSql(project, a) {
-  const layout = JSON.stringify({ id: a.id, per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}), ...(a.pending ? { pending: a.pending } : {}) });
+  const layout = JSON.stringify({ id: a.id, per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}), ...(a.into ? { into: a.into } : {}), ...(a.pending ? { pending: a.pending } : {}) });
   return `INSERT OR IGNORE INTO asleep(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())}) RETURNING name;`;
 }
 const byId = (id) => `json_extract(layout,'$.id')=${sqlText(id)}`;
@@ -39,7 +39,7 @@ export function rowsOf(rows) {
     try { l = JSON.parse(r.layout); } catch { continue; }
     if (!Array.isArray(l?.cols)) continue;
     out.push({ id: l.id ?? null, from: r.project, name: r.name, per: l.per ?? null, cols: l.cols, saved: Number(r.saved) || 0,
-      ...(l.space ? { space: l.space } : {}), ...(l.pending ? { pending: l.pending } : {}), ...(l.waking ? { waking: l.waking } : {}) });
+      ...(l.space ? { space: l.space } : {}), ...(l.into ? { into: l.into } : {}), ...(l.pending ? { pending: l.pending } : {}), ...(l.waking ? { waking: l.waking } : {}) });
   }
   return out.sort((a, b) => b.saved - a.saved);
 }

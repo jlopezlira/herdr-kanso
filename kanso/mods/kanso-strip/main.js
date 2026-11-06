@@ -227,7 +227,7 @@ const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", wi
 // Sleep the tab a pane is in (kanso-sleep).
 const openSleep = (p) => {
   const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
-  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "tab", space: space.id, tab: p.tab } } });
+  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
 };
 
 export default class Strip extends View {
@@ -623,7 +623,7 @@ export default class Strip extends View {
     const pane = p.pane;
     const list = [
       strip ? this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground)) : null,
-      p.terminal && p.tab ? this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this tab") : null,
+      p.terminal && p.tab && agents().some((x) => x.address === p.terminal) ? this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this agent") : null,
       canSend ? this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent") : null,
       p.cwd ? this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p)) : null,
       this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }),
@@ -798,6 +798,20 @@ export default class Strip extends View {
   }
 
   command(name) {
+    // Vim's keys (⌘⌥h/j/k/l, with ⇧ to move) are the arrows' moves.
+    const vim = /^vim-(move-)?(left|right|up|down)$/.exec(name);
+    if (vim) name = `${vim[1] ? "move" : "go"}-${vim[2]}`;
+    // The keyboard is on the sidebar's list (kanso-spaces): right goes back
+    // to the pane it came from, up and down move along the list.
+    const list = shared("kanso.list");
+    if (list && (name === "go-right" || name === "go-left" || name === "go-up" || name === "go-down")) {
+      if (name === "go-right") { setShared("kanso.list", null); if (list.from) run("pane.focus", { pane: list.from }); }
+      else if (name === "go-left") run("kanso-spaces.list");
+      // Up and down are the list's; one that isn't on the list any more
+      // sends them back here (kanso-spaces), so a stale flag costs nothing.
+      else run(`kanso-spaces.list-${name === "go-up" ? "up" : "down"}`);
+      return;
+    }
     if (name === "next-needs-you") { this.goNeedsYou(); return; }
     if (name === "send") { const p = this.focusedPane(); if (p?.terminal) openSend(p); return; }
     if (name === "arrange") { openArrange(); return; }
@@ -818,7 +832,8 @@ export default class Strip extends View {
       run("pane.split", { pane: id, direction: dir === "down" || dir === "up" ? "down" : "right" });
     };
     switch (name) {
-      case "go-left": if (at) go(at.ci - 1, at.ri); break;
+      // Left of the first column is the sidebar's list, as in vim.
+      case "go-left": if (at) { if (at.ci > 0) go(at.ci - 1, at.ri); else run("kanso-spaces.list"); } break;
       case "go-right": if (at) go(at.ci + 1, at.ri); break;
       case "go-up": if (at && at.ri > 0) go(at.ci, at.ri - 1); break;
       case "go-down": if (at && at.ri < st.cols[at.ci].panes.length - 1) go(at.ci, at.ri + 1); break;
@@ -828,6 +843,12 @@ export default class Strip extends View {
         if (at) {
           const to = at.ci + (name === "move-left" ? -1 : 1);
           if (to >= 0 && to < st.cols.length && !st.cols[at.ci].pin && !st.cols[to].pin) { [st.cols[at.ci], st.cols[to]] = [st.cols[to], st.cols[at.ci]]; this.reveal(st, id); }
+        }
+        break;
+      case "move-up": case "move-down":
+        if (at) {
+          const col = st.cols[at.ci].panes, to = at.ri + (name === "move-up" ? -1 : 1);
+          if (to >= 0 && to < col.length) { [col[at.ri], col[to]] = [col[to], col[at.ri]]; this.reveal(st, id); }
         }
         break;
       case "new-right": split("right"); break;

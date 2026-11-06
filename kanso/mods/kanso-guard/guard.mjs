@@ -514,7 +514,7 @@ async function guardWindow(win, state) {
   // At most 3 restarts an hour: past that, something restarts it bloated.
   state.restarts = (state.restarts ?? []).filter((t) => Date.now() - t < HOUR);
   if (state.restarts.length >= 3) {
-    if (!state.paused) { state.paused = true; event("error", `Window restarts paused: 3 in the last hour and still ${reason.toLowerCase()}`); await notify("Herdr keeps outgrowing its limit", "Automatic restarts are paused for an hour. Open Memory in Kanso to see what grows."); }
+    if (!state.paused) { state.paused = true; event("error", `Window restarts paused: 3 in the last hour and still ${reason.toLowerCase()}`); await notify("Herdr keeps outgrowing its limit", "Automatic restarts are paused for an hour. Open Memory in kansō to see what grows."); }
     return;
   }
   state.paused = false;

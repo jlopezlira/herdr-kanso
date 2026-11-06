@@ -15,6 +15,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, home, appHome, shared, setShared, layout, window as win } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
+import { listKey, moveTo } from "./listkeys.js";
 
 // PowerShell also treats U+2018..U+201B as single-quote delimiters.
 // Double every delimiter so paths remain data inside -Command.
@@ -306,13 +307,12 @@ done`;
 
     return v_flex().id("open-with").track_focus(this.handle).w_full().min_h(0).bg(t.popover).p(6).text_size(12.8)
       .on_key_down((ev, cx) => {
-        const k = ev.key;
-        if (k === "escape") return this.close();
-        if (ev.modifiers.control || ev.modifiers.platform || ev.modifiers.alt) return;
-        if (k === "down" && pickable.length) this.at = (this.at + 1) % pickable.length;
-        else if (k === "up" && pickable.length) this.at = (this.at + pickable.length - 1) % pickable.length;
-        else if (k === "enter") return void this.open(pickable[this.at]);
-        else if (/^[1-9]$/.test(k)) return void this.open(list[Number(k) - 1]);
+        const k = ev.key, move = listKey(ev, this.keys ??= {});
+        if (move === "escape") return this.close();
+        if (move === "enter") return void this.open(pickable[this.at]);
+        if (move && move !== "pending") { if (pickable.length) this.at = moveTo(move, this.at, pickable.length); }
+        else if (move === "pending") { /* the first g of gg */ }
+        else if (!ev.modifiers.control && !ev.modifiers.platform && !ev.modifiers.alt && /^[1-9]$/.test(k)) return void this.open(list[Number(k) - 1]);
         else return;
         cx.stop_propagation();
         cx.notify();

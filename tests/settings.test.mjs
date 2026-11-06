@@ -36,6 +36,10 @@ test("A new key says what it takes over, and keys.json comes back changed only w
   assert.equal(over["layout:kanso"]["cmd-d"], "kanso-strip.close", "a key taken over points at the new action");
 });
 
+// macOS keys taken because you asked for them: ⌘⌥h is vim's left (with
+// ⌘⌥j/k/l), over Hide Others, while the Kanso layout shows.
+const ASKED = new Set(["cmd-alt-h"]);
+
 test("The Keys page lists Kanso's own keys only, and Reset knows them all", async () => {
   const { GROUPS, HERDRS, ofRow } = await actions();
   const herdr = JSON.parse(readFileSync(new URL("./herdr-keys.macos.json", import.meta.url), "utf8"));
@@ -50,7 +54,7 @@ test("The Keys page lists Kanso's own keys only, and Reset knows them all", asyn
       const listed = rows.some((r) => ofRow(r, action));
       if (HERDRS.test(action)) { assert.ok(!listed, `${action} is Herdr's command: not on Kanso's Keys page`); assert.ok(herdrChords.has(chord), `${chord} = ${action} is not on Herdr's key`); continue; }
       assert.ok(listed, `${chord} = ${action} has no row on the Keys page`);
-      if (section === "layout:kanso") assert.ok(!herdrChords.has(chord), `${chord} = ${action}: Kanso's own key on one of Herdr's`);
+      if (section === "layout:kanso" && !ASKED.has(chord)) assert.ok(!herdrChords.has(chord), `${chord} = ${action}: Kanso's own key on one of Herdr's`);
     }
   }
 });
@@ -89,6 +93,7 @@ const SAME_AS_HERDR = {
   "pane.zoom": /^kanso-strip\.width$/,
   "space.select": /^kanso-spaces\.space-\d$/,
   "app.settings": /^kanso-spend\.settings$/,
+  "app.help": /^mod\.open:kanso-help$/,
 };
 const MACOS = ["cmd-alt-d", "cmd-alt-h", "cmd-h", "cmd-m", "cmd-q", "cmd-tab", "cmd-space", "cmd-alt-escape", "cmd-shift-3", "cmd-shift-4", "cmd-shift-5", "ctrl-up", "ctrl-down", "ctrl-left", "ctrl-right", "cmd-`"];
 
@@ -99,8 +104,8 @@ test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
   const wrong = [];
   for (const [section, keys] of Object.entries(kanso)) {
     for (const [chord, action] of Object.entries(keys)) {
-      if (MACOS.includes(chord)) wrong.push(`${section} ${chord} is macOS's`);
-      if (!theirs.has(chord)) continue;
+      if (MACOS.includes(chord) && !ASKED.has(chord)) wrong.push(`${section} ${chord} is macOS's`);
+      if (!theirs.has(chord) || ASKED.has(chord)) continue;
       const herdrAction = String(theirs.get(chord)).split(":")[0];
       if (!SAME_AS_HERDR[herdrAction]?.test(action)) wrong.push(`${section} ${chord}: Herdr's ${herdrAction}, Kanso's ${action}`);
     }

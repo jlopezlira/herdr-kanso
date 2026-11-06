@@ -29,8 +29,8 @@ const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, {
 // Credits: where Kanso comes from and who makes it, each opened in the browser.
 // The people's GitHub avatars ship in avatars/ (96 px), so the page needs no network.
 const PLACES = [
-  { id: "herdr", name: "Herdr", note: "The app Kanso runs in", url: "https://herdr.dev" },
-  { id: "kanso", name: "Kanso", note: "Source, releases and issues", url: "https://github.com/jlopezlira/herdr-kanso" },
+  { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
+  { id: "kanso", name: "kansō", note: "Source, releases and issues", url: "https://github.com/jlopezlira/herdr-kanso" },
 ];
 const PEOPLE = [
   { login: "jlopezlira", name: "Juan José López Lira" },
@@ -201,7 +201,7 @@ export default class Settings extends View {
         return capturing ? v_flex().w_full().child(line).child(this.pressNote(c, "Esc to keep, Backspace to remove.")) : line;
       })));
     return v_flex().w_full()
-      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("Kanso's own keys. Click one and press the new key."))
+      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("kansō's own keys. Click one and press the new key."))
       .child(div().text_size(12).line_height(1.5).text_color(c.dim).child("Panes, tabs and spaces use Herdr's keys, in Herdr's settings."))
       .children(rows);
   }
@@ -228,7 +228,7 @@ export default class Settings extends View {
         .child(glyph);
     };
     return v_flex().w_full()
-      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("What Kanso shows, and in what order. The arrows move a panel's button along the tab bar; a panel or piece turned off leaves its place at once, and comes back the same way."))
+      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("What kansō shows, and in what order. The arrows move a panel's button along the tab bar; a panel or piece turned off leaves its place at once, and comes back the same way."))
       .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child("Side panels"))
       .when(!panels.length, (el) => el.child(div().py(G.sm).text_size(12).text_color(c.dim).child("The tab bar lists the panels once it has drawn.")))
       .children(panels.map((p) => row(p.id, p.label, null, !off.has(p.id), (on) => { const next = new Set(off); on ? next.delete(p.id) : next.add(p.id); setShared("kanso.panels.off", [...next]); },
@@ -276,7 +276,7 @@ export default class Settings extends View {
     const waiting = have && latest && compare(latest, have) > 0 ? latest : null;
     return v_flex().w_full()
       .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(c.accent + "1a")
-        .child(div().flex_1().text_size(13).text_color(c.text).child(`Kanso ${waiting} is available. You have ${have}.`))
+        .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
         .child(div().id("update-kanso").flex_none().h(28).px(12).rounded(6).bg(c.primary).text_color(c.primaryText).text_size(12.5).font_medium()
           .flex().items_center().cursor_pointer().child(`Update to ${waiting}`)
           .on_click((_e, _cx) => { run("kanso-tabs.update"); closeOverlay(props().overlay); }))))
@@ -297,7 +297,7 @@ export default class Settings extends View {
       .child(svg("mods/kanso-chrome/icons/open-with.svg").size(13).flex_none().text_color(c.dim));
     const heading = (text) => div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child(text);
     return v_flex().w_full()
-      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("Kanso is a layout for Herdr, made in the open."))
+      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("kansō is a layout for Herdr, made in the open."))
       .child(heading("Where it comes from"))
       // Herdr's own mark (the app ships it) and Kanso's ensō.
       .children(PLACES.map((p) => link(p.id, p.id === "herdr"
@@ -314,7 +314,9 @@ export default class Settings extends View {
     return v_flex().id("kanso-settings").track_focus(this.handle).size_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().w_full().items_center().gap(G.md)
-        .child(div().flex_1().text_size(15).font_semibold().child(this.installed ? `Kanso ${this.installed}` : "Kanso"))
+        .child(div().flex_1().text_size(15).font_semibold().child(this.installed ? `kansō ${this.installed}` : "kansō"))
+        // How to use it, and its keys on a keyboard (kanso-help, ⌘?).
+        .child(quietLink("settings-help", "Help and keys", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
       .child(v_flex().flex_1().min_h(0).pt(G.md).overflow_y_scrollbar().child(page));

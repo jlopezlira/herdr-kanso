@@ -60,7 +60,7 @@ const text = (x, y, size, color, body, extra = "") => `<text x="${x}" y="${y}" f
 // enough for X (280).
 export function postText(parts, fallback) {
   const line = parts.length ? `${parts.join(", ")}.` : fallback;
-  return `${line[0].toUpperCase()}${line.slice(1)}\n\nCounted by Kanso for Herdr: ${REPO_URL}`.slice(0, 280);
+  return `${line[0].toUpperCase()}${line.slice(1)}\n\nCounted by kansō for Herdr: ${REPO_URL}`.slice(0, 280);
 }
 
 // The card, top to bottom: { svg, width, height }.
@@ -152,7 +152,7 @@ export function cardSvg(spec, c) {
   // Footer.
   y += 72;
   out.push(`<rect x="${PAD}" y="${y - 40}" width="${INNER}" height="1" ${paint(c.border)}/>`);
-  out.push(text(PAD, y, 20, c.dim, "Kanso for Herdr"));
+  out.push(text(PAD, y, 20, c.dim, "kansō for Herdr"));
   out.push(text(W - PAD, y, 20, c.dim, REPO_URL, 'text-anchor="end"'));
   const height = y + PAD - 20;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="${esc(FONT)}">

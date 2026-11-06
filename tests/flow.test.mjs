@@ -260,3 +260,131 @@ test("Ports finds dev servers, the pane that runs each, and the ones no pane own
   assert.equal(list[1].secs, 3723);
   assert.equal(shortArgs("/usr/local/bin/node /Users/me/web/node_modules/.bin/next dev"), "node /Users/me/web/node_modules/.bin/next dev");
 });
+
+test("Every list answers vim's keys: j/k, gg/G, Enter, Esc; with cmd, ctrl or alt a key is not the list's", async () => {
+  const { listKey, moveTo } = await load("kanso-menu/listkeys.js", ["listKey", "moveTo"]);
+  const key = (k, mods = {}) => ({ key: k, modifiers: mods });
+  const memo = {};
+  assert.equal(listKey(key("j"), memo), "down");
+  assert.equal(listKey(key("down"), memo), "down");
+  assert.equal(listKey(key("k"), memo), "up");
+  assert.equal(listKey(key("g", { shift: true }), memo), "last", "G");
+  assert.equal(listKey(key("g"), memo, 1000), "pending");
+  assert.equal(listKey(key("g"), memo, 1500), "first", "gg");
+  assert.equal(listKey(key("g"), memo, 3000), "pending");
+  assert.equal(listKey(key("g"), memo, 4500), "pending", "too slow for gg: a new first g");
+  assert.equal(listKey(key("enter"), memo), "enter");
+  assert.equal(listKey(key("escape"), memo), "escape");
+  assert.equal(listKey(key("j", { platform: true }), memo), null, "cmd-j is not the list's");
+  assert.equal(listKey(key("k", { control: true }), memo), null);
+  assert.equal(listKey(key("x"), memo), null);
+  assert.deepEqual([moveTo("down", 4, 5), moveTo("up", 0, 5), moveTo("first", 3, 5), moveTo("last", 0, 5), moveTo("down", 0, 0)], [4, 0, 0, 4, 0], "j and k stop at the ends");
+});
+
+test("Help draws the keyboard from your keys: a chord as key and modifiers, the layout's key over the global one", async () => {
+  const { parseChord, layer, describe } = await load("kanso-help/keymap.js", ["parseChord", "layer", "describe"]);
+  assert.deepEqual(clone(parseChord("cmd-shift--")), { mods: ["shift", "cmd"], key: "-" });
+  assert.deepEqual(clone(parseChord("cmd-}")), { mods: ["shift", "cmd"], key: "]" }, "macOS's shifted spelling");
+  assert.deepEqual(clone(parseChord("cmd-alt-h")), { mods: ["alt", "cmd"], key: "h" });
+  const bindings = [
+    { section: "global", keys: "cmd-alt-h", action: "app.hide_others" },
+    { section: "layout:kanso", keys: "cmd-alt-h", action: "kanso-strip.vim-left" },
+    { section: "layout:kanso", keys: "cmd-alt-shift-up", action: "terminal" },
+    { section: "terminal", keys: "cmd-alt-j", action: "send:x" },
+    { section: "mod:kanso-spend", keys: "cmd-alt-k", action: "kanso-spend.back" },
+  ];
+  const l = layer(bindings, ["alt", "cmd"]);
+  assert.deepEqual([...l.keys()], ["h"], "only the layout's and global keys, never the terminal's or a panel's");
+  assert.equal(l.get("h").action, "kanso-strip.vim-left", "the layout's key wins");
+  assert.equal(describe("kanso-strip.vim-left"), "Pane to the left, or the sidebar's list");
+  assert.equal(describe("kanso-strip.col-3"), "Column 3");
+  assert.equal(describe("tab.something_new"), "Tab something new");
+});
+
+test("hjkl dōjō: vim's motions on a board and on code, the fewest moves and the hint", async () => {
+  const { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points } = await load("kanso-dojo/dojo.js", ["LEVELS", "gridWorld", "textWorld", "move", "shortest", "newTarget", "points"]);
+  const g = gridWorld(), L = (n) => LEVELS[n - 1];
+  assert.deepEqual(clone(move(g, { x: 0, y: 0 }, "h")), { x: 0, y: 0 }, "the board's edge holds");
+  assert.deepEqual(clone(move(g, { x: 1, y: 0 }, "5l")), { x: 6, y: 0 });
+  assert.deepEqual(clone(move(g, { x: 2, y: 3 }, "$")), { x: 17, y: 3 });
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 17, y: 0 }, L(4)).dist, 1, "$ beats sixteen l's");
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 17, y: 0 }, L(4)).first, "$");
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 9, y: 0 }, L(1)).dist, 8, "with h and l only, eight it is");
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 7, y: 2 }, L(5)).dist, 2, "6l then 2j");
+  const w = { kind: "text", lines: ["const herd = agents.filter((a) => a.idle);", "  return tab;"] };
+  assert.deepEqual(clone(move(w, { x: 0, y: 0 }, "w")), { x: 6, y: 0 }, "w: the next word");
+  assert.deepEqual(clone(move(w, { x: 6, y: 0 }, "w")), { x: 11, y: 0 }, "= is a word of its own");
+  assert.deepEqual(clone(move(w, { x: 6, y: 0 }, "e")), { x: 9, y: 0 }, "e: the word's end");
+  assert.deepEqual(clone(move(w, { x: 11, y: 0 }, "b")), { x: 6, y: 0 }, "b: back to a word's start");
+  assert.deepEqual(clone(move(w, { x: 41, y: 0 }, "w")), { x: 2, y: 1 }, "w crosses to the next line");
+  assert.deepEqual(clone(move(w, { x: 0, y: 0 }, "fa")), { x: 13, y: 0 }, "f: onto the letter");
+  assert.deepEqual(clone(move(w, { x: 0, y: 0 }, "ta")), { x: 12, y: 0 }, "t: just before it");
+  assert.deepEqual(clone(move(w, { x: 20, y: 0 }, "Fa")), { x: 13, y: 0 });
+  assert.deepEqual(clone(move(w, { x: 9, y: 1 }, "^")), { x: 2, y: 1 });
+  assert.deepEqual(clone(move(w, { x: 9, y: 1 }, "0")), { x: 0, y: 1 });
+  assert.deepEqual(clone(move(w, { x: 2, y: 1 }, "$")), { x: 12, y: 1 });
+  assert.deepEqual(clone(move(w, { x: 30, y: 0 }, "j")), { x: 12, y: 1 }, "j keeps the column, inside the line");
+  assert.equal(shortest(w, { x: 0, y: 0 }, { x: 13, y: 0 }, L(7)).dist, 1, "one f");
+  let r = 0; const rand = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+  for (let n = 1; n <= LEVELS.length; n++) {
+    const world = LEVELS[n - 1].world === "grid" ? gridWorld() : textWorld(n);
+    const at = { x: 0, y: 0 };
+    for (let i = 0; i < 10; i++) {
+      const { target, need } = newTarget(world, at, LEVELS[n - 1], rand);
+      assert.ok(need >= 1 && need < Infinity, `level ${n}: a target it can reach`);
+      assert.equal(shortest(world, at, target, LEVELS[n - 1]).dist, need);
+      if (n === 1) assert.equal(target.y, at.y, "level 1: on the row");
+      if (n === 2) assert.equal(target.x, at.x, "level 2: on the column");
+    }
+  }
+  assert.deepEqual([points(3, 3, 0), points(3, 3, 4), points(5, 3, 4)], [15, 23, 10], "the fewest moves and the streak count");
+});
+
+test("Hachi, the dōjō's shiba, wears the game on its face", async () => {
+  const { hachiPixels } = await load("kanso-dojo/mascot.js", ["hachiPixels"], { div: () => null, h_flex: () => null, v_flex: () => null });
+  const eyes = (g) => g.slice(6, 8).map((r) => r.join("")).join("|");
+  const moods = ["calm", "glad", "sweat", "sleep"].map((m) => eyes(hachiPixels(m)));
+  assert.equal(new Set([moods[0], moods[1], moods[3]]).size, 3, "open, glad and asleep look apart");
+  assert.ok(hachiPixels("sweat").some((r) => r.includes("B")), "a drop of sweat");
+  assert.ok(hachiPixels("glad").some((r) => r.includes("T")), "tongue out when glad");
+  assert.ok(hachiPixels().every((row) => row.length === 16) && hachiPixels().length === 15);
+});
+
+
+test("The dōjō's card: the best round, the days in a row, only the levels played", async () => {
+  const host = { theme: () => ({}), exec, appHome: () => "/x", notify: () => {}, window: () => ({ platform: "macos" }) };
+  const { dayStreak, calendar, dojoShare } = await load("kanso-dojo/card.js", ["dayStreak", "calendar", "dojoShare"], host);
+  const now = new Date(2026, 10, 6, 12).getTime();
+  assert.equal(dayStreak(["2026-11-04", "2026-11-05", "2026-11-06"], now), 3);
+  assert.equal(dayStreak(["2026-11-04", "2026-11-05"], now), 2, "today may still come");
+  assert.equal(dayStreak(["2026-11-01"], now), 0);
+  const cal = calendar(["2026-11-06"], now, 4);
+  assert.equal(cal.length, 4);
+  assert.equal(cal.at(-1).contributionDays.at(-1).contributionLevel, "FOURTH_QUARTILE", "today, lit, last");
+  const card = dojoShare({ bests: { 1: 40, 3: 95 }, rounds: 4, rings: 20, fewest: 15, longest: 6, days: ["2026-11-05", "2026-11-06"], first: now - 86400000 }, now);
+  assert.equal(card.spec.title, "hjkl dōjō");
+  assert.equal(card.spec.hero.big, "95");
+  assert.match(card.spec.hero.label, /level 3: h j k l/);
+  assert.equal(card.spec.blocks[1].rows.length, 2, "only the levels played");
+  assert.match(card.text, /^95 points in my best 60-second round of vim, in the hjkl dōjō/);
+  assert.match(card.text, /75% in the fewest moves/);
+});
+
+test("The dōjō keeps its rounds in its own SQLite: bests per level, totals, the days played", async (t) => {
+  const dir = await temporary(t);
+  const { Store } = await load("kanso-dojo/store.js", ["Store"], { exec, appHome: () => dir });
+  const store = new Store();
+  assert.equal(await store.level(), 1, "level 1 to start");
+  await store.setLevel(3);
+  assert.equal(await store.level(), 3);
+  const day = new Date(2026, 10, 6, 12).getTime();
+  await store.add({ at: day, level: 1, score: 40, rings: 4, fewest: 2, streak: 2 });
+  await store.add({ at: day + 1000, level: 1, score: 55, rings: 5, fewest: 4, streak: 3 });
+  await store.add({ at: day - 86400000, level: 3, score: 30, rings: 3, fewest: 3, streak: 3 });
+  const tot = clone(await store.totals());
+  assert.deepEqual(tot.bests, { 1: 55, 3: 30 });
+  assert.deepEqual([tot.rounds, tot.rings, tot.fewest, tot.longest, tot.first], [3, 12, 9, 3, day - 86400000]);
+  assert.deepEqual(tot.days, ["2026-11-05", "2026-11-06"]);
+  assert.match(store.db, /data\/kanso-dojo\/dojo\.db$/);
+});
+
