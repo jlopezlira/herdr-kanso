@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.2.3] - 2026-11-06
+
+### Fixed
+
+- The working ring is the turning ensō again on battery too; 3.2.2 drew it as stepping quarter arcs. A working title still holds still and the strip's dots still stop pulsing on battery.
+
 ## [3.2.2] - 2026-11-06
 
 ### Changed
