@@ -759,7 +759,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     args}` (runs it with `name`, as Herdr's prompt) or `label: {terminal,
     key}` (`hc label <terminal> <key>=<text>`; empty removes the label).
     Opened as a dialog 420 wide.
-  - `kanso-help` (⌘?): keys() drawn as a keyboard per modifier; vim board.
+  - `kanso-help` (⌘?): keys() as a keyboard. `kanso-dojo`: vim game window.
   - `kanso-menu`: the terminal right-click menu (root `terminal_menu`):
     split right, left and down through the strip, width, right-clicks
     to the program, send back, "Open with…" (when the pane has a folder),

@@ -1,10 +1,10 @@
-// kansō help's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
+// hjkl dōjō's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// What learning vim is worth showing: the best round, the rings reached,
+// What training in the dōjō is worth showing: the best round, the rings reached,
 // how many in the fewest moves, the days practiced in a row and on a
 // calendar, the best of each level. Only your own numbers.
 import { postText } from "./share.js";
-import { LEVELS } from "./keymap.js";
+import { LEVELS } from "./dojo.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY = 86_400_000;
@@ -42,22 +42,22 @@ export function calendar(days, now = Date.now(), weeks = 53) {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /** The card and the post from the store's totals: { spec, text }. */
-export function vimShare(totals, now = Date.now()) {
+export function dojoShare(totals, now = Date.now()) {
   const best = Object.entries(totals.bests ?? {}).reduce((m, [lv, s]) => (s > m.score ? { level: Number(lv), score: s } : m), { level: null, score: 0 });
   const lv = LEVELS.find((L) => L.n === best.level);
   const streak = dayStreak(totals.days ?? [], now);
   const pct = totals.rings ? Math.round((100 * totals.fewest) / totals.rings) : 0;
   const since = totals.first ? new Date(totals.first) : null;
   const spec = {
-    title: "Learning vim",
+    title: "hjkl dōjō",
     right: since ? `since ${MONTHS[since.getMonth()]} ${since.getDate()}` : "",
     hero: {
       big: String(best.score), small: "points",
-      label: lv ? `my best 60-second round, level ${lv.n}: ${lv.name}` : "my best 60-second round",
-      delta: totals.longest ? { up: true, text: `${totals.longest} rings in a row in the fewest moves` } : null,
+      label: lv ? `my best 60-second round of vim, level ${lv.n}: ${lv.name}` : "my best 60-second round of vim",
+      delta: totals.longest ? { up: true, text: `${totals.longest} targets in a row in the fewest moves` } : null,
     },
     stats: [
-      { value: String(totals.rings ?? 0), unit: "rings reached" },
+      { value: String(totals.rings ?? 0), unit: "targets reached" },
       { value: `${pct}%`, unit: "in the fewest moves" },
       { value: String(totals.rounds ?? 0), unit: totals.rounds === 1 ? "round" : "rounds" },
       { value: String((totals.days ?? []).length), unit: (totals.days ?? []).length === 1 ? "day practiced" : "days practiced" },
@@ -69,9 +69,9 @@ export function vimShare(totals, now = Date.now()) {
     ],
   };
   const parts = [
-    `learning vim: ${best.score} points in my best 60-second round`,
-    totals.rings ? `${plural(totals.rings, "ring", "rings")}, ${pct}% in the fewest moves` : null,
+    `${best.score} points in my best 60-second round of vim, in the hjkl dōjō`,
+    totals.rings ? `${plural(totals.rings, "target", "targets")}, ${pct}% in the fewest moves` : null,
     streak > 1 ? `${streak} days in a row` : null,
   ].filter(Boolean);
-  return { spec, text: postText(parts, "learning vim with h j k l") };
+  return { spec, text: postText(parts, "training vim in the hjkl dōjō") };
 }

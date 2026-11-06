@@ -282,7 +282,7 @@ test("Every list answers vim's keys: j/k, gg/G, Enter, Esc; with cmd, ctrl or al
 });
 
 test("Help draws the keyboard from your keys: a chord as key and modifiers, the layout's key over the global one", async () => {
-  const { parseChord, layer, describe, step, fewest, LEVELS, bestMove, newTarget, points } = await load("kanso-help/keymap.js", ["parseChord", "layer", "describe", "step", "fewest", "LEVELS", "bestMove", "newTarget", "points"]);
+  const { parseChord, layer, describe } = await load("kanso-help/keymap.js", ["parseChord", "layer", "describe"]);
   assert.deepEqual(clone(parseChord("cmd-shift--")), { mods: ["shift", "cmd"], key: "-" });
   assert.deepEqual(clone(parseChord("cmd-}")), { mods: ["shift", "cmd"], key: "]" }, "macOS's shifted spelling");
   assert.deepEqual(clone(parseChord("cmd-alt-h")), { mods: ["alt", "cmd"], key: "h" });
@@ -299,28 +299,59 @@ test("Help draws the keyboard from your keys: a chord as key and modifiers, the 
   assert.equal(describe("kanso-strip.vim-left"), "Pane to the left, or the sidebar's list");
   assert.equal(describe("kanso-strip.col-3"), "Column 3");
   assert.equal(describe("tab.something_new"), "Tab something new");
-  assert.deepEqual(clone(step({ x: 0, y: 0 }, "h", 5, 3)), { x: 0, y: 0 }, "the board's edge holds");
-  assert.deepEqual(clone(step({ x: 2, y: 1 }, "$", 5, 3)), { x: 4, y: 1 });
-  assert.deepEqual(clone(step({ x: 2, y: 1 }, "G", 5, 3)), { x: 2, y: 2 });
-  const [, , hjkl, edges, counts] = LEVELS;
-  assert.equal(fewest({ x: 1, y: 0 }, { x: 9, y: 0 }, 10, 3, edges), 1, "$ beats eight l's");
-  assert.equal(fewest({ x: 1, y: 0 }, { x: 9, y: 0 }, 10, 3, hjkl), 8, "with h j k l only, eight it is");
-  assert.equal(fewest({ x: 1, y: 0 }, { x: 7, y: 2 }, 10, 3, counts), 2, "6l then 2j");
-  assert.deepEqual(clone(step({ x: 1, y: 0 }, "l", 10, 3, 5)), { x: 6, y: 0 }, "5l");
-  assert.equal(bestMove({ x: 1, y: 0 }, { x: 9, y: 0 }, 10, 3, edges), "$");
-  assert.equal(bestMove({ x: 1, y: 0 }, { x: 7, y: 0 }, 10, 3, counts), "6l");
-  assert.equal(bestMove({ x: 1, y: 1 }, { x: 1, y: 0 }, 10, 3, LEVELS[1]), "k");
+});
+
+test("hjkl dōjō: vim's motions on a board and on code, the fewest moves and the hint", async () => {
+  const { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points } = await load("kanso-dojo/dojo.js", ["LEVELS", "gridWorld", "textWorld", "move", "shortest", "newTarget", "points"]);
+  const g = gridWorld(), L = (n) => LEVELS[n - 1];
+  assert.deepEqual(clone(move(g, { x: 0, y: 0 }, "h")), { x: 0, y: 0 }, "the board's edge holds");
+  assert.deepEqual(clone(move(g, { x: 1, y: 0 }, "5l")), { x: 6, y: 0 });
+  assert.deepEqual(clone(move(g, { x: 2, y: 3 }, "$")), { x: 17, y: 3 });
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 17, y: 0 }, L(4)).dist, 1, "$ beats sixteen l's");
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 17, y: 0 }, L(4)).first, "$");
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 9, y: 0 }, L(1)).dist, 8, "with h and l only, eight it is");
+  assert.equal(shortest(g, { x: 1, y: 0 }, { x: 7, y: 2 }, L(5)).dist, 2, "6l then 2j");
+  const w = { kind: "text", lines: ["const herd = agents.filter((a) => a.idle);", "  return tab;"] };
+  assert.deepEqual(clone(move(w, { x: 0, y: 0 }, "w")), { x: 6, y: 0 }, "w: the next word");
+  assert.deepEqual(clone(move(w, { x: 6, y: 0 }, "w")), { x: 11, y: 0 }, "= is a word of its own");
+  assert.deepEqual(clone(move(w, { x: 6, y: 0 }, "e")), { x: 9, y: 0 }, "e: the word's end");
+  assert.deepEqual(clone(move(w, { x: 11, y: 0 }, "b")), { x: 6, y: 0 }, "b: back to a word's start");
+  assert.deepEqual(clone(move(w, { x: 41, y: 0 }, "w")), { x: 2, y: 1 }, "w crosses to the next line");
+  assert.deepEqual(clone(move(w, { x: 0, y: 0 }, "fa")), { x: 13, y: 0 }, "f: onto the letter");
+  assert.deepEqual(clone(move(w, { x: 0, y: 0 }, "ta")), { x: 12, y: 0 }, "t: just before it");
+  assert.deepEqual(clone(move(w, { x: 20, y: 0 }, "Fa")), { x: 13, y: 0 });
+  assert.deepEqual(clone(move(w, { x: 9, y: 1 }, "^")), { x: 2, y: 1 });
+  assert.deepEqual(clone(move(w, { x: 9, y: 1 }, "0")), { x: 0, y: 1 });
+  assert.deepEqual(clone(move(w, { x: 2, y: 1 }, "$")), { x: 12, y: 1 });
+  assert.deepEqual(clone(move(w, { x: 30, y: 0 }, "j")), { x: 12, y: 1 }, "j keeps the column, inside the line");
+  assert.equal(shortest(w, { x: 0, y: 0 }, { x: 13, y: 0 }, L(7)).dist, 1, "one f");
   let r = 0; const rand = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
-  for (let i = 0; i < 50; i++) {
-    const at = { x: 4, y: 1 };
-    const row = newTarget(at, 10, 3, LEVELS[0], rand);
-    assert.ok(row.y === 1 && row.x !== 4, "level 1: on the block's row");
-    const col = newTarget(at, 10, 3, LEVELS[1], rand);
-    assert.ok(col.x === 4 && col.y !== 1, "level 2: on its column");
+  for (let n = 1; n <= LEVELS.length; n++) {
+    const world = LEVELS[n - 1].world === "grid" ? gridWorld() : textWorld(n);
+    const at = { x: 0, y: 0 };
+    for (let i = 0; i < 10; i++) {
+      const { target, need } = newTarget(world, at, LEVELS[n - 1], rand);
+      assert.ok(need >= 1 && need < Infinity, `level ${n}: a target it can reach`);
+      assert.equal(shortest(world, at, target, LEVELS[n - 1]).dist, need);
+      if (n === 1) assert.equal(target.y, at.y, "level 1: on the row");
+      if (n === 2) assert.equal(target.x, at.x, "level 2: on the column");
+    }
   }
   assert.deepEqual([points(3, 3, 0), points(3, 3, 4), points(5, 3, 4)], [15, 23, 10], "the fewest moves and the streak count");
+});
 
-  const { dayStreak, calendar, vimShare } = await load("kanso-help/vim-card.js", ["dayStreak", "calendar", "vimShare"], { theme: () => ({}), exec, appHome: () => "/x", notify: () => {}, window: () => ({ platform: "macos" }) });
+test("Daru opens its second eye on a goal reached, and wears the game on its face", async () => {
+  const { daruPixels } = await load("kanso-dojo/mascot.js", ["daruPixels"], { div: () => null, h_flex: () => null, v_flex: () => null });
+  const eye = (g) => g[5][8] + g[6][8];
+  assert.equal(eye(daruPixels("calm", false)), "EE", "one eye only, at first");
+  assert.equal(eye(daruPixels("calm", true)), "KK", "both, once the goal is reached");
+  assert.notDeepEqual(clone(daruPixels("glad")), clone(daruPixels("sweat")));
+  assert.ok(daruPixels().every((row) => row.length === 12) && daruPixels().length === 12);
+});
+
+test("The dōjō's card: the best round, the days in a row, only the levels played", async () => {
+  const host = { theme: () => ({}), exec, appHome: () => "/x", notify: () => {}, window: () => ({ platform: "macos" }) };
+  const { dayStreak, calendar, dojoShare } = await load("kanso-dojo/card.js", ["dayStreak", "calendar", "dojoShare"], host);
   const now = new Date(2026, 10, 6, 12).getTime();
   assert.equal(dayStreak(["2026-11-04", "2026-11-05", "2026-11-06"], now), 3);
   assert.equal(dayStreak(["2026-11-04", "2026-11-05"], now), 2, "today may still come");
@@ -328,17 +359,18 @@ test("Help draws the keyboard from your keys: a chord as key and modifiers, the 
   const cal = calendar(["2026-11-06"], now, 4);
   assert.equal(cal.length, 4);
   assert.equal(cal.at(-1).contributionDays.at(-1).contributionLevel, "FOURTH_QUARTILE", "today, lit, last");
-  const card = vimShare({ bests: { 1: 40, 3: 95 }, rounds: 4, rings: 20, fewest: 15, longest: 6, days: ["2026-11-05", "2026-11-06"], first: now - 86400000 }, now);
+  const card = dojoShare({ bests: { 1: 40, 3: 95 }, rounds: 4, rings: 20, fewest: 15, longest: 6, days: ["2026-11-05", "2026-11-06"], first: now - 86400000 }, now);
+  assert.equal(card.spec.title, "hjkl dōjō");
   assert.equal(card.spec.hero.big, "95");
   assert.match(card.spec.hero.label, /level 3: h j k l/);
   assert.equal(card.spec.blocks[1].rows.length, 2, "only the levels played");
-  assert.match(card.text, /95 points/);
+  assert.match(card.text, /^95 points in my best 60-second round of vim, in the hjkl dōjō/);
   assert.match(card.text, /75% in the fewest moves/);
 });
 
-test("The vim game keeps its rounds in its own SQLite: bests per level, totals, the days played", async (t) => {
+test("The dōjō keeps its rounds in its own SQLite: bests per level, totals, the days played", async (t) => {
   const dir = await temporary(t);
-  const { Store } = await load("kanso-help/store.js", ["Store"], { exec, appHome: () => dir });
+  const { Store } = await load("kanso-dojo/store.js", ["Store"], { exec, appHome: () => dir });
   const store = new Store();
   assert.equal(await store.level(), 1, "level 1 to start");
   await store.setLevel(3);
@@ -351,4 +383,6 @@ test("The vim game keeps its rounds in its own SQLite: bests per level, totals, 
   assert.deepEqual(tot.bests, { 1: 55, 3: 30 });
   assert.deepEqual([tot.rounds, tot.rings, tot.fewest, tot.longest, tot.first], [3, 12, 9, 3, day - 86400000]);
   assert.deepEqual(tot.days, ["2026-11-05", "2026-11-06"]);
+  assert.match(store.db, /data\/kanso-dojo\/dojo\.db$/);
 });
+

@@ -13,7 +13,8 @@ checks all of this, and merging to main releases the version in
 ### Added
 
 - Vim keys: Cmd+Alt+H/J/K/L go left, down, up and right between panes, and with Shift move the pane, up and down within its stack too. Left of the first pane is the sidebar's list: a ring marks the row you are on, J and K move, GG and Shift+G go to the first and the last, Enter or L opens the row, / searches, and Esc or Cmd+Alt+L goes back to the pane you came from.
-- kansō help (⌘?, or Help and keys in kansō settings): the keys on a keyboard you can see, from your own keys.json. Pick ⌘ ⌥ ⇧ ⌃, or press a chord, and the keys that do something light up with what they do; a Lists layer shows j k gg G. A board to practice vim's moves (h j k l, 0 $, gg G) in the fewest keys. A guide to the strip, the sidebar, panels, Sleep and Arrangements, and where to set each thing up.
+- kansō help (⌘?, or Help and keys in kansō settings): the keys on a keyboard you can see, from your own keys.json. Pick ⌘ ⌥ ⇧ ⌃, or press a chord, and the keys that do something light up with what they do; a Lists layer shows j k gg G. A guide to the strip, the sidebar, panels, Sleep and Arrangements, and where to set each thing up.
+- hjkl dōjō, a game to learn vim's moves, kept by Daru, a pixel daruma that opens its second eye when you beat your best. Nine levels, from h and l alone on a board to w b e, f t, 0 ^ $ and gg G on real lines of code; 60-second rounds, points for the fewest moves, a streak, and the key that gets there lit after two seconds still. It opens as a window that asks before it closes. Rounds are kept in data/kanso-dojo/dojo.db, and Share makes a card of your best round, targets, days in a row and levels.
 - Every kansō menu and list answers the same keys: the pane menu, Open with, the sidebar's right-click menus, Sleep and Arrangements move with J and K (or the arrows), GG and Shift+G, Enter and Esc.
 
 ### Changed

@@ -1,12 +1,12 @@
-// kansō help, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
+// hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// The vim game's rounds, kept in a SQLite database of its own
-// (data/kanso-help/vim.db, through the sqlite3 command): one row per round
+// The dōjō's rounds, kept in a SQLite database of its own
+// (data/kanso-dojo/dojo.db, through the sqlite3 command): one row per round
 // played, and the level you were on. Bests, totals and the days you
 // practiced are read from the rounds.
 import { exec, appHome } from "herdr";
 
-export const STORE_DIR = "data/kanso-help";
+export const STORE_DIR = "data/kanso-dojo";
 const int = (n) => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : 0);
 
 export const SCHEMA = `CREATE TABLE IF NOT EXISTS rounds(
@@ -32,7 +32,7 @@ export function totalsOf(rows, days) {
 
 export class Store {
   constructor() {
-    this.db = `${appHome()}/${STORE_DIR}/vim.db`;
+    this.db = `${appHome()}/${STORE_DIR}/dojo.db`;
     this.ready = null;
   }
 

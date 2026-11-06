@@ -367,6 +367,9 @@ In the sidebar's list, and in every kansō menu and list: J and K (or the
 arrows) move, GG and Shift+G go to the first and the last, Enter opens, L
 opens too in the sidebar, / searches, Esc goes back to the pane you came
 from (Cmd+Alt+L as well).
+
+Cmd+? opens kansō help: your keys drawn on a keyboard, layer by modifier,
+and the way into the **hjkl dōjō**, a game to learn vim's moves with Daru.
 | Cmd+Alt+S | Send the pane's work to another agent |
 | Cmd+Alt+T | Arrangements: save this tab, or open a saved one |
 
