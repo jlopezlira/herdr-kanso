@@ -296,7 +296,7 @@ export default class Arrange extends View {
         .child(svg("mods/kanso-chrome/icons/layers.svg").size(15).flex_none().text_color(t.muted))
         .child(v_flex().flex_1().min_w(0).gap(2)
           .child(h_flex().min_w(0).gap(8).items_baseline()
-            .child(div().flex_shrink().min_w(0).truncate().text_size(13).text_color(t.foreground).child(a.name))
+            .child(div().flex_shrink_1().min_w(0).truncate().text_size(13).text_color(t.foreground).child(a.name))
             .when(Boolean(from), (el) => el.child(div().flex_none().max_w(140).truncate().text_size(11.5).text_color(t.dim).child(`from ${from}`))))
           .child(div().truncate().text_size(11.5).text_color(t.dim).child(`${n} ${n === 1 ? "pane" : "panes"}: ${summary(a)}`)))
         .when(!this.busy, (el) => el.child(div().id(`ar-ow-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(t.dim)
