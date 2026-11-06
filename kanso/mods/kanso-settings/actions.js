@@ -65,8 +65,8 @@ export const GROUPS = [
 
 // Herdr's commands the strip does its own way, on Herdr's own keys (a split,
 // closing, going to or swapping a pane, zoom as the column's width, a space
-// that is there). Not Kanso's keys: the Keys page leaves them out.
-export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right|up|down)|width)|kanso-spaces\.space-\d)$/;
+// that is there, help as kansō's help). Not kansō's own keys: the Keys page leaves them out.
+export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right|up|down)|width)|kanso-spaces\.space-\d|mod\.open:kanso-help)$/;
 
 // Whether a bound action belongs to a row: its own, or one of a family's nine.
 export const ofRow = (row, action) => (row.family ? new RegExp(`^${row.family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[1-9]$`).test(action) : action === row.action);

@@ -315,6 +315,8 @@ export default class Settings extends View {
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().w_full().items_center().gap(G.md)
         .child(div().flex_1().text_size(15).font_semibold().child(this.installed ? `kansō ${this.installed}` : "kansō"))
+        // How to use it, and its keys on a keyboard (kanso-help, ⌘?).
+        .child(quietLink("settings-help", "Help and keys", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
       .child(v_flex().flex_1().min_h(0).pt(G.md).overflow_y_scrollbar().child(page));

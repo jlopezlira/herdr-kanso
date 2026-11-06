@@ -65,7 +65,8 @@ export const DEFAULT_KEYS = {
     "ctrl-alt-p": "kanso-spaces.view-spaces",
     "ctrl-alt-s": "kanso-spaces.view-agents",
     "ctrl-alt-t": "kanso-spaces.view-threads",
-    "ctrl-shift-,": "kanso-tabs.settings"
+    "ctrl-shift-,": "kanso-tabs.settings",
+    "cmd-shift-/": "mod.open:kanso-help"
   },
   "mod:kanso-spend": {
     "cmd-r": "kanso-spend.refresh",

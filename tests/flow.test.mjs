@@ -280,3 +280,28 @@ test("Every list answers vim's keys: j/k, gg/G, Enter, Esc; with cmd, ctrl or al
   assert.equal(listKey(key("x"), memo), null);
   assert.deepEqual([moveTo("down", 4, 5), moveTo("up", 0, 5), moveTo("first", 3, 5), moveTo("last", 0, 5), moveTo("down", 0, 0)], [4, 0, 0, 4, 0], "j and k stop at the ends");
 });
+
+test("Help draws the keyboard from your keys: a chord as key and modifiers, the layout's key over the global one", async () => {
+  const { parseChord, layer, describe, step, fewest } = await load("kanso-help/keymap.js", ["parseChord", "layer", "describe", "step", "fewest"]);
+  assert.deepEqual(clone(parseChord("cmd-shift--")), { mods: ["shift", "cmd"], key: "-" });
+  assert.deepEqual(clone(parseChord("cmd-}")), { mods: ["shift", "cmd"], key: "]" }, "macOS's shifted spelling");
+  assert.deepEqual(clone(parseChord("cmd-alt-h")), { mods: ["alt", "cmd"], key: "h" });
+  const bindings = [
+    { section: "global", keys: "cmd-alt-h", action: "app.hide_others" },
+    { section: "layout:kanso", keys: "cmd-alt-h", action: "kanso-strip.vim-left" },
+    { section: "layout:kanso", keys: "cmd-alt-shift-up", action: "terminal" },
+    { section: "terminal", keys: "cmd-alt-j", action: "send:x" },
+    { section: "mod:kanso-spend", keys: "cmd-alt-k", action: "kanso-spend.back" },
+  ];
+  const l = layer(bindings, ["alt", "cmd"]);
+  assert.deepEqual([...l.keys()], ["h"], "only the layout's and global keys, never the terminal's or a panel's");
+  assert.equal(l.get("h").action, "kanso-strip.vim-left", "the layout's key wins");
+  assert.equal(describe("kanso-strip.vim-left"), "Pane to the left, or the sidebar's list");
+  assert.equal(describe("kanso-strip.col-3"), "Column 3");
+  assert.equal(describe("tab.something_new"), "Tab something new");
+  assert.deepEqual(clone(step({ x: 0, y: 0 }, "h", 5, 3)), { x: 0, y: 0 }, "the board's edge holds");
+  assert.deepEqual(clone(step({ x: 2, y: 1 }, "$", 5, 3)), { x: 4, y: 1 });
+  assert.deepEqual(clone(step({ x: 2, y: 1 }, "G", 5, 3)), { x: 2, y: 2 });
+  assert.equal(fewest({ x: 1, y: 0 }, { x: 9, y: 0 }, 10, 3), 1, "$ beats eight l's");
+  assert.equal(fewest({ x: 1, y: 1 }, { x: 2, y: 2 }, 10, 3), 2);
+});
