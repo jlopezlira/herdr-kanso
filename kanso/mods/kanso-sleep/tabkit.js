@@ -3,7 +3,8 @@
 // A tab as data, and a tab again from that data: what each pane runs and
 // where, in the strip's columns and widths; and opening it as a new tab,
 // pane by pane where the strip puts a split. kanso-arrange (arrangements)
-// and kanso-sleep (tabs put to sleep) both use it; kanso-arrange/tabkit.js
+// and kanso-sleep (tabs put to sleep) both use it, and the sidebar names
+// a sleeping tab's programs with it; kanso-arrange/tabkit.js
 // is the one you edit (`npm run sync:share` copies it, and a test fails
 // when a copy differs).
 import { spaces, panes, terminals, shared, setShared, run, home } from "herdr";
@@ -96,13 +97,23 @@ export async function openTab(a, cx, { space = null, create = null, progress = (
   const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
   if (!flat.length) throw new Error("nothing to open");
   const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}) });
-  let starter = null;
+  let starter = null, made = null;
   if (!space && create) {
     const { key, ...args } = create;
+    const had = new Set(spaces().map((sp) => sp.id));
     run("space.new", args);
-    for (let i = 0; i < 50 && !space; i++) { await cx.sleep(100); space = spaces().find((sp) => projectOf(sp) === key) ?? null; }
-    if (!space) throw new Error("Herdr did not make the space");
-    starter = space.tabs?.[0]?.id ?? null;
+    // Its starter tab too: it goes once the tab is open.
+    for (let i = 0; i < 50 && !starter; i++) {
+      await cx.sleep(100);
+      space = spaces().find((sp) => !had.has(sp.id) && projectOf(sp) === key) ?? null;
+      starter = space?.tabs?.[0]?.id ?? null;
+    }
+    if (!space) {
+      // One made under another folder spelling (a link, say) is not left behind.
+      for (const sp of spaces().filter((sp) => !had.has(sp.id) && sp.name === args.name)) run("space.close", { id: sp.id, confirmed: true });
+      throw new Error("Herdr did not make the space");
+    }
+    made = space.id;
   }
   if (!space) throw new Error("no space to open it in");
   progress(`Opening 1 of ${flat.length}`);
@@ -143,6 +154,10 @@ export async function openTab(a, cx, { space = null, create = null, progress = (
     if (tab) {
       for (const q of panes().filter((q) => q.tab === tab.id && !counted.has(q.pane) && q.terminal && asked.has(argvOf.get(q.terminal)))) run("terminal.kill", { terminal: q.terminal });
     } else for (const t of ours()) run("tab.close", { id: t.id, confirmed: true });
+    // A space made for it goes again when nothing of it opened; else only
+    // its starter tab, as on success.
+    if (made && !ids.length) run("space.close", { id: made, confirmed: true });
+    else if (starter) run("tab.close", { id: starter, confirmed: true });
     const err = e instanceof Error ? e : new Error(String(e));
     err.opened = ids;
     throw err;

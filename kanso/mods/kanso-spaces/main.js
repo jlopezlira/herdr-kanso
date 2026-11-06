@@ -12,6 +12,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover } from "gpui-base";
 import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
 import { findThreads } from "./threads.js";
+import { programOf } from "./tabkit.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, home, appHome } from "herdr";
 
@@ -98,12 +99,15 @@ const sleepProject = (spaceId) => arrange({ sleep: { scope: "project", space: sp
 // What sleeps, read from kanso-sleep's database: at start (shared state
 // outlives a restart and may be old) and every 30 s. A read that a newer
 // publication ("kanso.asleep.at", set by kanso-sleep too) overtook is dropped.
+// kanso-sleep/store.js's STALE_MS (a test keeps them equal): a sleep or wake
+// under way that long stopped half way, and shows again.
+const ASLEEP_STALE_MS = 10 * 60_000;
 // Reads overtaken by a later one of this sidebar are dropped too, even when
 // that later one changed nothing (and so published nothing).
 let asleepReads = 0, asleepApplied = 0;
 async function loadAsleep() {
   const started = Date.now(), seq = ++asleepReads;
-  const r = await exec("sqlite3", ["-json", `${appHome()}/data/kanso-sleep/sleep.db`, "SELECT project, name, saved, layout FROM asleep;"]).catch(() => null);
+  const r = await exec("sqlite3", ["-cmd", ".timeout 5000", "-json", `${appHome()}/data/kanso-sleep/sleep.db`, "SELECT project, name, saved, layout FROM asleep;"]).catch(() => null);
   if (seq < asleepApplied || (shared("kanso.asleep.at") ?? 0) > started) return;
   asleepApplied = seq;
   const publish = (list) => {
@@ -111,12 +115,15 @@ async function loadAsleep() {
     setShared("kanso.asleep.at", started);
     setShared("kanso.asleep", list);
   };
-  if (r?.code !== 0) { publish([]); return; }
+  // Nothing has slept yet (no table, no database): nothing shows. Any other
+  // failure (another window writing, say) keeps what shows until next time.
+  if (r?.code !== 0) { if (r && /no such table|unable to open/i.test(`${r.stderr}${r.stdout}`)) publish([]); return; }
   let rows = [];
   try { rows = r.stdout.trim() ? JSON.parse(r.stdout) : []; } catch { return; }
   const space = (l) => { try { return JSON.parse(l).space ?? null; } catch { return null; } };
-  const who = (l) => { try { return JSON.parse(l).cols.flatMap((c) => c.panes).map((p) => p.name || String(p.argv?.[0] ?? "shell").split("/").pop()).join(", "); } catch { return ""; } };
-  const busy = (l) => { try { const x = JSON.parse(l), old = Date.now() - 600000; return x.pending > old || parseInt(x.waking ?? 0, 10) > old; } catch { return true; } };
+  // As kanso-sleep says it (its sleepers()), so the two never disagree.
+  const who = (l) => { try { return JSON.parse(l).cols.flatMap((c) => c.panes).map((p) => p.name || programOf(p.argv)).join(", "); } catch { return ""; } };
+  const busy = (l) => { try { const x = JSON.parse(l), old = Date.now() - ASLEEP_STALE_MS; return x.pending > old || parseInt(x.waking ?? 0, 10) > old; } catch { return true; } };
   publish(rows.filter((x) => !busy(x.layout)).map((x) => ({ from: x.project, name: x.name, saved: Number(x.saved) || 0, who: who(x.layout), space: space(x.layout) })).sort((a, b) => b.saved - a.saved));
 }
 const since = (ms) => { const d = new Date(ms); return new Date().toDateString() === d.toDateString() ? d.toTimeString().slice(0, 5) : d.toDateString().slice(4, 10); };

@@ -20,7 +20,7 @@
 // sidebar what sleeps.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { spaces, panes, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile, exec } from "herdr";
+import { spaces, panes, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile, exec } from "herdr";
 import { Store, idle } from "./store.js";
 import { base, tilde, shq, SHELLS, captureTab, describe, programOf, projectOf, folderOfKey, openTab } from "./tabkit.js";
 
@@ -30,7 +30,10 @@ const ARM_MS = 4000;
 // when it can't: only options known to carry over are kept; the first
 // prompt and session options (--continue, --fork-session) are left out, so
 // a wake neither repeats the task it started with nor forks the conversation.
-const KEEP_VALUE = new Set(["--model", "--permission-mode", "--settings", "--agent", "--effort", "--fallback-model", "--append-system-prompt", "--system-prompt", "--plugin-dir", "--setting-sources", "--name", "--add-dir", "--mcp-config", "--allowedTools", "--disallowedTools"]);
+const KEEP_VALUE = new Set(["--model", "--permission-mode", "--settings", "--agent", "--effort", "--fallback-model", "--append-system-prompt", "--system-prompt", "--plugin-dir", "--setting-sources", "--name"]);
+// Options that take one value or more (Claude Code reads every word after
+// them up to the next option), so the words after them are theirs, not a prompt.
+const KEEP_MANY = new Set(["--add-dir", "--mcp-config", "--allowedTools", "--allowed-tools", "--disallowedTools", "--disallowed-tools"]);
 const KEEP_FLAG = new Set(["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--verbose", "--chrome", "--no-chrome", "--ide", "--strict-mcp-config", "--brief", "--debug"]);
 const DROP_VALUE = new Set(["--resume", "-r", "--session-id"]);
 const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
@@ -43,6 +46,13 @@ export function resumeArgv(argv, session) {
     const eq = a.startsWith("--") ? a.indexOf("=") : -1;
     const flag = eq > 0 ? a.slice(0, eq) : a;
     if (KEEP_FLAG.has(flag) && eq < 0) keep.push(a);
+    else if (KEEP_MANY.has(flag)) {
+      if (eq > 0) { keep.push(a); continue; }
+      const vals = [];
+      while (i + 1 < argv.length && !String(argv[i + 1]).startsWith("-")) vals.push(String(argv[++i]));
+      if (!vals.length) return null;
+      keep.push(a, ...vals);
+    }
     else if (KEEP_VALUE.has(flag)) { if (eq > 0) keep.push(a); else if (i + 1 < argv.length) keep.push(a, String(argv[++i])); else return null; }
     else if (DROP_VALUE.has(flag)) { if (eq < 0) i++; }
     else if (DROP_FLAG.has(flag)) { /* left out */ }
@@ -74,6 +84,21 @@ export function sleepBlocker(recs) {
 // The same tabs, panes and agents as when the sleep view opened.
 const shapeOf = (list) => JSON.stringify(list.map((r) => [r.tab.id, r.capture.cols.flatMap((c) => c.panes).map((p) => [p.terminal ?? null, p.pid ?? null, p.resume ?? null, p.argv])]));
 export const sameTabs = (a, b) => shapeOf(a) === shapeOf(b);
+
+// Claude Code's prompt on screen (`hc read`) holds nothing: the box under
+// the last rule, from its "❯" line to the rule that closes it, is blank.
+// False when no such box shows, so a screen it can't read stops /exit.
+export function promptEmpty(screen) {
+  const lines = String(screen ?? "").split("\n");
+  const rule = (l) => /^\s*─{8,}/.test(l ?? "");
+  for (let i = lines.length - 1; i > 0; i--) {
+    if (!/^\s*[❯>]/.test(lines[i]) || !rule(lines[i - 1])) continue;
+    const box = [lines[i].replace(/^\s*[❯>]/, "")];
+    for (let j = i + 1; j < lines.length && !rule(lines[j]); j++) box.push(lines[j]);
+    return box.every((l) => !l.trim());
+  }
+  return false;
+}
 
 // A name not taken yet: "shield", else "shield 2", "shield 3"...
 export function freeName(name, taken) {
@@ -118,7 +143,7 @@ export default class Sleep extends View {
     if (ask.sleep) this.startSleep(cx, ask.sleep.scope === "project", ask.sleep.tab);
     cx.spawn(async (cx) => {
       try { await this.refresh(true); }
-      catch (e) { this.asleep = []; this.error = String(e?.message ?? e); }
+      catch (e) { this.asleep = []; this.error = String(e?.message ?? e); cx.notify(); return; }
       const waking = ask.wakeAll ? this.asleep.filter((a) => a.from === ask.wakeAll)
         : ask.wake ? this.asleep.filter((a) => a.from === ask.wake.from && a.name === ask.wake.name) : [];
       if (waking.length) this.wake(waking[0], cx, waking.slice(1));
@@ -213,11 +238,11 @@ export default class Sleep extends View {
       try { taken = new Set((await this.store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)); }
       catch (e) { this.busy = null; this.error = String(e?.message ?? e); cx.notify(); return; }
       for (const r of list) { r.name = freeName(r.name, taken); taken.add(r.name); }
-      const stayed = [];
+      const stayed = [], notes = [];
       for (const r of list) {
         const cap = r.capture;
         const agents = cap.cols.flatMap((c) => c.panes).filter((p) => p.pid);
-        const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null });
+        const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, ...(p.pid ? { pid: p.pid } : {}) });
         const entry = { name: r.name, space: this.space?.name ?? null, per: cap.per, saved: Date.now(),
           cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map(kept) })) };
         const left = [], sent = [];
@@ -268,13 +293,12 @@ export default class Sleep extends View {
           // The tab stays for what is new in it; what slept ends, so it
           // doesn't run here and again on wake.
           for (const t of known) run("terminal.kill", { terminal: t });
-          stayed.push(note ?? r.name);
+          if (note) notes.push(note); else stayed.push(r.name);
         } else run("tab.close", { id: r.tab.id, confirmed: true });
       }
-      if (stayed.length) {
+      if (stayed.length || notes.length) {
         this.busy = null; this.view = "list";
-        const notes = stayed.filter((x) => x.includes(" ")), opened = stayed.filter((x) => !x.includes(" "));
-        this.error = [...notes, ...(opened.length ? [`${opened.join(", ")} ${opened.length === 1 ? "is" : "are"} asleep, but ${opened.length === 1 ? "its tab stays" : "their tabs stay"} open: a pane opened in ${opened.length === 1 ? "it" : "them"} meanwhile.`] : [])].join(" ");
+        this.error = [...notes, ...(stayed.length ? [`${stayed.join(", ")} ${stayed.length === 1 ? "is" : "are"} asleep, but ${stayed.length === 1 ? "its tab stays" : "their tabs stay"} open: a pane opened in ${stayed.length === 1 ? "it" : "them"} meanwhile.`] : [])].join(" ");
         cx.notify();
         return;
       }
@@ -282,15 +306,19 @@ export default class Sleep extends View {
     });
   }
 
-  // One agent out: still the one read, its prompt cleared (a draft would go
-  // out with /exit), /exit, then its process gone.
+  // One agent out: still the one read, its prompt cleared and seen empty
+  // (a draft would go out with /exit), /exit, then its process gone.
   async leave(p, cx, onSent = () => {}) {
     const now = await hc(["get", p.terminal, "--json"]).catch(() => null);
     let fg = null;
     try { fg = JSON.parse(now.stdout).foreground?.pid; } catch { /* below */ }
     if (fg !== p.pid) throw new Error(`${p.name}'s terminal changed`);
-    const clear = await hc(["keys", p.terminal, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"]).catch(() => null);
-    if (clear?.code !== 0) throw new Error(`${p.name}'s prompt could not be cleared`);
+    // ctrl+c empties the whole draft, every line of it; the screen must
+    // then show the prompt empty, or /exit is not sent.
+    const clear = await hc(["keys", p.terminal, "ctrl+c"]).catch(() => null);
+    await cx.sleep(400);
+    const screen = clear?.code === 0 ? await hc(["read", p.terminal]).catch(() => null) : null;
+    if (screen?.code !== 0 || !promptEmpty(screen.stdout)) throw new Error(`${p.name}'s prompt could not be cleared`);
     const s = await hc(["send", p.terminal, "/exit"]).catch(() => null);
     onSent();
     if (s?.code !== 0) throw new Error(`${p.name} did not take /exit`);
@@ -369,24 +397,36 @@ export default class Sleep extends View {
     if (this.busy) return;
     this.busy = `Waking ${shown.name}`; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
-      const a = await this.store.claim(shown.id).catch(() => null);
+      let a;
+      try { a = await this.store.claim(shown.id); }
+      catch (e) { this.busy = null; this.error = `${shown.name} could not be woken: ${String(e?.message ?? e)}`; cx.notify(); return; }
       if (!a) {
         await this.refresh();
         this.busy = null; this.error = `${shown.name} is waking in another window, or is no longer asleep.`; cx.notify(); return;
       }
       // An agent whose terminal could not be checked when a sleep stopped:
       // that terminal is looked at first, and the wake waits while it runs.
-      for (const p of a.cols.flatMap((c) => c.panes).filter((q) => q.check)) {
-        const g = await hc(["get", p.check, "--json"]).catch(() => null);
-        let x = null;
-        try { x = g?.code === 0 ? JSON.parse(g.stdout) : null; } catch { /* below */ }
-        const gone = g && g.code !== 0 && /not.found|no terminal/i.test(`${g.stderr}${g.stdout}`);
-        const idleShell = x && (!x.foreground?.pid || x.foreground.pid === x.pid || SHELLS.has(base(x.foreground.argv?.[0])));
-        if (!gone && !idleShell) {
-          await this.store.release(a.id, a.token).catch(() => {});
-          await this.refresh();
-          this.busy = null; this.error = `${p.name ?? "An agent"} of ${a.name} may still run in ${p.check}; end it there, then wake.`; cx.notify(); return;
+      // A sleep that stopped half way (the window closed under it, say)
+      // left its row pending: an agent of it that never left still runs.
+      const still = [];
+      for (const p of a.cols.flatMap((c) => c.panes)) {
+        if (p.check) {
+          const gone = !terminals().some((t) => t.address === p.check);
+          const g = gone ? null : await hc(["get", p.check, "--json"]).catch(() => null);
+          let x = null;
+          try { x = g?.code === 0 ? JSON.parse(g.stdout) : null; } catch { /* below */ }
+          const idleShell = x && (!x.foreground?.pid || x.foreground.pid === x.pid || SHELLS.has(base(x.foreground.argv?.[0])));
+          if (!gone && !idleShell) still.push(`${p.name ?? "an agent"} may still run in ${p.check}`);
         }
+        if (a.pending && p.pid) {
+          const ps = await exec("ps", ["-p", String(p.pid), "-o", "comm="]).catch(() => null);
+          if (ps?.code === 0 && base(ps.stdout.trim()) === "claude") still.push(`${p.name ?? "an agent"} still runs (pid ${p.pid})`);
+        }
+      }
+      if (still.length) {
+        await this.store.release(a.id, a.token).catch(() => {});
+        await this.refresh();
+        this.busy = null; this.error = `${a.name} can't wake yet: ${still.join("; ")}. End ${still.length === 1 ? "it" : "them"} there, then wake.`; cx.notify(); return;
       }
       const space = spaces().find((sp) => projectOf(sp) === a.from) ?? null;
       const folder = folderOfKey(a.from), machine = String(a.from).slice(0, String(a.from).indexOf(":")) || undefined;

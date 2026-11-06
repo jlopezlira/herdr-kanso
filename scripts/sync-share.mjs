@@ -17,7 +17,7 @@ export const SHARED = [
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
   // Opening a tab from data: arrangements and sleeping tabs.
-  { source: "kanso/mods/kanso-arrange/tabkit.js", copies: ["kanso/mods/kanso-sleep/tabkit.js"] },
+  { source: "kanso/mods/kanso-arrange/tabkit.js", copies: ["kanso/mods/kanso-sleep/tabkit.js", "kanso/mods/kanso-spaces/tabkit.js"] },
   { source: "kanso/mods/kanso-tabs/layout.js", copies: ["kanso/mods/kanso-strip/layout.js", "kanso/mods/kanso-spaces/layout.js", "kanso/mods/kanso-panel/layout.js", "kanso/mods/open-with/layout.js"] },
   // The Markdown editor: Kanso's preview panel is the source, the standalone
   // markdown-panel mod a copy.

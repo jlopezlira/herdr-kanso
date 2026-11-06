@@ -197,6 +197,9 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   const failed = await store.sleep(":/w", { ...a, name: "other", saved: 11 });
   await store.drop(failed);
   assert.equal((await now()).length, 1, "a sleep that stopped drops only its own row");
+  const src = async (f) => readFile(new URL(`../kanso/mods/${f}`, import.meta.url), "utf8");
+  const stale = (text, name) => text.match(new RegExp(`${name} = ([^;]+);`))?.[1];
+  assert.equal(stale(await src("kanso-spaces/main.js"), "ASLEEP_STALE_MS"), stale(await src("kanso-sleep/store.js"), "STALE_MS"), "the sidebar and the store agree when a sleep or wake stopped half way");
   // An agent that may still be starting is held back from waking.
   const held = await store.sleep(":/w", { ...a, name: "held", saved: 12 });
   await store.narrow(held, [{ w: 1, panes: [a.cols[0].panes[0]] }], null, true);
@@ -214,6 +217,21 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   assert.deepEqual(clone(resumeArgv(["claude", "-c"], "s9")), ["claude", "--resume", "s9"]);
   assert.equal(resumeArgv(["claude", "--something-new"], "s9"), null, "an option not known to carry over");
   assert.equal(resumeArgv(["npx", "claude"], "s9"), null);
+  assert.deepEqual(clone(resumeArgv(["claude", "--add-dir", "../api", "../web", "--allowedTools", "Edit", "Bash", "--model", "x"], "s9")),
+    ["claude", "--add-dir", "../api", "../web", "--allowedTools", "Edit", "Bash", "--model", "x", "--resume", "s9"], "every value of an option that takes several");
+  assert.equal(resumeArgv(["claude", "--add-dir"], "s9"), null);
+  const { promptEmpty } = await load("kanso-sleep/main.js", ["promptEmpty"], { home: () => HOME });
+  const guard = await import("../kanso/mods/kanso-guard/guard.mjs");
+  const rule = "─".repeat(40);
+  const box = (...lines) => ["output", "", rule, ...lines, rule, "  sleepy │ Haiku"].join("\n");
+  for (const pe of [promptEmpty, guard.promptEmpty]) {
+    assert.equal(pe(box("❯ ")), true, "an empty prompt");
+    assert.equal(pe(box("❯ ", "  Press Ctrl-C again to exit")), false, "inside the box, a line of a draft");
+    assert.equal(pe(box("❯ ") + "\n  Press Ctrl-C again to exit"), true, "under the box is not the draft");
+    assert.equal(pe(box("❯ ", "  two", "  three")), false, "a draft's later lines, the first one cleared");
+    assert.equal(pe(box("❯ fix it")), false);
+    assert.equal(pe("no prompt here"), false, "a screen it can't read stops /exit");
+  }
   assert.equal(freeName("shield", new Set(["shield", "shield 2"])), "shield 3");
   const tab = (pid) => ({ tab: { id: "t" }, capture: { cols: [{ panes: [{ terminal: "t1", pid, resume: "s1", argv: ["claude"] }] }] } });
   assert.equal(sameTabs([tab(1)], [tab(1)]), true);

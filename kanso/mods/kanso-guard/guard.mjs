@@ -62,6 +62,30 @@ function readJSON(path) { try { return JSON.parse(readFileSync(path, "utf8")); }
 function writeJSON(path, value) { const tmp = `${path}.${process.pid}.tmp`; writeFileSync(tmp, JSON.stringify(value)); renameSync(tmp, path); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Claude Code's prompt on screen (`hc read`) holds nothing: the box under
+// the last rule, from its "❯" line to the rule that closes it, is blank.
+// False when no such box shows, so a screen it can't read stops /exit.
+export function promptEmpty(screen) {
+  const lines = String(screen ?? "").split("\n");
+  const rule = (l) => /^\s*─{8,}/.test(l ?? "");
+  for (let i = lines.length - 1; i > 0; i--) {
+    if (!/^\s*[❯>]/.test(lines[i]) || !rule(lines[i - 1])) continue;
+    const box = [lines[i].replace(/^\s*[❯>]/, "")];
+    for (let j = i + 1; j < lines.length && !rule(lines[j]); j++) box.push(lines[j]);
+    return box.every((l) => !l.trim());
+  }
+  return false;
+}
+
+// A draft left in an agent's prompt, gone: ctrl+c empties every line of
+// it, then the screen must show the prompt empty.
+async function clearPrompt(term) {
+  if (!(await run("hc", ["keys", term, "ctrl+c"], 10_000)).ok) return false;
+  await sleep(400);
+  const r = await run("hc", ["read", term], 10_000);
+  return r.ok && promptEmpty(r.stdout);
+}
+
 /** Runs a program with a deadline; never throws. */
 function run(cmd, args, timeout = 10_000) {
   return new Promise((resolve) => {
@@ -282,7 +306,7 @@ async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) 
   const still = await hcJSON(["get", term], 5000);
   if (still?.foreground?.pid !== pid || still.pid !== g.pid || !claudeSession(pid, await processes())) return skip(pid, "its terminal changed");
   // A draft left in its prompt would go out with /exit: cleared first.
-  if (!(await run("hc", ["keys", term, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"], 10_000)).ok) return skip(pid, "its prompt could not be cleared");
+  if (!(await clearPrompt(term))) return skip(pid, "its prompt could not be cleared");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
   let gone = false;
   for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
@@ -415,7 +439,7 @@ async function closeAgent(pid, why, minIdle = 0) {
   if (again?.status !== "idle" || again.statusUpdatedAt !== s.statusUpdatedAt) return no("it started working again");
   const still = await hcJSON(["get", term], 5000);
   if (still?.foreground?.pid !== pid || still.pid !== g.pid) return no("its terminal changed");
-  if (!(await run("hc", ["keys", term, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"], 10_000)).ok) return no("its prompt could not be cleared");
+  if (!(await clearPrompt(term))) return no("its prompt could not be cleared");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return no("its terminal did not take /exit");
   let gone = false;
   for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
