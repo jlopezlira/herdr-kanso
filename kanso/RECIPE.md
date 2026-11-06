@@ -475,8 +475,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   slide out by `width`; a panel fades in.
 - **Keys** (keys.json `layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
-  settings; ⌘⌥h/j/k/l (⇧: move) vim panes, left of column 1 the sidebar
-  list (`kanso-spaces.list`, shared `kanso.list`); lists use listkeys.js.
+  settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
+  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
   rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
   `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new the log, Credits who.
@@ -759,8 +759,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     args}` (runs it with `name`, as Herdr's prompt) or `label: {terminal,
     key}` (`hc label <terminal> <key>=<text>`; empty removes the label).
     Opened as a dialog 420 wide.
-  - `kanso-help`: dialog (⌘?, `mod.open:kanso-help`): keyboard from `keys()`
-    by modifier layer, a vim practice board, guide, setup links.
+  - `kanso-help` (⌘?): keys() drawn as a keyboard per modifier; vim board.
   - `kanso-menu`: the terminal right-click menu (root `terminal_menu`):
     split right, left and down through the strip, width, right-clicks
     to the program, send back, "Open with…" (when the pane has a folder),
