@@ -769,17 +769,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     drafted as "Review the changes on branch <b> in <folder>." (plus its
     open pull request), and Send (Cmd+Enter): `hc send <terminal> <text>`
     (pasted, then Enter), refused for a blocked agent, then `agent.focus`.
-  - `kanso-arrange`: a dialog (480 wide) of all arrangements (SQLite
-    `data/kanso-arrange/arrange.db`, keyed by project and name); another
-    project's opens in the space's folder.
-    Save this tab reads each pane's `hc get --json` foreground argv and
-    cwd (a shell at its prompt is a shell; Claude Code's --resume, -r,
-    --session-id, --continue, -c and Codex's `resume <id>` are dropped)
-    and the strip's columns, widths and panes per view. Opening one runs
-    `tab.new {argv, folder, name}`, then for each pane `strip.intent`,
-    `pane.focus {pane}` and `terminal.open {argv, folder, place}` beside
-    its column or under the pane above, waiting for the strip to place
-    each, and last a `strip.req` `{op: "widths"}`.
+  - `kanso-arrange`: a dialog (560 wide) of all arrangements (SQLite
+    `data/kanso-arrange/arrange.db`, by project and name; another
+    project's opens in this space's folder). Save reads each pane's `hc
+    get --json` foreground argv (session flags dropped) and cwd and the
+    strip's columns; opening runs `tab.new`, then `terminal.open` per pane
+    after a `strip.intent`, then `strip.req` widths. Sleep (a tab or a
+    project) keeps each Claude pane's session id (table `asleep`), sends
+    /exit, closes the tab; Wake reopens it with `--resume <id>`.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

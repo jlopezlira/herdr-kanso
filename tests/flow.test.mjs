@@ -141,6 +141,31 @@ test("Arrangements are kept in SQLite: saving under a name overwrites it, and th
   assert.deepEqual(Object.keys(all), [`:${HOME}/web`]);
 });
 
+test("Sleep keeps each Claude agent's conversation, and Wake starts it on that conversation", async (t) => {
+  const { wakeArgv, wakeable, sleepers, sleepBlocker, captureTab } = await load("kanso-arrange/main.js", ["wakeArgv", "wakeable", "sleepers", "sleepBlocker", "captureTab"], { home: () => HOME });
+  assert.deepEqual(clone(wakeArgv({ argv: ["claude", "--model", "opus", "--resume", "old"], resume: "s1" })), ["claude", "--model", "opus", "--resume", "s1"], "the conversation it had when it slept, not the one it was started with");
+  assert.deepEqual(clone(wakeArgv({ argv: ["npm", "run", "dev"], resume: null })), ["npm", "run", "dev"]);
+  assert.equal(wakeArgv({ argv: null }), null, "a shell stays a shell");
+  const a = { name: "shield", per: 3, cols: [{ w: 0.5, panes: [{ argv: ["claude"], cwd: "/w", resume: "s1", name: "fury" }] }, { w: 0.5, panes: [{ argv: ["npm", "run", "dev"], cwd: "/w", resume: null, name: null }] }] };
+  assert.equal(sleepers(a), "fury, npm");
+  assert.deepEqual(clone(wakeable(a).cols.map((c) => c.panes[0].argv)), [["claude", "--resume", "s1"], ["npm", "run", "dev"]]);
+  assert.equal(sleepBlocker(new Map([["t1", { status: { state: "done" } }], ["t2", { labels: { "kanso.name": "Cap" }, status: { state: "working" } }]])), "Cap is working");
+  assert.equal(sleepBlocker(new Map([["t1", { title: "tony", status: { state: "blocked" } }]])), "tony is waiting on you");
+  assert.equal(sleepBlocker(new Map([["t1", { status: { state: "idle" } }]])), null);
+  const cap = clone(captureTab(null, [{ pane: "a", terminal: "t1", cwd: "/w" }], new Map([["t1", { foreground: { argv: ["claude"], cwd: "/w", pid: 9 } }]]), new Map([["t1", { resume: "s1", name: "fury" }]])));
+  assert.deepEqual(cap.cols[0].panes[0], { argv: ["claude"], cwd: "/w", resume: "s1", name: "fury" });
+
+  const dir = await temporary(t);
+  const { readFile } = await import("node:fs/promises");
+  const { Store } = await load("kanso-arrange/store.js", ["Store"], { exec, appHome: () => dir, readTextFile: (p) => readFile(p, "utf8").catch(() => null) });
+  const store = new Store();
+  let asleep = clone(await store.sleep(":/w", { ...a, saved: 7 }));
+  assert.deepEqual(asleep.map((x) => [x.from, x.name, x.cols[0].panes[0].resume]), [[":/w", "shield", "s1"]]);
+  assert.deepEqual(clone(await store.all()), {}, "a sleeping tab is not an arrangement");
+  asleep = clone(await store.woke(":/w", "shield"));
+  assert.deepEqual(asleep, []);
+});
+
 test("Ports finds dev servers, the pane that runs each, and the ones no pane owns", async () => {
   const { parseListen, parseCwds, parsePs, etimeSecs, servers, shortArgs } = await load("kanso-panel/ports.js",
     ["parseListen", "parseCwds", "parsePs", "etimeSecs", "servers", "shortArgs"], { home: () => HOME });

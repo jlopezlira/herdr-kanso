@@ -12,9 +12,13 @@
 // Saving under a name the project already has overwrites it. They live in
 // a SQLite database (store.js), data/kanso-arrange/arrange.db. Opened with
 // Cmd+Alt+T or a right-click on the tab bar's new tab button.
+//
+// Sleep puts a tab away for later: it is saved with each Claude agent's
+// conversation, the agents exit and the tab closes, so nothing of it runs.
+// Wake opens it again in its project, each agent back on its conversation.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { spaces, panes, shared, setShared, hc, run, props, closeOverlay, theme, home } from "herdr";
+import { spaces, panes, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile } from "herdr";
 import { Store } from "./store.js";
 const ARM_MS = 4000;
 
@@ -57,12 +61,12 @@ export function commandOf(rec) {
 
 // The tab's panes as columns, in the strip's order, each pane with what it
 // runs and where (`recs`: terminal address -> its `hc get` record).
-export function captureTab(state, tabPanes, recs) {
+export function captureTab(state, tabPanes, recs, extra = null) {
   const byId = new Map(tabPanes.map((p) => [p.pane, p]));
   const cols = (state?.cols?.length ? state.cols : tabPanes.map((p) => ({ panes: [p.pane], w: 1 / Math.max(1, tabPanes.length) })))
     .map((c) => ({ w: c.w, panes: c.panes.map((id) => byId.get(id)).filter(Boolean).map((p) => {
       const rec = recs.get(p.terminal);
-      return { argv: commandOf(rec), cwd: rec?.foreground?.cwd || p.cwd || null };
+      return { argv: commandOf(rec), cwd: rec?.foreground?.cwd || p.cwd || null, ...(extra?.get(p.terminal) ?? {}) };
     }) }))
     .filter((c) => c.panes.length);
   return { per: state?.n ?? null, cols };
@@ -85,6 +89,25 @@ export function listFor(projects, key) {
   const others = Object.keys(projects ?? {}).filter((k) => k !== key).flatMap(tag)
     .sort((a, b) => (b.saved ?? 0) - (a.saved ?? 0));
   return { mine: tag(key), others };
+}
+
+// What waking a pane runs: a Claude agent back on its conversation; any
+// other program as it was started.
+export function wakeArgv(p) {
+  if (!p.argv) return null;
+  return p.resume && base(p.argv[0]) === "claude" ? [...cleanArgv(p.argv), "--resume", p.resume] : p.argv;
+}
+export const wakeable = (a) => ({ ...a, cols: a.cols.map((c) => ({ ...c, panes: c.panes.map((p) => ({ argv: wakeArgv(p), cwd: p.cwd })) })) });
+// A sleeping tab's agents by the names they go by, the other panes by program.
+export const sleepers = (a) => a.cols.flatMap((c) => c.panes).map((p) => p.name || programOf(p.argv)).join(", ");
+
+// Why a tab can't sleep now: its agents at work or waiting on you.
+export function sleepBlocker(recs) {
+  for (const [, r] of recs) {
+    const st = r?.status?.state;
+    if (st === "working" || st === "blocked") return `${r.labels?.["kanso.name"] || r.title || r.address} is ${st === "working" ? "working" : "waiting on you"}`;
+  }
+  return null;
 }
 
 // Where an arrangement was made, named by the folder most of its panes ran
@@ -119,8 +142,9 @@ export default class Arrange extends View {
     this.space = spaces().find((s) => s.active) ?? null;
     this.store = new Store();
     this.target = null; // { project, name } an Overwrite replaces
+    this.asleep = [];
     cx.spawn(async (cx) => {
-      try { this.take(await this.store.all()); }
+      try { this.take(await this.store.all()); this.asleep = await this.store.asleep(); }
       catch (e) { this.list = []; this.error = String(e?.message ?? e); }
       cx.notify();
     });
@@ -178,6 +202,96 @@ export default class Arrange extends View {
     });
   }
 
+  // A tab as it runs, each Claude agent with its conversation (its session
+  // record, ~/.claude/sessions/<pid>.json): { tab, capture, blocker, error }.
+  async readTab(tab) {
+    const tabPanes = panes().filter((p) => p.tab === tab.id && p.terminal);
+    const recs = new Map(), extra = new Map();
+    let error = null;
+    await Promise.all(tabPanes.map(async (p) => {
+      const r = await hc(["get", p.terminal, "--json"]).catch(() => null);
+      try { if (r?.code === 0) recs.set(p.terminal, JSON.parse(r.stdout)); } catch { /* left as a shell */ }
+    }));
+    for (const [term, r] of recs) {
+      const fg = r.foreground;
+      if (!fg?.pid || base(fg.argv?.[0]) !== "claude") continue;
+      let ses = null;
+      try { ses = JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`)); } catch { /* reported below */ }
+      const who = ses?.name || r.labels?.["kanso.name"] || r.title || term;
+      if (!ses?.sessionId) error = `${who}'s conversation was not found, so it could not wake on it`;
+      extra.set(term, { resume: ses?.sessionId ?? null, name: who, pid: fg.pid, terminal: term });
+    }
+    return { tab, capture: captureTab(shared("strip.state")?.[tab.id], tabPanes, recs, extra), blocker: sleepBlocker(recs), error };
+  }
+
+  // The sleep view, for the tab you are on or (`whole`) every tab of the
+  // project; each tab sleeps under its own name.
+  startSleep(cx, whole = false) {
+    const all = this.space?.tabs ?? [];
+    const tabs = whole ? all : all.filter((t) => t.active);
+    this.view = "sleep"; this.whole = whole; this.sleepers = null; this.error = null;
+    const tab = tabs[0];
+    this.name.set_value(tab?.named ? tab.name : `Tab ${all.indexOf(tab) + 1}`);
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const read = await Promise.all(tabs.map((t) => this.readTab(t)));
+      read.forEach((r) => { r.name = r.tab.named ? r.tab.name : `Tab ${all.indexOf(r.tab) + 1}`; });
+      this.sleepers = read.filter((r) => r.capture.cols.length);
+      cx.notify();
+    });
+  }
+
+  // Saved first, then each agent leaves with /exit (its conversation stays
+  // on disk), then its tab closes with whatever else ran in it.
+  sleep(cx) {
+    const list = this.sleepers;
+    if (this.busy || !list?.length || list.some((r) => r.blocker || r.error)) return;
+    if (!this.whole) list[0].name = this.name.value().trim();
+    if (list.some((r) => !r.name)) return;
+    const taken = new Set();
+    for (const r of list) { let n = r.name, k = 2; while (taken.has(n)) n = `${r.name} ${k++}`; r.name = n; taken.add(n); }
+    this.busy = "Saving"; cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        for (const r of list) {
+          const cap = r.capture;
+          const entry = { name: r.name, per: cap.per, saved: Date.now(), cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map((p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, name: p.name ?? null })) })) };
+          this.asleep = await this.store.sleep(projectOf(this.space), entry);
+          const agents = cap.cols.flatMap((c) => c.panes).filter((p) => p.pid);
+          for (const [i, p] of agents.entries()) {
+            this.busy = `${p.name} is leaving, ${i + 1} of ${agents.length} in ${r.name}`; cx.notify();
+            const s = await hc(["send", p.terminal, "/exit"]).catch(() => null);
+            if (s?.code !== 0) throw new Error(`${p.name} did not take /exit; ${r.name} is kept under Asleep and left open`);
+            let gone = false;
+            for (let k = 0; k < 40 && !gone; k++) {
+              await cx.sleep(500);
+              const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
+              try { gone = g?.code !== 0 || JSON.parse(g.stdout).foreground?.pid !== p.pid; } catch { gone = false; }
+            }
+            if (!gone) throw new Error(`${p.name} did not exit; ${r.name} is kept under Asleep and left open`);
+          }
+          run("tab.close", { id: r.tab.id, confirmed: true });
+        }
+        closeOverlay(props()?.overlay);
+      } catch (e) {
+        this.busy = null;
+        this.error = `Stopped: ${String(e?.message ?? e)}`;
+        cx.notify();
+      }
+    });
+  }
+
+  // Back in its project's space (this one when that space is gone), each
+  // agent on its conversation; then it is no longer asleep. `rest`: more to
+  // wake after it (Wake all).
+  wake(a, cx, rest = []) {
+    const space = spaces().find((sp) => projectOf(sp) === a.from) ?? this.space;
+    this.open({ ...wakeable(a), name: a.name }, cx, { space, keepOpen: rest.length > 0, then: async (cx) => {
+      this.asleep = await this.store.woke(a.from, a.name);
+      if (rest.length) { this.busy = null; this.wake(rest[0], cx, rest.slice(1)); }
+    } });
+  }
+
   // A new pane, once Herdr has it (one not in `seen`) and the strip has put
   // it in its place: the next split's "beside this one" needs that place.
   async newPane(seen, cx, tab) {
@@ -194,17 +308,17 @@ export default class Arrange extends View {
 
   // A new tab with the first pane, then each other pane beside or under the
   // one before it, as the strip places a split; then the columns' widths.
-  open(a, cx) {
+  open(a, cx, { space = this.space, then = null, keepOpen = false } = {}) {
     if (this.busy) return;
-    if (a.from && a.from !== projectOf(this.space)) a = rebase(a, this.space?.folder || home());
+    if (!then && a.from && a.from !== projectOf(space)) a = rebase(a, space?.folder || home());
     const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
-    if (!flat.length || !this.space) return;
+    if (!flat.length || !space) return;
     this.busy = `Opening 1 of ${flat.length}`; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
       try {
         const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}) });
         let seen = new Set(panes().map((q) => q.pane));
-        run("tab.new", { space: this.space.id, name: a.name, ...opts(flat[0]) });
+        run("tab.new", { space: space.id, name: a.name, ...opts(flat[0]) });
         const first = await this.newPane(seen, cx);
         const ids = [[first.pane]];
         for (let k = 1; k < flat.length; k++) {
@@ -222,7 +336,8 @@ export default class Arrange extends View {
         await cx.sleep(150);
         setShared("strip.req", { op: "widths", per: a.per, cols: ids.map((col, ci) => ({ pane: col[0], w: a.cols[ci].w })), n: Date.now() + Math.random() });
         run("pane.focus", { pane: ids[0][0] });
-        closeOverlay(props()?.overlay);
+        if (then) await then(cx);
+        if (!keepOpen) closeOverlay(props()?.overlay);
       } catch (e) {
         this.busy = null;
         this.error = `Stopped: ${String(e?.message ?? e)}`;
@@ -256,9 +371,40 @@ export default class Arrange extends View {
     const shell = v_flex().id("kanso-arrange").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {
         if (e.key !== "escape") return;
-        if (this.view === "save") { this.view = "list"; this.target = null; cx.notify(); } else closeOverlay(p.overlay);
+        if (this.view !== "list" && !this.busy) { this.view = "list"; this.target = null; this.error = null; cx.notify(); }
+        else if (this.view !== "list") return; else closeOverlay(p.overlay);
         cx.stop_propagation();
       });
+
+    if (this.view === "sleep") {
+      const list = this.sleepers ?? [];
+      const whole = this.whole;
+      const panesOf = (r) => r.capture.cols.flatMap((c) => c.panes);
+      const others = [...new Set(list.flatMap(panesOf).filter((q) => !q.pid && q.argv).map((q) => programOf(q.argv)))];
+      const stop = list.find((r) => r.blocker || r.error);
+      const line = (q, i) => h_flex().id(`sl-${i}`).w_full().gap(10).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(q.pid ? t.foreground : t.muted).child(q.pid ? q.name : describe(q.argv)))
+        .child(div().flex_none().max_w(180).truncate().text_size(11.5).text_color(t.dim).child(q.pid ? "keeps its conversation" : tilde(q.cwd)));
+      let i = 0;
+      const ready = list.length > 0 && !stop && !this.busy;
+      return shell
+        .child(head(whole ? `Sleep ${project}` : "Sleep this tab", whole ? "Every tab's agents exit and the tabs close. Wake opens them again, each agent on its conversation." : "Its agents exit and the tab closes. Wake opens it again, each agent on its conversation."))
+        .when(!whole, (el) => el
+          .child(div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child("Name"))
+          .child(Input.new(this.name).h(36).px(10).rounded(9).border_1().border_color(t.input).bg(t.background).text_size(12.8).text_color(t.foreground)))
+        .when(this.sleepers === null, (el) => el.child(note("Reading")))
+        .children(list.map((r) => v_flex().pt(14).gap(4)
+          .when(whole, (el) => el.child(div().pb(3).text_size(11.5).text_color(t.dim).child(r.name)))
+          .children(panesOf(r).map((q) => line(q, i++)))))
+        .when(this.sleepers !== null && !list.length, (el) => el.child(note("Nothing runs here to put to sleep.")))
+        .when(others.length > 0, (el) => el.child(note(`${others.join(", ")} will stop now and start fresh on wake.`)))
+        .when(Boolean(stop), (el) => el.child(note(`It can't sleep now: ${stop?.blocker || stop?.error}.`, t.blocked)))
+        .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
+        .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
+        .child(h_flex().pt(18).gap(8).justify_end()
+          .child(button("sl-back", "Back", false, !this.busy, (cx) => { this.view = "list"; this.error = null; cx.notify(); }))
+          .child(button("sl-go", whole ? `Sleep ${list.length} ${list.length === 1 ? "tab" : "tabs"}` : "Sleep", true, ready, (cx) => this.sleep(cx))));
+    }
 
     if (this.view === "save") {
       const cols = this.capture?.cols ?? [];
@@ -309,14 +455,41 @@ export default class Arrange extends View {
           .child(armed ? "Press again to delete" : "Delete"));
     };
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
+    const asleep = this.asleep ?? [];
+    const groups = [...asleep.reduce((m, a) => m.set(a.from, [...(m.get(a.from) ?? []), a]), new Map())];
+    const spaceName = (from) => spaces().find((sp) => projectOf(sp) === from)?.name ?? (base(folderOfKey(from)) || "~");
+    const when = (ms) => { const d = new Date(ms), today = new Date().toDateString() === d.toDateString(); return today ? d.toTimeString().slice(0, 5) : d.toDateString().slice(4, 10); };
+    const sleeper = (a) => {
+      const id = `${a.from}:${a.name}`, key = `forget:${id}`, armed = this.armed === key;
+      return h_flex().id(`zz-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
+        .when(!this.busy, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.wake(a, cx)))
+        .child(svg("mods/kanso-chrome/icons/layers.svg").size(15).flex_none().text_color(t.muted))
+        .child(v_flex().flex_1().min_w(0).gap(2)
+          .child(h_flex().min_w(0).gap(8).items_baseline()
+            .child(div().flex_shrink_1().min_w(0).truncate().text_size(13).text_color(t.foreground).child(a.name))
+            .child(div().flex_none().text_size(11.5).text_color(t.dim).child(`asleep since ${when(a.saved)}`)))
+          .child(div().truncate().text_size(11.5).text_color(t.dim).child(sleepers(a))))
+        .when(!this.busy, (el) => el.child(div().id(`zz-wake-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(t.foreground)
+          .hover((s) => s.opacity(0.8)).on_click((_e, cx) => { cx.stop_propagation(); this.wake(a, cx); }).child("Wake")))
+        .child(div().id(`zz-rm-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(armed ? t.blocked : t.dim)
+          .hover((s) => s.text_color(armed ? t.blocked : t.foreground))
+          .on_click((_e, cx) => { cx.stop_propagation(); this.arm(key, cx, (cx) => cx.spawn(async (cx) => { this.asleep = await this.store.woke(a.from, a.name); cx.notify(); })); })
+          .child(armed ? "Press again to forget" : "Forget"));
+    };
     return shell
       .child(head("Arrangements", `Opens in ${project}`))
       .child(v_flex().id("ar-list").pt(14).gap(2).max_h(420).overflow_y_scrollbar()
         .when(this.list === null, (el) => el.child(div().py(8).text_size(12).text_color(t.dim).child("Reading")))
-        .when(this.list !== null && !list.length && !others.length, (el) => el.child(v_flex().py(6).gap(4)
+        .when(asleep.length > 0, (el) => el.children(groups.map(([from, tabs]) => v_flex().gap(2)
+            .child(h_flex().items_center().child(div().flex_1().child(label(`Asleep in ${spaceName(from)}`)))
+              .when(tabs.length > 1 && !this.busy, (el) => el.child(div().id(`zz-all-${from}`).px(16).pt(8).text_size(11.5).text_color(t.foreground).cursor_pointer()
+                .hover((s) => s.opacity(0.8)).on_click((_e, cx) => this.wake(tabs[0], cx, tabs.slice(1))).child(`Wake all ${tabs.length}`))))
+            .children(tabs.map(sleeper))))
+          .when(list.length + others.length > 0, (el) => el.child(label("Arrangements"))))
+        .when(this.list !== null && !list.length && !others.length && !asleep.length, (el) => el.child(v_flex().py(6).gap(4)
           .child(div().text_size(13).text_color(t.muted).child("No arrangement yet."))
           .child(div().text_size(11.5).line_height(1.45).text_color(t.dim).child("Set up a tab the way you work, with your agents, their flags and your servers, then save it to open it again in one click, in this project or any other."))))
-        .when(list.length > 0 && others.length > 0, (el) => el.child(label("This project")))
+        .when(list.length > 0 && others.length > 0 && !asleep.length, (el) => el.child(label("This project")))
         .children(list.map(row))
         .when(others.length > 0, (el) => el.child(label(list.length ? "Other projects, opened here" : "From other projects, opened here")))
         .children(others.map(row)))
@@ -324,6 +497,8 @@ export default class Arrange extends View {
       .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
       .child(h_flex().pt(18).gap(8).justify_end()
         .child(button("ar-close", "Close", false, true, () => closeOverlay(p.overlay)))
+        .child(button("ar-sleep-all", `Sleep ${project}`, false, !this.busy && (this.space?.tabs.length ?? 0) > 1, (cx) => this.startSleep(cx, true)))
+        .child(button("ar-sleep", "Sleep this tab", false, !this.busy, (cx) => this.startSleep(cx)))
         .child(button("ar-new", "Save this tab", !list.length && !others.length, !this.busy, (cx) => this.startSave(cx))));
   }
 }

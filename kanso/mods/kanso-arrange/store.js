@@ -16,14 +16,19 @@ const int = (n) => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : 0);
 export const SCHEMA = `CREATE TABLE IF NOT EXISTS arrangements(
   project TEXT NOT NULL, name TEXT NOT NULL, layout TEXT NOT NULL, saved INTEGER NOT NULL,
   PRIMARY KEY(project, name));
+CREATE TABLE IF NOT EXISTS asleep(
+  project TEXT NOT NULL, name TEXT NOT NULL, layout TEXT NOT NULL, saved INTEGER NOT NULL,
+  PRIMARY KEY(project, name));
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);`;
 
 // An arrangement's row: what it opens (columns, panes per view) as JSON.
-export function saveSql(project, a, replace = true) {
+// `asleep` holds the tabs put to sleep: the same shape, each Claude pane with
+// the conversation it resumes (`resume`).
+export function saveSql(project, a, replace = true, table = "arrangements") {
   const layout = JSON.stringify({ per: a.per ?? null, cols: a.cols ?? [] });
-  return `INSERT OR ${replace ? "REPLACE" : "IGNORE"} INTO arrangements(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())});`;
+  return `INSERT OR ${replace ? "REPLACE" : "IGNORE"} INTO ${table === "asleep" ? "asleep" : "arrangements"}(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())});`;
 }
-export const deleteSql = (project, name) => `DELETE FROM arrangements WHERE project=${sqlText(project)} AND name=${sqlText(name)};`;
+export const deleteSql = (project, name, table = "arrangements") => `DELETE FROM ${table === "asleep" ? "asleep" : "arrangements"} WHERE project=${sqlText(project)} AND name=${sqlText(name)};`;
 
 // Rows as { project: [arrangement] }, each project's in the order saved.
 export function projectsOf(rows) {
@@ -84,4 +89,13 @@ export class Store {
 
   async save(project, a) { await this.open(); await this.sql(saveSql(project, a)); return this.all(); }
   async remove(project, name) { await this.open(); await this.sql(deleteSql(project, name)); return this.all(); }
+
+  // The tabs asleep, newest first, each with the project it sleeps in (`from`).
+  async asleep() {
+    await this.open();
+    const by = projectsOf(await this.sql("SELECT project, name, layout, saved FROM asleep;", true));
+    return Object.entries(by).flatMap(([from, list]) => list.map((a) => ({ ...a, from }))).sort((a, b) => b.saved - a.saved);
+  }
+  async sleep(project, a) { await this.open(); await this.sql(saveSql(project, a, true, "asleep")); return this.asleep(); }
+  async woke(project, name) { await this.open(); await this.sql(deleteSql(project, name, "asleep")); return this.asleep(); }
 }

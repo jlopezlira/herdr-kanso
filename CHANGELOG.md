@@ -8,6 +8,17 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.3.0] - 2026-11-06
+
+### Added
+
+- Sleep a tab or a whole project from Arrangements. Each Claude agent's conversation is saved, the agents exit with /exit and the tabs close, so nothing of them runs or holds memory. Agents at work or waiting on you keep a tab from sleeping. Other programs in the tab stop and start fresh on wake.
+- Asleep, at the top of Arrangements and grouped by project: Wake opens a tab again in its project with its columns and widths, each Claude agent back on its own conversation (`claude --resume`), and Wake all wakes a project's tabs. Forget drops one without waking it.
+
+### Changed
+
+- The Arrangements dialog is 560 wide, for its new buttons.
+
 ## [3.2.3] - 2026-11-06
 
 ### Fixed

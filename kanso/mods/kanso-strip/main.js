@@ -223,7 +223,7 @@ export function digestTip(d) {
 // The dialogs: send a pane's work to another agent (kanso-send), and save or
 // open the tab's arrangement of agents (kanso-arrange).
 const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
+const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 560 });
 
 export default class Strip extends View {
   init(_props, cx) {
