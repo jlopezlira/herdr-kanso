@@ -15,6 +15,7 @@ checks all of this, and merging to main releases the version in
 - Vim keys: Cmd+Alt+H/J/K/L go left, down, up and right between panes, and with Shift move the pane, up and down within its stack too. Left of the first pane is the sidebar's list: a ring marks the row you are on, J and K move, GG and Shift+G go to the first and the last, Enter or L opens the row, / searches, and Esc or Cmd+Alt+L goes back to the pane you came from.
 - kansō help (⌘?, or Help and keys in kansō settings): the keys on a keyboard you can see, from your own keys.json. Pick ⌘ ⌥ ⇧ ⌃, or press a chord, and the keys that do something light up with what they do; a Lists layer shows j k gg G. A guide to the strip, the sidebar, panels, Sleep and Arrangements, and where to set each thing up.
 - hjkl dōjō, a game to learn vim's moves, with Hachi, a pixel shiba that cheers a streak and a new best. Nine levels, from h and l alone on a board to w b e, f t, 0 ^ $ and gg G on real lines of code; 60-second rounds, points for the fewest moves, a streak, and the key that gets there lit after two seconds still. It opens as a window that asks before it closes. Rounds are kept in data/kanso-dojo/dojo.db, and Share makes a card of your best round, targets, days in a row and levels.
+- Sleep one agent on its own: the moon in its pane's header, or Sleep this agent on its menu in the sidebar. It exits on its conversation, its pane closes and the rest of the tab stays; Wake opens it again in that tab, beside the others.
 - Every kansō menu and list answers the same keys: the pane menu, Open with, the sidebar's right-click menus, Sleep and Arrangements move with J and K (or the arrows), GG and Shift+G, Enter and Esc.
 
 ### Changed
@@ -22,6 +23,7 @@ checks all of this, and merging to main releases the version in
 - kansō's accent is a coral pink, in both themes and on the site, instead of the sage green.
 - The name is written kansō, in lowercase, in the app and in the README.
 - The site shows the current star count from GitHub on every visit.
+- The moon in a pane's header sleeps that agent, not the whole tab; a tab or a project still sleeps from the project's menu.
 - Cmd+Alt+H moves left while the kansō layout shows, instead of hiding other apps, and ⌘? opens kansō's help instead of Herdr's.
 
 ## [3.3.0] - 2026-11-06

@@ -227,7 +227,7 @@ const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", wi
 // Sleep the tab a pane is in (kanso-sleep).
 const openSleep = (p) => {
   const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
-  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "tab", space: space.id, tab: p.tab } } });
+  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
 };
 
 export default class Strip extends View {
@@ -623,7 +623,7 @@ export default class Strip extends View {
     const pane = p.pane;
     const list = [
       strip ? this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground)) : null,
-      p.terminal && p.tab ? this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this tab") : null,
+      p.terminal && p.tab && agents().some((x) => x.address === p.terminal) ? this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this agent") : null,
       canSend ? this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent") : null,
       p.cwd ? this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p)) : null,
       this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }),

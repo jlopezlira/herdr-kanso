@@ -73,7 +73,7 @@ export const folderOfKey = (key) => String(key ?? "").slice(String(key ?? "").in
 
 // A new pane, once Herdr has it (one not in `seen`) and the strip has put
 // it in its place: the next split's "beside this one" needs that place.
-async function newPane(seen, cx, tab) {
+export async function newPane(seen, cx, tab) {
   for (let i = 0; i < 60; i++) {
     const p = panes().find((q) => !seen.has(q.pane) && q.terminal && (!tab || q.tab === tab));
     if (p) {
@@ -83,6 +83,20 @@ async function newPane(seen, cx, tab) {
     await cx.sleep(100);
   }
   throw new Error("Herdr did not open the pane");
+}
+
+// One pane (`p`: { argv, cwd }) opened in tab `tabId`, to the right of the
+// tab's last column, as a split there would place it. Returns its id.
+export async function openInto(p, cx, tabId) {
+  const cols = shared("strip.state")?.[tabId]?.cols ?? [];
+  const inTab = panes().filter((q) => q.tab === tabId);
+  const from = cols.at(-1)?.panes?.[0] ?? inTab.at(-1)?.pane;
+  if (!from) throw new Error("its tab has no pane to open beside");
+  const seen = new Set(panes().map((q) => q.pane));
+  setShared("strip.intent", { dir: "right", from, at: Date.now() });
+  run("pane.focus", { pane: from });
+  run("terminal.open", { folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}), place: "right" });
+  return (await newPane(seen, cx, tabId)).pane;
 }
 
 // A tab `a` opened in `space`: a new tab with the first pane, then each

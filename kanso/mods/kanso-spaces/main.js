@@ -96,6 +96,7 @@ export const projectKey = (w) => `${w?.machine ?? ""}:${w?.folder || home()}`;
 const asleepOf = (w) => (shared("kanso.asleep") ?? []).filter((a) => a.from === projectKey(w));
 const arrange = (props) => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props });
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
+const sleepAgent = (spaceId, tab, pane) => arrange({ sleep: { scope: "agent", space: spaceId, tab, pane } });
 const sleepProject = (spaceId) => arrange({ sleep: { scope: "project", space: spaceId } });
 // What sleeps, read from kanso-sleep's database: at start (shared state
 // outlives a restart and may be old) and every 30 s. A read that a newer
@@ -1378,6 +1379,7 @@ export default class Spaces extends View {
       .when(snoozed, (el) => el.child(item("wake", "Wake now", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })))
       .when(!snoozed, (el) => el.child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Snooze"))
         .children(snoozePresets(now).map((x) => item(`snooze-${x.id}`, x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when }))))
+      .when(Boolean(p?.tab) && Boolean(sp) && Boolean(a), (el) => el.child(item("sleep-agent", "Sleep this agent\u2026", () => sleepAgent(sp.id, p.tab, p.pane), { icon: "moon" })))
       .when(Boolean(p?.tab) && Boolean(sp), (el) => el.child(item("sleep-tab", "Sleep its tab\u2026", () => sleepTab(sp.id, p.tab), { icon: "moon" })))
       .when((sp?.tabs?.length ?? 0) > 1, (el) => el.child(item("sleep-project", "Sleep its project\u2026", () => sleepProject(sp.id), { icon: "moon" })))
       .child(item("unread", isUnread(l) ? "Mark read" : "Mark unread", () => label(m.address, UNREAD_LABEL, isUnread(l) ? "" : "1"), { icon: "enso" }))
