@@ -1,7 +1,7 @@
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// A place to practice vim's moves until the fingers know them, kept by
-// Daru, a pixel daruma. Nine levels, from h and l alone on a board to w b
+// A place to practice vim's moves until the fingers know them, with Neko,
+// a pixel cat. Nine levels, from h and l alone on a board to w b
 // e, f t, 0 ^ $ and gg G on real lines of code. A round is 60 seconds: bring
 // the cursor onto the target, in the fewest moves for points and a streak.
 // After two seconds still, the key that gets there lights up.
@@ -17,7 +17,7 @@ import { G, tokens, iconButton } from "./ui.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
-import { daru } from "./mascot.js";
+import { neko } from "./mascot.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
 const ROUND_S = 60, HINT_MS = 2000, LIT_MS = 600, ARM_MS = 3000, SLEEP_MS = 20000;
@@ -154,12 +154,12 @@ export default class Dojo extends View {
     return "calm";
   }
 
-  // Daru's line: what the game needs you to know now.
+  // Neko's line: what the game needs you to know now.
   line() {
     const r = this.round, o = this.over, now = Date.now();
     if (now - this.armed <= ARM_MS) return "Press Esc again to leave the dōjō.";
     if (this.say) return this.say;
-    if (o) return `Time. ${o.score} points, ${o.hits} targets, ${o.perfect} in the fewest moves.${this.record ? " A new best: my second eye." : ""} Move to go again.`;
+    if (o) return `Time. ${o.score} points, ${o.hits} targets, ${o.perfect} in the fewest moves.${this.record ? " A new best!" : ""} Move to go again.`;
     if (/^[ftFT]$/.test(this.pending)) return `${this.pending}… now the letter to find.`;
     if (this.pending === "g") return "g… another g for the first line.";
     if (/^\d$/.test(this.pending)) return `${this.pending}… now h j k or l.`;
@@ -209,7 +209,6 @@ export default class Dojo extends View {
     const hint = r && now - this.idleAt >= HINT_MS ? shortest(this.world, this.at, this.target, lv).first : null;
     const hintBase = hint ? hint.replace(/^[1-9]\d*/, "").slice(0, hint.startsWith("gg") ? 2 : 1) : null;
     const best = this.bests[lv.n];
-    const both = this.record || (best != null && r != null && r.score > best);
     const words = { h: "left", j: "down", k: "up", l: "right", w: "next word", b: "word back", e: "word end", f: "find", t: "till", F: "find back", T: "till back", 0: "line start", "^": "first letter", $: "line end", gg: "first line", G: "last line" };
     const keysRow = h_flex().gap(G.md).flex_wrap().items_start()
       .children(lv.motions.map((m) => this.cap(c, ink, m, words[m] ?? m, hintBase === m, FINGER[m]?.[1] ?? null)))
@@ -245,10 +244,10 @@ export default class Dojo extends View {
           .child(leaving ? "Leave? Click again" : "Leave")))
       .child(h_flex().flex_1().min_h(0).items_start().gap(G.xl).p(20)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        // Daru, the numbers, the levels.
+        // Neko, the numbers, the levels.
         .child(v_flex().w(196).flex_none().gap(G.lg)
           .child(h_flex().gap(G.md).items_end()
-            .child(daru(t, { mood: this.mood(), both, px: 8 }))
+            .child(neko(t, { mood: this.mood(), px: 9 }))
             .child(div().pb(4).text_size(11).text_color(c.dim).child(this.mood() === "sleep" ? "z z" : "")))
           .child(h_flex().gap(G.lg)
             .child(stat("Score", r ? r.score : this.over ? this.over.score : 0, true))
@@ -257,7 +256,7 @@ export default class Dojo extends View {
             .child(stat("Streak", r ? r.streak : 0))
             .child(stat("Best", best ?? "–")))
           .child(v_flex().gap(2).children(LEVELS.map(levelRow))))
-        // The board or the code, the time, Daru's line, the keys.
+        // The board or the code, the time, the line, the keys.
         .child(v_flex().flex_1().min_w(0).gap(G.lg)
           .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, () => ({ ...dojoShare(this.totals), name: "dojo", title: "hjkl dōjō" }),
             "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))

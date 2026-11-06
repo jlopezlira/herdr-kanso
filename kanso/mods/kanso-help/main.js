@@ -10,7 +10,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, openOverlay, run } from "herdr";
 import { G, tokens, quietTabs, quietLink } from "./ui.js";
 import { glyphs } from "./marks.js";
-import { daru } from "./mascot.js";
+import { neko } from "./mascot.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
 
 const PAGES = [
@@ -136,15 +136,15 @@ export default class Help extends View {
     run("mod.open", { name: "kanso-dojo" });
   }
 
-  // The way into the game: Daru, what it is, a button.
+  // The way into the game: Neko, what it is, a button.
   dojoPage(t, c) {
     const ink = t.accent_foreground ?? c.canvas;
     return h_flex().gap(G.xl).items_center().pt(G.lg)
-      .child(daru(t, { mood: "glad", px: 10 }))
+      .child(neko(t, { mood: "glad", px: 10 }))
       .child(v_flex().flex_1().gap(G.md)
         .child(div().text_size(20).font_semibold().text_color(c.text).child("hjkl dōjō"))
         .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; 60-second rounds, points for the fewest moves, a streak, and a hint when you stop to think."))
-        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Daru keeps the dōjō. A daruma gets its first eye when you set a goal and the second when you reach it: beat your best and Daru opens the other one."))
+        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Neko, the dōjō's cat, keeps you company: happy on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
         .child(h_flex().pt(G.sm).gap(G.md).items_center()
           .child(div().id("enter-dojo").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
             .text_size(13).font_semibold().text_color(ink).hover((s) => s.opacity(0.88))

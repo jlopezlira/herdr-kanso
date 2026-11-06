@@ -340,14 +340,15 @@ test("hjkl dōjō: vim's motions on a board and on code, the fewest moves and th
   assert.deepEqual([points(3, 3, 0), points(3, 3, 4), points(5, 3, 4)], [15, 23, 10], "the fewest moves and the streak count");
 });
 
-test("Daru opens its second eye on a goal reached, and wears the game on its face", async () => {
-  const { daruPixels } = await load("kanso-dojo/mascot.js", ["daruPixels"], { div: () => null, h_flex: () => null, v_flex: () => null });
-  const eye = (g) => g[5][8] + g[6][8];
-  assert.equal(eye(daruPixels("calm", false)), "EE", "one eye only, at first");
-  assert.equal(eye(daruPixels("calm", true)), "KK", "both, once the goal is reached");
-  assert.notDeepEqual(clone(daruPixels("glad")), clone(daruPixels("sweat")));
-  assert.ok(daruPixels().every((row) => row.length === 12) && daruPixels().length === 12);
+test("Neko, the dōjō's cat, wears the game on its face", async () => {
+  const { nekoPixels } = await load("kanso-dojo/mascot.js", ["nekoPixels"], { div: () => null, h_flex: () => null, v_flex: () => null });
+  const eyes = (g) => g.slice(5, 7).map((r) => r.join("")).join("|");
+  const moods = ["calm", "glad", "sweat", "sleep"].map((m) => eyes(nekoPixels(m)));
+  assert.equal(new Set([moods[0], moods[1], moods[3]]).size, 3, "open, glad and asleep look apart");
+  assert.ok(nekoPixels("sweat").some((r) => r.includes("B")), "a drop of sweat");
+  assert.ok(nekoPixels().every((row) => row.length === 14) && nekoPixels().length === 12);
 });
+
 
 test("The dōjō's card: the best round, the days in a row, only the levels played", async () => {
   const host = { theme: () => ({}), exec, appHome: () => "/x", notify: () => {}, window: () => ({ platform: "macos" }) };
