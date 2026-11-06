@@ -3,7 +3,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
-import { stateMark, programIcon, NAME_LABEL } from "./marks.js";
+import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
 
 export { NAME_LABEL };
 
@@ -491,6 +491,10 @@ function guide(l, h, t) {
 const GLINT = [[44, 0.35], [26, 0.6], [12, 1]];
 const REACH = 240; // past the longest title the row can show
 function shimmer(text, t, address) {
+  // On battery the title holds still and only the dots count (marks.js).
+  if (onBattery()) return h_flex().flex_1().min_w(0).items_center()
+    .child(div().min_w(0).flex_shrink(1).truncate().text_color(t.foreground).child(text))
+    .child(div().w(16).flex_none().text_color(t.muted).frames(["", ".", "..", "..."], 380));
   const pace = 2200 + ([...address].reduce((n, c) => n + c.charCodeAt(0), 0) % 7) * 160;
   const lit = ([w, strength]) => div().absolute().top(0).bottom(0).w(w).overflow_hidden().opacity(strength)
     .loop("left", { from: -w, to: REACH, period: pace, easing: "linear" })

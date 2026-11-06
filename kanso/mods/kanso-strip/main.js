@@ -41,7 +41,7 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
-import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
+import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout } from "./layout.js";
 
 // How many panes the view holds at once (`st.n`, 1 to 8; you choose). A new
@@ -282,8 +282,9 @@ export default class Strip extends View {
     const given = givenNames();
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
-    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).loop("opacity", { from: 0.35, to: 1, period: 1800 })
-      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })
+    const calm = onBattery(); // on battery the dots hold still (marks.js)
+    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).when(!calm, (d) => d.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
+      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).when(!calm, (d) => d.loop("opacity", { from: 0.45, to: 1, period: 1600 }))
       : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
     const MAX_TILES = 8;
     const tile = (id) => {
@@ -560,7 +561,7 @@ export default class Strip extends View {
       // Pinned: the accent's tint, a little stronger when it's also the selected one.
       .when(pinned && st !== "blocked", (el) => el.bg(t.accent + (on ? "40" : "24")))
       .when(st === "blocked", (el) => el.bg(t.blocked + "66")
-        .child(div().absolute().left_0().bottom_0().w_full().h(2).bg(t.blocked).loop("opacity", { from: 0.45, to: 1, period: 1600 })))
+        .child(div().absolute().left_0().bottom_0().w_full().h(2).bg(t.blocked).when(!onBattery(), (d) => d.loop("opacity", { from: 0.45, to: 1, period: 1600 }))))
       .when(on && !pinned && st !== "blocked", (el) => el.bg(t.selected))
       // Where the held pane lands lights up in the accent, header and card as
       // one: the left or right half for a column before or after, the whole
