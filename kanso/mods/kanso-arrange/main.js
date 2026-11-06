@@ -14,69 +14,10 @@
 // Cmd+Alt+T or a right-click on the tab bar's new tab button.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { spaces, panes, shared, setShared, hc, run, props, closeOverlay, theme, home } from "herdr";
+import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "herdr";
 import { Store } from "./store.js";
+import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 const ARM_MS = 4000;
-
-const base = (s) => String(s ?? "").split("/").pop().replace(/^-/, "");
-const tilde = (cwd) => {
-  if (!cwd) return "~";
-  const h = home();
-  return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
-};
-
-// A program's arguments without the session it resumed, so opening the
-// arrangement starts each agent fresh: Claude Code's --resume/-r <id>,
-// --session-id <id>, --continue/-c; Codex's `resume <id>`.
-export function cleanArgv(argv) {
-  if (!Array.isArray(argv) || !argv.length) return null;
-  const [cmd, ...rest] = argv.map(String);
-  const name = base(cmd), out = [cmd];
-  const value = (i) => rest[i + 1] !== undefined && !rest[i + 1].startsWith("-");
-  for (let i = 0; i < rest.length; i++) {
-    const a = rest[i];
-    if (name === "claude") {
-      if (a === "--resume" || a === "-r" || a === "--session-id") { if (value(i)) i++; continue; }
-      if (a.startsWith("--resume=") || a.startsWith("--session-id=") || a === "--continue" || a === "-c") continue;
-    }
-    if (name === "codex" && i === 0 && a === "resume") { if (value(i)) i++; continue; }
-    out.push(a);
-  }
-  return out;
-}
-
-// What a terminal runs, from `hc get --json`: the program in the foreground
-// with its arguments (one you started in its shell, or one the terminal was
-// opened with), or null for a shell at its prompt.
-const SHELLS = new Set(["zsh", "bash", "fish", "sh", "dash", "ksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
-export function commandOf(rec) {
-  const fg = rec?.foreground;
-  if (!fg?.argv?.length || SHELLS.has(base(fg.argv[0]))) return null;
-  return cleanArgv(fg.argv);
-}
-
-// The tab's panes as columns, in the strip's order, each pane with what it
-// runs and where (`recs`: terminal address -> its `hc get` record).
-export function captureTab(state, tabPanes, recs) {
-  const byId = new Map(tabPanes.map((p) => [p.pane, p]));
-  const cols = (state?.cols?.length ? state.cols : tabPanes.map((p) => ({ panes: [p.pane], w: 1 / Math.max(1, tabPanes.length) })))
-    .map((c) => ({ w: c.w, panes: c.panes.map((id) => byId.get(id)).filter(Boolean).map((p) => {
-      const rec = recs.get(p.terminal);
-      return { argv: commandOf(rec), cwd: rec?.foreground?.cwd || p.cwd || null };
-    }) }))
-    .filter((c) => c.panes.length);
-  return { per: state?.n ?? null, cols };
-}
-
-export const describe = (argv) => (argv ? argv.join(" ") : "Shell");
-// A program's name: the script a runtime runs (`node …/bin/codex` is codex).
-const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3", "ruby"]);
-export const programOf = (argv) => (!argv?.length ? "shell" : RUNTIMES.has(base(argv[0])) && argv[1] && !argv[1].startsWith("-") ? base(argv[1]) : base(argv[0]));
-export const summary = (a) => a.cols.flatMap((c) => c.panes).map((p) => programOf(p.argv)).join(", ");
-
-// The project an arrangement belongs to: the space's folder on its machine.
-const projectOf = (space) => `${space?.machine ?? ""}:${space?.folder || home()}`;
-const folderOfKey = (key) => String(key ?? "").slice(String(key ?? "").indexOf(":") + 1);
 
 // Every saved arrangement, this project's first, then the other projects'
 // newest first, each with the project it was saved in (`from`).
@@ -178,50 +119,15 @@ export default class Arrange extends View {
     });
   }
 
-  // A new pane, once Herdr has it (one not in `seen`) and the strip has put
-  // it in its place: the next split's "beside this one" needs that place.
-  async newPane(seen, cx, tab) {
-    for (let i = 0; i < 60; i++) {
-      const p = panes().find((q) => !seen.has(q.pane) && q.terminal && (!tab || q.tab === tab));
-      if (p) {
-        for (let j = 0; j < 20 && !shared("strip.state")?.[p.tab]?.cols?.some((c) => c.panes?.includes(p.pane)); j++) await cx.sleep(75);
-        return p;
-      }
-      await cx.sleep(100);
-    }
-    throw new Error("Herdr did not open the pane");
-  }
-
-  // A new tab with the first pane, then each other pane beside or under the
-  // one before it, as the strip places a split; then the columns' widths.
+  // A new tab with the arrangement's panes (tabkit.js); one from another
+  // project opens in this project's folder.
   open(a, cx) {
-    if (this.busy) return;
-    if (a.from && a.from !== projectOf(this.space)) a = rebase(a, this.space?.folder || home());
-    const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
-    if (!flat.length || !this.space) return;
-    this.busy = `Opening 1 of ${flat.length}`; this.error = null; cx.notify();
+    if (this.busy || !this.space) return;
+    if (a.from && a.from !== projectOf(this.space)) a = rebase(a, this.space.folder || home());
+    this.busy = "Opening"; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
       try {
-        const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}) });
-        let seen = new Set(panes().map((q) => q.pane));
-        run("tab.new", { space: this.space.id, name: a.name, ...opts(flat[0]) });
-        const first = await this.newPane(seen, cx);
-        const ids = [[first.pane]];
-        for (let k = 1; k < flat.length; k++) {
-          const p = flat[k];
-          this.busy = `Opening ${k + 1} of ${flat.length}`; cx.notify();
-          const dir = p.ri > 0 ? "down" : "right";
-          const from = p.ri > 0 ? ids[p.ci][p.ri - 1] : ids[p.ci - 1][0];
-          seen = new Set(panes().map((q) => q.pane));
-          setShared("strip.intent", { dir, from, at: Date.now() });
-          run("pane.focus", { pane: from });
-          run("terminal.open", { ...opts(p), place: dir });
-          const made = await this.newPane(seen, cx, first.tab);
-          (ids[p.ci] ??= []).push(made.pane);
-        }
-        await cx.sleep(150);
-        setShared("strip.req", { op: "widths", per: a.per, cols: ids.map((col, ci) => ({ pane: col[0], w: a.cols[ci].w })), n: Date.now() + Math.random() });
-        run("pane.focus", { pane: ids[0][0] });
+        await openTab(a, cx, { space: this.space, progress: (text) => { this.busy = text; cx.notify(); } });
         closeOverlay(props()?.overlay);
       } catch (e) {
         this.busy = null;

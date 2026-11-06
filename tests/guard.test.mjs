@@ -325,8 +325,11 @@ test("ports share card: counts and sizes only, a brag once you stopped what agen
 
 test("Ports stops a server through the guard, detached, and by itself without it", async () => {
   const calls = [];
-  const files = { "/app/data/kanso-guard/ports.json": JSON.stringify(portsSample(Date.now())), "/app/mods/kanso-guard/runtime.json": "{\"node\": \"/opt/node\"}" };
+  // The panel's clock stands at NOW, the sample's: its 24 h chart reads
+  // the same minutes whatever the time the tests run.
+  const files = { "/app/data/kanso-guard/ports.json": JSON.stringify(portsSample(NOW)), "/app/mods/kanso-guard/runtime.json": "{\"node\": \"/opt/node\"}" };
   const host = {
+    Date: class extends Date { constructor(...a) { super(...(a.length ? a : [NOW])); } static now() { return NOW; } },
     appHome: () => "/app", home: () => "/h", theme: () => ({}), panes: () => [], terminals: () => [],
     readTextFile: async (path) => files[path] ?? null,
     exec: async (command, args) => { calls.push([command, ...args]); return { code: 0, stdout: "", stderr: "" }; },
@@ -352,7 +355,7 @@ test("Ports stops a server through the guard, detached, and by itself without it
   assert.deepEqual(guard.slice(0, -2), ["sh", "-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', "sh", "-c", STOP_LOOP, "/opt/node", "/app/mods/kanso-guard/guard.mjs"]);
   assert.match(a42, /^42@\d+$/, "each pid with the start the row showed");
   assert.match(a43, /^43@\d+:force$/);
-  assert.ok(Math.abs(Date.now() - 60_000 - Number(a42.slice(3))) < 5000);
+  assert.ok(Math.abs(NOW - 60_000 - Number(a42.slice(3))) < 5000);
   assert.ok(!calls.some((c) => c[0] === "kill"), "no signal of its own");
   assert.ok(timers.includes(4000), "reads the history again after a few seconds");
 

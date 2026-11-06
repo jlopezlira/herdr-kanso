@@ -580,6 +580,13 @@ export function agentRow(a, indent, t, row, more = {}) {
     .when(tasks.length > 0, (el) => el.child(div().id(`tasks-${a.address}`).flex_none().h(18).px(6).rounded_full().bg(t.foreground + "12")
       .flex().items_center().text_size(11).text_color(t.muted).tooltip(tasks.map((x) => `${x.command.length > 90 ? x.command.slice(0, 89) + "\u2026" : x.command} \u00b7 ${x.time}`).join("\n"))
       .child(String(tasks.length))))
+    // The ⋮ button on hover: the row's right-click menu.
+    .when(Boolean(row?.menu) && Boolean(row?.hovered), (el) => el.child(div().id(`dots-${a.address}`).size(20).flex_none().rounded(6)
+      .flex().items_center().justify_center().text_color(t.dim).tooltip("More")
+      .hover((s) => s.bg(t.input).text_color(t.foreground))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
+      .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13))))
     .child(statusMark(t, a.status));
   const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
     .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
