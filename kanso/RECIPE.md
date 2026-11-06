@@ -769,8 +769,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     drafted as "Review the changes on branch <b> in <folder>." (plus its
     open pull request), and Send (Cmd+Enter): `hc send <terminal> <text>`
     (pasted, then Enter), refused for a blocked agent, then `agent.focus`.
-  - `kanso-arrange`: a dialog (480 wide) of this project's arrangements
-    (`data/kanso-arrange.json`, keyed by the space's machine and folder).
+  - `kanso-arrange`: a dialog (480 wide) of all arrangements (SQLite
+    `data/kanso-arrange/arrange.db`, keyed by project and name); another
+    project's opens in the space's folder.
     Save this tab reads each pane's `hc get --json` foreground argv and
     cwd (a shell at its prompt is a shell; Claude Code's --resume, -r,
     --session-id, --continue, -c and Codex's `resume <id>` are dropped)
