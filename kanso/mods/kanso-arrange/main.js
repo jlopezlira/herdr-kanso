@@ -139,15 +139,31 @@ export default class Arrange extends View {
     this.name = InputState.new({ placeholder: "Name" });
     this.name.on("submit", (_e, cx) => this.save(cx));
     this.name.on("change", (_e, cx) => { this.error = null; cx.notify(); });
-    this.space = spaces().find((s) => s.active) ?? null;
+    // Opened from a menu (the sidebar's, a pane header's): `sleep` { scope:
+    // "tab" | "project", space, tab } goes straight to the sleep view;
+    // `wake` { from, name } or `wakeAll` (a project) wakes at once.
+    const ask = props() ?? {};
+    this.space = spaces().find((s) => s.id === ask.sleep?.space) ?? spaces().find((s) => s.active) ?? null;
     this.store = new Store();
     this.target = null; // { project, name } an Overwrite replaces
     this.asleep = [];
     cx.spawn(async (cx) => {
-      try { this.take(await this.store.all()); this.asleep = await this.store.asleep(); }
+      try { this.take(await this.store.all()); this.setAsleep(await this.store.asleep()); }
       catch (e) { this.list = []; this.error = String(e?.message ?? e); }
+      if (ask.sleep) this.startSleep(cx, ask.sleep.scope === "project", ask.sleep.tab);
+      const waking = ask.wakeAll ? this.asleep.filter((a) => a.from === ask.wakeAll)
+        : ask.wake ? this.asleep.filter((a) => a.from === ask.wake.from && a.name === ask.wake.name) : [];
+      if (waking.length) this.wake(waking[0], cx, waking.slice(1));
+      else if (ask.wake || ask.wakeAll) this.error = "That tab is no longer asleep.";
       cx.notify();
     });
+  }
+
+  // What sleeps, for the sidebar and the pane headers to show (shared
+  // "kanso.asleep": [{ from, name, saved, who }]).
+  setAsleep(list) {
+    this.asleep = list;
+    setShared("kanso.asleep", list.map((a) => ({ from: a.from, name: a.name, saved: a.saved, who: sleepers(a), space: a.space ?? null })));
   }
 
   take(projects) {
@@ -226,9 +242,9 @@ export default class Arrange extends View {
 
   // The sleep view, for the tab you are on or (`whole`) every tab of the
   // project; each tab sleeps under its own name.
-  startSleep(cx, whole = false) {
+  startSleep(cx, whole = false, tabId = null) {
     const all = this.space?.tabs ?? [];
-    const tabs = whole ? all : all.filter((t) => t.active);
+    const tabs = whole ? all : all.filter((t) => (tabId ? t.id === tabId : t.active));
     this.view = "sleep"; this.whole = whole; this.sleepers = null; this.error = null;
     const tab = tabs[0];
     this.name.set_value(tab?.named ? tab.name : `Tab ${all.indexOf(tab) + 1}`);
@@ -255,11 +271,13 @@ export default class Arrange extends View {
       try {
         for (const r of list) {
           const cap = r.capture;
-          const entry = { name: r.name, per: cap.per, saved: Date.now(), cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map((p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, name: p.name ?? null })) })) };
-          this.asleep = await this.store.sleep(projectOf(this.space), entry);
+          const entry = { name: r.name, space: this.space?.name ?? null, per: cap.per, saved: Date.now(), cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map((p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, name: p.name ?? null })) })) };
+          this.setAsleep(await this.store.sleep(projectOf(this.space), entry));
           const agents = cap.cols.flatMap((c) => c.panes).filter((p) => p.pid);
           for (const [i, p] of agents.entries()) {
             this.busy = `${p.name} is leaving, ${i + 1} of ${agents.length} in ${r.name}`; cx.notify();
+            // A draft left in its prompt would go out with /exit: cleared first.
+            await hc(["keys", p.terminal, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"]).catch(() => null);
             const s = await hc(["send", p.terminal, "/exit"]).catch(() => null);
             if (s?.code !== 0) throw new Error(`${p.name} did not take /exit; ${r.name} is kept under Asleep and left open`);
             let gone = false;
@@ -284,10 +302,13 @@ export default class Arrange extends View {
   // Back in its project's space (this one when that space is gone), each
   // agent on its conversation; then it is no longer asleep. `rest`: more to
   // wake after it (Wake all).
+  // A project that slept whole may have no space left: it gets a new one.
   wake(a, cx, rest = []) {
-    const space = spaces().find((sp) => projectOf(sp) === a.from) ?? this.space;
-    this.open({ ...wakeable(a), name: a.name }, cx, { space, keepOpen: rest.length > 0, then: async (cx) => {
-      this.asleep = await this.store.woke(a.from, a.name);
+    const space = spaces().find((sp) => projectOf(sp) === a.from) ?? null;
+    const at = String(a.from).indexOf(":"), folder = folderOfKey(a.from), machine = String(a.from).slice(0, at) || undefined;
+    const create = space ? null : { name: a.space || base(folder) || "~", folder, ...(machine ? { machine } : {}) };
+    this.open({ ...wakeable(a), name: a.name }, cx, { space, create, keepOpen: rest.length > 0, then: async (cx) => {
+      this.setAsleep(await this.store.woke(a.from, a.name));
       if (rest.length) { this.busy = null; this.wake(rest[0], cx, rest.slice(1)); }
     } });
   }
@@ -308,17 +329,18 @@ export default class Arrange extends View {
 
   // A new tab with the first pane, then each other pane beside or under the
   // one before it, as the strip places a split; then the columns' widths.
-  open(a, cx, { space = this.space, then = null, keepOpen = false } = {}) {
+  open(a, cx, { space = this.space, create = null, then = null, keepOpen = false } = {}) {
     if (this.busy) return;
     if (!then && a.from && a.from !== projectOf(space)) a = rebase(a, space?.folder || home());
     const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
-    if (!flat.length || !space) return;
+    if (!flat.length || (!space && !create)) return;
     this.busy = `Opening 1 of ${flat.length}`; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
       try {
         const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}) });
         let seen = new Set(panes().map((q) => q.pane));
-        run("tab.new", { space: space.id, name: a.name, ...opts(flat[0]) });
+        if (create) run("space.new", { ...opts(flat[0]), ...create, tab: a.name });
+        else run("tab.new", { space: space.id, name: a.name, ...opts(flat[0]) });
         const first = await this.newPane(seen, cx);
         const ids = [[first.pane]];
         for (let k = 1; k < flat.length; k++) {
@@ -473,7 +495,7 @@ export default class Arrange extends View {
           .hover((s) => s.opacity(0.8)).on_click((_e, cx) => { cx.stop_propagation(); this.wake(a, cx); }).child("Wake")))
         .child(div().id(`zz-rm-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(armed ? t.blocked : t.dim)
           .hover((s) => s.text_color(armed ? t.blocked : t.foreground))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.arm(key, cx, (cx) => cx.spawn(async (cx) => { this.asleep = await this.store.woke(a.from, a.name); cx.notify(); })); })
+          .on_click((_e, cx) => { cx.stop_propagation(); this.arm(key, cx, (cx) => cx.spawn(async (cx) => { this.setAsleep(await this.store.woke(a.from, a.name)); cx.notify(); })); })
           .child(armed ? "Press again to forget" : "Forget"));
     };
     return shell

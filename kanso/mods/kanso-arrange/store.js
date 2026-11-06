@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);`;
 // `asleep` holds the tabs put to sleep: the same shape, each Claude pane with
 // the conversation it resumes (`resume`).
 export function saveSql(project, a, replace = true, table = "arrangements") {
-  const layout = JSON.stringify({ per: a.per ?? null, cols: a.cols ?? [] });
+  const layout = JSON.stringify({ per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}) });
   return `INSERT OR ${replace ? "REPLACE" : "IGNORE"} INTO ${table === "asleep" ? "asleep" : "arrangements"}(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())});`;
 }
 export const deleteSql = (project, name, table = "arrangements") => `DELETE FROM ${table === "asleep" ? "asleep" : "arrangements"} WHERE project=${sqlText(project)} AND name=${sqlText(name)};`;
@@ -37,7 +37,7 @@ export function projectsOf(rows) {
     let layout;
     try { layout = JSON.parse(r.layout); } catch { continue; }
     if (!Array.isArray(layout?.cols)) continue;
-    (out[r.project] ??= []).push({ name: r.name, per: layout.per ?? null, cols: layout.cols, saved: Number(r.saved) || 0 });
+    (out[r.project] ??= []).push({ name: r.name, per: layout.per ?? null, cols: layout.cols, saved: Number(r.saved) || 0, ...(layout.space ? { space: layout.space } : {}) });
   }
   for (const k of Object.keys(out)) out[k].sort((a, b) => a.saved - b.saved);
   return out;
