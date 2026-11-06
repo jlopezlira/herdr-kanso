@@ -426,7 +426,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Themes**: `kanso` (dark) and `kanso-day` (light), in `themes/`.
   - Dark: background `#1b1b19`, foreground `#d8d4cb`, chrome and canvas
     `#161615`, border `#272725`, input `#353430`, muted `#949086`, dim
-    `#6b6862`, accent `#a3b09a`, working `#c4b07e`, blocked `#c99189`, done
+    `#6b6862`, accent `#ef7e62`, working `#c4b07e`, blocked `#c99189`, done
     `#98ad8f`.
   - Light: background `#f4f1eb`, foreground `#3c3934`, chrome `#e3dfd6`,
     working `#8f7d52`, blocked `#9a6e68`, done `#6d7d62`.
