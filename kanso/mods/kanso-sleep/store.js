@@ -10,6 +10,7 @@
 // claims it (`waking`, with a token of that wake) so one window at a time
 // wakes it, and only that wake may finish it.
 import { exec, appHome } from "herdr";
+import { programOf } from "./tabkit.js";
 
 export const STORE_DIR = "data/kanso-sleep";
 export const STALE_MS = 10 * 60_000; // a sleep or wake that long under way stopped half way
@@ -46,6 +47,15 @@ export function rowsOf(rows) {
 // Not going to sleep or waking right now, or that was so long ago it
 // stopped half way (then it shows again, to be woken).
 export const idle = (a, now = Date.now()) => !(a.pending > now - STALE_MS) && !(Number(String(a.waking ?? "").split(":")[0]) > now - STALE_MS);
+
+// What the sidebar shows of a row (shared "kanso.asleep", written by Sleep
+// and by the sidebar from this same file): each pane that sleeps, by the
+// name it went by and the terminal it ran in, so it keeps its place.
+// `busy`: going to sleep or waking right now.
+export function shownOf(a, now = Date.now()) {
+  return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, into: a.into ?? null, busy: !idle(a, now),
+    agents: a.cols.flatMap((c) => c.panes).map((p) => ({ name: p.name || programOf(p.argv), terminal: p.terminal ?? null, resume: p.resume ?? null })) };
+}
 
 export class Store {
   constructor() {

@@ -15,15 +15,18 @@
 //
 // Opened from the sidebar's menus, a pane header's moon, or on its own (the
 // list of what sleeps). Props: `sleep` { scope: "agent" | "tab" | "project",
-// space, tab, pane }, `wake` { from, name }, `wakeAll` (a project key). One
+// space, tab, pane }, `wake` { id } (or { from, name }), `wakeAll` (a
+// project key). An agent or a tab goes to sleep at once, under the name it
+// already has (the sidebar's, shared "kanso.names"): nothing is asked, the
+// view only shows it going and closes; a project asks once. One
 // agent sleeps on its own: its pane closes and the rest of the tab stays;
 // it wakes back into that tab when the tab is still there. The tabs live in
 // data/kanso-sleep/sleep.db (store.js); shared "kanso.asleep" tells the
 // sidebar what sleeps.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile, exec } from "herdr";
-import { Store, idle } from "./store.js";
+import { Store, idle, shownOf } from "./store.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, shq, SHELLS, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 
@@ -137,9 +140,6 @@ export default class Sleep extends View {
     this.armed = null;
     this.busy = null;
     this.error = null;
-    this.name = InputState.new({ placeholder: "Name" });
-    this.name.on("submit", (_e, cx) => this.sleep(cx));
-    this.name.on("change", (_e, cx) => { this.error = null; cx.notify(); });
     const ask = props() ?? {};
     this.space = spaces().find((s) => s.id === ask.sleep?.space) ?? spaces().find((s) => s.active) ?? null;
     this.store = new Store();
@@ -148,7 +148,7 @@ export default class Sleep extends View {
       try { await this.refresh(true); }
       catch (e) { this.asleep = []; this.error = String(e?.message ?? e); cx.notify(); return; }
       const waking = ask.wakeAll ? this.asleep.filter((a) => a.from === ask.wakeAll)
-        : ask.wake ? this.asleep.filter((a) => a.from === ask.wake.from && a.name === ask.wake.name) : [];
+        : ask.wake ? this.asleep.filter((a) => (ask.wake.id ? a.id === ask.wake.id : a.from === ask.wake.from && a.name === ask.wake.name)) : [];
       if (waking.length) this.wake(waking[0], cx, waking.slice(1));
       else if (ask.wake || ask.wakeAll) this.error = "That tab is no longer asleep.";
       cx.notify();
@@ -161,12 +161,13 @@ export default class Sleep extends View {
   // is not published. `strict`: a failed read throws; else it is let be.
   async refresh(strict = false) {
     const started = Date.now();
-    let list;
-    try { list = await this.store.asleep(); } catch (e) { if (strict) throw e; return; }
-    this.asleep = list;
+    let all;
+    try { all = await this.store.asleep(true); } catch (e) { if (strict) throw e; return; }
+    // The list shows what can wake now; the sidebar also what is on its way.
+    this.asleep = all.filter((a) => idle(a, started));
     if ((shared("kanso.asleep.at") ?? 0) > started) return;
     setShared("kanso.asleep.at", started);
-    setShared("kanso.asleep", list.filter((a) => idle(a)).map((a) => ({ from: a.from, name: a.name, saved: a.saved, who: sleepers(a), space: a.space ?? null })));
+    setShared("kanso.asleep", all.map((a) => shownOf(a, started)));
   }
 
   // A tab as it runs, each Claude agent with its conversation (its session
@@ -187,7 +188,8 @@ export default class Sleep extends View {
       if (!fg?.pid || base(fg.argv?.[0]) !== "claude") continue;
       let ses = null;
       try { ses = JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`)); } catch { /* reported below */ }
-      const who = ses?.name || r.labels?.["kanso.name"] || r.title || term;
+      // The name the sidebar shows it by, so it sleeps under that one.
+      const who = shared("kanso.names")?.[term] || r.labels?.["kanso.name"] || ses?.name || r.title || term;
       const again = ses?.sessionId ? resumeArgv(fg.argv, ses.sessionId) : null;
       if (!ses?.sessionId || ses.pid !== fg.pid) error ??= `${who}'s conversation was not found, so it could not wake on it`;
       else if (!again) error ??= `${who} was started with options a wake can't carry over`;
@@ -210,17 +212,17 @@ export default class Sleep extends View {
   }
 
   // The sleep view, for one tab (the one you are on by default) or (`whole`)
-  // every tab of the project; each tab sleeps under its own name.
+  // every tab of the project; each tab sleeps under its own name, an agent
+  // alone under its own. An agent or a tab goes at once when nothing stops
+  // it; a project waits for its button.
   startSleep(cx, whole = false, tabId = null, pane = null) {
     const all = this.space?.tabs ?? [];
     const tabs = whole ? all : all.filter((t) => (tabId ? t.id === tabId : t.active));
     this.view = "sleep"; this.whole = whole; this.onlyPane = pane; this.sleepers = null; this.error = null; this.sleepTabs = tabs;
-    const tab = tabs[0];
-    this.name.set_value(tab?.named ? tab.name : `Tab ${all.indexOf(tab) + 1}`);
     cx.notify();
     cx.spawn(async (cx) => {
       this.sleepers = await this.readTabs(tabs);
-      if (pane && this.sleepers[0]) this.name.set_value(this.sleepers[0].name);
+      if (!whole && this.sleepers.length && !this.sleepers.some((r) => r.blocker || r.error)) this.sleep(cx);
       cx.notify();
     });
   }
@@ -231,8 +233,6 @@ export default class Sleep extends View {
   sleep(cx) {
     const shown = this.sleepers;
     if (this.view !== "sleep" || this.busy || !shown?.length || shown.some((r) => r.blocker || r.error)) return;
-    const typed = this.whole ? null : this.name.value().trim();
-    if (!this.whole && !typed) return;
     const project = projectOf(this.space);
     this.busy = "Reading the tabs again"; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
@@ -244,7 +244,6 @@ export default class Sleep extends View {
         cx.notify();
         return;
       }
-      if (!this.whole) list[0].name = typed;
       let taken;
       try { taken = new Set((await this.store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)); }
       catch (e) { this.busy = null; this.error = String(e?.message ?? e); cx.notify(); return; }
@@ -253,7 +252,7 @@ export default class Sleep extends View {
       for (const r of list) {
         const cap = r.capture;
         const agents = cap.cols.flatMap((c) => c.panes).filter((p) => p.pid);
-        const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, ...(p.pid ? { pid: p.pid } : {}) });
+        const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, terminal: p.terminal ?? null, ...(p.pid ? { pid: p.pid } : {}) });
         const entry = { name: r.name, space: this.space?.name ?? null, per: cap.per, saved: Date.now(),
           cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map(kept) })),
           ...(this.onlyPane ? { into: { tab: r.tab.named ? r.tab.name : null, tabId: r.tab.id } } : {}) };
@@ -261,6 +260,7 @@ export default class Sleep extends View {
         let id = null;
         try {
           id = await this.store.sleep(project, entry);
+          await this.refresh(); // the sidebar shows it falling asleep, in its place
           for (const [i, p] of agents.entries()) {
             this.busy = `${p.name} is leaving, ${i + 1} of ${agents.length} in ${r.name}`; cx.notify();
             await this.leave(p, cx, () => sent.push(p));
@@ -424,6 +424,7 @@ export default class Sleep extends View {
         await this.refresh();
         this.busy = null; this.error = `${shown.name} is waking in another window, or is no longer asleep.`; cx.notify(); return;
       }
+      await this.refresh(); // the sidebar shows it waking
       // An agent whose terminal could not be checked when a sleep stopped:
       // that terminal is looked at first, and the wake waits while it runs.
       // A sleep that stopped half way (the window closed under it, say)
@@ -526,8 +527,7 @@ export default class Sleep extends View {
     const shell = v_flex().id("kanso-sleep").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {
         // The list of what sleeps: j/k (or the arrows) along it, gg/G,
-        // Enter wakes the one you are on. Not in the sleep view, whose
-        // name field takes letters.
+        // Enter wakes the one you are on.
         const move = this.view === "list" ? listKey(e, this.keys ??= {}) : (e.key === "escape" ? "escape" : null);
         if (!move) return;
         if (move !== "escape") {
@@ -558,9 +558,6 @@ export default class Sleep extends View {
           whole ? "Every tab's agents exit and the tabs close. Wake opens them again, each agent on its conversation."
           : alone ? "It exits and its pane closes; the rest of the tab stays. Wake opens it again in that tab, on its conversation."
           : "Its agents exit and the tab closes. Wake opens it again, each agent on its conversation."))
-        .when(!whole, (el) => el
-          .child(div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child("Name"))
-          .child(Input.new(this.name).h(36).px(10).rounded(9).border_1().border_color(t.input).bg(t.background).text_size(12.8).text_color(t.foreground)))
         .when(this.sleepers === null, (el) => el.child(note("Reading")))
         .children(list.map((r) => v_flex().pt(14).gap(4)
           .when(whole, (el) => el.child(div().pb(3).text_size(11.5).text_color(t.dim).child(r.name)))
@@ -572,7 +569,7 @@ export default class Sleep extends View {
         .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
         .child(h_flex().pt(18).gap(8).justify_end()
           .child(button("sl-back", "Cancel", false, !this.busy, () => closeOverlay(p.overlay)))
-          .child(button("sl-go", whole ? `Sleep ${list.length} ${list.length === 1 ? "tab" : "tabs"}` : "Sleep", true, ready, (cx) => this.sleep(cx))));
+          .when(whole || Boolean(stop) || Boolean(this.error), (el) => el.child(button("sl-go", whole ? `Sleep ${list.length} ${list.length === 1 ? "tab" : "tabs"}` : "Sleep", true, ready, (cx) => this.sleep(cx)))));
     }
 
     // The list: what sleeps, by project, newest first.

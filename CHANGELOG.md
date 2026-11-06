@@ -8,6 +8,18 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.5.0] - 2026-11-06
+
+### Added
+
+- An agent asleep keeps its row in the sidebar, in every view: in Projects at the place it had in its project, in Threads in its order, in Status under Asleep, by the same name, with the moon. It has no pane, so a click opens its menu instead of a pane; the sun on hover (or Wake on its menu) wakes it. A project asleep whole stays in Projects with its agents under it.
+- The sidebar keeps its own state in its own SQLite database, data/kanso-spaces/panel.db: the view, each view's order and what is folded (moved there from where they were kept before), and each agent's name and place, so one that sleeps keeps both.
+
+### Changed
+
+- Sleep asks nothing: an agent or a tab goes to sleep at once under the name it already has, and the dialog only shows it going, then closes. Putting a whole project to sleep still asks once.
+- An agent has one name in every view: the one you gave it, else its conversation's title, else its program's. Rename, from any view, changes it everywhere.
+
 ## [3.4.1] - 2026-11-06
 
 ### Fixed

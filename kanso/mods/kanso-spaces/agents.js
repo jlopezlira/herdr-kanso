@@ -535,8 +535,11 @@ const ROW = 32, TWO = 50, ROOMY = 64;
 export function agentRow(a, indent, t, row, more = {}) {
   const project = more.project ?? null;
   const pic = project ? null : programIcon(a.program, a.sub ? 13 : 15, t.foreground);
-  const live = a.status === "working" || a.status === "blocked" || more.strong;
-  const ink = a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
+  // Asleep (or on its way): in its place, by its name, with the moon; it has
+  // no pane, so a click opens its menu (Wake) instead of a pane.
+  const zz = Boolean(a.asleep) || Boolean(a.dozing);
+  const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
+  const ink = zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
   const pinned = a.pin != null, drag = row?.drag;
   const lines = more.lines ?? [];
@@ -550,11 +553,11 @@ export function agentRow(a, indent, t, row, more = {}) {
   const lead = project
     ? h_flex().size(20).flex_none().rounded(6).bg(project.fill + "2e").items_center().justify_center()
       .text_size(11).font_semibold().text_color(project.fill).child(project.name[0]?.toUpperCase() ?? "?")
-    : pic?.opacity(a.focused || live ? 1 : 0.75);
+    : pic?.opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75);
   const top = h_flex().h(two ? 22 : h).gap(10).items_center()
     // One weight always: a weight that changed with the state would reflow
     // the name and make the row jump. Ink alone says what matters.
-    .child(a.status === "working"
+    .child(a.status === "working" && !zz
       ? shimmer(more.label ?? agentLabel(a), t, a.address).text_size(13.5).font_medium()
       : div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(ink).child(more.label ?? agentLabel(a)))
     .when(Boolean(machine), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(machine)))
@@ -587,7 +590,8 @@ export function agentRow(a, indent, t, row, more = {}) {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
       .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13))))
-    .child(statusMark(t, a.status));
+    .child(zz ? h_flex().size(15).flex_none().items_center().justify_center().child(svg("mods/kanso-chrome/icons/moon.svg").size(13).text_color(t.muted))
+      : statusMark(t, a.status));
   const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
     .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
     .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))
@@ -602,8 +606,8 @@ export function agentRow(a, indent, t, row, more = {}) {
     // The keyboard's ring, when the list is driven by keys (main.js navRow).
     .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click(() => (a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })))
-    .on_mouse_down("left", (e) => { if (e.click_count === 2) renameTerminal(a.address, more.label ?? agentLabel(a), Boolean(more.label)); else drag?.down(); })
+    .on_click((_e, cx) => (a.asleep ? row?.menu?.(cx) : a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })))
+    .on_mouse_down("left", (e) => { if (e.click_count === 2 && !a.asleep) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
     .when(Boolean(drag), (el) => el.on_mouse_up("left", (_e, cx) => drag.up(cx)))
     .when(Boolean(row?.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))
     .when(Boolean(row?.menu), (el) => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); }))

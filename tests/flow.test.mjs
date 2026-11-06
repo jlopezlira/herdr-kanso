@@ -198,8 +198,7 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   await store.drop(failed);
   assert.equal((await now()).length, 1, "a sleep that stopped drops only its own row");
   const src = async (f) => readFile(new URL(`../kanso/mods/${f}`, import.meta.url), "utf8");
-  const stale = (text, name) => text.match(new RegExp(`${name} = ([^;]+);`))?.[1];
-  assert.equal(stale(await src("kanso-spaces/main.js"), "ASLEEP_STALE_MS"), stale(await src("kanso-sleep/store.js"), "STALE_MS"), "the sidebar and the store agree when a sleep or wake stopped half way");
+  assert.match(await src("kanso-spaces/main.js"), /from "\.\/store\.js"/, "the sidebar reads what sleeps through Sleep's own store (a copy), so the two agree");
   // An agent that may still be starting is held back from waking.
   const held = await store.sleep(":/w", { ...a, name: "held", saved: 12 });
   await store.narrow(held, [{ w: 1, panes: [a.cols[0].panes[0]] }], null, true);
@@ -416,4 +415,46 @@ test("A dōjō round ends after ten targets, with its result kept; End round sto
   game.endRound(null, false);
   assert.equal(game.over.kept, false, "End round: stopped");
   assert.equal(added.length, 1, "and not counted");
+});
+
+test("An agent asleep keeps its name and place: the sidebar sees each pane that sleeps, by the terminal it ran in", async () => {
+  const { shownOf } = await load("kanso-sleep/store.js", ["shownOf"], { exec: async () => ({ code: 0, stdout: "" }), appHome: () => "/x" });
+  const row = { id: "r1", from: ":/w", name: "fury", saved: 5, into: { tab: null, tabId: "tb1" },
+    cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "s1", name: "fury", terminal: "t1" }, { argv: ["npm", "run", "dev"], terminal: "t2" }] }] };
+  const now = Date.now();
+  const s = clone(shownOf(row, now));
+  assert.deepEqual(s.agents, [{ name: "fury", terminal: "t1", resume: "s1" }, { name: "npm", terminal: "t2", resume: null }]);
+  assert.equal(s.busy, false);
+  assert.equal(shownOf({ ...row, pending: now - 1 }, now).busy, true, "on its way to sleep: busy");
+  assert.deepEqual(clone(s.into), { tab: null, tabId: "tb1" });
+});
+
+test("The sidebar keeps its own state in panel.db: prefs moved from localStorage once, each agent's name and place, the gone ones forgotten", async (t) => {
+  const dir = await temporary(t);
+  const local = new Map([["spaces.view", "threads"], ["spaces.sections", "[\"done\"]"]]);
+  const localStorage = { getItem: (k) => local.get(k) ?? null, setItem: (k, v) => local.set(k, v) };
+  const { Panel, FORGET_MS } = await load("kanso-spaces/panel.js", ["Panel", "FORGET_MS"], { exec, appHome: () => dir, localStorage });
+  const p = new Panel(["spaces.view", "spaces.sections", "spaces.order"]);
+  assert.equal(p.get("spaces.view"), "threads", "the first frame: the copy in localStorage");
+  assert.equal(await p.load(), false, "first start: localStorage moves in, nothing differs");
+  p.set("spaces.view", "agents");
+  p.remember(new Map([["t1", { name: "fury", title: "Fix sleep", said: 3, space: "w1", project: ":/w", at: 1, program: null }]]), 100);
+  await p.chain;
+  local.set("spaces.view", "spaces"); // an old copy: the database wins
+  const fresh = new Panel(["spaces.view"]);
+  assert.equal(await fresh.load(), true);
+  assert.equal(fresh.get("spaces.view"), "agents");
+  assert.deepEqual(clone(fresh.json("spaces.sections", [])), ["done"]);
+  assert.equal(fresh.agents.get("t1").name, "fury");
+  assert.equal(fresh.agents.get("t1").at, 1);
+  // The same again writes nothing; a gone agent that sleeps is kept, the rest forgotten.
+  const before = fresh.chain;
+  fresh.remember(new Map([["t1", { name: "fury", title: "Fix sleep", said: 3, space: "w1", project: ":/w", at: 1, program: null }]]), 200);
+  assert.equal(fresh.chain, before, "nothing changed: nothing written");
+  fresh.remember(new Map([["t2", { name: "cap", title: null, said: null, space: "w1", project: ":/w", at: 0, program: null }]]), 100);
+  fresh.prune(new Set(["t1"]), 100 + FORGET_MS + 1);
+  await fresh.chain;
+  const last = new Panel([]);
+  await last.load();
+  assert.deepEqual([...last.agents.keys()], ["t1"], "t2 gone and not asleep: forgotten; t1 asleep: kept");
 });
