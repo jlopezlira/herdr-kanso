@@ -189,7 +189,7 @@ export class Updater {
     if (!done) return;
     this.setState({ done: null });
     if (done.version !== this.installed) return;
-    notify({ title: `Kanso updated to ${done.version}`, body: done.notes || undefined, level: "success" });
+    notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
   }
 
   // `report`: say so when there is nothing new or GitHub can't be reached
@@ -205,17 +205,17 @@ export class Updater {
     try { r = await exec("git", ["-c", "core.askPass=true", "-c", "credential.interactive=never", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20", "ls-remote", "--tags", "--refs", this.source.remote]); } catch {}
     finally { this.checking = false; }
     if (r?.code !== 0) { // offline: the next tick tries again
-      if (report) notify({ title: "Kanso could not check for updates", body: "GitHub could not be reached.", level: "warning" });
+      if (report) notify({ title: "kansō could not check for updates", body: "GitHub could not be reached.", level: "warning" });
       return;
     }
     this.setState({ latest: newestTag(r.stdout), checked: Date.now() });
     const v = this.available();
-    if (report && !v) notify({ title: "Kanso is up to date", body: `You have ${this.installed}, the newest release.`, level: "success" });
+    if (report && !v) notify({ title: "kansō is up to date", body: `You have ${this.installed}, the newest release.`, level: "success" });
     if (report && v && this.state().notified === v) this.setState({ notified: null }); // asked: say it again
     if (v && this.state().notified !== v) {
       this.setState({ notified: v });
       notify({
-        title: `Kanso ${v} is available`,
+        title: `kansō ${v} is available`,
         body: `You have ${this.installed}. Click to update; Herdr's own updates stay under Settings.`,
         action: { name: "kanso-tabs.update" },
         timeout: 30000,
@@ -249,7 +249,7 @@ export class Updater {
       this.finished();
     } catch (e) {
       this.error = String(e?.message ?? e);
-      notify({ title: "Kanso was not updated", body: this.error, level: "error" });
+      notify({ title: "kansō was not updated", body: this.error, level: "error" });
       try { await exec("rm", ["-rf", stage]); } catch {}
     } finally {
       this.busy = false;
@@ -280,11 +280,11 @@ export class Updater {
         const merged = mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys));
         if (merged.changed) {
           await writeTextFile(`${stage}/keys.json`, `${JSON.stringify(merged.keys, null, 2)}\n`, null);
-          notes.push("Kanso's keys updated.");
+          notes.push("kansō's keys updated.");
         }
         if (merged.kept.length) notes.push(`Kept your own ${merged.kept.join(", ")}.`);
       } catch {
-        notes.push("Your keys.json could not be read, so Kanso's keys were left as they are.");
+        notes.push("Your keys.json could not be read, so kansō's keys were left as they are.");
       }
     }
     return notes.join(" ");

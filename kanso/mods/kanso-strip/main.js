@@ -798,6 +798,20 @@ export default class Strip extends View {
   }
 
   command(name) {
+    // Vim's keys (⌘⌥h/j/k/l, with ⇧ to move) are the arrows' moves.
+    const vim = /^vim-(move-)?(left|right|up|down)$/.exec(name);
+    if (vim) name = `${vim[1] ? "move" : "go"}-${vim[2]}`;
+    // The keyboard is on the sidebar's list (kanso-spaces): right goes back
+    // to the pane it came from, up and down move along the list.
+    const list = shared("kanso.list");
+    if (list && (name === "go-right" || name === "go-left" || name === "go-up" || name === "go-down")) {
+      if (name === "go-right") { setShared("kanso.list", null); if (list.from) run("pane.focus", { pane: list.from }); }
+      else if (name === "go-left") run("kanso-spaces.list");
+      // Up and down are the list's; one that isn't on the list any more
+      // sends them back here (kanso-spaces), so a stale flag costs nothing.
+      else run(`kanso-spaces.list-${name === "go-up" ? "up" : "down"}`);
+      return;
+    }
     if (name === "next-needs-you") { this.goNeedsYou(); return; }
     if (name === "send") { const p = this.focusedPane(); if (p?.terminal) openSend(p); return; }
     if (name === "arrange") { openArrange(); return; }
@@ -818,7 +832,8 @@ export default class Strip extends View {
       run("pane.split", { pane: id, direction: dir === "down" || dir === "up" ? "down" : "right" });
     };
     switch (name) {
-      case "go-left": if (at) go(at.ci - 1, at.ri); break;
+      // Left of the first column is the sidebar's list, as in vim.
+      case "go-left": if (at) { if (at.ci > 0) go(at.ci - 1, at.ri); else run("kanso-spaces.list"); } break;
       case "go-right": if (at) go(at.ci + 1, at.ri); break;
       case "go-up": if (at && at.ri > 0) go(at.ci, at.ri - 1); break;
       case "go-down": if (at && at.ri < st.cols[at.ci].panes.length - 1) go(at.ci, at.ri + 1); break;
@@ -828,6 +843,12 @@ export default class Strip extends View {
         if (at) {
           const to = at.ci + (name === "move-left" ? -1 : 1);
           if (to >= 0 && to < st.cols.length && !st.cols[at.ci].pin && !st.cols[to].pin) { [st.cols[at.ci], st.cols[to]] = [st.cols[to], st.cols[at.ci]]; this.reveal(st, id); }
+        }
+        break;
+      case "move-up": case "move-down":
+        if (at) {
+          const col = st.cols[at.ci].panes, to = at.ri + (name === "move-up" ? -1 : 1);
+          if (to >= 0 && to < col.length) { [col[at.ri], col[to]] = [col[to], col[at.ri]]; this.reveal(st, id); }
         }
         break;
       case "new-right": split("right"); break;

@@ -11,7 +11,7 @@
   --text: #ece8de;
   --body: #c9c5bb;
   --muted: #949086;
-  --accent: #ef7e62;
+  --accent: #da627d;
   --accent-ink: #161615;
   --working: #c4b07e;
   --blocked: #c99189;
@@ -82,7 +82,7 @@ a { color: inherit; }
   content: ""; position: absolute; left: 50%; top: -220px; z-index: -1;
   width: 1100px; height: 760px; transform: translateX(-50%);
   background:
-    radial-gradient(closest-side at 38% 55%, rgba(239, 126, 98, .20), transparent 72%),
+    radial-gradient(closest-side at 38% 55%, rgba(218, 98, 125, .20), transparent 72%),
     radial-gradient(closest-side at 64% 46%, rgba(196, 176, 126, .14), transparent 70%);
   filter: blur(8px);
   pointer-events: none;
@@ -119,7 +119,7 @@ h1 {
 .button:hover { background: var(--raised); border-color: var(--muted); }
 .button-primary {
   background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
-  box-shadow: 0 8px 30px -10px rgba(239, 126, 98, .55);
+  box-shadow: 0 8px 30px -10px rgba(218, 98, 125, .55);
 }
 .button-primary:hover { background: #b3bfaa; border-color: #b3bfaa; }
 .button-ghost { background: transparent; border-color: transparent; color: var(--muted); }
@@ -137,8 +137,8 @@ h1 {
 .window-hero {
   max-width: var(--wide); margin: 64px auto 0;
   box-shadow:
-    0 0 0 1px rgba(239, 126, 98, .08),
-    0 40px 120px -40px rgba(239, 126, 98, .35),
+    0 0 0 1px rgba(218, 98, 125, .08),
+    0 40px 120px -40px rgba(218, 98, 125, .35),
     0 30px 80px -30px rgba(0, 0, 0, .9);
   animation: rise .9s cubic-bezier(.2, .7, .2, 1) .15s both;
 }

@@ -104,7 +104,7 @@ export default class WorkspaceChrome extends View {
       // Kanso's own release, apart from Herdr's: its own row, shown only when there is one.
       const kanso = this.updater?.available();
       const busy = this.updater?.busy;
-      const kansoLabel = busy ? "Updating Kanso..." : `Update Kanso to ${kanso}`;
+      const kansoLabel = busy ? "Updating kansō..." : `Update kansō to ${kanso}`;
       return v_flex().size_full().bg(t.chrome).px(collapsed ? 0 : 8).pt(8).pb(12).gap(2).text_size(13).justify_end()
         .when(collapsed, el => el.items_center())
         .when(Boolean(kanso), el => el.child(row("kanso-update", "mods/kanso-chrome/icons/refresh.svg", kansoLabel,

@@ -260,3 +260,23 @@ test("Ports finds dev servers, the pane that runs each, and the ones no pane own
   assert.equal(list[1].secs, 3723);
   assert.equal(shortArgs("/usr/local/bin/node /Users/me/web/node_modules/.bin/next dev"), "node /Users/me/web/node_modules/.bin/next dev");
 });
+
+test("Every list answers vim's keys: j/k, gg/G, Enter, Esc; with cmd, ctrl or alt a key is not the list's", async () => {
+  const { listKey, moveTo } = await load("kanso-menu/listkeys.js", ["listKey", "moveTo"]);
+  const key = (k, mods = {}) => ({ key: k, modifiers: mods });
+  const memo = {};
+  assert.equal(listKey(key("j"), memo), "down");
+  assert.equal(listKey(key("down"), memo), "down");
+  assert.equal(listKey(key("k"), memo), "up");
+  assert.equal(listKey(key("g", { shift: true }), memo), "last", "G");
+  assert.equal(listKey(key("g"), memo, 1000), "pending");
+  assert.equal(listKey(key("g"), memo, 1500), "first", "gg");
+  assert.equal(listKey(key("g"), memo, 3000), "pending");
+  assert.equal(listKey(key("g"), memo, 4500), "pending", "too slow for gg: a new first g");
+  assert.equal(listKey(key("enter"), memo), "enter");
+  assert.equal(listKey(key("escape"), memo), "escape");
+  assert.equal(listKey(key("j", { platform: true }), memo), null, "cmd-j is not the list's");
+  assert.equal(listKey(key("k", { control: true }), memo), null);
+  assert.equal(listKey(key("x"), memo), null);
+  assert.deepEqual([moveTo("down", 4, 5), moveTo("up", 0, 5), moveTo("first", 3, 5), moveTo("last", 0, 5), moveTo("down", 0, 0)], [4, 0, 0, 4, 0], "j and k stop at the ends");
+});

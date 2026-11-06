@@ -291,7 +291,7 @@ export function freedSpec(h, current, at = Date.now()) {
     right: h?.since ? `since ${shortDate(h.since)}` : "",
     hero: { big: size.big, small: size.small, label: freed ? "of disk freed from worktrees agents left behind" : "of disk in git worktrees agents left behind" },
     stats,
-    note: freed ? "Each one checked first: nothing uncommitted lost, every commit kept on a branch." : "Found and sized by Kanso, before cleaning up.",
+    note: freed ? "Each one checked first: nothing uncommitted lost, every commit kept on a branch." : "Found and sized by kansō, before cleaning up.",
     blocks: [
       ...(days.some((d) => d.kb) ? [{
         kind: "bars", title: freed ? "Freed each day" : "On disk each day",

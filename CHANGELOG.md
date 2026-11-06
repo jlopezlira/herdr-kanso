@@ -1,12 +1,26 @@
 # Changelog
 
-Every change to what Kanso installs, newest first. Versions follow
+Every change to what kansō installs, newest first. Versions follow
 [Semantic Versioning](https://semver.org): a release that lists Breaking or
 Removed changes is a major version, one that lists Added or Deprecated is a
 minor version, anything else is a patch. The format follows
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version`
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
+
+## [3.4.0] - 2026-11-06
+
+### Added
+
+- Vim keys: Cmd+Alt+H/J/K/L go left, down, up and right between panes, and with Shift move the pane, up and down within its stack too. Left of the first pane is the sidebar's list: a ring marks the row you are on, J and K move, GG and Shift+G go to the first and the last, Enter or L opens the row, / searches, and Esc or Cmd+Alt+L goes back to the pane you came from.
+- Every kansō menu and list answers the same keys: the pane menu, Open with, the sidebar's right-click menus, Sleep and Arrangements move with J and K (or the arrows), GG and Shift+G, Enter and Esc.
+
+### Changed
+
+- kansō's accent is a coral pink, in both themes and on the site, instead of the sage green.
+- The name is written kansō, in lowercase, in the app and in the README.
+- The site shows the current star count from GitHub on every visit.
+- Cmd+Alt+H moves left while the kansō layout shows, instead of hiding other apps.
 
 ## [3.3.0] - 2026-11-06
 

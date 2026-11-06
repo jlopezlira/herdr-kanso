@@ -22,6 +22,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile, exec } from "herdr";
 import { Store, idle } from "./store.js";
+import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, shq, SHELLS, captureTab, describe, programOf, projectOf, folderOfKey, openTab } from "./tabkit.js";
 
 const ARM_MS = 4000;
@@ -501,7 +502,17 @@ export default class Sleep extends View {
     const note = (text, tone) => div().pt(10).text_size(11.5).line_height(1.45).text_color(tone ?? t.dim).child(text);
     const shell = v_flex().id("kanso-sleep").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {
-        if (e.key !== "escape") return;
+        // The list of what sleeps: j/k (or the arrows) along it, gg/G,
+        // Enter wakes the one you are on. Not in the sleep view, whose
+        // name field takes letters.
+        const move = this.view === "list" ? listKey(e, this.keys ??= {}) : (e.key === "escape" ? "escape" : null);
+        if (!move) return;
+        if (move !== "escape") {
+          const order = this.order ?? [];
+          if (move === "enter") { if (!this.busy && order[this.at ?? 0]) this.wake(order[this.at ?? 0], cx); }
+          else if (move !== "pending") this.at = moveTo(move, this.at ?? 0, order.length);
+          cx.stop_propagation(); cx.notify(); return;
+        }
         if (this.busy) { cx.stop_propagation(); return; }
         if (this.view === "sleep" && (props()?.sleep == null)) { this.view = "list"; this.error = null; cx.notify(); }
         else closeOverlay(p.overlay);
@@ -541,11 +552,14 @@ export default class Sleep extends View {
     // The list: what sleeps, by project, newest first.
     const asleep = this.asleep ?? [];
     const groups = [...asleep.reduce((m, a) => m.set(a.from, [...(m.get(a.from) ?? []), a]), new Map())];
+    this.order = groups.flatMap(([, tabs]) => tabs);
+    const atId = this.order[Math.min(this.at ?? 0, Math.max(0, this.order.length - 1))]?.id;
     const spaceName = (from, list) => spaces().find((sp) => projectOf(sp) === from)?.name ?? list[0]?.space ?? (base(folderOfKey(from)) || "~");
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
     const row = (a) => {
       const id = `${a.from}:${a.name}`, key = `forget:${id}`, armed = this.armed === key;
       return h_flex().id(`zz-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
+        .when(a.id === atId, (el) => el.bg(t.selected))
         .when(!this.busy, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.wake(a, cx)))
         .child(svg("mods/kanso-chrome/icons/moon.svg").size(15).flex_none().text_color(t.muted))
         .child(v_flex().flex_1().min_w(0).gap(2)

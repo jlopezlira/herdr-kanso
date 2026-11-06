@@ -13,8 +13,9 @@ import { v_flex, h_flex, Popover } from "gpui-base";
 import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
 import { findThreads } from "./threads.js";
 import { programOf } from "./tabkit.js";
+import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, home, appHome } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome } from "herdr";
 
 // A value kept in localStorage, when it is the same shape as `fallback`.
 function stored(key, fallback) {
@@ -137,8 +138,10 @@ export function tone(t, status) {
 export default class Spaces extends View {
   init(_props, cx) {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.spaceMenu) { this.confirmClose = false; return; }
+    if (props()?.menu || props()?.spaceMenu) { this.confirmClose = false; this.menuAt = 0; this.handle = cx.focus_handle(); this.handle.focus(); return; }
     loadAsleep().catch(() => {});
+    this.handle = cx.focus_handle(); // the list by keyboard (enterList)
+    if (shared("kanso.list")) setShared("kanso.list", null); // a reload: nothing is on the list
     // By place key (placesOf): what git says of each place, when it was last
     // looked at, where git couldn't answer (a machine away), what to look at next.
     this.git = {}; // -> { name, branch, ahead, behind, repo, linked }, null: not a repo
@@ -228,6 +231,77 @@ export default class Spaces extends View {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (c === "list") this.enterList(cx);
+    else if (c === "list-up" || c === "list-down") {
+      if (this.kbd) this.listKeyDown({ key: c === "list-up" ? "up" : "down", modifiers: {} }, cx);
+      // Not on the list any more: the flag was stale; the strip takes it.
+      else { setShared("kanso.list", null); run(`kanso-strip.go-${c === "list-up" ? "up" : "down"}`); }
+    }
+  }
+
+  // The list by keyboard, as in vim (from the strip, ⌘⌥h past its first
+  // column): the keyboard moves onto the sidebar, a ring marks the row you
+  // are on, starting at the one you were in; j/k (or the arrows) along the
+  // rows, gg/G, Enter or l opens the row (an agent: its pane, and the
+  // keyboard goes with it), / searches, Esc goes back to the pane you came
+  // from. Rows add themselves as they draw (navMark), in the order on screen.
+  enterList(cx) {
+    if (shared("sidebar.collapsed") === true || !(this.nav ?? []).length) return;
+    const f = focused();
+    this.listFrom = f?.pane ?? null;
+    const here = this.nav.find((n) => n.here) ?? this.nav[0];
+    this.navKey = here.key;
+    this.kbd = true;
+    this.handle.focus();
+    // For the strip: ⌘⌥l (or →) now goes back to that pane.
+    setShared("kanso.list", { from: this.listFrom, at: Date.now() });
+    cx.notify();
+  }
+
+  leaveList(cx, back = true) {
+    this.kbd = false;
+    if (shared("kanso.list")) setShared("kanso.list", null);
+    if (back && this.listFrom) run("pane.focus", { pane: this.listFrom });
+    cx.notify();
+  }
+
+  // A row on the keyboard's path: `go` is its click, `here` marks the row
+  // you are in (the active space, the focused agent). True when the
+  // keyboard's ring is on it.
+  navMark(key, go, here = false) {
+    (this.navNext ??= []).push({ key, go, here });
+    return Boolean(this.kbd) && this.navKey === key;
+  }
+
+  // An agent's row object with the ring when the keyboard is on it.
+  navRow(a, row) {
+    const go = () => (a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address }));
+    return this.navMark(`agent:${a.address}`, go, Boolean(a.focused)) ? { ...(row ?? {}), kbd: true } : row;
+  }
+
+  listKeyDown(e, cx) {
+    if (!this.kbd) return;
+    const nav = this.nav ?? [];
+    const k = String(e.key ?? "").toLowerCase(), m = e.modifiers ?? {};
+    const plain = !m.control && !m.platform && !m.alt;
+    let move = listKey(e, this.listKeys ??= {});
+    if (!move && plain && k === "l") move = "enter";
+    if (!move && plain && (k === "/" || e.key_char === "/")) { this.leaveList(cx, false); run("mod.open", { name: "picker" }); cx.stop_propagation?.(); return; }
+    if (!move) return;
+    cx.stop_propagation?.();
+    if (move === "escape") { this.leaveList(cx); return; }
+    if (move === "pending") return;
+    const at = Math.max(0, nav.findIndex((n) => n.key === this.navKey));
+    if (move === "enter") {
+      const row = nav[at];
+      if (!row) return;
+      if (row.key.startsWith("agent:")) { this.kbd = false; setShared("kanso.list", null); }
+      row.go(cx);
+      cx.notify();
+      return;
+    }
+    this.navKey = nav[moveTo(move, at, nav.length)]?.key ?? this.navKey;
+    cx.notify();
   }
 
   // What still runs under each agent on this computer (agents.js `tasksOf`,
@@ -499,6 +573,7 @@ export default class Spaces extends View {
       .hover((s) => s.bg(t.foreground + "0c"))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
       .tooltip(list.map((a) => `${a.name}: ${a.who}, asleep since ${since(a.saved)}`).join("\n"))
+      .when(this.navMark(`asleep-project:${key}`, () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, props: { spaceMenu: { key } } })), (el) => el.border_1().border_color(t.accent))
       .on_click(open)
       .on_mouse_down("right", open)
       .child(h_flex().size(22).flex_none().rounded(6).bg(t.foreground + "12").items_center().justify_center().text_size(12).font_semibold().text_color(t.muted).child(name[0]?.toUpperCase() ?? "?"))
@@ -527,6 +602,7 @@ export default class Spaces extends View {
       return h_flex().id(`asleep-tab-${rid}`).h(50).flex_none().pl(12).pr(12).gap(12).items_center().rounded(8).cursor_pointer()
         .hover((s) => s.bg(t.foreground + "0c"))
         .on_hover((h, cx) => { const k = `asleep:${rid}`; if (h ? this.hoverRow !== k : this.hoverRow === k) { this.hoverRow = h ? k : null; cx.notify(); } })
+        .when(this.navMark(`asleep:${rid}`, () => arrange({ wake: { from: a.from, name: a.name } })), (el) => el.border_1().border_color(t.accent))
         .on_click(() => arrange({ wake: { from: a.from, name: a.name } }))
         .on_mouse_down("right", () => menu(a.from))
         .child(v_flex().flex_1().min_w(0).justify_center()
@@ -545,21 +621,40 @@ export default class Spaces extends View {
     return [head, ...box];
   }
 
+  // A popup menu's frame: the keyboard on it, j/k (or the arrows) along its
+  // items (each item() adds itself to menuActs as it draws), gg/G, Enter
+  // to choose, Esc to close.
+  menuFrame(t) {
+    return v_flex().id("spaces-menu").track_focus(this.handle).w_full().p(5).gap(1).bg(t.popover).text_size(13)
+      .on_key_down((e, cx) => {
+        const move = listKey(e, this.menuKeys ??= {});
+        if (!move) return;
+        const acts = this.menuActs ?? [];
+        if (move === "escape") closeOverlay(props().overlay);
+        else if (move === "enter") acts[this.menuAt]?.(cx);
+        else this.menuAt = moveTo(move, this.menuAt, acts.length);
+        cx.stop_propagation();
+        cx.notify();
+      });
+  }
+
   spaceMenuView(t) {
     const m = props().spaceMenu, close = () => closeOverlay(props().overlay);
     const w = m.id ? spaces().find((s) => s.id === m.id) : null;
     const key = w ? projectKey(w) : m.key;
     const asleep = (shared("kanso.asleep") ?? []).filter((a) => a.from === key);
     if (!w && !asleep.length) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Nothing here sleeps any more.");
+    const acts = this.menuActs = [];
     const item = (id, text, act, { icon = null, hint = null } = {}) =>
       h_flex().id(`menu-${id}`).h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(t.foreground)
+        .when(acts.push((cx) => { act(cx); close(); }) - 1 === this.menuAt, (el) => el.bg(t.selected))
         .hover((s) => s.bg(t.hover))
         .on_click((_e, cx) => { act(cx); close(); cx.notify(); })
         .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
         .child(div().flex_1().truncate().child(text))
         .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
     const active = w?.tabs?.find((x) => x.active);
-    return v_flex().id("spaces-menu").w_full().p(5).gap(1).bg(t.popover).text_size(13)
+    return this.menuFrame(t)
       .when(asleep.length > 0, (el) => el
         .child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Asleep"))
         .children(asleep.map((a, i) => item(`wake-${i}`, `Wake ${a.name}`, () => arrange({ wake: { from: a.from, name: a.name } }), { icon: "moon", hint: since(a.saved) })))
@@ -612,7 +707,7 @@ export default class Spaces extends View {
       const key = colOf(entries[i]);
       let j = i + 1;
       while (key && j < entries.length && colOf(entries[j]) === key) j++;
-      const rows = entries.slice(i, j).map((e) => { const m = this.more(e, ctx); return { a: e.a, h: agentRowH(e.a, m), el: agentRow(e.a, indent, t, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null, m) }; });
+      const rows = entries.slice(i, j).map((e) => { const m = this.more(e, ctx); return { a: e.a, h: agentRowH(e.a, m), el: agentRow(e.a, indent, t, this.navRow(e.a, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null), m) }; });
       const slab = key && rows.length > 1;
       for (const r of rows) { if (r.a.focused) { focus = y; focusH = r.h; } y += r.h + (slab ? 0 : 1); }
       if (slab) { y += 1; out.push(v_flex().id(`stack-${key}`).flex_none().rounded(6).bg(t.foreground + "08").children(rows.map((r) => r.el))); }
@@ -801,13 +896,15 @@ export default class Spaces extends View {
       if (gap.length) take(tape, 10);
       const rowY = take(tape, rowHeight(r));
       if (r.w.active) { tape.space = rowY; tape.spaceH = rowHeight(r); }
+      // The space's row before its agents': the keyboard's path (navMark) goes in screen order.
+      const head = this.row(r, t, entries.map((e) => e.a));
       const st = this.unfolded(r.w.id, open, ctx.now) ? this.stacked(entries, mine, r.tree ? CHILD_PAD : 0, t, r.w.id, ctx) : null;
       const box = st ? this.foldBox(r.w.id, open, st.out, ctx.now) : [];
       if (box.length) {
         const boxY = take(tape, open ? (this.foldH[r.w.id] ?? st.h) : 0);
         if (open && st.focus != null) { tape.agent = boxY + st.focus; tape.agentH = st.focusH; }
       }
-      return [...gap, this.row(r, t, entries.map((e) => e.a)), ...box];
+      return [...gap, head, ...box];
     };
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].sort();
     const loading = m => {
@@ -958,9 +1055,16 @@ export default class Spaces extends View {
     // A wash of the text color, so a loud theme accent never paints the row;
     // the wash under the space you are in is the list's pill, which glides here.
     const washHover = t.foreground + "0c";
+    // By keyboard, Enter on it is its click: arriving opens it, on the one
+    // you're in it folds or opens.
+    const ring = this.navMark(`space:${w.id}`, (cx) => {
+      if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false, cx);
+      if (!on) run("space.select", { id: w.id });
+    }, on && !mine.some((a) => a.focused));
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
+      .when(ring, (el) => el.border_1().border_color(t.accent))
       .px(8)
       .h(rowHeight({ tree }))
       .flex_none()
@@ -1063,7 +1167,7 @@ export default class Spaces extends View {
         for (const e of s.entries) {
           const m = this.more(e, ctx, e.lines.length ? null : project(e.a.space)), rh = agentRowH(e.a, m);
           if (e.a.focused) { focus = h; focusH = rh; }
-          rows.push(agentRow(e.a, FLUSH, t, this.rowFor(e.a), m));
+          rows.push(agentRow(e.a, FLUSH, t, this.navRow(e.a, this.rowFor(e.a)), m));
           h += rh + 1;
         }
       }
@@ -1189,7 +1293,7 @@ export default class Spaces extends View {
           : free && a.pin == null ? { id: "settle", icon: "check", tip: "Settle", act: () => label(a.address, SETTLED_LABEL, `${Date.now()}:${a.turn ?? 0}`) } : null,
         { id: "pin", icon: "pin", tip: a.pin != null ? "Unpin" : "Pin to the top", act: () => this.pinThread(a) },
       ].filter(Boolean);
-      return agentRow(a, FLUSH, t, this.rowFor(a, actions, { title: th?.title ?? null, session: th?.file ?? null }), {
+      return agentRow(a, FLUSH, t, this.navRow(a, this.rowFor(a, actions, { title: th?.title ?? null, session: th?.file ?? null })), {
         label: a.labels?.[THREAD_LABEL] || th?.title || agentLabel(a),
         time: snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : when ? duration(Math.max(0, ctx.now - when)) : null,
         badge: up ? "Woke" : null,
@@ -1253,8 +1357,10 @@ export default class Spaces extends View {
     const pinned = l[PIN_LABEL] != null && l[PIN_LABEL] !== "";
     const settled = Boolean(settledOf(l)), snoozed = snoozedUntil(l) > now;
     const free = a?.status !== "working" && a?.status !== "blocked";
+    const acts = this.menuActs = [];
     const item = (id, text, act, { icon = null, hint = null, ink = t.foreground, keep = false } = {}) =>
       h_flex().id(`menu-${id}`).h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
+        .when(acts.push((cx) => { act(cx); if (!keep) close(); }) - 1 === this.menuAt, (el) => el.bg(t.selected))
         .hover((s) => s.bg(t.hover))
         .on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); })
         .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
@@ -1264,7 +1370,7 @@ export default class Spaces extends View {
     const copy = (text) => (cx) => cx.write_to_clipboard?.(text);
     const session = m.session ? m.session.split("/").pop().replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
     const title = m.title ?? l[THREAD_LABEL] ?? null;
-    return v_flex().id("spaces-menu").w_full().p(5).gap(1).bg(t.popover).text_size(13)
+    return this.menuFrame(t)
       .when(Boolean(p), (el) => el.child(item("open", "Open", () => run("pane.focus", { pane: p.pane }), { icon: "chevron-right" })))
       .child(item("pin", pinned ? "Unpin" : "Pin to the top", () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }), { icon: "pin" }))
       .when(settled, (el) => el.child(item("unsettle", "Bring back", () => label(m.address, SETTLED_LABEL), { icon: "undo" })))
@@ -1314,6 +1420,9 @@ export default class Spaces extends View {
     if (props()?.menu) return this.menuView(t);
     if (props()?.spaceMenu) return this.spaceMenuView(t);
     const collapsed = shared("sidebar.collapsed") === true;
+    // The keyboard left (a click on a pane, say): the ring goes too.
+    if (this.kbd && (collapsed || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
+    this.navNext = [];
     const sp = spaces();
     const ps = panes();
     this.assignColors(sp);
@@ -1356,15 +1465,21 @@ export default class Spaces extends View {
         .child(this.orderPicker(t))
         .child(search)
         .child(hide);
-    return v_flex().id("spaces-root").size_full().min_h(0).bg(t.chrome).text_size(13)
+    const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(13)
+      .on_key_down((e, cx) => this.listKeyDown(e, cx))
       .on_size_change((size) => { this.width = size.width; })
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
       .child(this.list(t, collapsed, view, ctx,
-        view === "agents" ? this.agentsView(t, sp, ps, ctx) : view === "threads" ? this.threadsView(t, sp, ps, ctx) : this.grouped(t, collapsed, sp, ps, ctx)))
-      ;
+        view === "agents" ? this.agentsView(t, sp, ps, ctx) : view === "threads" ? this.threadsView(t, sp, ps, ctx) : this.grouped(t, collapsed, sp, ps, ctx)));
+    this.nav = this.navNext;
+    // The row the ring was on is gone (it closed, it folded away): the ring
+    // stays at the same place in the list.
+    if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;
+    this.navAt = Math.max(0, this.nav.findIndex((n) => n.key === this.navKey));
+    return root;
   }
 
   // The scrolling list, with the pills under the active space and the

@@ -20,7 +20,7 @@
   <a href="https://jlopezlira.github.io/herdr-kanso/">
     <picture>
       <source media="(prefers-color-scheme: light)" srcset="site/shots/hero-light.png">
-      <img alt="Kanso in the Herdr app: a sidebar of projects and their agents, and agents side by side on the strip, one asking for a decision." src="site/shots/hero.png">
+      <img alt="kansō in the Herdr app: a sidebar of projects and their agents, and agents side by side on the strip, one asking for a decision." src="site/shots/hero.png">
     </picture>
   </a>
 </p>
@@ -29,7 +29,7 @@
 >
 > [Manual install](#install) · [Keys](#keys) · [What it runs](#privacy-what-it-runs)
 
-## Why Kanso
+## Why kansō
 
 - **Read every agent.** Terminals sit on a horizontal strip and keep their
   width. A new pane opens beside the one you are in and the view glides to it.
@@ -215,7 +215,7 @@ started it with (`claude --model opus`, `codex -m gpt-5.5`, `npm run dev`),
 its folder, the columns, the stacks and their widths. Save this tab, and open
 it again in a new tab with one click. Arrangements belong to the project
 (the space's folder), so Shield can open a Sonnet lead beside an Opus
-developer while Fluenty opens something else. Kanso adds nothing of its own,
+developer while Fluenty opens something else. kansō adds nothing of its own,
 and a resumed session's id is left out, so each agent starts fresh.
 
 ### Servers left running
@@ -263,7 +263,7 @@ What changes eases into place natively (the view switch slides, the selection
 glides to the row you click, agents fold by height), and a working agent's
 ring keeps turning behind other windows, so a glance tells you it still is.
 
-![Kanso's native Needs you first ordering beside a review agent asking for a decision.](docs/screenshots/attention.png)
+![kansō's native Needs you first ordering beside a review agent asking for a decision.](docs/screenshots/attention.png)
 
 ### Light on your machine
 
@@ -271,7 +271,7 @@ Side panels are mounted only while open. Background Git checks slow down when
 the window is behind others. The Files tree draws only the visible rows, and the
 canvas avoids rendering off-screen panes.
 
-On an Apple M4 with Herdr 0.1.11, against Kanso before its performance work:
+On an Apple M4 with Herdr 0.1.11, against kansō before its performance work:
 **78% less CPU for a 500-row Files tree** and **74.7 ms to list a 50,000-file
 folder**. These are targeted measurements, not whole-app or battery-life claims.
 [Benchmark conditions and results](benchmarks/README.md).
@@ -287,13 +287,13 @@ Every move has a key, and panes also drag, resize and pin with the mouse.
 
 ### Light and dark
 
-Kanso ships two themes: `kanso` (dark) and `kanso-day` (light), in warm stone
+kansō ships two themes: `kanso` (dark) and `kanso-day` (light), in warm stone
 greys with color only where it helps you act.
 
 <details>
-<summary>See Kanso Day</summary>
+<summary>See kansō day</summary>
 
-![The same multi-agent workspace in Kanso Day, with a pinned worker and stacked panes.](docs/screenshots/hero-light.png)
+![The same multi-agent workspace in kansō day, with a pinned worker and stacked panes.](docs/screenshots/hero-light.png)
 
 </details>
 
@@ -301,7 +301,7 @@ The images use native Herdr captures with staged repositories, terminal output
 and pull request data. They predate 2.0, whose tab bar shows the panels as
 icons and no longer offers Specs.
 
-Kanso is the Japanese principle of simplicity: remove what is not needed. If it
+kansō is the Japanese principle of simplicity: remove what is not needed. If it
 saves you time, [a star](https://github.com/jlopezlira/herdr-kanso) helps other
 Herdr users find it.
 
@@ -325,12 +325,12 @@ layout you already use, or copy `open-with/mods/open-with` to
 `~/.config/herdr-app/mods/` and merge `open-with/keys.json` into yours.
 
 `ctrl-shift-l` switches back to your previous layout. Deleting the files
-removes Kanso. Light and dark themes are included (`kanso-day`, `kanso`).
+removes kansō. Light and dark themes are included (`kanso-day`, `kanso`).
 
 ### Updates
 
-Kanso updates itself, apart from Herdr. Herdr's own updates keep their dot on
-Settings; Kanso's show as their own row, **Update Kanso to X**, above
+kansō updates itself, apart from Herdr. Herdr's own updates keep their dot on
+Settings; kansō's show as their own row, **Update kansō to X**, above
 Settings, a dot on the gear at the end of the tab bar, and a toast once per
 version, even with the sidebar hidden. When Herdr starts, and every 5 minutes
 after, the tab bar looks up this repository's `vX.Y.Z` tags with
@@ -360,6 +360,13 @@ update those once by hand as above.
 | Cmd+Shift+O | Open the pane's folder in a code editor |
 | Cmd+Alt+P | Pin the pane: it keeps its place and stays in view |
 | Cmd+J | Go to the next agent that needs you, in any space |
+| Cmd+Alt+H/J/K/L | Vim's left, down, up, right between panes; left of the first pane is the sidebar's list |
+| Cmd+Alt+Shift+H/J/K/L | Move the pane left, down, up, right |
+
+In the sidebar's list, and in every kansō menu and list: J and K (or the
+arrows) move, GG and Shift+G go to the first and the last, Enter opens, L
+opens too in the sidebar, / searches, Esc goes back to the pane you came
+from (Cmd+Alt+L as well).
 | Cmd+Alt+S | Send the pane's work to another agent |
 | Cmd+Alt+T | Arrangements: save this tab, or open a saved one |
 
@@ -372,7 +379,7 @@ With the mouse:
 | Scroll over a header or the minimap | Slide the view |
 | Use the order button at the top of the sidebar | Sort each space's agents by last update, needs you first, kind, screen order, or your own; turn the activity line or the Projects, Status and Threads switch off |
 | Click Projects, Status or Threads at the top of the sidebar | See your agents by project, by what they need from you, or as conversations named on their own |
-| Click the gear at the end of the tab bar, or ⌃⇧, | Kanso settings: Kanso's own keys only (⌃⇧1-9 panels, ⌃⌥1-9 pane columns, ⌃⌥P/S/T views; panes, tabs and spaces keep Herdr's keys), rebound by pressing; hide the panels and pieces you don't use; read what's new; see who makes it |
+| Click the gear at the end of the tab bar, or ⌃⇧, | kansō settings: kansō's own keys only (⌃⇧1-9 panels, ⌃⌥1-9 pane columns, ⌃⌥P/S/T views; panes, tabs and spaces keep Herdr's keys), rebound by pressing; hide the panels and pieces you don't use; read what's new; see who makes it |
 | Hover an agent and click its pin | Keep it at the top of its space; drag pinned ones to order them |
 | Hover a panel icon at the top right | See its name; the open panel always shows it |
 | Press a panel icon and let go on another | Move it there |
@@ -460,7 +467,7 @@ real temporary Git repositories and folders. The benchmark compares a git ref
 with your working tree in isolated native Herdr windows; see
 [benchmarks/README.md](benchmarks/README.md).
 
-Versioning: any pull request that changes what Kanso installs (`kanso/mods`,
+Versioning: any pull request that changes what kansō installs (`kanso/mods`,
 `kanso/themes`, `kanso/layouts`, `kanso/keys.json`) bumps
 `kanso/mods/kanso-chrome/version.json` and adds that version's section to
 [CHANGELOG.md](CHANGELOG.md). The bump is semantic and follows from what the
