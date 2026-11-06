@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.2.1] - 2026-11-06
+
+### Fixed
+
+- Arrangements opened blank with "This view could not be re-rendered" when it listed an arrangement; the list shows again.
+
 ## [3.2.0] - 2026-11-06
 
 ### Added
