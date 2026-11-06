@@ -8,6 +8,17 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.2.0] - 2026-11-06
+
+### Added
+
+- Arrangements can be opened in any project. The dialog lists every arrangement you saved, this project's first and then the other projects' with the folder each came from. One from another project opens with the same programs, flags, columns and widths, every pane in the folder of the project you are in, so a new project gets your usual tab in one click.
+- An arrangement can be overwritten: Overwrite on its row saves the tab as it is now in its place, and saving under a name the project already has says it replaces it.
+
+### Changed
+
+- Arrangements are kept in a SQLite database (data/kanso-arrange/arrange.db) instead of a JSON file. The arrangements you had are read in the first time the dialog opens; the old file is left as it was.
+
 ## [3.1.0] - 2026-11-05
 
 ### Added

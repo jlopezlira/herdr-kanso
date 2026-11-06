@@ -93,7 +93,52 @@ test("An arrangement keeps what each pane runs with its flags, without the sessi
     { w: 0.25, panes: [{ argv: ["codex", "-m", "gpt-5.5"], cwd: `${HOME}/web` }, { argv: null, cwd: `${HOME}/web/api` }] },
   ] });
   assert.equal(summary(a), "claude, codex, shell");
+  assert.equal(summary({ cols: [{ panes: [{ argv: ["/opt/node/bin/node", "/opt/nvm/bin/codex", "-m", "x"] }, { argv: ["node", "--inspect"] }] }] }), "codex, node", "a runtime is named by the script it runs");
   assert.equal(clone(captureTab(undefined, panes.slice(0, 2), recs)).cols.length, 2, "a tab the strip never saw: one column per pane");
+});
+
+test("Arrangements from every project are listed, and one from another project opens in the folder you are in", async () => {
+  const { listFor, rebase, originOf } = await load("kanso-arrange/main.js", ["listFor", "rebase", "originOf"], { home: () => HOME });
+  const mk = (name, saved, cwd) => ({ name, saved, per: 2, cols: [{ w: 0.5, panes: [{ argv: ["claude", "--model", "opus"], cwd }] }, { w: 0.5, panes: [{ argv: null, cwd: `${cwd}/api` }, { argv: ["grok"], cwd }] }] });
+  const projects = {
+    [`:${HOME}/web`]: [mk("web", 1, `${HOME}/web`)],
+    [`:${HOME}/shop`]: [mk("old", 2, `${HOME}/shop`), mk("factory", 9, `${HOME}/agile`)],
+  };
+  const { mine, others } = clone(listFor(projects, `:${HOME}/web`));
+  assert.deepEqual(mine.map((a) => [a.name, a.from]), [["web", `:${HOME}/web`]]);
+  assert.deepEqual(others.map((a) => a.name), ["factory", "old"], "other projects', newest first");
+  assert.equal(others[0].from, `:${HOME}/shop`, "each keeps the project it was saved in, to delete it there");
+  assert.deepEqual(clone(listFor(projects, `:${HOME}/new`)).mine, [], "a new project still sees every arrangement as another project's");
+  assert.equal(clone(listFor(projects, `:${HOME}/new`)).others.length, 3);
+  assert.equal(originOf(others[0]), "agile", "named by the folder its panes ran in");
+  assert.equal(originOf({ from: `:${HOME}/shop`, cols: [{ panes: [{ argv: null, cwd: null }] }] }), "shop");
+  const r = clone(rebase(others[0], `${HOME}/new`));
+  assert.deepEqual(r.cols.flatMap((c) => c.panes.map((p) => p.cwd)), [`${HOME}/new`, `${HOME}/new`, `${HOME}/new`]);
+  assert.deepEqual(r.cols.map((c) => [c.w, c.panes.map((p) => p.argv)]), [[0.5, [["claude", "--model", "opus"]]], [0.5, [null, ["grok"]]]], "the same programs, flags and widths");
+  assert.equal(others[0].cols[0].panes[0].cwd, `${HOME}/agile`, "the saved arrangement is left as it was");
+});
+
+test("Arrangements are kept in SQLite: saving under a name overwrites it, and the old JSON file is read in once", async (t) => {
+  const dir = await temporary(t);
+  await import("node:fs/promises").then((fs) => fs.mkdir(join(dir, "data"), { recursive: true }));
+  const cols = (prog) => [{ w: 1, panes: [{ argv: [prog], cwd: `${HOME}/web` }] }];
+  await writeFile(join(dir, "data", "kanso-arrange.json"), JSON.stringify({ version: 1, projects: {
+    [`:${HOME}/web`]: [{ name: "it's mine", per: 2, cols: cols("claude"), saved: 5 }, { name: "broken" }],
+  } }));
+  const { readFile } = await import("node:fs/promises");
+  const host = { exec, appHome: () => dir, readTextFile: (p) => readFile(p, "utf8").catch(() => null) };
+  const { Store } = await load("kanso-arrange/store.js", ["Store"], host);
+  const store = new Store();
+  let all = clone(await store.all());
+  assert.deepEqual(all, { [`:${HOME}/web`]: [{ name: "it's mine", per: 2, cols: cols("claude"), saved: 5 }] }, "the JSON file read in, a quote in a name kept, a broken entry skipped");
+  all = clone(await store.save(`:${HOME}/web`, { name: "it's mine", per: 3, cols: cols("codex"), saved: 9 }));
+  assert.deepEqual(all[`:${HOME}/web`], [{ name: "it's mine", per: 3, cols: cols("codex"), saved: 9 }], "the same name in the same project overwrites");
+  all = clone(await store.save(`:${HOME}/shop`, { name: "it's mine", per: 1, cols: cols("grok"), saved: 10 }));
+  assert.equal(Object.keys(all).length, 2, "the same name in another project is its own arrangement");
+  const again = new Store();
+  assert.equal(clone(await again.all())[`:${HOME}/web`][0].per, 3, "the JSON file is not read in a second time over a newer row");
+  all = clone(await again.remove(`:${HOME}/shop`, "it's mine"));
+  assert.deepEqual(Object.keys(all), [`:${HOME}/web`]);
 });
 
 test("Ports finds dev servers, the pane that runs each, and the ones no pane owns", async () => {
