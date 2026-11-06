@@ -98,13 +98,17 @@ const sleepProject = (spaceId) => arrange({ sleep: { scope: "project", space: sp
 // What sleeps, read from kanso-sleep's database: at start (shared state
 // outlives a restart and may be old) and every 30 s. A read that a newer
 // publication ("kanso.asleep.at", set by kanso-sleep too) overtook is dropped.
+// Reads overtaken by a later one of this sidebar are dropped too, even when
+// that later one changed nothing (and so published nothing).
+let asleepReads = 0, asleepApplied = 0;
 async function loadAsleep() {
-  const started = Date.now();
+  const started = Date.now(), seq = ++asleepReads;
   const r = await exec("sqlite3", ["-json", `${appHome()}/data/kanso-sleep/sleep.db`, "SELECT project, name, saved, layout FROM asleep;"]).catch(() => null);
-  if ((shared("kanso.asleep.at") ?? 0) > started) return;
+  if (seq < asleepApplied || (shared("kanso.asleep.at") ?? 0) > started) return;
+  asleepApplied = seq;
   const publish = (list) => {
     if (JSON.stringify(list) === JSON.stringify(shared("kanso.asleep") ?? [])) return;
-    setShared("kanso.asleep.at", Date.now());
+    setShared("kanso.asleep.at", started);
     setShared("kanso.asleep", list);
   };
   if (r?.code !== 0) { publish([]); return; }

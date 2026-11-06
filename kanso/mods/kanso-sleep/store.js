@@ -70,7 +70,9 @@ export class Store {
     })());
   }
 
-  // The tabs asleep (`all`: also those going to sleep or waking now).
+  // The tabs asleep (`all`: also those going to sleep or waking now). The
+// changes below return nothing: read this after them, apart, so a failed
+// read never passes for a failed change.
   async asleep(all = false) {
     await this.open();
     const now = Date.now();
@@ -88,16 +90,17 @@ export class Store {
   async settle(id) {
     await this.open();
     await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.pending') WHERE ${byId(id)};`);
-    return this.asleep();
   }
   // A row this sleep wrote and no longer wants (its agents came back).
-  async drop(id) { await this.open(); await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND json_extract(layout,'$.pending') IS NOT NULL;`); return this.asleep(); }
-  // The panes kept (`cols`), all else of the row as it was.
-  async narrow(id, cols, token = null) {
+  async drop(id) { await this.open(); await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND json_extract(layout,'$.pending') IS NOT NULL;`); }
+  // The panes kept (`cols`), all else of the row as it was. `hold`: one of
+  // them may still be starting somewhere, so it is not offered to wake
+  // until that would have long settled (STALE_MS).
+  async narrow(id, cols, token = null, hold = false) {
     await this.open();
-    await this.sql(`UPDATE asleep SET layout=json_remove(json_set(layout,'$.cols',json(${sqlText(JSON.stringify(cols))})),'$.pending','$.waking')
+    const layout = `json_remove(json_set(layout,'$.cols',json(${sqlText(JSON.stringify(cols))})),'$.pending','$.waking')`;
+    await this.sql(`UPDATE asleep SET layout=${hold ? `json_set(${layout},'$.pending',${Date.now()})` : layout}
       WHERE ${byId(id)}${token ? ` AND json_extract(layout,'$.waking')=${sqlText(token)}` : ""};`);
-    return this.asleep();
   }
   // Taken by one wake at a time: the row as it is now, with the wake's
   // token, or null when another wake holds it or it is gone.
@@ -114,18 +117,15 @@ export class Store {
   async release(id, token) {
     await this.open();
     await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.waking') WHERE ${byId(id)} AND json_extract(layout,'$.waking')=${sqlText(token)};`);
-    return this.asleep();
   }
   // Awake: gone, if this wake still holds it.
   async woke(id, token) {
     await this.open();
     await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND json_extract(layout,'$.waking')=${sqlText(token)};`);
-    return this.asleep();
   }
   // Forgotten by hand: gone, unless a wake holds it.
   async forget(id) {
     await this.open();
     await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND (json_extract(layout,'$.waking') IS NULL OR CAST(json_extract(layout,'$.waking') AS INTEGER) < ${Date.now() - STALE_MS});`);
-    return this.asleep();
   }
 }

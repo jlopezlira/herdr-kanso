@@ -107,17 +107,14 @@ export async function openTab(a, cx, { space = null, create = null, progress = (
   if (!space) throw new Error("no space to open it in");
   progress(`Opening 1 of ${flat.length}`);
   const ids = [];
+  // The new tab: one this space did not have, with this name; its first
+  // pane only from that tab, never one opening elsewhere.
+  const before = new Set((spaces().find((sp) => sp.id === space.id)?.tabs ?? []).map((t) => t.id));
+  const ours = () => (spaces().find((sp) => sp.id === space.id)?.tabs ?? []).filter((t) => !before.has(t.id) && t.name === a.name);
+  let tab = null;
   try {
-    // The new tab: one this space did not have, by its name when Herdr has
-    // it; its first pane only from that tab, never one opening elsewhere.
-    const before = new Set((spaces().find((sp) => sp.id === space.id)?.tabs ?? []).map((t) => t.id));
     run("tab.new", { space: space.id, name: a.name, ...opts(flat[0]) });
-    let tab = null;
-    for (let i = 0; i < 60 && !tab; i++) {
-      await cx.sleep(100);
-      const fresh = (spaces().find((sp) => sp.id === space.id)?.tabs ?? []).filter((t) => !before.has(t.id));
-      tab = fresh.find((t) => t.name === a.name) ?? (fresh.length === 1 ? fresh[0] : null);
-    }
+    for (let i = 0; i < 60 && !tab; i++) { await cx.sleep(100); tab = ours()[0] ?? null; }
     if (!tab) throw new Error("Herdr did not open the tab");
     const first = await newPane(new Set(), cx, tab.id);
     ids.push([first.pane]);
@@ -134,6 +131,17 @@ export async function openTab(a, cx, { space = null, create = null, progress = (
       (ids[p.ci] ??= []).push(made.pane);
     }
   } catch (e) {
+    // What Herdr opens late, after it was given up on, is closed: a pane
+    // in the tab that was never counted, or the tab itself when it came
+    // too late to be found. So nothing runs that the caller doesn't know of.
+    await cx.sleep(3000);
+    const counted = new Set(ids.flat());
+    if (tab) {
+      for (const q of panes().filter((q) => q.tab === tab.id && !counted.has(q.pane))) {
+        if (q.terminal) run("terminal.kill", { terminal: q.terminal });
+        else run("pane.close", { pane: q.pane });
+      }
+    } else for (const t of ours()) run("tab.close", { id: t.id, confirmed: true });
     const err = e instanceof Error ? e : new Error(String(e));
     err.opened = ids;
     throw err;
