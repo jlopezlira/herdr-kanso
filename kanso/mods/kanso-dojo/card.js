@@ -53,7 +53,7 @@ export function dojoShare(totals, now = Date.now()) {
     right: since ? `since ${MONTHS[since.getMonth()]} ${since.getDate()}` : "",
     hero: {
       big: String(best.score), small: "points",
-      label: lv ? `my best 60-second round of vim, level ${lv.n}: ${lv.name}` : "my best 60-second round of vim",
+      label: lv ? `my best round of vim, ten targets, level ${lv.n}: ${lv.name}` : "my best round of vim, ten targets",
       delta: totals.longest ? { up: true, text: `${totals.longest} targets in a row in the fewest moves` } : null,
     },
     stats: [
@@ -69,7 +69,7 @@ export function dojoShare(totals, now = Date.now()) {
     ],
   };
   const parts = [
-    `${best.score} points in my best 60-second round of vim, in the hjkl dōjō`,
+    `${best.score} points in my best round of vim, in the hjkl dōjō`,
     totals.rings ? `${plural(totals.rings, "target", "targets")}, ${pct}% in the fewest moves` : null,
     streak > 1 ? `${streak} days in a row` : null,
   ].filter(Boolean);
