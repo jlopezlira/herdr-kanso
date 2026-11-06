@@ -69,7 +69,7 @@ test("Send to an agent lists every other agent, the last one you sent to first, 
 });
 
 test("An arrangement keeps what each pane runs with its flags, without the session it resumed", async () => {
-  const { cleanArgv, commandOf, captureTab, summary } = await load("kanso-arrange/main.js", ["cleanArgv", "commandOf", "captureTab", "summary"], { home: () => HOME });
+  const { cleanArgv, commandOf, captureTab, summary } = await load("kanso-arrange/tabkit.js", ["cleanArgv", "commandOf", "captureTab", "summary"], { home: () => HOME });
   assert.deepEqual(clone(cleanArgv(["claude", "--model", "opus", "--resume", "51fb0c9a", "--effort", "high"])), ["claude", "--model", "opus", "--effort", "high"]);
   assert.deepEqual(clone(cleanArgv(["claude", "-c", "--model=sonnet"])), ["claude", "--model=sonnet"]);
   assert.deepEqual(clone(cleanArgv(["claude", "--resume"])), ["claude"], "an interactive resume with no id");
@@ -142,7 +142,8 @@ test("Arrangements are kept in SQLite: saving under a name overwrites it, and th
 });
 
 test("Sleep keeps each Claude agent's conversation, and Wake starts it on that conversation", async (t) => {
-  const { wakeArgv, wakeable, sleepers, sleepBlocker, captureTab } = await load("kanso-arrange/main.js", ["wakeArgv", "wakeable", "sleepers", "sleepBlocker", "captureTab"], { home: () => HOME });
+  const { wakeArgv, wakeable, sleepers, sleepBlocker, isResumed } = await load("kanso-sleep/main.js", ["wakeArgv", "wakeable", "sleepers", "sleepBlocker", "isResumed"], { home: () => HOME });
+  const { captureTab } = await load("kanso-arrange/tabkit.js", ["captureTab"], { home: () => HOME });
   assert.deepEqual(clone(wakeArgv({ argv: ["claude", "--model", "opus", "--resume", "old"], resume: "s1" })), ["claude", "--model", "opus", "--resume", "s1"], "the conversation it had when it slept, not the one it was started with");
   assert.deepEqual(clone(wakeArgv({ argv: ["npm", "run", "dev"], resume: null })), ["npm", "run", "dev"]);
   assert.equal(wakeArgv({ argv: null }), null, "a shell stays a shell");
@@ -157,14 +158,13 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
 
   const dir = await temporary(t);
   const { readFile } = await import("node:fs/promises");
-  const { Store } = await load("kanso-arrange/store.js", ["Store"], { exec, appHome: () => dir, readTextFile: (p) => readFile(p, "utf8").catch(() => null) });
+  const { Store } = await load("kanso-sleep/store.js", ["Store"], { exec, appHome: () => dir });
   const store = new Store();
   let asleep = clone(await store.sleep(":/w", { ...a, saved: 7 }));
   assert.deepEqual(asleep, [], "going to sleep: hidden until its agents have left");
   await assert.rejects(store.sleep(":/w", { ...a, saved: 8 }), /already asleep/, "never over another sleeping tab of that name");
   asleep = clone(await store.settle(":/w", "shield"));
   assert.deepEqual(asleep.map((x) => [x.from, x.name, x.cols[0].panes[0].resume]), [[":/w", "shield", "s1"]]);
-  assert.deepEqual(clone(await store.all()), {}, "a sleeping tab is not an arrangement");
   assert.equal(await store.claim(":/w", "shield"), true);
   assert.equal(await store.claim(":/w", "shield"), false, "one wake at a time");
   assert.deepEqual(clone(await store.asleep()), [], "a tab waking is not offered again");
@@ -174,7 +174,11 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   await store.release(":/w", "shield");
   asleep = clone(await store.woke(":/w", "shield"));
   assert.deepEqual(asleep, []);
-  const { resumeArgv, freeName, sameTabs } = await load("kanso-arrange/main.js", ["resumeArgv", "freeName", "sameTabs"], { home: () => HOME });
+  const { resumeArgv, freeName, sameTabs } = await load("kanso-sleep/main.js", ["resumeArgv", "freeName", "sameTabs"], { home: () => HOME });
+  assert.equal(isResumed({ argv: ["claude", "--resume", "s9"] }, { sessionId: "s9" }, "s9"), true);
+  assert.equal(isResumed({ argv: ["claude", "--resume", "s9"] }, { sessionId: "other" }, "s9"), false, "its record says another conversation");
+  assert.equal(isResumed({ argv: ["claude", "--model", "x", "--resume", "s9"] }, null, "s9"), true, "no record: the command says it");
+  assert.equal(isResumed({ argv: ["claude"] }, null, "s9"), false);
   assert.deepEqual(clone(resumeArgv(["claude", "--model", "opus", "--fork-session", "fix the login bug"], "s9")), ["claude", "--model", "opus", "--resume", "s9"], "no first prompt again, no fork");
   assert.deepEqual(clone(resumeArgv(["claude", "-c"], "s9")), ["claude", "--resume", "s9"]);
   assert.equal(resumeArgv(["claude", "--something-new"], "s9"), null, "an option not known to carry over");

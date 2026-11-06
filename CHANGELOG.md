@@ -12,20 +12,19 @@ checks all of this, and merging to main releases the version in
 
 ### Added
 
-- Sleep a tab or a whole project from Arrangements. Each Claude agent's conversation is saved, the agents exit with /exit and the tabs close, so nothing of them runs or holds memory. Agents at work or waiting on you keep a tab from sleeping. Other programs in the tab stop and start fresh on wake.
-- Sleep and Wake are where you work: a right-click on a project in the sidebar (Sleep this tab, Sleep the whole project, Wake each sleeping tab, Wake all, then Herdr's project options), Sleep its tab and Sleep its project on an agent's menu in Projects, Status and Threads, and a moon next to the pin in each pane's header. A project with tabs asleep shows a moon and their count; one that sleeps whole is listed under Asleep at the foot of the sidebar until it wakes, in a new space.
-- Rows in the sidebar have a ⋮ button on hover that opens the same menu as a right-click.
-- Asleep, at the top of Arrangements and grouped by project: Wake opens a tab again in its project with its columns and widths, each Claude agent back on its own conversation (`claude --resume`), and Wake all wakes a project's tabs. Forget drops one without waking it.
+- Sleep, a mod of its own (kanso-sleep): put a tab, or every tab of a project, to sleep. Each Claude agent's conversation is kept in data/kanso-sleep/sleep.db, the agents exit with /exit and the tabs close, so nothing of them runs or holds memory. Wake opens them again in their project with their columns and widths, each agent back on its own conversation (`claude --resume`); a project that slept whole gets its space back. Other programs in a tab stop, and start fresh on wake.
+- Sleep is careful with your agents: it reads the tabs again when you press it and stops if anything changed or an agent is working or waiting on you; each agent's prompt is cleared before /exit and its process must be gone before the tab closes; if one won't leave, the ones that left come back on their conversations and the tab stays. A wake drops the prompt an agent was started with and never forks its conversation, is held by one window at a time, and checks every agent is back on its conversation before the tab stops being asleep; what did not come back stays asleep. Agents on another machine can't sleep yet.
+- Sleep is a state in the sidebar: a project with tabs asleep shows a moon and their count, a project asleep whole stays in Projects with its moon, and Status has an Asleep section, a row per sleeping tab that wakes it on a click.
+- Sleep and Wake where you work: a right-click on a project (Wake each sleeping tab, Wake all, Sleep this tab, Sleep the whole project, then Herdr's project options), Sleep its tab and Sleep its project on an agent's menu in Projects, Status and Threads, and a moon next to the pin in each pane's header.
+- Rows in the sidebar have a vertical dots button on hover that opens the same menu as a right-click.
 
 ### Changed
 
-- The Arrangements dialog is 560 wide, for its new buttons.
 - A right-click on a project opens Kanso's project menu; Herdr's own is its last item, Project options.
 
 ### Fixed
 
-- A recycle, a close or a sleep clears a draft left in the agent's prompt before sending /exit, so the draft is not sent with it.
-
+- A recycle or a close from Memory clears a draft left in the agent's prompt before sending /exit, and stops if it can't, so the draft is never sent with it.
 
 ## [3.2.3] - 2026-11-06
 

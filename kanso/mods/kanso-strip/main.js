@@ -223,11 +223,11 @@ export function digestTip(d) {
 // The dialogs: send a pane's work to another agent (kanso-send), and save or
 // open the tab's arrangement of agents (kanso-arrange).
 const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 560 });
-// Sleep the tab a pane is in: kanso-arrange's sleep view, for that tab.
+const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
+// Sleep the tab a pane is in (kanso-sleep).
 const openSleep = (p) => {
   const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
-  if (space) openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 560, props: { sleep: { scope: "tab", space: space.id, tab: p.tab } } });
+  if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "tab", space: space.id, tab: p.tab } } });
 };
 
 export default class Strip extends View {

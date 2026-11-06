@@ -88,23 +88,24 @@ const VIEWS = {
   agents: { label: "Status" },
   threads: { label: "Threads" },
 };
-// Tabs put to sleep (kanso-arrange, shared "kanso.asleep"), by project key:
-// the space's machine and folder, as kanso-arrange keys them.
+// Tabs put to sleep (kanso-sleep, shared "kanso.asleep"), by project key:
+// the space's machine and folder, as kanso-sleep keys them.
 export const projectKey = (w) => `${w?.machine ?? ""}:${w?.folder || home()}`;
 const asleepOf = (w) => (shared("kanso.asleep") ?? []).filter((a) => a.from === projectKey(w));
-const arrange = (props) => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 560, props });
+const arrange = (props) => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props });
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
 const sleepProject = (spaceId) => arrange({ sleep: { scope: "project", space: spaceId } });
-// What sleeps, read from kanso-arrange's database when no dialog has said yet.
+// What sleeps, read from kanso-sleep's database when no dialog has said yet.
+// Always read at start: shared state outlives a restart and may be old.
 async function loadAsleep() {
-  if (shared("kanso.asleep")) return;
-  const r = await exec("sqlite3", ["-json", `${appHome()}/data/kanso-arrange/arrange.db`, "SELECT project, name, saved, layout FROM asleep;"]).catch(() => null);
-  if (r?.code !== 0) return;
+  const r = await exec("sqlite3", ["-json", `${appHome()}/data/kanso-sleep/sleep.db`, "SELECT project, name, saved, layout FROM asleep;"]).catch(() => null);
+  if (r?.code !== 0) { if ((shared("kanso.asleep") ?? []).length) setShared("kanso.asleep", []); return; }
   let rows = [];
   try { rows = r.stdout.trim() ? JSON.parse(r.stdout) : []; } catch { return; }
   const space = (l) => { try { return JSON.parse(l).space ?? null; } catch { return null; } };
   const who = (l) => { try { return JSON.parse(l).cols.flatMap((c) => c.panes).map((p) => p.name || String(p.argv?.[0] ?? "shell").split("/").pop()).join(", "); } catch { return ""; } };
-  if (!shared("kanso.asleep")) setShared("kanso.asleep", rows.map((x) => ({ from: x.project, name: x.name, saved: Number(x.saved) || 0, who: who(x.layout), space: space(x.layout) })).sort((a, b) => b.saved - a.saved));
+  const busy = (l) => { try { const x = JSON.parse(l), old = Date.now() - 600000; return x.pending > old || x.waking > old; } catch { return true; } };
+  setShared("kanso.asleep", rows.filter((x) => !busy(x.layout)).map((x) => ({ from: x.project, name: x.name, saved: Number(x.saved) || 0, who: who(x.layout), space: space(x.layout) })).sort((a, b) => b.saved - a.saved));
 }
 const since = (ms) => { const d = new Date(ms); return new Date().toDateString() === d.toDateString() ? d.toTimeString().slice(0, 5) : d.toDateString().slice(4, 10); };
 
@@ -459,28 +460,67 @@ export default class Spaces extends View {
     openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 360, at: "pointer", props: { spaceMenu: { id: w.id } } });
   }
 
-  // Projects that sleep whole have no space left: listed under the list,
-  // each opening its wake menu.
-  sleepingProjects(t) {
+  // Sleep is a state. A project that sleeps whole has no space left, so it
+  // stays in Projects as a quiet row of its own, its moon and count where a
+  // space shows its state; a click opens its wake menu.
+  asleepProjects() {
     const keys = new Set(spaces().map(projectKey));
     const by = new Map();
     for (const a of shared("kanso.asleep") ?? []) if (!keys.has(a.from)) by.set(a.from, [...(by.get(a.from) ?? []), a]);
-    if (!by.size) return null;
-    const open = (key) => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, at: "pointer", props: { spaceMenu: { key } } });
-    return v_flex().id("spaces-asleep").flex_none().px(8).pt(6).pb(8).gap(1).border_t_1().border_color(t.border)
-      .child(div().h(24).px(8).flex().items_center().text_size(11.5).text_color(t.dim).child("Asleep"))
-      .children([...by].map(([key, list]) => {
-        const name = list[0].space || key.slice(key.indexOf(":") + 1).split("/").pop() || "~";
-        return h_flex().id(`asleep-project-${key}`).h(30).px(8).gap(9).items_center().rounded(8).cursor_pointer()
-          .hover((s) => s.bg(t.foreground + "0c"))
-          .tooltip(list.map((a) => `${a.name}: ${a.who}, asleep since ${since(a.saved)}`).join("\n"))
-          .on_click(() => open(key))
-          .on_mouse_down("right", () => open(key))
-          .child(svg("mods/kanso-chrome/icons/moon.svg").size(14).flex_none().text_color(t.muted))
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(t.muted).child(name))
-          .child(div().flex_none().text_size(11.5).text_color(t.dim).child(`${list.length} ${list.length === 1 ? "tab" : "tabs"}`))
-          .child(this.dots(`asleep-dots-${key}`, t, () => open(key)));
-      }));
+    return [...by];
+  }
+
+  asleepProjectRow(t, key, list) {
+    const name = list[0].space || key.slice(key.indexOf(":") + 1).split("/").pop() || "~";
+    const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, at: "pointer", props: { spaceMenu: { key } } });
+    return h_flex().id(`asleep-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
+      .hover((s) => s.bg(t.foreground + "0c"))
+      .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
+      .tooltip(list.map((a) => `${a.name}: ${a.who}, asleep since ${since(a.saved)}`).join("\n"))
+      .on_click(open)
+      .on_mouse_down("right", open)
+      .child(h_flex().size(22).flex_none().rounded(6).bg(t.foreground + "12").items_center().justify_center().text_size(12).font_semibold().text_color(t.muted).child(name[0]?.toUpperCase() ?? "?"))
+      .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_semibold().text_color(t.muted).child(name))
+      .when(this.hoverSpace === key, (el) => el.child(this.dots(`asleep-dots-${key}`, t, open)))
+      .child(h_flex().flex_none().h(18).px(6).gap(4).rounded_full().bg(t.foreground + "12").items_center().text_size(11).text_color(t.muted)
+        .child(svg("mods/kanso-chrome/icons/moon.svg").size(11)).child(String(list.length)));
+  }
+
+  // Status: what sleeps, as its own section after the others; a row per
+  // sleeping tab (its agents, its project), a click wakes it.
+  asleepSection(t, first, tape) {
+    const list = shared("kanso.asleep") ?? [];
+    if (!list.length) return [];
+    const id = "section-asleep", open = !this.sectionsFolded.has("asleep");
+    take(tape, first ? 32 : 44);
+    const head = this.sectionHead(t, id, first ? 0 : 1, open, (cx) => {
+      open ? this.sectionsFolded.add("asleep") : this.sectionsFolded.delete("asleep");
+      localStorage.setItem("spaces.sections", JSON.stringify([...this.sectionsFolded]));
+      this.toggleFold(id, !open, cx);
+    }, svg("mods/kanso-chrome/icons/moon.svg").size(13).flex_none().text_color(t.muted), "Asleep", list.length, t.foreground);
+    const project = (key) => spaces().find((sp) => projectKey(sp) === key)?.name ?? (list.find((a) => a.from === key)?.space || key.slice(key.indexOf(":") + 1).split("/").pop() || "~");
+    const menu = (key) => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, at: "pointer", props: { spaceMenu: { key } } });
+    const rows = this.unfolded(id, open, Date.now()) ? list.map((a) => {
+      const rid = `${a.from}:${a.name}`, hovered = this.hoverRow === `asleep:${rid}`;
+      return h_flex().id(`asleep-tab-${rid}`).h(50).flex_none().pl(12).pr(12).gap(12).items_center().rounded(8).cursor_pointer()
+        .hover((s) => s.bg(t.foreground + "0c"))
+        .on_hover((h, cx) => { const k = `asleep:${rid}`; if (h ? this.hoverRow !== k : this.hoverRow === k) { this.hoverRow = h ? k : null; cx.notify(); } })
+        .on_click(() => arrange({ wake: { from: a.from, name: a.name } }))
+        .on_mouse_down("right", () => menu(a.from))
+        .child(v_flex().flex_1().min_w(0).justify_center()
+          .child(h_flex().h(22).gap(10).items_center()
+            .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(t.muted).child(a.who || a.name))
+            .child(div().flex_none().text_size(11.5).text_color(t.dim).child(since(a.saved)))
+            .when(hovered, (el) => el.child(this.dots(`asleep-tab-dots-${rid}`, t, () => menu(a.from))))
+            .child(svg("mods/kanso-chrome/icons/moon.svg").size(13).flex_none().text_color(t.dim)))
+          .child(h_flex().h(18).mt(2).min_w(0).items_center().text_size(12).text_color(t.dim)
+            .child(div().flex_none().max_w(110).truncate().font_medium().child(project(a.from)))
+            .child(div().flex_none().px(5).child("\u00b7"))
+            .child(div().flex_1().min_w(0).truncate().child(a.name))));
+    }) : [];
+    const box = this.foldBox(id, open, rows, Date.now());
+    if (box.length) take(tape, open ? (this.foldH[id] ?? Math.max(0, list.length * 51 - 1)) : 0);
+    return [head, ...box];
   }
 
   spaceMenuView(t) {
@@ -496,17 +536,15 @@ export default class Spaces extends View {
         .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
         .child(div().flex_1().truncate().child(text))
         .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
-    const rule = () => div().mx(8).my(4).h(1).bg(t.border);
     const active = w?.tabs?.find((x) => x.active);
     return v_flex().id("spaces-menu").w_full().p(5).gap(1).bg(t.popover).text_size(13)
       .when(asleep.length > 0, (el) => el
         .child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Asleep"))
         .children(asleep.map((a, i) => item(`wake-${i}`, `Wake ${a.name}`, () => arrange({ wake: { from: a.from, name: a.name } }), { icon: "moon", hint: since(a.saved) })))
         .when(asleep.length > 1, (el) => el.child(item("wake-all", `Wake all ${asleep.length}`, () => arrange({ wakeAll: key }), { icon: "undo" }))))
-      .when(Boolean(w) && asleep.length > 0, (el) => el.child(rule()))
       .when(Boolean(active), (el) => el.child(item("sleep-tab", "Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })))
       .when((w?.tabs?.length ?? 0) > 1, (el) => el.child(item("sleep-project", "Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })))
-      .when(Boolean(w), (el) => el.child(rule()).child(item("space-options", "Project options\u2026", () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } }), { icon: "settings" })));
+      .when(Boolean(w), (el) => el.child(item("space-options", "Project options\u2026", () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } }), { icon: "settings" })));
   }
 
   // Spaces in order, each worktree space moved under its main checkout's.
@@ -756,7 +794,8 @@ export default class Spaces extends View {
         || rows.length < sp.length && sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
     const loadingRow = m => { take(tape, 28); return div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…"); };
-    if (!remote.length) return loading(null) && !rows.length ? [loadingRow(null)] : rows.flatMap(draw);
+    const sleeping = () => this.asleepProjects().map(([key, list]) => { take(tape, 10 + rowHeight({ tree: null })); return [div().h(10).flex_none(), this.asleepProjectRow(t, key, list)]; }).flat();
+    if (!remote.length) return loading(null) && !rows.length && !this.asleepProjects().length ? [loadingRow(null)] : [...rows.flatMap(draw), ...(collapsed ? [] : sleeping())];
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
       const mine = rows.filter((r) => (r.w.machine ?? null) === m);
@@ -975,7 +1014,7 @@ export default class Spaces extends View {
     const entries = nest(this.inStripOrder(this.listed(ps, sp, ctx.terms), ctx.strip), ctx.terms);
     const held = this.held?.done ? this.held.address : null;
     const sections = bySection(entries, this.since ?? {}, held, this.statusOrder);
-    if (!sections.length) return [this.empty(t, "No agents yet", "Start one from + in the tab bar; it shows here by what it needs from you.")];
+    if (!sections.length && !(shared("kanso.asleep") ?? []).length) return [this.empty(t, "No agents yet", "Start one from + in the tab bar; it shows here by what it needs from you.")];
     const project = this.projectOf(sp, t);
     const tape = ctx.tape;
     return sections.flatMap((s, i) => {
@@ -1004,7 +1043,7 @@ export default class Spaces extends View {
         if (open && focus != null) { tape.agent = boxY + focus; tape.agentH = focusH; }
       }
       return [head, ...box];
-    });
+    }).concat(this.asleepSection(t, !sections.length, tape));
   }
 
   // A section's header: [mark] name count ........ chevron. 13px semibold,
@@ -1295,7 +1334,7 @@ export default class Spaces extends View {
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
       .child(this.list(t, collapsed, view, ctx,
         view === "agents" ? this.agentsView(t, sp, ps, ctx) : view === "threads" ? this.threadsView(t, sp, ps, ctx) : this.grouped(t, collapsed, sp, ps, ctx)))
-      .when(!collapsed, (el) => el.child(this.sleepingProjects(t) ?? div()));
+      ;
   }
 
   // The scrolling list, with the pills under the active space and the

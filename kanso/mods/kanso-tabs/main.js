@@ -82,7 +82,7 @@ function setPanelOn(id, on) {
   setShared(OFF, [...off]);
 }
 
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 560 });
+const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
 
 function panelContent(id) {
   if (PANELS[id]) return { ...PANELS[id] };
