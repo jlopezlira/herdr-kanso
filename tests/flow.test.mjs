@@ -160,10 +160,29 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   const { Store } = await load("kanso-arrange/store.js", ["Store"], { exec, appHome: () => dir, readTextFile: (p) => readFile(p, "utf8").catch(() => null) });
   const store = new Store();
   let asleep = clone(await store.sleep(":/w", { ...a, saved: 7 }));
+  assert.deepEqual(asleep, [], "going to sleep: hidden until its agents have left");
+  await assert.rejects(store.sleep(":/w", { ...a, saved: 8 }), /already asleep/, "never over another sleeping tab of that name");
+  asleep = clone(await store.settle(":/w", "shield"));
   assert.deepEqual(asleep.map((x) => [x.from, x.name, x.cols[0].panes[0].resume]), [[":/w", "shield", "s1"]]);
   assert.deepEqual(clone(await store.all()), {}, "a sleeping tab is not an arrangement");
+  assert.equal(await store.claim(":/w", "shield"), true);
+  assert.equal(await store.claim(":/w", "shield"), false, "one wake at a time");
+  assert.deepEqual(clone(await store.asleep()), [], "a tab waking is not offered again");
+  asleep = clone(await store.keep(":/w", { ...a, cols: [{ w: 1, panes: [a.cols[0].panes[0]] }] }));
+  assert.equal(asleep[0].cols.length, 1, "what did not wake stays asleep, alone");
+  assert.equal(await store.claim(":/w", "shield"), true, "and can be woken again");
+  await store.release(":/w", "shield");
   asleep = clone(await store.woke(":/w", "shield"));
   assert.deepEqual(asleep, []);
+  const { resumeArgv, freeName, sameTabs } = await load("kanso-arrange/main.js", ["resumeArgv", "freeName", "sameTabs"], { home: () => HOME });
+  assert.deepEqual(clone(resumeArgv(["claude", "--model", "opus", "--fork-session", "fix the login bug"], "s9")), ["claude", "--model", "opus", "--resume", "s9"], "no first prompt again, no fork");
+  assert.deepEqual(clone(resumeArgv(["claude", "-c"], "s9")), ["claude", "--resume", "s9"]);
+  assert.equal(resumeArgv(["claude", "--something-new"], "s9"), null, "an option not known to carry over");
+  assert.equal(resumeArgv(["npx", "claude"], "s9"), null);
+  assert.equal(freeName("shield", new Set(["shield", "shield 2"])), "shield 3");
+  const tab = (pid) => ({ tab: { id: "t" }, capture: { cols: [{ panes: [{ terminal: "t1", pid, resume: "s1", argv: ["claude"] }] }] } });
+  assert.equal(sameTabs([tab(1)], [tab(1)]), true);
+  assert.equal(sameTabs([tab(1)], [tab(2)]), false, "an agent started again since the view opened");
 });
 
 test("Ports finds dev servers, the pane that runs each, and the ones no pane owns", async () => {

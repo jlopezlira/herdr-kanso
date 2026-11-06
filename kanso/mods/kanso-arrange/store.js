@@ -9,6 +9,7 @@ import { exec, appHome, readTextFile } from "herdr";
 
 export const STORE_DIR = "data/kanso-arrange";
 const OLD_FILE = "data/kanso-arrange.json";
+const STALE_MS = 10 * 60_000; // a sleep or wake that long under way stopped half way
 
 export const sqlText = (s) => `'${String(s ?? "").replace(/'/g, "''")}'`;
 const int = (n) => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : 0);
@@ -25,7 +26,7 @@ CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);`;
 // `asleep` holds the tabs put to sleep: the same shape, each Claude pane with
 // the conversation it resumes (`resume`).
 export function saveSql(project, a, replace = true, table = "arrangements") {
-  const layout = JSON.stringify({ per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}) });
+  const layout = JSON.stringify({ per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}), ...(a.pending ? { pending: a.pending } : {}) });
   return `INSERT OR ${replace ? "REPLACE" : "IGNORE"} INTO ${table === "asleep" ? "asleep" : "arrangements"}(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())});`;
 }
 export const deleteSql = (project, name, table = "arrangements") => `DELETE FROM ${table === "asleep" ? "asleep" : "arrangements"} WHERE project=${sqlText(project)} AND name=${sqlText(name)};`;
@@ -37,7 +38,8 @@ export function projectsOf(rows) {
     let layout;
     try { layout = JSON.parse(r.layout); } catch { continue; }
     if (!Array.isArray(layout?.cols)) continue;
-    (out[r.project] ??= []).push({ name: r.name, per: layout.per ?? null, cols: layout.cols, saved: Number(r.saved) || 0, ...(layout.space ? { space: layout.space } : {}) });
+    (out[r.project] ??= []).push({ name: r.name, per: layout.per ?? null, cols: layout.cols, saved: Number(r.saved) || 0, ...(layout.space ? { space: layout.space } : {}),
+      ...(layout.pending ? { pending: layout.pending } : {}), ...(layout.waking ? { waking: layout.waking } : {}) });
   }
   for (const k of Object.keys(out)) out[k].sort((a, b) => a.saved - b.saved);
   return out;
@@ -90,12 +92,48 @@ export class Store {
   async save(project, a) { await this.open(); await this.sql(saveSql(project, a)); return this.all(); }
   async remove(project, name) { await this.open(); await this.sql(deleteSql(project, name)); return this.all(); }
 
-  // The tabs asleep, newest first, each with the project it sleeps in (`from`).
-  async asleep() {
+  // The tabs asleep, newest first, each with the project it sleeps in
+  // (`from`). Not one going to sleep or waking right now, unless that was
+  // so long ago it stopped half way (then it is shown, to be woken).
+  async asleep(all = false) {
     await this.open();
     const by = projectsOf(await this.sql("SELECT project, name, layout, saved FROM asleep;", true));
-    return Object.entries(by).flatMap(([from, list]) => list.map((a) => ({ ...a, from }))).sort((a, b) => b.saved - a.saved);
+    const now = Date.now();
+    return Object.entries(by).flatMap(([from, list]) => list.map((a) => ({ ...a, from })))
+      .filter((a) => all || (!(a.pending > now - STALE_MS) && !(a.waking > now - STALE_MS)))
+      .sort((a, b) => b.saved - a.saved);
   }
-  async sleep(project, a) { await this.open(); await this.sql(saveSql(project, a, true, "asleep")); return this.asleep(); }
+  // A tab going to sleep: written `pending` (hidden) before its agents
+  // leave; settled once they have. Never over another sleeping tab.
+  async sleep(project, a) {
+    await this.open();
+    const r = await this.sql(`${saveSql(project, { ...a, pending: Date.now() }, false, "asleep").replace(/;$/, "")} RETURNING name;`, true);
+    if (!r.length) throw new Error(`a tab named ${a.name} is already asleep in this project`);
+    return this.asleep();
+  }
+  async settle(project, name) {
+    await this.open();
+    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.pending') WHERE project=${sqlText(project)} AND name=${sqlText(name)};`);
+    return this.asleep();
+  }
+  // Taken by one wake at a time: false when another holds it.
+  async claim(project, name) {
+    await this.open();
+    const now = Date.now();
+    const r = await this.sql(`UPDATE asleep SET layout=json_set(layout,'$.waking',${now}) WHERE project=${sqlText(project)} AND name=${sqlText(name)}
+      AND (json_extract(layout,'$.waking') IS NULL OR json_extract(layout,'$.waking') < ${now - STALE_MS}) RETURNING name;`, true);
+    return r.length > 0;
+  }
+  async release(project, name) {
+    await this.open();
+    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.waking') WHERE project=${sqlText(project)} AND name=${sqlText(name)};`);
+    return this.asleep();
+  }
+  // What did not wake stays asleep: the row keeps only those panes.
+  async keep(project, a) {
+    await this.open();
+    await this.sql(`${deleteSql(project, a.name, "asleep")}\n${saveSql(project, a, true, "asleep")}`);
+    return this.asleep();
+  }
   async woke(project, name) { await this.open(); await this.sql(deleteSql(project, name, "asleep")); return this.asleep(); }
 }

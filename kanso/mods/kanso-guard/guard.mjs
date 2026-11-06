@@ -282,7 +282,7 @@ async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) 
   const still = await hcJSON(["get", term], 5000);
   if (still?.foreground?.pid !== pid || still.pid !== g.pid || !claudeSession(pid, await processes())) return skip(pid, "its terminal changed");
   // A draft left in its prompt would go out with /exit: cleared first.
-  await run("hc", ["keys", term, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"], 10_000);
+  if (!(await run("hc", ["keys", term, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"], 10_000)).ok) return skip(pid, "its prompt could not be cleared");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
   let gone = false;
   for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
@@ -415,7 +415,7 @@ async function closeAgent(pid, why, minIdle = 0) {
   if (again?.status !== "idle" || again.statusUpdatedAt !== s.statusUpdatedAt) return no("it started working again");
   const still = await hcJSON(["get", term], 5000);
   if (still?.foreground?.pid !== pid || still.pid !== g.pid) return no("its terminal changed");
-  await run("hc", ["keys", term, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"], 10_000);
+  if (!(await run("hc", ["keys", term, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"], 10_000)).ok) return no("its prompt could not be cleared");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return no("its terminal did not take /exit");
   let gone = false;
   for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
