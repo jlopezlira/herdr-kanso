@@ -2,28 +2,34 @@
 //
 // Where sleeping tabs are kept: a local SQLite database
 // (data/kanso-sleep/sleep.db, through the sqlite3 command), one row per tab,
-// keyed by the project it sleeps in and its name. A row is written
+// keyed by the project it sleeps in and its name. Each row also carries an
+// id of its own (`$.id` in its layout) that no other row ever gets: every
+// change after it is written goes by that id, so a window holding an old
+// copy can never touch a newer tab that took the same name. A row is written
 // `pending` before its agents leave and settled once they have; a wake
-// claims it (`waking`) so one window at a time wakes it.
+// claims it (`waking`, with a token of that wake) so one window at a time
+// wakes it, and only that wake may finish it.
 import { exec, appHome } from "herdr";
 
 export const STORE_DIR = "data/kanso-sleep";
-const STALE_MS = 10 * 60_000; // a sleep or wake that long under way stopped half way
+export const STALE_MS = 10 * 60_000; // a sleep or wake that long under way stopped half way
 
 export const sqlText = (s) => `'${String(s ?? "").replace(/'/g, "''")}'`;
 const int = (n) => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : 0);
+export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 
 export const SCHEMA = `CREATE TABLE IF NOT EXISTS asleep(
   project TEXT NOT NULL, name TEXT NOT NULL, layout TEXT NOT NULL, saved INTEGER NOT NULL,
-  PRIMARY KEY(project, name));`;
+  PRIMARY KEY(project, name));
+UPDATE asleep SET layout=json_set(layout,'$.id',lower(hex(randomblob(8)))) WHERE json_extract(layout,'$.id') IS NULL;`;
 
 // A tab's row: what it opens (columns, panes, each Claude agent's
-// conversation) as JSON.
-export function saveSql(project, a, replace = true) {
-  const layout = JSON.stringify({ per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}), ...(a.pending ? { pending: a.pending } : {}) });
-  return `INSERT OR ${replace ? "REPLACE" : "IGNORE"} INTO asleep(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())});`;
+// conversation) as JSON. Never over a row of that name.
+export function insertSql(project, a) {
+  const layout = JSON.stringify({ id: a.id, per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}), ...(a.pending ? { pending: a.pending } : {}) });
+  return `INSERT OR IGNORE INTO asleep(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())}) RETURNING name;`;
 }
-export const deleteSql = (project, name) => `DELETE FROM asleep WHERE project=${sqlText(project)} AND name=${sqlText(name)};`;
+const byId = (id) => `json_extract(layout,'$.id')=${sqlText(id)}`;
 
 // Rows as tabs, each with the project it sleeps in (`from`), newest first.
 export function rowsOf(rows) {
@@ -32,11 +38,14 @@ export function rowsOf(rows) {
     let l;
     try { l = JSON.parse(r.layout); } catch { continue; }
     if (!Array.isArray(l?.cols)) continue;
-    out.push({ from: r.project, name: r.name, per: l.per ?? null, cols: l.cols, saved: Number(r.saved) || 0,
+    out.push({ id: l.id ?? null, from: r.project, name: r.name, per: l.per ?? null, cols: l.cols, saved: Number(r.saved) || 0,
       ...(l.space ? { space: l.space } : {}), ...(l.pending ? { pending: l.pending } : {}), ...(l.waking ? { waking: l.waking } : {}) });
   }
   return out.sort((a, b) => b.saved - a.saved);
 }
+// Not going to sleep or waking right now, or that was so long ago it
+// stopped half way (then it shows again, to be woken).
+export const idle = (a, now = Date.now()) => !(a.pending > now - STALE_MS) && !(Number(String(a.waking ?? "").split(":")[0]) > now - STALE_MS);
 
 export class Store {
   constructor() {
@@ -61,44 +70,62 @@ export class Store {
     })());
   }
 
-  // The tabs asleep. Not one going to sleep or waking right now, unless that
-  // was so long ago it stopped half way (then it is shown, to be woken).
+  // The tabs asleep (`all`: also those going to sleep or waking now).
   async asleep(all = false) {
     await this.open();
     const now = Date.now();
-    return rowsOf(await this.sql("SELECT project, name, layout, saved FROM asleep;", true))
-      .filter((a) => all || (!(a.pending > now - STALE_MS) && !(a.waking > now - STALE_MS)));
+    return rowsOf(await this.sql("SELECT project, name, layout, saved FROM asleep;", true)).filter((a) => all || idle(a, now));
   }
-  // Written going to sleep, never over another sleeping tab of that name.
+  // Written going to sleep, never over another sleeping tab of that name:
+  // its new id, or an error when the name is taken.
   async sleep(project, a) {
     await this.open();
-    const r = await this.sql(`${saveSql(project, { ...a, pending: Date.now() }, false).replace(/;$/, "")} RETURNING name;`, true);
+    const id = newId();
+    const r = await this.sql(insertSql(project, { ...a, id, pending: Date.now() }), true);
     if (!r.length) throw new Error(`a tab named ${a.name} is already asleep in this project`);
+    return id;
+  }
+  async settle(id) {
+    await this.open();
+    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.pending') WHERE ${byId(id)};`);
     return this.asleep();
   }
-  async settle(project, name) {
+  // A row this sleep wrote and no longer wants (its agents came back).
+  async drop(id) { await this.open(); await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND json_extract(layout,'$.pending') IS NOT NULL;`); return this.asleep(); }
+  // The panes kept (`cols`), all else of the row as it was.
+  async narrow(id, cols, token = null) {
     await this.open();
-    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.pending') WHERE project=${sqlText(project)} AND name=${sqlText(name)};`);
+    await this.sql(`UPDATE asleep SET layout=json_remove(json_set(layout,'$.cols',json(${sqlText(JSON.stringify(cols))})),'$.pending','$.waking')
+      WHERE ${byId(id)}${token ? ` AND json_extract(layout,'$.waking')=${sqlText(token)}` : ""};`);
     return this.asleep();
   }
-  // Taken by one wake at a time: false when another holds it.
-  async claim(project, name) {
+  // Taken by one wake at a time: the row as it is now, with the wake's
+  // token, or null when another wake holds it or it is gone.
+  async claim(id) {
     await this.open();
-    const now = Date.now();
-    const r = await this.sql(`UPDATE asleep SET layout=json_set(layout,'$.waking',${now}) WHERE project=${sqlText(project)} AND name=${sqlText(name)}
-      AND (json_extract(layout,'$.waking') IS NULL OR json_extract(layout,'$.waking') < ${now - STALE_MS}) RETURNING name;`, true);
-    return r.length > 0;
+    const now = Date.now(), token = `${now}:${newId()}`;
+    const r = await this.sql(`UPDATE asleep SET layout=json_set(layout,'$.waking',${sqlText(token)}) WHERE ${byId(id)}
+      AND (json_extract(layout,'$.pending') IS NULL OR json_extract(layout,'$.pending') < ${now - STALE_MS})
+      AND (json_extract(layout,'$.waking') IS NULL OR CAST(json_extract(layout,'$.waking') AS INTEGER) < ${now - STALE_MS})
+      RETURNING project, name, layout, saved;`, true);
+    const [a] = rowsOf(r);
+    return a ? { ...a, token } : null;
   }
-  async release(project, name) {
+  async release(id, token) {
     await this.open();
-    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.waking') WHERE project=${sqlText(project)} AND name=${sqlText(name)};`);
+    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.waking') WHERE ${byId(id)} AND json_extract(layout,'$.waking')=${sqlText(token)};`);
     return this.asleep();
   }
-  // What did not wake stays asleep: the row keeps only those panes.
-  async keep(project, a) {
+  // Awake: gone, if this wake still holds it.
+  async woke(id, token) {
     await this.open();
-    await this.sql(`${deleteSql(project, a.name)}\n${saveSql(project, a, true)}`);
+    await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND json_extract(layout,'$.waking')=${sqlText(token)};`);
     return this.asleep();
   }
-  async woke(project, name) { await this.open(); await this.sql(deleteSql(project, name)); return this.asleep(); }
+  // Forgotten by hand: gone, unless a wake holds it.
+  async forget(id) {
+    await this.open();
+    await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND (json_extract(layout,'$.waking') IS NULL OR CAST(json_extract(layout,'$.waking') AS INTEGER) < ${Date.now() - STALE_MS});`);
+    return this.asleep();
+  }
 }

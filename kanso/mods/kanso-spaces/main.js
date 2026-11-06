@@ -95,17 +95,25 @@ const asleepOf = (w) => (shared("kanso.asleep") ?? []).filter((a) => a.from === 
 const arrange = (props) => openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props });
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
 const sleepProject = (spaceId) => arrange({ sleep: { scope: "project", space: spaceId } });
-// What sleeps, read from kanso-sleep's database when no dialog has said yet.
-// Always read at start: shared state outlives a restart and may be old.
+// What sleeps, read from kanso-sleep's database: at start (shared state
+// outlives a restart and may be old) and every 30 s. A read that a newer
+// publication ("kanso.asleep.at", set by kanso-sleep too) overtook is dropped.
 async function loadAsleep() {
+  const started = Date.now();
   const r = await exec("sqlite3", ["-json", `${appHome()}/data/kanso-sleep/sleep.db`, "SELECT project, name, saved, layout FROM asleep;"]).catch(() => null);
-  if (r?.code !== 0) { if ((shared("kanso.asleep") ?? []).length) setShared("kanso.asleep", []); return; }
+  if ((shared("kanso.asleep.at") ?? 0) > started) return;
+  const publish = (list) => {
+    if (JSON.stringify(list) === JSON.stringify(shared("kanso.asleep") ?? [])) return;
+    setShared("kanso.asleep.at", Date.now());
+    setShared("kanso.asleep", list);
+  };
+  if (r?.code !== 0) { publish([]); return; }
   let rows = [];
   try { rows = r.stdout.trim() ? JSON.parse(r.stdout) : []; } catch { return; }
   const space = (l) => { try { return JSON.parse(l).space ?? null; } catch { return null; } };
   const who = (l) => { try { return JSON.parse(l).cols.flatMap((c) => c.panes).map((p) => p.name || String(p.argv?.[0] ?? "shell").split("/").pop()).join(", "); } catch { return ""; } };
-  const busy = (l) => { try { const x = JSON.parse(l), old = Date.now() - 600000; return x.pending > old || x.waking > old; } catch { return true; } };
-  setShared("kanso.asleep", rows.filter((x) => !busy(x.layout)).map((x) => ({ from: x.project, name: x.name, saved: Number(x.saved) || 0, who: who(x.layout), space: space(x.layout) })).sort((a, b) => b.saved - a.saved));
+  const busy = (l) => { try { const x = JSON.parse(l), old = Date.now() - 600000; return x.pending > old || parseInt(x.waking ?? 0, 10) > old; } catch { return true; } };
+  publish(rows.filter((x) => !busy(x.layout)).map((x) => ({ from: x.project, name: x.name, saved: Number(x.saved) || 0, who: who(x.layout), space: space(x.layout) })).sort((a, b) => b.saved - a.saved));
 }
 const since = (ms) => { const d = new Date(ms); return new Date().toDateString() === d.toDateString() ? d.toTimeString().slice(0, 5) : d.toDateString().slice(4, 10); };
 
@@ -189,7 +197,10 @@ export default class Spaces extends View {
     // What runs under each agent: one `ps` every 5 s in front, 30 s behind.
     cx.timer.every(5000, (cx) => this.checkTasks(cx));
     // The times beside the rows count in minutes.
-    cx.timer.every(30000, (cx) => cx.notify());
+    // ...and what sleeps is read again with them: a sleep or wake that
+    // stopped half way shows again once it is old, and another window's
+    // changes arrive.
+    cx.timer.every(30000, (cx) => { loadAsleep().catch(() => {}); cx.notify(); });
     // Keys (keys.json): ⌃1-9 goes to a space by position, ⌃⌥P/S/T to a view.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -794,8 +805,14 @@ export default class Spaces extends View {
         || rows.length < sp.length && sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
     const loadingRow = m => { take(tape, 28); return div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…"); };
-    const sleeping = () => this.asleepProjects().map(([key, list]) => { take(tape, 10 + rowHeight({ tree: null })); return [div().h(10).flex_none(), this.asleepProjectRow(t, key, list)]; }).flat();
-    if (!remote.length) return loading(null) && !rows.length && !this.asleepProjects().length ? [loadingRow(null)] : [...rows.flatMap(draw), ...(collapsed ? [] : sleeping())];
+    // Projects asleep whole (no space left), on their machine ("" here).
+    const sleepingOn = (m) => this.asleepProjects().filter(([key]) => key.slice(0, key.indexOf(":")) === (m ?? ""));
+    const sleeping = (m) => collapsed ? [] : sleepingOn(m).flatMap(([key, list]) => {
+      take(tape, 10);
+      take(tape, rowHeight({ tree: null }));
+      return [div().h(10).flex_none(), this.asleepProjectRow(t, key, list)];
+    });
+    if (!remote.length) return loading(null) && !rows.length && !sleepingOn(null).length ? [loadingRow(null)] : [...rows.flatMap(draw), ...sleeping(null)];
     const machineNames = [null, ...remote];
     return machineNames.flatMap((m) => {
       const mine = rows.filter((r) => (r.w.machine ?? null) === m);
@@ -821,7 +838,9 @@ export default class Spaces extends View {
         .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
         .on_click(() => run("space.new", { machine: m ?? "" }))
         .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
-      return [head, ...(folded ? [] : mine.length ? mine.flatMap(draw) : [loading(m) ? loadingRow(m) : (take(tape, 28), empty)])];
+      if (folded) return [head];
+      const asleep = sleepingOn(m).length > 0;
+      return [head, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : (take(tape, 28), empty)]), ...sleeping(m)];
     });
   }
 

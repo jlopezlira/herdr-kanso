@@ -89,7 +89,9 @@ async function newPane(seen, cx, tab) {
 // split; then the columns' widths. `create` ({ name, folder, machine, key }):
 // no space for it yet, so one is made, which starts with a shell tab in its
 // folder that goes once the tab is open. `progress(text)` says how far it
-// is. Returns the panes' ids, column by column; throws when Herdr fails it.
+// is. Returns the panes' ids, column by column; throws when Herdr fails it,
+// the error's `opened` holding the ids of the panes it did open (the same
+// shape), so what already runs is not opened twice.
 export async function openTab(a, cx, { space = null, create = null, progress = () => {} } = {}) {
   const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
   if (!flat.length) throw new Error("nothing to open");
@@ -104,21 +106,37 @@ export async function openTab(a, cx, { space = null, create = null, progress = (
   }
   if (!space) throw new Error("no space to open it in");
   progress(`Opening 1 of ${flat.length}`);
-  let seen = new Set(panes().map((q) => q.pane));
-  run("tab.new", { space: space.id, name: a.name, ...opts(flat[0]) });
-  const first = await newPane(seen, cx);
-  const ids = [[first.pane]];
-  for (let k = 1; k < flat.length; k++) {
-    const p = flat[k];
-    progress(`Opening ${k + 1} of ${flat.length}`);
-    const dir = p.ri > 0 ? "down" : "right";
-    const from = p.ri > 0 ? ids[p.ci][p.ri - 1] : ids[p.ci - 1][0];
-    seen = new Set(panes().map((q) => q.pane));
-    setShared("strip.intent", { dir, from, at: Date.now() });
-    run("pane.focus", { pane: from });
-    run("terminal.open", { ...opts(p), place: dir });
-    const made = await newPane(seen, cx, first.tab);
-    (ids[p.ci] ??= []).push(made.pane);
+  const ids = [];
+  try {
+    // The new tab: one this space did not have, by its name when Herdr has
+    // it; its first pane only from that tab, never one opening elsewhere.
+    const before = new Set((spaces().find((sp) => sp.id === space.id)?.tabs ?? []).map((t) => t.id));
+    run("tab.new", { space: space.id, name: a.name, ...opts(flat[0]) });
+    let tab = null;
+    for (let i = 0; i < 60 && !tab; i++) {
+      await cx.sleep(100);
+      const fresh = (spaces().find((sp) => sp.id === space.id)?.tabs ?? []).filter((t) => !before.has(t.id));
+      tab = fresh.find((t) => t.name === a.name) ?? (fresh.length === 1 ? fresh[0] : null);
+    }
+    if (!tab) throw new Error("Herdr did not open the tab");
+    const first = await newPane(new Set(), cx, tab.id);
+    ids.push([first.pane]);
+    for (let k = 1; k < flat.length; k++) {
+      const p = flat[k];
+      progress(`Opening ${k + 1} of ${flat.length}`);
+      const dir = p.ri > 0 ? "down" : "right";
+      const from = p.ri > 0 ? ids[p.ci][p.ri - 1] : ids[p.ci - 1][0];
+      const seen = new Set(panes().map((q) => q.pane));
+      setShared("strip.intent", { dir, from, at: Date.now() });
+      run("pane.focus", { pane: from });
+      run("terminal.open", { ...opts(p), place: dir });
+      const made = await newPane(seen, cx, tab.id);
+      (ids[p.ci] ??= []).push(made.pane);
+    }
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    err.opened = ids;
+    throw err;
   }
   await cx.sleep(150);
   setShared("strip.req", { op: "widths", per: a.per, cols: ids.map((col, ci) => ({ pane: col[0], w: a.cols[ci].w })), n: Date.now() + Math.random() });
