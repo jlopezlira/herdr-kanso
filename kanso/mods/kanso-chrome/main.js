@@ -4,7 +4,7 @@
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), Herdr's mark beside the traffic lights; an "Update Kanso" row for Kanso's own releases (update.js).
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, shared, updates, agents, home, window, nextCommand, openOverlay, exec, appHome, notify } from "herdr";
+import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, exec, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 
 const basename = (path) => path.replace(/\/+$/, "").split("/").pop();
@@ -36,6 +36,19 @@ export default class WorkspaceChrome extends View {
       }
     });
     cx.timer.every(60000, (cx) => this.watch(cx));
+    this.power(cx);
+    cx.timer.every(30000, (cx) => this.power(cx));
+  }
+
+  // On battery or on the charger (pmset), for the marks to step instead of
+  // glide (marks.js). Written only when it changes: every mod draws again.
+  power(cx) {
+    cx.spawn(async () => {
+      const r = await exec("pmset", ["-g", "ps"]).catch(() => null);
+      if (r?.code !== 0) return;
+      const on = /Battery Power/.test(r.stdout);
+      if (shared("kanso.battery") !== on) setShared("kanso.battery", on);
+    });
   }
 
   // The mod runtime can run out of memory after a long day of hot reloads

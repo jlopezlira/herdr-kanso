@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.2.2] - 2026-11-06
+
+### Changed
+
+- On battery, Kanso's motion steps instead of gliding: the working ring turns in quarter turns, a working title holds still while its dots count, and the strip's dots and the needs-you bar stop pulsing. A native spin or pulse redraws the whole window about 30 times a second; with an agent at work Herdr used about 31% CPU in a test, 10% with this. On the charger nothing changes.
+
 ## [3.2.1] - 2026-11-06
 
 ### Fixed
