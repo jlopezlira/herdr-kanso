@@ -227,6 +227,12 @@ h3 { margin: 0; color: var(--text); font-size: 19px; font-weight: 600; letter-sp
 
 /* Share cards. */
 .cards { margin-top: 56px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+/* Two pictures side by side, their words under them. */
+.duo { margin-top: 56px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.duo .window { margin: 0; }
+.duo-text { margin-top: 24px; }
+.duo-text h3 { margin: 0 0 8px; }
+.duo-text p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
 .cards img { border-radius: 12px; border: 1px solid var(--line-strong); }
 
 /* Last call. */
@@ -260,11 +266,12 @@ h3 { margin: 0; color: var(--text); font-size: 19px; font-weight: 600; letter-sp
   .block { padding-top: 96px; }
   .grid { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr; }
+  .duo { grid-template-columns: 1fr; }
   .button { height: 44px; }
 }
 
 /* Grid and flex children may shrink below their content (the install line scrolls inside its box). */
-.steps li, .tile, .tile-text, .grid > *, .cards > *, .facts li > div { min-width: 0; }
+.steps li, .tile, .tile-text, .grid > *, .cards > *, .duo > *, .facts li > div { min-width: 0; }
 body { overflow-x: clip; }
 
 /* Phones: the headline scales inside the padding, the pill wraps, the install line wraps instead of hiding its end. */
@@ -275,3 +282,25 @@ body { overflow-x: clip; }
 }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .window-panel a { display: block; cursor: zoom-in; }
+
+/* ---- pages: changelog, credits, privacy, terms, use ---- */
+.doc { max-width: 760px; margin: 0 auto; padding: 96px 24px 0; }
+.doc h1 { margin: 0; color: var(--text); font-size: clamp(36px, 5vw, 52px); font-weight: 600; letter-spacing: -.035em; line-height: 1.05; }
+.doc .lede { margin: 18px 0 0; color: var(--body); font-size: 19px; line-height: 1.55; }
+.doc .meta { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+.doc h2 { margin: 56px 0 12px; color: var(--text); font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.doc h3 { margin: 28px 0 8px; font-size: 15px; color: var(--accent); }
+.doc p, .doc li { color: var(--body); font-size: 16px; line-height: 1.65; }
+.doc ul { margin: 0; padding-left: 20px; }
+.doc li + li { margin-top: 8px; }
+.doc a { color: var(--text); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+.doc code { font-family: var(--mono); font-size: .88em; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.log .release { padding-top: 8px; border-top: 1px solid var(--line); margin-top: 48px; }
+.log .release h2 { margin-top: 32px; font-family: var(--mono); }
+.log .when { margin-left: 10px; color: var(--muted); font-family: var(--sans); font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.people { list-style: none; padding: 0 !important; display: grid; gap: 14px; }
+.people a { display: flex; gap: 16px; align-items: center; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); text-decoration: none; }
+.people a:hover { border-color: var(--line-strong); background: var(--raised); }
+.people img { border-radius: 50%; flex: none; }
+.people span { display: flex; flex-direction: column; color: var(--muted); font-size: 14px; }
+.people strong { color: var(--text); font-size: 16px; font-weight: 600; }

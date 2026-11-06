@@ -24,9 +24,11 @@
     <a class="brand" href="#top"><img src="assets/enso.svg" alt="" width="22" height="22">kansō</a>
     <nav class="nav-links" aria-label="Sections">
       <a href="#features">Features</a>
+      <a href="#sleep">Sleep</a>
+      <a href="#keys">Keys</a>
       <a href="#memory">Memory</a>
       <a href="#install">Install</a>
-      <a href="https://github.com/jlopezlira/herdr-kanso/releases">Changelog</a>
+      <a href="changelog.html">Changelog</a>
     </nav>
     <a class="star star-small" href="https://github.com/jlopezlira/herdr-kanso">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
@@ -38,7 +40,7 @@
 <main id="top">
 
   <section class="hero">
-    <a class="pill" href="#ports"><span class="pill-tag">New in 3.1</span>Ports keeps a history of the servers your agents leave running</a>
+    <a class="pill" href="#dojo"><span class="pill-tag">New in 3.4</span>Learn vim's moves in the hjkl dōjō, and sleep a single agent</a>
     <!-- The headline and subline: change them here. -->
     <h1>More agents.<br>Less babysitting.</h1>
     <p class="lede">Every agent gets a readable pane, the one waiting on you comes first, and idle Claude Code sessions recycle on the same conversation so your machine lasts weeks.</p>
@@ -131,6 +133,29 @@
     </div>
   </section>
 
+  <section class="block spotlight" id="sleep">
+    <h2>Put agents to sleep, wake them where they were</h2>
+    <p class="sub">Waiting on a backend ticket? Sleep the agents that wait on it. They exit with their conversation kept, so nothing of them runs or holds memory, and wake tomorrow on the same conversation.</p>
+    <ul class="facts">
+      <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>One agent, a tab or a project</strong>The moon in a pane's header sleeps that agent and leaves the rest of the tab; the project's menu sleeps a tab or all of it.</div></li>
+      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>The same conversation</strong>Wake brings each agent back on its conversation, in its tab, with its folder and options, and checks it is really there.</div></li>
+      <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>Careful with your work</strong>A draft in the prompt is cleared, never sent. An agent at work or waiting on you doesn't sleep.</div></li>
+    </ul>
+  </section>
+
+  <section class="block" id="keys">
+    <h2>Keys you can see, moves you can learn</h2>
+    <p class="sub">⌘⌥ h j k l move between panes as vim does, and every list answers j, k, gg and G. ⌘? draws your own keys on a keyboard, layer by modifier.</p>
+    <div class="duo">
+      <figure class="window"><img src="shots/help-keys.png" loading="lazy" width="860" height="680" alt="kansō help: a keyboard with ⌘⌥ held, H J K L lit for moving between panes, and what each key does."></figure>
+      <figure class="window" id="dojo"><img src="shots/dojo.png" loading="lazy" width="940" height="720" alt="The hjkl dōjō: Hachi the pixel shiba, nine levels, a board with a target to reach with h and l."></figure>
+    </div>
+    <div class="duo duo-text">
+      <div><h3>kansō help</h3><p>Hold ⌘ ⌥ ⇧ ⌃, or press a chord, and the keys that do something light up with what they do. A guide to everything, and where to set it up.</p></div>
+      <div><h3>hjkl dōjō</h3><p>Nine levels, from h and l on a board to w b e, f t and gg G on real lines of code. Sixty-second rounds, points for the fewest moves, a hint when you stop to think, and Hachi cheering a streak.</p></div>
+    </div>
+  </section>
+
   <section class="block spotlight" id="memory">
     <h2>Agent sessions that last weeks</h2>
     <p class="sub">Agents that stay open for weeks grow. kansō's guard checks every minute and cleans up without losing a conversation.</p>
@@ -145,7 +170,7 @@
 
   <section class="block share" id="share">
     <h2>Show what your agents did</h2>
-    <p class="sub">Memory, Ports, Spend and Shipped turn your numbers into a card for X, LinkedIn or Bluesky. Counts and sizes only, never a project or a path.</p>
+    <p class="sub">Memory, Ports, Spend, Shipped and the hjkl dōjō turn your numbers into a card for X, LinkedIn or Bluesky. Counts and sizes only, never a project or a path.</p>
     <div class="cards">
       <img src="shots/share-memory.png" loading="lazy" width="2400" height="2140" alt="A Memory share card: agents open for days, recycles and memory given back.">
       <img src="shots/share-ports.png" loading="lazy" width="2400" height="2140" alt="A Ports share card: dev servers left running by agents, found and stopped.">
@@ -172,10 +197,12 @@
   <div class="foot-in">
     <span class="brand brand-small"><img src="assets/enso.svg" alt="" width="18" height="18">kansō</span>
     <nav aria-label="Links">
-      <a href="https://herdr.dev">Herdr</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="credits.html">Credits and contact</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+      <a href="use.html">Use policy</a>
       <a href="https://github.com/jlopezlira/herdr-kanso">GitHub</a>
-      <a href="https://github.com/jlopezlira/herdr-kanso/releases">Changelog</a>
-      <a href="https://github.com/jlopezlira/herdr-kanso/blob/main/LICENSE">License</a>
     </nav>
   </div>
 </footer>
