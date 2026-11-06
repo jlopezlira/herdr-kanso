@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.4.1] - 2026-11-06
+
+### Fixed
+
+- A round in the hjkl dōjō has an end: ten targets, then the round's result (points, targets, the fewest moves, the best streak, the time) with Play again, Next level and Leave as buttons; Enter plays again and n goes to the next level. End round stops a round without counting it, and Leave the dōjō is a button in the title bar that asks once before it closes.
+
 ## [3.4.0] - 2026-11-06
 
 ### Added

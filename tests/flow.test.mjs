@@ -366,7 +366,7 @@ test("The dōjō's card: the best round, the days in a row, only the levels play
   assert.equal(card.spec.hero.big, "95");
   assert.match(card.spec.hero.label, /level 3: h j k l/);
   assert.equal(card.spec.blocks[1].rows.length, 2, "only the levels played");
-  assert.match(card.text, /^95 points in my best 60-second round of vim, in the hjkl dōjō/);
+  assert.match(card.text, /^95 points in my best round of vim, in the hjkl dōjō/);
   assert.match(card.text, /75% in the fewest moves/);
 });
 
@@ -388,3 +388,32 @@ test("The dōjō keeps its rounds in its own SQLite: bests per level, totals, th
   assert.match(store.db, /data\/kanso-dojo\/dojo\.db$/);
 });
 
+
+test("A dōjō round ends after ten targets, with its result kept; End round stops one without counting it", async () => {
+  const added = [];
+  const host = {
+    theme: () => ({}), props: () => ({ overlay: "o" }), closeOverlay: () => {}, appHome: () => "/x", settings: () => ({}),
+    exec: async () => ({ code: 0, stdout: "", stderr: "" }), notify: () => {}, window: () => ({ platform: "macos" }),
+    div: () => null, svg: () => null, v_flex: () => null, h_flex: () => null,
+  };
+  const { Dojo, shortest } = await load("kanso-dojo/main.js", ["Dojo", "shortest"], host);
+  const cx = { focus_handle: () => ({ focus() {} }), spawn: (f) => f(cx), notify() {}, stop_propagation() {}, timer: { every() {}, after() {} } };
+  const game = new Dojo();
+  game.init({}, cx);
+  game.store = { add: async (r) => { added.push(r); }, totals: async () => ({ bests: { 1: 1 } }), level: async () => 1, setLevel: async () => {} };
+  const press = (ch) => game.key({ key: ch, key_char: ch, modifiers: {} }, cx);
+  await new Promise((r) => setTimeout(r, 0));
+  for (let n = 0; n < 200 && !game.over; n++) for (const ch of shortest(game.world, game.at, game.target, game.level).first) press(ch);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(game.over?.kept, "the round is over after ten targets");
+  assert.equal(game.over.hits, 10);
+  assert.equal(game.over.perfect, 10, "each in the fewest moves");
+  assert.equal(added.length, 1, "and kept");
+  press("enter");
+  assert.equal(game.over, null, "Enter plays again");
+  press(shortest(game.world, game.at, game.target, game.level).first[0]);
+  assert.ok(game.round, "a move starts the next round");
+  game.endRound(null, false);
+  assert.equal(game.over.kept, false, "End round: stopped");
+  assert.equal(added.length, 1, "and not counted");
+});

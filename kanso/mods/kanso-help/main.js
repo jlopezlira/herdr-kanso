@@ -143,7 +143,7 @@ export default class Help extends View {
       .child(hachi(t, { mood: "glad", px: 9 }))
       .child(v_flex().flex_1().gap(G.md)
         .child(div().text_size(20).font_semibold().text_color(c.text).child("hjkl dōjō"))
-        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; 60-second rounds, points for the fewest moves, a streak, and a hint when you stop to think."))
+        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; rounds of ten targets, points for the fewest moves, a streak, and a hint when you stop to think."))
         .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Hachi, the dōjō's shiba, keeps you company: tongue out on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
         .child(h_flex().pt(G.sm).gap(G.md).items_center()
           .child(div().id("enter-dojo").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
