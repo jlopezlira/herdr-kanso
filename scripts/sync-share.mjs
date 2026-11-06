@@ -16,7 +16,7 @@ export const SHARED = [
   // Kanso's own updates: the footer shows the row, the tab bar (always on
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
-  // Neko, the dōjō's cat, also on kansō help's way into the dōjō.
+  // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
   { source: "kanso/mods/kanso-dojo/mascot.js", copies: ["kanso/mods/kanso-help/mascot.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-sleep/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js"] },

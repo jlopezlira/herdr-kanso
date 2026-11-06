@@ -340,13 +340,14 @@ test("hjkl dōjō: vim's motions on a board and on code, the fewest moves and th
   assert.deepEqual([points(3, 3, 0), points(3, 3, 4), points(5, 3, 4)], [15, 23, 10], "the fewest moves and the streak count");
 });
 
-test("Neko, the dōjō's cat, wears the game on its face", async () => {
-  const { nekoPixels } = await load("kanso-dojo/mascot.js", ["nekoPixels"], { div: () => null, h_flex: () => null, v_flex: () => null });
-  const eyes = (g) => g.slice(5, 7).map((r) => r.join("")).join("|");
-  const moods = ["calm", "glad", "sweat", "sleep"].map((m) => eyes(nekoPixels(m)));
+test("Hachi, the dōjō's shiba, wears the game on its face", async () => {
+  const { hachiPixels } = await load("kanso-dojo/mascot.js", ["hachiPixels"], { div: () => null, h_flex: () => null, v_flex: () => null });
+  const eyes = (g) => g.slice(6, 8).map((r) => r.join("")).join("|");
+  const moods = ["calm", "glad", "sweat", "sleep"].map((m) => eyes(hachiPixels(m)));
   assert.equal(new Set([moods[0], moods[1], moods[3]]).size, 3, "open, glad and asleep look apart");
-  assert.ok(nekoPixels("sweat").some((r) => r.includes("B")), "a drop of sweat");
-  assert.ok(nekoPixels().every((row) => row.length === 14) && nekoPixels().length === 12);
+  assert.ok(hachiPixels("sweat").some((r) => r.includes("B")), "a drop of sweat");
+  assert.ok(hachiPixels("glad").some((r) => r.includes("T")), "tongue out when glad");
+  assert.ok(hachiPixels().every((row) => row.length === 16) && hachiPixels().length === 15);
 });
 
 

@@ -1,7 +1,7 @@
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 //
-// A place to practice vim's moves until the fingers know them, with Neko,
-// a pixel cat. Nine levels, from h and l alone on a board to w b
+// A place to practice vim's moves until the fingers know them, with Hachi,
+// a pixel shiba. Nine levels, from h and l alone on a board to w b
 // e, f t, 0 ^ $ and gg G on real lines of code. A round is 60 seconds: bring
 // the cursor onto the target, in the fewest moves for points and a streak.
 // After two seconds still, the key that gets there lights up.
@@ -17,7 +17,7 @@ import { G, tokens, iconButton } from "./ui.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
-import { neko } from "./mascot.js";
+import { hachi } from "./mascot.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
 const ROUND_S = 60, HINT_MS = 2000, LIT_MS = 600, ARM_MS = 3000, SLEEP_MS = 20000;
@@ -154,7 +154,7 @@ export default class Dojo extends View {
     return "calm";
   }
 
-  // Neko's line: what the game needs you to know now.
+  // Hachi's line: what the game needs you to know now.
   line() {
     const r = this.round, o = this.over, now = Date.now();
     if (now - this.armed <= ARM_MS) return "Press Esc again to leave the dōjō.";
@@ -244,10 +244,10 @@ export default class Dojo extends View {
           .child(leaving ? "Leave? Click again" : "Leave")))
       .child(h_flex().flex_1().min_h(0).items_start().gap(G.xl).p(20)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        // Neko, the numbers, the levels.
+        // Hachi, the numbers, the levels.
         .child(v_flex().w(196).flex_none().gap(G.lg)
           .child(h_flex().gap(G.md).items_end()
-            .child(neko(t, { mood: this.mood(), px: 9 }))
+            .child(hachi(t, { mood: this.mood(), px: 8 }))
             .child(div().pb(4).text_size(11).text_color(c.dim).child(this.mood() === "sleep" ? "z z" : "")))
           .child(h_flex().gap(G.lg)
             .child(stat("Score", r ? r.score : this.over ? this.over.score : 0, true))
