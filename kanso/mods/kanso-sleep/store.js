@@ -55,7 +55,8 @@ export class Store {
   }
 
   async sql(text, json = false) {
-    const r = await exec("sqlite3", [...(json ? ["-json"] : []), this.db, text]);
+    // Another window writing: wait for it up to 5 s instead of failing.
+    const r = await exec("sqlite3", ["-cmd", ".timeout 5000", ...(json ? ["-json"] : []), this.db, text]);
     if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
     return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
   }

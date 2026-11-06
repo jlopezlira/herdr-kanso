@@ -220,19 +220,23 @@ export default class Sleep extends View {
         const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null });
         const entry = { name: r.name, space: this.space?.name ?? null, per: cap.per, saved: Date.now(),
           cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map(kept) })) };
-        const left = [];
+        const left = [], sent = [];
         let id = null;
         try {
           id = await this.store.sleep(project, entry);
           for (const [i, p] of agents.entries()) {
             this.busy = `${p.name} is leaving, ${i + 1} of ${agents.length} in ${r.name}`; cx.notify();
-            await this.leave(p, cx);
+            await this.leave(p, cx, () => sent.push(p));
             left.push(p);
           }
         } catch (e) {
           // Only what this sleep wrote is undone. An agent that did not come
-          // back stays asleep (its conversation kept); one that may still be
-          // starting is held back from waking for a while, so it never runs twice.
+          // back stays asleep (its conversation kept); one whose terminal
+          // could not be checked stays asleep with that terminal to check
+          // again before it wakes, so it never runs twice. One that took
+          // /exit but was slow to go is waited for, then comes back too.
+          this.busy = "Bringing the agents back"; cx.notify();
+          for (const p of sent) if (!left.includes(p) && (await this.gone(p.pid, cx, 30))) left.push(p);
           const lost = [], unsure = [];
           for (const p of left) {
             const how = await this.comeBack(p, cx);
@@ -240,8 +244,8 @@ export default class Sleep extends View {
             else if (how === "unsure") unsure.push(p);
           }
           if (id) {
-            const missing = [...lost, ...unsure];
-            await (missing.length ? this.store.narrow(id, colsOf(missing.map(kept)), null, unsure.length > 0) : this.store.drop(id)).catch(() => {});
+            const missing = [...lost.map(kept), ...unsure.map((p) => ({ ...kept(p), check: p.terminal }))];
+            await (missing.length ? this.store.narrow(id, colsOf(missing)) : this.store.drop(id)).catch(() => {});
             await this.refresh();
           }
           this.busy = null;
@@ -249,7 +253,7 @@ export default class Sleep extends View {
           this.error = `Stopped: ${String(e?.message ?? e)}. ${r.name} stays open`
             + (!left.length ? "" : !lost.length && !unsure.length ? "; the agents that had left are back on their conversations" : "")
             + (lost.length ? `; ${names(lost)} did not come back and ${lost.length === 1 ? "stays" : "stay"} asleep, to wake from here` : "")
-            + (unsure.length ? `; ${names(unsure)} could not be checked or stopped; ${unsure.length === 1 ? "it shows" : "they show"} here to wake in 10 minutes, look at ${unsure.length === 1 ? "its" : "their"} terminal first` : "") + ".";
+            + (unsure.length ? `; ${names(unsure)} could not be checked or stopped and ${unsure.length === 1 ? "stays" : "stay"} asleep; a wake looks at ${unsure.length === 1 ? "its" : "their"} terminal first` : "") + ".";
           this.view = lost.length || unsure.length ? "list" : this.view;
           cx.notify();
           return;
@@ -260,8 +264,12 @@ export default class Sleep extends View {
         await this.refresh();
         // A pane opened in the tab while it went to sleep keeps it open.
         const known = new Set(cap.cols.flatMap((c) => c.panes).map((p) => p.terminal));
-        if (note || panes().some((p) => p.tab === r.tab.id && p.terminal && !known.has(p.terminal))) stayed.push(note ?? r.name);
-        else run("tab.close", { id: r.tab.id, confirmed: true });
+        if (note || panes().some((p) => p.tab === r.tab.id && p.terminal && !known.has(p.terminal))) {
+          // The tab stays for what is new in it; what slept ends, so it
+          // doesn't run here and again on wake.
+          for (const t of known) run("terminal.kill", { terminal: t });
+          stayed.push(note ?? r.name);
+        } else run("tab.close", { id: r.tab.id, confirmed: true });
       }
       if (stayed.length) {
         this.busy = null; this.view = "list";
@@ -276,8 +284,7 @@ export default class Sleep extends View {
 
   // One agent out: still the one read, its prompt cleared (a draft would go
   // out with /exit), /exit, then its process gone.
-  async leave(p, cx) {
-    const live = async () => (await exec("kill", ["-0", String(p.pid)]).catch(() => null))?.code === 0;
+  async leave(p, cx, onSent = () => {}) {
     const now = await hc(["get", p.terminal, "--json"]).catch(() => null);
     let fg = null;
     try { fg = JSON.parse(now.stdout).foreground?.pid; } catch { /* below */ }
@@ -285,9 +292,18 @@ export default class Sleep extends View {
     const clear = await hc(["keys", p.terminal, "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u", "ctrl+e", "ctrl+u"]).catch(() => null);
     if (clear?.code !== 0) throw new Error(`${p.name}'s prompt could not be cleared`);
     const s = await hc(["send", p.terminal, "/exit"]).catch(() => null);
+    onSent();
     if (s?.code !== 0) throw new Error(`${p.name} did not take /exit`);
-    for (let k = 0; k < 40; k++) { await cx.sleep(500); if (!(await live())) return; }
-    throw new Error(`${p.name} did not exit`);
+    if (!(await this.gone(p.pid, cx, 20))) throw new Error(`${p.name} did not exit`);
+  }
+
+  // True once process `pid` has ended, looking for up to `secs` seconds.
+  async gone(pid, cx, secs) {
+    for (let k = 0; k < secs * 2; k++) {
+      await cx.sleep(500);
+      if ((await exec("kill", ["-0", String(pid)]).catch(() => null))?.code !== 0) return true;
+    }
+    return false;
   }
 
   // An agent that left during a sleep that stopped: started again in its
@@ -358,6 +374,20 @@ export default class Sleep extends View {
         await this.refresh();
         this.busy = null; this.error = `${shown.name} is waking in another window, or is no longer asleep.`; cx.notify(); return;
       }
+      // An agent whose terminal could not be checked when a sleep stopped:
+      // that terminal is looked at first, and the wake waits while it runs.
+      for (const p of a.cols.flatMap((c) => c.panes).filter((q) => q.check)) {
+        const g = await hc(["get", p.check, "--json"]).catch(() => null);
+        let x = null;
+        try { x = g?.code === 0 ? JSON.parse(g.stdout) : null; } catch { /* below */ }
+        const gone = g && g.code !== 0 && /not.found|no terminal/i.test(`${g.stderr}${g.stdout}`);
+        const idleShell = x && (!x.foreground?.pid || x.foreground.pid === x.pid || SHELLS.has(base(x.foreground.argv?.[0])));
+        if (!gone && !idleShell) {
+          await this.store.release(a.id, a.token).catch(() => {});
+          await this.refresh();
+          this.busy = null; this.error = `${p.name ?? "An agent"} of ${a.name} may still run in ${p.check}; end it there, then wake.`; cx.notify(); return;
+        }
+      }
       const space = spaces().find((sp) => projectOf(sp) === a.from) ?? null;
       const folder = folderOfKey(a.from), machine = String(a.from).slice(0, String(a.from).indexOf(":")) || undefined;
       const create = space ? null : { name: a.space || base(folder) || "~", folder, key: a.from, ...(machine ? { machine } : {}) };
@@ -379,12 +409,22 @@ export default class Sleep extends View {
         run("terminal.kill", { terminal: term });
       }
       const opened = flat.some((x) => x.pane);
+      // Written, or, if it can't be after a few tries, what this wake
+      // started ends: never awake and still claimable at once.
       let saveError = null;
-      try {
-        if (!opened) await this.store.release(a.id, a.token);
-        else if (missed.length) await this.store.narrow(a.id, colsOf(missed), a.token);
-        else await this.store.woke(a.id, a.token);
-      } catch (e) { saveError = String(e?.message ?? e); }
+      const missedNow = missed.map(({ check, ...p }) => p);
+      for (let k = 0; k < 4; k++) {
+        try {
+          if (!opened) await this.store.release(a.id, a.token);
+          else if (missed.length) await this.store.narrow(a.id, colsOf(missedNow), a.token);
+          else await this.store.woke(a.id, a.token);
+          saveError = null; break;
+        } catch (e) { saveError = String(e?.message ?? e); await cx.sleep(1000); }
+      }
+      if (saveError && opened) {
+        for (const pane of ids.flat()) { const term = panes().find((q) => q.pane === pane)?.terminal; if (term) run("terminal.kill", { terminal: term }); }
+        saveError += "; what it opened was ended, so it wakes from here again in 10 minutes";
+      }
       await this.refresh();
       this.busy = null;
       if (failure || missed.length || saveError) {

@@ -6,7 +6,7 @@
 // and kanso-sleep (tabs put to sleep) both use it; kanso-arrange/tabkit.js
 // is the one you edit (`npm run sync:share` copies it, and a test fails
 // when a copy differs).
-import { spaces, panes, shared, setShared, run, home } from "herdr";
+import { spaces, panes, terminals, shared, setShared, run, home } from "herdr";
 
 export const base = (s) => String(s ?? "").split("/").pop().replace(/^-/, "");
 export const tilde = (cwd) => {
@@ -135,12 +135,13 @@ export async function openTab(a, cx, { space = null, create = null, progress = (
     // in the tab that was never counted, or the tab itself when it came
     // too late to be found. So nothing runs that the caller doesn't know of.
     await cx.sleep(3000);
+    // Only a pane running what was asked for and not yet opened: one you
+    // opened in the tab meanwhile is not this opening's to end.
     const counted = new Set(ids.flat());
+    const asked = new Set(flat.slice(ids.flat().length).filter((p) => p.argv).map((p) => JSON.stringify(p.argv)));
+    const argvOf = new Map(terminals().map((t) => [t.address, JSON.stringify(t.argv ?? null)]));
     if (tab) {
-      for (const q of panes().filter((q) => q.tab === tab.id && !counted.has(q.pane))) {
-        if (q.terminal) run("terminal.kill", { terminal: q.terminal });
-        else run("pane.close", { pane: q.pane });
-      }
+      for (const q of panes().filter((q) => q.tab === tab.id && !counted.has(q.pane) && q.terminal && asked.has(argvOf.get(q.terminal)))) run("terminal.kill", { terminal: q.terminal });
     } else for (const t of ours()) run("tab.close", { id: t.id, confirmed: true });
     const err = e instanceof Error ? e : new Error(String(e));
     err.opened = ids;
