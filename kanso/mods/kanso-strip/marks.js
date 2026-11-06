@@ -13,11 +13,9 @@
 // elsewhere. What Kanso saves behind other windows is work, not motion.
 //
 // On battery (shared "kanso.battery", set by kanso-chrome) motion steps
-// instead of gliding: a native spin or loop redraws the whole window about
-// 30 times a second, a stepped frame only when it changes. The ring still
-// turns, in quarter turns a few times a second.
+// instead of gliding where it can do without: a native loop redraws the
+// whole window about 30 times a second. The working ring keeps its spin.
 export const onBattery = () => shared("kanso.battery") === true;
-const ARCS = ["\u25dc", "\u25dd", "\u25de", "\u25df"];
 import { div, svg, image } from "gpui-kit";
 import { terminals, window, shared } from "herdr";
 
@@ -47,9 +45,7 @@ export function glyphs(chord, mac = window()?.platform !== "linux" && window()?.
 
 export function stateMark(t, status, size = 13, { idle = false } = {}) {
   const enso = (name, color) => svg(`${ICONS}${name}.svg`).size(size).flex_none().text_color(color);
-  if (status === "working") return onBattery()
-    ? div().w(size).flex_none().text_size(size).text_color(t.working).frames(ARCS, 160)
-    : enso("working", t.working).spin(TURN);
+  if (status === "working") return enso("working", t.working).spin(TURN);
   if (status === "blocked") return div().size(size).flex_none().rounded_full().bg(t.blocked)
     .text_size(Math.round(size * 0.68)).font_bold().text_color(t.chrome).flex().items_center().justify_center().child("!");
   if (status === "done") return enso("enso", t.done);
