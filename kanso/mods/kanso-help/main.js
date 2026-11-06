@@ -7,10 +7,13 @@
 // `page` in its props picks the tab.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, closeOverlay, keys, openOverlay } from "herdr";
-import { G, tokens, quietTabs, quietLink } from "./ui.js";
+import { theme, props, closeOverlay, keys, openOverlay, appHome } from "herdr";
+import { G, tokens, quietTabs, quietLink, iconButton } from "./ui.js";
+import { Store } from "./store.js";
+import { Share } from "./share.js";
+import { vimShare } from "./vim-card.js";
 import { glyphs } from "./marks.js";
-import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe, step, fewest } from "./keymap.js";
+import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe, LEVELS, step, fewest, bestMove, newTarget, points } from "./keymap.js";
 
 const PAGES = [
   { key: "keys", label: "Keyboard" },
@@ -20,6 +23,8 @@ const PAGES = [
 ];
 const U = 40, GAP = 5; // a key's unit and the space between keys
 const BOARD = { w: 18, h: 8, cell: 28 };
+const ROUND_S = 60, HINT_MS = 2000;
+
 const LIT_MS = 650;
 const MOD_GLYPH = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘" };
 const MOD_WORD = { ctrl: "Control", alt: "Option", shift: "Shift", cmd: "Command" };
@@ -36,18 +41,97 @@ export default class Help extends View {
     this.lists = false; // the lists' layer (j k gg G) instead
     this.picked = "h";
     this.lit = null; // { key, at }: a key just pressed
-    this.at = { x: 2, y: 2 };
-    this.target = this.newTarget();
-    this.moves = 0;
-    this.score = { hits: 0, perfect: 0 };
     this.g = 0;
+    // Your rounds and level live in data/kanso-help/vim.db (store.js).
+    this.store = new Store();
+    this.totals = { bests: {}, rounds: 0, rings: 0, fewest: 0, longest: 0, days: [], first: null };
+    this.share = new Share("kanso-help", `${appHome()}/data/kanso-help/share`);
+    this.setLevel(1, false);
+    cx.spawn(async (cx) => {
+      try {
+        const n = await this.store.level();
+        if (!this.round && n !== this.level.n) this.setLevel(Math.min(LEVELS.length, Math.max(1, n)), false);
+        this.totals = await this.store.totals();
+      } catch (e) { this.say = String(e?.message ?? e); }
+      cx.notify();
+    });
+  }
+  get bests() { return this.totals.bests ?? {}; }
+
+  // The game: a level, a 60 s round that starts on the first move, a ring
+  // to reach, points, a streak of rings reached in the fewest moves.
+  setLevel(n, keep = true) {
+    this.level = LEVELS[n - 1];
+    if (keep) this.store.setLevel(n).catch(() => {});
+    this.at = { x: Math.floor(BOARD.w / 2), y: Math.floor(BOARD.h / 2) };
+    this.round = null; this.over = null; this.count = ""; this.say = null;
+    this.ring();
+  }
+  ring() {
+    this.target = newTarget(this.at, BOARD.w, BOARD.h, this.level);
+    this.need = fewest(this.at, this.target, BOARD.w, BOARD.h, this.level);
+    this.moves = 0;
+    this.idleAt = Date.now();
+  }
+  startRound(cx) {
+    this.round = { at: Date.now(), score: 0, hits: 0, perfect: 0, streak: 0 };
+    this.over = null;
+    const tick = (cx) => {
+      if (!this.round || this.page !== "practice") return;
+      if (Date.now() - this.round.at >= ROUND_S * 1000) { this.endRound(cx); cx.notify(); return; }
+      cx.notify();
+      cx.timer.after(500, tick);
+    };
+    cx.timer.after(500, tick);
+  }
+  endRound(cx) {
+    const r = this.round, n = this.level.n;
+    const record = r.score > (this.bests[n] ?? 0);
+    this.over = { ...r, record };
+    this.round = null;
+    cx.spawn(async (cx) => {
+      try {
+        await this.store.add({ at: r.at, level: n, score: r.score, rings: r.hits, fewest: r.perfect, streak: r.longest ?? r.streak });
+        this.totals = await this.store.totals();
+      } catch (e) { this.say = `Your round could not be kept: ${String(e?.message ?? e)}`; }
+      cx.notify();
+    });
   }
 
-  newTarget() {
-    for (;;) {
-      const t = { x: Math.floor(Math.random() * BOARD.w), y: Math.floor(Math.random() * BOARD.h) };
-      if (t.x !== this.at.x || t.y !== this.at.y) { this.best = fewest(this.at, t, BOARD.w, BOARD.h); return t; }
+  // A practice key: a move of this level (a number first, at the counts
+  // level), else a word on what it does here.
+  practice(e, k, mods, cx) {
+    const ch = e.key_char ?? k;
+    if (this.over && (k === "enter" || k === "space")) { this.over = null; this.ring(); cx.notify(); return true; }
+    if (["left", "right", "up", "down"].includes(k)) { this.say = "Arrows don't count here: h j k l"; cx.notify(); return true; }
+    if (this.level.counts && /^[1-9]$/.test(ch) && !mods.length) { this.count = (this.count + ch).slice(-2); this.light(ch, cx); cx.notify(); return true; }
+    let move = null;
+    if (["h", "j", "k", "l", "0"].includes(ch) && !mods.length) move = ch;
+    else if (ch === "$" || (k === "4" && mods.includes("shift"))) move = "$";
+    else if (k === "g" && mods.includes("shift")) move = "G";
+    else if (k === "g" && !mods.length) {
+      if (Date.now() - this.g < 1000) { move = "gg"; this.g = 0; } else { this.g = Date.now(); this.light("g", cx); cx.notify(); return true; }
     }
+    if (!move) return false;
+    if (!this.level.keys.includes(move)) { this.say = `${move} is for a later level; here: ${this.level.keys.join(" ")}`; this.count = ""; cx.notify(); return true; }
+    if (this.over) { this.over = null; }
+    if (!this.round) this.startRound(cx);
+    const n = this.level.counts && this.count ? Number(this.count) : 1;
+    this.count = ""; this.say = null;
+    this.light(move === "$" ? "4" : move === "gg" || move === "G" ? "g" : move, cx);
+    this.at = step(this.at, move, BOARD.w, BOARD.h, n);
+    this.moves += 1;
+    this.idleAt = Date.now();
+    if (this.at.x === this.target.x && this.at.y === this.target.y) {
+      const r = this.round, fine = this.moves <= this.need;
+      r.score += points(this.moves, this.need, r.streak);
+      r.hits += 1;
+      if (fine) { r.perfect += 1; r.streak += 1; r.longest = Math.max(r.longest ?? 0, r.streak); } else r.streak = 0;
+      this.last = { moves: this.moves, best: this.need, fine };
+      this.ring();
+    }
+    cx.notify();
+    return true;
   }
 
   light(key, cx) {
@@ -61,24 +145,7 @@ export default class Help extends View {
     if (k === "escape") { closeOverlay(props()?.overlay); cx.stop_propagation(); return; }
     const mods = modsOf(e.modifiers);
     if (this.page === "practice") {
-      const ch = e.key_char ?? k;
-      let move = null;
-      if (["h", "j", "k", "l", "0"].includes(ch) && !mods.length) move = ch;
-      else if (ch === "$" || (k === "4" && mods.includes("shift"))) move = "$";
-      else if (k === "g" && mods.includes("shift")) move = "G";
-      else if (k === "g" && !mods.length) { if (Date.now() - this.g < 1000) { move = "gg"; this.g = 0; } else { this.g = Date.now(); this.light("g", cx); cx.notify(); cx.stop_propagation(); return; } }
-      if (!move) return;
-      this.light(move === "$" ? "4" : move === "gg" || move === "G" ? "g" : move, cx);
-      this.at = step(this.at, move, BOARD.w, BOARD.h);
-      this.moves += 1;
-      if (this.at.x === this.target.x && this.at.y === this.target.y) {
-        this.score.hits += 1;
-        if (this.moves <= this.best) this.score.perfect += 1;
-        this.last = { moves: this.moves, best: this.best };
-        this.moves = 0;
-        this.target = this.newTarget();
-      }
-      cx.stop_propagation(); cx.notify();
+      if (this.practice(e, k, mods, cx)) cx.stop_propagation();
       return;
     }
     if (this.page !== "keys") return;
@@ -163,34 +230,81 @@ export default class Help extends View {
   }
 
   practicePage(t, c) {
-    const cell = BOARD.cell;
-    const grid = v_flex().gap(3).p(12).rounded(12).bg(c.text + "05").border_1().border_color(c.border)
+    const lv = this.level, cell = BOARD.cell, r = this.round, now = Date.now();
+    const left = r ? Math.max(0, ROUND_S - Math.floor((now - r.at) / 1000)) : ROUND_S;
+    const hint = r && now - this.idleAt >= HINT_MS ? bestMove(this.at, this.target, BOARD.w, BOARD.h, lv) : null;
+    const hintKey = hint ? hint.replace(/^\d+/, "") : null;
+    const ink = t.accent_foreground ?? c.canvas;
+    const levels = h_flex().gap(G.sm).flex_wrap().children(LEVELS.map((L) => {
+      const on = L.n === lv.n, best = this.bests[L.n];
+      return h_flex().id(`level-${L.n}`).h(30).px(10).gap(G.sm).items_center().rounded(7).cursor_pointer()
+        .border_1().border_color(on ? c.accent : c.border).bg(on ? c.accent + "24" : c.text + "06")
+        .hover((s) => s.border_color(c.accent))
+        .on_click((_e, cx) => { this.setLevel(L.n); cx.notify(); })
+        .child(div().text_size(11).font_semibold().text_color(on ? c.accent : c.dim).child(String(L.n)))
+        .child(div().text_size(12.5).font_medium().text_color(on ? c.text : c.muted).child(L.name))
+        .when(best != null, (el) => el.child(div().text_size(11).text_color(c.dim).child(String(best))));
+    }));
+    const board = v_flex().gap(3).p(12).rounded(12).bg(c.text + "05").border_1().border_color(c.border)
       .children(Array.from({ length: BOARD.h }, (_, y) => h_flex().gap(3).children(Array.from({ length: BOARD.w }, (_, x) => {
         const here = x === this.at.x && y === this.at.y, goal = x === this.target.x && y === this.target.y;
         return div().size(cell).rounded(5)
           .bg(here ? c.accent : c.text + "08")
           .when(goal && !here, (el) => el.border_2().border_color(c.accent));
       }))));
-    const hint = (key, word) => {
-      const lit = this.lit?.key === key;
-      return h_flex().gap(G.sm).items_center()
-        .child(div().h(30).min_w(30).px(8).rounded(6).border_1().border_color(lit ? c.accent : c.border).bg(lit ? c.accent : c.text + "08")
-          .flex().items_center().justify_center().text_size(13).font_semibold().text_color(lit ? (t.accent_foreground ?? c.canvas) : c.text)
-          .child(key === "4" ? "$" : key === "g" ? "g" : key))
-        .child(div().text_size(12).text_color(c.muted).child(word));
-    };
-    const last = this.last;
-    return v_flex().gap(G.lg).items_start()
-      .child(div().text_size(13).line_height(1.5).text_color(c.muted)
-        .child("Move the block onto the ring with vim's keys. Try the fewest moves: 0 and $ jump to the ends of a row, gg and G to the first and last row."))
-      .child(grid)
-      .child(h_flex().gap(G.xl).flex_wrap()
-        .child(hint("h", "left")).child(hint("j", "down")).child(hint("k", "up")).child(hint("l", "right"))
-        .child(hint("0", "row start")).child(hint("4", "row end")).child(hint("g", "gg top, G bottom")))
-      .child(h_flex().gap(G.xl).text_size(12.5).text_color(c.muted)
-        .child(div().child(`Reached ${this.score.hits}`))
-        .child(div().child(`In the fewest moves ${this.score.perfect}`))
-        .child(div().child(last ? `Last: ${last.moves} ${last.moves === 1 ? "move" : "moves"}, best ${last.best}` : `This one: ${this.best} at best`)));
+    // The home row as your right hand sits on it: which finger, which way.
+    const FINGER = { h: ["←", "index, reach"], j: ["↓", "index"], k: ["↑", "middle"], l: ["→", "ring"] };
+    const home = h_flex().gap(6).items_start().children(["a", "s", "d", "f", "g", "h", "j", "k", "l", ";"].map((key) => {
+      const vim = FINGER[key], usable = lv.keys.includes(key), lit = this.lit?.key === key, hinted = hintKey === key;
+      return v_flex().gap(4).items_center()
+        .child(div().w(40).h(40).rounded(7).border_1()
+          .border_color(lit ? c.accent : hinted ? c.accent : usable ? c.accent + "70" : c.border)
+          .bg(lit ? c.accent : hinted ? c.accent + "40" : usable ? c.accent + "1c" : c.text + "06")
+          .flex().items_center().justify_center().text_size(14).font_semibold()
+          .text_color(lit ? ink : usable || vim ? c.text : c.dim)
+          .child(key.toUpperCase()))
+        .child(div().h(14).text_size(12).text_color(vim ? (usable ? c.accent : c.dim) : c.canvas).child(vim ? vim[0] : "·"))
+        .child(div().h(12).text_size(9.5).text_color(c.dim).child(vim ? vim[1] : ""));
+    }));
+    const jumps = lv.edges ? h_flex().gap(G.md).children([["0", "row start", "0"], ["$", "row end", "4"], ["gg", "first row", "g"], ["G", "last row", "g"]].map(([k2, word, cap]) => {
+      const lit = this.lit?.key === cap && (k2 !== "G" || true), hinted = hint === k2;
+      return h_flex().gap(6).items_center()
+        .child(div().h(28).min_w(30).px(7).rounded(6).border_1().border_color(lit || hinted ? c.accent : c.border).bg(lit ? c.accent : hinted ? c.accent + "40" : c.text + "08")
+          .flex().items_center().justify_center().text_size(12.5).font_semibold().text_color(lit ? ink : c.text).child(k2))
+        .child(div().text_size(11.5).text_color(c.muted).child(word));
+    })) : null;
+    const stat = (label, value, strong = false) => v_flex().gap(2)
+      .child(div().text_size(10.5).text_color(c.dim).child(label))
+      .child(div().text_size(strong ? 20 : 15).font_semibold().text_color(strong ? c.accent : c.text).child(String(value)));
+    const o = this.over;
+    const shareable = (this.totals.rounds ?? 0) > 0;
+    return v_flex().gap(G.lg)
+      .child(h_flex().gap(G.md).items_center()
+        .child(div().flex_1().child(levels))
+        .when(shareable, (el) => el.child(iconButton("help-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }))))
+      .when(shareable && this.share.open, (el) => el.child(this.share.row(c, () => ({ ...vimShare(this.totals), name: "vim", title: "Learning vim" }),
+        "Your best round, rings, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
+      .child(div().text_size(12.8).line_height(1.5).text_color(c.muted).child(lv.tip))
+      .child(h_flex().gap(G.xl).items_start()
+        .child(v_flex().gap(G.md)
+          .child(board)
+          // The time left, as a line that empties.
+          .child(div().w_full().h(3).rounded_full().bg(c.text + "10")
+            .child(div().h(3).rounded_full().bg(c.accent).w_full().when(Boolean(r), (el) => el.w(Math.round((BOARD.w * (cell + 3) + 21) * left / ROUND_S))))))
+        .child(v_flex().gap(G.lg).min_w(120)
+          .child(stat(r ? "Score" : o ? "Last round" : "Score", r ? r.score : o ? o.score : 0, true))
+          .child(stat("Time", r ? `${left} s` : `${ROUND_S} s`))
+          .child(stat("Streak", r ? r.streak : 0))
+          .child(stat("Best", this.bests[lv.n] ?? "–"))))
+      .child(home)
+      .when(Boolean(jumps), (el) => el.child(jumps))
+      .child(div().h(18).text_size(12.5).text_color(this.say ? c.text : c.dim)
+        .child(o ? `Round over: ${o.score} points, ${o.hits} rings, ${o.perfect} in the fewest moves${o.record ? ". A new best." : "."} Move to play again.`
+          : this.say ? this.say
+          : this.count ? `${this.count}…`
+          : hint ? `Try ${hint}`
+          : !r ? "Make a move to start: 60 seconds, as many rings as you can."
+          : this.last ? (this.last.fine ? `Fewest moves: ${this.last.moves}. Streak ${r.streak}.` : `${this.last.moves} moves; ${this.last.best} would do.`) : `This one takes ${this.need} at best.`));
   }
 
   // A heading and its lines; `k` draws a key inline.
