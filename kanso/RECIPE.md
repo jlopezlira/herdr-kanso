@@ -769,15 +769,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     drafted as "Review the changes on branch <b> in <folder>." (plus its
     open pull request), and Send (Cmd+Enter): `hc send <terminal> <text>`
     (pasted, then Enter), refused for a blocked agent, then `agent.focus`.
-  - `kanso-arrange`: a dialog (480 wide) of every arrangement, this
-    project's first, then the other projects' (newest first, each named by
-    the folder most of its panes ran in). They are rows of a SQLite database
-    (`data/kanso-arrange/arrange.db` through `sqlite3`, store.js), keyed by
-    the space's machine and folder and the name, so saving under a name the
-    project has overwrites it; the earlier `data/kanso-arrange.json` is read
-    in once. Overwrite on a row opens the save view for that row's project
-    and name. One from another project opens with every pane's folder set
-    to the space's folder.
+  - `kanso-arrange`: a dialog (480 wide) of all arrangements (SQLite
+    `data/kanso-arrange/arrange.db`, keyed by project and name); another
+    project's opens in the space's folder.
     Save this tab reads each pane's `hc get --json` foreground argv and
     cwd (a shell at its prompt is a shell; Claude Code's --resume, -r,
     --session-id, --continue, -c and Codex's `resume <id>` are dropped)
