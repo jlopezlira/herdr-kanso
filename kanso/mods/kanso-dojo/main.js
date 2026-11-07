@@ -1,16 +1,4 @@
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// A place to practice vim's moves until the fingers know them, with Hachi,
-// a pixel shiba. Nine levels, from h and l alone on a board to w b
-// e, f t, 0 ^ $ and gg G on real lines of code. A round is ten targets:
-// bring the cursor onto each, in the fewest moves for points and a streak;
-// then the round's result, and Play again, Next level or Leave. After two
-// seconds still, the key that gets there lights up.
-//
-// It opens as a window (kansō help, or `mod.open` kanso-dojo), so a click
-// elsewhere or a stray Esc never closes it: End round stops a round, and
-// Leave (or Esc twice) closes the dōjō, asking first. Rounds and the level you are on live in
-// data/kanso-dojo/dojo.db (store.js); Share makes a card of your numbers.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
@@ -22,7 +10,7 @@ import { hachi } from "./mascot.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
 const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, ARM_MS = 3000, SLEEP_MS = 20000;
-const CELL = 30; // a board cell
+const CELL = 30;
 const FINGER = { h: ["←", "index, reach"], j: ["↓", "index"], k: ["↑", "middle"], l: ["→", "ring"] };
 
 export default class Dojo extends View {
@@ -45,7 +33,6 @@ export default class Dojo extends View {
       } catch (e) { this.say = String(e?.message ?? e); }
       cx.notify();
     });
-    // The clock and the hint: a look twice a second, only while it matters.
     cx.timer.every(500, (cx) => { if (this.round || this.lit || this.armed) cx.notify(); });
   }
 
@@ -70,15 +57,12 @@ export default class Dojo extends View {
     this.over = null; this.record = false;
   }
 
-  // The round's end: all ten targets reached (kept, and a best when it
-  // beats one), or stopped by End round (`kept` false: not counted).
   endRound(cx, kept = true) {
     const r = this.round, n = this.level.n;
     if (!r) return;
     this.round = null;
-    r.ms = Date.now() - r.at;
     this.record = kept && r.score > 0 && r.score > (this.bests[n] ?? 0);
-    this.over = { ...r, kept };
+    this.over = { ...r, ms: Date.now() - r.at, kept };
     this.pending = ""; this.say = null;
     if (this.level.world === "text") { this.snippet += 1; this.world = textWorld(this.snippet); this.at = { x: 0, y: 0 }; this.next(); }
     if (!kept) return;
@@ -97,8 +81,6 @@ export default class Dojo extends View {
     cx.timer.after(LIT_MS, (cx) => { if (this.lit?.at === at) { this.lit = null; cx.notify(); } });
   }
 
-  // A key: Esc (twice) leaves, a count or a first g or f waits for more,
-  // a motion moves. Arrows are not vim's.
   key(e, cx) {
     const k = String(e.key ?? "").toLowerCase(), m = e.modifiers ?? {};
     if (m.platform || m.control || m.alt) return;
@@ -119,14 +101,15 @@ export default class Dojo extends View {
     if (!ch || ch.length !== 1) return;
     this.light(ch.toLowerCase(), cx);
     const lv = this.level, p = this.pending;
-    let motion = null;
-    if (/^[ftFT]$/.test(p)) motion = p + ch;
-    else if (p === "g") { if (ch === "g") motion = "gg"; }
-    else if (/^\d+$/.test(p) && /[hjkl]/.test(ch)) motion = p + ch;
-    else if (lv.counts && /[1-9]/.test(ch)) { this.pending = (p + ch).slice(-1); cx.notify(); return; }
-    else if (ch === "g" && lv.motions.includes("gg")) { this.pending = "g"; cx.notify(); return; }
-    else if (/^[ftFT]$/.test(ch) && lv.motions.includes(ch)) { this.pending = ch; cx.notify(); return; }
-    else motion = ch;
+    const step = /^[ftFT]$/.test(p) ? { motion: p + ch }
+      : p === "g" ? { motion: ch === "g" ? "gg" : null }
+      : /^\d+$/.test(p) && /[hjkl]/.test(ch) ? { motion: p + ch }
+      : lv.counts && /[1-9]/.test(ch) ? { wait: (p + ch).slice(-1) }
+      : ch === "g" && lv.motions.includes("gg") ? { wait: "g" }
+      : /^[ftFT]$/.test(ch) && lv.motions.includes(ch) ? { wait: ch }
+      : { motion: ch };
+    if ("wait" in step) { this.pending = step.wait; cx.notify(); return; }
+    const { motion } = step;
     this.pending = "";
     const base = motion.replace(/^[1-9]\d*/, "")[0] === "g" ? "gg" : motion.replace(/^[1-9]\d*/, "")[0];
     if (!lv.motions.includes(base)) {
@@ -137,7 +120,6 @@ export default class Dojo extends View {
     this.play(motion, cx);
   }
 
-  // The round's end screen's choices.
   again() { this.over = null; this.record = false; this.next(); }
 
   play(motion, cx) {
@@ -147,12 +129,10 @@ export default class Dojo extends View {
     this.moves += 1;
     this.idleAt = Date.now();
     if (same(this.at, this.target)) {
-      const r = this.round, fine = this.moves <= this.need;
-      r.score += points(this.moves, this.need, r.streak);
-      r.hits += 1;
-      if (fine) { r.perfect += 1; r.streak += 1; r.longest = Math.max(r.longest, r.streak); } else r.streak = 0;
+      const r = this.round, fine = this.moves <= this.need, streak = fine ? r.streak + 1 : 0;
+      this.round = { ...r, score: r.score + points(this.moves, this.need, r.streak), hits: r.hits + 1, perfect: r.perfect + (fine ? 1 : 0), streak, longest: fine ? Math.max(r.longest, streak) : r.longest };
       this.last = { moves: this.moves, need: this.need, fine };
-      if (r.hits >= TARGETS) { this.endRound(cx); cx.notify(); return; }
+      if (this.round.hits >= TARGETS) { this.endRound(cx); cx.notify(); return; }
       this.next();
     }
     cx.notify();
@@ -166,7 +146,6 @@ export default class Dojo extends View {
     return "calm";
   }
 
-  // Hachi's line: what the game needs you to know now.
   line() {
     const r = this.round, o = this.over, now = Date.now();
     if (now - this.armed <= ARM_MS) return "Press Esc again to leave the dōjō.";
@@ -182,7 +161,6 @@ export default class Dojo extends View {
     return `This one takes ${this.need} at best.`;
   }
 
-  // The board of cells, the cursor filled, the target ringed.
   grid(c, ink) {
     const { w, h } = this.world;
     return v_flex().gap(3).children(Array.from({ length: h }, (_, y) => h_flex().gap(3).children(Array.from({ length: w }, (_, x) => {
@@ -191,7 +169,6 @@ export default class Dojo extends View {
     }))));
   }
 
-  // The lines of code, one cell per letter, as a terminal shows them.
   text(c, ink) {
     const mono = settings()?.font_family ?? "JetBrains Mono";
     return v_flex().gap(4).children(this.world.lines.map((line, y) => h_flex().h(26).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
@@ -203,7 +180,6 @@ export default class Dojo extends View {
     }))));
   }
 
-  // A key of the level as a cap, with what it does; lit when pressed or hinted.
   cap(c, ink, key, word, hinted, sub = null) {
     const lit = this.lit?.key === key.toLowerCase();
     return v_flex().gap(3).items_center()
@@ -241,7 +217,6 @@ export default class Dojo extends View {
         .child(div().text_size(11).text_color(c.dim).child(b != null ? String(b) : ""));
     };
     const leaving = now - this.armed <= ARM_MS;
-    // A button anyone can see: bordered, its word in full.
     const button = (id, text, act, { strong = false, warn = false } = {}) => div().id(id).h(32).px(14).rounded(8).flex().items_center().cursor_pointer()
       .border_1().border_color(strong ? c.accent : warn ? c.accent + "90" : c.border).bg(strong ? c.accent : warn ? c.accent + "24" : c.text + "08")
       .text_size(12.5).font_semibold().text_color(strong ? ink : c.text).hover((s) => s.opacity(0.85))
@@ -251,7 +226,6 @@ export default class Dojo extends View {
     const leave = button("dojo-leave", leaving ? "Click again to leave" : "Leave the dōjō",
       () => { if (Date.now() - this.armed <= ARM_MS) closeOverlay(props()?.overlay); else this.armed = Date.now(); }, { warn: leaving });
     const o = this.over;
-    // The round's result, in the board's place.
     const result = o ? v_flex().gap(G.lg).p(24).rounded(12).bg(c.accent + "10").border_1().border_color(c.accent + "50")
       .child(div().text_size(13).text_color(c.muted).child(o.kept ? `Level ${lv.n}: ${lv.name}, done` : "Round stopped"))
       .child(h_flex().gap(G.xl).items_end()
@@ -267,7 +241,6 @@ export default class Dojo extends View {
         .child(leave)) : null;
     return v_flex().id("kanso-dojo").track_focus(this.handle).size_full().min_h(0).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
-      // The title bar: drag the window by it; × asks before it closes.
       .child(h_flex().h(44).px(16).gap(G.md).items_center().border_b_1().border_color(c.border)
         .child(svg("mods/kanso-chrome/icons/enso.svg").size(16).text_color(c.accent))
         .child(div().text_size(14).font_semibold().child("hjkl dōjō"))
@@ -279,7 +252,6 @@ export default class Dojo extends View {
         .child(leave))
       .child(h_flex().flex_1().min_h(0).items_start().gap(G.xl).p(20)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        // Hachi, the numbers, the levels.
         .child(v_flex().w(196).flex_none().gap(G.lg)
           .child(h_flex().gap(G.md).items_end()
             .child(hachi(t, { mood: this.mood(), px: 8 }))
@@ -291,7 +263,6 @@ export default class Dojo extends View {
             .child(stat("Streak", r ? r.streak : 0))
             .child(stat("Best", best ?? "–")))
           .child(v_flex().gap(2).children(LEVELS.map(levelRow))))
-        // The board or the code, the time, the line, the keys.
         .child(v_flex().flex_1().min_w(0).gap(G.lg)
           .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, () => ({ ...dojoShare(this.totals), name: "dojo", title: "hjkl dōjō" }),
             "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
@@ -299,7 +270,6 @@ export default class Dojo extends View {
           .when(Boolean(result), (el) => el.child(result))
           .when(!result, (el) => el.child(div().p(14).rounded(12).bg(c.text + "05").border_1().border_color(c.border)
             .child(lv.world === "grid" ? this.grid(c, ink) : this.text(c, ink))))
-          // The round's ten targets: reached ones filled.
           .child(h_flex().gap(6).items_center()
             .children(Array.from({ length: TARGETS }, (_, i) => div().h(6).flex_1().rounded_full().bg(i < done ? c.accent : c.text + "14")))
             .child(div().pl(G.sm).text_size(12).text_color(c.muted).child(`${done} / ${TARGETS}`)))

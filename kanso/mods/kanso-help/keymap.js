@@ -1,7 +1,4 @@
 // kansō help, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The keyboard as data: its rows of keys, what each chord in keys.json
-// does in words, and which keys do something with a set of modifiers held.
 
 // A Mac keyboard, US layout, in rows; `w` is a key's width in units.
 export const ROWS = [
@@ -14,39 +11,34 @@ export const ROWS = [
 export const MODIFIERS = ["ctrl", "alt", "shift", "cmd"];
 export const CAP = { backspace: "⌫", tab: "⇥", capslock: "⇪", enter: "↩", shift: "⇧", ctrl: "⌃", alt: "⌥", cmd: "⌘", space: "", left: "←", right: "→", up: "↑", down: "↓", escape: "esc" };
 
-// What macOS types with shift on a US keyboard, back to the key and shift:
-// keys.json may say "cmd-}" for "cmd-shift-]".
+// keys.json may say "cmd-}" for "cmd-shift-]": a typed char goes back to its key plus shift.
 const SHIFTED = { "~": "`", "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0", "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/" };
 
-// "cmd-shift--" as { mods: ["cmd", "shift"], key: "-" }.
 export function parseChord(chord) {
   const parts = String(chord ?? "").toLowerCase().split("-");
-  let key = parts.pop();
-  if (key === "" && parts.length && parts[parts.length - 1] === "") { parts.pop(); key = "-"; }
-  else if (key === "") key = "-";
-  const mods = parts.filter((p) => p && ["ctrl", "alt", "shift", "cmd", "fn"].includes(p));
-  if (SHIFTED[key]) { key = SHIFTED[key]; if (!mods.includes("shift")) mods.push("shift"); }
-  if (key === "return") key = "enter";
-  if (key === "esc") key = "escape";
+  const last = parts.at(-1);
+  // "cmd--" ends in two empty parts: the key is the dash, both are taken.
+  const dash = last === "" && parts.length > 1 && parts.at(-2) === "";
+  const typed = last === "" ? "-" : last;
+  const held = parts.slice(0, dash ? -2 : -1).filter((p) => p && ["ctrl", "alt", "shift", "cmd", "fn"].includes(p));
+  const shifted = SHIFTED[typed];
+  const mods = shifted && !held.includes("shift") ? [...held, "shift"] : held;
+  const base = shifted ? shifted : typed;
+  const key = base === "return" ? "enter" : base === "esc" ? "escape" : base;
   return { mods: MODIFIERS.filter((m) => mods.includes(m)), key };
 }
 export const sameMods = (a, b) => a.length === b.length && a.every((m) => b.includes(m));
 
-// What a key does with `mods` held, from keys() (Herdr's bindings with the
-// person's own): key -> { action, section, chord }. The kansō layout's keys
-// win over the global ones, as they do in Herdr; keys handed to the
-// terminal and the panels' own sections are left out.
+// Precedence mirrors Herdr's own: the kansō layout's keys win over the global ones.
 export function layer(bindings, mods) {
-  const out = new Map();
   const rank = (s) => (s === "layout:kanso" ? 2 : s === "global" ? 1 : 0);
-  for (const b of bindings ?? []) {
-    if (!rank(b.section) || !b.action || b.action === "terminal" || String(b.action).startsWith("send:")) continue;
+  const hits = (bindings ?? []).flatMap((b) => {
+    if (!rank(b.section) || !b.action || b.action === "terminal" || String(b.action).startsWith("send:")) return [];
     const c = parseChord(b.keys);
-    if (!sameMods(c.mods, mods)) continue;
-    const had = out.get(c.key);
-    if (!had || rank(b.section) > rank(had.section)) out.set(c.key, { action: b.action, section: b.section, chord: b.keys });
-  }
-  return out;
+    return sameMods(c.mods, mods) ? [{ key: c.key, does: { action: b.action, section: b.section, chord: b.keys } }] : [];
+  });
+  const winner = (key) => hits.filter((h) => h.key === key).reduce((had, h) => (rank(h.does.section) > rank(had.does.section) ? h : had)).does;
+  return new Map([...new Set(hits.map((h) => h.key))].map((key) => [key, winner(key)]));
 }
 
 // The keys of every kansō list and menu (listkeys.js), as a layer of its own.
@@ -62,7 +54,6 @@ export const LIST_LAYER = new Map([
 ]);
 export const LIST_SHIFT = new Map([["g", { action: "list:last", chord: "shift-g" }]]);
 
-// An action in words.
 const WORDS = {
   "kanso-strip.go-left": "Pane to the left", "kanso-strip.go-right": "Pane to the right", "kanso-strip.go-up": "Pane above", "kanso-strip.go-down": "Pane below",
   "kanso-strip.vim-left": "Pane to the left, or the sidebar's list", "kanso-strip.vim-right": "Pane to the right", "kanso-strip.vim-up": "Pane above", "kanso-strip.vim-down": "Pane below",

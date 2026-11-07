@@ -203,7 +203,7 @@ test("guard panel: agents grouped, estimate, batch progress", async () => {
   assert.equal(m.parseBatch(JSON.stringify({ at: now, total: 0, done: [], finished: true, finishedAt: now }), now).total, 0);
   const cut = m.parseBatch(JSON.stringify({ at: now - 7 * 60_000, beat: now - 6 * 60_000, total: 3, done: [], finished: false }), now);
   assert.equal(cut.interrupted, true);
-  assert.deepEqual(m.groupAgents(agents, "t9").ready.batchable.map((a) => a.pid), [2, 1]);
+  assert.deepEqual(m.groupAgents(agents, "t9").batchable.map((a) => a.pid), [2, 1]);
 });
 
 test("guard panel: stale agents to close, oldest first, never the focused one", async () => {

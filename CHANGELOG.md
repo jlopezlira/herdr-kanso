@@ -8,6 +8,28 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.6.0] - 2026-11-07
+
+### Added
+
+- Every terminal has a name in Herdr, whatever its program (Claude Code, Codex, Qwen Code, a shell): the sidebar writes the name it shows onto each terminal as the label `kanso.shown`, unique ("Claude Code 2" for a second one), and its project as `kanso.project`, so any agent finds any other with Herdr alone (`hc ls --label kanso.shown=Lead`, `hc ls --label kanso.project=herdr-kanso`) and talks to it with `hc send`. Each terminal also gets its own id once (`kanso.id`), so an agent with no conversation Kanso can read is still known.
+- An agent belongs to a project, whatever space its terminal was opened in: Move to project on its menu in the sidebar (and Back to where it runs). The sidebar shows it under that project in every view, and it stays there across restarts, sleep and wake.
+- Send to an agent lists every agent of any model, with or without a pane, by its name, grouped by project with yours first, and finds one by name or project as you type. A project's heading sends to all of its agents at once; one waiting on its own question is skipped and named.
+- An agent you sent a message to shows "Message from" whoever sent it in the sidebar, until you open it.
+
+### Changed
+
+- The left nav keeps everything in one SQLite database, data/kanso/kanso.db: each agent by its conversation (or its terminal's id) with its name, project, place and status, what sleeps, the spaces and the sidebar's choices. What panel.db and Sleep's sleep.db held is taken in once.
+- Asleep is a status like working, idle or done: Status lists it in its own section, with the moon.
+- Every mod is written without mutation (no let or var, nothing changed in place but a view's own state), checked by a test.
+
+### Fixed
+
+- An agent woken wakes in the space it slept in, never in another space that shares its folder (several spaces on one folder no longer mix their agents).
+- A wake never starts a conversation that already runs, never types into or ends a program you started in that terminal meanwhile, and never closes a space or tab it did not make.
+- An agent keeps the name you gave it, by its conversation, not by the terminal it happens to be in.
+- Every scrolling list and panel scrolls: the sidebar, Send to an agent, Sleep, Arrangements, Open with, kansō settings and help, the panels (pull request, ports, worktrees, Shipped, Spend, Memory), the Markdown preview and its tables, and Spend's menus. Their rows no longer shrink to fit, so what does not fit scrolls instead of being squeezed or cut.
+- An agent's menu keeps its own items in view however many projects there are: four show under Move to project, the rest scroll.
 ## [3.5.1] - 2026-11-07
 
 ### Fixed

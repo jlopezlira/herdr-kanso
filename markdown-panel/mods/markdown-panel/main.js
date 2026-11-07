@@ -1,14 +1,6 @@
 // Markdown panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// A Markdown file in a window over any layout: formatted, and edited where
-// it reads (double-click a block; a table as a grid of cells), saved as you
-// go without overwriting what an agent wrote meanwhile. It opens when a .md
-// file is opened from outside Herdr (Cmd-click on a path in a terminal,
-// Finder) once Kanso Markdown is the app for .md files (markdown-handler.sh):
-// that app leaves the path in data/kanso-open and opens this mod. Opened by
-// hand (mod.open), it lists the Markdown files in the focused pane's folder.
-// The window remembers where you drop it.
-// doc.js and blocks.js are copies of Kanso's (kanso-panel); edit those.
+// markdown-handler.sh leaves .md paths opened from outside in data/kanso-open; watchOpens picks them up.
+// doc.js and blocks.js are synced copies of kanso-panel's; edit those.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
@@ -17,21 +9,19 @@ import { MarkdownDoc, tildePath } from "./doc.js";
 const ICONS = "mods/markdown-panel/icons";
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
-const nameOf = (path) => path.split(/[\\/]/).pop();
+const nameOf = (path) => path.split(/[\\/]/).at(-1);
 const REMOTE_READ_MS = 3000;
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
   const r = await exec("sh", ["-c", 'for f in "$1"/*.path; do [ -f "$f" ] || continue; cat "$f"; printf "\\0"; rm -f "$f"; done', "sh", dir]);
   const paths = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter((p) => p.startsWith("/"));
-  return paths.pop() ?? null;
+  return paths.at(-1) ?? null;
 }
 
-// Markdown files under a folder, nearest first: what git tracks, else a
-// shallow look (no node_modules), at most 40.
 export function markdownIn(listing) {
   return listing.split("\n").map((l) => l.trim()).filter((l) => /\.(md|markdown|mdx)$/i.test(l))
-    .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)).slice(0, 40);
+    .toSorted((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)).slice(0, 40);
 }
 
 // The focused pane's machine (null: this one) and folder. A pane on an SSH
@@ -95,7 +85,6 @@ export default class MarkdownPanel extends View {
     });
   }
 
-  // The file is read again on every change in its folder, while it is shown.
   // Another machine's folder can't be watched from here: read it every few seconds.
   watch(path, cx) {
     const doc = this.doc, dir = folderOf(path);
@@ -116,7 +105,6 @@ export default class MarkdownPanel extends View {
     });
   }
 
-  // Back to the list of this folder's Markdown files.
   back(cx) {
     const doc = this.doc;
     if (!doc) return;
@@ -151,7 +139,7 @@ export default class MarkdownPanel extends View {
     if (files === null) return div().p(16).text_size(12.5).text_color(t.dim).child("Looking for Markdown…");
     if (!files.length) return div().p(16).text_size(12.5).text_color(t.dim).child("No Markdown files in this folder. Cmd-click a .md path in a terminal to read it here.");
     return div().id("md-files").flex_1().min_h(0).overflow_y_scrollbar().p(6)
-      .children(files.map((f, i) => h_flex().id(`md-file-${i}`).h(30).px(10).gap(8).items_center().rounded(6).cursor_pointer()
+      .children(files.map((f, i) => h_flex().id(`md-file-${i}`).flex_none().h(30).px(10).gap(8).items_center().rounded(6).cursor_pointer()
         .hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.open(`${this.folder}/${f}`, cx, this.on))
         .child(div().flex_none().truncate().child(nameOf(f)))
         .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(f.includes("/") ? folderOf(f) : ""))));

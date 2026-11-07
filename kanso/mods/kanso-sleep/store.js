@@ -1,142 +1,130 @@
-// Sleep, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// Where sleeping tabs are kept: a local SQLite database
-// (data/kanso-sleep/sleep.db, through the sqlite3 command), one row per tab,
-// keyed by the project it sleeps in and its name. Each row also carries an
-// id of its own (`$.id` in its layout) that no other row ever gets: every
-// change after it is written goes by that id, so a window holding an old
-// copy can never touch a newer tab that took the same name. A row is written
-// `pending` before its agents leave and settled once they have; a wake
-// claims it (`waking`, with a token of that wake) so one window at a time
-// wakes it, and only that wake may finish it.
+// Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
+// Shared "kanso.asleep" is only a copy of the database, for the other windows to draw at once.
 import { exec, appHome } from "herdr";
 import { programOf } from "./tabkit.js";
+import { Kdb, STALE_MS, newId } from "./kdb.js";
 
-export const STORE_DIR = "data/kanso-sleep";
-export const STALE_MS = 10 * 60_000; // a sleep or wake that long under way stopped half way
+export { STALE_MS };
+const json = (text, fallback) => { try { return text == null ? fallback : JSON.parse(text); } catch { return fallback; } };
+const agentsOf = (cols) => cols.flatMap((c) => c.panes).filter((p) => p.resume)
+  .map((p) => ({ conversation: p.resume, given: p.given ?? null, cwd: p.cwd ?? null, tab: p.tab ?? null, pos: p.pos ?? null }));
+const keptOf = (cols) => cols.flatMap((c) => c.panes).map((p) => p.resume).filter(Boolean);
+const busyAt = (at, now) => Number(at) > now - STALE_MS;
 
-export const sqlText = (s) => `'${String(s ?? "").replace(/'/g, "''")}'`;
-const int = (n) => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : 0);
-export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-
-export const SCHEMA = `CREATE TABLE IF NOT EXISTS asleep(
-  project TEXT NOT NULL, name TEXT NOT NULL, layout TEXT NOT NULL, saved INTEGER NOT NULL,
-  PRIMARY KEY(project, name));
-UPDATE asleep SET layout=json_set(layout,'$.id',lower(hex(randomblob(8)))) WHERE json_extract(layout,'$.id') IS NULL;`;
-
-// A tab's row: what it opens (columns, panes, each Claude agent's
-// conversation) as JSON. Never over a row of that name.
-export function insertSql(project, a) {
-  const layout = JSON.stringify({ id: a.id, per: a.per ?? null, cols: a.cols ?? [], ...(a.space ? { space: a.space } : {}), ...(a.into ? { into: a.into } : {}), ...(a.pending ? { pending: a.pending } : {}) });
-  return `INSERT OR IGNORE INTO asleep(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())}) RETURNING name;`;
-}
-const byId = (id) => `json_extract(layout,'$.id')=${sqlText(id)}`;
-
-// Rows as tabs, each with the project it sleeps in (`from`), newest first.
 export function rowsOf(rows) {
-  const out = [];
-  for (const r of rows ?? []) {
-    let l;
-    try { l = JSON.parse(r.layout); } catch { continue; }
-    if (!Array.isArray(l?.cols)) continue;
-    out.push({ id: l.id ?? null, from: r.project, name: r.name, per: l.per ?? null, cols: l.cols, saved: Number(r.saved) || 0,
-      ...(l.space ? { space: l.space } : {}), ...(l.into ? { into: l.into } : {}), ...(l.pending ? { pending: l.pending } : {}), ...(l.waking ? { waking: l.waking } : {}) });
-  }
-  return out.sort((a, b) => b.saved - a.saved);
+  return (rows ?? []).flatMap((r) => {
+    const l = json(r.layout, null);
+    if (!Array.isArray(l?.cols)) return [];
+    return [{ id: r.id, from: r.project, name: r.name, per: l.per ?? null, cols: l.cols, saved: Number(r.saved) || 0, space: r.space_name ?? null, spaceId: r.space_id ?? null,
+      into: json(r.into_tab, null), agents: r.agents ?? [], ...(r.pending || r.pending_at ? { pending: Number(r.pending_at) || 0 } : {}), ...(r.waking ? { waking: Number(r.waking_at) || 0 } : {}) }];
+  }).toSorted((a, b) => b.saved - a.saved);
 }
-// Not going to sleep or waking right now, or that was so long ago it
-// stopped half way (then it shows again, to be woken).
-export const idle = (a, now = Date.now()) => !(a.pending > now - STALE_MS) && !(Number(String(a.waking ?? "").split(":")[0]) > now - STALE_MS);
+// One that stopped half way shows again once its hold goes stale, to be woken.
+export const idle = (a, now = Date.now()) => !busyAt(a.pending, now) && !busyAt(a.waking, now);
 
-// What the sidebar shows of a row (shared "kanso.asleep", written by Sleep
-// and by the sidebar from this same file): each pane that sleeps, by the
-// name it went by and the terminal it ran in, so it keeps its place.
-// `busy`: going to sleep or waking right now.
 export function shownOf(a, now = Date.now()) {
-  return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, into: a.into ?? null, busy: !idle(a, now),
-    agents: a.cols.flatMap((c) => c.panes).map((p) => ({ name: p.name || programOf(p.argv), terminal: p.terminal ?? null, resume: p.resume ?? null })) };
+  const kept = new Map((a.agents ?? []).map((g) => [g.id, g]));
+  return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, spaceId: a.spaceId ?? null, into: a.into ?? null, busy: !idle(a, now), pending: busyAt(a.pending, now),
+    agents: a.cols.flatMap((c) => c.panes).map((p) => {
+      const g = p.resume ? kept.get(p.resume) : null;
+      return { name: g?.name || p.name || programOf(p.argv), terminal: p.terminal ?? null, resume: p.resume ?? null,
+        title: g?.title ?? null, said: g?.said ?? null, spaceId: g?.space_id ?? null, at: g?.pos ?? null, program: g?.program ?? null };
+    }) };
+}
+
+// Any other failure throws, so the migration waits for a read it can trust; "none" only when ls's message ends in ": No such file or directory", which a path can't fake.
+const THERE = 'if [ -f "$1" ]; then echo file; elif out=$(LC_ALL=C ls -d "$1" 2>&1); then echo other; else case "$out" in *": No such file or directory") echo none;; *) echo "error: $out";; esac; fi';
+async function legacyRows(file, table, sql) {
+  const there = (await exec("sh", ["-c", THERE, "sh", file])).stdout?.trim() ?? "";
+  if (there === "none") return null;
+  if (there !== "file") throw new Error(`${file} could not be looked at: ${there || "no answer"}`);
+  const read = async (text) => {
+    const r = await exec("sqlite3", ["-readonly", "-cmd", ".timeout 5000", "-json", file, text]);
+    if (r.code !== 0) throw new Error(`${file} could not be read: ${(r.stderr || "sqlite3 failed").trim().split("\n")[0]}`);
+    return r.stdout.trim() ? JSON.parse(r.stdout) : [];
+  };
+  if (!(await read(`SELECT name FROM sqlite_master WHERE type='table' AND name='${table}';`)).length) return null;
+  return read(sql);
+}
+
+// An agent the old file had asleep twice stays only in the newest sleep, so waking either never runs it twice.
+export function planMigration(rows) {
+  const read = (rows ?? []).flatMap((r) => {
+    const l = json(r.layout, null);
+    return Array.isArray(l?.cols) ? [{ r, l }] : [];
+  }).toSorted((x, y) => Number(y.r.saved) - Number(x.r.saved));
+  const once = ({ panes, taken }, p) => {
+    if (!p?.resume) return { panes: p ? [...panes, p] : panes, taken };
+    if (taken.has(p.resume)) return { panes, taken };
+    return { panes: [...panes, p], taken: new Set([...taken, p.resume]) };
+  };
+  return read.reduce(({ taken, out }, { r, l }) => {
+    const seen = l.cols.reduce(({ cols, taken }, c) => {
+      const kept = (c.panes ?? []).reduce(once, { panes: [], taken });
+      return { cols: [...cols, { ...c, panes: kept.panes }], taken: kept.taken };
+    }, { cols: [], taken });
+    const cols = seen.cols.filter((c) => c.panes.length);
+    if (!cols.length) return { taken: seen.taken, out };
+    const agents = cols.flatMap((c) => c.panes).filter((p) => p.resume).map((p) => ({ conversation: p.resume, name: p.name ?? null, cwd: p.cwd ?? null }));
+    return { taken: seen.taken, out: [...out, { id: l.id ?? newId(), name: r.name, project: r.project, space: l.space ?? null, into: l.into ?? null, saved: Number(r.saved) || 0,
+      layout: { per: l.per ?? null, cols }, agents, pendingAt: l.pending ?? null, wakingAt: l.waking ? Number(String(l.waking).split(":")[0]) || null : null }] };
+  }, { taken: new Set(), out: [] }).out;
 }
 
 export class Store {
-  constructor() {
-    this.dir = `${appHome()}/${STORE_DIR}`;
-    this.db = `${this.dir}/sleep.db`;
+  constructor(kdb = new Kdb(), legacy = `${appHome()}/data`) {
+    this.kdb = kdb;
+    this.legacy = legacy;
     this.ready = null;
-  }
-
-  async sql(text, json = false) {
-    // Another window writing: wait for it up to 5 s instead of failing.
-    const r = await exec("sqlite3", ["-cmd", ".timeout 5000", ...(json ? ["-json"] : []), this.db, text]);
-    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
-    return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
+    this.holds = new Map(); // sleep id -> this window's sleep token
   }
 
   open() {
     return (this.ready ??= (async () => {
-      let ok = null;
-      try { ok = await exec("sqlite3", ["-version"]); } catch { /* reported below */ }
-      if (ok?.code !== 0) { this.ready = null; throw new Error("Install sqlite3 to put tabs to sleep."); }
-      await exec("mkdir", ["-p", this.dir]);
-      await this.sql(SCHEMA);
-    })());
+      await this.kdb.open();
+      if (await this.kdb.migrated()) return;
+      const sleeps = await legacyRows(`${this.legacy}/kanso-sleep/sleep.db`, "asleep", "SELECT project, name, layout, saved FROM asleep;");
+      const prefs = await legacyRows(`${this.legacy}/kanso-spaces/panel.db`, "prefs", "SELECT key, value FROM prefs;");
+      await this.kdb.migrate({ sleeps: planMigration(sleeps), prefs: prefs ?? [] });
+    })().catch((e) => { this.ready = null; throw e; }));
   }
 
-  // The tabs asleep (`all`: also those going to sleep or waking now). The
-// changes below return nothing: read this after them, apart, so a failed
-// read never passes for a failed change.
   async asleep(all = false) {
     await this.open();
     const now = Date.now();
-    return rowsOf(await this.sql("SELECT project, name, layout, saved FROM asleep;", true)).filter((a) => all || idle(a, now));
+    return rowsOf(await this.kdb.sleeps()).filter((a) => all || idle(a, now));
   }
-  // Written going to sleep, never over another sleeping tab of that name:
-  // its new id, or an error when the name is taken.
   async sleep(project, a) {
     await this.open();
-    const id = newId();
-    const r = await this.sql(insertSql(project, { ...a, id, pending: Date.now() }), true);
-    if (!r.length) throw new Error(`a tab named ${a.name} is already asleep in this project`);
+    const convs = (a.cols ?? []).flatMap((c) => c.panes).map((p) => p.resume).filter(Boolean);
+    if (new Set(convs).size !== convs.length) throw new Error("two panes of it are on the same conversation; close one first");
+    const { id, token } = await this.kdb.sleepTab({ name: a.name, space: a.space, project, layout: { per: a.per ?? null, cols: a.cols ?? [] }, into: a.into ?? null, agents: agentsOf(a.cols ?? []), saved: a.saved ?? Date.now() });
+    this.holds.set(id, token);
     return id;
   }
-  async settle(id) {
+  // False once another window took the row: then this one changes nothing more.
+  async holdSleep(id) { await this.open(); return this.holds.has(id) && this.kdb.holdSleep(id, this.holds.get(id)); }
+  async settle(id) { await this.open(); const ok = await this.kdb.settle(id, this.holds.get(id)); this.holds.delete(id); return ok; }
+  async drop(id) { await this.open(); const ok = await this.kdb.drop(id, this.holds.get(id)); this.holds.delete(id); return ok; }
+  // A sleep's own narrow lets its hold go; a wake's keeps it.
+  async narrow(id, cols, token = null, { space = null, wait = false, restores = [] } = {}) {
     await this.open();
-    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.pending') WHERE ${byId(id)};`);
+    const [row] = await this.kdb.read(`SELECT layout FROM sleeps WHERE id='${String(id).replace(/'/g, "''")}';`);
+    const layout = { ...json(row?.layout, {}), cols };
+    const ok = await this.kdb.narrow(id, layout, keptOf(cols), token ? { wake: token } : { sleep: this.holds.get(id) }, { space, wait, restores });
+    if (!token) this.holds.delete(id);
+    return ok;
   }
-  // A row this sleep wrote and no longer wants (its agents came back).
-  async drop(id) { await this.open(); await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND json_extract(layout,'$.pending') IS NOT NULL;`); }
-  // The panes kept (`cols`), all else of the row as it was. `hold`: one of
-  // them may still be starting somewhere, so it is not offered to wake
-  // until that would have long settled (STALE_MS).
-  async narrow(id, cols, token = null, hold = false) {
-    await this.open();
-    const layout = `json_remove(json_set(layout,'$.cols',json(${sqlText(JSON.stringify(cols))})),'$.pending','$.waking')`;
-    await this.sql(`UPDATE asleep SET layout=${hold ? `json_set(${layout},'$.pending',${Date.now()})` : layout}
-      WHERE ${byId(id)}${token ? ` AND json_extract(layout,'$.waking')=${sqlText(token)}` : ""};`);
-  }
-  // Taken by one wake at a time: the row as it is now, with the wake's
-  // token, or null when another wake holds it or it is gone.
+  // Null when another wake holds it or it is gone.
   async claim(id) {
     await this.open();
-    const now = Date.now(), token = `${now}:${newId()}`;
-    const r = await this.sql(`UPDATE asleep SET layout=json_set(layout,'$.waking',${sqlText(token)}) WHERE ${byId(id)}
-      AND (json_extract(layout,'$.pending') IS NULL OR json_extract(layout,'$.pending') < ${now - STALE_MS})
-      AND (json_extract(layout,'$.waking') IS NULL OR CAST(json_extract(layout,'$.waking') AS INTEGER) < ${now - STALE_MS})
-      RETURNING project, name, layout, saved;`, true);
-    const [a] = rowsOf(r);
-    return a ? { ...a, token } : null;
+    const row = await this.kdb.claim(id);
+    if (!row) return null;
+    const [a] = rowsOf([{ ...row, agents: (await this.kdb.sleeps()).find((r) => r.id === id)?.agents ?? [] }]);
+    return a ? { ...a, token: row.token } : null;
   }
-  async release(id, token) {
-    await this.open();
-    await this.sql(`UPDATE asleep SET layout=json_remove(layout,'$.waking') WHERE ${byId(id)} AND json_extract(layout,'$.waking')=${sqlText(token)};`);
-  }
-  // Awake: gone, if this wake still holds it.
-  async woke(id, token) {
-    await this.open();
-    await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND json_extract(layout,'$.waking')=${sqlText(token)};`);
-  }
-  // Forgotten by hand: gone, unless a wake holds it.
-  async forget(id) {
-    await this.open();
-    await this.sql(`DELETE FROM asleep WHERE ${byId(id)} AND (json_extract(layout,'$.waking') IS NULL OR CAST(json_extract(layout,'$.waking') AS INTEGER) < ${Date.now() - STALE_MS});`);
-  }
+  async renew(id, token) { await this.open(); return this.kdb.renew(id, token); }
+  async release(id, token) { await this.open(); return this.kdb.release(id, token); }
+  async woke(id, token, restores = []) { await this.open(); return this.kdb.woke(id, token, restores); }
+  async forget(id) { await this.open(); return this.kdb.forget(id); }
 }

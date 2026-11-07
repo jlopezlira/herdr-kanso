@@ -1,10 +1,6 @@
 // Ports' history, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// What the guard's ports.json says, made ready to draw: no host calls here,
-// so the tests load it as is. The guard (kanso-guard/guard.mjs, every minute)
-// writes the servers listening now, 24 hours by the minute and 90 days by the
-// hour of how many ran (and how many with no pane), the last 30 days of
-// servers with how each ended, and the totals of what Stop gave back.
+// No host calls here, so the tests load it as is.
+import { parseOr } from "./pure.js";
 
 /** ports.json older than this means the guard stopped. */
 export const STALE_MS = 3 * 60_000;
@@ -16,7 +12,7 @@ const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const pad = (n) => String(n).padStart(2, "0");
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-/** A size in MB as a person reads it: "640 MB", "1.4 GB", "12 GB". */
+/** Takes MB. */
 export function size(mb) {
   const n = num(mb);
   if (n === null) return "–";
@@ -25,7 +21,7 @@ export function size(mb) {
   return `${gb < 10 ? gb.toFixed(1).replace(/\.0$/, "") : Math.round(gb)} GB`;
 }
 
-/** A duration in ms, short: "40 s", "12 min", "5 h", "3 d". */
+/** Takes ms. */
 export function lasted(ms) {
   const n = Math.max(0, num(ms) ?? 0);
   if (n < 60_000) return `${Math.max(1, Math.round(n / 1000))} s`;
@@ -34,7 +30,6 @@ export function lasted(ms) {
   return `${Math.round(n / DAY)} d`;
 }
 
-/** A moment: "14:05" today, "Nov 3 14:05" before. */
 export function clock(ms, now = Date.now()) {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "";
@@ -43,7 +38,7 @@ export function clock(ms, now = Date.now()) {
 }
 
 const day = (ms) => `${MONTHS[new Date(ms).getMonth()]} ${new Date(ms).getDate()}`;
-const startOfDay = (now) => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const startOfDay = (now) => { const d = new Date(now); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
 
 const server = (s) => ({
   key: String(s.key ?? `${s.pid}@${s.startedAt}`), pid: num(s.pid),
@@ -57,14 +52,9 @@ const server = (s) => ({
 });
 const rows = (list) => (Array.isArray(list) ? list.filter((r) => Array.isArray(r) && num(r[0]) !== null) : []);
 
-/**
- * ports.json as `{ state, data }`: "off" when there is none, "bad" when it
- * can't be read, "stale" when the guard stopped writing it, else "ok".
- */
 export function parsePorts(text, now = Date.now()) {
   if (!text || !String(text).trim()) return { state: "off", data: null };
-  let raw;
-  try { raw = JSON.parse(text); } catch { return { state: "bad", data: null }; }
+  const raw = parseOr(text);
   if (!raw || typeof raw !== "object" || raw.v !== 1 || !num(raw.at)) return { state: "bad", data: null };
   const keep = (list) => (Array.isArray(list) ? list.filter((s) => s && typeof s === "object" && num(s.pid) !== null).map(server) : []);
   const t = raw.totals && typeof raw.totals === "object" ? raw.totals : {};
@@ -73,16 +63,12 @@ export function parsePorts(text, now = Date.now()) {
     now: keep(raw.now),
     minutes: rows(raw.minutes),
     hours: rows(raw.hours),
-    servers: keep(raw.servers).sort((a, b) => (b.lastSeen ?? b.startedAt ?? 0) - (a.lastSeen ?? a.startedAt ?? 0)),
+    servers: keep(raw.servers).toSorted((a, b) => (b.lastSeen ?? b.startedAt ?? 0) - (a.lastSeen ?? a.startedAt ?? 0)),
     totals: { opened: num(t.opened) ?? 0, stopped: num(t.stopped) ?? 0, exited: num(t.exited) ?? 0, freedMB: num(t.freedMB) ?? 0, since: num(t.since) },
   };
   return { state: now - data.at > STALE_MS ? "stale" : "ok", data };
 }
 
-/**
- * A live row's history: the guard's entry for the same process (its pid,
- * started within two minutes of what ps says), or null.
- */
 export function historyOf(live, data, now = Date.now()) {
   if (!data || !live) return null;
   const started = num(live.secs) !== null ? now - live.secs * 1000 : null;
@@ -95,26 +81,20 @@ export const RANGES = [
   { key: "month", label: "30 days", ms: 30 * DAY, buckets: 90 },
 ];
 
-/**
- * Servers running over a range, as bars: each bucket holds the most that ran
- * at once in it, and the most with no pane. The 24 h view reads the
- * per-minute samples, the others the hourly ones. The peak is `mark`ed; a
- * bucket with no sample is `empty`. Ratios are on the range's own peak.
- */
+// Bars per bucket: the most that ran at once; ratios are on the range's own peak, not absolute.
 export function activeSeries(data, key, now = Date.now()) {
   const range = RANGES.find((r) => r.key === key) ?? RANGES[0];
   const source = key === "day" && data?.minutes?.length ? data.minutes : data?.hours ?? [];
   const start = now - range.ms, step = range.ms / range.buckets;
-  const active = new Array(range.buckets).fill(null), loose = new Array(range.buckets).fill(0);
-  for (const row of source) {
+  const inRange = source.filter((row) => {
     const at = num(row[0]), n = num(row[1]);
-    if (at === null || n === null || at < start || at > now) continue;
-    const i = Math.min(range.buckets - 1, Math.floor((at - start) / step));
-    active[i] = Math.max(active[i] ?? 0, n);
-    loose[i] = Math.max(loose[i], Math.min(n, num(row[2]) ?? 0));
-  }
-  let peak = -1;
-  active.forEach((v, i) => { if (v !== null && (peak < 0 || v >= active[peak])) peak = i; });
+    return !(at === null || n === null || at < start || at > now);
+  });
+  const byBucket = Map.groupBy(inRange, (row) => Math.min(range.buckets - 1, Math.floor((num(row[0]) - start) / step)));
+  const active = Array.from({ length: range.buckets }, (_, i) => (byBucket.has(i) ? byBucket.get(i).reduce((m, row) => Math.max(m, num(row[1])), 0) : null));
+  const loose = Array.from({ length: range.buckets }, (_, i) => (byBucket.get(i) ?? []).reduce((m, row) => Math.max(m, Math.min(num(row[1]), num(row[2]) ?? 0)), 0));
+  // On equals, the latest bucket wins.
+  const peak = active.reduce((p, v, i) => (v !== null && (p < 0 || v >= active[p]) ? i : p), -1);
   const top = peak < 0 ? 0 : active[peak];
   const bars = active.map((v, i) => {
     const from = start + i * step;
@@ -130,7 +110,6 @@ export function activeSeries(data, key, now = Date.now()) {
   return { bars, first, last: "now", peak: top, empty: peak < 0, filled: bars.filter((b) => !b.empty).length };
 }
 
-/** The numbers the stats row and the card share. */
 export function portStats(data, now = Date.now()) {
   const today = startOfDay(now), week = now - 7 * DAY;
   const servers = data?.servers ?? [];
@@ -155,10 +134,6 @@ export function portStats(data, now = Date.now()) {
   };
 }
 
-/**
- * The history lists: servers opened today (newest first) and servers that
- * ended (latest end first), each row as the panel words it.
- */
 export function historyLists(data, now = Date.now()) {
   const today = startOfDay(now);
   const servers = data?.servers ?? [];
@@ -176,7 +151,7 @@ export function historyLists(data, now = Date.now()) {
     };
   };
   return {
-    opened: servers.filter((s) => (s.startedAt ?? 0) >= today).sort((a, b) => b.startedAt - a.startedAt).map(row),
-    ended: servers.filter((s) => s.ended).sort((a, b) => b.ended.at - a.ended.at).map(row),
+    opened: servers.filter((s) => (s.startedAt ?? 0) >= today).toSorted((a, b) => b.startedAt - a.startedAt).map(row),
+    ended: servers.filter((s) => s.ended).toSorted((a, b) => b.ended.at - a.ended.at).map(row),
   };
 }

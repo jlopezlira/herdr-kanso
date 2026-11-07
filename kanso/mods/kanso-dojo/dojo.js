@@ -1,14 +1,8 @@
 // hjkl dōjō, kansō help's vim game, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The game's world and its moves, with nothing drawn: a board of cells
-// (levels 1 to 5) or a few lines of code (6 to 9), a cursor, a target,
-// vim's motions on them, and the fewest moves from one to the other
-// (a breadth-first search over the moves a level allows), which gives the
-// score and the hint.
+import { range } from "./pure.js";
 
 export const GRID = { w: 18, h: 8 };
 
-// Lines of code to move through; each one is a line a person could write.
 export const SNIPPETS = [
   [
     "const herd = agents.filter((a) => a.idle);",
@@ -33,7 +27,6 @@ export const SNIPPETS = [
   ],
 ];
 
-// The levels: the motions each one takes, where its targets go, and a tip.
 export const LEVELS = [
   { n: 1, name: "h l", world: "grid", motions: ["h", "l"], aim: "row", tip: "h moves left, l right. Your right index finger rests on j; h is one key to its left." },
   { n: 2, name: "j k", world: "grid", motions: ["j", "k"], aim: "column", tip: "j goes down (its tail hangs below the line), k goes up. Index on j, middle finger on k." },
@@ -49,7 +42,6 @@ export const LEVELS = [
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const same = (a, b) => a.x === b.x && a.y === b.y;
 
-// A world: { kind: "grid", w, h } or { kind: "text", lines }.
 export const gridWorld = () => ({ kind: "grid", w: GRID.w, h: GRID.h });
 export const textWorld = (i) => ({ kind: "text", lines: SNIPPETS[i % SNIPPETS.length] });
 
@@ -57,43 +49,28 @@ export const textWorld = (i) => ({ kind: "text", lines: SNIPPETS[i % SNIPPETS.le
 const kind = (ch) => (ch === undefined || ch === " " || ch === "\t" ? 0 : /\w/.test(ch) ? 1 : 2);
 const firstNonBlank = (line) => Math.max(0, line.search(/\S/));
 const lastCol = (line) => Math.max(0, line.length - 1);
+const walk = (i, step, go) => (go(i) ? walk(i + step, step, go) : i);
 
-// Every character position in reading order, with the line break as a blank.
 function flat(lines) {
-  const out = [];
-  lines.forEach((l, y) => { for (let x = 0; x < l.length; x++) out.push({ x, y, ch: l[x] }); out.push({ x: l.length, y, ch: undefined, eol: true }); });
-  return out;
+  return lines.flatMap((l, y) => [...l.split("").map((ch, x) => ({ x, y, ch })), { x: l.length, y, ch: undefined, eol: true }]);
 }
 function indexOf(f, at) { return f.findIndex((p) => p.x === at.x && p.y === at.y && !p.eol); }
 
-// vim's w, b and e on small words, across lines.
 function word(lines, at, m) {
   const f = flat(lines);
-  let i = indexOf(f, at);
-  if (i < 0) return at;
+  const from = indexOf(f, at);
+  if (from < 0) return at;
   const k = (j) => kind(f[j]?.ch);
-  if (m === "w") {
-    const c = k(i);
-    if (c) while (i < f.length && k(i) === c) i++;
-    while (i < f.length && (k(i) === 0)) i++;
-  } else if (m === "e") {
-    i++;
-    while (i < f.length && k(i) === 0) i++;
-    const c = k(i);
-    while (i + 1 < f.length && k(i + 1) === c && c) i++;
-  } else if (m === "b") {
-    i--;
-    while (i > 0 && k(i) === 0) i--;
-    const c = k(i);
-    while (i > 0 && k(i - 1) === c && c) i--;
-  }
+  const w = (c = k(from)) => walk(c ? walk(from, 1, (i) => i < f.length && k(i) === c) : from, 1, (i) => i < f.length && k(i) === 0);
+  const e = (start = walk(from + 1, 1, (i) => i < f.length && k(i) === 0), c = k(start)) => walk(start, 1, (i) => i + 1 < f.length && k(i + 1) === c && c);
+  const b = (start = walk(from - 1, -1, (i) => i > 0 && k(i) === 0), c = k(start)) => walk(start, -1, (i) => i > 0 && k(i - 1) === c && c);
+  const i = m === "w" ? w() : m === "e" ? e() : m === "b" ? b() : from;
   const p = f[clamp(i, 0, f.length - 1)];
   if (!p || p.eol) return at;
   return { x: p.x, y: p.y };
 }
 
-// The cursor after a motion. `motion`: "h", "5l", "w", "fa", "$", "gg"...
-// Inside the world always; a motion that can't move leaves it where it is.
+// Always lands inside the world; a motion that can't move leaves the cursor.
 export function move(world, at, motion) {
   const m = String(motion);
   const count = /^[1-9]\d*/.exec(m); // 0 alone is the line start, not a count
@@ -114,7 +91,7 @@ export function move(world, at, motion) {
     case "0": return { x: 0, y: at.y };
     case "^": return { x: firstNonBlank(line), y: at.y };
     case "$": return { x: lastCol(line), y: at.y };
-    case "w": case "b": case "e": { let p = at; for (let i = 0; i < n; i++) p = word(L, p, k); return p; }
+    case "w": case "b": case "e": return range(n).reduce((p) => word(L, p, k), at);
     case "f": case "t": { const c = k[1]; const i = line.indexOf(c, at.x + 1 + (k[0] === "t" ? 1 : 0)); return i < 0 ? at : { x: k[0] === "t" ? i - 1 : i, y: at.y }; }
     case "F": case "T": { const c = k[1]; const from = at.x - 1 - (k[0] === "T" ? 1 : 0); const i = from < 0 ? -1 : line.lastIndexOf(c, from); return i < 0 ? at : { x: k[0] === "T" ? i + 1 : i, y: at.y }; }
     default:
@@ -124,76 +101,66 @@ export function move(world, at, motion) {
   }
 }
 
-// The motions a level allows from `at`, each a word you would type.
 export function motionsFrom(world, at, level) {
-  const out = [];
-  for (const m of level.motions) {
-    if (m === "f" || m === "t" || m === "F" || m === "T") {
-      const line = world.lines?.[at.y] ?? "";
-      for (const c of new Set(line.replace(/\s/g, ""))) out.push(`${m}${c}`);
-    } else out.push(m);
-  }
-  if (level.counts) for (const d of ["h", "j", "k", "l"]) for (let c = 2; c <= 9; c++) out.push(`${c}${d}`);
-  return out;
+  const own = level.motions.flatMap((m) => {
+    if (m !== "f" && m !== "t" && m !== "F" && m !== "T") return [m];
+    const line = world.lines?.[at.y] ?? "";
+    return [...new Set(line.replace(/\s/g, ""))].map((c) => `${m}${c}`);
+  });
+  const counted = level.counts ? ["h", "j", "k", "l"].flatMap((d) => range(8, 2).map((c) => `${c}${d}`)) : [];
+  return [...own, ...counted];
 }
 
-// The fewest motions from `a` to `b`, and the first of them (the hint).
 export function shortest(world, a, b, level) {
   if (same(a, b)) return { dist: 0, first: null };
   const key = (p) => `${p.x},${p.y}`;
-  const seen = new Map([[key(a), null]]);
-  let wave = [{ p: a, first: null }];
-  for (let d = 1; d <= 40 && wave.length; d++) {
-    const next = [];
-    for (const { p, first } of wave) {
-      for (const m of motionsFrom(world, p, level)) {
-        const q = move(world, p, m);
-        const kq = key(q);
-        if (seen.has(kq)) continue;
-        const f = first ?? m;
-        if (same(q, b)) return { dist: d, first: f };
-        seen.set(kq, f);
-        next.push({ p: q, first: f });
-      }
-    }
-    wave = next;
-  }
-  return { dist: Infinity, first: null };
+  const search = (wave, seen, d) => {
+    if (d > 40 || !wave.length) return { dist: Infinity, first: null };
+    const { hit, parts } = wave.reduce((acc, { p, first }) => {
+      if (acc.hit) return acc;
+      const steps = motionsFrom(world, p, level).map((m) => { const q = move(world, p, m); return { q, kq: key(q), f: first ?? m }; });
+      return { hit: steps.find((x) => same(x.q, b) && !seen.has(x.kq)) ?? null, parts: [...acc.parts, steps] };
+    }, { hit: null, parts: [] });
+    if (hit) return { dist: d, first: hit.f };
+    const steps = parts.flat();
+    const firstAt = new Map(steps.map((x, i) => [x.kq, i]).toReversed());
+    const fresh = steps.filter((x, i) => !seen.has(x.kq) && firstAt.get(x.kq) === i);
+    return search(fresh.map((x) => ({ p: x.q, first: x.f })), new Set([...seen, ...fresh.map((x) => x.kq)]), d + 1);
+  };
+  return search([{ p: a, first: null }], new Set([key(a)]), 1);
 }
 
-// A new target for a level, reachable, never on the cursor.
 export function newTarget(world, at, level, rand = Math.random) {
   const pick = (n) => Math.floor(rand() * n);
-  for (let i = 0; i < 300; i++) {
-    let t;
-    if (world.kind === "grid") {
-      const { w, h } = world;
-      t = { x: pick(w), y: pick(h) };
-      if (level.aim === "row") t.y = at.y;
-      if (level.aim === "column") t.x = at.x;
-      if (level.aim === "edges" && rand() < 0.75) { if (rand() < 0.5) t.x = rand() < 0.5 ? 0 : w - 1; else t.y = rand() < 0.5 ? 0 : h - 1; }
-      if (level.aim === "far" && Math.abs(t.x - at.x) < 3 && Math.abs(t.y - at.y) < 3) continue;
-    } else {
-      const L = world.lines;
-      const y = level.aim === "line" ? at.y : pick(L.length);
-      const line = L[y];
-      if (!line.trim()) continue;
-      if (level.aim === "words") {
-        const starts = [...line.matchAll(/\w+|[^\w\s]+/g)].flatMap((m) => [m.index, m.index + m[0].length - 1]);
-        t = { x: starts[pick(starts.length)], y };
-      } else if (level.aim === "ends") {
-        t = { x: [0, firstNonBlank(line), lastCol(line)][pick(3)], y };
-      } else t = { x: pick(line.length), y };
-      if (line[t.x] === " ") continue;
-    }
-    if (same(t, at)) continue;
+  const onGrid = () => {
+    const { w, h } = world;
+    const x = pick(w), y = pick(h);
+    const edge = level.aim === "edges" && rand() < 0.75 ? (rand() < 0.5 ? "x" : "y") : null;
+    const t = {
+      x: edge === "x" ? (rand() < 0.5 ? 0 : w - 1) : level.aim === "column" ? at.x : x,
+      y: edge === "y" ? (rand() < 0.5 ? 0 : h - 1) : level.aim === "row" ? at.y : y,
+    };
+    return level.aim === "far" && Math.abs(t.x - at.x) < 3 && Math.abs(t.y - at.y) < 3 ? null : t;
+  };
+  const inText = () => {
+    const L = world.lines;
+    const y = level.aim === "line" ? at.y : pick(L.length);
+    const line = L[y];
+    if (!line.trim()) return null;
+    const starts = () => [...line.matchAll(/\w+|[^\w\s]+/g)].flatMap((m) => [m.index, m.index + m[0].length - 1]);
+    const x = level.aim === "words" ? ((s) => s[pick(s.length)])(starts())
+      : level.aim === "ends" ? [0, firstNonBlank(line), lastCol(line)][pick(3)]
+      : pick(line.length);
+    return line[x] === " " ? null : { x, y };
+  };
+  const attempt = () => {
+    const t = world.kind === "grid" ? onGrid() : inText();
+    if (!t || same(t, at)) return null;
     const s = shortest(world, at, t, level);
-    if (s.dist === Infinity || (world.kind === "text" && level.aim !== "ends" && s.dist < 1)) continue;
+    if (s.dist === Infinity || (world.kind === "text" && level.aim !== "ends" && s.dist < 1)) return null;
     return { target: t, need: s.dist };
-  }
-  return { target: at, need: 0 };
+  };
+  return range(300).reduce((got) => got ?? attempt(), null) ?? { target: at, need: 0 };
 }
 
-// Points for reaching a target in `moves` when `need` would do: 10, 5 more
-// in the fewest, and 2 for each target of the streak before it.
 export const points = (moves, need, streak) => 10 + (moves <= need ? 5 + 2 * streak : 0);

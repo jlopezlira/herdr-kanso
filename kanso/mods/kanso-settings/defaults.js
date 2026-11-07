@@ -1,5 +1,4 @@
-// Kanso's keys as shipped (kanso/keys.json; a test fails when this falls
-// behind): what Reset puts back.
+// Kanso's keys as shipped: must match kanso/keys.json (a test fails when this falls behind).
 export const DEFAULT_KEYS = {
   "layout:kanso": {
     "cmd-d": "kanso-strip.new-right",

@@ -2,10 +2,6 @@
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): the same dialog Herdr
 // uses to rename a space or a tab, for what Herdr has no command for: a terminal's name, kept as a
 // label on the terminal in herdr-core.
-//
-// A text prompt. Enter saves, Esc cancels. Props: title, value, hint, and one of
-//   command: { name, args }        run(name, { ...args, name: <text> }), as Herdr's prompt
-//   label: { terminal, key }       hc label <terminal> <key>=<text> (empty text removes the label)
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { run, hc, props, closeOverlay, theme } from "herdr";

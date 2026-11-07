@@ -1,19 +1,16 @@
 // Spend's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The panel's global numbers as a card for share.js: what your AI work is
-// worth at list price, the tasks, the tokens, how many projects and models,
-// and the period day by day. Never a project, task or session name: only the
-// totals of the unfiltered view are shared.
+// Only the unfiltered totals are shared: never a project, task or session name.
 import { postText } from "./share.js";
 
 const plain = (s) => String(s ?? "").trim();
 
-// The card spec, from the presenter's costs (the unfiltered view).
 export function spendSpec(costs) {
   const hero = costs.hero ?? {};
-  const stats = (hero.stats ?? []).map((x) => ({ value: plain(x.value), unit: plain(x.unit) }));
-  if (costs.projectCount) stats.push({ value: plain(costs.projectCount), unit: costs.projectCount === "1" ? "project" : "projects" });
-  if (costs.modelCount) stats.push({ value: plain(costs.modelCount), unit: costs.modelCount === "1" ? "model" : "models" });
+  const stats = [
+    ...(hero.stats ?? []).map((x) => ({ value: plain(x.value), unit: plain(x.unit) })),
+    ...(costs.projectCount ? [{ value: plain(costs.projectCount), unit: costs.projectCount === "1" ? "project" : "projects" }] : []),
+    ...(costs.modelCount ? [{ value: plain(costs.modelCount), unit: costs.modelCount === "1" ? "model" : "models" }] : []),
+  ];
   const note = plain(hero.note);
   const chart = costs.chart;
   return {
@@ -30,12 +27,12 @@ export function spendSpec(costs) {
   };
 }
 
-// The post's words.
 export function spendText(costs) {
   const hero = costs.hero ?? {};
-  const parts = [];
   const when = plain(costs.range?.label ?? hero.title);
-  if (hero.value) parts.push(`${plain(hero.value)} of AI work at list price${when ? ` in ${when}` : ""}`);
-  for (const x of hero.stats ?? []) if (/^(tasks?|tokens)$/.test(plain(x.unit))) parts.push(`${plain(x.value)} ${plain(x.unit)}`);
+  const parts = [
+    ...(hero.value ? [`${plain(hero.value)} of AI work at list price${when ? ` in ${when}` : ""}`] : []),
+    ...(hero.stats ?? []).filter((x) => /^(tasks?|tokens)$/.test(plain(x.unit))).map((x) => `${plain(x.value)} ${plain(x.unit)}`),
+  ];
   return postText(parts, "What my AI work is worth.");
 }

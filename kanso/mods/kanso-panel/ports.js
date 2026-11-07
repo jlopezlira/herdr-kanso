@@ -1,21 +1,8 @@
-// Ports: the dev servers listening on this computer, the ones nobody owns,
-// and how many came and went.
-//
-// Agents start servers (npm run dev, vite, a Django runserver) and leave them
-// running when their pane closes, as they leave worktrees behind. This lists
-// every program of yours listening on a TCP port from a project folder, says
-// which pane runs it (its process descends from that terminal's shell), and
-// marks the ones no pane owns any more. Open one in the browser, go to its
-// pane, or stop it: a second press confirms, SIGTERM first, then a force stop
-// for one that won't go. The rows are read live (lsof and ps, every 10 s);
-// how long each has run, its memory and the history (24 hours, 7 and 30
-// days, what ended and how) come from the memory guard's ports.json, and a
-// stop goes through the guard, which measures what it gives back. Without
-// the guard the rows still work and Stop sends the signal itself.
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
 import { tilde } from "./lib.js";
+import { tryOr } from "./pure.js";
 import { G, Armed, tokens, quietLink, quietTabs, iconButton, section } from "./ui.js";
 import { Share } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
@@ -29,83 +16,68 @@ const RUNTIME_FILE = `mods/${GUARD}/runtime.json`;
 const HISTORY_MS = 30_000; // the guard writes once a minute
 const BUSY_MS = 90_000;
 const LIST_ROWS = 12;
-// One detached shell stops the servers through the guard one after another:
-// $0 is node, $1 guard.mjs, then a pid each ("pid:force" for a force stop).
+// One detached shell stops them one at a time: $0 node, $1 guard.mjs, then a pid each ("pid:force" for a force stop).
 export const STOP_LOOP = 'g="$1"; shift; for a in "$@"; do case "$a" in *:force) "$0" "$g" stop-server "${a%:force}" force;; *) "$0" "$g" stop-server "$a";; esac; done';
 const DETACHED = 'nohup "$0" "$@" >/dev/null 2>&1 &';
 
 const EVERY_MS = 10000;
 
-// `lsof -F pcn` of the listening sockets: pid -> { pid, command, ports }.
+// lsof's -F output: each "p" line (pid) and the field lines after it; lines before the first are no one's.
+function byProcess(text) {
+  const lines = String(text ?? "").split("\n");
+  const starts = lines.flatMap((line, i) => (line[0] === "p" ? [i] : []));
+  return starts.map((at, k) => ({ pid: Number(lines[at].slice(1)), fields: lines.slice(at + 1, starts[k + 1] ?? lines.length) }));
+}
+
+// `lsof -F pcn` of the listening sockets: pid -> { pid, command, ports }
 export function parseListen(text) {
-  const out = new Map();
-  let cur = null;
-  for (const line of String(text ?? "").split("\n")) {
-    const k = line[0], v = line.slice(1);
-    if (k === "p") { cur = { pid: Number(v), command: "", ports: [] }; out.set(cur.pid, cur); }
-    else if (k === "c" && cur) cur.command = v;
-    else if (k === "n" && cur) {
-      const port = Number(v.slice(v.lastIndexOf(":") + 1));
-      if (port && !cur.ports.includes(port)) cur.ports.push(port);
-    }
-  }
-  for (const s of out.values()) s.ports.sort((a, b) => a - b);
-  return out;
+  return new Map(byProcess(text).map(({ pid, fields }) => {
+    const command = fields.filter((line) => line[0] === "c").map((line) => line.slice(1)).at(-1) ?? "";
+    const ports = fields.filter((line) => line[0] === "n").map((line) => Number(line.slice(line.lastIndexOf(":") + 1))).filter(Boolean);
+    return [pid, { pid, command, ports: [...new Set(ports)].toSorted((a, b) => a - b) }];
+  }));
 }
 
 // `lsof -a -d cwd -F pn`: pid -> its working folder.
 export function parseCwds(text) {
-  const out = new Map();
-  let pid = null;
-  for (const line of String(text ?? "").split("\n")) {
-    if (line[0] === "p") pid = Number(line.slice(1));
-    else if (line[0] === "n" && pid != null) out.set(pid, line.slice(1));
-  }
-  return out;
+  return new Map(byProcess(text).flatMap(({ pid, fields }) => fields.filter((line) => line[0] === "n").map((line) => [pid, line.slice(1)])));
 }
 
 // `ps -axo pid=,ppid=,etime=,args=`: pid -> { ppid, secs, args }.
 export function parsePs(text) {
-  const out = new Map();
-  for (const line of String(text ?? "").split("\n")) {
+  return new Map(String(text ?? "").split("\n").flatMap((line) => {
     const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
-    if (m) out.set(Number(m[1]), { ppid: Number(m[2]), secs: etimeSecs(m[3]), args: m[4] });
-  }
-  return out;
+    return m ? [[Number(m[1]), { ppid: Number(m[2]), secs: etimeSecs(m[3]), args: m[4] }]] : [];
+  }));
 }
 
 // ps's elapsed time, [[dd-]hh:]mm:ss, in seconds.
 export function etimeSecs(s) {
   const [days, rest] = String(s).includes("-") ? String(s).split("-") : [0, String(s)];
-  const parts = rest.split(":").map(Number).reverse();
+  const parts = rest.split(":").map(Number).toReversed();
   return Number(days) * 86400 + (parts[0] ?? 0) + (parts[1] ?? 0) * 60 + (parts[2] ?? 0) * 3600;
 }
 
-// The terminal a process runs in: the first of its ancestors that is a
-// terminal's shell (`shells`: pid -> terminal address), or null.
+// The terminal a process runs in: the first ancestor that is a terminal's shell (`shells`: pid -> address), or null; 64 hops at most.
 export function ownerOf(pid, ps, shells) {
-  for (let p = pid, hops = 0; p > 1 && hops < 64; p = ps.get(p)?.ppid ?? 0, hops++) if (shells.has(p)) return shells.get(p);
-  return null;
+  const up = (p, hops) => (!(p > 1 && hops < 64) ? null : shells.has(p) ? shells.get(p) : up(ps.get(p)?.ppid ?? 0, hops + 1));
+  return up(pid, 0);
 }
 
-// The servers worth showing: a terminal's, or one started in a folder of
-// your home (not the home itself, not ~/Library, where apps keep theirs).
+// Worth showing: a terminal's, or one under home (not home itself, not ~/Library, where apps keep theirs).
 export function servers(listen, cwds, ps, shells, homeDir) {
-  const out = [];
-  for (const s of listen.values()) {
+  return [...listen.values()].flatMap((s) => {
     const cwd = cwds.get(s.pid) ?? null, owner = ownerOf(s.pid, ps, shells);
     const mine = cwd && cwd.startsWith(homeDir + "/") && !cwd.startsWith(homeDir + "/Library/");
-    if (!owner && !mine) continue;
+    if (!owner && !mine) return [];
     const p = ps.get(s.pid);
-    out.push({ pid: s.pid, ports: s.ports, command: s.command, args: p?.args ?? s.command, secs: p?.secs ?? 0, cwd, owner });
-  }
-  return out.sort((a, b) => Boolean(a.owner) - Boolean(b.owner) || a.ports[0] - b.ports[0]);
+    return [{ pid: s.pid, ports: s.ports, command: s.command, args: p?.args ?? s.command, secs: p?.secs ?? 0, cwd, owner }];
+  }).toSorted((a, b) => Boolean(a.owner) - Boolean(b.owner) || a.ports[0] - b.ports[0]);
 }
 
-// A command line, short: the program's name and its arguments.
 export const shortArgs = (args) => {
   const [cmd, ...rest] = String(args).split(" ");
-  return [cmd.split("/").pop(), ...rest].join(" ");
+  return [cmd.split("/").at(-1), ...rest].join(" ");
 };
 
 const age = (secs) => secs < 3600 ? `${Math.max(1, Math.round(secs / 60))} min` : secs < 86400 ? `${Math.round(secs / 3600)} h` : `${Math.round(secs / 86400)} d`;
@@ -130,19 +102,17 @@ export class Ports {
     cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }
 
-  // Terminal shells by pid: herdr-core knows each terminal's.
   async shells() {
-    const out = new Map();
     const local = terminals().filter((t) => t?.address && !String(t.address).includes("/") && t.state !== "dead");
-    await Promise.all(local.map(async (t) => {
-      let pid = t.pid;
-      if (!pid) {
-        const r = await hc(["get", t.address, "--json"]).catch(() => null);
-        try { pid = r?.code === 0 ? JSON.parse(r.stdout).pid : null; } catch { pid = null; }
-      }
-      if (pid) out.set(Number(pid), t.address);
+    const asked = async (t) => {
+      const r = await hc(["get", t.address, "--json"]).catch(() => null);
+      return tryOr(() => (r?.code === 0 ? JSON.parse(r.stdout).pid : null));
+    };
+    const found = await Promise.all(local.map(async (t) => {
+      const pid = t.pid || await asked(t);
+      return pid ? [[Number(pid), t.address]] : [];
     }));
-    return out;
+    return new Map(found.flat());
   }
 
   async read() {
@@ -154,17 +124,18 @@ export class Ports {
       this.shells()]);
     const list = servers(listen, parseCwds(cwdOut), parsePs(psOut), shells, home());
     const now = Date.now();
-    for (const s of list) {
-      // One asked to stop that is still here gets a force stop next.
-      if (this.forced?.has(s.pid)) s.force = true;
-      // What the guard knows of it: since when, its memory, its project.
+    return list.map((s) => {
       const h = historyOf(s, this.hist?.data, now);
-      if (h) Object.assign(s, { mb: h.mb, startedAt: h.startedAt, project: h.project });
-    }
-    return list;
+      return {
+        ...s,
+        // One asked to stop that is still here gets a force stop next.
+        ...(this.forced?.has(s.pid) ? { force: true } : {}),
+        ...(h ? { mb: h.mb, startedAt: h.startedAt, project: h.project } : {}),
+      };
+    });
   }
 
-  /** ports.json, down to what the panel draws. A file read, no process. */
+  /** Read ports.json: a file read, no process. */
   async readHistory() {
     const text = await readTextFile(`${appHome()}/${PORTS_FILE}`).catch(() => null);
     const now = Date.now();
@@ -176,10 +147,9 @@ export class Ports {
       stats: portStats(hist.data, now),
       lists: historyLists(hist.data, now),
     } : null;
-    if (this.busy.install && (hist.state === "ok" || now - this.busy.install > BUSY_MS)) delete this.busy.install;
+    if (this.busy.install && (hist.state === "ok" || now - this.busy.install > BUSY_MS)) this.idle();
   }
 
-  // The live rows every 10 s; the history when it is due or asked for.
   refresh(cx, { history = false, then = null } = {}) {
     if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
@@ -187,32 +157,29 @@ export class Ports {
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
         this.list = await this.read(); this.note = null;
-      } catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list ??= []; }
+      } catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list = this.list ?? []; }
       finally { this.reading = false; then?.(); cx.notify(); }
     });
   }
 
-  // The guard can stop a server when it is installed and keeps ports.json.
   async guardReady() {
     if (!this.hist?.data) return false;
     if (this.guardFile === undefined) this.guardFile = (await exec("test", ["-f", `${appHome()}/${GUARD_FILE}`]).catch(() => null))?.code === 0;
     return this.guardFile;
   }
 
-  // The node the guard runs on, as its runtime.json says.
   async node() {
     if (this.nodeBin) return this.nodeBin;
     const raw = await readTextFile(`${appHome()}/${RUNTIME_FILE}`).catch(() => null);
-    let node = "node";
-    try { const v = JSON.parse(raw ?? "{}")?.node; if (typeof v === "string" && v.trim()) node = v.trim(); } catch { /* the default */ }
-    return (this.nodeBin = node);
+    const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
+    const node = typeof v === "string" && v.trim() ? v.trim() : "node";
+    this.nodeBin = node;
+    return node;
   }
 
-  // Through the guard, detached (it measures each server's processes, sends
-  // SIGTERM or SIGKILL and keeps what it gave back); without it, the signal
-  // straight away. Rows are read again after 1.5 s, the history after a few.
+  // Through the guard when installed (it measures what stopping gives back); without it, the signal directly.
   stop(items, cx) {
-    for (const s of items) this.stopping.add(s.pid);
+    this.stopping = new Set([...this.stopping, ...items.map((s) => s.pid)]);
     cx.notify();
     cx.spawn(async (cx) => {
       const viaGuard = await this.guardReady();
@@ -223,14 +190,15 @@ export class Ports {
       } else {
         for (const s of items) await exec("kill", [s.force ? "-KILL" : "-TERM", String(s.pid)]).catch(() => null);
       }
-      for (const s of items) this.forced.add(s.pid);
+      this.forced = new Set([...this.forced, ...items.map((s) => s.pid)]);
       await cx.sleep(1500);
       try { this.list = await this.read(); } catch { /* the timer reads again */ }
-      const done = () => { for (const s of items) this.stopping.delete(s.pid); };
+      const settled = (gone) => { this.stopping = new Set([...this.stopping].filter((pid) => !gone.some((s) => s.pid === pid))); };
+      const done = () => settled(items);
       if (!viaGuard) done();
       else {
         // The guard takes a moment per server: the rest show "Stopping…" until it has written.
-        for (const s of items) if (!this.list.some((x) => x.pid === s.pid)) this.stopping.delete(s.pid);
+        settled(items.filter((s) => !this.list.some((x) => x.pid === s.pid)));
         cx.timer.after(4000, (cx) => this.refresh(cx, { history: true, then: done }));
         cx.timer.after(10_000, (cx) => this.refresh(cx, { history: true }));
       }
@@ -238,20 +206,23 @@ export class Ports {
     });
   }
 
-  // Starts the guard (a launchd job once installed), then reads its file again.
   turnOn(cx) {
     if (this.busy.install && Date.now() - this.busy.install < BUSY_MS) return;
-    this.busy.install = Date.now();
+    this.busy = { ...this.busy, install: Date.now() };
     cx.notify();
     cx.spawn(async (cx) => {
-      await exec("sh", ["-c", DETACHED, await this.node(), `${appHome()}/${GUARD_FILE}`, "install"]).catch(() => { delete this.busy.install; });
+      await exec("sh", ["-c", DETACHED, await this.node(), `${appHome()}/${GUARD_FILE}`, "install"]).catch(() => { this.idle(); });
       this.guardFile = undefined;
       for (const ms of [3000, 8000, 20_000]) cx.timer.after(ms, (cx) => this.refresh(cx, { history: true }));
       cx.notify();
     });
   }
 
-  // Which pane runs it, by the name its header shows.
+  idle() {
+    const { install: _install, ...rest } = this.busy;
+    this.busy = rest;
+  }
+
   paneOf(address) {
     const p = panes().find((q) => q.terminal === address);
     const given = terminals().find((t) => t.address === address)?.labels?.["kanso.name"];
@@ -310,7 +281,6 @@ export class Ports {
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
   }
 
-  // Without a fresh ports.json: one quiet line, and the way to start the guard.
   guardOff(c) {
     const state = this.hist?.state, busy = Boolean(this.busy.install);
     const at = this.hist?.data?.at;
@@ -347,7 +317,6 @@ export class Ports {
         .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
   }
 
-  // What opened today, or what ended: the guard's last 30 days.
   history(c) {
     const lists = this.digest?.lists;
     const tabs = [
@@ -398,7 +367,7 @@ export class Ports {
         .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(history)));
     return v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
+      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(header)
           .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),

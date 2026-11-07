@@ -2,47 +2,38 @@
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-files.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-files; one of the kanso-panel mod's panels.
-// A lazy file browser for the focused pane's folder, with bounded read-only previews.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec, readTextFile, watchFolder, theme, window, openOverlay, shared, setShared } from "herdr";
-import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
+import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel, mapWith } from "./lib.js";
+import { mapSeries } from "./pure.js";
 
 const PER_FOLDER = 500, TOTAL = 5000;
 const RETURN = "kanso.files.return";
 
 async function directory(path, on) {
   if (!on && window()?.platform === "windows") {
-    // The path is the process's cwd, not part of -Command: PowerShell joins
-    // everything after -Command into the script, so a folder name could run.
+    // The path is the process's cwd, not part of -Command: a folder name inside the script could run as code.
     const script = "& { @(Get-ChildItem -LiteralPath . -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First 501 | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) } }) | ConvertTo-Json -Compress }";
     const r = await exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { cwd: path });
     if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
     const result = JSON.parse(r.stdout || "[]");
     return Array.isArray(result) ? result : [result];
   }
-  // One process and no shell: find prints each directory twice in a row (a
-  // name can't appear twice in a folder), so the type costs no extra call.
-  // Entries are not followed (-type d is false for a link to a folder); -H
-  // follows only the folder itself, as a link to it should open.
+  // find prints each directory twice in a row, so its type costs no extra call.
+  // -H follows only the folder itself (a link to a folder should open); entries are not followed.
   const fast = await exec("find", ["-H", ".", "-mindepth", "1", "-maxdepth", "1", "!", "-name", ".git",
     "(", "-type", "d", "-print0", "-print0", "-o", "-print0", ")"], { cwd: path, on }).catch(() => null);
   if (fast?.code === 0) {
-    const out = [], text = fast.stdout;
-    for (let at = 0, last = null; at < text.length && out.length <= PER_FOLDER + 1;) {
-      const end = text.indexOf("\0", at);
-      if (end < 0) break;
-      const name = text.slice(at + 2, end); // drop "./"
-      at = end + 1;
-      if (name === last) { out[out.length - 1].dir = true; last = null; continue; }
-      out.push({ name, dir: false }); last = name;
-    }
+    // Names kept: two per folder, one for anything else; "./" dropped.
+    const names = fast.stdout.split("\0").slice(0, -1).slice(0, 2 * (PER_FOLDER + 2)).map((name) => name.slice(2));
+    // A name equal to the one before it, unless that was itself a pair's second, is a folder's second print.
+    const second = mapWith(names, (last, name) => (name === last ? [null, true] : [name, false]), null);
+    const out = names.flatMap((name, i) => (second[i] ? [] : [{ name, dir: second[i + 1] === true }]));
     // One past the cap tells the panel the folder was cut short.
     return out.slice(0, PER_FOLDER + 1);
   }
-  // Fallback (no find on that machine, or a folder so large the output went
-  // past exec's limit): stream NUL-separated names. Bash's read -d keeps the
-  // stream bounded; read one extra entry to detect truncation.
+  // Fallback when find is missing or its output would pass exec's limit; one extra entry detects truncation.
   const script = `
 n=0
 find -H "$1" -mindepth 1 -maxdepth 1 ! -name .git -print0 2>/dev/null |
@@ -56,19 +47,17 @@ done
 test -d "$1"`;
   const r = await exec("bash", ["-c", script, "files", path], { on });
   if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-  const fields = r.stdout.split("\0"), out = [];
-  for (let i = 0; i + 1 < fields.length; i += 2) out.push({ name: fields[i + 1], dir: fields[i] === "d" });
-  return out;
+  const fields = r.stdout.split("\0");
+  return Array.from({ length: Math.floor(fields.length / 2) }, (_, k) => ({ name: fields[2 * k + 1], dir: fields[2 * k] === "d" }));
 }
 
-// The panel exists only while it is shown (kanso-tabs mounts it on demand),
-// so it always works: no idle state to keep.
+// Exists only while shown (kanso-tabs mounts it on demand), so there is no idle state to keep.
 export class Files {
-  constructor() { this.rev = 0; } // bumped whenever the rows would differ: the tree is rebuilt only then
+  constructor() { this.rev = 0; } // bumped whenever the rows would differ; the tree is rebuilt only then
 
   init(cx) {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
-    // Back from a Markdown file: the folders that were open, for the same place.
+    // Returning from the preview: the folders that were open, for the same place.
     const back = shared(RETURN);
     if (back) {
       setShared(RETURN, null);
@@ -106,8 +95,9 @@ export class Files {
     const entries = await directory(path ? `${root}/${path}` : root, on);
     if (key() !== context || (path && !this.folders.has(path))) return;
     const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
-    this.entries.set(path, entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)));
-    this.rev++;
+    const kept = entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).toSorted((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+    this.entries = new Map([...this.entries, [path, kept]]);
+    this.rev = this.rev + 1;
     if (entries.length > PER_FOLDER || used + entries.length > TOTAL) this.limited = true;
   }
 
@@ -117,61 +107,56 @@ export class Files {
     if (context !== this.context) {
       this.context = context; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set();
       this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
-      this.rev++;
+      this.rev = this.rev + 1;
     }
     if (!cwd) return;
     this.loading = true;
     this.limited = false;
     cx.spawn(async cx => {
       try {
-        for (const path of ["", ...this.folders]) await this.loadFolder(path, context);
+        await mapSeries(["", ...this.folders], (path) => this.loadFolder(path, context));
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
-        const marks = {};
-        if (top?.code === 0) {
-          const status = await exec("git", ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null);
-          if (status?.code === 0) for (const entry of status.stdout.split("\0").filter(Boolean).slice(0, TOTAL)) {
-            const xy = entry.slice(0, 2);
-            marks[`${top.stdout.trim()}/${entry.slice(3)}`] = xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
-          }
-        }
+        const status = top?.code === 0
+          ? await exec("git", ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null)
+          : null;
+        const marks = Object.fromEntries(status?.code === 0 ? status.stdout.split("\0").filter(Boolean).slice(0, TOTAL).map((entry) => {
+          const xy = entry.slice(0, 2);
+          return [`${top.stdout.trim()}/${entry.slice(3)}`, xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M"];
+        }) : []);
         if (key() !== context) return;
-        this.marks = marks; this.rev++; this.error = null; this.watch(cwd, cx);
+        this.marks = marks; this.rev = this.rev + 1; this.error = null; this.watch(cwd, cx);
       } catch (e) { if (key() === context) this.error = String(e); }
       finally { this.loading = false; cx.notify(); }
     });
   }
 
   toggle(path, cx) {
-    this.rev++;
+    this.rev = this.rev + 1;
     if (this.folders.has(path)) {
-      for (const folder of [...this.folders]) if (folder === path || folder.startsWith(path + "/")) {
-        this.folders.delete(folder);
-        this.entries.delete(folder);
-      }
+      const closing = (folder) => this.folders.has(folder) && (folder === path || folder.startsWith(path + "/"));
+      this.entries = new Map([...this.entries].filter(([folder]) => !closing(folder)));
+      this.folders = new Set([...this.folders].filter((folder) => !closing(folder)));
     } else {
-      this.folders.add(path);
+      this.folders = new Set([...this.folders, path]);
       if (!this.entries.has(path) && !this.pending.has(path)) {
         const context = this.context;
-        this.pending.add(path);
+        this.pending = new Set([...this.pending, path]);
         cx.spawn(async cx => {
           try { await this.loadFolder(path, context); }
           catch (e) { if (key() === context) this.error = String(e); }
-          finally { this.pending.delete(path); cx.notify(); }
+          finally { this.pending = new Set([...this.pending].filter((p) => p !== path)); cx.notify(); }
         });
       }
     }
     cx.notify();
   }
 
-  // The file in a code editor of your choice (the `open-with` mod), or in
-  // Kanso's own preview panel, which that list offers for text files.
   openWith(path) {
     if (!insideRoot(path)) return;
     openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { file: `${this.root}/${path}`, folder: this.root, machine: this.on } });
   }
 
-  // A Markdown file opens in the preview panel, to read and edit, with a way
-  // back here; the open folders are kept for that return.
+  // The open folders are kept so returning from the preview restores them.
   read(path) {
     if (!insideRoot(path)) return;
     setShared(RETURN, { context: this.context, folders: [...this.folders] });
@@ -189,30 +174,26 @@ export class Files {
         if (this.file !== path || key() !== context) return;
         if (text === null) { this.fileError = "This file is no longer available"; return; }
         if (text.includes("\0")) { this.fileError = "Binary file · no text preview"; return; }
-        // Markdown is rendered (the SDK's TextView); anything else is read-only code.
         if (isMarkdown(path)) this.text = text; else this.code = codeState(path, text);
       } catch { if (this.file === path && key() === context) this.fileError = "Cannot preview this file (binary, too large, or unreadable)"; }
       finally { cx.notify(); }
     });
   }
 
-  // The tree's rows, built again only when something in them changed (`rev`):
-  // a draw comes with every shared write anywhere, the rows run to 5,000.
+  // Rebuilt only when `rev` changes: a draw comes with every shared write anywhere, and rows run to 5,000.
   rows() {
-    if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0, []) };
+    if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0).slice(0, TOTAL) };
     return this.shown.items;
   }
 
-  // Plain rows, so a frame builds elements only for the ones on screen.
-  flat(prefix, depth, out) {
-    if (out.length >= TOTAL || depth > 40) return out;
-    for (const entry of this.entries.get(prefix) ?? []) {
-      if (out.length >= TOTAL) break;
+  // Plain rows, so the virtual list builds elements only for the ones on screen.
+  flat(prefix, depth) {
+    if (depth > 40) return [];
+    return (this.entries.get(prefix) ?? []).flatMap((entry) => {
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-      out.push({ path, entry, depth, mark: this.marks[`${this.root}/${path}`] });
-      if (entry.dir && this.folders.has(path)) this.flat(path, depth + 1, out);
-    }
-    return out;
+      const row = { path, entry, depth, mark: this.marks[`${this.root}/${path}`] };
+      return entry.dir && this.folders.has(path) ? [row, ...this.flat(path, depth + 1)] : [row];
+    });
   }
 
   row({ path, entry, depth, mark }, t) {
@@ -232,15 +213,14 @@ export class Files {
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))
         .child(div().font_semibold().child("Files"))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? ""))
+        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).at(-1) ?? ""))
         .when(Boolean(this.file), el => el.child(div().id("files-open-with").p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip("Open with…")
           .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => this.openWith(this.file))
           .child(svg("mods/kanso-chrome/icons/open-with.svg").size(14)))))
       .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
           .child(v_virtual_list("files-rows", items.length, 28, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, t)))
-            // Item renderers run during native layout, where per-row handlers
-            // are forbidden. The list owns two handlers, keyed by file path.
+            // Item renderers run during native layout, where per-row handlers are forbidden.
             .on_item_click((path, cx) => {
               const item = items.find((item) => item.path === path);
               if (!item) return;

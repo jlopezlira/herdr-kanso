@@ -6,12 +6,10 @@ import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, exec, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
+import { tryOrAsync } from "./pure.js";
 
-const basename = (path) => path.replace(/\/+$/, "").split("/").pop();
-// Kanso's own settings (kanso-settings): keys, what shows, what's new. The
-// tab bar holds the button; ⌃⇧, lands here (kanso-chrome.settings).
+const basename = (path) => path.replace(/\/+$/, "").split("/").at(-1);
 const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
-// The pieces you turned off in Kanso settings (`kanso.hidden`).
 const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
 
 export default class WorkspaceChrome extends View {
@@ -20,13 +18,12 @@ export default class WorkspaceChrome extends View {
     if (!props()?.footer) return;
     this.updater = new Updater();
     this.updater.start(cx);
-    // The footer's row installs; the toast and keys go to the tab bar
-    // (kanso-tabs.update, .check, .settings), which is always on screen.
-    // These names stay for keys bound to them before.
+    // Command names stay kanso-tabs.* for keys bound to them before.
     cx.spawn(async (cx) => {
       for (;;) {
-        let c;
-        try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
+        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
+        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+        const { c } = next;
         if (c === "update") this.updater.install(cx);
         else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
         else if (c === "settings") openSettings();
@@ -40,8 +37,7 @@ export default class WorkspaceChrome extends View {
     cx.timer.every(30000, (cx) => this.power(cx));
   }
 
-  // On battery or on the charger (pmset), for the marks to step instead of
-  // glide (marks.js). Written only when it changes: every mod draws again.
+  // Written only when it changes: every mod draws again on a shared write.
   power(cx) {
     cx.spawn(async () => {
       const r = await exec("pmset", ["-g", "ps"]).catch(() => null);
@@ -51,18 +47,18 @@ export default class WorkspaceChrome extends View {
     });
   }
 
-  // The mod runtime can run out of memory after a long day of hot reloads
-  // (something of each replaced build stays behind): from then on panels and
-  // bars fail to load until the window restarts. The footer asks Herdr every
-  // minute and offers the restart in a toast; terminals and agents live in
-  // herdr-core and stay.
+  // Hot reloads leak mod-runtime memory until the window restarts; terminals live in herdr-core and survive it.
   watch(cx) {
-    if (this.watching) return; // the last look has not answered yet
+    if (this.watching) return;
     this.watching = true;
     cx.spawn(async (cx) => {
-      let errors = [];
-      try { const r = await exec("sh", ["-c", 'HERDR_APP_HOME="$1" herdr-app status', "_", appHome()]); errors = JSON.parse(r.stdout).errors ?? []; } catch { return; }
-      finally { this.watching = false; }
+      const status = await tryOrAsync(async () => {
+        const r = await exec("sh", ["-c", 'HERDR_APP_HOME="$1" herdr-app status', "_", appHome()]);
+        return { errors: JSON.parse(r.stdout).errors ?? [] };
+      });
+      this.watching = false;
+      if (!status) return;
+      const { errors } = status;
       if (!errors.some((e) => /out of memory/i.test(String(e)))) { this.warned = false; return; }
       if (this.warned) return;
       this.warned = true;
@@ -71,7 +67,7 @@ export default class WorkspaceChrome extends View {
     });
   }
 
-  // A new window on the same home, started apart from this one, then this one quits.
+  // Started detached, so the new window survives this one quitting.
   restart() {
     exec("sh", ["-c", '(sleep 1; HERDR_APP_HOME="$1" nohup herdr-app >/dev/null 2>&1 &) >/dev/null 2>&1', "_", appHome()]).catch(() => {});
     run("app.quit");
@@ -81,8 +77,6 @@ export default class WorkspaceChrome extends View {
     const t = theme();
     const collapsed = shared("sidebar.collapsed") === true;
     if (props()?.footer) {
-      // Secondary nav (Settings, Add machine), then the account chip, as in shadcn's dashboard-01.
-      // Collapsed, every item is a centred square with its label as a tooltip.
       const row = (id, icon, label, action) => h_flex().id(id).relative().h(34).flex_none().items_center().rounded(6)
         .text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
         .on_click(action).child(svg(icon).size(17).flex_none())
@@ -101,7 +95,6 @@ export default class WorkspaceChrome extends View {
           .child(div().truncate().text_size(13).font_medium().text_color(t.foreground).child(who))
           .child(div().truncate().text_size(11.5).text_color(t.muted).child(count))));
       const ready = Boolean(updates().app.ready);
-      // Kanso's own release, apart from Herdr's: its own row, shown only when there is one.
       const kanso = this.updater?.available();
       const busy = this.updater?.busy;
       const kansoLabel = busy ? "Updating kansō..." : `Update kansō to ${kanso}`;
@@ -119,9 +112,6 @@ export default class WorkspaceChrome extends View {
         .child(div().h(8).flex_none())
         .child(chip);
     }
-    // The top bar holds the traffic lights and lets you drag the window. Open,
-    // Herdr's mark sits at its right end, clear of the lights (collapsed, the
-    // rail shows it lower, over the buttons). The actions live one row lower.
     const lights = window()?.platform === "macos" ? 76 : 14;
     return h_flex().size_full().bg(t.chrome).items_center().justify_end().pl(lights).pr(14).gap(8)
       .when(!collapsed, el => el.child(image("frame/welcome/herdr.png").size(20).rounded(6))

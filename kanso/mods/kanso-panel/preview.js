@@ -1,9 +1,3 @@
-// One file in the side panel. Markdown is shown formatted and edited in
-// place (doc.js); anything else is read-only code. A click on a
-// Markdown file in Files opens it here (with a way back to Files), and "Open
-// with" offers it for text files, in place of an external editor. The file is
-// read again when its folder changes (an agent writing a doc shows up as it
-// writes). Props: { path, on } (the machine, null here), back ("files").
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
 import { readTextFile, watchFolder, theme, openOverlay } from "herdr";
@@ -11,7 +5,7 @@ import { codeState, isMarkdown, showPanel } from "./lib.js";
 import { MarkdownDoc, tildePath } from "./doc.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
-const nameOf = (path) => path.split(/[\\/]/).pop();
+const nameOf = (path) => path.split(/[\\/]/).at(-1);
 
 export class Preview {
   init(cx, p) {
@@ -31,8 +25,6 @@ export class Preview {
     cx.notify();
   }
 
-  // A link in the document to another Markdown file opens it here; one to
-  // any other file is offered to "Open with".
   follow(to, cx) {
     if (!isMarkdown(to)) { openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { file: to, folder: folderOf(to), machine: this.on } }); return; }
     this.leave(cx, (cx) => this.open(to, cx));
@@ -60,8 +52,7 @@ export class Preview {
     });
   }
 
-  // Watch the file's folder (this computer only) and read the file again on
-  // every change there. Opening another file starts a new watch.
+  // Watched via the folder (this computer only): any change there re-reads the file.
   watch(cx) {
     if (this.on) return;
     const path = this.path, dir = folderOf(path);

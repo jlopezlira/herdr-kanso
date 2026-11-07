@@ -1,21 +1,4 @@
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// One dialog, three pages, opened from the gear at the end of the tab bar
-// (after the panel buttons, fixed) or ⌃⇧, (kanso-tabs.settings):
-// - Keys: Kanso's own keys (never Herdr's), the tab bar's first, drawn as
-//   the bar. Click a key and press a new one in its place, Backspace while
-//   pressing drops it, Reset goes back to what Kanso ships. A key something else already uses
-//   says so and takes a second press. What you press is written to Herdr's
-//   keys.json (`layout:kanso`, `mod:kanso-spend`, `mod:kanso-guard`), which Herdr applies at
-//   once and the updater keeps as yours.
-// - Mods: the side panels and the pieces of Kanso you can do without, each
-//   with a switch. Panels follow the same list as the tab bar's Panels
-//   popup (`kanso.panels.off`); pieces are `kanso.hidden`, which each mod
-//   reads.
-// - What's new: Kanso's CHANGELOG, newest first, with the version you have
-//   marked; read from GitHub and kept in data/kanso-settings for when it
-//   can't be reached, and the update button when a newer release waits.
-// - Credits: Herdr, Kanso's repository and the people who make it.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, exec, run } from "herdr";
@@ -24,10 +7,10 @@ import { glyphs, keycap } from "./marks.js";
 import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { parseChangelog, plain, compare } from "./changelog.js";
+import { tryOrAsync } from "./pure.js";
 
 const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
-// Credits: where Kanso comes from and who makes it, each opened in the browser.
-// The people's GitHub avatars ship in avatars/ (96 px), so the page needs no network.
+// The people's avatars ship in avatars/ (96 px), so the credits page needs no network.
 const PLACES = [
   { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
   { id: "kanso", name: "kansō", note: "Source, releases and issues", url: "https://github.com/jlopezlira/herdr-kanso" },
@@ -68,12 +51,8 @@ export default class Settings extends View {
     });
   }
 
-  // ---- Keys ----------------------------------------------------------------------
-
-  // Every binding in Kanso's sections, by section then chord, as Herdr has them now.
   bound() { return keys().filter((k) => GROUPS.some((g) => g.section === k.section)); }
 
-  // A row's chords now, and as shipped; a family's as one pattern each.
   chordsOf(row, section, list) {
     const mine = list.filter((k) => k.section === section && ofRow(row, k.action)).map((k) => k.keys);
     return row.family ? [...new Set(mine.map(familyPattern))] : mine;
@@ -124,7 +103,7 @@ export default class Settings extends View {
     });
   }
 
-  // keys.json rewritten with `change(doc)`; Herdr applies it as it lands.
+  // Herdr applies keys.json as it lands.
   change(cx, change) {
     const path = `${appHome()}/keys.json`;
     cx.spawn(async (cx) => {
@@ -139,12 +118,9 @@ export default class Settings extends View {
     });
   }
 
-  // A row's keys as a person reads them: a family's "⌃⌥N" as "⌃⌥1–9".
   shown(chord) { return glyphs(chord).replace(/N$/, "1–9"); }
 
-  // The panels as the tab bar shows them, in its order, each with its key
-  // by place (the Nth shown panel is the family's N), then the gear. A click
-  // on a key takes a new one for all of them: each keeps its number.
+  // The Nth shown panel gets the family's Nth chord; a new key is taken for all of them.
   barKeys(t, c, group, list) {
     const [panelRow, gearRow] = group.actions;
     const roster = Array.isArray(shared("kanso.panels.all")) ? shared("kanso.panels.all") : [];
@@ -163,7 +139,7 @@ export default class Settings extends View {
       ...panels.map((pnl, i) => tile(pnl.id, pnl.icon, pnl.label, panelRow, pattern ? pattern.replace(/N$/, String(i + 1)) : null, pattern)),
       tile("settings", "mods/kanso-chrome/icons/settings.svg", "Settings", gearRow, gear, gear),
     ];
-    const changed = [panelRow, gearRow].some((row) => JSON.stringify(this.chordsOf(row, group.section, list).sort()) !== JSON.stringify(this.shipped(row, group.section).sort()));
+    const changed = [panelRow, gearRow].some((row) => JSON.stringify(this.chordsOf(row, group.section, list).toSorted()) !== JSON.stringify(this.shipped(row, group.section).toSorted()));
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().pt(G.lg)
         .child(div().flex_1().text_size(12).text_color(c.dim).child("The tab bar"))
@@ -174,7 +150,6 @@ export default class Settings extends View {
         : "Press the new key. Esc to keep, Backspace to remove.")));
   }
 
-  // What a press needs said: the key to press, a key already in use, an error.
   pressNote(c, ask) {
     const text = this.conflict
       ? `${glyphs(this.conflict.chord)} already does ${[...new Set(this.conflict.taken.map((k) => k.action))].join(", ")}. Press it again to take it, Esc to keep yours.`
@@ -189,7 +164,7 @@ export default class Settings extends View {
       .children(g.actions.map((row) => {
         const id = row.family ?? row.action;
         const chords = this.chordsOf(row, g.section, list);
-        const changed = JSON.stringify([...chords].sort()) !== JSON.stringify([...this.shipped(row, g.section)].sort());
+        const changed = JSON.stringify(chords.toSorted()) !== JSON.stringify(this.shipped(row, g.section).toSorted());
         const capturing = this.capture?.row === row;
         const line = h_flex().id(`key-${id}`).w_full().h(32).gap(G.sm).items_center().px(G.sm).rounded(6)
           .cursor_pointer().hover((s) => s.bg(c.subtle)).when(capturing, (el) => el.bg(c.subtle))
@@ -206,8 +181,6 @@ export default class Settings extends View {
       .children(rows);
   }
 
-  // ---- Mods ----------------------------------------------------------------------
-
   modsPage(t, c) {
     const off = new Set(Array.isArray(shared("kanso.panels.off")) ? shared("kanso.panels.off") : []);
     const panels = Array.isArray(shared("kanso.panels.all")) ? shared("kanso.panels.all") : [];
@@ -218,36 +191,31 @@ export default class Settings extends View {
         .when(Boolean(note), (el) => el.child(div().truncate().text_size(11.5).text_color(c.dim).child(note))))
       .when(Boolean(order), (el) => el.child(h_flex().flex_none().gap(2).children(order)))
       .child(toggleSwitch(`toggle-${id}`, on, (next) => flip(next), c, { label }));
-    // The panels' order in the bar, moved one step at a time (`kanso.panels.order`, the same list the bar's drag writes).
+    // `kanso.panels.order`: the same list the bar's drag writes.
     const ids = panels.map((p) => p.id);
     const step = (id, by, glyph) => {
       const i = ids.indexOf(id), j = i + by, can = j >= 0 && j < ids.length;
       return div().id(`order-${id}-${by}`).size(22).flex_none().rounded(4).flex().items_center().justify_center().text_size(12)
         .text_color(can ? c.muted : c.border).when(can, (el) => el.cursor_pointer().hover((s) => s.bg(c.input).text_color(c.text))
-          .on_click(() => { const next = [...ids]; [next[i], next[j]] = [next[j], next[i]]; setShared("kanso.panels.order", next); }))
+          .on_click(() => setShared("kanso.panels.order", ids.with(i, ids[j]).with(j, ids[i]))))
         .child(glyph);
     };
     return v_flex().w_full()
       .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("What kansō shows, and in what order. The arrows move a panel's button along the tab bar; a panel or piece turned off leaves its place at once, and comes back the same way."))
       .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child("Side panels"))
       .when(!panels.length, (el) => el.child(div().py(G.sm).text_size(12).text_color(c.dim).child("The tab bar lists the panels once it has drawn.")))
-      .children(panels.map((p) => row(p.id, p.label, null, !off.has(p.id), (on) => { const next = new Set(off); on ? next.delete(p.id) : next.add(p.id); setShared("kanso.panels.off", [...next]); },
+      .children(panels.map((p) => row(p.id, p.label, null, !off.has(p.id), (on) => setShared("kanso.panels.off", on ? [...off].filter((x) => x !== p.id) : [...new Set([...off, p.id])]),
         [step(p.id, -1, "\u2191"), step(p.id, 1, "\u2193")])))
       .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child("Pieces"))
-      .children(PIECES.map((p) => row(p.id, p.label, p.note, !hidden.has(p.id), (on) => { const next = hiddenSet(); on ? next.delete(p.id) : next.add(p.id); setShared(HIDDEN, [...next]); })));
+      .children(PIECES.map((p) => row(p.id, p.label, p.note, !hidden.has(p.id), (on) => { const was = [...hiddenSet()]; setShared(HIDDEN, on ? was.filter((x) => x !== p.id) : [...new Set([...was, p.id])]); })));
   }
-
-  // ---- What's new -------------------------------------------------------------------
 
   async readNews(cx) {
     const dir = `${appHome()}/data/kanso-settings`, cache = `${dir}/CHANGELOG.md`;
-    let text = null, from = null;
-    try { const r = await fetch(CHANGELOG_URL); if (r.ok) { text = await r.text(); from = "github"; } } catch {}
-    if (text) {
-      try { await exec("mkdir", ["-p", dir]); await writeTextFile(cache, text, await readTextFile(cache)); } catch {}
-    } else {
-      try { text = await readTextFile(cache); from = text ? "cache" : null; } catch {}
-    }
+    const fresh = await tryOrAsync(async () => { const r = await fetch(CHANGELOG_URL); return r.ok ? await r.text() : null; });
+    if (fresh) await tryOrAsync(async () => { await exec("mkdir", ["-p", dir]); await writeTextFile(cache, fresh, await readTextFile(cache)); });
+    const kept = fresh ? null : await tryOrAsync(() => readTextFile(cache));
+    const text = fresh || kept, from = fresh ? "github" : kept ? "cache" : null;
     this.news = text ? { entries: parseChangelog(text), error: null, from } : { entries: [], error: "GitHub could not be reached, and nothing was kept from before.", from: null };
     cx.notify();
   }
@@ -271,7 +239,6 @@ export default class Settings extends View {
             .child(div().flex_none().w(6).pt(7).child(div().size(4).rounded_full().bg(c.dim)))
             .child(div().flex_1().min_w(0).text_size(12.5).line_height(1.5).text_color(c.muted).child(plain(item)))))));
     };
-    // A release newer than yours: one button, the same update as the footer's row.
     const latest = shared("kanso.update")?.latest ?? null;
     const waiting = have && latest && compare(latest, have) > 0 ? latest : null;
     return v_flex().w_full()
@@ -285,7 +252,6 @@ export default class Settings extends View {
       .children(entries.map(entry));
   }
 
-  // Where Kanso comes from and who makes it. Each row opens in the browser.
   creditsPage(t, c) {
     const link = (id, lead, title, note, url) => h_flex().id(`credit-${id}`).w_full().h(52).gap(G.md).items_center().px(G.sm).rounded(8)
       .cursor_pointer().hover((s) => s.bg(c.subtle)).tooltip(url).on_click((_e, cx) => cx.open_url(url))
@@ -299,7 +265,7 @@ export default class Settings extends View {
     return v_flex().w_full()
       .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("kansō is a layout for Herdr, made in the open."))
       .child(heading("Where it comes from"))
-      // Herdr's own mark (the app ships it) and Kanso's ensō.
+      // Herdr's mark ships with the app; the ensō is Kanso's.
       .children(PLACES.map((p) => link(p.id, p.id === "herdr"
         ? image("frame/welcome/herdr.png").size(28).flex_none().rounded(7)
         : div().size(28).flex_none().rounded(7).bg(c.subtle).flex().items_center().justify_center().child(svg("mods/kanso-chrome/icons/enso.svg").size(16).text_color(c.text)),
@@ -315,10 +281,9 @@ export default class Settings extends View {
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().w_full().items_center().gap(G.md)
         .child(div().flex_1().text_size(15).font_semibold().child(this.installed ? `kansō ${this.installed}` : "kansō"))
-        // How to use it, and its keys on a keyboard (kanso-help, ⌘?).
         .child(quietLink("settings-help", "Help and keys", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
-      .child(v_flex().flex_1().min_h(0).pt(G.md).overflow_y_scrollbar().child(page));
+      .child(v_flex().flex_1().min_h(0).pt(G.md).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

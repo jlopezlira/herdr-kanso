@@ -1,21 +1,13 @@
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-// Part of Kanso since 1.5.0; it was the separate herdr-token-spend mod, and
-// the first start moves that mod's data (data/token-spend) here.
-//
-// Spend: what your AI coding sessions cost at API list price, per model,
-// project and task. Native view only: Node (presenter.mjs) scans, prices and
-// formats; this view keeps the small result and lays it out.
-//
-// QuickJS runs every step under a time limit, so nothing heavy happens here:
-// the payload is ~35 KB of ready-made strings, and render builds < 100 rows.
+// QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout } from "herdr";
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
+import { tryOr, tryOrAsync } from "./pure.js";
 
-// The folder name: change it here if you install the mod under another name.
 const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
 const PRESENTER_FILE = `mods/${MOD}/presenter.mjs`;
@@ -29,9 +21,6 @@ const REFRESH_MS = 60_000;
 const LIVE_REFRESH_MS = 30_000;
 const LIST_ROWS = 6;
 const TASK_ROWS = 8;
-
-// ---------------------------------------------------------------------------
-// Helpers
 
 function sanitizeError(error) {
   const raw = error && typeof error === "object" ? (error.message ?? error.error ?? "") : String(error ?? "");
@@ -56,25 +45,19 @@ function parseRuntimeNode(raw) {
 
 function projectName(value) {
   const text = String(value ?? "").replace(/[\\/]+$/, "");
-  return text.split(/[\\/]/).pop() || text || "Unknown project";
+  return text.split(/[\\/]/).at(-1) || text || "Unknown project";
 }
 
-/**
- * True when this mod's block is in the layout but not on screen: under a
- * hidden node, or in a stack showing another child. Herdr keeps such a copy
- * alive (and its timers running), so the view checks before doing any work.
- */
+/** True when this block is in the layout but off screen; Herdr keeps hidden copies (and their timers) alive. */
 function hiddenInLayout() {
   try {
-    const path = [];
-    const walk = (node) => {
-      path.push(node);
-      if (node?.content?.mod === MOD) return true;
-      for (const child of node?.children ?? []) if (walk(child)) return true;
-      path.pop();
-      return false;
+    const pathTo = (node) => {
+      if (node?.content?.mod === MOD) return [node];
+      const below = (node?.children ?? []).reduce((found, child) => found ?? pathTo(child), null);
+      return below ? [node, ...below] : null;
     };
-    if (!walk(layout())) return false; // a pane or overlay: shown whenever it runs
+    const path = pathTo(layout());
+    if (!path) return false; // a pane or overlay: shown whenever it runs
     return path.some((node, index) => node.hidden
       || (node.type === "stack" && node.active && path[index + 1] && node.active !== path[index + 1].id));
   } catch {
@@ -88,8 +71,6 @@ function formatTime(iso) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-// ---------------------------------------------------------------------------
-
 export default class TokenSpend extends View {
   init(_props, cx) {
     this.closed = false;
@@ -101,7 +82,7 @@ export default class TokenSpend extends View {
     this.costs = null;
     this.share = new Share(MOD, `${appHome()}/${DATA_DIR}`);
     this.error = null;
-    this.running = null; // "snapshot" | "prepare" | null
+    this.running = null;
     this.queued = { snapshot: false, prepare: false };
     this.generation = 0;
     this.task = null;
@@ -110,8 +91,8 @@ export default class TokenSpend extends View {
     this.lastSnapshotAt = 0;
     this.cost = { period: "month", offset: 0, project: "all", model: "all" };
     this.expanded = {};
-    this.page = "home"; // "home" | "settings"
-    this.stack = []; // detail views: { kind: "project" | "model" | "task", label, value?, task?, prevCost? }
+    this.page = "home";
+    this.stack = [];
     this.settings = null;
     this.planInputs = [];
     this.settingsNote = null;
@@ -121,20 +102,18 @@ export default class TokenSpend extends View {
     this.ticker = null;
     this.awake = false;
 
-    // On demand: Herdr starts this copy the first time it shows. From then on
-    // it works only while visible; hidden, it stops its timer and lets go of
-    // its data, and the panel button wakes it again (`kanso-spend.open`).
+    // Herdr starts hidden copies too, so wake only when this one is on screen.
     if (!hiddenInLayout()) this.wake(cx);
 
     this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
-        let command;
-        try {
-          command = await nextCommand();
-          commandCx.notify(); // a replaced build (hot reload, update) stops here, before acting
-        } catch {
-          break;
-        }
+        const next = await tryOrAsync(async () => {
+          const command = await nextCommand();
+          commandCx.notify();
+          return { command };
+        });
+        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+        const { command } = next;
         const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
         if (name === "refresh") this.run("snapshot", commandCx);
         else if (name === "open") this.wake(commandCx);
@@ -144,7 +123,6 @@ export default class TokenSpend extends View {
     });
   }
 
-  /** Shown: load what is missing, then keep fresh while visible. */
   wake(cx) {
     if (this.closed) return;
     this.awake = true;
@@ -154,7 +132,6 @@ export default class TokenSpend extends View {
           this.sleep();
           return;
         }
-        // Live sessions are followed every 30 s; otherwise once a minute.
         const every = this.costs?.live?.length ? LIVE_REFRESH_MS : REFRESH_MS;
         if (Date.now() - this.lastSnapshotAt >= every) this.run("snapshot", tickCx);
       });
@@ -163,7 +140,7 @@ export default class TokenSpend extends View {
       if (this.runtimeTask) return;
       this.runtimeTask = cx.spawn(async (runtimeCx) => {
         try {
-          // Once: the separate token-spend mod's data, so its history carries over.
+          // One-time migration of the old token-spend mod's data, so its history carries over.
           await exec("sh", ["-c", 'if [ ! -e "$2/store.json" ] && [ -d "$1" ]; then mkdir -p "$2" && cp -R "$1/." "$2/" && rm -rf "$2"/*.lock; fi', "sh",
             `${appHome()}/data/token-spend`, `${appHome()}/${DATA_DIR}`]).catch(() => null);
           this.nodeBinary = parseRuntimeNode(await readTextFile(`${appHome()}/${RUNTIME_FILE}`));
@@ -182,7 +159,6 @@ export default class TokenSpend extends View {
     cx.notify();
   }
 
-  /** Hidden: no timer, no Node process, no data kept. */
   sleep() {
     this.awake = false;
     for (const handle of [this.ticker, this.continueTimer]) {
@@ -209,18 +185,16 @@ export default class TokenSpend extends View {
     return { today, cost: { ...this.cost } };
   }
 
-  /**
-   * One presenter call at a time. A request made while another runs is
-   * queued (a scan wins over a re-price), so filters never race a refresh.
-   */
+  /** One presenter call at a time; later requests queue, so filters never race a refresh. */
   run(command, cx, extra = null) {
     if (this.closed || !this.nodeBinary) return;
     if (this.running) {
       if (command === "configure") this.queuedSources = extra;
-      this.queued[command === "configure" ? "snapshot" : command] = true;
+      this.queued = { ...this.queued, [command === "configure" ? "snapshot" : command]: true };
       return;
     }
-    const generation = ++this.generation;
+    this.generation += 1;
+    const generation = this.generation;
     const sent = this.options();
     this.running = command;
     if (command === "snapshot") this.lastSnapshotAt = Date.now();
@@ -235,34 +209,39 @@ export default class TokenSpend extends View {
     });
 
     this.task = cx.spawn(async (taskCx) => {
-      let failure = null;
-      let payload = null;
-      try {
-        const result = await exec(this.nodeBinary, [
-          `${appHome()}/${PRESENTER_FILE}`, command,
-          "--store", `${appHome()}/${DATA_DIR}/store.json`,
-          "--home", home(),
-          "--options", JSON.stringify(sent),
-          ...(command === "configure" ? ["--sources", JSON.stringify(extra ?? {})] : []),
-        ]);
-        if (result.code !== 0) throw new Error(resultError(result));
-        payload = JSON.parse(String(result.stdout ?? ""));
-        if (payload?.kind !== PAYLOAD_KIND || payload.version !== PAYLOAD_VERSION || !payload.costs) {
-          throw new Error("Spend got an answer it does not understand. Reload the panel.");
-        }
-      } catch (error) {
-        failure = sanitizeError(error);
-      }
+      const { payload, failure } = await this.ask(command, sent, extra).then(
+        (answer) => ({
+          payload: answer,
+          failure: answer?.kind !== PAYLOAD_KIND || answer.version !== PAYLOAD_VERSION || !answer.costs
+            ? "Spend got an answer it does not understand. Reload the panel."
+            : null,
+        }),
+        (error) => ({ payload: null, failure: sanitizeError(error) }),
+      );
       if (generation !== this.generation || this.closed) return;
       if (payload) {
         this.scan = payload.scan ?? this.scan;
         if (this.awake) this.costs = payload.costs;
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
-        if (JSON.stringify(sent.cost) !== JSON.stringify(this.cost)) this.queued.prepare = true;
+        if (JSON.stringify(sent.cost) !== JSON.stringify(this.cost)) this.queued = { ...this.queued, prepare: true };
       }
       this.finish(taskCx, failure);
     });
+  }
+
+  /** Parsed presenter answer; Node 22's node:sqlite experimental notice is suppressed so stderr stays clean for errors. */
+  async ask(command, sent, extra) {
+    const result = await exec(this.nodeBinary, [
+      "--disable-warning=ExperimentalWarning",
+      `${appHome()}/${PRESENTER_FILE}`, command,
+      "--store", `${appHome()}/${DATA_DIR}/store.json`,
+      "--home", home(),
+      "--options", JSON.stringify(sent),
+      ...(command === "configure" ? ["--sources", JSON.stringify(extra ?? {})] : []),
+    ]);
+    if (result.code !== 0) throw new Error(resultError(result));
+    return JSON.parse(String(result.stdout ?? ""));
   }
 
   finish(cx, failure) {
@@ -279,7 +258,7 @@ export default class TokenSpend extends View {
         if (sources) this.run("configure", cx, sources);
         else this.run("snapshot", cx);
       } else if (this.queued.prepare) {
-        this.queued.prepare = false;
+        this.queued = { ...this.queued, prepare: false };
         this.run("prepare", cx);
       } else if (this.scan?.partial && !failure && this.awake) {
         // The first scan is time-boxed; keep going until it has read everything.
@@ -298,9 +277,6 @@ export default class TokenSpend extends View {
     this.run("prepare", cx);
     cx.notify();
   }
-
-  // -------------------------------------------------------------------------
-  // Navigation: Home -> project / model / task, each with a way back.
 
   openDetail(kind, item, cx) {
     this.openMenu = null;
@@ -362,9 +338,10 @@ export default class TokenSpend extends View {
     cx.spawn(async (saveCx) => {
       try {
         const before = await readTextFile(file);
-        let data = {};
-        try { data = before ? JSON.parse(before) : {}; } catch { data = {}; }
-        data.plans = plans;
+        // Unreadable JSON starts over; an array is written back unchanged (a key on an array never reaches its JSON).
+        const kept = tryOr(() => (before ? JSON.parse(before) : {}), {});
+        if (!kept || typeof kept !== "object") throw new TypeError("prices.json is not a JSON object.");
+        const data = Array.isArray(kept) ? kept : { ...kept, plans };
         await writeTextFile(file, `${JSON.stringify(data, null, 2)}\n`, before);
         this.settingsNote = plans.length ? `Saved ${plans.length} ${plans.length === 1 ? "plan" : "plans"}.` : "Saved. No plans.";
         this.run("prepare", saveCx);
@@ -383,12 +360,8 @@ export default class TokenSpend extends View {
     cx.notify();
   }
 
-  // -------------------------------------------------------------------------
-  // Render
-
   render(cx) {
-    // Shown again without the button (a space switch restored the panel):
-    // wake on the next tick, outside this render pass.
+    // A space switch can restore the panel without a command: wake on the next tick, outside the render pass.
     if (!this.awake && !this.closed && !this.waking && !hiddenInLayout()) {
       this.waking = true;
       cx.timer.after(0, (wakeCx) => {
@@ -399,10 +372,9 @@ export default class TokenSpend extends View {
     const c = tokens(theme());
     const narrow = (this.width || 960) < 560;
     const top = this.stack[this.stack.length - 1];
-    let body;
-    if (this.page === "settings") body = this.settingsView(c);
-    else if (top?.kind === "task") body = this.taskView(c, top.task, narrow);
-    else body = this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
+    const body = this.page === "settings" ? this.settingsView(c)
+      : top?.kind === "task" ? this.taskView(c, top.task, narrow)
+      : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
     return v_flex().id("spend-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => {
@@ -410,7 +382,7 @@ export default class TokenSpend extends View {
         this.width = size.width;
         if (changed) sizeCx.notify();
       })
-      .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
+      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(this.header(c, narrow))
           .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
@@ -451,11 +423,6 @@ export default class TokenSpend extends View {
         .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", icon("settings"), "Settings", (cx) => this.openSettings(cx), c))));
   }
 
-  /**
-   * The loader is the view's own silhouette: where the figure, the chart and
-   * the rows will be, in the faintest tone, breathing slowly while it loads.
-   * One native loop on the whole shape, and only while it is drawn.
-   */
   skeleton(c, narrow) {
     const block = (w, h, radius = 3) => div().w(w).h(h).flex_none().rounded(radius).bg(c.border);
     const heights = [18, 26, 22, 40, 64, 92, 48, 52, 36, 44, 20, 38, 70, 50, 42, 46, 28, 34, 58, 30, 44, 24, 14, 10, 8, 8, 6, 6, 6, 6, 8];
@@ -500,7 +467,6 @@ export default class TokenSpend extends View {
 
   costsView(c, narrow, top = null) {
     const data = this.costs;
-    // Inside a project, list its models; inside a model, its projects.
     const lists = [
       top?.kind === "project" ? null : this.list(c, "Projects", `${data.projectCount} projects`, data.projects, "project"),
       top?.kind === "model" ? null : this.list(c, "Models", `${data.modelCount} models`, data.models, "model"),
@@ -579,7 +545,7 @@ export default class TokenSpend extends View {
         .bg(c.popover).border_1().border_color(c.border)
         .children(this.menuOptions.map((option, index) => {
           const selected = option.value === value;
-          return Button.new(`${id}-option-${index}`).w_full().px(8).py(5).gap(G.sm).items_center().rounded(R.control)
+          return Button.new(`${id}-option-${index}`).flex_none().w_full().px(8).py(5).gap(G.sm).items_center().rounded(R.control)
             .cursor_pointer()
             .selected(selected)
             .set_position(index + 1, this.menuOptions.length)
@@ -674,7 +640,6 @@ export default class TokenSpend extends View {
         }, c))));
   }
 
-  /** One task or session: what it cost, in what, and when. */
   taskView(c, d, narrow) {
     const row = (name, sub, usd, tokens, index) => h_flex().w_full().items_end().gap(G.md).py(7)
       .when(index > 0, (el) => el.border_t(1).border_color(c.border))
@@ -709,7 +674,6 @@ export default class TokenSpend extends View {
 
   settingsView(c) {
     const s = this.settings;
-    // A setting's heading: its name, and what it does under it.
     const heading = (title, note) => v_flex().w_full().gap(4).pb(G.md)
       .child(div().text_size(15).text_color(c.text).child(title))
       .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(c.dim).child(note)));
@@ -750,7 +714,6 @@ export default class TokenSpend extends View {
           .child("While this panel is open: every minute, or every 30 seconds while a session is active. Closed, Spend does nothing.")));
   }
 
-  /** Sessions being written right now, this conversation included. */
   live(c, sessions) {
     return v_flex().w_full()
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)

@@ -1,12 +1,5 @@
 #!/usr/bin/env node
-// Node side of the Spend costs panel.
-//
-// The native view (QuickJS) parses this output inside one time-limited step,
-// so the payload stays small: every number and label arrives formatted, and
-// raw rows never leave Node.
-//
-//   presenter.mjs snapshot --store <file> --home <dir> [--options <json>]   scan, then costs
-//   presenter.mjs prepare  --store <file> [--home <dir>] [--options <json>] costs from the store
+// Node side of Spend: the QuickJS view parses this in one time-limited step, so all values arrive pre-formatted and raw rows never leave Node.
 import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +10,8 @@ import { loadLabels, updateLabels } from "./core/labels.mjs";
 import { deriveCosts, loadCatalog, loadOverrides } from "./core/costs.mjs";
 import { demoData } from "./core/demo.mjs";
 import { existsSync } from "node:fs";
+import { tryOrAsync } from "./pure.js";
+import { ExitError, exitWith } from "./core/util.mjs";
 
 export const PAYLOAD_KIND = "kanso-spend-costs";
 export const PAYLOAD_VERSION = 1;
@@ -33,38 +28,35 @@ function usage() {
   ].join("\n");
 }
 
+function parseFlags(argv, index = 1, options = {}) {
+  if (index >= argv.length) return options;
+  const arg = argv[index];
+  if (arg === "--help" || arg === "-h") return parseFlags(argv, index + 1, { ...options, help: true });
+  const match = /^-{2}(store|home|options|sources)(?:=(.*))?$/.exec(arg);
+  if (!match) throw new Error(`unknown argument ${arg}`);
+  const inline = match[2] !== undefined;
+  const value = inline ? match[2] : argv[index + 1];
+  if (value === undefined) throw new Error(`--${match[1]} needs a value`);
+  return parseFlags(argv, index + (inline ? 1 : 2), { ...options, [match[1]]: value });
+}
+
 function parseArgs(argv) {
-  const command = argv[0];
-  const options = {};
-  for (let index = 1; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--help" || arg === "-h") {
-      options.help = true;
-      continue;
-    }
-    const match = /^--(store|home|options|sources)(?:=(.*))?$/.exec(arg);
-    if (!match) throw new Error(`unknown argument ${arg}`);
-    let value = match[2];
-    if (value === undefined) {
-      index += 1;
-      value = argv[index];
-      if (value === undefined) throw new Error(`--${match[1]} needs a value`);
-    }
-    options[match[1]] = value;
+  return { command: argv[0], options: parseFlags(argv) };
+}
+
+function parseFlagJson(raw, flag) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new ExitError(`invalid ${flag}: ${error.message}`, 2);
   }
-  return { command, options };
 }
 
 function parseOptions(raw) {
   if (raw === undefined) return {};
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw Object.assign(new Error(`invalid --options: ${error.message}`), { exitCode: 2 });
-  }
+  const parsed = parseFlagJson(raw, "--options");
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw Object.assign(new Error("invalid --options: expected one JSON object"), { exitCode: 2 });
+    throw new ExitError("invalid --options: expected one JSON object", 2);
   }
   return parsed;
 }
@@ -74,7 +66,6 @@ function today() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** What the view shows about the scan itself: when, and whether it is still catching up. */
 function scanState(snapshot, lastScanAt) {
   const stats = snapshot?.stats ?? {};
   return {
@@ -89,18 +80,17 @@ function scanState(snapshot, lastScanAt) {
 
 const LIVE_WINDOW_MS = 30 * 60 * 1000;
 
-/** Sessions whose transcript changed recently, with when (ms). */
+/** Sessions whose transcript changed in the last LIVE_WINDOW_MS, with their latest file time in ms. */
 function liveSessions(store) {
   const now = Date.now();
-  const live = new Map();
-  for (const file of Object.values(store?.files ?? {})) {
+  const seen = Object.values(store?.files ?? {}).flatMap((file) => {
     const at = Number(file?.mtimeMs) || 0;
-    if (!at || now - at > LIVE_WINDOW_MS) continue;
-    for (const row of file.rows ?? []) {
-      if (typeof row.session === "string") live.set(row.session, Math.max(live.get(row.session) ?? 0, at));
-    }
-  }
-  return live;
+    if (!at || now - at > LIVE_WINDOW_MS) return [];
+    return (file.rows ?? []).filter((row) => typeof row.session === "string").map((row) => ({ session: row.session, at }));
+  });
+  return new Map([...Map.groupBy(seen, (s) => s.session)].map(([session, list]) => (
+    [session, list.reduce((latest, s) => Math.max(latest, s.at), 0)]
+  )));
 }
 
 async function costsFor(rows, storePath, home, options, { refresh = false, labels = null, store = null, live = null } = {}) {
@@ -115,7 +105,6 @@ async function costsFor(rows, storePath, home, options, { refresh = false, label
   });
 }
 
-/** What the Settings view edits: which harnesses are read, and what plans cost. */
 async function settingsFor(store, storePath) {
   const overrides = await loadOverrides(storePath);
   return {
@@ -146,13 +135,12 @@ export async function run(argv, environment = {}) {
   const home = path.resolve(options.home ?? environment.home ?? os.homedir());
   const viewOptions = parseOptions(options.options);
 
-  // Sample data instead of your sessions while data/<mod>/demo exists.
   if (existsSync(path.join(path.dirname(storePath), "demo")) && command !== "configure") {
     const demo = demoData(typeof viewOptions.today === "string" ? viewOptions.today : today());
     const costs = await costsFor(demo.rows, storePath, home, viewOptions, { labels: demo.labels, live: demo.live });
     const scan = { lastScanAt: new Date().toISOString(), partial: false, processed: 0, total: 0, errors: 0, warnings: 0 };
-    let store = null;
-    try { store = (await loadStore(storePath, { readOnly: true })).store; } catch { /* no store yet */ }
+    // No store yet is fine: the settings then list no sources.
+    const store = await tryOrAsync(async () => (await loadStore(storePath, { readOnly: true })).store, null);
     return { exitCode: 0, stdout: payload(command, viewOptions, scan, costs, await settingsFor(store, storePath)), stderr: "" };
   }
 
@@ -167,40 +155,32 @@ export async function run(argv, environment = {}) {
   }
 
   const startedAt = Date.now();
-  let snapshot;
-  if (command === "configure") {
-    // Only the enabled flags change here; everything else in the config stays.
-    let wanted;
-    try {
-      wanted = JSON.parse(options.sources ?? "{}");
-    } catch (error) {
-      throw Object.assign(new Error(`invalid --sources: ${error.message}`), { exitCode: 2 });
-    }
-    const current = (await loadStore(storePath, { readOnly: true })).store.config;
-    const config = {
-      ...current,
-      sources: (current.sources ?? []).map((source) => (
-        typeof wanted[source.id] === "boolean" ? { ...source, enabled: wanted[source.id] } : source
-      )),
-    };
-    snapshot = await collectSnapshot("configure", { store: storePath, home, config: JSON.stringify(config) });
-  } else {
-    snapshot = await collectSnapshot("snapshot", { store: storePath, home });
-  }
-  // Task labels and list prices are best-effort and time-boxed: a slow pass
-  // leaves the rest for the next refresh instead of failing this one.
-  let labels = null;
-  let store = snapshot.store ?? null;
-  try {
-    store ??= (await loadStore(storePath, { readOnly: true })).store;
-    labels = (await updateLabels(store, storePath, { home, deadline: startedAt + LABEL_DEADLINE_MS })).labels;
-  } catch { /* fall back to the cached labels */ }
+  const snapshot = command === "configure"
+    ? await configureSources(storePath, home, options.sources)
+    : await collectSnapshot("snapshot", { store: storePath, home });
+  // Labels and the catalog refresh are best-effort and time-boxed: a slow pass leaves the rest for the next refresh.
+  const store = snapshot.store ?? await tryOrAsync(async () => (await loadStore(storePath, { readOnly: true })).store, null);
+  const labels = store
+    ? await tryOrAsync(async () => (await updateLabels(store, storePath, { home, deadline: startedAt + LABEL_DEADLINE_MS })).labels, null)
+    : null;
   const costs = await costsFor(snapshot.rows, storePath, home, viewOptions, {
     refresh: Date.now() - startedAt < CATALOG_REFRESH_BEFORE_MS,
     labels,
     store,
   });
   return { exitCode: 0, stdout: payload(command, viewOptions, scanState(snapshot), costs, await settingsFor(store, storePath)), stderr: "" };
+}
+
+async function configureSources(storePath, home, sources) {
+  const wanted = parseFlagJson(sources ?? "{}", "--sources");
+  const current = (await loadStore(storePath, { readOnly: true })).store.config;
+  const config = {
+    ...current,
+    sources: (current.sources ?? []).map((source) => (
+      typeof wanted[source.id] === "boolean" ? { ...source, enabled: wanted[source.id] } : source
+    )),
+  };
+  return collectSnapshot("configure", { store: storePath, home, config: JSON.stringify(config) });
 }
 
 function isEntryPoint() {
@@ -218,10 +198,10 @@ async function main() {
     const result = await run(process.argv.slice(2));
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
-    process.exitCode = result.exitCode;
+    await exitWith(result.exitCode);
   } catch (error) {
     process.stderr.write(`kanso-spend: ${error.message}\n`);
-    process.exitCode = error.exitCode ?? 1;
+    await exitWith(error.exitCode ?? 1);
   }
 }
 

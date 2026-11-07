@@ -1,49 +1,39 @@
 // Memory, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// Memory: what the guard (guard.mjs, a launchd job every 60 s) sees and does
-// in a weeks-long session: memory free, the window, herdr-core, every agent's
-// footprint, what it recycled, restarted and cleaned up. This view only reads
-// the two files the guard writes (no process to read them) and starts the
-// guard detached for a manual action, then reads again.
-//
-// It works only while shown, like Spend: hidden or closed, it runs nothing.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, appHome, theme, nextCommand, readTextFile, layout } from "herdr";
 import { G, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
+import { tryOr, tryOrAsync } from "./pure.js";
 import { memorySpec, memoryText } from "./memory-card.js";
 import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords } from "./model.js";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-// The folder name: change it here if you install the mod under another name.
 const MOD = "kanso-guard";
 const DATA_DIR = `data/${MOD}`;
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
 const GUARD_FILE = `mods/${MOD}/guard.mjs`;
 const TICK_MS = 15_000;
 const HISTORY_MS = 60_000;
-const BUSY_MS = 90_000; // an action's "…" gives way after this, done or not
+const BUSY_MS = 90_000;
 const AGENT_ROWS = 12;
 const EVENT_ROWS = 15;
 const HEAVY_ROWS = 6;
 
-/**
- * True when this mod's block is in the layout but not on screen: under a
- * hidden node, or in a stack showing another child (as Spend's).
- */
+// True when the mod's block is in the layout but not on screen (hidden node, or a stack showing another child).
 function hiddenInLayout() {
   try {
-    const path = [];
-    const walk = (node) => {
-      path.push(node);
-      if (node?.content?.mod === MOD) return true;
-      for (const child of node?.children ?? []) if (walk(child)) return true;
-      path.pop();
-      return false;
+    const pathTo = (node) => {
+      if (node?.content?.mod === MOD) return [node];
+      for (const child of node?.children ?? []) {
+        const below = pathTo(child);
+        if (below) return [node, ...below];
+      }
+      return null;
     };
-    if (!walk(layout())) return false;
+    const path = pathTo(layout());
+    if (!path) return false;
     return path.some((node, index) => node.hidden
       || (node.type === "stack" && node.active && path[index + 1] && node.active !== path[index + 1].id));
   } catch {
@@ -57,17 +47,17 @@ export default class Memory extends View {
     this.awake = false;
     this.width = 960;
     this.node = null;
-    this.now = null; // parseNow(): { state, data }
-    this.digest = null; // digestHistory()
+    this.now = null;
+    this.digest = null;
     this.historyAt = 0;
     this.reading = false;
     this.range = "day";
     this.share = new Share(MOD, `${appHome()}/${DATA_DIR}/share`);
-    this.batch = null; // parseBatch(): a recycle-all running or just done
-    this.batchSeen = 0; // a finished batch you dismissed
+    this.batch = null;
+    this.batchSeen = 0; // the finished batch you dismissed
     this.showAll = false;
     this.armed = new Armed();
-    this.busy = {}; // action key -> { at, done(data) }
+    this.busy = {};
     this.timers = [];
     this.ticker = null;
 
@@ -75,14 +65,14 @@ export default class Memory extends View {
 
     this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
-        let command;
-        try {
-          command = await nextCommand();
+        // A replaced build (hot reload, update) stops here.
+        const next = await tryOrAsync(async () => {
+          const command = await nextCommand();
           commandCx.notify();
-        } catch {
-          break;
-        }
-        const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
+          return { command };
+        });
+        if (!next) break;
+        const name = String(next.command).replace(new RegExp(`^${MOD}\\.`), "");
         if (name === "refresh") this.check(commandCx);
         else if (name === "open") this.wake(commandCx);
         else if (name === "back") { this.armed.clear(); this.showAll = false; commandCx.notify(); }
@@ -90,7 +80,6 @@ export default class Memory extends View {
     });
   }
 
-  /** Shown: read now, then every 15 s while visible. */
   wake(cx) {
     if (this.closed) return;
     this.awake = true;
@@ -103,7 +92,6 @@ export default class Memory extends View {
     this.read(cx);
   }
 
-  /** Hidden: no timer, nothing kept. */
   sleep() {
     this.awake = false;
     for (const handle of [this.ticker, this.batchTimer, ...this.timers]) {
@@ -123,30 +111,29 @@ export default class Memory extends View {
     }
   }
 
-  /** Reads now.json, and history.json once a minute. Files only, no process. */
   read(cx) {
-    if (this.closed || !this.awake || this.reading) return; // hidden: nothing is read
+    if (this.closed || !this.awake || this.reading) return;
     this.reading = true;
     cx.spawn(async (readCx) => {
       const dir = `${appHome()}/${DATA_DIR}`;
-      let now;
-      try { now = parseNow(await readTextFile(`${dir}/now.json`)); } catch { now = { state: "bad", data: null }; }
-      let digest = this.digest;
-      if (now.data && (!digest || Date.now() - this.historyAt >= HISTORY_MS)) {
-        try {
-          digest = digestHistory(await readTextFile(`${dir}/history.json`), Date.now(), now.data.limits?.lowFreePct ?? null);
+      const now = await tryOrAsync(async () => parseNow(await readTextFile(`${dir}/now.json`)), { state: "bad", data: null });
+      const last = this.digest;
+      // A history.json that can't be read keeps the last digest.
+      const fresh = now.data && (!last || Date.now() - this.historyAt >= HISTORY_MS)
+        ? await tryOrAsync(async () => {
+          const read = digestHistory(await readTextFile(`${dir}/history.json`), Date.now(), now.data.limits?.lowFreePct ?? null);
           this.historyAt = Date.now();
-        } catch { /* keep the last one */ }
-      }
-      let batch = null;
-      try { batch = parseBatch(await readTextFile(`${dir}/batch.json`)); } catch { /* none */ }
+          return { read };
+        })
+        : null;
+      const digest = fresh ? fresh.read : last;
+      const batch = await tryOrAsync(async () => parseBatch(await readTextFile(`${dir}/batch.json`)), null);
       this.reading = false;
       if (this.closed || !this.awake) return;
       this.now = now;
       this.digest = digest;
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
       this.settle();
-      // While a batch runs, follow it closely.
       // One follow-up timer at most, never a chain per read.
       try { this.batchTimer?.cancel(); } catch { /* already gone */ }
       this.batchTimer = this.batch && !this.batch.finished ? readCx.timer.after(4000, (timerCx) => { this.batchTimer = null; this.read(timerCx); }) : null;
@@ -154,7 +141,6 @@ export default class Memory extends View {
     });
   }
 
-  /** Drops an action's "…" once the guard shows it done, or after a while. */
   settle() {
     const data = this.now?.data;
     for (const [key, b] of Object.entries(this.busy)) {
@@ -166,10 +152,7 @@ export default class Memory extends View {
     }
   }
 
-  /**
-   * Starts the guard detached (so exec's 30 s limit never applies) and reads
-   * again a few seconds later, and once more after that.
-   */
+  // Detached, so exec's 30 s limit never applies to the guard.
   act(key, args, done, cx) {
     // One action at a time: two recycles never race each other.
     if (this.closed || this.busy[key] || Object.keys(this.busy).some((k) => k !== "check")) return;
@@ -179,19 +162,18 @@ export default class Memory extends View {
       try {
         if (!this.node) {
           const raw = await readTextFile(`${appHome()}/${RUNTIME_FILE}`).catch(() => null);
-          let node = "node";
-          try { const v = JSON.parse(raw ?? "{}")?.node; if (typeof v === "string" && v.trim()) node = v.trim(); } catch { /* the default */ }
-          this.node = node;
+          const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
+          this.node = typeof v === "string" && v.trim() ? v.trim() : "node";
         }
         await exec("sh", ["-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', this.node, `${appHome()}/${GUARD_FILE}`, ...args]);
       } catch {
         delete this.busy[key];
       }
-      if (this.closed || !this.awake) return; // hidden meanwhile: nothing scheduled
-      for (const ms of [3000, 8000, 20_000]) {
-        this.timers.push(actCx.timer.after(ms, (timerCx) => { this.historyAt = 0; this.read(timerCx); }));
-      }
-      while (this.timers.length > 12) { try { this.timers.shift()?.cancel(); } catch { /* already gone */ } }
+      if (this.closed || !this.awake) return;
+      const timers = [...this.timers, ...[3000, 8000, 20_000].map((ms) => actCx.timer.after(ms, (timerCx) => { this.historyAt = 0; this.read(timerCx); }))];
+      const extra = Math.max(0, timers.length - 12);
+      for (const handle of timers.slice(0, extra)) { try { handle?.cancel(); } catch { /* already gone */ } }
+      this.timers = timers.slice(extra);
       actCx.notify();
     });
   }
@@ -205,13 +187,10 @@ export default class Memory extends View {
 
   recycle(a, cx) { this.act(`recycle:${a.pid}`, ["recycle", String(a.pid)], (data) => !data.agents.some((x) => x.pid === a.pid), cx); }
 
-  /** Every ready agent (only those from `overMB`), one after another. */
   recycleAll(overMB, cx) { this.batchSeen = 0; this.act("batch", ["recycle-all", String(overMB || 0)], () => false, cx); }
 
-  /** Ends one idle agent and closes its pane. */
   closeAgent(a, cx) { this.act(`close:${a.pid}`, ["close", String(a.pid)], (data) => !data.agents.some((x) => x.pid === a.pid), cx); }
 
-  /** Every Claude agent not used for `minIdle` minutes. */
   closeStale(minIdle, cx) { this.batchSeen = 0; this.act("batch", ["close-stale", String(minIdle)], () => false, cx); }
 
   restartWindow(cx) {
@@ -220,9 +199,6 @@ export default class Memory extends View {
   }
 
   reap(cx) { this.act("reap", ["reap"], (data) => !data.helpers, cx); }
-
-  // -------------------------------------------------------------------------
-  // Render
 
   render(cx) {
     if (!this.awake && !this.closed && !this.waking && !hiddenInLayout()) {
@@ -245,7 +221,7 @@ export default class Memory extends View {
         this.width = s.width;
         if (changed) sizeCx.notify();
       })
-      .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
+      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(this.header(c, narrow))
           .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
@@ -253,7 +229,6 @@ export default class Memory extends View {
           .child(body)));
   }
 
-  // A card needs a live picture; the history makes it better but is optional.
   canShare() { return this.now?.state === "ok" && Boolean(this.now.data); }
 
   shareCard() {
@@ -271,7 +246,6 @@ export default class Memory extends View {
         .child(iconButton("guard-refresh", "refresh", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
   }
 
-  /** Loading: the view's own shape, breathing. */
   skeleton(c, narrow) {
     const { block, row } = ghost(c);
     const heights = [40, 44, 42, 46, 50, 48, 52, 38, 30, 26, 34, 42, 48, 54, 56, 52, 50, 46, 44, 48, 52, 50, 46, 44];
@@ -376,8 +350,7 @@ export default class Memory extends View {
 
   agents(c, data) {
     const list = data.agents;
-    const { ready, working, other } = groupAgents(list, data.focused);
-    const batchable = ready.batchable;
+    const { ready, batchable, working, other } = groupAgents(list, data.focused);
     const limit = data.limits.agentMB;
     const over = num(data.limits.pressureAgentMB) ?? 500;
     const heavy = batchable.filter((a) => a.mb >= over);
@@ -416,7 +389,6 @@ export default class Memory extends View {
       .when(other.length > 0, (el) => el.child(this.group(c, "Can't be recycled", other, { limit, reason: true })));
   }
 
-  /** A recycle-all: how far it got, agent by agent. */
   batchView(c) {
     const b = this.batch;
     const closing = b.kind === "close";
@@ -452,7 +424,6 @@ export default class Memory extends View {
   agentRow(c, a, index, { limit, action, reason }) {
     const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
     const closeKey = `close:${a.pid}`, armedClose = this.armed.is(closeKey), closing = Boolean(this.busy[closeKey]);
-    // Close: any idle agent but the one you are on, and not while a batch runs.
     const closable = a.kind === "claude" && Boolean(a.session) && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
     const spark = sparkFor(this.digest?.sparks, a);
     const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;

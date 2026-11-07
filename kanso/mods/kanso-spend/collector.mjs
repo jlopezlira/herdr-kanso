@@ -11,11 +11,11 @@ import {
   loadStore,
   saveStore,
   snapshotRows,
+  storeWith,
 } from "./core/store.mjs";
-import { withStoreLock } from "./core/util.mjs";
+import { ExitError, exitWith, withStoreLock } from "./core/util.mjs";
 
-// herdr stops an exec after 30 s. Leave room for the store save, the
-// dashboard derivation and process startup, then continue on the next run.
+// herdr stops an exec after 30 s; leave room for the save, derivation and startup, then continue next run.
 export const SCAN_BUDGET_MS = 18_000;
 
 function usage() {
@@ -26,44 +26,40 @@ function usage() {
   ].join("\n");
 }
 
+function parseFlags(argv, index = 1, options = { rebuild: false }) {
+  if (index >= argv.length) return options;
+  const arg = argv[index];
+  if (arg === "--rebuild") return parseFlags(argv, index + 1, { ...options, rebuild: true });
+  if (arg === "--help" || arg === "-h") return parseFlags(argv, index + 1, { ...options, help: true });
+  const match = /^-{2}(store|home|config)(?:=(.*))?$/.exec(arg);
+  if (!match) throw new Error(`unknown argument ${arg}`);
+  const key = match[1];
+  const inline = match[2] !== undefined;
+  const value = inline ? match[2] : argv[index + 1];
+  if (value === undefined) throw new Error(`--${key} needs a value`);
+  return parseFlags(argv, index + (inline ? 1 : 2), { ...options, [key]: value });
+}
+
 function parseArgs(argv) {
-  const command = argv[0];
-  const options = { rebuild: false };
-  for (let index = 1; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--rebuild") {
-      options.rebuild = true;
-      continue;
-    }
-    if (arg === "--help" || arg === "-h") {
-      options.help = true;
-      continue;
-    }
-    const match = /^--(store|home|config)(?:=(.*))?$/.exec(arg);
-    if (!match) throw new Error(`unknown argument ${arg}`);
-    const key = match[1];
-    let value = match[2];
-    if (value === undefined) {
-      index += 1;
-      value = argv[index];
-      if (value === undefined) throw new Error(`--${key} needs a value`);
-    }
-    options[key] = value;
-  }
-  return { command, options };
+  return { command: argv[0], options: parseFlags(argv) };
 }
 
 /** The in-process caller (presenter) reuses the scanned store instead of parsing it again. */
 function withStore(snapshot, store) {
-  Object.defineProperty(snapshot, "store", { value: store, enumerable: false });
-  return snapshot;
+  return Object.create(Object.prototype, {
+    ...Object.getOwnPropertyDescriptors(snapshot),
+    store: { value: store, enumerable: false },
+  });
 }
 
 async function buildSnapshot(store, scan, nowIso, loadWarnings = [], loadErrors = 0) {
-  const warnings = [...loadWarnings, ...scan.warnings];
-  if (scan.stats.partial) {
-    warnings.push(`First scan in progress: ${scan.stats.processed} of ${scan.stats.total} files indexed; it continues on the next refresh.`);
-  }
+  const warnings = [
+    ...loadWarnings,
+    ...scan.warnings,
+    ...(scan.stats.partial
+      ? [`First scan in progress: ${scan.stats.processed} of ${scan.stats.total} files indexed; it continues on the next refresh.`]
+      : []),
+  ];
   const stats = {
     ...scan.stats,
     errors: scan.stats.errors + loadErrors,
@@ -80,112 +76,94 @@ async function buildSnapshot(store, scan, nowIso, loadWarnings = [], loadErrors 
   };
 }
 
-/**
- * Best-effort scan progress sidecar next to the store. The native view polls
- * it only while a refresh is running; it is removed when the scan settles.
- */
+/** Best-effort scan-progress sidecar next to the store; removed when the scan settles. */
+class ProgressWriter {
+  constructor(storePath) {
+    this.progressPath = `${storePath}.progress.json`;
+    this.tempPath = `${this.progressPath}.${process.pid}-${randomUUID()}.tmp`;
+    this.lastWrite = 0;
+  }
+
+  update(state) {
+    const now = Date.now();
+    if (now - this.lastWrite < 250 && state.processed < state.total) return;
+    this.lastWrite = now;
+    const { progressPath, tempPath } = this;
+    try {
+      // Atomic replacement also avoids following an existing sidecar link.
+      writeFileSync(tempPath, `${JSON.stringify(state)}\n`, { mode: 0o600, flag: "wx" });
+      renameSync(tempPath, progressPath);
+    } catch { /* progress is best-effort */ }
+    finally {
+      try { unlinkSync(tempPath); } catch { /* renamed or not created */ }
+    }
+  }
+
+  remove() {
+    try {
+      unlinkSync(this.progressPath);
+    } catch { /* already gone */ }
+  }
+}
+
 export function progressWriter(storePath) {
-  const progressPath = `${storePath}.progress.json`;
-  const tempPath = `${progressPath}.${process.pid}-${randomUUID()}.tmp`;
-  let lastWrite = 0;
-  return {
-    update(state) {
-      const now = Date.now();
-      if (now - lastWrite < 250 && state.processed < state.total) return;
-      lastWrite = now;
-      try {
-        // Atomic replacement also avoids following an existing sidecar link.
-        writeFileSync(tempPath, `${JSON.stringify(state)}\n`, { mode: 0o600, flag: "wx" });
-        renameSync(tempPath, progressPath);
-      } catch { /* progress is best-effort */ }
-      finally {
-        try { unlinkSync(tempPath); } catch { /* renamed or not created */ }
-      }
-    },
-    clear() {
-      try {
-        unlinkSync(progressPath);
-      } catch { /* already gone */ }
-    },
-  };
+  return new ProgressWriter(storePath);
+}
+
+async function scanWithProgress(store, storePath, home, deadline) {
+  const progress = progressWriter(storePath);
+  try {
+    return await scanSources(store, {
+      home,
+      onProgress: (state) => progress.update(state),
+      deadline,
+    });
+  } finally {
+    progress.remove();
+  }
 }
 
 async function snapshotWithStore(storePath, home, { rebuild = false } = {}) {
   const scanStartedAt = Date.now();
   return withStoreLock(storePath, async () => {
     const loaded = await loadStore(storePath);
-    const store = loaded.store;
-    let dirty = loaded.dirty;
-    if (rebuild) {
-      clearCollectedData(store);
-      dirty = true;
-    }
-    const progress = progressWriter(storePath);
-    let scan;
-    try {
-      scan = await scanSources(store, {
-        home,
-        onProgress: (state) => progress.update(state),
-        deadline: scanStartedAt + SCAN_BUDGET_MS,
-      });
-    } finally {
-      progress.clear();
-    }
-    if (dirty || scan.dirty) await saveStore(storePath, store);
+    const store = rebuild ? clearCollectedData(loaded.store) : loaded.store;
+    const dirty = loaded.dirty || rebuild;
+    const scan = await scanWithProgress(store, storePath, home, scanStartedAt + SCAN_BUDGET_MS);
+    const saved = dirty || scan.dirty ? await saveStore(storePath, scan.store) : scan.store;
     const now = new Date().toISOString();
-    return withStore(await buildSnapshot(store, scan, now, loaded.warnings, loaded.errors), store);
+    return withStore(await buildSnapshot(saved, scan, now, loaded.warnings, loaded.errors), saved);
   });
 }
 
 async function configureStore(storePath, home, rawConfig, { rebuild = false } = {}) {
   const scanStartedAt = Date.now();
-  let config;
-  try {
-    const parsed = typeof rawConfig === "string" ? JSON.parse(rawConfig) : rawConfig;
-    config = migrateLoadedConfig(normalizeConfig(parsed)).config;
-  } catch (error) {
-    const invalid = new Error(`invalid --config: ${error.message}`);
-    invalid.exitCode = 2;
-    throw invalid;
-  }
+  const config = (() => {
+    try {
+      const parsed = typeof rawConfig === "string" ? JSON.parse(rawConfig) : rawConfig;
+      return migrateLoadedConfig(normalizeConfig(parsed)).config;
+    } catch (error) {
+      throw new ExitError(`invalid --config: ${error.message}`, 2);
+    }
+  })();
 
   return withStoreLock(storePath, async () => {
     const loaded = await loadStore(storePath);
-    const store = loaded.store;
-    let dirty = loaded.dirty;
-    const configChanged = JSON.stringify(store.config) !== JSON.stringify(config);
+    const configChanged = JSON.stringify(loaded.store.config) !== JSON.stringify(config);
     const mappingsChanged =
-      sourcesSignature(store.config) !== sourcesSignature(config);
-    if (configChanged) {
-      store.config = config;
-      dirty = true;
-    }
-    if (mappingsChanged || rebuild) {
-      clearCollectedData(store);
-      dirty = true;
-    }
+      sourcesSignature(loaded.store.config) !== sourcesSignature(config);
+    const configured = configChanged ? storeWith(loaded.store, { config }) : loaded.store;
+    const cleared = mappingsChanged || rebuild ? clearCollectedData(configured) : configured;
 
-    // Persist the accepted config before scanning. If the scan fails, the UI
-    // still has the newly configured sources and can show the scan error.
-    if (dirty) {
-      await saveStore(storePath, store);
-      dirty = false;
-    }
+    // Save the accepted config before scanning: if the scan fails, the UI still has the new sources.
+    const store = loaded.dirty || configChanged || mappingsChanged || rebuild
+      ? await saveStore(storePath, cleared)
+      : cleared;
 
-    const progress = progressWriter(storePath);
-    let scan;
-    try {
-      scan = await scanSources(store, {
-        home,
-        onProgress: (state) => progress.update(state),
-        deadline: scanStartedAt + SCAN_BUDGET_MS,
-      });
-    } finally {
-      progress.clear();
-    }
-    if (dirty || scan.dirty) await saveStore(storePath, store);
+    const scan = await scanWithProgress(store, storePath, home, scanStartedAt + SCAN_BUDGET_MS);
+    const saved = scan.dirty ? await saveStore(storePath, scan.store) : scan.store;
     const now = new Date().toISOString();
-    return withStore(await buildSnapshot(store, scan, now, loaded.warnings, loaded.errors), store);
+    return withStore(await buildSnapshot(saved, scan, now, loaded.warnings, loaded.errors), saved);
   });
 }
 
@@ -228,10 +206,10 @@ async function main() {
     const result = await run(process.argv.slice(2));
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
-    process.exitCode = result.exitCode;
+    await exitWith(result.exitCode);
   } catch (error) {
     process.stderr.write(`kanso-spend collector: ${error.message}\n`);
-    process.exitCode = error.exitCode ?? 1;
+    await exitWith(error.exitCode ?? 1);
   }
 }
 

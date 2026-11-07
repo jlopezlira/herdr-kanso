@@ -214,6 +214,8 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.equal(panel.note, null);
   assert.equal(panel.groups.length, 1);
   const g = panel.groups[0], by = Object.fromEntries(g.items.map((w) => [w.path.split("/").pop(), w]));
+  // Rows are values, replaced on every change: what one holds now is read from the panel.
+  const row = (n) => panel.groups[0].items.find((w) => w.path.split("/").pop() === n);
   assert.deepEqual(Object.fromEntries(Object.entries(by).map(([k, w]) => [k, stateOf(w)])), {
     merged: "merged", squashed: "merged", unmerged: "unmerged", dirty: "changes", lost: "lost", detached: "detached", open: "open", gone: "missing", reused: "missing", moved: "broken", late: "merged",
   });
@@ -228,7 +230,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   panel.cleanUp(cx); await drain();
   assert.equal(panel.note, null, "no error: what changed is left alone");
   assert.match(panel.notice, /^1 stays: it changed since the scan/);
-  assert.ok(existsSync(join(late, "new.txt")) && stateOf(by.late) === "changes", "checked again right before: its new work is kept");
+  assert.ok(existsSync(join(late, "new.txt")) && stateOf(row("late")) === "changes", "checked again right before: its new work is kept");
   assert.match(notes[0].title, /^Freed \d+ KB$/);
   assert.match(notes[0].body, /^6 removed, \d+ KB freed so far$/);
   assert.ok(existsSync(join(reused, ".git")) && existsSync(join(reused, "keep.txt")), "the reused folder, a repository of its own, is not touched");
@@ -266,6 +268,6 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   // Repaired, git reads it again, and its uncommitted file shows.
   panel.repair(by.moved, cx); await drain();
   assert.equal(panel.note, null);
-  assert.equal(stateOf(by.moved), "changes");
-  assert.equal(by.moved.dirty, 1);
+  assert.equal(stateOf(row("moved")), "changes");
+  assert.equal(row("moved").dirty, 1);
 });

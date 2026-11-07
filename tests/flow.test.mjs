@@ -164,27 +164,26 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   const now = async () => clone(await store.asleep());
   assert.deepEqual(await now(), [], "going to sleep: hidden until its agents have left");
   await assert.rejects(store.sleep(":/w", { ...a, saved: 8 }), /already asleep/, "never over another sleeping tab of that name");
-  await store.settle(id);
+  assert.equal(await store.settle(id), true);
   assert.deepEqual((await now()).map((x) => [x.id, x.from, x.name, x.cols[0].panes[0].resume]), [[id, ":/w", "shield", "s1"]]);
-  await store.drop(id);
-  assert.equal((await now()).length, 1, "a settled tab is not dropped by a sleep's undo");
+  assert.equal(await store.drop(id), false, "a settled tab is not dropped by a sleep's undo");
+  assert.equal((await now()).length, 1);
   const got = await store.claim(id);
   assert.equal(got.name, "shield", "the claim hands back the row as it is now");
   assert.equal(await store.claim(id), null, "one wake at a time");
   assert.deepEqual(await now(), [], "a tab waking is not offered again");
-  await store.forget(id);
-  assert.equal((await store.asleep(true)).length, 1, "a tab a wake holds is not forgotten under it");
-  await store.woke(id, "not-this-wake");
-  assert.equal((await store.asleep(true)).length, 1, "only the wake that holds it finishes it");
-  await store.narrow(id, [{ w: 1, panes: [a.cols[0].panes[0]] }], got.token);
+  assert.equal(await store.forget(id), false, "a tab a wake holds is not forgotten under it");
+  assert.equal(await store.woke(id, "not-this-wake"), false, "only the wake that holds it finishes it");
+  assert.equal(await store.renew(id, got.token), true, "the wake renews its hold");
+  assert.equal(await store.narrow(id, [{ w: 1, panes: [a.cols[0].panes[0]] }], got.token), true);
   let asleep = await now();
   assert.equal(asleep[0].cols.length, 1, "what did not wake stays asleep, alone");
   assert.equal(asleep[0].id, id);
   const again = await store.claim(id);
   assert.ok(again, "and can be woken again");
-  await store.release(id, again.token);
+  assert.equal(await store.release(id, again.token), true);
   const third = await store.claim(id);
-  await store.woke(id, third.token);
+  assert.equal(await store.woke(id, third.token), true);
   assert.deepEqual(await now(), []);
   // A row taken over by a newer tab of the same name is not the old one.
   const old = await store.sleep(":/w", { ...a, saved: 9 });
@@ -194,15 +193,17 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   const fresh = await store.sleep(":/w", { ...a, saved: 10 });
   await store.settle(fresh);
   assert.equal(await store.claim(old), null, "an old list can't claim the new tab of that name");
-  const failed = await store.sleep(":/w", { ...a, name: "other", saved: 11 });
-  await store.drop(failed);
+  const failed = await store.sleep(":/w", { ...a, name: "other", cols: [a.cols[1]], saved: 11 });
+  assert.equal(await store.drop(failed), true);
   assert.equal((await now()).length, 1, "a sleep that stopped drops only its own row");
   const src = async (f) => readFile(new URL(`../kanso/mods/${f}`, import.meta.url), "utf8");
-  assert.match(await src("kanso-spaces/main.js"), /from "\.\/store\.js"/, "the sidebar reads what sleeps through Sleep's own store (a copy), so the two agree");
+  assert.match(await src("kanso-spaces/main.js"), /from "\.\/store\.js"/, "the sidebar reads what sleeps through the left nav's store, the one Sleep writes through");
   // An agent that may still be starting is held back from waking.
+  const t2 = await store.claim(fresh);
+  await store.woke(fresh, t2.token);
   const held = await store.sleep(":/w", { ...a, name: "held", saved: 12 });
-  await store.narrow(held, [{ w: 1, panes: [a.cols[0].panes[0]] }], null, true);
-  assert.deepEqual((await now()).map((x) => x.name), ["shield"], "held: not offered yet");
+  assert.equal(await store.narrow(held, [{ w: 1, panes: [a.cols[0].panes[0]] }], null, { wait: true }), true);
+  assert.deepEqual(await now(), [], "held: not offered yet");
   assert.equal(await store.claim(held), null, "nor claimed");
   const { resumeArgv, freeName, sameTabs, coversTab } = await load("kanso-sleep/main.js", ["resumeArgv", "freeName", "sameTabs", "coversTab"], { home: () => HOME });
   const covered = { cols: [{ panes: [{ terminal: "t1" }] }] };
@@ -263,20 +264,14 @@ test("Ports finds dev servers, the pane that runs each, and the ones no pane own
 test("Every list answers vim's keys: j/k, gg/G, Enter, Esc; with cmd, ctrl or alt a key is not the list's", async () => {
   const { listKey, moveTo } = await load("kanso-menu/listkeys.js", ["listKey", "moveTo"]);
   const key = (k, mods = {}) => ({ key: k, modifiers: mods });
-  const memo = {};
-  assert.equal(listKey(key("j"), memo), "down");
-  assert.equal(listKey(key("down"), memo), "down");
-  assert.equal(listKey(key("k"), memo), "up");
-  assert.equal(listKey(key("g", { shift: true }), memo), "last", "G");
-  assert.equal(listKey(key("g"), memo, 1000), "pending");
-  assert.equal(listKey(key("g"), memo, 1500), "first", "gg");
-  assert.equal(listKey(key("g"), memo, 3000), "pending");
-  assert.equal(listKey(key("g"), memo, 4500), "pending", "too slow for gg: a new first g");
-  assert.equal(listKey(key("enter"), memo), "enter");
-  assert.equal(listKey(key("escape"), memo), "escape");
-  assert.equal(listKey(key("j", { platform: true }), memo), null, "cmd-j is not the list's");
-  assert.equal(listKey(key("k", { control: true }), memo), null);
-  assert.equal(listKey(key("x"), memo), null);
+  // Each key with the pending g the one before left.
+  const run = (keys) => keys.reduce((st, [k, at]) => { const r = listKey(k, st.gAt, at); return { gAt: r.gAt, moves: [...st.moves, r.move] }; }, { gAt: 0, moves: [] }).moves;
+  assert.deepEqual(run([[key("j")], [key("down")], [key("k")], [key("g", { shift: true })]]), ["down", "down", "up", "last"], "G");
+  assert.deepEqual(run([[key("g"), 1000], [key("g"), 1500], [key("g"), 3000], [key("g"), 4500]]), ["pending", "first", "pending", "pending"], "gg; too slow for gg: a new first g");
+  assert.deepEqual(run([[key("enter")], [key("escape")]]), ["enter", "escape"]);
+  assert.equal(listKey(key("j", { platform: true })).move, null, "cmd-j is not the list's");
+  assert.equal(listKey(key("k", { control: true })).move, null);
+  assert.equal(listKey(key("x")).move, null);
   assert.deepEqual([moveTo("down", 4, 5), moveTo("up", 0, 5), moveTo("first", 3, 5), moveTo("last", 0, 5), moveTo("down", 0, 0)], [4, 0, 0, 4, 0], "j and k stop at the ends");
 });
 
@@ -417,44 +412,69 @@ test("A dōjō round ends after ten targets, with its result kept; End round sto
   assert.equal(added.length, 1, "and not counted");
 });
 
-test("An agent asleep keeps its name and place: the sidebar sees each pane that sleeps, by the terminal it ran in", async () => {
+test("An agent asleep keeps its name and place: the sidebar sees each pane that sleeps, and each agent as the left nav keeps it", async () => {
   const { shownOf } = await load("kanso-sleep/store.js", ["shownOf"], { exec: async () => ({ code: 0, stdout: "" }), appHome: () => "/x" });
-  const row = { id: "r1", from: ":/w", name: "fury", saved: 5, into: { tab: null, tabId: "tb1" },
+  const row = { id: "r1", from: ":/w", name: "fury", saved: 5, into: { tab: null, tabId: "tb1" }, spaceId: "w1",
+    agents: [{ id: "s1", name: "Fury", title: "Fix sleep", said: 3, space_id: "w1", pos: 2, program: null }],
     cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "s1", name: "fury", terminal: "t1" }, { argv: ["npm", "run", "dev"], terminal: "t2" }] }] };
   const now = Date.now();
   const s = clone(shownOf(row, now));
-  assert.deepEqual(s.agents, [{ name: "fury", terminal: "t1", resume: "s1" }, { name: "npm", terminal: "t2", resume: null }]);
+  assert.deepEqual(s.agents, [{ name: "Fury", terminal: "t1", resume: "s1", title: "Fix sleep", said: 3, spaceId: "w1", at: 2, program: null },
+    { name: "npm", terminal: "t2", resume: null, title: null, said: null, spaceId: null, at: null, program: null }], "the agent by what the left nav keeps of it; a shell by its program");
   assert.equal(s.busy, false);
   assert.equal(shownOf({ ...row, pending: now - 1 }, now).busy, true, "on its way to sleep: busy");
+  assert.equal(shownOf({ ...row, pending: now - 1 }, now).pending, true);
   assert.deepEqual(clone(s.into), { tab: null, tabId: "tb1" });
 });
 
-test("The sidebar keeps its own state in panel.db: prefs moved from localStorage once, each agent's name and place, the gone ones forgotten", async (t) => {
+test("The sidebar keeps its state in the left nav's database: prefs moved from localStorage once, each agent by its conversation", async (t) => {
   const dir = await temporary(t);
   const local = new Map([["spaces.view", "threads"], ["spaces.sections", "[\"done\"]"]]);
   const localStorage = { getItem: (k) => local.get(k) ?? null, setItem: (k, v) => local.set(k, v) };
-  const { Panel, FORGET_MS } = await load("kanso-spaces/panel.js", ["Panel", "FORGET_MS"], { exec, appHome: () => dir, localStorage });
+  const { Panel } = await load("kanso-spaces/panel.js", ["Panel"], { exec, appHome: () => dir, localStorage });
   const p = new Panel(["spaces.view", "spaces.sections", "spaces.order"]);
   assert.equal(p.get("spaces.view"), "threads", "the first frame: the copy in localStorage");
   assert.equal(await p.load(), false, "first start: localStorage moves in, nothing differs");
   p.set("spaces.view", "agents");
-  p.remember(new Map([["t1", { name: "fury", title: "Fix sleep", said: 3, space: "w1", project: ":/w", at: 1, program: null }]]), 100);
-  await p.chain;
+  const seen = (status) => new Map([["t1", { conversation: "c1", given: "fury", name: "fury", title: "Fix sleep", said: 3, space: "w1", tab: "tb1", pos: 1, program: null, status, terminal: "t1" }]]);
+  await p.remember(seen("idle"), 100);
   local.set("spaces.view", "spaces"); // an old copy: the database wins
   const fresh = new Panel(["spaces.view"]);
   assert.equal(await fresh.load(), true);
   assert.equal(fresh.get("spaces.view"), "agents");
   assert.deepEqual(clone(fresh.json("spaces.sections", [])), ["done"]);
-  assert.equal(fresh.agents.get("t1").name, "fury");
-  assert.equal(fresh.agents.get("t1").at, 1);
-  // The same again writes nothing; a gone agent that sleeps is kept, the rest forgotten.
+  assert.equal(fresh.agents.get("c1").name, "fury", "by its conversation, not its terminal");
+  assert.equal(fresh.agents.get("c1").pos, 1);
   const before = fresh.chain;
-  fresh.remember(new Map([["t1", { name: "fury", title: "Fix sleep", said: 3, space: "w1", project: ":/w", at: 1, program: null }]]), 200);
-  assert.equal(fresh.chain, before, "nothing changed: nothing written");
-  fresh.remember(new Map([["t2", { name: "cap", title: null, said: null, space: "w1", project: ":/w", at: 0, program: null }]]), 100);
-  fresh.prune(new Set(["t1"]), 100 + FORGET_MS + 1);
-  await fresh.chain;
+  fresh.sent.set("c1", { a: seen("idle").get("t1"), at: 100 });
+  assert.equal(fresh.remember(seen("idle"), 200), before, "nothing changed: nothing written");
+  await fresh.remember(seen("working"), 300);
   const last = new Panel([]);
   await last.load();
-  assert.deepEqual([...last.agents.keys()], ["t1"], "t2 gone and not asleep: forgotten; t1 asleep: kept");
+  assert.equal(last.agents.get("c1").status, "working");
+  // The name cleared on its terminal: the automatic one again, here and in the database.
+  await last.remember(new Map([["t1", { ...seen("idle").get("t1"), given: null }]]), 400);
+  assert.equal(last.agents.get("c1").name, null);
+  // Nobody left to write: the write that ends the ones no longer seen still runs.
+  const writes = [];
+  const observe = last.kdb.observe.bind(last.kdb);
+  last.kdb.observe = (list, at) => { writes.push(list.length); return observe(list, at); };
+  await last.remember(new Map(), 400 + 61_000);
+  assert.deepEqual(writes, [0]);
+  assert.equal((await last.kdb.read("SELECT status FROM agents WHERE id='c1'"))[0].status, "gone", "not seen for a while: gone");
+});
+
+test("Send reaches any agent of any model by the name and project Kanso gives it, grouped by project, yours first", async () => {
+  const { everyone } = await load("kanso-send/main.js", ["everyone"], {});
+  const terms = [
+    { address: "t5g", state: "live", status: "working", labels: { "kanso.shown": "morpheus", "kanso.project": "herdr-kanso" } },
+    { address: "t5t", state: "live", status: "done", agent: "qwen-code", labels: { "kanso.shown": "qb2", "kanso.project": "herdr-kanso" } },
+    { address: "t2c", state: "live", status: "blocked", labels: { "kanso.shown": "Lead", "kanso.project": "fluenty" } },
+    { address: "t5r", state: "live", labels: { "kanso.shown": "zsh" } },
+    { address: "box/t1", state: "live", status: "idle", labels: {} },
+  ];
+  const groups = clone(everyone(terms, [], { from: "t5g" }));
+  assert.deepEqual(groups.map((g) => [g.project, g.agents.map((x) => x.name)]), [["herdr-kanso", ["qb2"]], ["fluenty", ["Lead"]]], "a shell and another machine's are not agents to send to");
+  assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "flu" })).map((g) => g.project), ["fluenty"], "found by project");
+  assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "qb" })).map((g) => g.agents.map((x) => x.terminal)), [["t5t"]], "found by name");
 });

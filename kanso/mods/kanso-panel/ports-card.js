@@ -1,16 +1,9 @@
 // Ports' share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// What the Ports panel lets you brag about, from the guard's ports.json: the
-// dev servers agents left running after their panes closed that you found
-// and stopped, and the memory that gave back; else how many your agents
-// opened this week. Never a port, folder, project or command: only counts
-// and sizes.
 import { postText } from "./share.js";
 import { size, portStats, activeSeries } from "./ports-model.js";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-/** The card spec, from parsePorts()'s data. */
 export function portsSpec(data, now = Date.now()) {
   const s = portStats(data, now);
   const brag = s.stoppedLoose > 0;
@@ -39,12 +32,12 @@ export function portsSpec(data, now = Date.now()) {
   };
 }
 
-/** The post's words. */
 export function portsText(data, now = Date.now()) {
   const s = portStats(data, now);
-  const parts = [];
-  if (s.stoppedLoose) parts.push(`${plural(s.stoppedLoose, "dev server", "dev servers")} my agents left running, found and stopped${s.stoppedLooseMB ? `: ${size(s.stoppedLooseMB)} back` : ""}`);
-  if (s.openedWeek) parts.push(`${plural(s.openedWeek, "dev server", "dev servers")} opened this week, ${s.weekPeak} at once at the peak`);
-  parts.push(!s.running ? "none running now" : `${s.running} running now${s.loose ? `, ${s.loose} with no pane` : ", every one in a pane"}`);
+  const parts = [
+    ...(s.stoppedLoose ? [`${plural(s.stoppedLoose, "dev server", "dev servers")} my agents left running, found and stopped${s.stoppedLooseMB ? `: ${size(s.stoppedLooseMB)} back` : ""}`] : []),
+    ...(s.openedWeek ? [`${plural(s.openedWeek, "dev server", "dev servers")} opened this week, ${s.weekPeak} at once at the peak`] : []),
+    !s.running ? "none running now" : `${s.running} running now${s.loose ? `, ${s.loose} with no pane` : ", every one in a pane"}`,
+  ];
   return postText(parts, "Every dev server accounted for.");
 }

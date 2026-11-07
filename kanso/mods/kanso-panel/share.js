@@ -1,22 +1,9 @@
 // Kanso's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// One way to share for every Kanso panel that brags (Shipped, Spend): the
-// panel hands over its global numbers as a card spec, and this draws the
-// image, saves it, and posts it to X, LinkedIn or Bluesky.
-//
-// Herdr loads a mod's files from its own folder only, so this file is kept
-// byte for byte in kanso-panel/ and kanso-spend/; `npm run sync:share` copies
-// it and the tests fail when the copies differ. Edit kanso-panel/share.js.
-//
-// The card is an SVG, turned into a PNG by the first renderer this machine
-// has: a Chromium browser (Chrome, Chromium, Brave, Edge) headless,
-// rsvg-convert or ImageMagick, or QuickLook on macOS. The networks' links
-// take text only, so the image goes on the clipboard, the composer opens with
-// the text, and once the page is up the image is pasted into it (on macOS
-// that needs Herdr in Accessibility; without it you paste it yourself).
+// Kept byte for byte in kanso-panel/ and kanso-spend/ (`npm run sync:share`): edit kanso-panel/share.js.
 import { div } from "gpui-kit";
 import { h_flex, Button } from "gpui-base";
 import { exec, home, readTextFile, writeTextFile, window, notify, theme, appHome } from "herdr";
+import { findAsync, retry, tryOrAsync } from "./pure.js";
 
 export const NETWORKS = {
   x: { name: "X", wait: 4, url: (text) => `https://x.com/intent/post?text=${encodeURIComponent(text)}` },
@@ -27,7 +14,6 @@ export const REPO_URL = "github.com/jlopezlira/herdr-kanso";
 const W = 1200, PAD = 72, INNER = W - 2 * PAD;
 const FONT = "Inter, 'SF Pro Display', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-// The card's colors, from Herdr's theme.
 export function palette(t = theme() ?? {}) {
   return {
     canvas: t.canvas ?? t.background, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
@@ -43,117 +29,133 @@ function paint(hex, alpha) {
   const a = alpha ?? (h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1);
   return `fill="${base}"${a < 1 ? ` fill-opacity="${Math.round(a * 1000) / 1000}"` : ""}`;
 }
-// Lines of at most `width` characters, broken between words.
 export function wrap(body, width) {
-  const lines = [];
-  let line = "";
-  for (const word of String(body).split(/\s+/)) {
-    if (line && line.length + 1 + word.length > width) { lines.push(line); line = word; }
-    else line = line ? `${line} ${word}` : word;
-  }
-  if (line) lines.push(line);
-  return lines;
+  const { lines, line } = String(body).split(/\s+/).reduce((acc, word) => (
+    acc.line && acc.line.length + 1 + word.length > width
+      ? { lines: [...acc.lines, acc.line], line: word }
+      : { lines: acc.lines, line: acc.line ? `${acc.line} ${word}` : word }
+  ), { lines: [], line: "" });
+  return line ? [...lines, line] : lines;
 }
 const text = (x, y, size, color, body, extra = "") => `<text x="${x}" y="${y}" font-size="${size}" ${paint(color)} ${extra}>${esc(body)}</text>`;
 
-// The post's words: one line of numbers, then where they come from. Short
-// enough for X (280).
 export function postText(parts, fallback) {
   const line = parts.length ? `${parts.join(", ")}.` : fallback;
   return `${line[0].toUpperCase()}${line.slice(1)}\n\nCounted by kansō for Herdr: ${REPO_URL}`.slice(0, 280);
 }
 
-// The card, top to bottom: { svg, width, height }.
-//   spec: { title, right, hero: { big, small, label, delta: { up, text } | null },
-//           stats: [{ value, unit }], note, blocks: [block] }
-//   block: { kind: "streak", title, right, n, unit, weeks (GitHub's calendar) }
-//        | { kind: "list", title, rows: [{ name, detail, value, unit }] }
-//        | { kind: "bars", title, right, values: [n], ticks: [label] }
+// Each part takes the y it starts at and answers { y, out }: where it ends and what it drew.
+const drawn = (y, out = []) => ({ y, out });
+const stack = (y, parts) => parts.reduce((acc, part) => {
+  const next = part(acc.y);
+  return { y: next.y, out: acc.out.concat(next.out) };
+}, drawn(y));
+
+const headerPart = (spec, c) => (from) => {
+  const y = from + 30;
+  return drawn(y, [
+    text(PAD, y, 30, c.text, spec.title, 'font-weight="600"'),
+    ...(spec.right ? [text(W - PAD, y, 24, c.muted, spec.right, 'text-anchor="end"')] : []),
+  ]);
+};
+
+const heroPart = (hero, c) => (from) => {
+  const top = from + 150;
+  const labelY = hero.label ? top + 52 : top;
+  const y = hero.delta?.text ? labelY + 44 : labelY;
+  const color = hero.delta?.up ? c.green : c.red;
+  return drawn(y, [
+    `<text x="${PAD}" y="${top}" font-size="132" font-weight="300" ${paint(c.text)} letter-spacing="-3">${esc(hero.big ?? "—")}${hero.small ? `<tspan font-size="52" dx="24" ${paint(c.muted)}>${esc(hero.small)}</tspan>` : ""}</text>`,
+    ...(hero.label ? [text(PAD, labelY, 26, c.muted, hero.label)] : []),
+    ...(hero.delta?.text ? [`<circle cx="${PAD + 7}" cy="${y - 9}" r="7" ${paint(color)}/>`, text(PAD + 26, y, 26, color, hero.delta.text)] : []),
+  ]);
+};
+
+const statsPart = (stats, c) => (from) => {
+  if (!stats.length) return drawn(from);
+  const top = from + 80;
+  const col = INNER / Math.min(3, stats.length);
+  return drawn(top + Math.floor((stats.length - 1) / 3) * 128 + 128, stats.flatMap((x, i) => {
+    const y = top + Math.floor(i / 3) * 128, cx = PAD + (i % 3) * col;
+    return [text(cx, y + 56, 64, c.text, x.value, 'font-weight="300"'), text(cx, y + 92, 22, c.dim, x.unit)];
+  }));
+};
+
+const notePart = (note, c) => (from) => {
+  if (!note) return drawn(from);
+  const lines = wrap(note, 88);
+  return drawn(from + lines.length * 32 + 8, lines.map((line, i) => text(PAD, from + i * 32 + 12, 22, c.muted, line)));
+};
+
+const LEVEL = { NONE: null, FIRST_QUARTILE: 0.3, SECOND_QUARTILE: 0.55, THIRD_QUARTILE: 0.8, FOURTH_QUARTILE: 1 };
+const streakBlock = (b, c) => (from) => {
+  const titleY = from + 48, bigY = titleY + 100, top = bigY + 32;
+  // Always a year's 53 columns, the latest at the right, so the squares keep their size.
+  const weeks = (b.weeks ?? []).slice(-53), gap = 4, cell = Math.floor((INNER - 52 * gap) / 53), first = 53 - weeks.length;
+  return drawn(top + 7 * cell + 6 * gap, [
+    text(PAD, titleY, 30, c.text, b.title),
+    ...(b.right ? [text(W - PAD, titleY, 22, c.dim, b.right, 'text-anchor="end"')] : []),
+    `<text x="${PAD}" y="${bigY}" font-size="96" font-weight="300" ${paint(c.text)}>${esc(b.n)}<tspan font-size="24" dx="16" ${paint(c.dim)}>${esc(b.unit)}</tspan></text>`,
+    ...weeks.flatMap((w, wi) => w.contributionDays.map((d) => {
+      const a = LEVEL[d.contributionLevel];
+      return `<rect x="${PAD + (first + wi) * (cell + gap)}" y="${top + d.weekday * (cell + gap)}" width="${cell}" height="${cell}" rx="${Math.max(2, Math.round(cell / 5))}" ${a ? paint(c.accent, a) : paint(c.subtle)}/>`;
+    })),
+  ]);
+};
+
+const listBlock = (b, c) => (from) => {
+  const titleY = from + 76, top = titleY + 16;
+  return drawn(top + b.rows.length * 92, [
+    text(PAD, titleY, 30, c.text, b.title),
+    ...b.rows.flatMap((r, i) => {
+      const y = top + i * 92;
+      return [
+        ...(i ? [`<rect x="${PAD}" y="${y}" width="${INNER}" height="1" ${paint(c.border)}/>`] : []),
+        text(PAD, y + 40, 24, c.text, r.name),
+        ...(r.detail ? [text(PAD, y + 70, 20, c.dim, r.detail)] : []),
+        `<text x="${W - PAD}" y="${y + 56}" font-size="40" font-weight="300" text-anchor="end" ${paint(c.text)}>${esc(r.value)}${r.unit ? `<tspan font-size="20" dx="10" ${paint(c.dim)}>${esc(r.unit)}</tspan>` : ""}</text>`,
+      ];
+    }),
+  ]);
+};
+
+const barsBlock = (b, c) => (from) => {
+  const titleY = from + 64, top = titleY + 28;
+  const values = b.values, highest = Math.max(...values), peak = values.indexOf(highest), n = values.length;
+  const gap = n > 40 ? 3 : 6, bw = (INNER - (n - 1) * gap) / n, bh = 140, y = top + bh + 30;
+  const ticks = b.ticks ?? [], last = ticks.length - 1;
+  return drawn(y, [
+    text(PAD, titleY, 30, c.text, b.title),
+    ...(b.right ? [text(W - PAD, titleY, 22, c.dim, b.right, 'text-anchor="end"')] : []),
+    ...values.map((v, i) => {
+      const height = Math.max(4, Math.round((v / highest) * bh));
+      return `<rect x="${PAD + i * (bw + gap)}" y="${top + bh - height}" width="${bw}" height="${height}" rx="3" ${v ? paint(c.accent, i === peak ? 1 : 0.55) : paint(c.subtle)}/>`;
+    }),
+    ...ticks.map((t, i) => text(PAD + (last ? (i * INNER) / last : 0), y, 18, c.dim, t, `text-anchor="${i === 0 ? "start" : i === last ? "end" : "middle"}"`)),
+  ]);
+};
+
+const blockPart = (b, c) =>
+  b.kind === "streak" ? streakBlock(b, c)
+    : b.kind === "list" && b.rows?.length ? listBlock(b, c)
+      : b.kind === "bars" && b.values?.some((n) => n > 0) ? barsBlock(b, c)
+        : (from) => drawn(from);
+
 export function cardSvg(spec, c) {
-  const out = [];
-  let y = PAD;
-  // Header: the panel's name, and whose numbers for which period.
-  y += 30;
-  out.push(text(PAD, y, 30, c.text, spec.title, 'font-weight="600"'));
-  if (spec.right) out.push(text(W - PAD, y, 24, c.muted, spec.right, 'text-anchor="end"'));
-  // The hero.
-  const hero = spec.hero ?? {};
-  y += 150;
-  out.push(`<text x="${PAD}" y="${y}" font-size="132" font-weight="300" ${paint(c.text)} letter-spacing="-3">${esc(hero.big ?? "—")}${hero.small ? `<tspan font-size="52" dx="24" ${paint(c.muted)}>${esc(hero.small)}</tspan>` : ""}</text>`);
-  if (hero.label) { y += 52; out.push(text(PAD, y, 26, c.muted, hero.label)); }
-  if (hero.delta?.text) {
-    y += 44;
-    const color = hero.delta.up ? c.green : c.red;
-    out.push(`<circle cx="${PAD + 7}" cy="${y - 9}" r="7" ${paint(color)}/>`);
-    out.push(text(PAD + 26, y, 26, color, hero.delta.text));
-  }
-  // The numbers, in a row that wraps after three.
-  const stats = spec.stats ?? [];
-  if (stats.length) {
-    y += 80;
-    const col = INNER / Math.min(3, stats.length);
-    stats.forEach((x, i) => {
-      if (i && i % 3 === 0) y += 128;
-      const cx = PAD + (i % 3) * col;
-      out.push(text(cx, y + 56, 64, c.text, x.value, 'font-weight="300"'));
-      out.push(text(cx, y + 92, 22, c.dim, x.unit));
-    });
-    y += 128;
-  }
-  if (spec.note) {
-    for (const line of wrap(spec.note, 88)) { out.push(text(PAD, y + 12, 22, c.muted, line)); y += 32; }
-    y += 8;
-  }
-  for (const b of spec.blocks ?? []) {
-    if (b.kind === "streak") {
-      y += 48;
-      out.push(text(PAD, y, 30, c.text, b.title));
-      if (b.right) out.push(text(W - PAD, y, 22, c.dim, b.right, 'text-anchor="end"'));
-      y += 100;
-      out.push(`<text x="${PAD}" y="${y}" font-size="96" font-weight="300" ${paint(c.text)}>${esc(b.n)}<tspan font-size="24" dx="16" ${paint(c.dim)}>${esc(b.unit)}</tspan></text>`);
-      y += 32;
-      // Always a year's 53 columns, the latest at the right, so the squares keep their size.
-      const weeks = (b.weeks ?? []).slice(-53), gap = 4, cell = Math.floor((INNER - 52 * gap) / 53), first = 53 - weeks.length;
-      const level = { NONE: null, FIRST_QUARTILE: 0.3, SECOND_QUARTILE: 0.55, THIRD_QUARTILE: 0.8, FOURTH_QUARTILE: 1 };
-      weeks.forEach((w, wi) => {
-        for (const d of w.contributionDays) {
-          const a = level[d.contributionLevel];
-          out.push(`<rect x="${PAD + (first + wi) * (cell + gap)}" y="${y + d.weekday * (cell + gap)}" width="${cell}" height="${cell}" rx="${Math.max(2, Math.round(cell / 5))}" ${a ? paint(c.accent, a) : paint(c.subtle)}/>`);
-        }
-      });
-      y += 7 * cell + 6 * gap;
-    } else if (b.kind === "list" && b.rows?.length) {
-      y += 76;
-      out.push(text(PAD, y, 30, c.text, b.title));
-      y += 16;
-      b.rows.forEach((r, i) => {
-        if (i) out.push(`<rect x="${PAD}" y="${y}" width="${INNER}" height="1" ${paint(c.border)}/>`);
-        out.push(text(PAD, y + 40, 24, c.text, r.name));
-        if (r.detail) out.push(text(PAD, y + 70, 20, c.dim, r.detail));
-        out.push(`<text x="${W - PAD}" y="${y + 56}" font-size="40" font-weight="300" text-anchor="end" ${paint(c.text)}>${esc(r.value)}${r.unit ? `<tspan font-size="20" dx="10" ${paint(c.dim)}>${esc(r.unit)}</tspan>` : ""}</text>`);
-        y += 92;
-      });
-    } else if (b.kind === "bars" && b.values?.some((n) => n > 0)) {
-      y += 64;
-      out.push(text(PAD, y, 30, c.text, b.title));
-      if (b.right) out.push(text(W - PAD, y, 22, c.dim, b.right, 'text-anchor="end"'));
-      y += 28;
-      const values = b.values, top = Math.max(...values), peak = values.indexOf(top), n = values.length;
-      const gap = n > 40 ? 3 : 6, bw = (INNER - (n - 1) * gap) / n, bh = 140;
-      values.forEach((v, i) => {
-        const height = Math.max(4, Math.round((v / top) * bh));
-        out.push(`<rect x="${PAD + i * (bw + gap)}" y="${y + bh - height}" width="${bw}" height="${height}" rx="3" ${v ? paint(c.accent, i === peak ? 1 : 0.55) : paint(c.subtle)}/>`);
-      });
-      y += bh + 30;
-      const ticks = b.ticks ?? [], last = ticks.length - 1;
-      ticks.forEach((t, i) => out.push(text(PAD + (last ? (i * INNER) / last : 0), y, 18, c.dim, t, `text-anchor="${i === 0 ? "start" : i === last ? "end" : "middle"}"`)));
-    }
-  }
-  // Footer.
-  y += 72;
-  out.push(`<rect x="${PAD}" y="${y - 40}" width="${INNER}" height="1" ${paint(c.border)}/>`);
-  out.push(text(PAD, y, 20, c.dim, "kansō for Herdr"));
-  out.push(text(W - PAD, y, 20, c.dim, REPO_URL, 'text-anchor="end"'));
+  const body = stack(PAD, [
+    headerPart(spec, c),
+    heroPart(spec.hero ?? {}, c),
+    statsPart(spec.stats ?? [], c),
+    notePart(spec.note, c),
+    ...(spec.blocks ?? []).map((b) => blockPart(b, c)),
+  ]);
+  const y = body.y + 72;
+  const out = [
+    ...body.out,
+    `<rect x="${PAD}" y="${y - 40}" width="${INNER}" height="1" ${paint(c.border)}/>`,
+    text(PAD, y, 20, c.dim, "kansō for Herdr"),
+    text(W - PAD, y, 20, c.dim, REPO_URL, 'text-anchor="end"'),
+  ];
   const height = y + PAD - 20;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="${esc(FONT)}">
 <rect width="${W}" height="${height}" ${paint(c.canvas)}/>
@@ -173,7 +175,6 @@ const exists = async (path) => (await exec("sh", ["-c", 'test -s "$1"', "sh", pa
 const macos = () => window()?.platform === "macos";
 const pause = (seconds) => exec("sleep", [String(seconds)]).catch(() => null);
 
-// Writes the card as a PNG at twice its size. Returns the renderer used, or throws.
 export async function renderPng(card, svgPath, pngPath) {
   await writeTextFile(svgPath, card.svg, await readTextFile(svgPath));
   await exec("rm", ["-f", pngPath]).catch(() => {});
@@ -185,11 +186,11 @@ export async function renderPng(card, svgPath, pngPath) {
     ["rsvg-convert", ["-z", "2", "-o", pngPath, svgPath]],
     ["magick", ["-density", "192", svgPath, pngPath]],
   ];
-  for (const [bin, args] of tries) {
-    let r = null;
-    try { r = await exec(bin, args); } catch { continue; } // not installed here
-    if (r.code === 0 && await exists(pngPath)) return bin.split("/").pop();
-  }
+  const made = await findAsync(tries, async ([bin, args]) => {
+    const tried = await tryOrAsync(async () => ({ r: await exec(bin, args) })); // null: not installed here
+    return tried !== null && tried.r.code === 0 && await exists(pngPath);
+  });
+  if (made) return made[0].split("/").at(-1);
   if (macos()) {
     const dir = svgPath.replace(/\/[^/]+$/, "");
     const r = await exec("qlmanage", ["-t", "-s", String(card.width * 2), "-o", dir, svgPath]).catch(() => null);
@@ -198,33 +199,25 @@ export async function renderPng(card, svgPath, pngPath) {
   throw new Error("Install Chrome, Chromium or rsvg-convert to make the image.");
 }
 
-// Puts the PNG on the clipboard.
 export async function copyImage(pngPath) {
   const tries = macos()
     ? [["osascript", ["-e", `set the clipboard to (read (POSIX file "${pngPath.replace(/"/g, '\\"')}") as «class PNGf»)`]]]
     : [["sh", ["-c", 'wl-copy --type image/png < "$1"', "sh", pngPath]], ["xclip", ["-selection", "clipboard", "-t", "image/png", "-i", pngPath]]];
-  for (const [bin, args] of tries) {
-    const r = await exec(bin, args).catch(() => null);
-    if (r?.code === 0) return true;
-  }
-  return false;
+  return (await findAsync(tries, async ([bin, args]) => (await exec(bin, args).catch(() => null))?.code === 0)) !== null;
 }
 
 export const openPath = (target) => exec(macos() ? "open" : "xdg-open", [target]).catch(() => null);
 
-// The app in front, by bundle id (macOS), or null when it can't be told.
 async function frontApp() {
   const r = await exec("osascript", ["-l", "JavaScript", "-e",
     'ObjC.import("AppKit"); var a = $.NSWorkspace.sharedWorkspace.frontmostApplication; a ? ObjC.unwrap(a.bundleIdentifier) : ""']).catch(() => null);
   return r?.code === 0 && r.stdout.trim() ? r.stdout.trim() : null;
 }
 
-// Pastes the clipboard into the composer that was just opened: once the
-// browser is in front and the page had time to load. False when it could not.
 async function pasteInto(network, before) {
   if (macos()) {
-    let front = await frontApp();
-    for (let i = 0; i < 12 && front && front === before; i += 1) { await pause(0.5); front = await frontApp(); }
+    // Wait until the app in front is no longer Herdr: the browser came up.
+    const front = await retry(13, () => frontApp(), { done: (app) => !(app && app === before), between: () => pause(0.5) });
     if (front && front === before) return false; // the browser never came up
     await pause(network.wait);
     if (front && (await frontApp()) !== front) return false; // you moved on: not into another app
@@ -232,14 +225,10 @@ async function pasteInto(network, before) {
     return r?.code === 0;
   }
   await pause(network.wait);
-  for (const [bin, args] of [["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]]) {
-    const r = await exec(bin, args).catch(() => null);
-    if (r?.code === 0) return true;
-  }
-  return false;
+  const keys = [["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]];
+  return (await findAsync(keys, async ([bin, args]) => (await exec(bin, args).catch(() => null))?.code === 0)) !== null;
 }
 
-// Where the image is kept: Downloads when there is one, else home.
 export async function outputPath(name) {
   const downloads = (await exec("test", ["-d", `${home()}/Downloads`]).catch(() => null))?.code === 0;
   const dir = downloads ? `${home()}/Downloads` : home();
@@ -248,9 +237,6 @@ export async function outputPath(name) {
   return `${dir}/kanso-${slug(name)}-${day}.png`;
 }
 
-// The image made, saved, and posted: to a network's composer with the text
-// and the image in it, or with no network just saved and opened.
-//   make() → { spec, text, name, title }  (title: "Shipped", "Spend")
 export async function shareImage(network, make, workDir) {
   const { spec, text: words, name, title } = make();
   const card = cardSvg(spec, palette());
@@ -273,12 +259,10 @@ export async function shareImage(network, make, workDir) {
     ? { title: `Your ${n.name} post has the image and the text`, body: `Check it and post. Not there? It is on the clipboard: ${key}. Saved in ${where}.`, level: "success" }
     : copied
       ? { title: `Paste the image into your ${n.name} post: ${key}`, body: macos() ? `It is on the clipboard and in ${where}. To have it pasted for you, allow Herdr in System Settings > Privacy & Security > Accessibility.` : `It is on the clipboard and in ${where}.`, level: "success" }
-      : { title: `Attach ${png.split("/").pop()} to your ${n.name} post`, body: png, level: "success" });
+      : { title: `Attach ${png.split("/").at(-1)} to your ${n.name} post`, body: png, level: "success" });
   if (!copied) await openPath(png.replace(/\/[^/]+$/, ""));
 }
 
-// The "Share to" row and its state, the same in every panel.
-//   id: a prefix for element ids; make: as for shareImage; note: what the image holds.
 export class Share {
   constructor(id, workDir) { this.id = id; this.workDir = workDir ?? `${appHome()}/data/${id}`; this.open = false; this.busy = null; }
 

@@ -1,16 +1,5 @@
 // Kanso's side panels, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// One mod, several panels: `props.panel` is "files" (a lazy file browser),
-// "pr" (the branch's pull
-// request, or another of your open ones picked from a list), "shipped" (what
-// you delivered: lines, pull requests, reviews, streak and records), "worktrees"
-// (every git worktree on this computer, and removing the ones left behind) or "preview" (one file, rendered: Markdown as the SDK draws it,
-// anything else as read-only code; `props.path`, `props.on`). kanso-tabs mounts one of them in the panel stack on demand and
-// empties the stack to close it, so a panel exists only while it is shown
-// and never has to watch whether it is. Each panel is a plain class with
-// init(cx, props) and render(cx); what they share (where the focused pane is, diff
-// rows) is in lib.js. Herdr lets a mod import its own files, not another's:
-// this is why the three live together.
+// Herdr lets a mod import its own files, not another's, so the panels live in one mod.
 import { View, div } from "gpui-kit";
 import { props } from "herdr";
 import { Files } from "./files.js";
@@ -28,8 +17,7 @@ export default class Panel extends View {
     const Impl = PANELS[p.panel] ?? Files;
     this.panel = new Impl();
     this.panel.init(cx, p);
-    // A panel comes in with a fade: clear on its first frame, in full on the
-    // next, and GPUI eases between them.
+    // The opacity must change between frames for GPUI to ease the fade.
     this.shown = false;
     cx.timer.after(16, (cx) => { this.shown = true; cx.notify(); });
   }
