@@ -11,13 +11,14 @@
 // doc.js and blocks.js are copies of Kanso's (kanso-panel); edit those.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { appHome, exec, watchFolder, focused, props, closeOverlay, theme, home } from "herdr";
+import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
 import { MarkdownDoc, tildePath } from "./doc.js";
 
 const ICONS = "mods/markdown-panel/icons";
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).pop();
+const REMOTE_READ_MS = 3000;
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
@@ -33,21 +34,34 @@ export function markdownIn(listing) {
     .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)).slice(0, 40);
 }
 
+// The focused pane's machine (null: this one) and folder. A pane on an SSH
+// machine has a folder on that machine, so its files are listed and read there.
+export function placeOf(focus, list, localHome) {
+  const space = list.find((s) => s.id === focus?.space);
+  const on = space?.machine ?? null;
+  return { on, folder: focus?.cwd || space?.folder || (on ? "" : localHome) };
+}
+
 export default class MarkdownPanel extends View {
   init(_props, cx) {
     this.doc = null; this.files = null;
-    this.folder = focused()?.cwd || home();
+    const { on, folder } = placeOf(focused(), spaces(), home());
+    this.on = on; this.folder = folder;
     this.handle = cx.focus_handle();
     this.watchOpens(cx);
     this.list(cx);
   }
 
   list(cx) {
-    const folder = this.folder;
+    const on = this.on;
     cx.spawn(async (cx) => {
-      const git = await exec("git", ["ls-files", "--", "*.md", "*.markdown", "*.mdx"], { cwd: folder }).catch(() => null);
+      // A machine's home when its pane told no folder: where its commands start.
+      const folder = this.folder || (await exec("pwd", [], { on }).catch(() => null))?.stdout.trim() || "";
+      this.folder = folder;
+      const where = { cwd: folder || undefined, on };
+      const git = await exec("git", ["ls-files", "--", "*.md", "*.markdown", "*.mdx"], where).catch(() => null);
       const out = git?.code === 0 && git.stdout.trim() ? git.stdout
-        : (await exec("find", [".", "-maxdepth", "3", "-name", "node_modules", "-prune", "-o", "-type", "f", "(", "-iname", "*.md", "-o", "-iname", "*.mdx", ")", "-print"], { cwd: folder }).catch(() => null))?.stdout ?? "";
+        : (await exec("find", [".", "-maxdepth", "3", "-name", "node_modules", "-prune", "-o", "-type", "f", "(", "-iname", "*.md", "-o", "-iname", "*.mdx", ")", "-print"], where).catch(() => null))?.stdout ?? "";
       this.files = markdownIn(out.replace(/^\.\//gm, ""));
       cx.notify();
     });
@@ -68,12 +82,13 @@ export default class MarkdownPanel extends View {
   }
 
   // Saves what you typed in the file shown before, then shows this one.
-  open(path, cx) {
+  // on: the machine the file is on (null: this one); paths opened from outside are here.
+  open(path, cx, on = null) {
     const before = this.doc;
     cx.spawn(async (cx) => {
       if (before && !(await before.flush())) { cx.notify(); return; }
       before?.release();
-      this.doc = new MarkdownDoc(path, null, (to) => { if (isMarkdown(to)) this.open(to, cx); }, ICONS);
+      this.doc = new MarkdownDoc(path, on, (to) => { if (isMarkdown(to)) this.open(to, cx, on); }, ICONS);
       this.doc.load(cx);
       this.watch(path, cx);
       cx.notify();
@@ -81,10 +96,12 @@ export default class MarkdownPanel extends View {
   }
 
   // The file is read again on every change in its folder, while it is shown.
+  // Another machine's folder can't be watched from here: read it every few seconds.
   watch(path, cx) {
-    const dir = folderOf(path);
+    const doc = this.doc, dir = folderOf(path);
+    const next = () => (doc.on ? cx.sleep(REMOTE_READ_MS) : watchFolder(dir));
     cx.spawn(async (cx) => {
-      try { while (this.doc?.path === path) { await watchFolder(dir); if (this.doc?.path === path) this.doc.load(cx); } } catch {}
+      try { while (this.doc === doc) { await next(); if (this.doc === doc) doc.load(cx); } } catch {}
     });
   }
 
@@ -122,7 +139,7 @@ export default class MarkdownPanel extends View {
         .when(Boolean(doc), (el) => el.child(button("md-back", "chevron-left", "Markdown in this folder", (cx) => this.back(cx))))
         .child(v_flex().flex_1().min_w(0).pl(doc ? 0 : 4)
           .child(div().truncate().font_semibold().child(doc ? nameOf(doc.path) : "Markdown"))
-          .child(div().truncate().text_size(11).text_color(t.dim).child(tildePath(doc ? folderOf(doc.path) : this.folder, null))))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(tildePath(doc ? folderOf(doc.path) : this.folder, doc ? doc.on : this.on))))
         .children(doc ? doc.controls(t, "md") : [])
         .when(Boolean(doc) && !doc.editing, (el) => el.child(button("md-refresh", "refresh", "Read again", (cx) => doc.load(cx))))
         .child(button("md-close", "close", "Close", (cx) => this.close(cx))))
@@ -135,7 +152,7 @@ export default class MarkdownPanel extends View {
     if (!files.length) return div().p(16).text_size(12.5).text_color(t.dim).child("No Markdown files in this folder. Cmd-click a .md path in a terminal to read it here.");
     return div().id("md-files").flex_1().min_h(0).overflow_y_scrollbar().p(6)
       .children(files.map((f, i) => h_flex().id(`md-file-${i}`).h(30).px(10).gap(8).items_center().rounded(6).cursor_pointer()
-        .hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.open(`${this.folder}/${f}`, cx))
+        .hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.open(`${this.folder}/${f}`, cx, this.on))
         .child(div().flex_none().truncate().child(nameOf(f)))
         .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(f.includes("/") ? folderOf(f) : ""))));
   }
