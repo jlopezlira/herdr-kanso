@@ -478,3 +478,14 @@ test("Send reaches any agent of any model by the name and project Kanso gives it
   assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "flu" })).map((g) => g.project), ["fluenty"], "found by project");
   assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "qb" })).map((g) => g.agents.map((x) => x.terminal)), [["t5t"]], "found by name");
 });
+
+test("the minimap's pills fit their slot whatever the columns, so the stepper always shows", async () => {
+  const { pillWidths } = await load("kanso-strip/main.js", ["pillWidths"]);
+  const span = (ws) => ws.reduce((a, b) => a + b + 2, 0) + (ws.length - 1) * 3;
+  assert.deepEqual(clone(pillWidths([{ w: 0.5 }, { w: 0.5 }])), [15, 15], "few columns keep their size");
+  const six = pillWidths(Array.from({ length: 6 }, () => ({ w: 1 })));
+  assert.ok(span(six) <= 110, `six full-width columns fit (${span(six)}px)`);
+  assert.ok(six.every((w) => w === six[0]), "and stay alike");
+  const many = pillWidths(Array.from({ length: 30 }, () => ({ w: 1 })));
+  assert.ok(many.every((w) => w >= 3), "never thinner than a mark");
+});

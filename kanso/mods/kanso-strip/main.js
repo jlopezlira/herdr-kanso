@@ -17,6 +17,15 @@ const DEFAULT_N = 2;
 const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
 const newW = (st) => 1 / (st.n ?? DEFAULT_N);
+// The minimap's slot is 180px and its stepper takes about 60: the pills shrink to the rest, and past a mark's least width they are cut in their own box, so the stepper always shows.
+const PILLS_PX = 110;
+export function pillWidths(cols, budget = PILLS_PX) {
+  const raw = cols.map((c) => 6 + (Number(c.w) || 0) * 18);
+  const room = budget - cols.length * 2 - Math.max(0, cols.length - 1) * 3;
+  const total = raw.reduce((a, b) => a + b, 0);
+  const scale = total > room ? Math.max(0, room) / total : 1;
+  return raw.map((w) => Math.max(3, scale < 1 ? Math.floor(w * scale) : Math.round(w)));
+}
 const EPS = 1e-3;
 const KEY = "strip.state";
 const HEADER_H = 34;
@@ -1078,9 +1087,10 @@ export default class Strip extends View {
     const st = key !== this.lastKey || this.pendingFocus || !this.state[tab] ? this.refresh(tab, ps, key, drag) : this.state[tab];
 
     const at = this.where(st, st.focus);
+    const widths = pillWidths(st.cols);
     const pills = st.cols.map((c, i) => {
       const tone = at?.ci === i ? t.foreground : c.pin || this.shown?.has(i) ? t.muted : t.input;
-      const w = Math.round(6 + c.w * 18), k = c.panes.length;
+      const w = widths[i], k = c.panes.length;
       return v_flex().id(`strip-mark-${i}`).h(14).px(1).gap(1).flex_none().justify_center().cursor_pointer()
         .on_click(() => { this.edit(tab, st, (now) => this.focusOn(now, c.panes[0], ps)); this.dirty = true; })
         .children(c.panes.map((id, r) => div().id(`strip-cell-${id}`).w(w).h(k > 1 ? 2 : 4).rounded_full()
@@ -1097,10 +1107,11 @@ export default class Strip extends View {
     return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()
       .on_mouse_up("left", () => { if (shared("strip.drag")) endDrag(); })
       .on_scroll_wheel((ev) => this.wheel(ev, tab, st))
-      .children(pills)
-      .child(div().w(8))
+      // Past what fits, the extra marks are cut here, never the stepper.
+      .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PILLS_PX).overflow_hidden().gap(3).items_center().children(pills))
+      .child(div().w(8).flex_none())
       .child(tiny("strip-fewer", "\u2212", "Fewer panes per view", () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
-      .child(div().id("strip-n").text_size(11).text_color(t.muted).tooltip(`${n} per view · click to even out`).cursor_pointer()
+      .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(`${n} per view · click to even out`).cursor_pointer()
         .on_click(() => { this.edit(tab, st, (now) => this.fit(now, now.focus)); this.dirty = true; }).child(String(n)))
       .child(tiny("strip-more", "+", "More panes per view", () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
   }
