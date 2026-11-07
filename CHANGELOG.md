@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.5.1] - 2026-11-07
+
+### Fixed
+
+- The Markdown panel (Cmd+Shift+M) in a pane on an SSH machine lists that machine's Markdown files and shows them, read only, read again every few seconds; before, it looked on this computer and found nothing (#53).
+
 ## [3.5.0] - 2026-11-06
 
 ### Added
