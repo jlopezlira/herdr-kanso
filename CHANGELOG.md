@@ -30,6 +30,11 @@ checks all of this, and merging to main releases the version in
 - An agent keeps the name you gave it, by its conversation, not by the terminal it happens to be in.
 - Every scrolling list and panel scrolls: the sidebar, Send to an agent, Sleep, Arrangements, Open with, kansō settings and help, the panels (pull request, ports, worktrees, Shipped, Spend, Memory), the Markdown preview and its tables, and Spend's menus. Their rows no longer shrink to fit, so what does not fit scrolls instead of being squeezed or cut.
 - An agent's menu keeps its own items in view however many projects there are: four show under Move to project, the rest scroll.
+## [3.5.1] - 2026-11-07
+
+### Fixed
+
+- The Markdown panel (Cmd+Shift+M) in a pane on an SSH machine lists that machine's Markdown files and shows them, read only, read again every few seconds; before, it looked on this computer and found nothing (#53).
 
 ## [3.5.0] - 2026-11-06
 
