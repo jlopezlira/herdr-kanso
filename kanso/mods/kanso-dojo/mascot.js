@@ -1,9 +1,4 @@
 // Hachi, the dōjō's shiba, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// A pixel shiba that keeps you company while you practice, named after
-// Hachikō, the dog who waited every day. Its face follows the game: calm,
-// tongue out on a streak or a new best, a drop of sweat when the moves pile
-// up, asleep when left alone.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 
@@ -30,8 +25,7 @@ const EYES = [4, 11];
 
 //   mood: "calm" | "glad" | "sweat" | "sleep".
 export function hachiPixels(mood = "calm") {
-  // The face drawn over the body, [x, y, ink] each: the eyes, then the mouth
-  // (a later mark wins where two meet; one off the body draws nothing).
+  // [x, y, ink] marks over the body; in the Map a later mark wins where two meet.
   const eyes = EYES.flatMap((x) => (mood === "glad" ? [[x - 1, 7, "K"], [x, 6, "K"], [x + 1, 7, "K"]]
     : mood === "sleep" ? [[x - 1, 7, "K"], [x, 7, "K"], [x + 1, 7, "K"]]
     : [[x, 6, "K"], [x, 7, "K"]]));
@@ -42,7 +36,6 @@ export function hachiPixels(mood = "calm") {
   return BODY.map((r, y) => r.split("").map((c, x) => face.get(y * 100 + x) ?? c));
 }
 
-// Hachi at `px` pixels a cell, in the theme's colors (the tongue in its accent).
 export function hachi(t, { mood = "calm", px = 6 } = {}) {
   const ink = { O: t.chrome ?? "#161615", F: "#e8963a", C: "#f6ece0", D: "#f6ece0", N: t.chrome ?? "#161615", K: t.chrome ?? "#161615", T: t.accent, B: t.ansi4 ?? "#8e9fb2" };
   return v_flex().flex_none().children(hachiPixels(mood).map((row) => h_flex().children(row.map((v) =>

@@ -1,9 +1,4 @@
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The dōjō's rounds, kept in a SQLite database of its own
-// (data/kanso-dojo/dojo.db, through the sqlite3 command): one row per round
-// played, and the level you were on. Bests, totals and the days you
-// practiced are read from the rounds.
 import { exec, appHome } from "herdr";
 import { tryOrAsync } from "./pure.js";
 
@@ -17,8 +12,7 @@ CREATE TABLE IF NOT EXISTS prefs(key TEXT PRIMARY KEY, value TEXT NOT NULL);`;
 
 export const roundSql = (r) => `INSERT INTO rounds(at,level,score,rings,fewest,streak) VALUES(${int(r.at)},${int(r.level)},${int(r.score)},${int(r.rings)},${int(r.fewest)},${int(r.streak)});`;
 
-// What the rounds add up to: { bests: { level: score }, rounds, rings,
-// fewest, longest (streak), days: ["YYYY-MM-DD"], first (ms) }.
+// `first` is in ms; `days` are "YYYY-MM-DD".
 export function totalsOf(rows, days) {
   const sum = (rows ?? []).reduce((acc, r) => ({
     bests: { ...acc.bests, [r.level]: Math.max(acc.bests[r.level] ?? 0, Number(r.best) || 0) },

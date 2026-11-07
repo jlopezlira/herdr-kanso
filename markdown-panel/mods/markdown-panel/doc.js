@@ -1,11 +1,3 @@
-// A Markdown file in the side panel, edited where it reads. The document is
-// always shown formatted; a double-click on a block (a paragraph, a list, a heading,
-// a table) opens just that block to edit, and the rest stays formatted. A
-// heading is edited without its #, a table as a grid of cells. Changes are
-// saved as you go, and only if the file on disk is still what was read, so a
-// change an agent made meanwhile is never overwritten: you choose. "Source"
-// edits the whole file as Markdown. Used by Kanso's preview panel and, as a
-// copy (npm run sync:share), by the markdown-panel mod.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home } from "herdr";
@@ -15,16 +7,13 @@ const MAX_TEXT = 400000;
 const AUTOSAVE_MS = 700;
 const HEADING_SIZE = [0, 22, 18, 16, 15, 14, 13.5];
 
-// YAML front matter (skills, agents, docs sites) as a code block, so it
-// reads as data instead of running into the first paragraph.
+// Front matter shown as a code block, so it reads as data instead of running into the first paragraph.
 export function readable(text) {
   const m = /^-{3}\r?\n([\s\S]*?)\r?\n-{3}[ \t]*(\r?\n|$)/.exec(text);
   const body = m ? "```yaml\n" + m[1] + "\n```\n\n" + text.slice(m[0].length) : text;
   return body.length > MAX_TEXT ? body.slice(0, MAX_TEXT) + "\n\n… (file truncated)" : body;
 }
 
-// Where a link in the document goes: a web page, another file (resolved
-// against the document's folder, its #anchor dropped), or nothing.
 export function linkTarget(url, docPath) {
   if (/^(https?:|mailto:)/i.test(url)) return { web: url };
   if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^file:/i.test(url)) return null;
@@ -36,13 +25,11 @@ export function linkTarget(url, docPath) {
 }
 
 export class MarkdownDoc {
-  // path: absolute; on: the machine (null here). onOpen(path) follows a link
-  // to another file; without it, links to files do nothing.
-  // icons: the folder of close.svg (Kanso's, or the standalone mod's own).
+  // path: absolute; on: a remote machine (null here); without onOpen, links to files do nothing.
   constructor(path, on, onOpen, icons = "mods/kanso-chrome/icons") {
     this.path = path; this.on = on ?? null; this.onOpen = onOpen ?? null; this.icons = icons;
-    this.saved = null;   // the file on disk, as last read or written
-    this.text = null;    // the document as it is now
+    this.saved = null;
+    this.text = null;
     this.blocks = [];
     this.active = null;  // the block being edited
     this.box = null;     // its text, or a table's cells
@@ -75,15 +62,12 @@ export class MarkdownDoc {
     });
   }
 
-  // The document is replaced (read from disk, or taken back): nothing stays open.
   setText(text) {
     this.close();
     this.text = text;
     this.blocks = parseBlocks(text);
     this.source?.set_value(text);
   }
-
-  // ---- Editing one block -----------------------------------------------------
 
   open(i, cx) {
     if (!this.canEdit || this.conflict) return;
@@ -107,14 +91,11 @@ export class MarkdownDoc {
     cx.notify();
   }
 
-  // The open block's lines are new: the block is replaced in the document.
   setLines(i, lines, cx) {
     this.blocks = this.blocks.with(i, { ...this.blocks[i], lines });
     this.changed(cx);
   }
 
-  // Block i, a table, as a grid of cells. A cell typed in makes a new table
-  // (put answers it from the one before), and the block follows.
   openTable(i, cx) {
     const table = parseTable(this.blocks[i].lines);
     const cell = (value, put) => {
@@ -135,9 +116,7 @@ export class MarkdownDoc {
     this.cells.head[0]?.focus();
   }
 
-  // A row or a column added or removed: the grid is built again from the table.
-  // fn answers the new table; a caller that changes the table it is handed
-  // instead gets a copy, so the open one is never changed in place.
+  // fn gets a copy of the table, so the open one is never changed in place.
   reshape(fn, cx) {
     const { table, block } = this.cells;
     const copy = { ...table, head: [...table.head], align: [...table.align], rows: table.rows.map((r) => [...r]) };
@@ -154,8 +133,7 @@ export class MarkdownDoc {
     this.cells = null;
   }
 
-  // Leaves the open block; the document is read into blocks again, so a
-  // paragraph you split with an empty line becomes two.
+  // Reparsed on close, so a paragraph split with an empty line becomes two.
   close() {
     this.box?.release(); this.box = null;
     this.releaseCells();
@@ -163,7 +141,6 @@ export class MarkdownDoc {
     this.active = null;
   }
 
-  // A new paragraph at the end of the document.
   append(cx) {
     if (!this.canEdit || this.conflict) return;
     this.close();
@@ -182,8 +159,6 @@ export class MarkdownDoc {
     this.later(cx);
     cx.notify();
   }
-
-  // ---- Saving ----------------------------------------------------------------
 
   later(cx) {
     const seq = this.seq + 1;
@@ -211,8 +186,7 @@ export class MarkdownDoc {
     });
   }
 
-  // Saves now, before the panel closes or shows another file. False when
-  // it could not (the file changed on disk: the choice is shown).
+  // False when it could not save: the file changed on disk and the choice is shown.
   async flush() {
     this.seq = this.seq + 1;
     if (!this.dirty || this.on) return !this.conflict;
@@ -225,8 +199,6 @@ export class MarkdownDoc {
     }
   }
 
-  // The file changed on disk while you edited: keep yours (written over it)
-  // or take the file's.
   keepMine(cx) {
     if (!this.conflict) return;
     this.saved = this.disk; this.conflict = false; this.disk = null;
@@ -239,8 +211,6 @@ export class MarkdownDoc {
     this.setText(this.saved);
     cx.notify();
   }
-
-  // ---- The whole file as Markdown -------------------------------------------
 
   toggleSource(cx) {
     if (!this.canEdit) return;
@@ -258,7 +228,6 @@ export class MarkdownDoc {
     cx.notify();
   }
 
-  // Cmd+S saves now; Escape closes the block being edited.
   key(e, cx) {
     const cmd = e.modifiers?.platform || e.modifiers?.control;
     if (cmd && e.key === "s") { this.seq = this.seq + 1; this.save(cx); cx.stop_propagation(); }
@@ -271,9 +240,6 @@ export class MarkdownDoc {
     else if (to?.file && this.onOpen) this.onOpen(to.file);
   }
 
-  // ---- Drawing ---------------------------------------------------------------
-
-  // The header's part: where the saving is, and Source.
   controls(t, prefix) {
     const state = this.on ? "Read only" : this.big ? "Too large to edit" : this.conflict ? "" : this.saving ? "Saving…" : this.dirty ? "Edited" : this.savedAt ? "Saved" : "";
     return [
@@ -297,9 +263,9 @@ export class MarkdownDoc {
     const main = this.source
       ? div().flex_1().min_h(0).px(6).py(4).child(Editor.new(this.source).size_full())
       : div().id(`${id}-scroll`).flex_1().min_h(0).overflow_y_scrollbar()
-        .child(v_flex().w_full().max_w(760).px(16).pt(14).pb(8).gap(10)
+        .child(v_flex().flex_none().w_full().max_w(760).px(16).pt(14).pb(8).gap(10)
           .children(this.blocks.map((b, i) => this.block(b, i, t, id)).filter(Boolean)))
-        .when(this.canEdit, (el) => el.child(div().id(`${id}-append`).h(120).w_full()
+        .when(this.canEdit, (el) => el.child(div().id(`${id}-append`).flex_none().h(120).w_full()
           .on_mouse_down("left", (e, cx) => { if (e.click_count === 2) this.append(cx); })));
     return v_flex().flex_1().min_h(0).when(Boolean(conflict), (el) => el.child(conflict)).child(main);
   }
@@ -343,7 +309,7 @@ export class MarkdownDoc {
       .child(div().w(26).flex_none());
     return v_flex().w_full().gap(6)
       .child(div().id(`${id}-grid`).w_full().overflow_x_scrollbar()
-        .child(v_flex().min_w(n * 96 + 26).child(removeCol)
+        .child(v_flex().flex_none().min_w(n * 96 + 26).child(removeCol)
           .child(v_flex().rounded(6).border_1().border_color(t.input).overflow_hidden()
             .child(line(head.map((s, c) => cell(s, `${id}-h${c}`, true)), `${id}-hrow`, true, div()))
             .children(rows.map((r, ri) => line(r.map((s, c) => cell(s, `${id}-c${ri}-${c}`)), `${id}-row${ri}`, false,

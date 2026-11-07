@@ -1,7 +1,4 @@
-// Markdown as blocks, for editing a document in place: each block is a run of
-// whole lines (a heading, a paragraph, a list, a table, a code fence, front
-// matter, a blank line), and joining the blocks' lines gives back the file
-// byte for byte. Tables also parse into cells and print back.
+// Each block is a run of whole lines; joining the blocks' lines gives back the file byte for byte.
 
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 const HEADING = /^\s{0,3}#{1,6}(\s|$)/;
@@ -15,11 +12,7 @@ import { range } from "./pure.js";
 const isTableStart = (lines, i) => lines[i].includes("|") && i + 1 < lines.length && DIVIDER.test(lines[i + 1]) && lines[i + 1].includes("-");
 const startsBlock = (lines, i) => FENCE.test(lines[i]) || HEADING.test(lines[i]) || RULE.test(lines[i]) || isTableStart(lines, i);
 
-// A fold over 0..n-1 that also collects what each step gives out, in order:
-// step(state, j) answers { state, emit } (emit left out when there is
-// nothing). Collecting into one array by spread would copy it once per item,
-// slow on a document of many thousands of lines, so the indexes go in runs
-// of 64: each run gathers its own items, and the runs are joined at the end.
+// step(state, j) answers { state, emit }; emits go in runs of 64 so the array is not copied once per item.
 const RUN = 64;
 function collect(n, step, init) {
   const done = range(Math.ceil(n / RUN)).reduce((acc, r) => {
@@ -32,45 +25,34 @@ function collect(n, step, init) {
   return done.runs.flat();
 }
 
-// How a block goes on: given the next line's index, the way it goes on after
-// that line when the line is still the block's, or null when the block ended
-// before it.
+// A block's continuation: given the next line's index, the continuation after it, or null when the block ended.
 const ended = () => null;
 const whileLine = (test) => {
   const more = (j) => (test(j) ? more : null);
   return more;
 };
 
-// The block that line i starts, when it is not part of the one before:
-// { kind, next } (next as above).
 function opening(lines, i) {
   const line = lines[i];
   if (!line.trim()) return { kind: "blank", next: ended };
   const fence = FENCE.exec(line);
   if (fence) {
-    // Everything up to the closing fence, that one included (or to the end).
     const closing = new RegExp(`^\\s{0,3}\\${fence[1][0]}{${fence[1].length},}\\s*$`);
     const inside = (j) => (closing.test(lines[j]) ? ended : inside);
     return { kind: "code", next: inside };
   }
   if (HEADING.test(line)) return { kind: "heading", next: ended };
   if (RULE.test(line)) return { kind: "rule", next: ended };
-  // The divider line is the table's, then the rows with a pipe.
   if (isTableStart(lines, i)) return { kind: "table", next: () => whileLine((j) => lines[j].trim() && lines[j].includes("|")) };
   if (QUOTE.test(line)) return { kind: "quote", next: whileLine((j) => lines[j].trim() && QUOTE.test(lines[j])) };
   if (ITEM.test(line)) return { kind: "list", next: whileLine((j) => lines[j].trim() && (ITEM.test(lines[j]) || /^\s/.test(lines[j])) && !startsBlock(lines, j)) };
   return { kind: "paragraph", next: whileLine((j) => lines[j].trim() && !startsBlock(lines, j) && !QUOTE.test(lines[j]) && !ITEM.test(lines[j])) };
 }
 
-// [{ kind, lines }]; kinds: front, code, heading, rule, table, list, quote,
-// paragraph, blank.
 export function parseBlocks(text) {
   const lines = text.split("\n");
-  // Front matter: from the first line's --- to the next one.
   const frontEnd = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
   const front = frontEnd > 0;
-  // One pass over the lines: each either goes on with the block it is in, or
-  // starts the next one. Only the starts are kept; a block ends where the next begins.
   const starts = collect(lines.length, (next, j) => {
     const more = next(j);
     if (more) return { state: more };
@@ -83,14 +65,12 @@ export function parseBlocks(text) {
 
 export const joinBlocks = (blocks) => blocks.flatMap((b) => b.lines).join("\n");
 
-// A heading's level and words, and back.
 export function headingOf(line) {
   const m = /^\s{0,3}(#{1,6})\s*(.*?)\s*#*\s*$/.exec(line);
   return m ? { level: m[1].length, text: m[2] } : { level: 1, text: line };
 }
 export const headingLine = (level, text) => `${"#".repeat(level)} ${text.replace(/\n+/g, " ").trim()}`;
 
-// A row's cells: split on pipes that aren't escaped, outer pipes dropped.
 export function cellsOf(line) {
   const trimmed = line.trim();
   const opened = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
@@ -99,7 +79,6 @@ export function cellsOf(line) {
   return s.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, "|").trim());
 }
 
-// { head: [...], align: ["left"|"center"|"right"|null], rows: [[...]] }
 export function parseTable(lines) {
   const head = cellsOf(lines[0]);
   const align = cellsOf(lines[1]).map((c) => (c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : null));

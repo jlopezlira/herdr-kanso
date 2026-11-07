@@ -1,11 +1,6 @@
 // Shipped's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The panel's global numbers as a card for share.js: the hero, the totals,
-// the streak with its year of contributions, the records and when you ship.
-// No repository or machine names, so nothing private leaves with it.
 import { postText } from "./share.js";
 
-// The post's words: the numbers that brag best.
 export function shareText(s, extra) {
   const merged = s.stats.find((x) => x.unit === "pull requests merged");
   const parts = [
@@ -16,8 +11,6 @@ export function shareText(s, extra) {
   return postText(parts, "What I shipped.");
 }
 
-// The card spec. `s` is the panel's summary; `extra`: { streak, longest,
-// weeks (the calendar), records [{ name, value, unit, detail }], rhythm { hours, note } }.
 export function shippedSpec(s, extra) {
   const blocks = [
     { kind: "streak", title: "Streak", right: `longest ${extra.longest} ${extra.longest === 1 ? "day" : "days"}`,

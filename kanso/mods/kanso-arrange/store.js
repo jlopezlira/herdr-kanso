@@ -1,10 +1,4 @@
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// Where arrangements are kept: a local SQLite database
-// (data/kanso-arrange/arrange.db, through the sqlite3 command), one row per
-// arrangement, keyed by the project it was saved in and its name, so saving
-// under a name that exists overwrites it. The JSON file earlier versions
-// wrote (data/kanso-arrange.json) is read into it once and left in place.
 import { exec, appHome, readTextFile } from "herdr";
 import { parseOr, tryOrAsync } from "./pure.js";
 
@@ -19,16 +13,13 @@ export const SCHEMA = `CREATE TABLE IF NOT EXISTS arrangements(
   PRIMARY KEY(project, name));
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);`;
 
-// An arrangement's row: what it opens (columns, panes per view) as JSON.
 export function saveSql(project, a, replace = true) {
   const layout = JSON.stringify({ per: a.per ?? null, cols: a.cols ?? [] });
   return `INSERT OR ${replace ? "REPLACE" : "IGNORE"} INTO arrangements(project,name,layout,saved) VALUES(${sqlText(project)},${sqlText(a.name)},${sqlText(layout)},${int(a.saved ?? Date.now())});`;
 }
 export const deleteSql = (project, name) => `DELETE FROM arrangements WHERE project=${sqlText(project)} AND name=${sqlText(name)};`;
 
-// Rows as { project: [arrangement] }, each project's in the order saved.
 export function projectsOf(rows) {
-  // A row whose layout is not JSON, or holds no columns, is left out.
   const kept = (rows ?? []).flatMap((r) => {
     const layout = parseOr(r.layout);
     if (!Array.isArray(layout?.cols)) return [];

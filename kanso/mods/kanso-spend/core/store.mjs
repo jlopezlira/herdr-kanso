@@ -13,32 +13,14 @@ import {
   tokenTotal,
 } from "./util.mjs";
 
-// The store is a plain object, read from spend.db and written back. A scan
-// never changes it: it opens it as a working store (openStore), whose
-// collections are persistent maps over the stored ones (pmap.mjs), threads
-// that through every file and line, and makes a new plain store of it once,
-// at the end (closeStore). Every function here answers a new working store
-// and leaves the one it was given as it was.
-//
-// A working store holds:
-//   store      the plain store it was opened from (version, config, ...)
-//   nextFileId the id the next new file entry gets
-//   files      file key -> entry; an entry's rows and tasks are the stored
-//              ones until `rows` or `lists` holds a newer version
-//   byId       file id -> file key
-//   rows       file id -> the rows of a file changed in this scan
-//   lists      file id -> the task keys of a file changed in this scan
-//   dedup      usage key -> dedup entry
-//   tasks      task key -> task entry
-//   fallbacks  session hash -> its fallback task keys, oldest first; built
-//              when first needed, dropped when a task stops being one
+// A scan never changes the store: openStore wraps it in persistent maps (pmap.mjs), functions answer new stores, closeStore makes the plain one once.
+// Stored rows and tasks stand until work.rows/work.lists holds newer; fallbacks are built on first need and dropped when stale.
 
 export function fileKey(sourceId, filePath) {
   return `${sourceId}\u0000${filePath}`;
 }
 
-// `store` with `fields` set, its hidden fields (the saved state, the
-// read-only mark) kept: a new object, the old one as it was.
+// Setting fields through the descriptors keeps the hidden ones (_saved, _readOnly).
 export function storeWith(store, fields) {
   return Object.create(Object.getPrototypeOf(store), {
     ...Object.getOwnPropertyDescriptors(store),
@@ -46,7 +28,6 @@ export function storeWith(store, fields) {
   });
 }
 
-// `store` with `values` as fields that JSON and the database never see.
 function withHidden(store, values) {
   return Object.create(Object.getPrototypeOf(store), {
     ...Object.getOwnPropertyDescriptors(store),
@@ -68,8 +49,7 @@ export function emptyStore(config = defaultConfig()) {
   };
 }
 
-// The store with every file, usage key and task dropped. What was saved
-// stays known, so the next save deletes it from the database.
+// What was saved stays known, so the next save deletes the cleared data from the database.
 export function clearCollectedData(store) {
   return storeWith(store, { files: {}, dedup: {}, tasks: {}, nextFileId: 1 });
 }
@@ -90,8 +70,6 @@ export function openStore(store) {
   };
 }
 
-// The plain store a working store comes to: the one it was opened from when
-// nothing changed.
 export function closeStore(work) {
   const { store } = work;
   const touched = work.rows.changed || work.lists.changed;
@@ -125,7 +103,6 @@ export function fileById(work, id) {
   return key === undefined ? null : (work.files.get(key) ?? null);
 }
 
-// The working store with `entry` stored under `key`.
 export function putEntry(work, key, entry) {
   return { ...work, files: work.files.with(key, entry) };
 }
@@ -148,8 +125,6 @@ export function newFileEntry(work, values) {
   };
 }
 
-// The file's own usage rows and task keys dropped, ready to be read again
-// from the start.
 export function resetFileEntry(work, key, entry) {
   const cleaned = removeOwnedMetadata(work, entry.id);
   const reset = { ...entry, offset: 0, lineNo: 0, rows: [], tasks: [], state: {} };
@@ -163,9 +138,6 @@ export function resetFileEntry(work, key, entry) {
     entry: reset,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Rows
 
 function newRow(meta) {
   return {
@@ -184,14 +156,11 @@ function newRow(meta) {
   };
 }
 
-// A file's rows while a scan changes them, and the bucket index over them:
-// each key at the first row that has it. The index is built when first
-// needed and again after a row's key changed.
+// A file's rows plus a bucket index (key -> first row with it), built when first needed and after a row's key changed.
 function rowsFrom(array) {
   return { list: PList.of(array), index: null };
 }
 
-// The rows of file `id`, or null when there is no such file.
 function rowsOf(work, id) {
   const changed = work.rows.get(id);
   if (changed) return changed;
@@ -199,7 +168,6 @@ function rowsOf(work, id) {
   return file ? rowsFrom(Array.isArray(file.rows) ? file.rows : []) : null;
 }
 
-// How many rows file `id` has now.
 export function rowCount(work, id) {
   return rowsOf(work, id)?.list.length ?? 0;
 }
@@ -209,8 +177,7 @@ function rowIndex(rows) {
   return PMap.over(new Map(rows.list.toArray().map((row, index) => [rowKey(row), index]).toReversed()));
 }
 
-// OpenCode puts the entire history in one file: a linear search here would
-// make a cold scan quadratic in the number of session/model buckets.
+// OpenCode puts the entire history in one file; a linear search would make a cold scan quadratic.
 function getOrCreateRow(rows, meta) {
   const index = rowIndex(rows);
   const key = rowKey(meta);
@@ -231,16 +198,10 @@ function addRowTokens(row, tokens) {
   };
 }
 
-// The working store with row `rowIdx` of file `id` replaced by `row`.
 function putRow(work, id, rows, rowIdx, row) {
   return { ...work, rows: work.rows.with(id, { ...rows, list: rows.list.with(rowIdx, row) }) };
 }
 
-// ---------------------------------------------------------------------------
-// Task lists
-
-// A file's task keys while a scan changes them: the stored list, then each
-// key added or taken out since, in order, read back once at the end.
 function taskList(base) {
   return { base, log: PList.of([]) };
 }
@@ -252,16 +213,12 @@ function listOf(work, id) {
   return file && Array.isArray(file.tasks) ? taskList(file.tasks) : null;
 }
 
-// What filter and append would have left: each key added and not taken out
-// later, in order.
+// What filter and append would have left: each key added and not taken out later, in order.
 function taskKeys(list) {
   const ops = [...list.base.map((key) => ({ key, gone: false })), ...list.log.toArray()];
   const lastGone = new Map(ops.flatMap((op, index) => (op.gone ? [[op.key, index]] : [])));
   return ops.filter((op, index) => !op.gone && !(lastGone.get(op.key) > index)).map((op) => op.key);
 }
-
-// ---------------------------------------------------------------------------
-// Dedup and tasks
 
 const TOKEN_FIELDS = ["input", "output", "cacheRead", "cacheWrite", "reasoning"];
 const DEDUP_AUX_INDEX = 7;
@@ -287,7 +244,6 @@ function validAuxMeta(meta) {
   );
 }
 
-// `entry` with `value` at `index`, even one past its end.
 function setAt(entry, index, value) {
   return index < entry.length ? entry.with(index, value)
     : Array.from({ length: index + 1 }, (_, at) => (at === index ? value : entry[at]));
@@ -314,14 +270,11 @@ function dropCopyCandidate(entry, index, fileId) {
   return entry.with(index, { ...aux, copies: aux.copies.filter((id) => id !== fileId) });
 }
 
-// The first copy whose file still exists, and the copies after it.
 function takeCandidate(work, aux) {
   const at = aux.copies.findIndex((candidateId) => fileById(work, candidateId));
   return at < 0 ? null : { candidate: fileById(work, aux.copies[at]), rest: aux.copies.slice(at + 1) };
 }
 
-// A usage key owned by a file that goes: its first remaining copy takes it
-// over, with the tokens. Null when no copy is left.
 function transferDedupOwnership(work, entry) {
   const aux = entry[DEDUP_AUX_INDEX];
   if (!isPlainObject(aux) || !Array.isArray(aux.copies) || !validAuxMeta(aux.meta)) return null;
@@ -354,9 +307,7 @@ function transferTaskOwnership(work, entry) {
   };
 }
 
-// Every usage key and task of `collection` with `fileId` dropped from its
-// copies; those the file owned pass to a copy or go. In stored order: a
-// transfer can add a row to the file that takes it over.
+// In stored order: a transfer can add a row to the file that takes it over.
 function releaseOwned(work, collection, auxIndex, transfer, fileId) {
   return work[collection].entries().reduce((current, [key, value]) => {
     if (!Array.isArray(value)) return current;
@@ -375,17 +326,14 @@ export function removeOwnedMetadata(work, fileId) {
   return { ...releaseOwned(released, "tasks", TASK_AUX_INDEX, transferTaskOwnership, fileId), fallbacks: null };
 }
 
-// Usage dedup is a max-upsert: Claude streams the same message.id repeatedly
-// and revises its numbers upward. One message, maximum numeric value per
-// field. The answer is the working store and where the usage went.
+// Dedup is a max-upsert: Claude streams the same message.id repeatedly and revises its numbers upward.
 export function addUsage(work, fileId, meta, tokens, dedupKey) {
   const entry = work.dedup.get(dedupKey);
   if (Array.isArray(entry)) {
     const ownerRows = rowsOf(work, entry[0]);
     const row = ownerRows?.list.at(entry[1]);
     if (ownerRows && row) {
-      // A row first seen without a provider takes the concrete one; its
-      // bucket key changed, so the index is built again when next needed.
+      // A row first seen without a provider takes the concrete one; its bucket key changed, so the index is rebuilt.
       const refreshed = row.provider === "unknown" &&
         typeof meta.provider === "string" &&
         meta.provider.length > 0 &&
@@ -421,8 +369,7 @@ export function addUsage(work, fileId, meta, tokens, dedupKey) {
     }
   }
 
-  // New, or its owner's row is gone: counted here, and the key (taken out
-  // first when it was stale) goes after every other.
+  // A stale key is taken out first so the fresh entry goes after every other.
   const fresh = Array.isArray(entry) ? work.dedup.without(dedupKey) : work.dedup;
   const { rows, rowIdx } = getOrCreateRow(rowsOf(work, fileId), meta);
   const row = rows.list.at(rowIdx);
@@ -446,8 +393,6 @@ export function addUsage(work, fileId, meta, tokens, dedupKey) {
   };
 }
 
-// The fallback (estimated) task keys of every session, oldest first, from
-// the tasks as they are now.
 function fallbackIndex(tasks) {
   const found = tasks.entries()
     .filter(([, entry]) => Array.isArray(entry) && entry[3] === 0)
@@ -474,8 +419,7 @@ export function addTask(
     const existingRow = existing[0] !== candidateFileId ? rowsOf(work, existing[0])?.list.at(existing[1]) : undefined;
     const noted = existingRow ? recordCopyCandidate(existing, TASK_AUX_INDEX, existingRow, candidateFileId) : existing;
     const ownHint = existing[0] === fileId && existing[3] === 0;
-    // An exact time replaces an estimate; a longer estimate replaces a
-    // shorter one. An estimate made exact leaves the fallback index.
+    // An exact time replaces an estimate; a longer estimate replaces a shorter one.
     const timed = ownHint && exact ? noted.with(2, ms).with(3, 1)
       : ownHint && !exact && ms > existing[2] ? noted.with(2, ms)
         : noted;
@@ -494,8 +438,6 @@ export function addTask(
   };
 }
 
-// The newest fallback task of `session` taken out of the store, as
-// { work, removed }; removed is null when there is none.
 export function removeLatestFallbackTaskForSession(work, session) {
   const sHash = sessionHash(session);
   const fallbacks = work.fallbacks ?? fallbackIndex(work.tasks);
@@ -504,8 +446,7 @@ export function removeLatestFallbackTaskForSession(work, session) {
   if (key === undefined) return { work: { ...work, fallbacks }, removed: null };
   const entry = work.tasks.get(key);
   if (!(Array.isArray(entry) && entry[3] === 0 && entry[4] === sHash)) {
-    // The index keeps only live fallback tasks; one that is not means it was
-    // kept past a change, so it is built again from the tasks.
+    // A non-fallback in the index means it went stale past a change; build it again from the tasks.
     if (work.fallbacks) return removeLatestFallbackTaskForSession({ ...work, fallbacks: null }, session);
     throw new Error("fallback task index is out of step with the tasks");
   }
@@ -549,7 +490,6 @@ function emptyAggregate(meta) {
 }
 
 export function snapshotRows(store) {
-  // One pass to group every file's rows by bucket, one to group the task time.
   const rows = Map.groupBy(Object.values(store.files).flatMap((file) => file.rows ?? []), rowKey);
   const byId = new Map(Object.values(store.files)
     .filter((entry) => entry && Number.isInteger(entry.id))
@@ -625,7 +565,6 @@ function validRow(row) {
   );
 }
 
-// The store as read, checked, with its config normalized: { store, migrated }.
 function validateLoadedStore(raw) {
   if (!isPlainObject(raw) || raw.version !== STORE_VERSION) {
     throw new Error("unsupported store version");
@@ -719,25 +658,19 @@ function validateLoadedStore(raw) {
   return { store, migrated: configMigration.migrated };
 }
 
-// The store lives in SQLite (spend.db, next to where store.json was): one
-// row per scanned file, usage key and task, so a scan writes only what it
-// changed instead of rewriting every byte. A store.json from before is moved
-// in once, by the first writer, and kept as store.json.migrated.
+// The store lives in spend.db: one row per scanned file, usage key and task, so a scan writes only what it changed.
+// A store.json from before is moved in once, by the first writer, and kept as store.json.migrated.
 export function dbPathFor(storePath) {
   return path.join(path.dirname(storePath), "spend.db");
 }
 
-// node:sqlite still announces itself as experimental on Node 22; the panel
-// runs Node with --disable-warning=ExperimentalWarning (main.js), so that
-// notice stays out of its stderr. A module already imported comes back from
-// the loader's own cache.
+// node:sqlite is experimental on Node 22; main.js runs Node with --disable-warning=ExperimentalWarning to keep the notice out of stderr.
 function sqliteModule() {
   return import("node:sqlite");
 }
 
 const COLLECTIONS = ["files", "dedup", "tasks"];
-// Keys are kept as JSON strings: file keys hold a NUL, which SQLite text
-// would cut short.
+// Keys are kept as JSON strings: file keys hold a NUL, which SQLite text would cut short.
 const SCHEMA = `
   PRAGMA journal_mode = WAL;
   PRAGMA synchronous = NORMAL;
@@ -766,7 +699,6 @@ function remember(store, saved) {
 function readDb(db, { skipDedup = false } = {}) {
   const meta = Object.fromEntries(db.prepare("SELECT k, v FROM meta").all().map((r) => [r.k, r.v]));
   if (!meta.version) throw new Error("spend.db has no store in it");
-  // Each collection as [key, stored JSON] pairs, in table order.
   const rows = Object.fromEntries(COLLECTIONS.map((name) => [name, name === "dedup" && skipDedup ? []
     : db.prepare(`SELECT key, v FROM ${name}`).all().map((row) => [JSON.parse(row.key), row.v])]));
   const parsed = (name) => Object.fromEntries(rows[name].map(([key, json]) => [key, JSON.parse(json)]));
@@ -828,8 +760,6 @@ async function moveAside(file) {
   return target;
 }
 
-// Runs `preserve` (it keeps a corrupt store aside) and answers where it went,
-// or fails with both reasons when even that does not work.
 async function preserved(error, preserve) {
   try {
     return await preserve();
@@ -841,7 +771,6 @@ async function preserved(error, preserve) {
   }
 }
 
-// A fresh store in place of a corrupt one that was kept at `backup`.
 function restarted(backup, error) {
   return {
     store: emptyStore(),
@@ -853,8 +782,6 @@ function restarted(backup, error) {
   };
 }
 
-// The store in spend.db, checked and indexed; the database is closed again
-// whether or not it reads.
 async function readStoreDb(dbPath, readOnly) {
   const db = await openDb(dbPath, { readOnly });
   try {
@@ -874,7 +801,6 @@ export async function loadStore(storePath, { readOnly = false } = {}) {
   const hasDb = Boolean(await fileStatOrNull(dbPath));
 
   if (!hasDb) {
-    // Nothing in SQLite yet: a store.json from before, or nothing at all.
     try {
       const raw = await readLegacy(storePath);
       if (raw) {
@@ -912,7 +838,6 @@ export async function loadStore(storePath, { readOnly = false } = {}) {
   }
 }
 
-// Writes `store` stamped with the time; the answer is the store as saved.
 export async function saveStore(storePath, store) {
   if (store._readOnly) throw new Error("a store read for display cannot be saved");
   const stamped = storeWith(store, { lastScanAt: new Date().toISOString() });

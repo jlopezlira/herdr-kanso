@@ -1,17 +1,4 @@
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The tab you set up every morning, kept: save the tab as it is (each pane's
-// program with the flags you started it with, its folder, the columns, the
-// stacks and their widths) and open it again in a new tab with one click.
-// Kanso adds nothing of its own: an arrangement holds only what you ran.
-// A session's resume id is left out, so each agent starts fresh.
-//
-// An arrangement is saved with the project it was made in (the space's
-// folder, on its machine) and can be opened in any project: one from
-// another project opens each pane in the folder of the project you are in.
-// Saving under a name the project already has overwrites it. They live in
-// a SQLite database (store.js), data/kanso-arrange/arrange.db. Opened with
-// Cmd+Alt+T or a right-click on the tab bar's new tab button.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "herdr";
@@ -21,8 +8,6 @@ import { listKey, moveTo } from "./listkeys.js";
 import { tryOr } from "./pure.js";
 const ARM_MS = 4000;
 
-// Every saved arrangement, this project's first, then the other projects'
-// newest first, each with the project it was saved in (`from`).
 export function listFor(projects, key) {
   const tag = (k) => (projects?.[k] ?? []).map((a) => ({ ...a, from: k }));
   const others = Object.keys(projects ?? {}).filter((k) => k !== key).flatMap(tag)
@@ -30,9 +15,6 @@ export function listFor(projects, key) {
   return { mine: tag(key), others };
 }
 
-// Where an arrangement was made, named by the folder most of its panes ran
-// in (the space's folder when none of them say; of folders as common, the
-// first one).
 export function originOf(a) {
   const cwds = a.cols.flatMap((c) => c.panes).map((p) => p.cwd).filter(Boolean);
   const count = [...new Set(cwds)].map((cwd) => [cwd, cwds.filter((x) => x === cwd).length]);
@@ -40,8 +22,6 @@ export function originOf(a) {
   return base(top || folderOfKey(a.from)) || "~";
 }
 
-// An arrangement from another project, ready to open in `folder`: the same
-// programs, flags, columns and widths, every pane in that folder.
 export function rebase(a, folder) {
   return { ...a, cols: a.cols.map((c) => ({ ...c, panes: c.panes.map((p) => ({ ...p, cwd: folder || p.cwd })) })) };
 }
@@ -52,17 +32,17 @@ export default class Arrange extends View {
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.view = "list";
-    this.list = null; // this project's arrangements, once read
-    this.others = []; // the other projects' arrangements, each with its `from`
+    this.list = null;
+    this.others = [];
     this.armed = null;
-    this.busy = null; // "Opening 2 of 4" while an arrangement opens
+    this.busy = null;
     this.error = null;
     this.name = InputState.new({ placeholder: "Name" });
     this.name.on("submit", (_e, cx) => this.save(cx));
     this.name.on("change", (_e, cx) => { this.error = null; cx.notify(); });
     this.space = spaces().find((s) => s.active) ?? null;
     this.store = new Store();
-    this.target = null; // { project, name } an Overwrite replaces
+    this.target = null;
     cx.spawn(async (cx) => {
       try { this.take(await this.store.all()); }
       catch (e) { this.list = []; this.error = String(e?.message ?? e); }
@@ -75,9 +55,6 @@ export default class Arrange extends View {
     this.list = mine; this.others = others;
   }
 
-  // The save view: what the tab runs now, read from herdr-core.
-  // With `a`, an Overwrite: the tab replaces that arrangement, in the
-  // project it was saved in, under its name.
   startSave(cx, a = null) {
     const tab = this.space?.tabs.find((t) => t.active);
     this.view = "save"; this.capture = null; this.error = null;
@@ -124,8 +101,6 @@ export default class Arrange extends View {
     });
   }
 
-  // A new tab with the arrangement's panes (tabkit.js); one from another
-  // project opens in this project's folder.
   open(saved, cx) {
     if (this.busy || !this.space) return;
     const a = saved.from && saved.from !== projectOf(this.space) ? rebase(saved, this.space.folder || home()) : saved;
@@ -148,7 +123,7 @@ export default class Arrange extends View {
     cx.timer.after(ARM_MS + 50, (cx) => { if (this.armed === key) { this.armed = null; cx.notify(); } });
   }
 
-  // A key in the list (listkeys.js), its pending g kept on the view.
+  // The pending g (for gg) is kept on the view between keys.
   listed(e) {
     const { move, gAt } = listKey(e, this.listG);
     this.listG = gAt;
@@ -173,8 +148,7 @@ export default class Arrange extends View {
     const note = (text, tone) => div().pt(10).text_size(11.5).line_height(1.45).text_color(tone ?? t.dim).child(text);
     const shell = v_flex().id("kanso-arrange").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {
-        // The list: j/k (or the arrows) along it, gg/G, Enter opens the
-        // one you are on. Not in the save view, whose name field takes letters.
+        // Not in the save view: its name field takes letters.
         const move = this.view !== "save" ? this.listed(e) : (e.key === "escape" ? "escape" : null);
         if (!move) return;
         if (move !== "escape") {
@@ -192,7 +166,6 @@ export default class Arrange extends View {
       const line = (q, i) => h_flex().id(`cap-${i}`).w_full().gap(10).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(q.argv ? t.foreground : t.muted).child(describe(q.argv)))
         .child(div().flex_none().max_w(180).truncate().text_size(11.5).text_color(t.dim).child(tilde(q.cwd)));
-      // Each pane's id counts the panes before it, across the columns.
       const starts = cols.map((_, ci) => cols.slice(0, ci).reduce((s, c) => s + c.panes.length, 0));
       const typed = this.name.value().trim(), tg = this.target;
       const replaces = (tg && tg.name === typed) ? tg : (this.list ?? []).some((a) => a.name === typed) ? { name: typed } : null;
@@ -201,7 +174,6 @@ export default class Arrange extends View {
         .child(div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child("Name"))
         .child(Input.new(this.name).h(36).px(10).rounded(9).border_1().border_color(t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
         .child(div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(cols.length ? `${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right` : "Reading the tab"))
-        // One rule per column; a stack's panes sit on the same rule.
         .child(v_flex().gap(10).children(cols.map((c, ci) => h_flex().w_full().gap(10).items_stretch()
           .child(div().w(2).flex_none().rounded_full().bg(t.border))
           .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))))
@@ -242,7 +214,8 @@ export default class Arrange extends View {
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
     return shell
       .child(head("Arrangements", `Opens in ${project}`))
-      .child(v_flex().id("ar-list").pt(14).gap(2).max_h(420).overflow_y_scrollbar()
+      // The list's content in a column that never shrinks: past 420 it scrolls.
+      .child(v_flex().id("ar-list").pt(14).max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().gap(2)
         .when(this.list === null, (el) => el.child(div().py(8).text_size(12).text_color(t.dim).child("Reading")))
         .when(this.list !== null && !list.length && !others.length, (el) => el.child(v_flex().py(6).gap(4)
           .child(div().text_size(13).text_color(t.muted).child("No arrangement yet."))
@@ -250,7 +223,7 @@ export default class Arrange extends View {
         .when(list.length > 0 && others.length > 0, (el) => el.child(label("This project")))
         .children(list.map(row))
         .when(others.length > 0, (el) => el.child(label(list.length ? "Other projects, opened here" : "From other projects, opened here")))
-        .children(others.map(row)))
+        .children(others.map(row))))
       .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
       .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
       .child(h_flex().pt(18).gap(8).justify_end()

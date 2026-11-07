@@ -1,23 +1,5 @@
 // Kanso's Worktrees panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// Every git worktree on this computer, grouped by repository, so the ones
-// agents leave behind can be seen and removed. Repositories are found under
-// the top folders of your spaces (~/Apps for ~/Apps/acme/web, or the folders
-// in shared `kanso.worktrees.roots`); each one's `git worktree list` then
-// finds its worktrees wherever they are, temp folders included. A folder
-// whose `.git` points at a worktree record that no longer exists (left in
-// those roots or in /tmp) is listed apart. Chosen roots replace all of
-// these, temp folders included.
-//
-// Each row says what removing it would lose. Only uncommitted changes, and
-// commits that exist only in that worktree (a detached HEAD no branch, tag
-// or remote holds), can be lost: removing a worktree keeps its branch, and
-// the branch goes too only when its work is already in the default branch
-// or develop (an ancestor, or a squash merge: merging it would change
-// nothing). Clean up removes, in one go, every one that loses nothing and
-// is idle: no file or git state touched in the last day (shared
-// `kanso.worktrees.idleHours`, default 24), so an agent still at work keeps
-// its folder. A worktree open in Herdr is never removed.
+// Removing a worktree keeps its branch; only uncommitted changes and commits no branch, tag or remote holds can be lost.
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
@@ -29,8 +11,6 @@ import { range, reduceSeries } from "./pure.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
 
-// The folders to search: the top folder under your home of each space and
-// pane, any folder outside it as is, or `kanso.worktrees.roots` when set.
 export function rootsFor(folders, homeDir, chosen) {
   if (Array.isArray(chosen) && chosen.some((s) => typeof s === "string" && s.startsWith("/"))) {
     return [...new Set(chosen.filter((s) => typeof s === "string" && s.startsWith("/")))];
@@ -46,8 +26,7 @@ export function rootsFor(folders, homeDir, chosen) {
   return [...new Set(roots)];
 }
 
-// Prints `R <repo>` for each repository with linked worktrees, and
-// `O <folder>` for a folder whose `.git` names a worktree record that is gone.
+// Prints `R <repo>` for each repository with linked worktrees, `O <folder>` for an orphaned `.git`.
 const DISCOVER = `
 list=$(for root in "$@"; do
   [ -d "$root" ] || continue
@@ -70,8 +49,7 @@ export function parseDiscovery(out) {
   return { repos: lines.filter(([kind]) => kind === "R").map(([, path]) => path), orphans: lines.filter(([kind]) => kind === "O").map(([, path]) => path) };
 }
 
-// The branches work lands in: the default one, and develop or dev where a
-// repository integrates there; origin's and the local one of each.
+// The branches work lands in: the default one, plus develop or dev where used; origin's and the local one of each.
 const BASES = `
 cd "$1" || exit 3
 o=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)
@@ -91,9 +69,7 @@ export function basesFrom(out) {
   return [...new Set([...pick(main), ...pick(extra)])];
 }
 
-// `git worktree list --porcelain -z`: the first is the main worktree.
-// Each worktree is its "worktree" line and the lines after it, up to an
-// empty one or the next worktree; lines outside any are no one's.
+// From `git worktree list --porcelain -z`; the first worktree is the main one.
 export function parseWorktrees(out) {
   const fields = String(out).split("\0").map((line) => {
     const sp = line.indexOf(" ");
@@ -112,11 +88,7 @@ export function parseWorktrees(out) {
   });
 }
 
-// What one worktree holds: whether a file in it changed, or it committed or
-// checked out, in the last $2 minutes (not its index, which any git status
-// touches; this one asks for no optional locks so it never does), uncommitted
-// entries, its last commit, the commits not in the bases, the commits no
-// branch, tag or remote has, and whether its work is already in a base.
+// $2 is the idle window in minutes; --no-optional-locks so probing never touches the index.
 const PROBE = `
 cd "$1" 2>/dev/null || { echo gone; exit 0; }
 [ -d .git ] && { echo replaced; exit 0; }
@@ -144,9 +116,7 @@ done
 printf 'ahead\\t%s\\n' "$ahead"
 exit 0`;
 
-// Removes the record of a worktree whose folder is now a repository of its
-// own ($2/.git a folder): the entry under the repository's worktrees/ whose
-// gitdir names it. Prints "forgot" for each one removed.
+// Removes the record of a worktree whose folder is now a repository of its own; prints "forgot" per removal.
 const FORGET = `
 c=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 3
 [ -d "$2/.git" ] || exit 4
@@ -168,12 +138,11 @@ export function parseProbe(out) {
   }, start);
 }
 
-// /tmp and /var are /private/tmp and /private/var on macOS; git and panes
-// may report either.
+// On macOS git and panes may report /tmp or /private/tmp, so both forms are normalized.
 const real = (p) => String(p ?? "").replace(/^\/(tmp|var)(\/|$)/, "/private/$1$2").replace(/\/+$/, "");
 export const inside = (dir, path) => { const d = real(dir), p = real(path); return Boolean(d) && (p === d || p.startsWith(`${d}/`)); };
 
-// One word for a worktree, in the order that decides it.
+// The order of the checks decides the state.
 export function stateOf(w) {
   if (w.orphan) return "orphan";
   if (w.missing) return "missing";
@@ -192,15 +161,13 @@ export function stateOf(w) {
 // Clean up takes it: removing it loses nothing, and nothing is at work there.
 export const safe = (w) => ["merged", "detached", "unmerged", "missing"].includes(stateOf(w));
 
-// A repository's Remove all takes it, losses and all, on a second press: never
-// one open in Herdr, locked, touched today or not checked yet.
+// Remove all takes it, losses and all, on a second press; never one open in Herdr, locked, touched today or unchecked.
 export const removable = (w) => !["open", "locked", "recent", "checking", "broken"].includes(stateOf(w));
 
-// Would lose work, or can't be read until repaired: yours to look at.
+// Would lose work, or can't be read until repaired.
 export const needsLook = (w) => ["changes", "lost", "broken"].includes(stateOf(w));
 
-// Where the disk goes: what can go, what needs a look, what is in use, the
-// folders left behind, and what is still being checked. Sizes in KB.
+// Sizes in KB.
 export function spaceBy(items, orphans = []) {
   const live = items.filter((w) => !w.missing), of = (test) => live.filter(test);
   const parts = [
@@ -214,7 +181,6 @@ export function spaceBy(items, orphans = []) {
     .filter((p) => p.count > 0);
 }
 
-// What a Remove all would lose, in words.
 export function losses(items) {
   const dirty = items.filter((w) => w.dirty > 0), lost = items.filter((w) => stateOf(w) === "lost"), orphans = items.filter((w) => w.orphan);
   const sum = (list, k) => list.reduce((n, w) => n + (w[k] ?? 0), 0);
@@ -226,7 +192,6 @@ export function losses(items) {
   return parts.length ? `Loses ${parts.join("; ")}.` : "Nothing is lost.";
 }
 
-// What removing it does, in words.
 export function consequence(w, base) {
   const s = stateOf(w);
   if (s === "orphan") return "The folder is deleted. Its repository moved or was deleted, so git cannot say what is in it.";
@@ -242,17 +207,11 @@ export function consequence(w, base) {
   return (lost.length ? `Loses ${lost.join(" and ")}.` : "Nothing is lost.") + branch;
 }
 
-// ---- What you freed -------------------------------------------------------
-// The history is in worktrees-store.js (SQLite): every worktree seen, and
-// for the gone ones when and how much they freed. `h` below is its history():
-// { kb, kanso, worktrees, records, orphans, branches, since, freedByDay, diskByDay }.
 const dayKey = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
-// The last `n` days, the oldest first, each with its value in `byDay` (or 0).
 export function lastDays(byDay, now = Date.now(), n = 30) {
   const t = new Date(now);
   return range(n).map((k) => {
-    // Noon, i days back (the oldest first).
     const at = new Date(t.getFullYear(), t.getMonth(), t.getDate() - (n - 1 - k), 12, 0, 0, 0).getTime();
     const day = dayKey(at);
     return { day, at, kb: byDay?.[day] ?? 0 };
@@ -263,12 +222,9 @@ const best = (byDay) => Object.entries(byDay ?? {}).reduce((b, [day, kb]) => (kb
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const shortDate = (ms) => { const d = new Date(ms); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
-// "12.4 GB" as the card's big number and its unit.
 const splitSize = (kb) => { const [n, u] = fmtSize(kb).split(" "); return { big: n || "0", small: u || "KB" }; };
 
-// The share card: global numbers only, never a repository, branch or path.
-// What was freed when there is some; else what the worktrees take now.
-//   now: { size, worktrees, canGoSize, look } from the last scan.
+// The share card: totals only, never a repository, branch or path.
 export function freedSpec(h, current, at = Date.now()) {
   const where = (current?.space ?? []).filter((p) => p.kb > 0);
   const freed = (h?.kb ?? 0) > 0, days = lastDays(freed ? h.freedByDay : h?.diskByDay, at);
@@ -310,9 +266,6 @@ export function freedText(h, current) {
   return postText(parts, "Cleaning up after my AI agents.");
 }
 
-// ---- Asking your agent ---------------------------------------------------------
-// What a worktree holds and whether it can go, read by your agent in a new
-// tab there. Explaining changes nothing.
 export function explainPrompt(w, base) {
   if (w.orphan) return `This folder was a git worktree whose repository moved or was deleted, so git no longer knows it. Explain what it holds: read its files, and if you can find the repository it came from (its .git file names the old location), compare them. End with a verdict: safe to delete, or what would be lost and how to keep it. Do not change, move or delete anything.`;
   const head = w.branch ? `on branch ${w.branch}` : "with a detached HEAD";
@@ -321,7 +274,6 @@ export function explainPrompt(w, base) {
   return `This folder is a git worktree of ${w.repo}, ${head}. Explain what work it holds and whether it can be removed. Look at its uncommitted changes (git status, git diff), the commits not in ${b} (git log ${b}..HEAD), and whether that work exists anywhere else: another branch, a remote, or a pull request (gh pr list --state all --search <commit>${byBranch}). End with a verdict: safe to remove, or exactly what would be lost and how to keep it (commit, push, open a pull request). Do not change, commit, push or delete anything.`;
 }
 
-// The ones that need a look, reviewed together.
 export function reviewPrompt(items, baseOf) {
   const lines = items.slice(0, 40).map((w) => `- ${w.path} (${w.repo ? `worktree of ${w.repo}, ${w.branch ? `branch ${w.branch}` : "detached HEAD"}, ` : ""}${w.dirty > 0 ? `${w.dirty} uncommitted changes` : `${w.only} commits no branch has`}${baseOf(w) ? `, compared with ${baseOf(w)}` : ""})`);
   return `These git worktrees would lose work if removed:\n${lines.join("\n")}${items.length > 40 ? `\n(and ${items.length - 40} more)` : ""}\n\nFor each one, find out what that work is and whether it already exists elsewhere: merged or squash-merged into the base branch, on another branch or remote, or in a pull request (use git and gh). Then give me a table: worktree, what it holds, where else it exists, and your recommendation (remove, or keep and why). For the ones safe to remove, end with the exact git worktree remove commands. Do not change, commit, push or delete anything yourself.`;
@@ -346,44 +298,37 @@ export function fmtAge(ms, now = Date.now()) {
 
 const ORDER = { merged: 0, detached: 1, unmerged: 2, recent: 3, broken: 4, lost: 5, changes: 6, locked: 7, open: 8, checking: 9 };
 
-// Drawn until you ask for more, so a frame stays quick: repositories, and rows in each.
+// Drawn only until you ask for more, so a frame stays quick.
 const REPOS = 8, ROWS = 4;
 
 const name = (p) => String(p).split("/").filter(Boolean).at(-1) ?? p;
 
-// Rows are values: a worktree is never changed, only replaced by a new one
-// with the same path. The path is its key, so anything that acts on a row
-// later (a click, a batch, a probe coming back) keeps the path and reads the
-// row as it is then. The actions take a worktree or its path.
+// Rows are values, keyed by path: an action that runs later re-reads the row as it is then.
 const keyOf = (w) => (typeof w === "string" ? w : w?.path);
 
-// `list` with `change` made to every item, or `list` itself when none
-// changed, so a redraw that changes nothing builds nothing new.
+// Returns `list` itself when nothing changed, so a redraw that changes nothing builds nothing new.
 const mapSame = (list, change) => {
   const out = list.map(change);
   return out.every((x, i) => x === list[i]) ? list : out;
 };
 
-// The groups with `change` made to their items, a group untouched kept as is.
 const mapGroups = (groups, change) => mapSame(groups, (g) => {
   const items = mapSame(g.items, change);
   return items === g.items ? g : { ...g, items };
 });
 
-// What a probe found, as a new worktree. A repository of its own now lives
-// in that folder: only the record goes.
+// `replaced`: a repository of its own now lives in that folder, so only the record goes.
 const withProbe = (w, p) => ({
   ...w, dirty: p.dirty, last: p.last, ahead: p.ahead, merged: p.merged, recent: p.recent, only: p.only, broken: p.broken, probed: true, fresh: true,
   ...(p.gone || p.replaced ? { missing: true } : {}), ...(p.replaced ? { replaced: true } : {}),
 });
 
-// The minutes a worktree has to be idle for, from shared `kanso.worktrees.idleHours`.
 const idleMinutes = () => {
   const hours = shared("kanso.worktrees.idleHours");
   return String(Math.round((typeof hours === "number" && hours >= 0 ? hours : 24) * 60));
 };
 
-// Exists only while shown (mounted on demand). Scans when opened and on Refresh.
+// Exists only while shown (mounted on demand).
 export class Worktrees {
   constructor() { this.armed = new Armed(); } // removals ask for a second press
 
@@ -407,28 +352,22 @@ export class Worktrees {
     });
   }
 
-  // Items as the panel's repositories and left-behind folders.
   show(items) {
     this.groups = [...Map.groupBy(items.filter((w) => !w.orphan), (w) => w.repo)].map(([repo, list]) => ({ repo, base: "", bases: [], items: list }));
     this.orphans = items.filter((w) => w.orphan);
   }
 
-  // The row listed under `path` now, or null once it is gone.
   item(path) {
     return this.groups.flatMap((g) => g.items).find((w) => w.path === path) ?? this.orphans.find((w) => w.path === path) ?? null;
   }
 
-  // Replaces the row under `path` with `change(row)`. It reads the lists as
-  // they are when called and assigns them once, with no wait in between, so
-  // the probes and sizes that come back in any order each land on what the
-  // others already left, and none undoes another.
+  // Reads the lists and assigns them once with no wait in between, so probes landing in any order never undo each other.
   update(path, change) {
     const one = (w) => (w.path === path ? change(w) : w);
     this.groups = mapGroups(this.groups, one);
     this.orphans = mapSame(this.orphans, one);
   }
 
-  // Keeps this scan in the history, and what it shows as gone.
   async keep(repos, search) {
     if (!this.stored) return;
     const all = [...this.groups.flatMap((g) => g.items), ...this.orphans];
@@ -445,7 +384,6 @@ export class Worktrees {
     this.hist = await this.store.history();
   }
 
-  // Removals into the history: what each freed, and by Kanso.
   async credit(pairs) {
     if (!this.stored) return;
     try {
@@ -461,15 +399,13 @@ export class Worktrees {
     this.pending = cx.timer.after(250, (cx) => { this.pending = null; cx.notify(); });
   }
 
-  // The folders to search, and the temp folders (only when the roots are not chosen).
   roots() {
     const folders = [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)];
     const chosen = shared("kanso.worktrees.roots"), roots = rootsFor(folders, home(), chosen);
     return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...TEMP] };
   }
 
-  // Panes and spaces in a worktree: Herdr is using it. Runs on every draw, so
-  // only a row whose answer changed is replaced.
+  // Runs on every draw, so only a row whose answer changed is replaced.
   markOpen() {
     const used = [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)].filter(Boolean);
     const mark = (w) => { const open = used.some((u) => inside(w.path, u)); return w.open === open ? w : { ...w, open }; };
@@ -503,12 +439,9 @@ export class Worktrees {
         this.orphans = orphans.filter((o) => !roots.includes(o) && o !== home()).map((path) => ({ path, orphan: true, fresh: true, size: this.known.get(path) ?? null }));
         this.markOpen();
         cx.notify();
-        // What each one holds, then what each one weighs: the list is usable
-        // before the sizes are in.
+        // What each one holds, then what each one weighs: the list is usable before the sizes are in.
         const idle = idleMinutes();
-        // By path and its repository's bases: each answer lands on the row as it is when it comes back.
         const live = groups.flatMap((g) => g.items.filter((w) => !w.missing).map((w) => [w.path, g.bases]));
-        // `counted`: how many of this step are done, for the line that says so.
         this.counted = 0;
         await pool(live, 8, async ([path, bases]) => {
           const r = await exec("bash", ["-c", PROBE, "probe", path, idle, ...bases]);
@@ -519,7 +452,6 @@ export class Worktrees {
           this.soon(cx);
         });
         if (id !== this.scan) return;
-        // The probed ones still there and not gone after all, then the left-behind folders.
         const sized = [...live.map(([path]) => this.item(path)).filter((w) => w && !w.missing), ...this.orphans].map((w) => w.path);
         this.counted = 0;
         await pool(sized, 4, async (path) => {
@@ -543,13 +475,11 @@ export class Worktrees {
     cx.notify();
   }
 
-  // What a probe found, onto the row under `path` as it is now.
   apply(path, p) {
     this.update(path, (w) => withProbe(w, p));
   }
 
-  // Points a worktree whose repository moved back at it (git worktree
-  // repair, which rewrites its .git file), then checks it like any other.
+  // git worktree repair rewrites the .git file of a worktree whose repository moved.
   repair(target, cx) {
     const w = this.item(keyOf(target));
     if (this.working || !w) return;
@@ -569,18 +499,15 @@ export class Worktrees {
     cx.notify();
   }
 
-  // Removes one worktree (or orphan folder); throws with git's words.
   async removeOne(w) {
     if (w.orphan) {
-      // Checked again now: still a folder whose .git names a record that is gone.
+      // Checked again right before deleting: if it is a worktree again, the script exits instead.
       const r = await exec("bash", ["-c", 'g=$(sed -n "1s/^gitdir: //p" "$1/.git" 2>/dev/null); case "$g" in */worktrees/*) ;; *) exit 4 ;; esac; case "$g" in /*) ;; *) g="$1/$g" ;; esac; [ -e "$g" ] && exit 5; rm -rf -- "$1"', "orphan", w.path]);
       if (r.code !== 0) throw new Error(r.code === 4 || r.code === 5 ? "It is a worktree again; refresh" : (r.stderr || "Cannot delete it").trim());
       return { kb: w.size ?? 0, orphans: 1 };
     }
     if (w.replaced) {
-      // git worktree remove refuses a folder that is a repository of its own,
-      // and prune keeps a record whose folder exists: the record alone goes,
-      // checked again now, and the folder is not touched.
+      // git worktree remove refuses it and prune keeps it, so only the record is removed; the folder is not touched.
       const r = await exec("bash", ["-c", FORGET, "forget", w.repo, w.path]);
       if (r.code !== 0 || !r.stdout.includes("forgot")) throw new Error(r.code === 4 ? "It is a worktree again; refresh" : (r.stderr || "No record of it was found").trim());
       return { records: 1 };
@@ -595,17 +522,12 @@ export class Worktrees {
     return w.missing ? { records: 1 } : { kb: w.size ?? 0, worktrees: 1, branches: branch ? 1 : 0 };
   }
 
-  // Takes the row under `w`'s path off the lists, and a repository left with none.
   drop(w) {
     if (w.orphan) this.orphans = this.orphans.filter((o) => o.path !== w.path);
     this.groups = this.groups.map((g) => ({ ...g, items: g.items.filter((x) => x.path !== w.path) })).filter((g) => g.items.length);
   }
 
-  // Checks one again right before it goes, and says whether `ok` still holds
-  // for it then: the row as it is now, or null when it no longer holds or is
-  // no longer listed. What changed since the scan (new work, an agent at work
-  // there, a link that broke, a folder made again) shows on its row instead
-  // of failing.
+  // Checks the row again right before it goes; null when `ok` no longer holds or the row is gone.
   async still(path, ok) {
     const w = this.item(path);
     if (!w) return null;
@@ -630,7 +552,6 @@ export class Worktrees {
     const before = { dirty: w.dirty ?? 0, only: w.only ?? 0 };
     cx.spawn(async (cx) => {
       try {
-        // As confirmed: still removable, and holding no more than it said.
         const now = await this.still(w.path, (x) => removable(x) && (x.dirty ?? 0) <= before.dirty && (x.only ?? 0) <= before.only);
         if (!now) {
           this.notice = `${name(w.path)} changed since you looked, so it stays. Its row shows it as it is now.`;
@@ -645,7 +566,6 @@ export class Worktrees {
     cx.notify();
   }
 
-  // A repository's records of folders already gone, all with one prune.
   prune(targets, cx) {
     const missing = targets.map((t) => this.item(keyOf(t))).filter(Boolean);
     if (!missing.length || this.working) return;
@@ -664,7 +584,6 @@ export class Worktrees {
     cx.notify();
   }
 
-  // Everything that loses nothing, in one go. A repository's missing ones go with one prune.
   plan() {
     return this.groups.flatMap((g) => g.items.filter(safe));
   }
@@ -674,21 +593,17 @@ export class Worktrees {
     this.removeAll(this.plan(), cx, safe);
   }
 
-  // Removes several, one after another, each checked again right before it
-  // goes: one that no longer meets `ok` stays, and the panel says how many.
-  // `this.batch` holds the paths still to go, for the rows that say so.
+  // One at a time, each checked again right before it goes; `batch` holds the paths still to go.
   removeAll(targets, cx, ok = removable) {
     const paths = targets.map(keyOf);
     if (!paths.length || this.working) return;
     this.working = "all"; this.batch = new Set(paths); this.armed.clear(); this.note = null; this.notice = null;
     cx.spawn(async (cx) => {
-      // One at a time: how many went, stayed and failed, what each freed, and
-      // the repositories already pruned (their other missing ones go with it).
+      // `pruned`: repositories already pruned; their other missing rows go with it.
       const { done, kept, failed, got } = await reduceSeries(paths, async (t, path) => {
         this.phase = `Removing ${t.done + t.kept + t.failed.length + 1} of ${paths.length}`;
         this.soon(cx);
         try {
-          // The row as it is once checked again: what it holds now decides.
           const w = await this.still(path, ok);
           if (!w) {
             this.batch = new Set([...this.batch].filter((x) => x !== path));
@@ -713,12 +628,6 @@ export class Worktrees {
     cx.notify();
   }
 
-  // ---- Drawing ----------------------------------------------------------------
-  // Drawn the way PR and Spend are: one centered column, no cards, hierarchy
-  // from type size and tone, a hero with the numbers, hairline sections, quiet
-  // text actions, and a second press to confirm anything that removes.
-
-  // A worktree's state in words and a color; green when Clean up takes it.
   verdict(w, c) {
     const s = stateOf(w), n = (k, one, many) => `${w[k]} ${w[k] === 1 ? one : many}`;
     return {
@@ -799,9 +708,6 @@ export class Worktrees {
         .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note))));
   }
 
-  // One worktree, as PR draws a pull request in its list: the name, where and
-  // when, its state in its color, and its size. A click opens what it holds
-  // and what can be done with it.
   row(w, c) {
     const v = this.verdict(w, c), picked = this.picked === w.path, busy = this.working === w.path || Boolean(this.batch?.has(w.path));
     const age = fmtAge(w.last), when = age ? (age === "today" ? "last commit today" : `last commit ${age} ago`) : "";
@@ -843,8 +749,6 @@ export class Worktrees {
             (cx) => this.armed.press(key, cx, (cx) => this.remove(w.path, cx)), c, { color: armed ? c.red : c.text, disabled: Boolean(this.working) })))));
   }
 
-  // A repository: its name and where it is, the rows that matter first, then
-  // what can be done with all of them at once.
   group(id, title, where, items, c) {
     const missing = items.filter((w) => w.missing), shown = items.filter((w) => !w.missing)
       .toSorted((a, b) => (ORDER[stateOf(a)] ?? 9) - (ORDER[stateOf(b)] ?? 9) || (b.size ?? 0) - (a.size ?? 0));
@@ -870,7 +774,6 @@ export class Worktrees {
           (cx) => this.armed.press(key, cx, (cx) => { this.markOpen(); this.removeAll(items.map((w) => this.item(w.path)).filter((w) => w && removable(w)), cx); }), c, { color: armed ? c.red : c.muted, disabled: Boolean(this.working) }))));
   }
 
-  // A task for your agent, in a new tab in `folder`, as PR's "Ask your agent".
   ask(title, folder, prompt) {
     knownAgents({ on: null }).then((list) => {
       const agent = list.find((a) => a.installed);
@@ -879,8 +782,6 @@ export class Worktrees {
     }).catch((e) => notify({ title: "Could not start the agent", body: String(e?.message ?? e), level: "error" }));
   }
 
-  // Bars a day for the last 30, drawn like Spend's chart: the top day in
-  // the accent with its value. Drawn empty too, with a line on what fills it.
   bars(c, byDay, title, height, empty) {
     const days = lastDays(byDay), top = Math.max(0, ...days.map((d) => d.kb));
     return v_flex().w_full().gap(G.sm)
@@ -903,8 +804,6 @@ export class Worktrees {
         .child(div().text_size(10).text_color(c.dim).child("Today")));
   }
 
-  // Where the disk goes now: one bar split by state, its legend, and the
-  // repositories that take the most.
   space(c) {
     const items = this.groups.flatMap((g) => g.items), parts = spaceBy(items, this.orphans);
     const total = parts.reduce((n, p) => n + p.kb, 0);
@@ -938,9 +837,6 @@ export class Worktrees {
             .child(div().h_full().w(`${Math.max(1, (r.kb / most) * 100).toFixed(2)}%`).rounded(2).bg(c.muted)))))));
   }
 
-  // The history: what was freed (by Clean up and Remove, or by anything
-  // else), the counts, a bar a day of what was freed, and of what the
-  // worktrees took on disk.
   freed(c, narrow) {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(section(c, "Freed"))
@@ -970,7 +866,6 @@ export class Worktrees {
       .child(diskBars);
   }
 
-  // The ones that need a look, handed to your agent to sort out.
   agent(c) {
     const look = this.groups.flatMap((g) => g.items).filter((w) => needsLook(w));
     if (!look.length) return null;
@@ -983,7 +878,6 @@ export class Worktrees {
         .child(quietLink("wt-review", `Review the ${look.length} that need a look`, () => this.ask("Worktrees review", home(), reviewPrompt(look, baseOf)), c, { size: 13, color: c.text })));
   }
 
-  // The last scan's totals, for a card before anything was freed.
   current() {
     const live = this.groups.flatMap((g) => g.items).filter((w) => !w.missing), plan = this.plan();
     return {
@@ -998,7 +892,6 @@ export class Worktrees {
     return { spec: freedSpec(this.hist, now), text: freedText(this.hist, now), name: "worktrees", title: "Worktrees" };
   }
 
-  // The scanned page: the numbers, the space, what was freed, then each repository.
   page(c, narrow, groups, shown) {
     const ask = this.agent(c), spaceView = this.space(c);
     return v_flex().w_full().gap(narrow ? 36 : 48)
@@ -1029,7 +922,7 @@ export class Worktrees {
         : this.page(c, narrow, groups, shown);
     return v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
+      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(this.header(c, narrow))
           .when(this.share.open, (el) => el.child(this.share.row(c, () => this.shareCard(),

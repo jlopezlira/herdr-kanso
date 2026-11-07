@@ -1,10 +1,6 @@
 // Kanso's terminal right-click menu, by jlopezlira (https://github.com/jlopezlira/herdr-kanso).
 // Apache-2.0; derived from Herdr's shipped `menu` mod.
-//
-// In the strip a terminal is a layout block, so Herdr's menu gets the block's
-// id ("term-<pane>") as its target pane and every pane command fails with
-// "no pane". This menu finds the real pane from the clicked terminal and
-// splits through the strip, so the new pane lands beside the clicked one.
+// In the strip Herdr's menu gets the block id ("term-<pane>"), so pane commands fail: this menu resolves the real pane.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, theme, terminals, panes, spaces, shared, setShared, keys } from "herdr";
@@ -12,8 +8,6 @@ import { listKey, moveTo } from "./listkeys.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 
-// The clicked pane's folder in a code editor (the `open-with` mod), on the
-// machine its space lives on.
 function openWith(p) {
   const space = spaces().find((s) => s.tabs.some((x) => x.id === p.tab));
   openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { folder: p.cwd, machine: space?.machine ?? null } });

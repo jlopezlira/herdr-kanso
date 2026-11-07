@@ -15,8 +15,7 @@ import {
 } from "./core/store.mjs";
 import { ExitError, exitWith, withStoreLock } from "./core/util.mjs";
 
-// herdr stops an exec after 30 s. Leave room for the store save, the
-// dashboard derivation and process startup, then continue on the next run.
+// herdr stops an exec after 30 s; leave room for the save, derivation and startup, then continue next run.
 export const SCAN_BUDGET_MS = 18_000;
 
 function usage() {
@@ -27,8 +26,6 @@ function usage() {
   ].join("\n");
 }
 
-// The flags after the command, one at a time: `--key=value` takes one
-// argument, `--key value` two, and a key with no value left is an error.
 function parseFlags(argv, index = 1, options = { rebuild: false }) {
   if (index >= argv.length) return options;
   const arg = argv[index];
@@ -79,12 +76,7 @@ async function buildSnapshot(store, scan, nowIso, loadWarnings = [], loadErrors 
   };
 }
 
-/**
- * Best-effort scan progress sidecar next to the store. The native view polls
- * it only while a refresh is running; it is removed when the scan settles.
- */
-// The writer is an instance because it remembers when it last wrote (the
-// throttle), and that is its own state, like a view's.
+/** Best-effort scan-progress sidecar next to the store; removed when the scan settles. */
 class ProgressWriter {
   constructor(storePath) {
     this.progressPath = `${storePath}.progress.json`;
@@ -118,9 +110,6 @@ export function progressWriter(storePath) {
   return new ProgressWriter(storePath);
 }
 
-// One scan of the sources against the time budget, with the progress sidecar
-// written while it runs and removed however it ends. The answer carries the
-// scanned store (scan.store).
 async function scanWithProgress(store, storePath, home, deadline) {
   const progress = progressWriter(storePath);
   try {
@@ -160,17 +149,13 @@ async function configureStore(storePath, home, rawConfig, { rebuild = false } = 
 
   return withStoreLock(storePath, async () => {
     const loaded = await loadStore(storePath);
-    // Each step answers a new store: the config set, the data cleared, then
-    // what each save wrote.
     const configChanged = JSON.stringify(loaded.store.config) !== JSON.stringify(config);
     const mappingsChanged =
       sourcesSignature(loaded.store.config) !== sourcesSignature(config);
     const configured = configChanged ? storeWith(loaded.store, { config }) : loaded.store;
     const cleared = mappingsChanged || rebuild ? clearCollectedData(configured) : configured;
 
-    // Persist the accepted config before scanning. If the scan fails, the UI
-    // still has the newly configured sources and can show the scan error.
-    // Saved here, the store is clean again: only the scan can dirty it now.
+    // Save the accepted config before scanning: if the scan fails, the UI still has the new sources.
     const store = loaded.dirty || configChanged || mappingsChanged || rebuild
       ? await saveStore(storePath, cleared)
       : cleared;

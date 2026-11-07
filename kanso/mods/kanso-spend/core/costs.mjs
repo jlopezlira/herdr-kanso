@@ -1,7 +1,4 @@
-// Costs: the subsidy (what the same tokens would cost at API list price) per
-// model, project and task, over a chosen period. Pricing follows pi-usage:
-// OpenRouter catalog rates, matched by model name with the provider's first
-// word as a vendor prefix; no price, no guess (those tokens show as unpriced).
+// Pricing follows pi-usage: OpenRouter catalog rates matched by model name with a vendor prefix; no price, no guess.
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,8 +9,7 @@ export const CATALOG_URL = "https://openrouter.ai/api/v1/models";
 export const CATALOG_TTL = 24 * 60 * 60 * 1000;
 const FETCH_MS = 8_000;
 
-// ---------------------------------------------------------------------------
-// Rates (ported from pi-usage pricing.ts)
+// Rates ported from pi-usage pricing.ts.
 
 const dash = (id) => String(id).toLowerCase().replace(/[_.]/g, "-");
 const tail = (id) => {
@@ -80,10 +76,7 @@ export function catalogPath(storePath) {
   return path.join(path.dirname(storePath), "pricing.json");
 }
 
-/**
- * The freshest catalog between ours and pi-usage's. With `refresh`, a catalog
- * older than 24h is fetched again; a failed fetch keeps the last good one.
- */
+/** Freshest catalog between ours and pi-usage's; a failed refresh keeps the last good one. */
 export async function loadCatalog(storePath, { home = os.homedir(), refresh = false } = {}) {
   const own = await readCatalog(catalogPath(storePath));
   const shared = await readCatalog(path.join(home, ".prjct/pi-usage/pricing.json"));
@@ -92,9 +85,7 @@ export async function loadCatalog(storePath, { home = os.homedir(), refresh = fa
   return fetched ?? cached ?? { fetchedAt: 0, rates: [] };
 }
 
-// A fresh catalog from OpenRouter, saved next to the store; null when offline
-// or when the answer has no rates (the cached catalog is kept then). A fresh
-// catalog that cannot be saved is still used for this run.
+// Null when offline or empty; an unsavable fresh catalog is still used for this run.
 async function fetchCatalog(storePath) {
   try {
     const response = await fetch(CATALOG_URL, { signal: AbortSignal.timeout(FETCH_MS), headers: { accept: "application/json" } });
@@ -109,11 +100,7 @@ async function fetchCatalog(storePath) {
   }
 }
 
-/**
- * Optional `prices.json` next to the store:
- *   { "models": { "<model>": { "input": 1.25, "output": 10, "cacheRead": 0.125 } },  // USD per 1M tokens
- *     "plans": [ { "name": "ChatGPT Pro", "usdPerMonth": 200 } ] }
- */
+/** Optional prices.json next to the store: per-model rates in USD per 1M tokens, and monthly plans. */
 export async function loadOverrides(storePath) {
   try {
     const parsed = JSON.parse(await readFile(path.join(path.dirname(storePath), "prices.json"), "utf8"));
@@ -140,12 +127,7 @@ export async function loadOverrides(storePath) {
   }
 }
 
-/**
- * Anthropic first-party list prices (USD per 1M tokens), which win over the
- * OpenRouter catalog for Claude models: the catalog has had wrong cache rates
- * for some of them. Cache writes cost 1.25x input for the 5-minute TTL and 2x
- * for the 1-hour TTL.
- */
+/** Anthropic list prices (USD per 1M tokens), winning over the catalog for Claude models: it has had wrong cache rates for some. */
 const ANTHROPIC_PRICES = {
   "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2 },
   "claude-fable-5-1": { input: 10, output: 50, cacheRead: 0.25 },
@@ -178,9 +160,7 @@ function rateOf(catalog, overrides, provider, model, harness = "") {
     ?? null;
 }
 
-// The rate of each provider, model and harness the priced rows use, looked
-// up once (a catalog search per row would be slow over a long history): the
-// first row with a key stands for every row with it.
+// Each provider/model/harness rate looked up once: a catalog search per row would be slow over a long history.
 function pricer(catalog, overrides, rows) {
   const keyOf = (provider, model, harness = "") => `${provider}\u0001${model}\u0001${harness}`;
   const first = new Map(rows.filter((row) => sumTokens(row.tokens ?? {})).toReversed()
@@ -188,9 +168,6 @@ function pricer(catalog, overrides, rows) {
   const rates = new Map([...first].map(([key, row]) => [key, rateOf(catalog, overrides, row.provider, row.model, row.harness)]));
   return (provider, model, harness = "") => rates.get(keyOf(provider, model, harness)) ?? null;
 }
-
-// ---------------------------------------------------------------------------
-// Periods
 
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -240,10 +217,8 @@ function previousRange(range, today, firstDay) {
   return costRange(range.period, offset, today, firstDay);
 }
 
-// `first`, next(first), next(next(first)) ... while `keep` holds.
 const unfold = (first, next, keep) => (keep(first) ? [first, ...unfold(next(first), next, keep)] : []);
-// The same local time one day or one month later (what setDate(+1) and
-// setMonth(+1) give, without changing a Date).
+// The same local time a day or a month later, without mutating a Date as setDate/setMonth would.
 const dayAfter = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
 const monthAfter = (d) => new Date(d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
 
@@ -257,8 +232,7 @@ function buckets(range) {
     .map((d) => ({ key: dayKey(d).slice(0, 7), label: MONTHS[d.getMonth()], tip: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, usd: 0, tokens: 0 }));
 }
 
-// ---------------------------------------------------------------------------
-// Display text, prepared here so the native render pass only lays it out.
+// Display text is prepared here so the native render pass only lays it out.
 
 const group3 = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 export function usdText(value, exact = false) {
@@ -288,9 +262,6 @@ function dayText(day) {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
-// ---------------------------------------------------------------------------
-// Derivation
-
 const sumTokens = (t) => (t.input || 0) + (t.output || 0) + (t.cacheRead || 0) + (t.cacheWrite || 0);
 const projectLabel = (p) => {
   const text = String(p ?? "").replace(/[\\/]+$/, "");
@@ -298,12 +269,9 @@ const projectLabel = (p) => {
   return text.split(/[\\/]/).at(-1) || text;
 };
 
-// Totals are summed in row order, as a running total would, so every
-// figure comes out to the same last digit.
+// Totals are summed in row order, as a running total would, so every figure comes out to the same last digit.
 const sumOf = (list, value) => list.reduce((sum, item) => sum + value(item), 0);
-// `list` in groups by `key`, in the order each key first appears (items keep
-// list order), each group made into one value by `make(items)`. One pass to
-// group and one per group, so it stays linear over a long history.
+// One pass to group and one per group: stays linear over a long history.
 const groupInto = (list, key, make) => new Map([...Map.groupBy(list, key)].map(([k, items]) => [k, make(items)]));
 const usdOf = (item) => item.usd;
 const countOf = (item) => item.count;
@@ -311,15 +279,7 @@ const unpricedOf = (item) => item.unpriced;
 const earliest = (days) => days.reduce((min, day) => (day < min ? day : min));
 const latest = (days) => days.reduce((max, day) => (day > max ? day : max));
 
-/**
- * Everything the Costs view shows, compact enough for QuickJS. `rows` are the
- * snapshot rows (day × session × model × project).
- */
-/**
- * Sessions still being written (their file changed in the last half hour),
- * whole-session totals regardless of the period and filters: "what is this
- * conversation costing me right now".
- */
+/** Sessions still being written (file changed in the last half hour): whole-session totals, ignoring period and filters. */
 function liveCosts(rows, live, price, labels) {
   if (!live?.size) return [];
   const items = rows.flatMap((row) => {
@@ -365,10 +325,6 @@ function liveCosts(rows, live, price, labels) {
 
 const HARNESS_NAMES = { claude: "Claude Code", codex: "Codex", pi: "Pi", opencode: "OpenCode" };
 
-/**
- * Per-task (or per-session) breakdown for the detail view, from its priced
- * rows ({ row, tokens, usd, count }) in order.
- */
 function breakdownOf(items) {
   return {
     input: sumOf(items, (item) => item.tokens.input || 0),
@@ -430,7 +386,6 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
   const project = options.project && options.project !== "all" ? options.project : null;
   const model = options.model && options.model !== "all" ? options.model : null;
 
-  // Every row with tokens in this period or the one before, priced once.
   const priced = rows.flatMap((row) => {
     const tokens = row.tokens ?? {};
     const count = sumTokens(tokens);
@@ -476,7 +431,6 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
   const models = groupInto(current, (item) => item.row.model, (group) => ({
     model: group[0].row.model,
     providers: new Set(group.map((item) => item.row.provider)),
-    // The first rate any of its rows found.
     rate: group.find((item) => item.rate)?.rate ?? group[0].rate,
     input: sumOf(group, (item) => item.tokens.input || 0),
     output: sumOf(group, (item) => item.tokens.output || 0),
@@ -485,8 +439,6 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf),
   }));
 
-  // A task is a ticket when the session names one, else the session itself;
-  // its first row names it.
   const taskKey = (item) => {
     const ticket = labels?.sessions?.[item.row.session]?.tickets?.[0];
     return ticket ? `ticket:${item.row.project}:${ticket}` : item.row.session;

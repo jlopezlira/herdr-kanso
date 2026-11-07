@@ -1,9 +1,5 @@
 // Memory's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// What the guard lets you brag about: how long your agents have been open,
-// how many at once, on how much memory, and what recycling gave back, with
-// free memory over the last week. Never an agent's name, folder or session:
-// only counts and sizes are shared.
+// Only counts and sizes are shared: never an agent's name, folder or session.
 import { postText } from "./share.js";
 import { size, span } from "./model.js";
 
@@ -16,7 +12,6 @@ const longSpan = (min) => {
   return { big: String(Math.max(1, Math.round(n))), small: "min" };
 };
 
-/** The numbers the card and the post share, from now.json's data and the history digest. */
 export function memoryWins(data, digest) {
   const agents = Array.isArray(data?.agents) ? data.agents : [];
   const longest = agents.reduce((m, a) => Math.max(m, num(a.ageMin) ?? 0), 0);
@@ -36,7 +31,6 @@ export function memoryWins(data, digest) {
   };
 }
 
-/** The card spec for share.js. */
 export function memorySpec(data, digest) {
   const w = memoryWins(data, digest);
   const long = longSpan(w.longestMin);
@@ -69,7 +63,6 @@ export function memorySpec(data, digest) {
   };
 }
 
-/** The post's words. */
 export function memoryText(data, digest) {
   const w = memoryWins(data, digest);
   const long = longSpan(w.longestMin);

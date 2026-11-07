@@ -18,11 +18,7 @@ function storedObject(key) {
   } catch { return {}; }
 }
 
-// The side panels, mounted on demand: the panel stack holds at most one block,
-// the open one. Closing removes it from the layout, so Herdr ends that mod
-// (its timers, watches and processes stop); opening adds a fresh copy. Nothing
-// you aren't looking at runs.
-// Each panel's block content: Files, Changes and PR are one mod (kanso-panel) told which panel it is.
+// Mounted on demand: closing removes the block, so Herdr ends that mod (its timers, watches and processes stop).
 const PANELS = {
   files: { mod: "kanso-panel", props: { panel: "files" } }, pr: { mod: "kanso-panel", props: { panel: "pr" } },
   shipped: { mod: "kanso-panel", props: { panel: "shipped" } },
@@ -37,30 +33,22 @@ function customPanels() {
   return Array.isArray(list) ? list.filter((p) => p && typeof p.id === "string" && typeof p.mod === "string" && !(p.id in PANELS)) : [];
 }
 
-// The panel buttons, in the order you dragged them into, and the ones you
-// turned off. Both are shared, so the Panels popup and every bar agree.
+// Both shared, so the Panels popup and every bar agree.
 const ORDER = "kanso.panels.order", OFF = "kanso.panels.off";
 const ICON = "mods/kanso-chrome/icons/";
 const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
 const BUILTIN = [
   { id: "files", label: "Files", icon: `${ICON}file.svg` },
-  // Spend (kanso-spend): costs per model, project and task.
   { id: "insights", label: "Spend", icon: `${ICON}chart.svg` },
-  // The open pull request of the focused branch: status, checks, reviews, threads, files, agent tasks.
   { id: "pr", label: "PR", icon: `${ICON}pull-request.svg` },
-  // What you delivered: lines, pull requests, reviews, streak and records.
   { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
-  // Every git worktree on this computer; remove the ones agents left behind.
   { id: "worktrees", label: "Worktrees", icon: `${ICON}worktree.svg` },
-  // Dev servers listening on a port, and the ones no pane runs any more.
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
-  // Memory (kanso-guard): what the guard sees, recycles and restarts in a long session.
   { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
-// Every panel, in order, with `on`. Panels you never placed keep their place
-// after the ones you did.
+// Panels you never placed keep their catalog place after the ones you dragged.
 function panelList() {
   const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
   const order = list(ORDER), off = new Set(list(OFF));
@@ -68,7 +56,6 @@ function panelList() {
   return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: !off.has(p.id) }));
 }
 
-// Puts panel `from` where `to` is.
 function movePanel(from, to) {
   const ids = panelList().map((p) => p.id), i = ids.indexOf(from), j = ids.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
@@ -111,12 +98,10 @@ export default class Tabs extends View {
     this.panels = storedObject("panels");
     if (!this.arrange && cx) {
       this.watchOpens(cx);
-      // Kanso's releases (update.js): the bar is always on screen, the
-      // sidebar's footer may not be.
+      // The bar is always on screen; the sidebar's footer may not be.
       this.updater = new Updater();
       this.updater.start(cx);
-      // Keys (keys.json): ⌘⌥1-9 shows a tab by position, ⌃⇧1-9 opens or
-      // closes a panel by its place in the bar.
+      // keys.json: tab-N and panel-N arrive here as commands.
       cx.spawn(async (cx) => {
         for (;;) {
           const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
@@ -132,7 +117,6 @@ export default class Tabs extends View {
     }
   }
 
-  // A key's command; a tab or panel that isn't there is nothing to do.
   command(name) {
     const tab = /^tab-(\d)$/.exec(name), panel = /^panel-(\d)$/.exec(name);
     if (tab) {
@@ -146,10 +130,7 @@ export default class Tabs extends View {
     }
   }
 
-  // Markdown opened from outside Herdr (Cmd-click on a path in a terminal,
-  // Finder) when you chose Kanso Markdown as the app for .md files
-  // (markdown-handler.sh): it leaves each path in data/kanso-open, and the
-  // newest one is shown in the preview panel.
+  // markdown-handler.sh leaves .md paths opened from outside in data/kanso-open; the newest shows in the preview.
   watchOpens(cx) {
     const dir = `${appHome()}/data/kanso-open`;
     cx.spawn(async (cx) => {
@@ -171,17 +152,12 @@ export default class Tabs extends View {
     commitLayout({ panel: { id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path, on: null } } } });
   }
 
-  // Which panel is open now (null: closed), read from the layout.
-  // The node that hides: a "panel" wrapper if the layout has one, else the
-  // stack itself (Herdr folds a wrapper with a single child into it).
+  // Herdr folds a single-child wrapper: the node that hides is the "panel" wrapper if the layout has one, else the stack.
   openPanel(panel, body) {
     const box = panel ?? body, child = body?.children?.[0];
-    // A panel that hid its own block is closed.
     return !box || box.hidden || !child || child.hidden ? null : child.id;
   }
 
-  // Shows panel `id` (null: closes it) by rewriting the panel stack to hold
-  // only that block.
   mount(id) {
     const content = id ? panelContent(id) : null;
     if (id && !content) return;
@@ -196,27 +172,22 @@ export default class Tabs extends View {
     return this.want !== undefined && now !== this.want && Date.now() - this.mountedAt < 1000;
   }
 
-  // Keeps the layout honest when something else opened or closed the panel
-  // (a key, a panel's own close button): hidden means unmounted, shown means mounted.
+  // Hidden means unmounted, shown means mounted: stays honest when a key or a panel's own button changed it.
   reconcile(space, panel, body, now) {
     if (!body || this.inFlight(now)) return;
     const child = body.children?.[0];
     const hidden = (panel ?? body).hidden || Boolean(child?.hidden), mounted = (body.children ?? []).length > 0;
     if (hidden && mounted) this.mount(null);
     else if (!hidden && !mounted) this.mount(this.panels[space?.id] ?? null);
-    // A panel kept from an older Kanso whose mod has a new name (Spend was
-    // token-spend): mounted again with the one this version ships.
+    // A panel kept from an older Kanso whose mod was renamed (Spend was token-spend): remount with this version's.
     else if (mounted && child?.id) {
       const want = panelContent(child.id);
-      // A panel Kanso no longer has (Specs, Changes): closed. A file's preview is
-      // opened by Files or Open with, with its own props, not by a button.
+      // A panel this Kanso no longer has closes; "preview" is opened by Files or Open with, not by a button.
       if (!want) { if (child.id !== "preview") this.mount(null); return; }
       if (want?.mod && child.content?.mod && child.content.mod !== want.mod) this.mount(hidden ? null : child.id);
     }
   }
 
-  // The side panel is remembered per space: switching shows that space's choice
-  // (closed if it never had one), and opening or closing it records it.
   syncPanel(space, now, enabled) {
     if (!space || this.inFlight(now)) return;
     if (space.id !== this.space) {
@@ -232,8 +203,7 @@ export default class Tabs extends View {
     localStorage.setItem("panels", JSON.stringify(this.panels));
   }
 
-  // A trackpad sends dozens of small scroll events per swipe: add them up and
-  // move one tab per notch's worth, so a swipe doesn't race through every tab.
+  // A trackpad sends dozens of small events per swipe: add them up so one swipe moves one tab.
   wheel(e) {
     // A mouse wheel reports lines: one notch, one tab.
     if (Math.abs(e.delta_lines?.y ?? 0) >= 1) { run(e.delta_lines.y > 0 ? "tab.prev" : "tab.next"); return; }
@@ -257,10 +227,9 @@ export default class Tabs extends View {
     const stop = (_e, cx) => cx.stop_propagation();
     const button = (id, label, action) => div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.foreground + "0a").text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(action).child(label);
-    // The pill under the chosen tab: the tabs' widths (measured as they are
-    // drawn, kept) say where it goes, and it eases there natively.
+    // The pill under the chosen tab glides to it; tab widths are measured as they draw.
     this.tabW ??= {};
-    for (const id of Object.keys(this.tabW)) if (!shown.some((c) => c.id === id)) delete this.tabW[id]; // tabs gone take their width with them
+    for (const id of Object.keys(this.tabW)) if (!shown.some((c) => c.id === id)) delete this.tabW[id];
     const { at } = shown.reduce((acc, c) => {
       const w = this.tabW[c.id];
       return { at: c.active && w ? { left: acc.x, width: w } : acc.at, x: acc.x + (w ?? 0) + 2 };
@@ -273,8 +242,7 @@ export default class Tabs extends View {
       const name = c.name;
       return h_flex().id(`tab-${c.id}`).h(TAB_H).px(10).gap(6).rounded(6).items_center().flex_none().text_size(12.5)
         .text_color(c.active ? t.foreground : t.muted)
-        // The chosen tab's wash is the pill under the tabs, which glides to
-        // it; until every tab is measured the tab wears it itself.
+        // Until every tab is measured there is no pill: the chosen tab wears the wash itself.
         .when(c.active && !tabPill, el => el.bg(t.foreground + "12"))
         .hover(s => s.bg(t.foreground + "0a").text_color(t.foreground))
         .on_size_change((s, cx) => { if (Math.abs((this.tabW[c.id] ?? 0) - s.width) >= 0.5) { this.tabW[c.id] = s.width; cx.notify(); } })
@@ -304,15 +272,10 @@ export default class Tabs extends View {
     this.syncPanel(space, now, enabled);
     // A panel turned off while open closes (a file's preview has no button to turn off).
     if (now && now !== "preview" && !enabled.includes(now) && !this.inFlight(now)) this.mount(null);
-    // Icons only: the name opens beside the icon while the pointer is on it,
-    // and stays open on the panel that is open.
-    // Pressed on one and let go on another, a button moves there; right-click
-    // opens Kanso settings on Mods, where the order and the switches live.
     const panelButton = (p, k) => {
       const on = now === p.id, target = this.dragPanel && this.dragPanel !== p.id;
       const named = !p.icon || on || this.hoverPanel === p.id;
-      // The name slides open: its box eases from 0 to the text's width
-      // (about 6.8 px a character at 12) while it fades in, natively.
+      // 6.8 px a character at size 12: the name's box eases open to this width.
       const wide = Math.ceil(String(p.label).length * 6.8) + 10;
       const name = div().id(`panel-name-${p.id}`).h_full().flex().items_center().overflow_hidden().flex_none()
         .w(named ? wide : 0).opacity(named ? 1 : 0)
@@ -348,13 +311,10 @@ export default class Tabs extends View {
         .child(h_flex().flex_none().gap(2).items_center().relative().when(Boolean(tabPill), (el) => el.child(tabPill)).children(shown.map(item)))
         .child(button("tab-new", svg("mods/kanso-chrome/icons/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
           .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }))
-        // A saved arrangement of agents, opened in a new tab (kanso-arrange).
         .when(!hidden.has("tabs.arrange"), (el) => el.child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
           .tooltip(window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements"))))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
-        // Kanso settings: keys, what shows, what's new. Fixed at the end of
-        // the bar, after the panels; not one of them, so it is neither dragged nor turned off.
-        // A dot on it while a Kanso release waits; then it opens on What's new.
+        // Not one of the panels: never dragged nor turned off; the dot means a release waits.
         .child(button("kanso-settings", div().relative().child(svg("mods/kanso-chrome/icons/settings.svg").size(15))
             .when(Boolean(update), (el) => el.child(div().absolute().top(-2).right(-3).size(6).rounded_full().bg(t.accent))),
           () => openSettings(update ? "news" : "keys"))

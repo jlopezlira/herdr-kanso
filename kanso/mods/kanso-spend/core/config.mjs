@@ -3,18 +3,8 @@ import {
   nonEmptyString,
 } from "./util.mjs";
 
-// Custom source mapping (declarative; no executable code):
-//   mapping: {
-//     session: field, timestamp: field,
-//     messageId?: field, project?: field, model?: field, provider?: field,
-//     role?: field, roles?: string[], include?: [{path, equals|exists}],
-//     usage: {input?, output?, cacheRead?, cacheWrite?, reasoning?},
-//     taskDurationMs?: field, harness?: string
-//   }
-// field = "dot.path" | {path, default?} | {literal}.
-// Paths read own object keys and numeric array indexes. The custom usage
-// fields are already canonical: input is uncached, output includes reasoning,
-// reasoning is a subset, and total is computed by the collector.
+// Custom source mappings are declarative: no executable code.
+// Their usage fields are canonical: input uncached, output includes reasoning; the collector computes total.
 
 const PI_SOURCE = Object.freeze({
   id: "pi",
@@ -45,8 +35,7 @@ const CLAUDE_SOURCE = Object.freeze({
   roots: Object.freeze(["~/.claude/projects"]),
 });
 
-// Stores written before Claude Code became a default source get the same
-// upgrade, but only when they still contain the untouched previous defaults.
+// Stores from before Claude Code became a default get it added, but only when their sources are still the untouched previous defaults.
 const LEGACY_DEFAULT_SOURCES = Object.freeze([
   PI_SOURCE,
   CODEX_SOURCE,

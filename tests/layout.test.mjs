@@ -283,10 +283,29 @@ test("an agent moved to another project shows there, and only there, whatever sp
   });
   const view = new Spaces();
   Object.assign(view, { order: "updated", custom: {}, termBy: new Map([["t1", { address: "t1", labels: { "kanso.id": "t1-5" } }], ["t2", { address: "t2", labels: {} }]]),
-    panel: { agents: new Map([["term:t1-5", { project: "sp-kanso" }]]) }, inStripOrder: (l) => l });
+    panel: { agents: new Map([["term:t1-5", { project: "sp-kanso", projectAt: 1 }]]) }, inStripOrder: (l) => l });
   const ctx = { all: [{ address: "t1", space: "sp-fluenty" }, { address: "t2", space: "sp-fluenty" }], strip: {}, asleep: { rows: [] }, spaceIds: new Set(["sp-fluenty", "sp-kanso"]) };
   assert.deepEqual(clone(view.spaceRows("sp-kanso", ctx).map((a) => a.address)), ["t1"], "qb2 under herdr-kanso");
   assert.deepEqual(clone(view.spaceRows("sp-fluenty", ctx).map((a) => a.address)), ["t2"], "and no longer under fluenty");
   const gone = { ...ctx, spaceIds: new Set(["sp-fluenty"]) };
   assert.deepEqual(clone(view.spaceRows("sp-fluenty", gone).map((a) => a.address)), ["t1", "t2"], "its project closed: back where it runs, never nowhere");
+});
+
+test("the latest project choice wins, whichever key it was made under, and a clearing is a choice too", async () => {
+  const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
+    orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
+  });
+  const C = "00000000-0000-4000-8000-0000000000aa";
+  const view = new Spaces();
+  const th = { file: `/h/.claude/projects/-w/${C}.jsonl`, pid: 7 };
+  const at = (agents) => Object.assign(view, { order: "updated", custom: {}, threads: { t1: th }, alive: new Set([7]),
+    termBy: new Map([["t1", { address: "t1", labels: { "kanso.id": "t1-5" } }]]), panel: { agents: new Map(agents) }, inStripOrder: (l) => l });
+  const ctx = { all: [{ address: "t1", space: "sp-f" }], strip: {}, asleep: { rows: [] }, spaceIds: new Set(["sp-f", "sp-a", "sp-b"]) };
+  const where = () => ["sp-f", "sp-a", "sp-b"].find((id) => view.spaceRows(id, ctx).length);
+  at([[C, { project: "sp-a", projectAt: 3 }], ["term:t1-5", { project: "sp-b", projectAt: 5 }]]);
+  assert.equal(where(), "sp-b", "moved to B after its conversation was put in A: B");
+  at([[C, { project: "sp-a", projectAt: 3 }], ["term:t1-5", { project: null, projectAt: 6 }]]);
+  assert.equal(where(), "sp-f", "then back to where it runs: there, not A");
 });

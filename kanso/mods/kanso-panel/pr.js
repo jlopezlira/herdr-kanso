@@ -1,21 +1,4 @@
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// One pull request at a time: the focused pane's branch's own, else the newest
-// open one in that repository; "N open" in the header turns the panel to a page
-// of every open one, by anyone, and a click there shows it,
-// read with the GitHub CLI (`gh`), in the spirit of T3 Code's pull request view and drawn the way the
-// Spend panel is: one centered column, no cards or uppercase labels, hierarchy
-// from type size, weight and tone, hairlines between rows, a breathing
-// silhouette while it loads.
-//
-// What it shows: state, readiness, size, assignees, reviewers and labels (each
-// with T3 Code's candidate picker: search, a check on what is applied, a click
-// toggles it and the picker stays open), checks, unresolved review threads and
-// the files with their diff. What it does: merge (a second press confirms),
-// mark ready or back to draft, close or reopen, open it on GitHub, assign it to
-// you, and hand a task (explain, address feedback, resolve conflicts) to your
-// agent in a new tab. A branch without one offers to create it.
-//
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
@@ -27,26 +10,21 @@ import { tryOr, tryOrAsync } from "./pure.js";
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
-// T3 Code's candidate reads: assignableUsers is GitHub's own picker list (everyone with access),
-// which, unlike `collaborators`, does not need push access to read.
+// assignableUsers is GitHub's own picker list and, unlike `collaborators`, needs no push access to read.
 const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
 const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
-// Every open pull request of this repository, by anyone: the list a click picks from.
 const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,statusCheckRollup,additions,deletions";
-// The repository's finished ones (merged or closed), read only when that tab opens.
 const DONE = "number,title,url,state,updatedAt,mergedAt,closedAt,author,headRefName,baseRefName,additions,deletions";
 const DONE_LIMIT = 30;
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
-// The description folds to this height when it is longer than a few lines.
 const BODY_FOLD = 150;
 
 // A pull request's body as Markdown to show: no template comments, no Windows line ends.
 export function cleanBody(text) {
   return String(text ?? "").replace(/\r\n?/g, "\n").replace(/<!-{2}[\s\S]*?(-{2}>|$)/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
-// Whether it is long enough to fold: more than 6 lines or 480 characters.
 export const longBody = (text) => text.split("\n").length > 6 || text.length > 480;
 
 function ago(iso) {
@@ -71,11 +49,8 @@ function checkOf(c) {
     : ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion) ? "pass" : "fail";
   return { name: c.name, workflow: c.workflowName && c.workflowName !== c.name ? c.workflowName : "", url: c.detailsUrl, state, skipped: conclusion === "SKIPPED" };
 }
-// The checks, once each by name (the first one of a name stays).
 const onceByName = (checks) => checks.filter((ch, i) => checks.findIndex((x) => x.name === ch.name) === i);
 
-// The diff, file by file: each file's lines from its first hunk on. A file
-// starts at its "diff --git" line and runs to the next one.
 const FILE_HEAD = /^diff -{2}git a\/.* b\/(.*)$/;
 function splitDiff(text) {
   const lines = text.split("\n");
@@ -90,7 +65,6 @@ function splitDiff(text) {
   }));
 }
 
-// T3 Code's agent tasks, worded for a pull request reached through `gh`.
 const PROMPTS = {
   explain: (pr) => `Explain pull request #${pr.number} (${pr.url}). Read the diff (\`gh pr diff ${pr.url}\`) and walk through its purpose, the changes, the risks, and what I should read closely before approving. Do not change any code.`,
   feedback: (pr) => `Address the actionable feedback and failing checks on pull request #${pr.number} (${pr.url}). Fetch the latest review threads and check results with \`gh\`, skip resolved feedback, and verify each finding before changing code. First confirm this checkout is on ${pr.headRefName}; if it isn't, prepare the branch in its own worktree. Keep the fixes focused and run the relevant checks.`,
@@ -113,7 +87,6 @@ export class PullRequest {
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.refresh(cx);
-    // Every minute while shown, every 20 s while a check runs; never under an open picker.
     cx.timer.every(20000, (cx) => {
       if (this.picker) return;
       const pending = this.checks().some((ch) => ch.state === "pending");
@@ -121,8 +94,7 @@ export class PullRequest {
     });
   }
 
-  // The pull request's checks, once each by name; kept while it is the same
-  // reading (a draw asks several times, on every shared write anywhere).
+  // Cached per reading: a draw asks several times, on every shared write anywhere.
   checks() {
     const pr = this.pr;
     if (this.checked?.pr !== pr) this.checked = { pr, list: onceByName((pr?.statusCheckRollup ?? []).map(checkOf)) };
@@ -131,7 +103,6 @@ export class PullRequest {
 
   gh(args) { return exec("gh", args, { cwd: this.root ?? this.cwd, on: this.on }); }
   repo() { const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(this.pr?.url ?? ""); return m ? { o: m[1], r: m[2] } : null; }
-  // Whether a pull request (its URL) belongs to the focused pane's repository.
   local(url) {
     if (url && url === this.branchUrl) return true; // the branch's own, even from a fork's checkout
     const m = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(url ?? "");
@@ -167,8 +138,7 @@ export class PullRequest {
         ]);
         this.branch = branch.stdout.trim() || null;
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remote?.stdout ?? "")?.[1] ?? null;
-        // The repository's open ones, read alongside the one shown, and never
-        // left running past the read they belong to.
+        // Awaited in the finally so the read never outlives this refresh.
         const list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
         try { await this.readShown(context, want, list); }
         catch (e) { failed(e); }
@@ -181,9 +151,6 @@ export class PullRequest {
     });
   }
 
-  // Once the repository is known: the pull request to show (`want`, a URL
-  // picked, or the branch's own, else the newest open one), its review
-  // threads and who you are. `list`: the open ones, being read.
   async readShown(context, want, list) {
     const asked = await tryOrAsync(async () => ({ view: await this.gh(["pr", "view", ...(want ? [want] : []), "--json", FIELDS]) }));
     if (!asked) { this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return; }
@@ -194,12 +161,10 @@ export class PullRequest {
       const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
       if (sorted !== null) this.openPrs = sorted;
     }
-    // `gh pr view` also finds the branch's merged or closed one. That one is
-    // done, so the branch counts as having none.
+    // `gh pr view` also finds the branch's merged or closed one; that counts as none.
     const done = (v) => tryOr(() => ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state), false);
     const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
     if (branchHasNone && !this.openPrs.length) { this.none = true; this.pr = null; this.error = null; this.branchUrl = null; return; }
-    // The branch has none: the newest open one stands in, the branch offers to create its own.
     const fallback = branchHasNone;
     const view = branchHasNone
       ? await this.gh(["pr", "view", this.openPrs[0].url, "--json", FIELDS]).catch(() => ({ code: 1, stdout: "", stderr: "GitHub could not be read." }))
@@ -233,8 +198,6 @@ export class PullRequest {
     }
   }
 
-  // The repository's finished pull requests, newest first. Never shown on
-  // their own: only from the list's Closed tab, picked one at a time.
   loadClosed(cx) {
     if (this.closedLoading || !this.root) return;
     this.closedLoading = true;
@@ -257,8 +220,6 @@ export class PullRequest {
     cx.notify();
   }
 
-  // Shows another pull request (by its URL), open or finished; the branch's own
-  // goes back to following the branch.
   choose(p, cx) {
     this.listing = false;
     if (this.pr?.url === p.url) { cx.notify(); return; }
@@ -266,8 +227,6 @@ export class PullRequest {
     this.none = false; this.error = null; this.note = null; this.armed.clear(); this.picker = null;
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
-
-  // ---- actions ----
 
   act(label, args, cx) {
     if (this.busy) return;
@@ -282,7 +241,6 @@ export class PullRequest {
     cx.notify();
   }
 
-  // The second press within ARM_MS merges, with the first method the repository allows.
   merge(cx) {
     this.armed.press("merge", cx, (cx) => this.mergeNow(cx));
   }
@@ -329,8 +287,6 @@ export class PullRequest {
     }).catch((e) => notify({ title: "Could not start the agent", body: String(e?.message ?? e), level: "error" }));
   }
 
-  // ---- T3 Code's candidate pickers: assignees, reviewers, labels ----
-
   openPicker(kind, open, cx) {
     this.picker = open ? kind : null;
     this.query = ""; this.search.set_value("");
@@ -363,7 +319,6 @@ export class PullRequest {
     return new Set((pr.reviewRequests ?? []).map((r) => r.login).filter(Boolean));
   }
 
-  // Applies or takes back one candidate through the REST API; the picker stays open, as in T3 Code.
   toggle(kind, name, on, cx) {
     if (this.pending) return;
     const { o, r } = this.repo(), n = this.pr.number;
@@ -434,18 +389,14 @@ export class PullRequest {
     return popover.content(v_flex().w(288).p(G.xs).gap(G.xs).rounded(8).bg(c.popover).border_1().border_color(c.border)
       .child(div().h(30).flex_none().px(8).flex().items_center().rounded(6).border_1().border_color(c.border)
         .child(Input.new(this.search).flex_1().h_full().text_size(12).text_color(c.text)))
-      .child(div().id(`${id}-list`).w_full().max_h(290).overflow_y_scrollbar().child(list)));
+      .child(div().id(`${id}-list`).w_full().max_h(290).overflow_y_scrollbar().child(div().flex_none().w_full().child(list))));
   }
 
-  // ---- drawing, as Spend draws ----
-
-  // The repository's open pull requests, by anyone: yours first, then the newest.
   openList() {
     const me = this.viewer;
     return (this.openPrs ?? []).toSorted((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
   }
 
-  // One open pull request's state, in a word and a color, from what the list reads.
   rowState(p, c) {
     const checks = onceByName((p.statusCheckRollup ?? []).map(checkOf));
     const failing = checks.filter((x) => x.state === "fail").length, running = checks.filter((x) => x.state === "pending").length;
@@ -459,12 +410,10 @@ export class PullRequest {
     return { text: "Open", color: c.dim };
   }
 
-  // Whether there is a list to go to: any repository has its closed ones.
   canSwitch() {
     return Boolean(this.root) && !this.outside;
   }
 
-  // The header's pill: "N open" turns to the page of open ones; there, "Back to #n" returns.
   switchPill(c) {
     const back = this.listing && this.pr;
     const label = this.listing ? (back ? `Back to #${this.pr.number}` : "Back") : `${this.openPrs.length} open`;
@@ -478,7 +427,6 @@ export class PullRequest {
       .when(!this.listing, (el) => el.child(svg(`${ICON}chevron-right.svg`).size(12).text_color(c.muted)));
   }
 
-  // The list page's tabs: the open ones (where it starts) and the closed ones.
   tabs(c) {
     const tab = (id, label) => {
       const on = this.tab === id;
@@ -492,8 +440,6 @@ export class PullRequest {
     return h_flex().gap(G.xs).items_center().child(tab("open", `Open ${this.openPrs.length}`)).child(tab("closed", closed));
   }
 
-  // The list page: its tabs, then the open ones (where it starts) or the
-  // closed ones, each grouped as this branch, yours and others' (your colleagues').
   listPage(c) {
     const body = this.tab === "closed"
       ? this.closedPrs === null ? div().text_size(12).text_color(c.dim).child(this.closedLoading ? "Reading the closed ones…" : "GitHub could not be read.")
@@ -503,11 +449,6 @@ export class PullRequest {
         : this.openPage(c);
     return v_flex().w_full().gap(G.lg).child(this.tabs(c)).child(body);
   }
-
-  // A page of pull requests, grouped as this branch, yours and others. Each row
-  // reads as the hero does in small: the whole title, who and when, then its
-  // state in its color and its size; the shown one is selected and says so.
-  // Without `rows`, the open ones; with them, finished ones.
 
   openPage(c, rows = null) {
     const finished = rows !== null;
@@ -566,7 +507,6 @@ export class PullRequest {
         .when(Boolean(pr), (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
   }
 
-  // The pull request's address to the clipboard; the icon turns to a check for 1.5 s.
   copyUrl(url, cx) {
     cx.write_to_clipboard(url);
     this.copied = url; cx.notify();
@@ -649,7 +589,6 @@ export class PullRequest {
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
-  // The description, as GitHub renders it: Markdown, folded to a few lines when long.
   description(c) {
     const text = cleanBody(this.pr.body), long = longBody(text), open = this.expanded.body;
     const toggle = (cx) => { this.expanded = { ...this.expanded, body: !open }; cx.notify(); };
@@ -663,7 +602,6 @@ export class PullRequest {
       .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c))));
   }
 
-  // Who and what it carries, in T3 Code's meta rows: a quiet label column, the values, a picker.
   people(c) {
     const pr = this.pr, open = pr.state === "OPEN";
     const metaRow = (label, values, picker, extra) => h_flex().w_full().min_h(28).gap(G.md).items_center()
@@ -678,11 +616,9 @@ export class PullRequest {
       .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub)));
     const assignees = (pr.assignees ?? []).map((a) => person(a.login));
     const mine = this.viewer && (pr.assignees ?? []).some((a) => a.login === this.viewer);
-    // Reviewers: who reviewed, with the outcome, then who is still asked.
     const outcome = { APPROVED: ["approved", c.green], CHANGES_REQUESTED: ["changes", c.red], COMMENTED: ["commented", null], DISMISSED: ["dismissed", null] };
     const reviewed = (pr.latestReviews ?? []).filter((r) => r.author?.login).map((r) => person(r.author.login, outcome[r.state]?.[0] ?? String(r.state).toLowerCase(), outcome[r.state]?.[1]));
     const asked = (pr.reviewRequests ?? []).map((r) => person(r.login ?? r.name ?? r.slug, r.login ? "requested" : "team · requested", c.yellow));
-    // Labels in their own color, as T3 Code's label chips.
     const labels = (pr.labels ?? []).map((l) => {
       const color = labelColor(l.color) ?? c.dim;
       return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(color + "26")
@@ -802,7 +738,6 @@ export class PullRequest {
       .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
   }
 
-  // What the page shows under its header: the list, the pull request, or why there is none.
   body(c, narrow) {
     if (this.listing) return this.listPage(c);
     if (this.pr) {
@@ -834,7 +769,7 @@ export class PullRequest {
 
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
+      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(this.header(c, narrow))
           .child(body)));

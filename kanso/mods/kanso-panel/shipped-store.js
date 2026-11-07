@@ -1,18 +1,5 @@
 // Shipped's store, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// A local SQLite database (data/kanso-panel/shipped.db, through the sqlite3
-// command) of statistics only: for each commit of yours, its repository, hash,
-// time, lines added and removed and the machine it was read on; for each
-// repository, GitHub's weekly sums. No messages, file names or code.
-//
-// Three sources fill it, each asked only for what changed:
-// - this machine's git: every branch of the repositories in your panes and
-//   spaces and under ~/Apps, ~/Projects and the like, by any of your
-//   identities, so commits GitHub can't link to you count too;
-// - your other machines: each one publishes its commits to a private gist of
-//   yours ("Kanso Shipped stats", one file per machine) and reads the others';
-//   a commit on several machines counts once, by its hash;
-// - GitHub's weekly contributor statistics, for what no machine has cloned.
+// Statistics only: no messages, file names or code.
 // A repository's week counts the larger of what the machines and GitHub saw.
 import { exec, appHome, home, spaces, panes, writeTextFile } from "herdr";
 import { range, tryOrAsync, mapSeries } from "./pure.js";
@@ -35,8 +22,6 @@ CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);`;
 export const sqlText = (s) => `'${String(s ?? "").replace(/'/g, "''")}'`;
 const int = (n) => String(Math.round(Number(n) || 0));
 
-// A repository's name from its remote: owner/name on GitHub, host/path
-// elsewhere, local/<folder> without one.
 export function repoName(url, folder) {
   const u = String(url ?? "").trim().replace(/\.git$/, "").replace(/\/+$/, "");
   const gh = /github\.com[:/]+([^/]+\/[^/]+)$/i.exec(u);
@@ -60,16 +45,13 @@ export function parseLog(stdout) {
   });
 }
 
-// SQL that adds commits, once each (a hash already read on another machine is kept as it was).
+// INSERT OR IGNORE: a hash already read on another machine is kept as it was.
 export function insertCommits(repo, commits, machine) {
   const rows = commits.map((c) => `(${sqlText(repo)},${sqlText(c.hash)},${int(c.at)},${int(c.add)},${int(c.del)},${sqlText(machine)})`);
-  // 500 rows a statement.
   return range(Math.ceil(rows.length / 500)).map((k) => `INSERT OR IGNORE INTO commits(repo,hash,at,adds,dels,machine) VALUES ${rows.slice(k * 500, k * 500 + 500).join(",")};`).join("\n");
 }
 
-// This machine's file in the gist: its commits, compact, and the identities it signs with.
 export function machineFile(machine, identities, rows) {
-  // Each repository's name once, in the order first met; a commit points to it by its place.
   const repos = [...new Set(rows.map((r) => r.repo))];
   const index = new Map(repos.map((repo, i) => [repo, i]));
   const commits = rows.map((r) => [index.get(r.repo), r.hash, r.at, r.adds, r.dels]);
@@ -84,7 +66,7 @@ export function readMachineFile(text) {
   } catch { return null; }
 }
 
-// Repository-weeks with the larger of the machines' and GitHub's sums: { repo: { weeks: [[week ms, adds, dels, commits]] } }.
+// Each week takes the larger of the machines' and GitHub's sums.
 export const WEEKLY = `WITH l AS (SELECT repo, (at - ${WEEK0}) / 604800 * 604800 + ${WEEK0} AS week, SUM(adds) a, SUM(dels) d, COUNT(*) c FROM commits GROUP BY repo, week),
 u AS (SELECT repo, week, a, d, c FROM l UNION ALL SELECT repo, week, adds, dels, commits FROM gh_weeks)
 SELECT repo, week, MAX(a) a, MAX(d) d, MAX(c) c FROM u GROUP BY repo, week ORDER BY repo, week;`;
@@ -134,7 +116,6 @@ export class Store {
   async machine() {
     if (this.name) return this.name;
     const stored = await this.meta("machine");
-    // The first time: this computer's short host name, kept.
     const named = async () => {
       const r = await exec("hostname", ["-s"]).catch(() => null);
       const name = (r?.stdout ?? "").trim().replace(/[^A-Za-z0-9._-]+/g, "-") || `machine-${Date.now().toString(36)}`;
@@ -148,7 +129,7 @@ export class Store {
 
   async weekly() { return weeklyStats(await this.sql(WEEKLY, true)); }
 
-  // When and where you ship, from the commits read (local and synced) in [start, end) (s).
+  // [start, end) in seconds.
   async rhythm(start, end) {
     const span = `at >= ${int(start)} AND at < ${int(end)}`;
     const [hours, machines] = await Promise.all([
@@ -159,8 +140,6 @@ export class Store {
     const byHour = range(24).map((h) => (counts.has(h) ? counts.get(h) : 0));
     return { hours: byHour, machines };
   }
-
-  // ---- GitHub's weekly sums ----
 
   async ghRepos() { return this.sql("SELECT repo, pushed, fetched, pending FROM gh_repos;", true); }
 
@@ -176,10 +155,6 @@ export class Store {
     await this.script(out.join("\n"));
   }
 
-  // ---- this machine's git ----
-
-  // Your repositories here, once each: where your panes and spaces are, the
-  // ones read before, and those under the usual folders (4 levels deep).
   async localRepos() {
     const known = [
       ...panes().filter((p) => p.cwd && !String(p.pane).includes("/")).map((p) => p.cwd),
@@ -188,7 +163,6 @@ export class Store {
     ];
     const found = await exec("sh", ["-c", 'for d in "$@"; do [ -d "$d" ] && find "$d" -maxdepth 4 -name .git -prune 2>/dev/null; done', "sh", ...ROOTS.map((r) => `${home()}/${r}`)]).catch(() => null);
     const list = [...new Set([...known, ...(found?.stdout ?? "").split("\n").filter((line) => line.trim()).map((line) => line.trim().replace(/\/\.git$/, ""))])];
-    // Eight folders at a time: each one's repository, by its git folder.
     const read = await mapSeries(range(Math.ceil(list.length / 8)), (k) => Promise.all(list.slice(k * 8, k * 8 + 8).map(async (folder) => {
       const r = await exec("sh", ["-c", 'cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir --show-toplevel && (git config --get remote.origin.url || echo) && git for-each-ref --format="%(objectname)" | cksum', "sh", folder]).catch(() => null);
       if (r?.code !== 0) return [];
@@ -201,7 +175,6 @@ export class Store {
     return [...Map.groupBy(read.flat(2), (r) => r.common).values()].map(([{ path, repo, refs }]) => ({ path, repo, refs }));
   }
 
-  // Reads the commits of every repository whose branches moved since the last read.
   async scanLocal(identities, progress) {
     const machine = await this.machine();
     const seen = new Map((await this.sql("SELECT path, refs FROM scans;", true)).map((r) => [r.path, r.refs]));
@@ -217,10 +190,6 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
     return repos.length;
   }
 
-  // ---- your other machines ----
-
-  // Publishes this machine's commits to the gist and reads the other machines'.
-  // Returns the identities they sign with.
   async syncMachines(identities) {
     const machine = await this.machine();
     const stored = await this.meta("gist");
@@ -244,7 +213,6 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
     const gist = JSON.parse(sent.stdout);
     const gistId = id || gist.id;
     await this.setMeta("gist", gistId);
-    // The other machines' files, one at a time: each one's commits stored.
     const read = await mapSeries(Object.entries(gist.files ?? {}), async ([file, f]) => {
       if (file === name || !file.startsWith("shipped-")) return null;
       const fetched = async () => { const r = await exec("curl", ["-fsSL", "--max-time", "25", f.raw_url]).catch(() => null); return r?.code === 0 ? r.stdout : null; };

@@ -2,7 +2,6 @@
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-files.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-files; one of the kanso-panel mod's panels.
-// A lazy file browser for the focused pane's folder, with bounded read-only previews.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec, readTextFile, watchFolder, theme, window, openOverlay, shared, setShared } from "herdr";
@@ -14,34 +13,27 @@ const RETURN = "kanso.files.return";
 
 async function directory(path, on) {
   if (!on && window()?.platform === "windows") {
-    // The path is the process's cwd, not part of -Command: PowerShell joins
-    // everything after -Command into the script, so a folder name could run.
+    // The path is the process's cwd, not part of -Command: a folder name inside the script could run as code.
     const script = "& { @(Get-ChildItem -LiteralPath . -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First 501 | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) } }) | ConvertTo-Json -Compress }";
     const r = await exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { cwd: path });
     if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
     const result = JSON.parse(r.stdout || "[]");
     return Array.isArray(result) ? result : [result];
   }
-  // One process and no shell: find prints each directory twice in a row (a
-  // name can't appear twice in a folder), so the type costs no extra call.
-  // Entries are not followed (-type d is false for a link to a folder); -H
-  // follows only the folder itself, as a link to it should open.
+  // find prints each directory twice in a row, so its type costs no extra call.
+  // -H follows only the folder itself (a link to a folder should open); entries are not followed.
   const fast = await exec("find", ["-H", ".", "-mindepth", "1", "-maxdepth", "1", "!", "-name", ".git",
     "(", "-type", "d", "-print0", "-print0", "-o", "-print0", ")"], { cwd: path, on }).catch(() => null);
   if (fast?.code === 0) {
-    // The names ended by a NUL ("./" dropped), as many as the entries kept
-    // can take: two for a folder, one for anything else.
+    // Names kept: two per folder, one for anything else; "./" dropped.
     const names = fast.stdout.split("\0").slice(0, -1).slice(0, 2 * (PER_FOLDER + 2)).map((name) => name.slice(2));
-    // A name the same as the one before it, when that one was not itself the
-    // second of a pair, is that folder's second print.
+    // A name equal to the one before it, unless that was itself a pair's second, is a folder's second print.
     const second = mapWith(names, (last, name) => (name === last ? [null, true] : [name, false]), null);
     const out = names.flatMap((name, i) => (second[i] ? [] : [{ name, dir: second[i + 1] === true }]));
     // One past the cap tells the panel the folder was cut short.
     return out.slice(0, PER_FOLDER + 1);
   }
-  // Fallback (no find on that machine, or a folder so large the output went
-  // past exec's limit): stream NUL-separated names. Bash's read -d keeps the
-  // stream bounded; read one extra entry to detect truncation.
+  // Fallback when find is missing or its output would pass exec's limit; one extra entry detects truncation.
   const script = `
 n=0
 find -H "$1" -mindepth 1 -maxdepth 1 ! -name .git -print0 2>/dev/null |
@@ -59,14 +51,13 @@ test -d "$1"`;
   return Array.from({ length: Math.floor(fields.length / 2) }, (_, k) => ({ name: fields[2 * k + 1], dir: fields[2 * k] === "d" }));
 }
 
-// The panel exists only while it is shown (kanso-tabs mounts it on demand),
-// so it always works: no idle state to keep.
+// Exists only while shown (kanso-tabs mounts it on demand), so there is no idle state to keep.
 export class Files {
-  constructor() { this.rev = 0; } // bumped whenever the rows would differ: the tree is rebuilt only then
+  constructor() { this.rev = 0; } // bumped whenever the rows would differ; the tree is rebuilt only then
 
   init(cx) {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
-    // Back from a Markdown file: the folders that were open, for the same place.
+    // Returning from the preview: the folders that were open, for the same place.
     const back = shared(RETURN);
     if (back) {
       setShared(RETURN, null);
@@ -142,7 +133,6 @@ export class Files {
   toggle(path, cx) {
     this.rev = this.rev + 1;
     if (this.folders.has(path)) {
-      // The folder closes, and every open one inside it, with what was read of them.
       const closing = (folder) => this.folders.has(folder) && (folder === path || folder.startsWith(path + "/"));
       this.entries = new Map([...this.entries].filter(([folder]) => !closing(folder)));
       this.folders = new Set([...this.folders].filter((folder) => !closing(folder)));
@@ -161,15 +151,12 @@ export class Files {
     cx.notify();
   }
 
-  // The file in a code editor of your choice (the `open-with` mod), or in
-  // Kanso's own preview panel, which that list offers for text files.
   openWith(path) {
     if (!insideRoot(path)) return;
     openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { file: `${this.root}/${path}`, folder: this.root, machine: this.on } });
   }
 
-  // A Markdown file opens in the preview panel, to read and edit, with a way
-  // back here; the open folders are kept for that return.
+  // The open folders are kept so returning from the preview restores them.
   read(path) {
     if (!insideRoot(path)) return;
     setShared(RETURN, { context: this.context, folders: [...this.folders] });
@@ -187,22 +174,19 @@ export class Files {
         if (this.file !== path || key() !== context) return;
         if (text === null) { this.fileError = "This file is no longer available"; return; }
         if (text.includes("\0")) { this.fileError = "Binary file · no text preview"; return; }
-        // Markdown is rendered (the SDK's TextView); anything else is read-only code.
         if (isMarkdown(path)) this.text = text; else this.code = codeState(path, text);
       } catch { if (this.file === path && key() === context) this.fileError = "Cannot preview this file (binary, too large, or unreadable)"; }
       finally { cx.notify(); }
     });
   }
 
-  // The tree's rows, built again only when something in them changed (`rev`):
-  // a draw comes with every shared write anywhere, the rows run to 5,000.
+  // Rebuilt only when `rev` changes: a draw comes with every shared write anywhere, and rows run to 5,000.
   rows() {
     if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0).slice(0, TOTAL) };
     return this.shown.items;
   }
 
-  // Plain rows, so a frame builds elements only for the ones on screen: a
-  // folder's entries, each open one followed by its own, 40 deep at most.
+  // Plain rows, so the virtual list builds elements only for the ones on screen.
   flat(prefix, depth) {
     if (depth > 40) return [];
     return (this.entries.get(prefix) ?? []).flatMap((entry) => {
@@ -236,8 +220,7 @@ export class Files {
       .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
           .child(v_virtual_list("files-rows", items.length, 28, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, t)))
-            // Item renderers run during native layout, where per-row handlers
-            // are forbidden. The list owns two handlers, keyed by file path.
+            // Item renderers run during native layout, where per-row handlers are forbidden.
             .on_item_click((path, cx) => {
               const item = items.find((item) => item.path === path);
               if (!item) return;

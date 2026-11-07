@@ -15,16 +15,9 @@ import {
   taskKeyFor,
 } from "./store.mjs";
 
-// A parser is a step of a fold over a file's records: (record, ctx, acc)
-// gives the next acc. acc.state is the file's parser state, kept in the store
-// with the file; the rest of acc is the scan's, reached only through ctx:
-// ctx.addUsage and ctx.removeLatestFallback answer { acc, ... },
-// ctx.addTask and ctx.warn answer the next acc. Nothing is changed in place.
-//
-// The parts of the state that grow with the file (one entry per session,
-// turn, request or response) are persistent maps while the file is read
-// (openParserState), so a record copies only its own path, not all of them;
-// they are plain objects again in the store (closeParserState).
+// Parser contract: (record, ctx, acc) -> next acc, nothing changed in place; acc.state is the file's own state.
+// ctx.addUsage and ctx.removeLatestFallback answer { acc, ... }; ctx.addTask and ctx.warn answer the next acc.
+// State parts that grow with the file are persistent maps while reading (openParserState), so a record copies only its own path.
 
 const GROWING = ["sessions", "turns", "modernObserved", "responseKeys"];
 
@@ -42,19 +35,15 @@ export function closeParserState(state) {
   ]));
 }
 
-// acc with `fields` set on its state: a field already there keeps its place,
-// a new one goes after the others, as an assignment would.
 function put(acc, fields) {
   return { ...acc, state: { ...acc.state, ...fields } };
 }
 
-// One of the growing maps of the state, empty when it is not there yet.
 function mapOf(state, key) {
   return state[key] instanceof PMap ? state[key] : PMap.over();
 }
 
-// A step that failed part way: what it did so far stays, and the scan
-// reports `error` as it reports a record that throws.
+// A step that failed part way: work done so far stays; the error is reported like a throwing record.
 function failed(acc, error) {
   return { ...acc, lineError: error };
 }
@@ -83,8 +72,6 @@ function spanMs(start, end) {
   return Math.min(end - start, MAX_TURN_MS);
 }
 
-// The timing history of `session`, made (with the map of them) on first
-// use: { acc, history }.
 function historyFor(acc, session) {
   const sessions = mapOf(acc.state, "sessions");
   const known = sessions.get(session);
@@ -120,9 +107,6 @@ function emitTask(ctx, acc, history, session, key, duration, exact) {
   );
 }
 
-// An assistant record of a timed session: the turn's first reply time kept,
-// its usage counted (the row remembered for the turn's task), and on the
-// final reply the turn's span as a fallback task.
 function assistantTurn(acc, session, timestamp, counted, final) {
   const opened = historyFor(acc, session);
   const first = opened.history.turnFirst ? opened.history : { ...opened.history, turnFirst: timestamp };
@@ -131,9 +115,6 @@ function assistantTurn(acc, session, timestamp, counted, final) {
   const timed = usage ? setHistory(usage.acc, session, { ...first, lastRow: rowOf(usage.result) }) : started;
   return final ? final(timed) : timed;
 }
-
-// ---------------------------------------------------------------------------
-// Pi
 
 function piMainSession(state, ctx) {
   if (state.header?.id) return `pi:${state.header.id}`;
@@ -203,7 +184,6 @@ function piTiming(record, ctx, acc, session, timestamp, isFinal, finalIdentity) 
   return setHistory(tasked, session, { ...first, turnStart: null, turnFirst: null });
 }
 
-// A Pi assistant message (main or sub-agent): usage, then the turn's span.
 function piAssistant(ctx, acc, { session, timestamp, project, provider, model, usage, identity, final }) {
   const tokens = usage ? normalizeTokens({
     input: usage.input,
@@ -250,8 +230,7 @@ function parsePi(record, ctx, acc) {
     });
   }
 
-  // Pi usage carriers outside assistant messages: cache warming, compaction,
-  // and branch-summary usage all contribute to Pi's session totals.
+  // Cache warming, compaction and branch-summary records carry usage that counts toward Pi's session totals.
   if (
     record.type === "usage" ||
     record.type === "compaction" ||
@@ -260,7 +239,6 @@ function parsePi(record, ctx, acc) {
     return piUsageCarrier(record, ctx, acc);
   }
 
-  // Pi's own session files: message + message.usage.
   if (record.type === "message" && isPlainObject(record.message)) {
     const message = record.message;
     const role = asString(message.role, "");
@@ -286,8 +264,7 @@ function parsePi(record, ctx, acc) {
       return timestamp !== null ? piTiming({ role }, ctx, acc, session, timestamp, false, "") : acc;
     }
     if (role === "toolResult") {
-      // Tool extensions may report nested-model usage directly. Count the
-      // reported event without opening/closing the surrounding assistant turn.
+      // Tool extensions may report nested-model usage; count it without touching the surrounding turn.
       return piUsageCarrier({
         type: "toolResult", usage: message.usage,
         id: record.id ?? message.toolCallId ?? message.responseId,
@@ -306,8 +283,7 @@ function parsePi(record, ctx, acc) {
     });
   }
 
-  // Pi sub-agent transcript artifacts. They are JSONL under the same root but
-  // put usage and role at the top level and have no session header.
+  // Pi sub-agent transcripts: same JSONL root, but usage and role at top level and no session header.
   if (record.recordType === "message" && record.role !== undefined) {
     const role = asString(record.role, "");
     const session = piSubagentSession(record, ctx);
@@ -344,9 +320,6 @@ function parsePi(record, ctx, acc) {
   }
   return acc;
 }
-
-// ---------------------------------------------------------------------------
-// Claude Code
 
 function claudeSession(record, ctx) {
   const id = asString(record.sessionId ?? record.session_id, "");
@@ -407,8 +380,7 @@ function parseClaude(record, ctx, acc) {
       ? { ...history, lastRow: { fileId: taken.removed.fileId, rowIdx: taken.removed.rowIdx } }
       : history;
     const noted = linked === history ? taken.acc : setHistory(taken.acc, session, linked);
-    // A record with no id and no time has no task key; the fallback above is
-    // gone all the same.
+    // No id and no time means no task key, but the removed fallback stays removed.
     const key = attempt(() => taskKeyFor(
       "claude",
       "turn-duration",
@@ -469,9 +441,6 @@ function parseClaude(record, ctx, acc) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Codex
-
 function codexSession(state, ctx) {
   if (state.session) return `codex:${state.session}`;
   return `codex-file:${ctx.file.path}`;
@@ -489,8 +458,6 @@ function codexRecordSession(state, ctx, payload) {
   return codexSession(state, ctx);
 }
 
-// The context of `turnId` (or of the file when the turn is unknown), with
-// the map of turns made on first use: { acc, context }.
 function codexContext(acc, turnId) {
   const turns = mapOf(acc.state, "turns");
   const made = turns === acc.state.turns ? acc : put(acc, { turns });
@@ -546,7 +513,6 @@ function codexCloseInTime(left, right) {
   return Math.abs(left - right) <= CODEX_TWIN_WINDOW_MS;
 }
 
-// The pending tokens, made whole numbers and kept: { acc, pending }.
 function codexPendingTokens(acc) {
   const pending = isPlainObject(acc.state.modernPending) ? acc.state.modernPending : codexZeroTokens();
   const whole = { ...pending, ...Object.fromEntries(CODEX_TOKEN_FIELDS.map((field) => [field, toNonNegInt(pending[field])])) };
@@ -560,10 +526,7 @@ function codexAddPending(acc, tokens) {
   });
 }
 
-// Local per-file request state. Global dedup only reports the delta a copy adds
-// to the store, which is zero for a copied file; the legacy cumulative counter
-// in that file still has to subtract everything the file itself observed.
-// The answer is { acc, added }.
+// Per-file state: global dedup reports zero for a copied file, but the legacy cumulative counter must subtract everything this file observed.
 function codexObserveModern(acc, key, tokens) {
   const observed = mapOf(acc.state, "modernObserved");
   const known = observed.get(key);
@@ -586,8 +549,7 @@ function codexKnownCumulative(entry) {
   return null;
 }
 
-// Cumulative counters are the strong identity. The vector/time fallback is
-// only used for older payloads where either side lacks those counters.
+// Cumulative counters are the strong twin identity; vector/time matching is only for older payloads that lack them.
 function codexCumulativeTwin(entry, cumulative) {
   const known = codexKnownCumulative(entry);
   if (!Array.isArray(known) || !Array.isArray(cumulative)) return true;
@@ -630,7 +592,6 @@ function codexSubtract(tokens, represented) {
 }
 
 function codexRememberModern(acc, key, tokens, timestamp, identity) {
-  // The last eight requests, oldest first.
   const recent = [...(Array.isArray(acc.state.modernRecent) ? acc.state.modernRecent : []), {
     key,
     tokens: codexTokenVector(tokens),
@@ -643,8 +604,6 @@ function codexRememberModern(acc, key, tokens, timestamp, identity) {
   return put(acc, { modernRecent: recent.length > 8 ? recent.slice(1) : recent });
 }
 
-// The newest matching request, taken out of the list: { acc, key }, key null
-// when none matches.
 function codexTakeModernTwin(
   acc,
   tokens,
@@ -669,9 +628,6 @@ function codexTakeModernTwin(
   return { acc: put(acc, { modernRecent: recent.toSpliced(index, 1) }), key: recent[index].key };
 }
 
-// A token_count with running totals: what this record adds since the last
-// one (all of it after a counter reset), and the totals kept for the next.
-// The answer is { acc, legacy }.
 function codexFromTotals(acc, totals, record, ctx) {
   const current = {
     input_tokens: toNonNegInt(totals.input_tokens),
@@ -683,8 +639,7 @@ function codexFromTotals(acc, totals, record, ctx) {
   const previous = isPlainObject(acc.state.legacyTotals)
     ? acc.state.legacyTotals
     : null;
-  // A reset belongs to the whole counter vector, not just the fields that
-  // decreased. Other fields may already exceed their old values on restart.
+  // A reset applies to the whole vector: other fields may already exceed their old values on restart.
   const reset = Boolean(previous && Object.keys(current).some((key) => current[key] < toNonNegInt(previous[key])));
   const raw = Object.fromEntries(Object.keys(current).map((key) => [key, !previous || reset ? current[key] : current[key] - toNonNegInt(previous[key])]));
   return {
@@ -705,7 +660,6 @@ function codexFromTotals(acc, totals, record, ctx) {
   };
 }
 
-// A token_count with only the last request's usage.
 function codexFromLast(raw, record, ctx) {
   return {
     raw,
@@ -722,7 +676,6 @@ function codexFromLast(raw, record, ctx) {
   };
 }
 
-// The turn `turnId` given the row its usage went to.
 function codexTurnRow(acc, turnId, context, lastRow) {
   const turns = mapOf(acc.state, "turns");
   return put(acc, { turns: turns.with(turnId, { ...(turns.get(turnId) ?? context), lastRow }) });
@@ -752,7 +705,6 @@ function codexTurnContext(acc, payload) {
   const turns = mapOf(acc.state, "turns");
   const made = turns === acc.state.turns ? acc : put(acc, { turns });
   const state = made.state;
-  // A turn seen again keeps the row its usage went to.
   const previous = turnId ? turns.get(turnId) : null;
   const context = {
     model: asString(payload.model, state.model ?? "unknown"),
@@ -808,8 +760,7 @@ function codexUsageRecord(record, ctx, acc, payload, timestamp) {
     responseKeys &&
     typeof responseKeys.get(responseId) === "string",
   );
-  // A token_count twin can precede its token_usage_record. Reuse the
-  // token_count contribution instead of counting the turn twice.
+  // A token_count twin can precede its token_usage_record; reuse its contribution instead of counting the turn twice.
   const dedupKey = knownResponse ? responseKeys.get(responseId)
     : twinKey ? twinKey
       : makeDedupKey("codex", ...identity);
@@ -889,8 +840,7 @@ function codexTokenCount(record, ctx, acc, payload, timestamp) {
     dedupKey,
   );
   const lastRow = rowOf(counted.result);
-  // Keep this contribution available if the matching token_usage_record
-  // appears immediately after the token_count record.
+  // Keep this contribution available for a token_usage_record that arrives right after.
   const placed = put(put(counted.acc, { lastRow }), {
     pendingTwin: usedModernTwin ? null : {
       key: dedupKey,
@@ -911,7 +861,6 @@ function codexTaskComplete(record, ctx, acc, payload) {
   const reported = Number.isFinite(payload.duration_ms)
     ? toNonNegInt(payload.duration_ms)
     : 0;
-  // Without a reported duration, the span between start and completion.
   const started = Number(payload.started_at);
   const completed = Number(payload.completed_at);
   const duration = reported || (Number.isFinite(started) && Number.isFinite(completed) && completed >= started
@@ -955,12 +904,8 @@ function parseCodex(record, ctx, acc) {
   return acc;
 }
 
-// ---------------------------------------------------------------------------
-// Declarative custom JSONL
-
 export function getPath(object, path) {
   if (typeof path !== "string" || !path) return undefined;
-  // Once a step finds nothing, every later step finds nothing too.
   return path.split(".").reduce((current, part) => {
     if (current === null || current === undefined) return undefined;
     if (Array.isArray(current)) return /^\d+$/.test(part) ? current[Number(part)] : undefined;

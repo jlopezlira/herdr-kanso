@@ -1,19 +1,5 @@
 // Kanso's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// One way to share for every Kanso panel that brags (Shipped, Spend): the
-// panel hands over its global numbers as a card spec, and this draws the
-// image, saves it, and posts it to X, LinkedIn or Bluesky.
-//
-// Herdr loads a mod's files from its own folder only, so this file is kept
-// byte for byte in kanso-panel/ and kanso-spend/; `npm run sync:share` copies
-// it and the tests fail when the copies differ. Edit kanso-panel/share.js.
-//
-// The card is an SVG, turned into a PNG by the first renderer this machine
-// has: a Chromium browser (Chrome, Chromium, Brave, Edge) headless,
-// rsvg-convert or ImageMagick, or QuickLook on macOS. The networks' links
-// take text only, so the image goes on the clipboard, the composer opens with
-// the text, and once the page is up the image is pasted into it (on macOS
-// that needs Herdr in Accessibility; without it you paste it yourself).
+// Kept byte for byte in kanso-panel/ and kanso-spend/ (`npm run sync:share`): edit kanso-panel/share.js.
 import { div } from "gpui-kit";
 import { h_flex, Button } from "gpui-base";
 import { exec, home, readTextFile, writeTextFile, window, notify, theme, appHome } from "herdr";
@@ -28,7 +14,6 @@ export const REPO_URL = "github.com/jlopezlira/herdr-kanso";
 const W = 1200, PAD = 72, INNER = W - 2 * PAD;
 const FONT = "Inter, 'SF Pro Display', -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-// The card's colors, from Herdr's theme.
 export function palette(t = theme() ?? {}) {
   return {
     canvas: t.canvas ?? t.background, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
@@ -44,7 +29,6 @@ function paint(hex, alpha) {
   const a = alpha ?? (h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1);
   return `fill="${base}"${a < 1 ? ` fill-opacity="${Math.round(a * 1000) / 1000}"` : ""}`;
 }
-// Lines of at most `width` characters, broken between words.
 export function wrap(body, width) {
   const { lines, line } = String(body).split(/\s+/).reduce((acc, word) => (
     acc.line && acc.line.length + 1 + word.length > width
@@ -55,22 +39,18 @@ export function wrap(body, width) {
 }
 const text = (x, y, size, color, body, extra = "") => `<text x="${x}" y="${y}" font-size="${size}" ${paint(color)} ${extra}>${esc(body)}</text>`;
 
-// The post's words: one line of numbers, then where they come from. Short
-// enough for X (280).
 export function postText(parts, fallback) {
   const line = parts.length ? `${parts.join(", ")}.` : fallback;
   return `${line[0].toUpperCase()}${line.slice(1)}\n\nCounted by kansō for Herdr: ${REPO_URL}`.slice(0, 280);
 }
 
-// The card is drawn in parts, top to bottom: each part takes the height it
-// starts at and answers { y, out }, where it ends and what it drew.
+// Each part takes the y it starts at and answers { y, out }: where it ends and what it drew.
 const drawn = (y, out = []) => ({ y, out });
 const stack = (y, parts) => parts.reduce((acc, part) => {
   const next = part(acc.y);
   return { y: next.y, out: acc.out.concat(next.out) };
 }, drawn(y));
 
-// Header: the panel's name, and whose numbers for which period.
 const headerPart = (spec, c) => (from) => {
   const y = from + 30;
   return drawn(y, [
@@ -79,7 +59,6 @@ const headerPart = (spec, c) => (from) => {
   ]);
 };
 
-// The hero: the big number, what it counts, and how it moved.
 const heroPart = (hero, c) => (from) => {
   const top = from + 150;
   const labelY = hero.label ? top + 52 : top;
@@ -92,7 +71,6 @@ const heroPart = (hero, c) => (from) => {
   ]);
 };
 
-// The numbers, in a row that wraps after three.
 const statsPart = (stats, c) => (from) => {
   if (!stats.length) return drawn(from);
   const top = from + 80;
@@ -157,19 +135,12 @@ const barsBlock = (b, c) => (from) => {
   ]);
 };
 
-// A block as a part; one with nothing to show draws nothing.
 const blockPart = (b, c) =>
   b.kind === "streak" ? streakBlock(b, c)
     : b.kind === "list" && b.rows?.length ? listBlock(b, c)
       : b.kind === "bars" && b.values?.some((n) => n > 0) ? barsBlock(b, c)
         : (from) => drawn(from);
 
-// The card, top to bottom: { svg, width, height }.
-//   spec: { title, right, hero: { big, small, label, delta: { up, text } | null },
-//           stats: [{ value, unit }], note, blocks: [block] }
-//   block: { kind: "streak", title, right, n, unit, weeks (GitHub's calendar) }
-//        | { kind: "list", title, rows: [{ name, detail, value, unit }] }
-//        | { kind: "bars", title, right, values: [n], ticks: [label] }
 export function cardSvg(spec, c) {
   const body = stack(PAD, [
     headerPart(spec, c),
@@ -178,7 +149,6 @@ export function cardSvg(spec, c) {
     notePart(spec.note, c),
     ...(spec.blocks ?? []).map((b) => blockPart(b, c)),
   ]);
-  // Footer.
   const y = body.y + 72;
   const out = [
     ...body.out,
@@ -205,7 +175,6 @@ const exists = async (path) => (await exec("sh", ["-c", 'test -s "$1"', "sh", pa
 const macos = () => window()?.platform === "macos";
 const pause = (seconds) => exec("sleep", [String(seconds)]).catch(() => null);
 
-// Writes the card as a PNG at twice its size. Returns the renderer used, or throws.
 export async function renderPng(card, svgPath, pngPath) {
   await writeTextFile(svgPath, card.svg, await readTextFile(svgPath));
   await exec("rm", ["-f", pngPath]).catch(() => {});
@@ -230,7 +199,6 @@ export async function renderPng(card, svgPath, pngPath) {
   throw new Error("Install Chrome, Chromium or rsvg-convert to make the image.");
 }
 
-// Puts the PNG on the clipboard.
 export async function copyImage(pngPath) {
   const tries = macos()
     ? [["osascript", ["-e", `set the clipboard to (read (POSIX file "${pngPath.replace(/"/g, '\\"')}") as «class PNGf»)`]]]
@@ -240,18 +208,15 @@ export async function copyImage(pngPath) {
 
 export const openPath = (target) => exec(macos() ? "open" : "xdg-open", [target]).catch(() => null);
 
-// The app in front, by bundle id (macOS), or null when it can't be told.
 async function frontApp() {
   const r = await exec("osascript", ["-l", "JavaScript", "-e",
     'ObjC.import("AppKit"); var a = $.NSWorkspace.sharedWorkspace.frontmostApplication; a ? ObjC.unwrap(a.bundleIdentifier) : ""']).catch(() => null);
   return r?.code === 0 && r.stdout.trim() ? r.stdout.trim() : null;
 }
 
-// Pastes the clipboard into the composer that was just opened: once the
-// browser is in front and the page had time to load. False when it could not.
 async function pasteInto(network, before) {
   if (macos()) {
-    // A first look, then up to 12 more half a second apart, while the app in front is still Herdr.
+    // Wait until the app in front is no longer Herdr: the browser came up.
     const front = await retry(13, () => frontApp(), { done: (app) => !(app && app === before), between: () => pause(0.5) });
     if (front && front === before) return false; // the browser never came up
     await pause(network.wait);
@@ -264,7 +229,6 @@ async function pasteInto(network, before) {
   return (await findAsync(keys, async ([bin, args]) => (await exec(bin, args).catch(() => null))?.code === 0)) !== null;
 }
 
-// Where the image is kept: Downloads when there is one, else home.
 export async function outputPath(name) {
   const downloads = (await exec("test", ["-d", `${home()}/Downloads`]).catch(() => null))?.code === 0;
   const dir = downloads ? `${home()}/Downloads` : home();
@@ -273,9 +237,6 @@ export async function outputPath(name) {
   return `${dir}/kanso-${slug(name)}-${day}.png`;
 }
 
-// The image made, saved, and posted: to a network's composer with the text
-// and the image in it, or with no network just saved and opened.
-//   make() → { spec, text, name, title }  (title: "Shipped", "Spend")
 export async function shareImage(network, make, workDir) {
   const { spec, text: words, name, title } = make();
   const card = cardSvg(spec, palette());
@@ -302,8 +263,6 @@ export async function shareImage(network, make, workDir) {
   if (!copied) await openPath(png.replace(/\/[^/]+$/, ""));
 }
 
-// The "Share to" row and its state, the same in every panel.
-//   id: a prefix for element ids; make: as for shareImage; note: what the image holds.
 export class Share {
   constructor(id, workDir) { this.id = id; this.workDir = workDir ?? `${appHome()}/data/${id}`; this.open = false; this.busy = null; }
 

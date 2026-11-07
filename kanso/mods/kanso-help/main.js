@@ -1,10 +1,4 @@
 // kansō help, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// How to use kansō, how to set it up, and its keys on a keyboard you can
-// see: hold ⌘ ⌥ ⇧ ⌃ (or pick them) and the keys that do something light
-// up; press one and it says what it does. The way into the hjkl dōjō, the
-// vim game (kanso-dojo). Opened with ⌘? (keys.json) or from kansō settings;
-// `page` in its props picks the tab.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, openOverlay, run } from "herdr";
@@ -25,7 +19,6 @@ const LIT_MS = 650;
 const MOD_GLYPH = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘" };
 const MOD_WORD = { ctrl: "Control", alt: "Option", shift: "Shift", cmd: "Command" };
 
-// The modifiers of a key event, as keys.json names them.
 const modsOf = (m = {}) => MODIFIERS.filter((k) => (k === "cmd" ? m.platform : k === "ctrl" ? m.control : m[k]));
 
 export default class Help extends View {
@@ -34,9 +27,9 @@ export default class Help extends View {
     this.handle.focus();
     this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
     this.mods = ["cmd", "alt"]; // the layer shown first: the vim panes
-    this.lists = false; // the lists' layer (j k gg G) instead
+    this.lists = false;
     this.picked = "h";
-    this.lit = null; // { key, at }: a key just pressed
+    this.lit = null;
   }
 
   light(key, cx) {
@@ -51,7 +44,6 @@ export default class Help extends View {
     const mods = modsOf(e.modifiers);
     if (this.page === "dojo" && k === "enter") { this.enterDojo(); cx.stop_propagation(); return; }
     if (this.page !== "keys") return;
-    // The keyboard page: the key pressed lights up, with its layer.
     if (["shift", "control", "alt", "platform", "meta", "cmd", "ctrl", "option", "command"].includes(k)) return;
     const key = k === "return" ? "enter" : k === " " ? "space" : k;
     if (mods.length) { this.mods = mods; this.lists = false; }
@@ -60,14 +52,11 @@ export default class Help extends View {
     cx.stop_propagation(); cx.notify();
   }
 
-  // The keys lit on the keyboard page: key -> { action, chord }.
   shown() {
     if (this.lists) return this.mods.includes("shift") ? LIST_SHIFT : LIST_LAYER;
     return layer(keys(), this.mods);
   }
 
-  // One key: its cap, lit when it does something in this layer, filled
-  // when picked or just pressed. Modifier keys light while held.
   cap(t, c, [name, w = 1], i, bound) {
     const width = Math.round(U * w + GAP * (w - 1));
     const isMod = MODIFIERS.includes(name);
@@ -116,12 +105,10 @@ export default class Help extends View {
         .child(div().text_size(12).text_color(c.dim).child(`${layerName} · ${bound.size} ${bound.size === 1 ? "key" : "keys"}`)))
       .child(v_flex().gap(GAP).p(14).rounded(12).bg(c.text + "05").border_1().border_color(c.border).items_center()
         .children(ROWS.map((row, r) => h_flex().gap(GAP).children(row.map((k, i) => this.cap(t, c, k, `${r}-${i}`, bound))))))
-      // The key picked (or pressed), in words.
       .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(10).bg(chosen ? c.accent + "18" : c.text + "06")
         .child(div().min_w(64).text_size(17).font_semibold().text_color(chosen ? c.text : c.dim).child(chosen ? chordOf(chosen) : glyphs([...this.mods, this.picked].join("-"))))
         .child(div().flex_1().text_size(13.5).text_color(chosen ? c.text : c.dim)
           .child(chosen ? describe(chosen.action) : "Nothing on this key here. Press a key, or pick one.")))
-      // Everything in this layer, as a list to read.
       .child(v_flex().gap(2)
         .children(list.map(([key, d]) => h_flex().id(`row-${key}`).h(26).px(10).gap(G.md).items_center().rounded(6).cursor_pointer()
           .when(key === this.picked, (el) => el.bg(c.selected))
@@ -136,7 +123,6 @@ export default class Help extends View {
     run("mod.open", { name: "kanso-dojo" });
   }
 
-  // The way into the game: Hachi, what it is, a button.
   dojoPage(t, c) {
     const ink = t.accent_foreground ?? c.canvas;
     return h_flex().gap(G.xl).items_center().pt(G.lg)
@@ -153,7 +139,6 @@ export default class Help extends View {
           .child(div().text_size(11.5).text_color(c.dim).child("or press Enter"))));
   }
 
-  // A heading and its lines; `k` draws a key inline.
   block(c, title, lines) {
     return v_flex().gap(6)
       .child(div().text_size(14).font_semibold().text_color(c.text).child(title))
@@ -209,6 +194,6 @@ export default class Help extends View {
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(G.md).child(quietTabs("help-pages", PAGES, this.page, (key, cx) => { this.page = key; cx.notify(); }, c)))
-      .child(v_flex().flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(page));
+      .child(v_flex().flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

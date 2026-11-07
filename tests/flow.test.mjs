@@ -463,3 +463,18 @@ test("The sidebar keeps its state in the left nav's database: prefs moved from l
   assert.deepEqual(writes, [0]);
   assert.equal((await last.kdb.read("SELECT status FROM agents WHERE id='c1'"))[0].status, "gone", "not seen for a while: gone");
 });
+
+test("Send reaches any agent of any model by the name and project Kanso gives it, grouped by project, yours first", async () => {
+  const { everyone } = await load("kanso-send/main.js", ["everyone"], {});
+  const terms = [
+    { address: "t5g", state: "live", status: "working", labels: { "kanso.shown": "morpheus", "kanso.project": "herdr-kanso" } },
+    { address: "t5t", state: "live", status: "done", agent: "qwen-code", labels: { "kanso.shown": "qb2", "kanso.project": "herdr-kanso" } },
+    { address: "t2c", state: "live", status: "blocked", labels: { "kanso.shown": "Lead", "kanso.project": "fluenty" } },
+    { address: "t5r", state: "live", labels: { "kanso.shown": "zsh" } },
+    { address: "box/t1", state: "live", status: "idle", labels: {} },
+  ];
+  const groups = clone(everyone(terms, [], { from: "t5g" }));
+  assert.deepEqual(groups.map((g) => [g.project, g.agents.map((x) => x.name)]), [["herdr-kanso", ["qb2"]], ["fluenty", ["Lead"]]], "a shell and another machine's are not agents to send to");
+  assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "flu" })).map((g) => g.project), ["fluenty"], "found by project");
+  assert.deepEqual(clone(everyone(terms, [], { from: "t5g", query: "qb" })).map((g) => g.agents.map((x) => x.terminal)), [["t5t"]], "found by name");
+});

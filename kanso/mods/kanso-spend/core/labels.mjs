@@ -1,7 +1,5 @@
-// Task labels for the Costs view: a session's /name, else its ticket, else
-// how its first prompt starts. Same rules as pi-usage (scan.ts), so a Pi
-// session reads the same in both places. Only the first line of the first
-// prompt (120 chars) and ticket refs are kept, never the transcript.
+// Label rules match pi-usage (scan.ts) so a Pi session reads the same in both places.
+// Only the first prompt's first line (120 chars) and ticket refs are kept, never the transcript.
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -17,8 +15,7 @@ const MAX_LINES = 4000;
 const MAX_BYTES = 8 * 1024 * 1024;
 const RELABEL_MS = 10 * 60 * 1000;
 
-// ---------------------------------------------------------------------------
-// Tickets (ported from pi-usage scan.ts)
+// Tickets ported from pi-usage scan.ts.
 
 const JIRA = /(?<![\w-])([A-Z]{2}[A-Z0-9_]{0,8}-\d{1,6})(?![\w-])/g;
 const NOT_TICKETS = new Set(["UTF", "ISO", "SHA", "GPT", "RFC", "ES", "MD", "AES", "RSA", "HTTP", "TLS", "SSL", "IPV", "CVE", "WCAG", "ECMA", "PEP", "COVID", "MP", "H", "TS", "X", "K", "V", "BASE", "ARM", "TOP", "GPU", "CPU", "P", "M", "IP", "UUID", "LTS", "NODE", "ED", "HMAC", "PBKDF"]);
@@ -35,7 +32,6 @@ const LINKS = [
 export function ticketsIn(text) {
   const links = LINKS.flatMap(({ pattern, ref }) => [...text.matchAll(pattern)].map((match) => ref(match)));
   const keys = [...text.matchAll(JIRA)].map((match) => match[1]).filter((key) => !NOT_TICKETS.has(key.slice(0, key.indexOf("-"))));
-  // Each ref once, in the order it was first seen.
   return [...new Set([...links, ...keys])];
 }
 
@@ -61,7 +57,6 @@ function cleanPrompt(text) {
   return trimmed;
 }
 
-/** The user texts of one transcript line, per harness. */
 function userTexts(adapter, entry) {
   if (!isPlainObject(entry)) return { texts: [] };
   if (adapter === "claude") {
@@ -82,8 +77,6 @@ function userTexts(adapter, entry) {
   return { texts: [] };
 }
 
-// Async `step(acc, item)` over an async iterable, one item at a time, until
-// it runs out or a step answers { stop: true }: the last `acc`.
 async function foldUntil(iterator, step, acc) {
   const { value, done } = await iterator.next();
   if (done) return acc;
@@ -91,7 +84,6 @@ async function foldUntil(iterator, step, acc) {
   return next.stop ? next.acc : foldUntil(iterator, step, next.acc);
 }
 
-// One transcript line folded into what is known of the label so far.
 function readLine(adapter, seen, line) {
   const counted = { ...seen, lines: seen.lines + 1, bytes: seen.bytes + line.length };
   if (counted.lines > MAX_LINES || counted.bytes > MAX_BYTES) return { stop: true, acc: counted };
@@ -110,7 +102,6 @@ function readLine(adapter, seen, line) {
   return { stop: next.users >= USER_SCAN && adapter !== "pi", acc: next };
 }
 
-/** Reads a transcript head (decompressing .zst) until enough user turns are seen. */
 export async function readLabel(adapter, filePath) {
   const empty = { prompt: undefined, name: undefined, tickets: [] };
   const source = createReadStream(filePath);
@@ -134,9 +125,6 @@ export function labelText(label, sessionId) {
   return label?.name || label?.tickets?.[0] || label?.prompt || `Session ${String(sessionId).split(":").at(-1).slice(0, 8)}`;
 }
 
-// ---------------------------------------------------------------------------
-// Cache
-
 export function labelsPath(storePath) {
   return path.join(path.dirname(storePath), "labels.json");
 }
@@ -159,35 +147,25 @@ async function piUsageLabels(home) {
   }, new Map());
 }
 
-/**
- * Brings the label cache up to date for every session in the store. A label
- * is re-read when its transcript grew (a /name or ticket can arrive later),
- * and the work stops at the deadline; the rest continues on the next refresh.
- */
+/** Refreshes the label cache; a label is re-read when its transcript grew, because a /name or ticket can arrive later. */
 export async function updateLabels(store, storePath, { home = os.homedir(), deadline = Infinity } = {}) {
   const cache = await loadLabels(storePath);
   const now = Date.now();
-  // Each session once, with the first file that holds it.
   const rows = Object.values(store.files ?? {}).flatMap((file) => (file.rows ?? [])
     .filter((row) => typeof row.session === "string").map((row) => ({ session: row.session, file })));
   const sessions = [...Map.groupBy(rows, (row) => row.session)].map(([session, [{ file }]]) => [session, file]);
-  // A session whose transcript did not grow keeps its label. A live session
-  // grows every turn; its label rarely changes. Re-read a known session at
-  // most every few minutes, not on every refresh.
+  // A live session grows every turn but its label rarely changes: re-read a known one at most every few minutes.
   const stale = sessions.filter(([session, file]) => {
     const cached = cache.sessions[session];
     return !(cached && cached.size === file.size) && !(cached && now - (cached.readAt ?? 0) < RELABEL_MS);
   });
   const fromPiUsage = stale.length ? await piUsageLabels(home) : null;
-  // One answer per stale session, in order: [session, label] to store, or
-  // "pending" when the deadline came first.
   const answers = await mapSeries(stale, async ([session, file]) => {
     const cached = cache.sessions[session];
     const known = fromPiUsage.get(session);
     if (known && (known.name || known.prompt || known.tickets.length)) return [session, { ...known, size: file.size, readAt: now }];
     if (Date.now() >= deadline) return "pending";
-    // A label that never changes once the first prompts are in: only re-read
-    // a growing Pi file, whose /name can change; others keep their label.
+    // Only Pi files are re-read once labelled: their /name can change later; other labels do not.
     if (cached && file.adapter !== "pi" && (cached.prompt || cached.tickets?.length)) return [session, { ...cached, size: file.size, readAt: now }];
     try {
       const fileStat = await stat(file.path);

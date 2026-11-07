@@ -1,15 +1,8 @@
 // hjkl dōjō, kansō help's vim game, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The game's world and its moves, with nothing drawn: a board of cells
-// (levels 1 to 5) or a few lines of code (6 to 9), a cursor, a target,
-// vim's motions on them, and the fewest moves from one to the other
-// (a breadth-first search over the moves a level allows), which gives the
-// score and the hint.
 import { range } from "./pure.js";
 
 export const GRID = { w: 18, h: 8 };
 
-// Lines of code to move through; each one is a line a person could write.
 export const SNIPPETS = [
   [
     "const herd = agents.filter((a) => a.idle);",
@@ -34,7 +27,6 @@ export const SNIPPETS = [
   ],
 ];
 
-// The levels: the motions each one takes, where its targets go, and a tip.
 export const LEVELS = [
   { n: 1, name: "h l", world: "grid", motions: ["h", "l"], aim: "row", tip: "h moves left, l right. Your right index finger rests on j; h is one key to its left." },
   { n: 2, name: "j k", world: "grid", motions: ["j", "k"], aim: "column", tip: "j goes down (its tail hangs below the line), k goes up. Index on j, middle finger on k." },
@@ -50,7 +42,6 @@ export const LEVELS = [
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const same = (a, b) => a.x === b.x && a.y === b.y;
 
-// A world: { kind: "grid", w, h } or { kind: "text", lines }.
 export const gridWorld = () => ({ kind: "grid", w: GRID.w, h: GRID.h });
 export const textWorld = (i) => ({ kind: "text", lines: SNIPPETS[i % SNIPPETS.length] });
 
@@ -58,26 +49,20 @@ export const textWorld = (i) => ({ kind: "text", lines: SNIPPETS[i % SNIPPETS.le
 const kind = (ch) => (ch === undefined || ch === " " || ch === "\t" ? 0 : /\w/.test(ch) ? 1 : 2);
 const firstNonBlank = (line) => Math.max(0, line.search(/\S/));
 const lastCol = (line) => Math.max(0, line.length - 1);
-// From `i`, a step at a time, while `go` holds: where it stops.
 const walk = (i, step, go) => (go(i) ? walk(i + step, step, go) : i);
 
-// Every character position in reading order, with the line break as a blank.
 function flat(lines) {
   return lines.flatMap((l, y) => [...l.split("").map((ch, x) => ({ x, y, ch })), { x: l.length, y, ch: undefined, eol: true }]);
 }
 function indexOf(f, at) { return f.findIndex((p) => p.x === at.x && p.y === at.y && !p.eol); }
 
-// vim's w, b and e on small words, across lines.
 function word(lines, at, m) {
   const f = flat(lines);
   const from = indexOf(f, at);
   if (from < 0) return at;
   const k = (j) => kind(f[j]?.ch);
-  // w: past the word under the cursor, then past the blanks after it.
   const w = (c = k(from)) => walk(c ? walk(from, 1, (i) => i < f.length && k(i) === c) : from, 1, (i) => i < f.length && k(i) === 0);
-  // e: one on, past the blanks, then to the last letter of that word.
   const e = (start = walk(from + 1, 1, (i) => i < f.length && k(i) === 0), c = k(start)) => walk(start, 1, (i) => i + 1 < f.length && k(i + 1) === c && c);
-  // b: one back, back over the blanks, then to the first letter of that word.
   const b = (start = walk(from - 1, -1, (i) => i > 0 && k(i) === 0), c = k(start)) => walk(start, -1, (i) => i > 0 && k(i - 1) === c && c);
   const i = m === "w" ? w() : m === "e" ? e() : m === "b" ? b() : from;
   const p = f[clamp(i, 0, f.length - 1)];
@@ -85,8 +70,7 @@ function word(lines, at, m) {
   return { x: p.x, y: p.y };
 }
 
-// The cursor after a motion. `motion`: "h", "5l", "w", "fa", "$", "gg"...
-// Inside the world always; a motion that can't move leaves it where it is.
+// Always lands inside the world; a motion that can't move leaves the cursor.
 export function move(world, at, motion) {
   const m = String(motion);
   const count = /^[1-9]\d*/.exec(m); // 0 alone is the line start, not a count
@@ -117,7 +101,6 @@ export function move(world, at, motion) {
   }
 }
 
-// The motions a level allows from `at`, each a word you would type.
 export function motionsFrom(world, at, level) {
   const own = level.motions.flatMap((m) => {
     if (m !== "f" && m !== "t" && m !== "F" && m !== "T") return [m];
@@ -128,15 +111,11 @@ export function motionsFrom(world, at, level) {
   return [...own, ...counted];
 }
 
-// The fewest motions from `a` to `b`, and the first of them (the hint).
 export function shortest(world, a, b, level) {
   if (same(a, b)) return { dist: 0, first: null };
   const key = (p) => `${p.x},${p.y}`;
-  // Wave `d`: every move from the cells the last wave reached first, in
-  // order. A cell reached before is not reached again.
   const search = (wave, seen, d) => {
     if (d > 40 || !wave.length) return { dist: Infinity, first: null };
-    // The wave's moves, cell by cell, until one lands on `b`.
     const { hit, parts } = wave.reduce((acc, { p, first }) => {
       if (acc.hit) return acc;
       const steps = motionsFrom(world, p, level).map((m) => { const q = move(world, p, m); return { q, kq: key(q), f: first ?? m }; });
@@ -151,11 +130,8 @@ export function shortest(world, a, b, level) {
   return search([{ p: a, first: null }], new Set([key(a)]), 1);
 }
 
-// A new target for a level, reachable, never on the cursor.
 export function newTarget(world, at, level, rand = Math.random) {
   const pick = (n) => Math.floor(rand() * n);
-  // A cell of the board, kept to the row or column, pushed to an edge or
-  // far enough as the level aims.
   const onGrid = () => {
     const { w, h } = world;
     const x = pick(w), y = pick(h);
@@ -166,7 +142,6 @@ export function newTarget(world, at, level, rand = Math.random) {
     };
     return level.aim === "far" && Math.abs(t.x - at.x) < 3 && Math.abs(t.y - at.y) < 3 ? null : t;
   };
-  // A letter of the code, never a blank, on a line with something on it.
   const inText = () => {
     const L = world.lines;
     const y = level.aim === "line" ? at.y : pick(L.length);
@@ -185,10 +160,7 @@ export function newTarget(world, at, level, rand = Math.random) {
     if (s.dist === Infinity || (world.kind === "text" && level.aim !== "ends" && s.dist < 1)) return null;
     return { target: t, need: s.dist };
   };
-  // Up to 300 tries; none that fits leaves the target on the cursor.
   return range(300).reduce((got) => got ?? attempt(), null) ?? { target: at, need: 0 };
 }
 
-// Points for reaching a target in `moves` when `need` would do: 10, 5 more
-// in the fewest, and 2 for each target of the streak before it.
 export const points = (moves, need, streak) => 10 + (moves <= need ? 5 + 2 * streak : 0);

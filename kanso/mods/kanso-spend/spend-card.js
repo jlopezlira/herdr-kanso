@@ -1,14 +1,9 @@
 // Spend's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The panel's global numbers as a card for share.js: what your AI work is
-// worth at list price, the tasks, the tokens, how many projects and models,
-// and the period day by day. Never a project, task or session name: only the
-// totals of the unfiltered view are shared.
+// Only the unfiltered totals are shared: never a project, task or session name.
 import { postText } from "./share.js";
 
 const plain = (s) => String(s ?? "").trim();
 
-// The card spec, from the presenter's costs (the unfiltered view).
 export function spendSpec(costs) {
   const hero = costs.hero ?? {};
   const stats = [
@@ -32,7 +27,6 @@ export function spendSpec(costs) {
   };
 }
 
-// The post's words.
 export function spendText(costs) {
   const hero = costs.hero ?? {};
   const when = plain(costs.range?.label ?? hero.title);

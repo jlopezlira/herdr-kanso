@@ -1,15 +1,5 @@
-// Open with: opens the focused pane's folder in a code editor installed on
-// this computer. Detects the editors on open (app bundles on macOS, CLIs on
-// PATH, Flatpak on Linux), lists the last one used first, Enter opens it,
-// 1-9 picks directly, Esc leaves. Terminal editors (Neovim, Helix, ...) open
-// in a split beside the pane. A folder on another machine opens over SSH in
-// the editors that support it (VS Code family, Zed).
-//
-// Bound to cmd-shift-o (`mod.open:open-with`). Other mods can open it for a
-// given folder: openOverlay({ mod: "open-with", kind: "popup", at: "top",
-// width: 380, props: { folder, machine } }), or for a file (`file`, its full
-// path): then the editors open that file, and a text file is also offered
-// to Kanso's own preview panel (kanso-panel, `preview`), with no editor.
+// Open with: opens the focused pane's folder in a code editor installed on this computer.
+// Other mods open it with openOverlay({ mod: "open-with", kind: "popup", props: { folder, machine } }), or props.file (full path) for one file; a text file is also offered to kanso-panel's preview.
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -17,16 +7,14 @@ import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, 
 import { walkLayout, commitLayout } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
 
-// PowerShell also treats U+2018..U+201B as single-quote delimiters.
-// Double every delimiter so paths remain data inside -Command.
+// PowerShell treats U+2018..U+201B as single quotes too: double every one so paths stay data inside -Command.
 function psQuote(s) {
   const v = String(s);
   if (/[\r\n\0]/.test(v)) throw new Error("Invalid path");
   return `'${v.replace(/['\u2018-\u201b]/g, (quote) => quote + quote)}'`;
 }
 
-// Start-Process joins ArgumentList into a Windows command line. Quote each
-// argument there too, doubling backslashes before a quote or the closing one.
+// Start-Process rejoins ArgumentList into a command line: quote again, doubling backslashes before a quote or the closing one.
 function windowsArg(s) {
   return '"' + String(s).replace(/(\\*)"/g, (_match, slashes) => slashes + slashes + '\\"')
     .replace(/\\+$/g, (slashes) => slashes + slashes) + '"';
@@ -37,9 +25,7 @@ const RECENT = `${MOD}.recent`;
 const FOUND = `${MOD}.found`;
 const ICONS = `data/${MOD}/icons`;
 
-// Catalog order is the order shown before anything was used.
-// mac: app bundle names; cli: commands on PATH; flatpak: Flatpak app ids;
-// family: how a remote (SSH) folder opens; bin: the CLI inside the macOS bundle.
+// Catalog order is the order shown before anything was used; family: how a remote (SSH) folder opens; bin: the CLI inside the macOS bundle.
 const VSC = "Contents/Resources/app/bin/";
 const EDITORS = [
   { id: "cursor", name: "Cursor", mac: ["Cursor.app"], cli: ["cursor"], family: "vscode", bin: VSC + "cursor", icon: "icons/cursor.svg" },
@@ -110,7 +96,6 @@ async function detect(platform) {
     const tries = EDITORS.flatMap((e) => (e.cli ?? []).map((c) => [e, c]));
     const hits = (await Promise.all(tries.map(([e, c]) =>
       exec("where", [c]).then((r) => (r.code === 0 ? [e, r.stdout.split(/\r?\n/)[0].trim()] : null)).catch(() => null)))).filter(Boolean);
-    // An editor's first command found is the one kept.
     return Object.fromEntries(hits.filter((h, i) => hits.findIndex((x) => x[0].id === h[0].id) === i).map((h) => [h[0].id, { cli: h[1] }]));
   }
   const args = EDITORS.flatMap((e) => [...(platform === "macos" ? (e.mac ?? []).map((m) => `app:${m}`) : []), ...(e.cli ?? []).map((c) => `cli:${c}`)]);
@@ -128,7 +113,6 @@ async function detect(platform) {
 const TEXT = /\.(md|markdown|mdx|txt|text|log|json|jsonc|ya?ml|toml|csv|tsv|rst|adoc|org|ini|cfg|conf|env|sh|zsh|bash|fish|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cs|php|lua|sql|html|css|scss|xml|svg)$/i;
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file-text.svg", builtin: true };
 
-// Puts the preview in the side panel, as kanso-tabs' panel buttons mount theirs.
 function showPreview(file, machine) {
   if (!walkLayout(layout(), "panel-body")) return false;
   const child = { id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path: file, on: machine } } };
@@ -193,8 +177,6 @@ done`;
     }
   }
 
-  // Detected editors, last used first, then catalog order; GUI before terminal.
-  // For a text file, Kanso's own preview comes first.
   list() {
     const recent = (shared(RECENT) ?? []).filter((id) => BY_ID[id]);
     const have = EDITORS.filter((e) => this.found?.[e.id]);
@@ -317,6 +299,6 @@ done`;
           .child(div().text_size(11).text_color(t.dim).truncate().child(machine ? `${machine}: ${shown}` : shortPath(shown, machine))))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().h(1).mx(4).mb(4).bg(t.border))
-      .child(v_flex().max_h(420).overflow_y_scrollbar().children(body));
+      .child(v_flex().max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().children(body)));
   }
 }

@@ -1,16 +1,5 @@
-// Persistent maps and lists: a change answers a new value and leaves the old
-// one as it was. A scan threads the store and each file's parser state
-// through a fold over the lines, so nothing is changed in place; a plain
-// copy per line would make that quadratic, so these share what did not
-// change instead. A change copies only the path to one key in a hash trie
-// of 32-way nodes (at most seven, five for any real store), and a map
-// opened over a stored object or Map keeps reading it as its base: only
-// what changed is held in the trie, and the whole is made into a plain
-// object once, at the end.
-//
-// Keys keep the order a plain object gives them: a key already there keeps
-// its place when its value changes, a new key goes after all the others,
-// and a key removed and added again goes to the end.
+// Persistent map/list over a hash trie: a plain copy per record would be quadratic, so unchanged parts are shared.
+// Keys keep plain-object order: an existing key keeps its place, a new key goes last, a re-added key goes to the end.
 
 const BITS = 5;
 const MASK = 31;
@@ -18,7 +7,6 @@ const LEAF = 0;
 const BRANCH = 1;
 const COLLISION = 2;
 
-// The number of bits set in a 32-bit word.
 function popcount(word) {
   const pairs = word - ((word >>> 1) & 0x55555555);
   const nibbles = (pairs & 0x33333333) + ((pairs >>> 2) & 0x33333333);
@@ -27,8 +15,7 @@ function popcount(word) {
 
 const step = (hash, code) => Math.imul(hash ^ code, 16777619);
 
-// FNV-1a over the UTF-16 units from `at` to `end`, four to a call: the
-// recursion stays shallow and runs ten times faster than a reduce.
+// FNV-1a in chunks of four units: shallow recursion, about ten times faster than a reduce.
 function hashRange(key, at, end, hash) {
   if (at + 4 <= end) {
     return hashRange(key, at + 4, end, step(step(step(step(hash, key.charCodeAt(at)), key.charCodeAt(at + 1)), key.charCodeAt(at + 2)), key.charCodeAt(at + 3)));
@@ -36,18 +23,14 @@ function hashRange(key, at, end, hash) {
   return at < end ? hashRange(key, at + 1, end, step(hash, key.charCodeAt(at))) : hash;
 }
 
-// Numbers (list indexes, file ids) are their own hash, which keeps a list's
-// trie dense. A very long key is hashed by its two ends and its length; a
-// collision only costs a compare.
+// Numbers are their own hash, which keeps a list's trie dense; very long keys hash by both ends and length: a collision only costs a compare.
 function hashOf(key) {
   if (typeof key === "number") return key | 0;
   if (key.length <= 4096) return hashRange(key, 0, key.length, 0x811c9dc5);
   return step(hashRange(key, key.length - 2048, key.length, hashRange(key, 0, 2048, 0x811c9dc5)), key.length);
 }
 
-// A leaf is one key. `fresh` marks a key added after the base was read (it
-// goes after the base keys, in `seq` order); `gone` marks a base key taken
-// out.
+// fresh: added after the base was read (goes after the base keys, in seq order); gone: a base key taken out.
 function leaf(key, value, hash, seq, fresh, gone) {
   return { t: LEAF, k: key, v: value, h: hash, s: seq, f: fresh, g: gone };
 }
@@ -61,7 +44,6 @@ function lookup(node, hash, key, shift) {
   return lookup(node.nodes[popcount(node.bitmap & (bit - 1))], hash, key, shift + BITS);
 }
 
-// Two nodes whose hashes differ, under the branch they share from `shift`.
 function join(a, b, shift) {
   const ia = (a.h >>> shift) & MASK;
   const ib = (b.h >>> shift) & MASK;
@@ -89,8 +71,7 @@ function insert(node, one, shift) {
   return { t: BRANCH, bitmap: node.bitmap, nodes: node.nodes.with(at, insert(node.nodes[at], one, shift + BITS)) };
 }
 
-// A branch left with one leaf (or one collision) is replaced by it: a leaf
-// is found by its key at any depth.
+// A branch down to one leaf collapses into it: a leaf must be findable by its key at any depth.
 function remove(node, hash, key, shift) {
   if (node === null) return null;
   if (node.t === LEAF) return node.k === key ? null : node;
@@ -118,7 +99,6 @@ function leavesOf(node) {
   return node.nodes.flatMap(leavesOf);
 }
 
-// The base is read, never changed: a plain object, a Map, or nothing.
 function baseHas(base, key) {
   if (base === null) return false;
   return base instanceof Map ? base.has(key) : Object.hasOwn(base, key);
@@ -129,7 +109,7 @@ function baseGet(base, key) {
   return base instanceof Map ? base.get(key) : (Object.hasOwn(base, key) ? base[key] : undefined);
 }
 
-// A key a plain object lists before the others: an array index.
+// Plain objects list array-index keys before all others.
 function isIndex(key) {
   return typeof key === "string" && /^(?:0|[1-9]\d*)$/.test(key) && Number(key) < 4294967295;
 }
@@ -146,12 +126,10 @@ export class PMap {
     this.seq = seq;
   }
 
-  // A map that reads `base` (an object or a Map) until a key changes.
   static over(base = null) {
     return new PMap(base, null, 0);
   }
 
-  // Whether anything changed since the base.
   get changed() {
     return this.root !== null;
   }
@@ -167,7 +145,6 @@ export class PMap {
     return one ? !one.g : baseHas(this.base, key);
   }
 
-  // The map with `key` set to `value`.
   with(key, value) {
     const hash = hashOf(key);
     const one = lookup(this.root, hash, key, 0);
@@ -178,7 +155,6 @@ export class PMap {
     return new PMap(this.base, insert(this.root, leaf(key, value, hash, seq, fresh, false), 0), live ? this.seq : this.seq + 1);
   }
 
-  // The map without `key`.
   without(key) {
     const hash = hashOf(key);
     const one = lookup(this.root, hash, key, 0);
@@ -189,8 +165,7 @@ export class PMap {
     return new PMap(this.base, root, this.seq);
   }
 
-  // Every [key, value], in the base's order: a plain object's (array-index
-  // keys first, in numeric order) unless the base is a Map.
+  // Entries in the base's order; plain-object rules: array-index keys first, in numeric order.
   entries() {
     if (this.root === null) return baseEntries(this.base);
     const kept = baseEntries(this.base).flatMap(([key, value]) => {
@@ -210,15 +185,12 @@ export class PMap {
     ];
   }
 
-  // The map as a plain object; the base itself when nothing changed.
   toObject() {
     if (this.root === null && this.base !== null && !(this.base instanceof Map)) return this.base;
     return Object.fromEntries(this.entries());
   }
 }
 
-// A list over a stored array: `at` reads it, `with` and `plus` answer a new
-// list, `less` drops the last item.
 export class PList {
   constructor(base, over, length) {
     this.base = base;
@@ -235,7 +207,6 @@ export class PList {
     return this.over.get(index) ?? this.base[index];
   }
 
-  // `index` up to the length: at the length it adds one.
   with(index, value) {
     return new PList(this.base, this.over.with(index, value), Math.max(this.length, index + 1));
   }

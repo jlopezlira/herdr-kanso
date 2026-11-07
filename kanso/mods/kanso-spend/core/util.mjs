@@ -19,8 +19,7 @@ import { findAsync, range } from "../pure.js";
 export const STORE_VERSION = 1;
 export const STORE_LOCK_STALE_MS = 10 * 60 * 1000;
 export const MAX_LINE_BYTES = 16 * 1024 * 1024;
-// A turn without harness-reported task boundaries is capped. This keeps idle
-// time from becoming active time without inventing sub-minute precision.
+// Caps a turn without harness-reported boundaries, so idle time never becomes active time.
 export const MAX_TURN_MS = 2 * 60 * 60 * 1000;
 
 export function isPlainObject(value) {
@@ -114,7 +113,6 @@ export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// An error that ends a command with its own exit code (2: a usage error).
 export class ExitError extends Error {
   constructor(message, exitCode) {
     super(message);
@@ -122,8 +120,7 @@ export class ExitError extends Error {
   }
 }
 
-// Ends the process with `code` once what was printed is out; 0 ends as Node
-// would by itself, so the process is never cut short on success.
+// A nonzero exit only after printed output is out; 0 ends as Node would, so success is never cut short.
 export async function exitWith(code) {
   if (!code) return;
   await new Promise((resolve) => process.stdout.write("", resolve));
@@ -154,8 +151,6 @@ export async function ensureParent(file, mode = 0o700) {
   await mkdir(path.dirname(file), { recursive: true, mode });
 }
 
-// Creates `file` (it must not exist yet), writes `text` and syncs it to disk.
-// The handle is closed whether or not the write works.
 async function writeNewSynced(file, text) {
   const handle = await open(file, "wx", 0o600);
   try {
@@ -189,8 +184,6 @@ export async function readJsonFile(file) {
 export async function backupCorruptStore(file) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const base = `${file}.corrupt-${stamp}`;
-  // The first free name of base, base-1 ... base-99; a name already taken is
-  // skipped, any other failure stops the backup.
   const saved = await findAsync(range(100).map((index) => (index === 0 ? base : `${base}-${index}`)), async (target) => {
     try {
       await copyFile(file, target, fsConstants.COPYFILE_EXCL);
@@ -239,8 +232,7 @@ async function tryUnlinkStaleLock(lockPath, observed) {
   if (observed?.directory) {
     if (!observed.ownerPath || current.ownerPath !== observed.ownerPath) return false;
     try {
-      // Only the reclaimer that removed this unique owner file may remove the
-      // directory. A delayed second reclaimer cannot delete a new owner's lock.
+      // Only the reclaimer that removed this unique owner file may rmdir: a late second cannot delete a new owner's lock.
       await unlink(observed.ownerPath);
     } catch (error) {
       if (error?.code === "ENOENT") return false;
@@ -251,16 +243,13 @@ async function tryUnlinkStaleLock(lockPath, observed) {
     });
     return true;
   }
-  // Compatibility with older file locks. unlink cannot remove a new directory
-  // lock if another reclaimer has already replaced the legacy lock.
+  // Legacy file locks: unlink cannot remove a directory lock that replaced them.
   await unlink(lockPath).catch((error) => {
     if (!["ENOENT", "EISDIR", "EPERM"].includes(error?.code)) throw error;
   });
   return true;
 }
 
-// One attempt to create the lock directory and its owner file: null when the
-// lock is ours, else { error }. A half-made lock is removed again.
 async function takeLock(lockPath, ownerPath, owner) {
   try {
     await mkdir(lockPath, { mode: 0o700 });
@@ -291,8 +280,6 @@ export async function withStoreLock(
   const ownerPath = path.join(lockPath, `owner-${token}.json`);
   const owner = `${JSON.stringify({ pid: process.pid, host, startedAt, token })}\n`;
 
-  // One try at the lock, then again after evicting a dead owner (at once) or
-  // after a short wait, until the deadline.
   const acquire = async () => {
     const failure = await takeLock(lockPath, ownerPath, owner);
     if (!failure) return;
@@ -303,8 +290,7 @@ export async function withStoreLock(
     const sameHost = observed?.host === host;
     const pid = Number(observed?.pid);
     const dead = sameHost && Number.isInteger(pid) && !isProcessAlive(pid);
-    // Only provably dead local owners can be evicted. Foreign/empty locks
-    // fail closed rather than allowing two writers based on elapsed time.
+    // Only provably dead local owners are evicted; foreign or empty locks fail closed rather than trusting elapsed time.
     const malformedOld = !observed?.directory && observed?.invalid && age > Math.max(staleMs, 60_000);
 
     if (dead || malformedOld) {

@@ -1,14 +1,5 @@
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// The sidebar's state, in the left nav's one database (kdb.js, through
-// store.js, which also takes in what panel.db and sleep.db held before):
-//   prefs   what you chose here: the view, each view's order, what is folded
-//   agents  each agent by its conversation: the name you gave it, its
-//           conversation's title and last message, its space and place
-//           there, its status (asleep among them)
-// Read once at start, then written as it changes. localStorage keeps a copy
-// of the prefs only so the first frame after a start is already right (the
-// database answers a moment later and is what counts).
+// localStorage mirrors the prefs only so the first frame after a start is already right; the database is what counts.
 import { Store } from "./store.js";
 import { tryOr } from "./pure.js";
 
@@ -17,11 +8,8 @@ const FIELDS = ["given", "title", "said", "space", "tab", "pos", "program", "sta
 const same = (x, y) => Boolean(x && y) && FIELDS.every((f) => (x[f] ?? null) === (y[f] ?? null));
 
 export class Panel {
-  // `seed`: the prefs' keys, read from localStorage for the first frame.
-  // `store`: the left nav's store (one per window, shared with what sleeps).
   constructor(seed = [], store = null) {
     this.store = store;
-    // A key not there (or no localStorage at all) is left out.
     this.cache = new Map(seed.flatMap((k) => {
       const v = tryOr(() => localStorage.getItem(k));
       return v != null ? [[k, v]] : [];
@@ -33,12 +21,11 @@ export class Panel {
 
   get kdb() { return (this.store ??= new Store()).kdb; }
 
-  // The database's state into memory (taking in the old files first, once).
   // True when a pref differs from the first frame's.
   async load() {
     await (this.store ??= new Store()).open();
     const [prefs, agents] = [await this.kdb.prefs(), await this.kdb.agents()];
-    for (const r of agents) this.agents.set(r.id, { name: r.name, title: r.title, said: r.said, space: r.space_id, pos: r.pos, program: r.program, status: r.status, restore: r.restore, project: r.project ?? null });
+    for (const r of agents) this.agents.set(r.id, { name: r.name, title: r.title, said: r.said, space: r.space_id, pos: r.pos, program: r.program, status: r.status, restore: r.restore, project: r.project ?? null, projectAt: r.project_at ?? null });
     if (!prefs.length) {
       for (const [k, v] of this.cache) this.write(() => this.kdb.setPref(k, v));
       return false;
@@ -53,7 +40,6 @@ export class Panel {
   mirror(key, value) { try { localStorage.setItem(key, value); } catch { /* the database has it */ } }
 
   get(key) { return this.cache.get(key) ?? null; }
-  // A JSON pref, when it is the same shape as `fallback`.
   json(key, fallback) {
     try {
       const v = JSON.parse(this.cache.get(key) ?? "null");
@@ -68,28 +54,20 @@ export class Panel {
     this.write(() => this.kdb.setPref(key, v));
   }
 
-  // What the sidebar saw of each agent (`seen`: records with their
-  // `conversation`) at `at`, when it looked: those that changed, and every
-  // one again each REFRESH_MS. That write also ends the ones no longer seen
-  // (gone), so it runs each REFRESH_MS even when nobody is left to write.
-  // The name you gave is what its terminal says (none: the automatic one).
-  // Names a wake could not put back on their terminals, to put back now:
-  // { terminal, conversation, name } for each agent seen without one.
+  // Writes also end the agents no longer seen (gone), so they run each REFRESH_MS even when nothing changed.
   toRestore(seen) {
     return [...seen.values()].filter((a) => a.conversation && !a.given && this.agents.get(a.conversation)?.restore)
       .map((a) => ({ terminal: a.terminal, conversation: a.conversation, name: this.agents.get(a.conversation).restore }));
   }
-  // Read again (what a wake in another window left to put back).
   async reloadAgents() {
     const rows = await this.kdb.agents(), ids = new Set(rows.map((r) => r.id));
-    for (const r of rows) { const was = this.agents.get(r.id); this.agents.set(r.id, { ...was, restore: r.restore, name: was?.name ?? r.name, project: r.project ?? null }); }
-    // One the database no longer lists has no project here either (cleared in another window).
-    for (const [id, was] of [...this.agents]) if (!ids.has(id) && was?.project) this.agents.set(id, { ...was, project: null });
+    for (const r of rows) { const was = this.agents.get(r.id); this.agents.set(r.id, { ...was, restore: r.restore, name: was?.name ?? r.name, project: r.project ?? null, projectAt: r.project_at ?? null }); }
+    // One the database no longer lists had its project cleared in another window.
+    for (const [id, was] of [...this.agents]) if (!ids.has(id) && was?.projectAt) this.agents.set(id, { ...was, project: null, projectAt: null });
   }
-  // An agent's project (kdb setProject), here at once and then written.
-  setProject(id, project) {
-    this.agents.set(id, { ...this.agents.get(id), project: project ?? null });
-    return this.write(() => this.kdb.setProject(id, project ?? null));
+  setProject(id, project, at = Date.now()) {
+    this.agents.set(id, { ...this.agents.get(id), project: project ?? null, projectAt: at });
+    return this.write(() => this.kdb.setProject(id, project ?? null, at));
   }
   remember(seen, at = Date.now()) {
     const list = [...seen.values()].filter((a) => a.conversation);

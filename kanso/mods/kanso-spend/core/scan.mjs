@@ -34,15 +34,6 @@ const MAX_WARNINGS = 50;
 const MAX_TRAVERSAL_ENTRIES = 250_000;
 const PARSER_VERSIONS = { pi: 3, codex: 5, claude: 2 };
 
-// A scan is a fold over the files found, one after another, and within each
-// file over its lines. What it carries is new at every step, never changed:
-// the working store (store.mjs), the file's parser state (adapters.mjs), and
-// the tally below.
-
-// ---------------------------------------------------------------------------
-// Tally: the totals, the counts per source, the warnings to show and the
-// files already seen. Each function answers a new tally.
-
 function newTally(sources) {
   return {
     stats: {
@@ -90,20 +81,16 @@ function tallyFinish(tally) {
   return { ...tally, reportedHidden: true, warnings: [...tally.warnings, `${tally.hidden} additional scan warnings were not shown.`] };
 }
 
-// `n` added to one total.
 function count(tally, field, n = 1) {
   return { ...tally, stats: { ...tally.stats, [field]: tally.stats[field] + n } };
 }
 
-// `n` added to one count of one source.
 function countFor(tally, sourceId, field, n = 1) {
   const source = tally.sources[sourceId];
   return { ...tally, sources: { ...tally.sources, [sourceId]: { ...source, [field]: source[field] + n } } };
 }
 
-// A file is scanned once per path and once per inode (a hard link or a
-// second root reaching the same file counts once). The answer of firstSight
-// is the tally that has seen it, or null when it was seen already.
+// A file counts once per path and once per inode: a hard link or a second root reaching it is scanned once.
 function seenPath(tally, file) {
   return tally.seenPaths.has(file);
 }
@@ -113,7 +100,6 @@ function firstSight(tally, file, inode) {
   return { ...tally, seenPaths: tally.seenPaths.with(file, true), seenInodes: tally.seenInodes.with(inode, true) };
 }
 
-// A warning of one source, its id in front.
 function sourceWarn(tally, source, message) {
   return tallyWarn(tally, `[${source.id}] ${message}`, source.id);
 }
@@ -143,11 +129,6 @@ async function walkRoot(root, adapter) {
   return { files: walked.files.flat(Infinity), sortBase: canonical, unavailable: false, fatal: walked.fatal };
 }
 
-// One directory and everything under it, depth first: its own files, then
-// its subdirectories from the last name to the first. Every entry seen counts
-// toward the traversal cap; at the cap the walk stops where it is. `seen`
-// carries the count, the first read error and whether the walk stopped;
-// `files` comes back nested, one list per directory.
 async function walkDir(dir, root, adapter, seen) {
   const listed = await readdir(dir, { withFileTypes: true }).then((entries) => ({ entries }), (error) => ({ error }));
   if (!listed.entries) {
@@ -168,8 +149,7 @@ async function walkDir(dir, root, adapter, seen) {
     if (entry.isDirectory()) return [];
     if (entry.isFile() && isEligible(adapter, entry.name)) return [full];
     if (!entry.isSymbolicLink()) return [];
-    // Do not follow directory symlinks (loops); a symlinked file is harmless.
-    // Broken links are simply not transcript files.
+    // Directory symlinks are not followed (loops); a symlinked file is harmless.
     const linkStat = await stat(full).catch(() => null);
     return linkStat?.isFile() && isEligible(adapter, full) ? [full] : [];
   }));
@@ -182,10 +162,7 @@ async function walkDir(dir, root, adapter, seen) {
   }, { ...here, files: own });
 }
 
-// Every eligible file of every enabled root, in order, and the tally with
-// what each root reported: { files, tally }.
 export async function discoverFiles(config, home, tally) {
-  // Every root of every enabled source, in config order.
   const roots = config.sources.flatMap((source, sourceIndex) => (source.enabled
     ? source.roots.map((rootText, rootIndex) => ({ source, sourceIndex, rootIndex, rootText, root: expandHome(rootText, home) }))
       .filter((job) => job.root)
@@ -226,17 +203,9 @@ function hashBytes(buffer) {
   return createHash("sha256").update(buffer).digest("hex").slice(0, 24);
 }
 
-// The byte offsets of every newline in `buffer`.
 function newlinesIn(buffer) {
   return [...buffer.toString("latin1").matchAll(/\n/g)].map((match) => match.index);
 }
-
-// ---------------------------------------------------------------------------
-// Lines: a byte stream split into JSON lines, chunk by chunk. A run is
-// { lines, acc }: `lines` is where the reading is (the last complete line's
-// end, the line count, a part line waiting in `pending` for its newline),
-// `acc` what the lines have made so far. Each step answers the next run;
-// `onLine(acc, record, info)` answers the next acc.
 
 function startLines({ offset = 0, lineNo = 0, discarding = false } = {}) {
   return {
@@ -246,7 +215,6 @@ function startLines({ offset = 0, lineNo = 0, discarding = false } = {}) {
     lineNo,
     offset,
     skippedLargeLine: false,
-    // Bytes fed so far.
     fed: 0,
   };
 }
@@ -271,12 +239,10 @@ function processLine(run, onLine, buffer, absoluteEnd, complete) {
   };
 }
 
-// A line too long to keep: counted and stepped over.
 function skipLine(run, absoluteEnd) {
   return { ...run, lines: { ...run.lines, lineNo: run.lines.lineNo + 1, offset: absoluteEnd, skippedLargeLine: true } };
 }
 
-// The line of `buffer` from `start` to the newline at `newline`.
 function lineAt(run, onLine, buffer, start, newline, chunkStart) {
   const absoluteEnd = chunkStart + newline + 1;
   if (run.lines.discarding) {
@@ -291,8 +257,6 @@ function lineAt(run, onLine, buffer, start, newline, chunkStart) {
   return piece.length > MAX_LINE_BYTES ? skipLine(run, absoluteEnd) : processLine(run, onLine, piece, absoluteEnd, true);
 }
 
-// The end of a chunk with no newline yet: kept for the next chunk, or
-// dropped once the line outgrows the limit.
 function keepPartial(run, remainder, chunkEnd) {
   const lines = run.lines;
   const kept = lines.discarding ? lines
@@ -321,8 +285,7 @@ function finishLines(run, onLine, fileSize) {
   if (run.lines.pendingLength === 0) return run;
   const whole = Buffer.concat(run.lines.pending, run.lines.pendingLength);
   if (whole.length > MAX_LINE_BYTES) return emptied;
-  // A trailing partial line is deliberately not persisted. offset stays at
-  // the last complete newline and the next scan rereads the tail from disk.
+  // A trailing partial line is deliberately not persisted: offset stays at the last complete newline and the next scan rereads it.
   const parses = tryOr(() => {
     JSON.parse(whole.toString("utf8"));
     return true;
@@ -330,14 +293,10 @@ function finishLines(run, onLine, fileSize) {
   return parses ? processLine(emptied, onLine, whole, fileSize, true) : emptied;
 }
 
-// `step(value, chunk, position)` over the bytes of `filePath` from `start`
-// to `end` (or EOF): { value } with what the chunks made, and `error` too
-// when a read failed part way (the value then covers the chunks before it).
 async function streamRange(filePath, start, end, step, initial) {
   const opened = await open(filePath, "r").then((handle) => ({ handle }), (error) => ({ error }));
   if (opened.error) return { value: initial, error: opened.error };
   const { handle } = opened;
-  // One chunk at `position`, then the rest after it, until `end` or EOF.
   const readFrom = async (position, value) => {
     if (position >= end) return { value };
     const toRead = Math.min(CHUNK_BYTES, end - position);
@@ -358,9 +317,6 @@ function hasZstdSupport() {
   return typeof zlib.createZstdDecompress === "function";
 }
 
-// What one file's lines can do to the scan, for the adapters (ctx in
-// adapters.mjs): each takes the line acc ({ work, state, tally }) and
-// answers the next.
 function lineContext(entry, source) {
   return {
     file: entry,
@@ -395,9 +351,7 @@ function lineContext(entry, source) {
   };
 }
 
-// What a line does: a JSON object goes to the source's parser, with the
-// line's hash for records that carry no id. A record that throws counts for
-// nothing and is reported.
+// A record that throws counts for nothing and is reported; the line hash identifies records that carry no id.
 function lineHandler(entry, source) {
   const context = lineContext(entry, source);
   const where = `${source.adapter} ${entry.path}`;
@@ -420,13 +374,10 @@ function lineHandler(entry, source) {
   };
 }
 
-// A run over the file's lines from `lines`, its acc the scan's work and
-// tally with the entry's parser state.
 function startRun(work, tally, entry, lines) {
   return { lines: startLines(lines), acc: { work, state: openParserState(entry.state), tally } };
 }
 
-// `object` without `key`, the order of the rest kept.
 function withoutKey(object, key) {
   if (!Object.hasOwn(object, key)) return object;
   const { [key]: _dropped, ...rest } = object;
@@ -450,8 +401,7 @@ async function scanPlainFile(work, tally, key, entry, source, filePath, fileStat
       discarding: entry.state.discardingLargeLine,
     }),
   );
-  // Keep the accepted complete prefix and its parser state together. The
-  // unfinished suffix is retried even if the file metadata is unchanged.
+  // On a read error the accepted complete prefix and its parser state are kept together; the unfinished suffix is retried next scan.
   const run = streamed.error ? streamed.value : finishLines(streamed.value, onLine, start + streamed.value.lines.fed);
   const parsed = closeParserState(run.acc.state);
   const read = streamed.error ? { ...parsed, readFailed: true } : withoutKey(parsed, "readFailed");
@@ -488,8 +438,6 @@ async function verifyZstd(filePath) {
   }
 }
 
-// `step(value, chunk)` over the decompressed bytes of an archive: { value },
-// and `error` too when the stream failed part way.
 async function streamArchive(filePath, step, initial) {
   const chunks = pipe(createReadStream(filePath), zlib.createZstdDecompress(), () => {});
   const iterator = chunks[Symbol.asyncIterator]();
@@ -530,8 +478,7 @@ async function scanCompressedFile(work, tally, key, entry, source, filePath, fil
     startRun(fresh.work, tally, fresh.entry, { offset: 0, lineNo: fresh.entry.lineNo ?? 0 }),
   );
   if (streamed.error) {
-    // The archive verified before this read, so it changed underneath us.
-    // Drop this file's partial contribution and retry it on the next scan.
+    // The archive verified before this read, so it changed underneath: drop this file's partial contribution and retry next scan.
     const dropped = resetFileEntry(streamed.value.acc.work, key, fresh.entry);
     const next = { ...dropped.entry, state: { ...dropped.entry.state, readFailed: true } };
     return {
@@ -571,8 +518,6 @@ function openCodeInt(value) {
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
 }
 
-// One OpenCode message row: its usage (and its time as a task) go into the
-// store. The answer is the working store and 1 for a malformed row, else 0.
 function openCodeMessage(work, entry, source, record) {
   const data = parseOr(record.data, null);
   if (!isPlainObject(data)) return { work, malformed: 1 };
@@ -617,9 +562,6 @@ function openCodeMessage(work, entry, source, record) {
   };
 }
 
-// Every message of an OpenCode database read again into a fresh entry:
-// { work, entry, malformedRows }. A failure part way throws, and the caller
-// keeps the working store it had before.
 function readOpenCodeMessages(sqlite, filePath, work, key, entry, source) {
   // Never open an external source writable, including on recovery errors.
   const db = new sqlite.DatabaseSync(filePath, { readOnly: true });
@@ -638,13 +580,8 @@ function readOpenCodeMessages(sqlite, filePath, work, key, entry, source) {
   }
 }
 
-/**
- * OpenCode stores sessions in one SQLite database. Messages are immutable
- * once completed and each assistant row carries canonical tokens, so a full
- * re-read through the max-upsert dedup is exact. The WAL file changes on
- * every write while the main database may not, so the checkpoint fingerprint
- * covers both files.
- */
+// OpenCode messages are immutable once completed, so a full re-read through the max-upsert dedup is exact.
+// The WAL changes on every write while the main database may not, so the fingerprint covers both files.
 async function scanOpenCodeDb(work, tally, source, filePath) {
   const statted = await stat(filePath).then((found) => ({ found }), (error) => ({ error }));
   if (statted.error) {
@@ -655,7 +592,6 @@ async function scanOpenCodeDb(work, tally, source, filePath) {
   }
   const dbStat = statted.found;
   if (!dbStat.isFile()) return { work, tally, dirty: false };
-  // No WAL right now is fine.
   const walStat = await stat(`${filePath}-wal`).catch(() => null);
   const fingerprint = `${dbStat.mtimeMs}:${dbStat.size}:${walStat?.mtimeMs ?? 0}:${walStat?.size ?? 0}`;
 
@@ -724,7 +660,6 @@ async function scanOpenCodeDb(work, tally, source, filePath) {
   };
 }
 
-// One file against the working store: { work, tally, dirty }.
 async function scanOneFile(work, tally, source, filePath) {
   if (source.adapter === "opencode") {
     return scanOpenCodeDb(work, tally, source, filePath);
@@ -764,8 +699,7 @@ async function scanOneFile(work, tally, source, filePath) {
     && entry.size === fileStat.size && entry.mtimeMs === fileStat.mtimeMs) {
     return { work: made.work, tally: count(tally, "unchangedFiles"), dirty: isNew };
   }
-  // Verify a changed archive decompresses before migrations/truncation reset
-  // anything, so a bad archive leaves the store as it was.
+  // Verify a changed archive decompresses before any reset, so a bad archive leaves the store as it was.
   if (entry.compressed && hasZstdSupport() && filePath.endsWith(".jsonl.zst")) {
     const failure = await verifyZstd(filePath);
     if (failure) {
@@ -776,10 +710,8 @@ async function scanOneFile(work, tally, source, filePath) {
       };
     }
   }
-  // Each of these reads the file again from the start. They are checked in
-  // turn: a reset clears the state the next one looks at.
-  // Migrate existing history once for accounting fixes. New files own no
-  // metadata and must never trigger a global ownership cleanup scan.
+  // Each reset re-reads the file from the start; they are checked in turn because a reset clears what the next looks at.
+  // Migration applies to existing history only: a new file owns no metadata and must never trigger a global ownership cleanup.
   const migrated = Boolean(!isNew && parserVersion && entry.state[parserKey] !== parserVersion);
   const afterMigration = migrated ? resetFileEntry(made.work, key, entry) : made;
   const zstdBack =
@@ -827,19 +759,13 @@ async function scanOneFile(work, tally, source, filePath) {
   return { work: putEntry(scanned.work, key, done), tally: scanned.tally, dirty: scanned.dirty || dirtyBefore };
 }
 
-// Every source scanned into `store`: the new store, with the stats,
-// warnings and per-source counts, and whether anything changed.
 export async function scanSources(store, { home, onProgress, deadline } = {}) {
   const discovered = await discoverFiles(store.config, home, newTally(store.config.sources));
   const total = discovered.files.length;
 
-  // File by file, in order. `stoppedAt` is how many were processed when the
-  // time budget ran out (null while it lasts).
   const run = await reduceSeries(discovered.files, async (done, found, processed) => {
     if (done.stoppedAt !== null) return done;
-    // Time budget: the host kills the collector after a fixed limit, and the
-    // store is only saved when the scan settles. Stop between files so every
-    // run persists its progress and the next refresh continues from there.
+    // Stop between files so every run persists its progress: the host kills the collector after a fixed limit.
     if (Number.isFinite(deadline) && processed > 0 && Date.now() >= deadline) {
       return { ...done, stoppedAt: processed };
     }

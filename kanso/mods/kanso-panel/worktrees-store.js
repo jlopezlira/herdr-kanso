@@ -1,22 +1,10 @@
 // The Worktrees panel's store, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// A local SQLite database (data/kanso-panel/worktrees.db, through the sqlite3
-// command, as Shipped keeps its own) with the history of every worktree the
-// panel has seen:
-// - `worktrees`: one row per worktree while it exists, by its folder. A scan
-//   adds the new ones and rewrites a row only when something in it changed
-//   (its branch, what it holds, its size); nothing is copied twice. When one
-//   is gone, removed here or anywhere else, its row stays, with when, by whom
-//   (`kanso` or `outside`) and the size it had: that is what was freed. A
-//   folder made again at the same path is a new row; the old one stays
-//   history.
-// - `scans`: the totals of each finished scan, for the days' chart.
+// A gone worktree's row stays, with when, by whom (`kanso` or `outside`) and the size it had: that is what was freed.
 import { exec, appHome, writeTextFile } from "herdr";
 import { range, tryOrAsync, mapSeries } from "./pure.js";
 
 export const STORE_DIR = "data/kanso-panel";
-// Two copies of the panel (or a scan and a removal) can reach the database at
-// once: each sqlite3 waits up to 10 s for the other instead of failing.
+// Two copies of the panel can reach the database at once: each sqlite3 waits up to 10 s instead of failing.
 const BUSY = ["-cmd", ".timeout 10000"];
 
 const SCHEMA = `
@@ -39,7 +27,6 @@ export const sqlText = (s) => (s === null || s === undefined ? "NULL" : `'${Stri
 const int = (n) => (n === null || n === undefined || !Number.isFinite(Number(n)) ? "NULL" : String(Math.round(Number(n))));
 const bit = (b) => (b ? "1" : "0");
 
-// What a row keeps of a worktree (or a left-behind folder).
 export function rowOf(w) {
   return {
     path: w.path, repo: w.repo ?? "", kind: w.orphan ? "orphan" : "worktree", branch: w.branch ?? null,
@@ -51,7 +38,6 @@ export function rowOf(w) {
 
 const FIELDS = ["repo", "kind", "branch", "dirty", "ahead", "only", "merged", "recent", "missing", "locked", "last_commit"];
 
-// SQL that adds the new ones and rewrites a live row only when it changed.
 // A size not measured yet (null) keeps the one stored.
 export function upsertSql(items, now) {
   return items.map((w) => {
@@ -65,7 +51,7 @@ WHERE ${differs};`;
   }).join("\n");
 }
 
-// A live row as the panel's item: stored facts, not checked again yet.
+// Stored facts, not checked again yet.
 export function itemOf(r) {
   return {
     path: r.path, repo: r.repo || null, orphan: r.kind === "orphan", branch: r.branch, size: r.size,
@@ -107,23 +93,18 @@ export class WorktreeStore {
     await this.sql(SCHEMA);
   }
 
-  // The worktrees seen last, as they were.
   async live() {
     return (await this.sql("SELECT * FROM worktrees WHERE gone_at IS NULL;", true)).map(itemOf);
   }
 
   async save(items, now = Date.now()) { await this.script(upsertSql(items, now)); }
 
-  // Rows no scan found again. A folder that no longer exists is gone (freed:
-  // the size it had); a record of a folder already gone, once its repository
-  // was read and no longer lists it. Anything else (a repository outside this
-  // scan's folders) is left as it was.
+  // A row no scan found again is gone when its folder is gone, or its repository was read and no longer lists it; anything else stays as it was.
   async sweep(seen, repos, now = Date.now()) {
     const rows = await this.sql("SELECT id, path, repo, missing, size FROM worktrees WHERE gone_at IS NULL;", true);
     const unseen = rows.filter((r) => !seen.has(r.path));
     if (!unseen.length) return 0;
     const check = unseen.filter((r) => !r.missing).map((r) => r.path);
-    // 200 paths a call, one call after another: the ones no longer there.
     const listed = await mapSeries(range(Math.ceil(check.length / 200)), async (k) => {
       const r = await exec("bash", ["-c", 'for p in "$@"; do [ -e "$p" ] || printf "%s\\n" "$p"; done', "sweep", ...check.slice(k * 200, k * 200 + 200)]);
       return String(r.stdout).split("\n").filter(Boolean);
@@ -134,7 +115,6 @@ export class WorktreeStore {
     return gone.length;
   }
 
-  // Removed here: when, and what it freed.
   async removed(w, got, now = Date.now()) {
     await this.sql(`UPDATE worktrees SET gone_at=${int(now)}, gone_by='kanso', freed=${int(got.kb ?? 0)}, branch_deleted=${bit(got.branches)}, size=COALESCE(${int(w.size)}, size)
 WHERE path=${sqlText(w.path)} AND gone_at IS NULL;`);
@@ -144,7 +124,7 @@ WHERE path=${sqlText(w.path)} AND gone_at IS NULL;`);
     await this.sql(`INSERT OR REPLACE INTO scans(at,worktrees,size,can_go,can_go_size,look,missing,orphans,repos) VALUES(${[now, s.worktrees, s.size, s.canGo, s.canGoSize, s.look, s.missing, s.orphans, s.repos].map(int).join(",")});`);
   }
 
-  // What was freed, in all and by day, and the disk the worktrees took each day (the day's last scan).
+  // Disk per day is the day's last scan.
   async history() {
     const [totals, byDay, disk, first] = await Promise.all([
       this.sql(`SELECT COALESCE(SUM(freed),0) kb, COALESCE(SUM(CASE WHEN gone_by='kanso' THEN freed END),0) kanso,

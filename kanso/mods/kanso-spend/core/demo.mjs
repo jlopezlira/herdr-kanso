@@ -1,6 +1,4 @@
-// Sample data for screenshots and trying the panel without any sessions:
-// create `data/kanso-spend/demo` (any content) and refresh. Nothing here is
-// read from disk; delete the file to go back to your own sessions.
+// Sample data: create data/kanso-spend/demo (any content) and refresh; delete it to go back to your own sessions.
 
 import { range } from "../pure.js";
 
@@ -25,13 +23,11 @@ const TASKS = [
   [null, "Upgrade the build to Node 22"],
 ];
 
-// A small deterministic generator so every screenshot looks the same: one
-// step turns a seed into the next seed and a number in [0, 1).
+// Deterministic so every screenshot looks the same.
 const step = (seed) => {
   const next = (seed * 1664525 + 1013904223) >>> 0;
   return [next, next / 2 ** 32];
 };
-// `n` numbers in a row from `seed`, and the seed after them.
 const draws = (seed, n) => range(n).reduce(([s, out]) => {
   const [next, value] = step(s);
   return [next, [...out, value]];
@@ -42,8 +38,6 @@ const pad = (n) => String(n).padStart(2, "0");
 /** Rows shaped like snapshotRows(), labels shaped like labels.json, live like liveSessions(). */
 export function demoData(today) {
   const [year, month, dayOfMonth] = today.split("-").map(Number);
-  // Day by day from 75 days back to today, each with one to four sessions;
-  // the seed and the session count carry from one day to the next.
   const { days } = range(76).map((k) => 75 - k).reduce(({ seed, session, days }, back) => {
     const date = new Date(year, month - 1, dayOfMonth - back);
     const day = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;

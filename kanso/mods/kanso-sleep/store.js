@@ -1,15 +1,5 @@
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// What sleeps, as the left nav keeps it (kdb.js, its one database): a tab
-// put to sleep is a row of `sleeps` (every pane it opens again, the space it
-// slept in by id) and each agent in it a row of `agents` whose status is
-// asleep, still in its space and place. Sleep writes through this and the
-// sidebar reads through it; shared "kanso.asleep" is only a copy of what it
-// read, for the other windows to draw at once.
-//
-// A sleep holds its row (its token) until its agents have left; a wake
-// claims it, one window at a time, and renews its hold while it works.
-// Every change that needs the hold says whether it still had it.
+// Shared "kanso.asleep" is only a copy of the database, for the other windows to draw at once.
 import { exec, appHome } from "herdr";
 import { programOf } from "./tabkit.js";
 import { Kdb, STALE_MS, newId } from "./kdb.js";
@@ -21,9 +11,6 @@ const agentsOf = (cols) => cols.flatMap((c) => c.panes).filter((p) => p.resume)
 const keptOf = (cols) => cols.flatMap((c) => c.panes).map((p) => p.resume).filter(Boolean);
 const busyAt = (at, now) => Number(at) > now - STALE_MS;
 
-// Rows as tabs: { id, from (its project), name, per, cols, saved, space (its
-// name then), spaceId, into, agents (as the left nav keeps them), pending,
-// waking (when each was last held) }, newest first.
 export function rowsOf(rows) {
   return (rows ?? []).flatMap((r) => {
     const l = json(r.layout, null);
@@ -32,14 +19,9 @@ export function rowsOf(rows) {
       into: json(r.into_tab, null), agents: r.agents ?? [], ...(r.pending || r.pending_at ? { pending: Number(r.pending_at) || 0 } : {}), ...(r.waking ? { waking: Number(r.waking_at) || 0 } : {}) }];
   }).toSorted((a, b) => b.saved - a.saved);
 }
-// Not going to sleep or waking right now, or that stopped half way so long
-// ago (then it shows again, to be woken).
+// One that stopped half way shows again once its hold goes stale, to be woken.
 export const idle = (a, now = Date.now()) => !busyAt(a.pending, now) && !busyAt(a.waking, now);
 
-// What the sidebar shows of a row: each pane that sleeps by the name it
-// went by and the terminal it ran in, and each agent as the left nav keeps
-// it (its conversation, name, title, space and place). `busy`: going to
-// sleep or waking right now; `pending`: going to sleep.
 export function shownOf(a, now = Date.now()) {
   const kept = new Map((a.agents ?? []).map((g) => [g.id, g]));
   return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, spaceId: a.spaceId ?? null, into: a.into ?? null, busy: !idle(a, now), pending: busyAt(a.pending, now),
@@ -50,12 +32,7 @@ export function shownOf(a, now = Date.now()) {
     }) };
 }
 
-// What an old file holds: `sql`'s rows; null when the file or its table is
-// not there. Any other failure (a lock held too long, no permission) throws,
-// so the migration waits for a read it can trust instead of passing it by.
-// Absent only when the system says so ("No such file"); a folder that
-// can't be looked into is an error, never taken for nothing there.
-// (matched at the end of ls's message, after the path, which it can't fake)
+// Any other failure throws, so the migration waits for a read it can trust; "none" only when ls's message ends in ": No such file or directory", which a path can't fake.
 const THERE = 'if [ -f "$1" ]; then echo file; elif out=$(LC_ALL=C ls -d "$1" 2>&1); then echo other; else case "$out" in *": No such file or directory") echo none;; *) echo "error: $out";; esac; fi';
 async function legacyRows(file, table, sql) {
   const there = (await exec("sh", ["-c", THERE, "sh", file])).stdout?.trim() ?? "";
@@ -70,19 +47,12 @@ async function legacyRows(file, table, sql) {
   return read(sql);
 }
 
-// The old sleep.db's rows as this database takes them in: each tab with the
-// space it slept in by name (its id is found once it fits one space), every
-// pane, and each agent by its conversation. A row it can't read is left
-// behind. An agent the old file had asleep twice stays only in the newest
-// sleep (its pane leaves the older one, which goes when nothing is left), so
-// waking either never runs it twice.
+// An agent the old file had asleep twice stays only in the newest sleep, so waking either never runs it twice.
 export function planMigration(rows) {
   const read = (rows ?? []).flatMap((r) => {
     const l = json(r.layout, null);
     return Array.isArray(l?.cols) ? [{ r, l }] : [];
   }).toSorted((x, y) => Number(y.r.saved) - Number(x.r.saved));
-  // Each conversation taken as it is accepted (`taken`, carried from pane to
-  // pane and tab to tab): twice in one tab is once too.
   const once = ({ panes, taken }, p) => {
     if (!p?.resume) return { panes: p ? [...panes, p] : panes, taken };
     if (taken.has(p.resume)) return { panes, taken };
@@ -102,7 +72,6 @@ export function planMigration(rows) {
 }
 
 export class Store {
-  // `legacy`: the folder the old sleep.db and panel.db live under (data/).
   constructor(kdb = new Kdb(), legacy = `${appHome()}/data`) {
     this.kdb = kdb;
     this.legacy = legacy;
@@ -114,21 +83,17 @@ export class Store {
     return (this.ready ??= (async () => {
       await this.kdb.open();
       if (await this.kdb.migrated()) return;
-      // The old files, read as they are (left in place): what slept, and the sidebar's prefs.
       const sleeps = await legacyRows(`${this.legacy}/kanso-sleep/sleep.db`, "asleep", "SELECT project, name, layout, saved FROM asleep;");
       const prefs = await legacyRows(`${this.legacy}/kanso-spaces/panel.db`, "prefs", "SELECT key, value FROM prefs;");
       await this.kdb.migrate({ sleeps: planMigration(sleeps), prefs: prefs ?? [] });
     })().catch((e) => { this.ready = null; throw e; }));
   }
 
-  // The tabs asleep (`all`: also those going to sleep or waking now).
   async asleep(all = false) {
     await this.open();
     const now = Date.now();
     return rowsOf(await this.kdb.sleeps()).filter((a) => all || idle(a, now));
   }
-  // Written going to sleep: its id. `a.space`: the space ({ id, name }); each
-  // pane its `tab` and `pos` when known. Throws when the name is taken.
   async sleep(project, a) {
     await this.open();
     const convs = (a.cols ?? []).flatMap((c) => c.panes).map((p) => p.resume).filter(Boolean);
@@ -137,14 +102,11 @@ export class Store {
     this.holds.set(id, token);
     return id;
   }
-  // This window's sleep still holds its row (and keeps it a while longer), or not.
+  // False once another window took the row: then this one changes nothing more.
   async holdSleep(id) { await this.open(); return this.holds.has(id) && this.kdb.holdSleep(id, this.holds.get(id)); }
-  // This window's sleep is done (true), or another took the row meanwhile (false).
   async settle(id) { await this.open(); const ok = await this.kdb.settle(id, this.holds.get(id)); this.holds.delete(id); return ok; }
   async drop(id) { await this.open(); const ok = await this.kdb.drop(id, this.holds.get(id)); this.holds.delete(id); return ok; }
-  // The panes kept (`cols`), under the wake's hold (`token`) or else this
-  // window's sleep's, which it lets go; `space`: where it is now; `wait`:
-  // not offered to wake for a while. False when the hold was lost.
+  // A sleep's own narrow lets its hold go; a wake's keeps it.
   async narrow(id, cols, token = null, { space = null, wait = false, restores = [] } = {}) {
     await this.open();
     const [row] = await this.kdb.read(`SELECT layout FROM sleeps WHERE id='${String(id).replace(/'/g, "''")}';`);
@@ -153,7 +115,7 @@ export class Store {
     if (!token) this.holds.delete(id);
     return ok;
   }
-  // The row as it is now with this wake's token, or null when another wake holds it or it is gone.
+  // Null when another wake holds it or it is gone.
   async claim(id) {
     await this.open();
     const row = await this.kdb.claim(id);
@@ -163,7 +125,6 @@ export class Store {
   }
   async renew(id, token) { await this.open(); return this.kdb.renew(id, token); }
   async release(id, token) { await this.open(); return this.kdb.release(id, token); }
-  // `restores`: [conversation, name] a wake could not put back on a terminal, kept in the same write.
   async woke(id, token, restores = []) { await this.open(); return this.kdb.woke(id, token, restores); }
   async forget(id) { await this.open(); return this.kdb.forget(id); }
 }

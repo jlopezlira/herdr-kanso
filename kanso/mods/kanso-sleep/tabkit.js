@@ -1,12 +1,5 @@
 // Arrangements and Sleep, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// A tab as data, and a tab again from that data: what each pane runs and
-// where, in the strip's columns and widths; and opening it as a new tab,
-// pane by pane where the strip puts a split. kanso-arrange (arrangements)
-// and kanso-sleep (tabs put to sleep) both use it, and the sidebar names
-// a sleeping tab's programs with it; kanso-arrange/tabkit.js
-// is the one you edit (`npm run sync:share` copies it, and a test fails
-// when a copy differs).
+// Shared source: npm run sync:share copies it, and a test fails when a copy differs.
 import { spaces, panes, shared, setShared, run, home, hc } from "herdr";
 import { retry, tryOr, findAsync, mapSeries, reduceSeries } from "./pure.js";
 
@@ -18,9 +11,7 @@ export const tilde = (cwd) => {
 };
 export const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + String(s).replaceAll("'", "'\\''") + "'");
 
-// A program's arguments without the session it resumed, so opening an
-// arrangement starts each agent fresh: Claude Code's --resume/-r <id>,
-// --session-id <id>, --continue/-c; Codex's `resume <id>`.
+// Resume/session flags are dropped so an arrangement starts each agent fresh.
 export function cleanArgv(argv) {
   if (!Array.isArray(argv) || !argv.length) return null;
   const [cmd, ...rest] = argv.map(String);
@@ -38,9 +29,6 @@ export function cleanArgv(argv) {
   }, { out: [cmd], skip: false }).out;
 }
 
-// What a terminal runs, from `hc get --json`: the program in the foreground
-// with its arguments (one you started in its shell, or one the terminal was
-// opened with), or null for a shell at its prompt.
 export const SHELLS = new Set(["zsh", "bash", "fish", "sh", "dash", "ksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
 export function commandOf(rec) {
   const fg = rec?.foreground;
@@ -48,9 +36,6 @@ export function commandOf(rec) {
   return cleanArgv(fg.argv);
 }
 
-// The tab's panes as columns, in the strip's order, each pane with what it
-// runs and where (`recs`: terminal address -> its `hc get` record; `extra`:
-// terminal address -> more to keep with that pane).
 export function captureTab(state, tabPanes, recs, extra = null) {
   const byId = new Map(tabPanes.map((p) => [p.pane, p]));
   const cols = (state?.cols?.length ? state.cols : tabPanes.map((p) => ({ panes: [p.pane], w: 1 / Math.max(1, tabPanes.length) })))
@@ -68,25 +53,19 @@ const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3", "ruby"]);
 export const programOf = (argv) => (!argv?.length ? "shell" : RUNTIMES.has(base(argv[0])) && argv[1] && !argv[1].startsWith("-") ? base(argv[1]) : base(argv[0]));
 export const summary = (a) => a.cols.flatMap((c) => c.panes).map((p) => programOf(p.argv)).join(", ");
 
-// A project: the space's folder on its machine.
 export const projectOf = (space) => `${space?.machine ?? ""}:${space?.folder || home()}`;
 export const folderOfKey = (key) => String(key ?? "").slice(String(key ?? "").indexOf(":") + 1);
 
-// A record's JSON as [value], or null when it is not JSON (a value of null
-// is still told apart from a failed read).
+// [value] tells a JSON null apart from a failed read.
 const parsed = (g) => tryOr(() => [JSON.parse(g.stdout)]);
-// Up to `times` looks at `ok()`, `ms` slept after each one that fails.
 const waitFor = (cx, times, ms, ok) => retry(times, async () => {
   if (ok()) return true;
   await cx.sleep(ms);
   return false;
 });
 
-// A new pane, once Herdr has it (one not in `seen`) and the strip has put
-// it in its place: the next split's "beside this one" needs that place.
-// `resume`: the pane is the one running that conversation (its program's
-// arguments name it): in a tab others open panes in too (another window's
-// wake, one you opened), the next new pane is not taken for it.
+// Waits for the strip to place the pane: the next split is positioned "beside this one".
+// `resume` matches the pane by its conversation id, so a pane opened elsewhere is not taken.
 export async function newPane(seen, cx, tab, resume = null) {
   const runs = async (q) => {
     const g = await hc(["get", q.terminal, "--json"]).catch(() => null);
@@ -104,10 +83,7 @@ export async function newPane(seen, cx, tab, resume = null) {
   throw new Error("Herdr did not open the pane");
 }
 
-// One pane (`p`: { argv, cwd }) opened in tab `tabId`, to the right of the
-// tab's last column, as a split there would place it. Returns its id; when
-// Herdr is too slow to show it, the error's `pending` (1) says it was asked
-// for and may still open.
+// On a timeout, the error's `pending` says the pane was asked for and may still open.
 export async function openInto(p, cx, tabId) {
   const cols = shared("strip.state")?.[tabId]?.cols ?? [];
   const inTab = panes().filter((q) => q.tab === tabId);
@@ -121,9 +97,6 @@ export async function openInto(p, cx, tabId) {
   catch (e) { throw new OpenError(e, { pending: 1 }); }
 }
 
-// An opening that stopped: the error that stopped it (its message), what it
-// did open (`opened`, the ids by column) and how many panes it asked Herdr
-// for that never showed (`pending`).
 export class OpenError extends Error {
   constructor(cause, { opened = [], pending = 0 } = {}) {
     super(cause instanceof Error ? cause.message : String(cause), { cause });
@@ -133,20 +106,6 @@ export class OpenError extends Error {
   }
 }
 
-// A tab `a` opened in `space`: a new tab with the first pane, then each
-// other pane beside or under the one before it, as the strip places a
-// split; then the columns' widths. `create` ({ name, folder, machine, key }):
-// no space for it yet, so one is made, which starts with a shell tab in its
-// folder that goes once the tab is open. `progress(text)` says how far it
-// is. `before(p)` runs before each pane opens and may stop it (throwing):
-// nothing opens that its caller no longer wants. Returns the panes' ids,
-// column by column; throws when Herdr fails it, the error's `opened`
-// holding the ids of the panes it did open (the same shape), so what
-// already runs is not opened twice, and `pending` how many it asked Herdr
-// for that never showed (they may still open: nothing is ended on a guess
-// of which is which). The space and the tab it makes are
-// found by a name no other opening has (then given theirs): what it closes
-// on failure is only ever its own.
 export const opening = (name) => `${name} (opening ${Math.random().toString(36).slice(2, 8)})`;
 export async function openTab(a, cx, { space: given = null, create = null, progress = () => {}, before = async () => {} } = {}) {
   const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ ...p, ci, ri })));
@@ -156,9 +115,7 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
     const { key: _key, ...args } = create;
     const had = new Set(spaces().map((sp) => sp.id)), mine = opening(args.name);
     run("space.new", { ...args, name: mine });
-    // The one just made, by the name only it has (a space another window
-    // makes meanwhile, of any name, is never taken); its starter tab too:
-    // it goes once the tab is open.
+    // Matched by the temp name only it has, so another window's new space is never taken.
     const found = await retry(50, async () => {
       await cx.sleep(100);
       const sp = spaces().find((w) => !had.has(w.id) && w.name === mine) ?? null;
@@ -172,13 +129,10 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
   const starter = fresh?.starter ?? null, made = fresh?.space.id ?? null;
   if (!space) throw new Error("no space to open it in");
   progress(`Opening 1 of ${flat.length}`);
-  // The new tab: by the name only it has; its first pane only from that
-  // tab, never one opening elsewhere.
+  // The new tab is matched by its unique temp name, never one opening elsewhere.
   const had = new Set((spaces().find((sp) => sp.id === space.id)?.tabs ?? []).map((t) => t.id)), mine = opening(a.name);
   const ours = () => (spaces().find((sp) => sp.id === space.id)?.tabs ?? []).filter((t) => !had.has(t.id) && t.name === mine);
-  // The starter tab of a space it made goes only as it was made: one pane,
-  // at its shell's prompt (one you started using meanwhile is yours); the
-  // space itself only when nothing else is in it.
+  // The starter tab and its space are closed only while provably untouched, so your work is never closed.
   const untouched = async (tabId) => {
     const ps = panes().filter((q) => q.tab === tabId);
     if (ps.length > 1) return false;
@@ -190,10 +144,7 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
     });
     return !busy;
   };
-  // A tab it made that came too late is its own only while it holds just
-  // one pane, running what it was made to run (an agent: on its
-  // conversation). Another pane in it, or one you opened in place of that
-  // one, is yours: the tab stays.
+  // A late tab is ours only while it holds just the pane it was made with; anything you add makes it yours.
   const alone = async (t) => {
     const ps = panes().filter((q) => q.tab === t.id);
     if (ps.length !== 1) return false;
@@ -210,11 +161,6 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
     const rest = (spaces().find((w) => w.id === made)?.tabs ?? []).filter((t) => t.id !== starter && !mine.some((m) => m.id === t.id));
     return !rest.length && (await everyAlone(mine)) && (!starter || (await untouched(starter)));
   };
-  // The opening as a run of steps, each from the state before it to the
-  // state after it: the tab once found, the panes asked of Herdr so far
-  // (`issued`) and the ids of those that showed, column by column. A step
-  // that throws leaves the state as it found it, with the error; the steps
-  // after it are skipped.
   const step = async (st, fn) => {
     if (st.failed) return st;
     try { return await fn(st); } catch (error) { return { ...st, failed: true, error }; }
@@ -248,18 +194,12 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
     });
     return step(sent, async ({ seen, ...st }) => {
       const made = await newPane(seen, cx, st.tab.id, p.resume ?? null);
-      // A pane joins its column (the one before it in a stack) or starts the next.
       const ids = p.ci < st.ids.length ? st.ids.with(p.ci, [...st.ids[p.ci], made.pane]) : [...st.ids, [made.pane]];
       return { ...st, ids };
     });
   }, started);
   if (end.failed) {
-    // What this opening asked for and never got back may still open. Only
-    // what is provably its own is closed: the space it made (nothing of it
-    // opened), else the tab it made when that came too late to be found
-    // (by the name only it has). A pane that shows late in its tab is not
-    // told apart from one you opened there: it is left, and counted as
-    // pending, for the caller to keep the agent from waking twice.
+    // Only what is provably ours is closed; a late pane can't be told from one you opened, so it stays, counted as pending.
     await cx.sleep(3000);
     const left = end.issued - end.ids.flat().length;
     const closeLate = async () => {

@@ -1,21 +1,5 @@
 // Kanso's Shipped panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-//
-// Vanity metrics, on purpose: what you delivered, counted as generously as
-// GitHub allows, drawn the way Spend draws what you spent (one centered
-// column, a big light number, periods with arrows, then the breakdowns).
-//
-// Statistics only, never one item at a time from GitHub. The store
-// (shipped-store.js, SQLite) holds your commits as your machines read them in
-// local git, shared through a private gist, and each repository's weekly
-// contributor sums from GitHub; a repository's week counts the larger of the
-// two. Each refresh reads only what changed: repositories pushed since,
-// branches that moved, machines that published. One GraphQL query of counts
-// per period adds contributions (private ones included, as your profile counts
-// them), reviews, merged pull requests, the last year's calendar (streak, best
-// day, the heat map) and every pull request you ever merged. GitHub's sums are
-// weekly, so a day leads with contributions. Records are kept in
-// shared("kanso.shipped.bests"); setting one toasts once.
-//
+// Statistics only, never one item at a time from GitHub.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
@@ -46,8 +30,7 @@ const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,
 const fromIsoDay = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).getTime(); };
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 
-// A period in local time: kind "day" | "week" (from Monday) | "month" | "year",
-// offset 0 for the current one, -1 for the one before.
+// A period in local time; weeks run from Monday.
 export function periodRange(kind, offset, now = Date.now()) {
   const t = new Date(now), y = t.getFullYear(), m = t.getMonth(), d = t.getDate();
   const monday = d - ((t.getDay() + 6) % 7) + 7 * offset;
@@ -58,8 +41,7 @@ export function periodRange(kind, offset, now = Date.now()) {
   return { start: start.getTime(), end: end.getTime() };
 }
 
-// The span to compare with: the period before, cut at the same point when the
-// current one is still running ("vs this point last month").
+// The period before, cut at the same point when the current one is still running.
 export function comparedRange(kind, offset, now = Date.now()) {
   const prev = periodRange(kind, offset - 1, now);
   if (offset !== 0) return prev;
@@ -81,26 +63,18 @@ const comparedLabel = (kind, offset) => offset === 0
   ? { day: "vs this time yesterday", week: "vs last week", month: "vs this point last month", year: "vs this point last year" }[kind]
   : { day: "vs the day before", week: "vs the week before", month: "vs the month before", year: "vs the year before" }[kind];
 
-// ---- GitHub's weekly sums ----
-// A repository's entry: { fetched (ms), pushed (ISO), weeks: [[week start ms, additions, deletions, commits]] }.
-
-// Your weeks from a stats/contributors answer (only weeks with something in
-// them); null while GitHub is still computing (it answers {} then).
+// Null while GitHub is still computing the statistics (it answers {} then).
 export function yourWeeks(body, login) {
   if (!Array.isArray(body)) return null;
   const me = body.find((e) => e?.author?.login?.toLowerCase() === String(login).toLowerCase());
   return (me?.weeks ?? []).filter((w) => w.a || w.d || w.c).map((w) => [w.w * 1000, w.a, w.d, w.c]);
 }
 
-// GitHub's weeks start on Sunday, UTC. Placed at Monday noon UTC, a week lands
-// in the local Monday-to-Sunday week it mostly covers, whatever the time zone.
+// GitHub's weeks start Sunday UTC; at Monday noon a week lands in the local Monday-to-Sunday week it mostly covers, any time zone.
 export const weekAt = (w) => w + 1.5 * DAY;
 
-// Lines and commits of the weeks that land in [start, end), in total and per
-// repository. The panel keeps what this gives while the stats are the same
-// reading (its sumsIn below), so this stays a plain function of its inputs.
+// A plain function of its inputs: the panel caches it per reading (sumsIn below).
 export function sumWeeks(stats, start, end) {
-  // Each repository's sums in the span, then the totals over all of them.
   const sum = (list, pick) => list.reduce((n, x) => n + pick(x), 0);
   const repos = Object.entries(stats?.repos ?? {}).map(([name, entry]) => {
     const weeks = (entry.weeks ?? []).filter((w) => { const at = weekAt(w[0]); return at >= start && at < end; });
@@ -110,13 +84,10 @@ export function sumWeeks(stats, start, end) {
   return { add: sum(repos, (r) => r.add), del: sum(repos, (r) => r.del), commits: sum(repos, (r) => r.commits), byRepo };
 }
 
-// How many spans the panel keeps sums for: a draw asks for up to four (the
-// period, the one before, all time, the breakdown's week), and a running
-// period's "this point last time" is a new span on every draw.
+// A draw asks for up to four spans, and a running period's compare point is a new span on every draw.
 const KEPT_SPANS = 8;
 
-// The current and longest run of days with at least one contribution. Today
-// without one yet does not break the current run.
+// Today without a contribution yet does not break the current run.
 export function streaks(days, today) {
   const list = days ?? [];
   const { longest } = list.reduce((acc, d) => {
@@ -124,7 +95,6 @@ export function streaks(days, today) {
     const run = acc.run + 1;
     return { run, longest: run > acc.longest.n ? { n: run, end: d.date } : acc.longest };
   }, { run: 0, longest: { n: 0, end: null } });
-  // The current run: the days with some up to the last one (today left out while it has none).
   const last = list.length - 1;
   const upTo = last >= 0 && list[last].date === today && list[last].contributionCount === 0 ? last : last + 1;
   const counted = list.slice(0, upTo);
@@ -132,8 +102,7 @@ export function streaks(days, today) {
   return { current, longest };
 }
 
-// The contributions of [start, end): the calendar's days (private ones
-// included) when it reaches back that far, else the period's totals.
+// The calendar's days (private ones included) when it reaches back that far, else the period's totals.
 export function contributionsIn(days, start, end, totals) {
   if (days?.length && fromIsoDay(days[0].date) <= start) {
     return days.reduce((n, d) => { const at = fromIsoDay(d.date); return at >= start && at < end ? n + d.contributionCount : n; }, 0);
@@ -143,13 +112,10 @@ export function contributionsIn(days, start, end, totals) {
     + totals.totalIssueContributions + totals.restrictedContributionsCount;
 }
 
-// Personal bests from the calendar and the weekly sums.
 export function computeRecords({ days, stats }) {
-  // The first of the best: `score(x)` above 0 and above every one before it.
   const best = (list, score, make) => list.reduce((top, x) => (score(x) > 0 && (!top || score(x) > top.score) ? { score: score(x), value: make(x) } : top), null)?.value ?? null;
   const bestDay = best(days ?? [], (d) => d.contributionCount, (d) => ({ n: d.contributionCount, date: d.date }));
   const { longest } = streaks(days, null);
-  // Every repository-week, at its local week and month.
   const rows = Object.values(stats?.repos ?? {}).flatMap((entry) => (entry.weeks ?? []).map(([w, a, , c]) => {
     const at = weekAt(w);
     return { week: periodRange("week", 0, at).start, month: periodRange("month", 0, at).start, a, c };
@@ -177,10 +143,7 @@ const BETTER = {
 export const RECORD_NAMES = { bestDay: "Best day", bestWeek: "Best week", bestMonth: "Best month", longestStreak: "Longest streak", busiestWeek: "Most commits in a week" };
 const recordAt = (k, r) => k === "bestDay" ? fromIsoDay(r.date) : k === "longestStreak" ? (r.end ? fromIsoDay(r.end) : 0) : r.start;
 
-// Keeps the best of what was stored and what was just read. `beaten`: the
-// records you just set, improving on a stored one within the last week (a
-// month for the best month). A first reading beats nothing, and an older best
-// found later (a repository read for the first time) updates it quietly.
+// `beaten`: records set within the last week (a month for best month); an older best found later updates quietly, no toast.
 export function mergeRecords(stored, found, now = Date.now()) {
   return Object.entries(BETTER).reduce(({ kept, beaten }, [k, better]) => {
     const r = found[k];
@@ -200,9 +163,6 @@ export function recordText(k, r) {
   return { value: fmt(r.n), unit: "commits", detail: `week of ${dayName(r.start)}` };
 }
 
-// How many weeks of the calendar fit `width`, and how big each square is:
-// as many whole weeks as fit, up to a year, with squares of 9 to 16 that
-// fill the width.
 export function heatLayout(width) {
   const w = Math.max(120, Math.floor(width));
   const weeks = Math.max(4, Math.min(53, Math.floor((w + CELL_GAP) / (9 + CELL_GAP))));
@@ -210,8 +170,6 @@ export function heatLayout(width) {
   return { weeks, cell };
 }
 
-// The per-period query: contributions now and before, merged counts, the
-// year's calendar and every merged pull request you ever had, counted.
 export function periodQuery(cur, prev, now) {
   const end = (r) => Math.max(r.start, Math.min(r.end, now) - 1000);
   const span = (r) => `from:"${iso(r.start)}",to:"${iso(end(r))}"`;
@@ -226,13 +184,10 @@ prevMerged:search(query:"${merged(prev)}",type:ISSUE,first:0){issueCount}
 ever:search(query:"is:pr author:@me is:merged",type:ISSUE,first:0){issueCount}}`;
 }
 
-// Every repository you contributed to or can reach (yours, as a collaborator,
-// in your organizations), with when it was last pushed.
 export const REPOS = `query($after:String,$own:String){viewer{databaseId
 contributed:repositoriesContributedTo(first:100,after:$after,includeUserRepositories:true,contributionTypes:[COMMIT,PULL_REQUEST,PULL_REQUEST_REVIEW,REPOSITORY]){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}
 access:repositories(first:100,after:$own,affiliations:[OWNER,COLLABORATOR,ORGANIZATION_MEMBER],ownerAffiliations:[OWNER,COLLABORATOR,ORGANIZATION_MEMBER],orderBy:{field:PUSHED_AT,direction:DESC}){pageInfo{hasNextPage endCursor} nodes{nameWithOwner pushedAt}}}}`;
 
-// "most at 23:00 · 38% after 9 pm"
 export function rhythmNote(hours) {
   const total = hours.reduce((a, b) => a + b, 0);
   if (!total) return "";
@@ -270,10 +225,7 @@ export class Shipped {
 
   key() { return `${this.kind}:${this.offset}`; }
 
-  // sumWeeks over this.stats, kept per span while the stats are the same
-  // reading: a draw asks for the period, the one before and all time on every
-  // shared write anywhere. `this.sums` is { stats, bySpan }, replaced whole
-  // when a span is added or a new reading comes in, never changed.
+  // Cached per span while the stats are the same reading: a draw asks several times, on every shared write anywhere.
   sumsIn(start, end) {
     const span = `${start}:${end}`, kept = this.sums?.stats === this.stats ? this.sums.bySpan : [];
     const hit = kept.find(([s]) => s === span);
@@ -290,7 +242,6 @@ export class Shipped {
     cx.notify();
   }
 
-  // The period's query; the repositories' sums are read alongside, on their own.
   refresh(cx, again = false) {
     if (this.loading) { this.pending = this.pending || again || "missing"; return; }
     this.loading = true;
@@ -338,7 +289,6 @@ export class Shipped {
     cx.notify();
   }
 
-  // When and where you ship in the shown period (read from the store, once per period).
   async readRhythm() {
     const key = this.key();
     if (this.rhythm[key] || !this.stats) return;
@@ -346,8 +296,6 @@ export class Shipped {
     try { this.rhythm[key] = await this.store.rhythm(r.start / 1000, r.end / 1000); } catch {}
   }
 
-  // Everything you sign commits with: GitHub's names for you, this machine's
-  // git identity and the ones your other machines published.
   async identities(databaseId) {
     const conf = await Promise.all(["user.email", "user.name"].map((k) => exec("git", ["config", "--global", k]).catch(() => null)));
     const synced = JSON.parse((await this.store.meta("identities")) ?? "[]");
@@ -356,9 +304,6 @@ export class Shipped {
     return { mine: [...new Set(mine.filter(Boolean))], all: [...new Set([...mine, ...synced].filter(Boolean))] };
   }
 
-  // GitHub's sums for the repositories pushed since they were read, this
-  // machine's git for the repositories whose branches moved, then your other
-  // machines through the gist. Each step keeps what it read in the store.
   async sync(cx) {
     await this.store.open();
     this.stats = await this.store.weekly();
@@ -366,7 +311,6 @@ export class Shipped {
     cx.notify();
 
     this.phase = "your repositories on GitHub"; cx.notify();
-    // Every page of one of the two lists, one after another: [{ databaseId, nodes }].
     const pagesOf = async (field, after = null, got = []) => {
       const v = (await gql(REPOS, field === "contributed" ? { after } : { own: after })).viewer;
       const page = v[field];
@@ -379,8 +323,6 @@ export class Shipped {
     const known = new Map((await this.store.ghRepos()).map((r) => [r.repo, r]));
     const repos = new Map([...listed, ...[...known].filter(([name]) => !listed.has(name)).map(([name, r]) => [name, r.pushed])]);
     const due = [...repos].filter(([name, pushed]) => { const had = known.get(name); return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched); });
-    // Up to RETRIES rounds, 5 s apart: each asks for the repositories still
-    // due, PARALLEL at a time, and the next one for those GitHub was still computing.
     const rounds = async (due, round) => {
       if (!due.length || round >= RETRIES) return;
       if (round) await exec("sleep", ["5"]);
@@ -416,8 +358,7 @@ export class Shipped {
     } catch (e) { this.machineError = String(e?.message ?? e); }
   }
 
-  // Keeps the bests, and toasts the ones just set. The sums' records wait
-  // until every repository is in, so a half-read one is never a "new record".
+  // The sums' records wait until every repository is in: a half-read one is never a "new record".
   checkRecords() {
     if (!this.days) return;
     const whole = this.stats && !this.syncing ? this.stats : null;
@@ -431,10 +372,7 @@ export class Shipped {
     }
   }
 
-  // ---- sharing ----
-
-  // The card's data: the summary plus the streak, the calendar, the records
-  // and the hours. Never a repository or machine name.
+  // Never a repository or machine name.
   cardData() {
     const { current, longest } = streaks(this.days, isoDay(new Date()));
     const records = Object.keys(RECORD_NAMES).filter((k) => this.records[k]).map((k) => ({ name: RECORD_NAMES[k], ...recordText(k, this.records[k]) }));
@@ -442,13 +380,10 @@ export class Shipped {
     return { streak: current, longest: longest.n, weeks: this.weeks ?? [], records, rhythm: r ? { hours: r.hours, note: rhythmNote(r.hours) } : null };
   }
 
-  // What the share card holds: this period's global numbers, nothing named.
   shareCard() {
     const s = this.summary(), extra = this.cardData();
     return { spec: shippedSpec(s, extra), text: shareText(s, extra), name: `shipped-${s.period}`, title: "Shipped" };
   }
-
-  // ---- drawing, as Spend draws ----
 
   periods(c) {
     const tab = (kind) => {
@@ -467,7 +402,6 @@ export class Shipped {
         .child(iconButton("shipped-next", "chevron-right", "Next period", (cx) => this.pick(this.kind, this.offset + 1, cx), c, { disabled: this.offset >= 0 })));
   }
 
-  // The shown period in numbers, for the hero and the share card.
   summary() {
     const now = Date.now();
     const cur = periodRange(this.kind, this.offset, now), prev = comparedRange(this.kind, this.offset, now);
@@ -526,8 +460,6 @@ export class Shipped {
       .when(Boolean(s.error), (el) => el.child(div().text_size(12).text_color(c.red).child(s.error)));
   }
 
-  // The current streak, then as many weeks of the calendar as fit, its
-  // squares sized to fill the width, in the accent.
   streak(c, width) {
     const { current, longest } = streaks(this.days, isoDay(new Date()));
     const level = { NONE: null, FIRST_QUARTILE: "40", SECOND_QUARTILE: "70", THIRD_QUARTILE: "b0", FOURTH_QUARTILE: "ff" };
@@ -600,8 +532,7 @@ export class Shipped {
       .child(`${this.firstRead ? "Adding up" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a few minutes; after that only what changed is read." : ""}`);
   }
 
-  // When you ship (commits by hour, local time) and from which machines, in
-  // the shown period: from the commits the machines read, not GitHub's sums.
+  // From the commits the machines read, not GitHub's sums.
   rhythmView(c) {
     const r = this.rhythm[this.key()];
     const total = r ? r.hours.reduce((a, b) => a + b, 0) : 0;
@@ -640,7 +571,7 @@ export class Shipped {
         .child(div().text_size(10.5).text_color(c.dim).child("Statistics only, kept in data/kanso-panel/shipped.db: your commits as every machine of yours read them (repository, hash, time, lines; no messages or code), shared between machines through a private gist, and GitHub's weekly sums for the rest. A repository's week counts the larger of the two. Contributions count the way your profile does, private ones included."));
     return v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
+      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
           .child(h_flex().w_full().items_center().justify_between().gap(G.md)
             .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Shipped"))

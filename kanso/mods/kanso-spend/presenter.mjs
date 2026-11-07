@@ -1,12 +1,5 @@
 #!/usr/bin/env node
-// Node side of the Spend costs panel.
-//
-// The native view (QuickJS) parses this output inside one time-limited step,
-// so the payload stays small: every number and label arrives formatted, and
-// raw rows never leave Node.
-//
-//   presenter.mjs snapshot --store <file> --home <dir> [--options <json>]   scan, then costs
-//   presenter.mjs prepare  --store <file> [--home <dir>] [--options <json>] costs from the store
+// Node side of Spend: the QuickJS view parses this in one time-limited step, so all values arrive pre-formatted and raw rows never leave Node.
 import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -35,8 +28,6 @@ function usage() {
   ].join("\n");
 }
 
-// The flags after the command, one at a time: `--key=value` takes one
-// argument, `--key value` two, and a key with no value left is an error.
 function parseFlags(argv, index = 1, options = {}) {
   if (index >= argv.length) return options;
   const arg = argv[index];
@@ -53,8 +44,6 @@ function parseArgs(argv) {
   return { command: argv[0], options: parseFlags(argv) };
 }
 
-// JSON text as a value; a parse error becomes a usage error (exit 2) that
-// names the flag it came from.
 function parseFlagJson(raw, flag) {
   try {
     return JSON.parse(raw);
@@ -77,7 +66,6 @@ function today() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** What the view shows about the scan itself: when, and whether it is still catching up. */
 function scanState(snapshot, lastScanAt) {
   const stats = snapshot?.stats ?? {};
   return {
@@ -92,11 +80,7 @@ function scanState(snapshot, lastScanAt) {
 
 const LIVE_WINDOW_MS = 30 * 60 * 1000;
 
-/**
- * Sessions whose transcript changed recently, with when (ms). One pass over
- * the rows of the recent files, grouped by session once: a session's time is
- * the latest of its files.
- */
+/** Sessions whose transcript changed in the last LIVE_WINDOW_MS, with their latest file time in ms. */
 function liveSessions(store) {
   const now = Date.now();
   const seen = Object.values(store?.files ?? {}).flatMap((file) => {
@@ -121,7 +105,6 @@ async function costsFor(rows, storePath, home, options, { refresh = false, label
   });
 }
 
-/** What the Settings view edits: which harnesses are read, and what plans cost. */
 async function settingsFor(store, storePath) {
   const overrides = await loadOverrides(storePath);
   return {
@@ -152,7 +135,6 @@ export async function run(argv, environment = {}) {
   const home = path.resolve(options.home ?? environment.home ?? os.homedir());
   const viewOptions = parseOptions(options.options);
 
-  // Sample data instead of your sessions while data/<mod>/demo exists.
   if (existsSync(path.join(path.dirname(storePath), "demo")) && command !== "configure") {
     const demo = demoData(typeof viewOptions.today === "string" ? viewOptions.today : today());
     const costs = await costsFor(demo.rows, storePath, home, viewOptions, { labels: demo.labels, live: demo.live });
@@ -176,10 +158,7 @@ export async function run(argv, environment = {}) {
   const snapshot = command === "configure"
     ? await configureSources(storePath, home, options.sources)
     : await collectSnapshot("snapshot", { store: storePath, home });
-  // Task labels and list prices are best-effort and time-boxed: a slow pass
-  // leaves the rest for the next refresh instead of failing this one. A store
-  // that cannot be read skips the labels too; null labels fall back to the
-  // cached ones.
+  // Labels and the catalog refresh are best-effort and time-boxed: a slow pass leaves the rest for the next refresh.
   const store = snapshot.store ?? await tryOrAsync(async () => (await loadStore(storePath, { readOnly: true })).store, null);
   const labels = store
     ? await tryOrAsync(async () => (await updateLabels(store, storePath, { home, deadline: startedAt + LABEL_DEADLINE_MS })).labels, null)
@@ -192,7 +171,6 @@ export async function run(argv, environment = {}) {
   return { exitCode: 0, stdout: payload(command, viewOptions, scanState(snapshot), costs, await settingsFor(store, storePath)), stderr: "" };
 }
 
-// Only the enabled flags change here; everything else in the config stays.
 async function configureSources(storePath, home, sources) {
   const wanted = parseFlagJson(sources ?? "{}", "--sources");
   const current = (await loadStore(storePath, { readOnly: true })).store.config;
