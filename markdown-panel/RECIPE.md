@@ -57,6 +57,11 @@ files next to it are one build of it.
 - The folder is the focused pane's current folder, else your home. The list
   is `git ls-files -- '*.md' '*.markdown' '*.mdx'` there, else `find` 3 deep
   (skipping `node_modules`), at most 40, shallowest first. A click opens one.
+- A pane on another machine (an SSH machine in `hc machine ls`): the list
+  and the file come from that machine (`exec` and `readTextFile` with `on`,
+  the space's `machine`), its folder shown as `machine: folder`. The file is
+  read only there and read again every 3 seconds (`watchFolder` watches only
+  this computer).
 - **Editing**: a double-click on a block opens it; a double-click below the
   last block adds a paragraph there. Escape, or a double-click on another
   block, closes it, and the document is split into blocks again (an empty
@@ -134,6 +139,8 @@ and made the default with `LSSetDefaultRoleHandlerForContentType` (through
 
 - `herdr-app check mods/markdown-panel` reports nothing.
 - Cmd+Shift+M lists the folder's Markdown; a click shows one formatted.
+- In a pane on an SSH machine, Cmd+Shift+M lists that machine's Markdown
+  and a click shows it, read only.
 - A double-click on a paragraph shows only that paragraph's text; typing
   saves within a second ("Saved"); Escape shows it formatted again.
 - A double-click on a table shows the grid; "Add row" adds one to the file.
