@@ -4,6 +4,7 @@
 // tests load it as is. The daemon (guard.mjs) writes now.json every minute
 // and history.json alongside; the view reads both and keeps only what this
 // file derives from them (a few hundred short strings and ratios).
+import { parseOr } from "./pure.js";
 
 /** now.json older than this means the guard stopped. */
 export const STALE_MS = 3 * 60_000;
@@ -47,17 +48,19 @@ export function clock(ms, now = Date.now()) {
  */
 export function parseNow(text, now = Date.now()) {
   if (!text || !String(text).trim()) return { state: "off", data: null };
-  let data;
-  try { data = JSON.parse(text); } catch { return { state: "bad", data: null }; }
-  if (!data || typeof data !== "object" || data.v !== 1 || !num(data.at)) return { state: "bad", data: null };
-  data.agents = Array.isArray(data.agents) ? data.agents.filter((a) => a && typeof a === "object") : [];
-  data.agents.sort((a, b) => (num(b.mb) ?? 0) - (num(a.mb) ?? 0));
-  data.heaviest = Array.isArray(data.heaviest) ? data.heaviest.filter((p) => p && typeof p === "object") : [];
-  data.events = Array.isArray(data.events) ? data.events.filter((e) => e && num(e.at)).sort((a, b) => b.at - a.at) : [];
-  data.machine = data.machine ?? {};
-  data.window = data.window ?? {};
-  data.core = data.core ?? {};
-  data.limits = data.limits ?? {};
+  const raw = parseOr(text, null);
+  if (!raw || typeof raw !== "object" || raw.v !== 1 || !num(raw.at)) return { state: "bad", data: null };
+  // The file's own fields, with every part the view draws made safe to read.
+  const data = {
+    ...raw,
+    agents: (Array.isArray(raw.agents) ? raw.agents.filter((a) => a && typeof a === "object") : []).toSorted((a, b) => (num(b.mb) ?? 0) - (num(a.mb) ?? 0)),
+    heaviest: Array.isArray(raw.heaviest) ? raw.heaviest.filter((p) => p && typeof p === "object") : [],
+    events: Array.isArray(raw.events) ? raw.events.filter((e) => e && num(e.at)).toSorted((a, b) => b.at - a.at) : [],
+    machine: raw.machine ?? {},
+    window: raw.window ?? {},
+    core: raw.core ?? {},
+    limits: raw.limits ?? {},
+  };
   return { state: now - data.at > STALE_MS ? "stale" : "ok", data };
 }
 
@@ -72,12 +75,12 @@ export function agentMeta(a) {
 
 /** The limits the guard works to, as one footnote line. */
 export function limitsNote(l = {}) {
-  const parts = [];
-  if (num(l.windowMB)) parts.push(`Window restarts past ${size(l.windowMB)}`);
-  if (l.recycle === false) parts.push("agents are never recycled");
-  else if (num(l.agentMB)) parts.push(`idle agents recycle past ${size(l.agentMB)}${num(l.agentIdleMin) ? ` after ${span(l.agentIdleMin)}` : ""}`);
-  if (num(l.lowFreePct)) parts.push(`notice under ${l.lowFreePct}% free`);
-  return parts.join(" · ");
+  return [
+    num(l.windowMB) ? `Window restarts past ${size(l.windowMB)}` : null,
+    l.recycle === false ? "agents are never recycled"
+      : num(l.agentMB) ? `idle agents recycle past ${size(l.agentMB)}${num(l.agentIdleMin) ? ` after ${span(l.agentIdleMin)}` : ""}` : null,
+    num(l.lowFreePct) ? `notice under ${l.lowFreePct}% free` : null,
+  ].filter(Boolean).join(" · ");
 }
 
 export const RANGES = [
@@ -98,16 +101,21 @@ export function freeSeries(history, key, now = Date.now(), low = null) {
   const hours = Array.isArray(history?.hours) ? history.hours : [];
   const rows = key === "day" && minutes.length ? minutes : hours;
   const start = now - range.ms, step = range.ms / range.buckets;
-  const lows = new Array(range.buckets).fill(null);
-  for (const row of rows) {
-    if (!Array.isArray(row)) continue;
+  // Each sample in range as [bucket, free], grouped by bucket in one pass.
+  const samples = rows.flatMap((row) => {
+    if (!Array.isArray(row)) return [];
     const at = num(row[0]), free = num(row[1]);
-    if (at === null || free === null || at < start || at > now) continue;
-    const i = Math.min(range.buckets - 1, Math.floor((at - start) / step));
-    if (lows[i] === null || free < lows[i]) lows[i] = free;
-  }
-  let lowest = -1;
-  lows.forEach((v, i) => { if (v !== null && (lowest < 0 || v <= lows[lowest])) lowest = i; });
+    if (at === null || free === null || at < start || at > now) return [];
+    return [[Math.min(range.buckets - 1, Math.floor((at - start) / step)), free]];
+  });
+  const byBucket = Map.groupBy(samples, ([i]) => i);
+  // A bucket's first sample, replaced only by one strictly lower.
+  const lows = Array.from({ length: range.buckets }, (_, i) => {
+    const seen = byBucket.get(i);
+    return seen ? seen.reduce((m, [, free]) => (free < m ? free : m), seen[0][1]) : null;
+  });
+  // The last of the lowest buckets, or -1 when none has a sample.
+  const lowest = lows.reduce((best, v, i) => (v !== null && (best < 0 || v <= lows[best]) ? i : best), -1);
   const bars = lows.map((v, i) => {
     const from = start + i * step;
     const when = key === "day" ? clock(from, now) : `${MONTHS[new Date(from).getMonth()]} ${new Date(from).getDate()} ${pad(new Date(from).getHours())}:00`;
@@ -126,21 +134,19 @@ export function freeSeries(history, key, now = Date.now(), low = null) {
 export function agentSparks(history, now = Date.now(), days = 14) {
   const agents = history?.agents && typeof history.agents === "object" ? history.agents : {};
   const start = now - days * DAY;
-  const out = {};
-  let top = 0;
-  for (const [key, entry] of Object.entries(agents)) {
-    const daily = new Array(days).fill(0);
-    for (const p of Array.isArray(entry?.points) ? entry.points : []) {
+  const rows = Object.entries(agents).map(([key, entry]) => {
+    // Each point in range as [day, mb], grouped by day in one pass.
+    const points = (Array.isArray(entry?.points) ? entry.points : []).flatMap((p) => {
       const at = num(p?.[0]), mb = num(p?.[1]);
-      if (at === null || mb === null || at < start || at > now) continue;
-      const i = Math.min(days - 1, Math.floor((at - start) / DAY));
-      daily[i] = Math.max(daily[i], mb);
-    }
-    top = Math.max(top, ...daily);
-    out[key] = { name: entry?.name, kind: entry?.kind, daily };
-  }
-  for (const spark of Object.values(out)) spark.ratios = spark.daily.map((mb) => (top > 0 ? mb / top : 0));
-  return out;
+      if (at === null || mb === null || at < start || at > now) return [];
+      return [[Math.min(days - 1, Math.floor((at - start) / DAY)), mb]];
+    });
+    const byDay = Map.groupBy(points, ([i]) => i);
+    const daily = Array.from({ length: days }, (_, i) => (byDay.get(i) ?? []).reduce((m, [, mb]) => Math.max(m, mb), 0));
+    return [key, { name: entry?.name, kind: entry?.kind, daily }];
+  });
+  const top = rows.reduce((t, [, spark]) => Math.max(t, ...spark.daily), 0);
+  return Object.fromEntries(rows.map(([key, spark]) => [key, { ...spark, ratios: spark.daily.map((mb) => (top > 0 ? mb / top : 0)) }]));
 }
 
 /** An agent's sparkline: by session, then by kind and name. */
@@ -154,11 +160,9 @@ export function sparkFor(sparks, agent) {
 
 /** history.json, once a minute, down to what the view draws. */
 export function digestHistory(text, now = Date.now(), low = null) {
-  let history = null;
-  try { history = text ? JSON.parse(text) : null; } catch { history = null; }
+  const history = text ? parseOr(text, null) : null;
   if (!history || history.v !== 1) return null;
-  const series = {};
-  for (const r of RANGES) series[r.key] = freeSeries(history, r.key, now, low);
+  const series = Object.fromEntries(RANGES.map((r) => [r.key, freeSeries(history, r.key, now, low)]));
   const t = history.totals ?? {};
   return {
     series,
@@ -176,12 +180,12 @@ export const FRESH_MB = 230;
  */
 export function groupAgents(agents = [], focused = null) {
   const bySize = (a, b) => (num(b.mb) ?? 0) - (num(a.mb) ?? 0);
-  const ready = agents.filter((a) => a.recyclable).sort(bySize);
+  const sorted = agents.filter((a) => a.recyclable).toSorted(bySize);
   // What "Recycle all" takes: everyone ready but the agent you are on.
-  ready.batchable = ready.filter((a) => !focused || a.terminal !== focused);
-  const working = agents.filter((a) => !a.recyclable && a.status === "working").sort(bySize);
-  const other = agents.filter((a) => !a.recyclable && a.status !== "working").sort(bySize);
-  return { ready, working, other };
+  const ready = sorted, batchable = sorted.filter((a) => !focused || a.terminal !== focused);
+  const working = agents.filter((a) => !a.recyclable && a.status === "working").toSorted(bySize);
+  const other = agents.filter((a) => !a.recyclable && a.status !== "working").toSorted(bySize);
+  return { ready, batchable, working, other };
 }
 
 /** Roughly what recycling these gives back, in MB. */
@@ -193,8 +197,7 @@ export const freedEstimate = (list) => list.reduce((sum, a) => sum + Math.max(0,
  * last 10.
  */
 export function parseBatch(text, now = Date.now()) {
-  let b;
-  try { b = JSON.parse(text ?? ""); } catch { return null; }
+  const b = parseOr(text ?? "", null);
   if (!b || typeof b !== "object" || !num(b.at) || num(b.total) === null) return null;
   const done = Array.isArray(b.done) ? b.done : [];
   // A running batch saves at least once per agent; one silent for 5 minutes
@@ -210,7 +213,7 @@ export function parseBatch(text, now = Date.now()) {
 /** Claude agents not used for `minIdle` minutes (by their own idle time), never the one you are on: what "Close" takes. */
 export function staleAgents(agents = [], minIdle = 2880, focused = null) {
   return agents.filter((a) => a.kind === "claude" && a.status === "idle" && (num(a.idleMin) ?? 0) >= minIdle && (!focused || a.terminal !== focused))
-    .sort((a, b) => (num(b.idleMin) ?? 0) - (num(a.idleMin) ?? 0));
+    .toSorted((a, b) => (num(b.idleMin) ?? 0) - (num(a.idleMin) ?? 0));
 }
 
 /** An idle threshold in words: "2 days", "36 hours". */

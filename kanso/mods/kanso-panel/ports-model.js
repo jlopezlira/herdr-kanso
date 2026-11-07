@@ -5,6 +5,7 @@
 // writes the servers listening now, 24 hours by the minute and 90 days by the
 // hour of how many ran (and how many with no pane), the last 30 days of
 // servers with how each ended, and the totals of what Stop gave back.
+import { parseOr } from "./pure.js";
 
 /** ports.json older than this means the guard stopped. */
 export const STALE_MS = 3 * 60_000;
@@ -43,7 +44,7 @@ export function clock(ms, now = Date.now()) {
 }
 
 const day = (ms) => `${MONTHS[new Date(ms).getMonth()]} ${new Date(ms).getDate()}`;
-const startOfDay = (now) => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const startOfDay = (now) => { const d = new Date(now); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
 
 const server = (s) => ({
   key: String(s.key ?? `${s.pid}@${s.startedAt}`), pid: num(s.pid),
@@ -63,8 +64,7 @@ const rows = (list) => (Array.isArray(list) ? list.filter((r) => Array.isArray(r
  */
 export function parsePorts(text, now = Date.now()) {
   if (!text || !String(text).trim()) return { state: "off", data: null };
-  let raw;
-  try { raw = JSON.parse(text); } catch { return { state: "bad", data: null }; }
+  const raw = parseOr(text);
   if (!raw || typeof raw !== "object" || raw.v !== 1 || !num(raw.at)) return { state: "bad", data: null };
   const keep = (list) => (Array.isArray(list) ? list.filter((s) => s && typeof s === "object" && num(s.pid) !== null).map(server) : []);
   const t = raw.totals && typeof raw.totals === "object" ? raw.totals : {};
@@ -73,7 +73,7 @@ export function parsePorts(text, now = Date.now()) {
     now: keep(raw.now),
     minutes: rows(raw.minutes),
     hours: rows(raw.hours),
-    servers: keep(raw.servers).sort((a, b) => (b.lastSeen ?? b.startedAt ?? 0) - (a.lastSeen ?? a.startedAt ?? 0)),
+    servers: keep(raw.servers).toSorted((a, b) => (b.lastSeen ?? b.startedAt ?? 0) - (a.lastSeen ?? a.startedAt ?? 0)),
     totals: { opened: num(t.opened) ?? 0, stopped: num(t.stopped) ?? 0, exited: num(t.exited) ?? 0, freedMB: num(t.freedMB) ?? 0, since: num(t.since) },
   };
   return { state: now - data.at > STALE_MS ? "stale" : "ok", data };
@@ -105,16 +105,16 @@ export function activeSeries(data, key, now = Date.now()) {
   const range = RANGES.find((r) => r.key === key) ?? RANGES[0];
   const source = key === "day" && data?.minutes?.length ? data.minutes : data?.hours ?? [];
   const start = now - range.ms, step = range.ms / range.buckets;
-  const active = new Array(range.buckets).fill(null), loose = new Array(range.buckets).fill(0);
-  for (const row of source) {
+  // The samples in the range, by bucket.
+  const inRange = source.filter((row) => {
     const at = num(row[0]), n = num(row[1]);
-    if (at === null || n === null || at < start || at > now) continue;
-    const i = Math.min(range.buckets - 1, Math.floor((at - start) / step));
-    active[i] = Math.max(active[i] ?? 0, n);
-    loose[i] = Math.max(loose[i], Math.min(n, num(row[2]) ?? 0));
-  }
-  let peak = -1;
-  active.forEach((v, i) => { if (v !== null && (peak < 0 || v >= active[peak])) peak = i; });
+    return !(at === null || n === null || at < start || at > now);
+  });
+  const byBucket = Map.groupBy(inRange, (row) => Math.min(range.buckets - 1, Math.floor((num(row[0]) - start) / step)));
+  const active = Array.from({ length: range.buckets }, (_, i) => (byBucket.has(i) ? byBucket.get(i).reduce((m, row) => Math.max(m, num(row[1])), 0) : null));
+  const loose = Array.from({ length: range.buckets }, (_, i) => (byBucket.get(i) ?? []).reduce((m, row) => Math.max(m, Math.min(num(row[1]), num(row[2]) ?? 0)), 0));
+  // The peak: the fullest bucket, the latest of equals.
+  const peak = active.reduce((p, v, i) => (v !== null && (p < 0 || v >= active[p]) ? i : p), -1);
   const top = peak < 0 ? 0 : active[peak];
   const bars = active.map((v, i) => {
     const from = start + i * step;
@@ -176,7 +176,7 @@ export function historyLists(data, now = Date.now()) {
     };
   };
   return {
-    opened: servers.filter((s) => (s.startedAt ?? 0) >= today).sort((a, b) => b.startedAt - a.startedAt).map(row),
-    ended: servers.filter((s) => s.ended).sort((a, b) => b.ended.at - a.ended.at).map(row),
+    opened: servers.filter((s) => (s.startedAt ?? 0) >= today).toSorted((a, b) => b.startedAt - a.startedAt).map(row),
+    ended: servers.filter((s) => s.ended).toSorted((a, b) => b.ended.at - a.ended.at).map(row),
   };
 }

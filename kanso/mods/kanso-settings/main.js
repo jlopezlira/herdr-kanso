@@ -24,6 +24,7 @@ import { glyphs, keycap } from "./marks.js";
 import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { parseChangelog, plain, compare } from "./changelog.js";
+import { tryOrAsync } from "./pure.js";
 
 const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
 // Credits: where Kanso comes from and who makes it, each opened in the browser.
@@ -163,7 +164,7 @@ export default class Settings extends View {
       ...panels.map((pnl, i) => tile(pnl.id, pnl.icon, pnl.label, panelRow, pattern ? pattern.replace(/N$/, String(i + 1)) : null, pattern)),
       tile("settings", "mods/kanso-chrome/icons/settings.svg", "Settings", gearRow, gear, gear),
     ];
-    const changed = [panelRow, gearRow].some((row) => JSON.stringify(this.chordsOf(row, group.section, list).sort()) !== JSON.stringify(this.shipped(row, group.section).sort()));
+    const changed = [panelRow, gearRow].some((row) => JSON.stringify(this.chordsOf(row, group.section, list).toSorted()) !== JSON.stringify(this.shipped(row, group.section).toSorted()));
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().pt(G.lg)
         .child(div().flex_1().text_size(12).text_color(c.dim).child("The tab bar"))
@@ -189,7 +190,7 @@ export default class Settings extends View {
       .children(g.actions.map((row) => {
         const id = row.family ?? row.action;
         const chords = this.chordsOf(row, g.section, list);
-        const changed = JSON.stringify([...chords].sort()) !== JSON.stringify([...this.shipped(row, g.section)].sort());
+        const changed = JSON.stringify(chords.toSorted()) !== JSON.stringify(this.shipped(row, g.section).toSorted());
         const capturing = this.capture?.row === row;
         const line = h_flex().id(`key-${id}`).w_full().h(32).gap(G.sm).items_center().px(G.sm).rounded(6)
           .cursor_pointer().hover((s) => s.bg(c.subtle)).when(capturing, (el) => el.bg(c.subtle))
@@ -224,30 +225,27 @@ export default class Settings extends View {
       const i = ids.indexOf(id), j = i + by, can = j >= 0 && j < ids.length;
       return div().id(`order-${id}-${by}`).size(22).flex_none().rounded(4).flex().items_center().justify_center().text_size(12)
         .text_color(can ? c.muted : c.border).when(can, (el) => el.cursor_pointer().hover((s) => s.bg(c.input).text_color(c.text))
-          .on_click(() => { const next = [...ids]; [next[i], next[j]] = [next[j], next[i]]; setShared("kanso.panels.order", next); }))
+          .on_click(() => setShared("kanso.panels.order", ids.with(i, ids[j]).with(j, ids[i]))))
         .child(glyph);
     };
     return v_flex().w_full()
       .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("What kansō shows, and in what order. The arrows move a panel's button along the tab bar; a panel or piece turned off leaves its place at once, and comes back the same way."))
       .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child("Side panels"))
       .when(!panels.length, (el) => el.child(div().py(G.sm).text_size(12).text_color(c.dim).child("The tab bar lists the panels once it has drawn.")))
-      .children(panels.map((p) => row(p.id, p.label, null, !off.has(p.id), (on) => { const next = new Set(off); on ? next.delete(p.id) : next.add(p.id); setShared("kanso.panels.off", [...next]); },
+      .children(panels.map((p) => row(p.id, p.label, null, !off.has(p.id), (on) => setShared("kanso.panels.off", on ? [...off].filter((x) => x !== p.id) : [...new Set([...off, p.id])]),
         [step(p.id, -1, "\u2191"), step(p.id, 1, "\u2193")])))
       .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child("Pieces"))
-      .children(PIECES.map((p) => row(p.id, p.label, p.note, !hidden.has(p.id), (on) => { const next = hiddenSet(); on ? next.delete(p.id) : next.add(p.id); setShared(HIDDEN, [...next]); })));
+      .children(PIECES.map((p) => row(p.id, p.label, p.note, !hidden.has(p.id), (on) => { const was = [...hiddenSet()]; setShared(HIDDEN, on ? was.filter((x) => x !== p.id) : [...new Set([...was, p.id])]); })));
   }
 
   // ---- What's new -------------------------------------------------------------------
 
   async readNews(cx) {
     const dir = `${appHome()}/data/kanso-settings`, cache = `${dir}/CHANGELOG.md`;
-    let text = null, from = null;
-    try { const r = await fetch(CHANGELOG_URL); if (r.ok) { text = await r.text(); from = "github"; } } catch {}
-    if (text) {
-      try { await exec("mkdir", ["-p", dir]); await writeTextFile(cache, text, await readTextFile(cache)); } catch {}
-    } else {
-      try { text = await readTextFile(cache); from = text ? "cache" : null; } catch {}
-    }
+    const fresh = await tryOrAsync(async () => { const r = await fetch(CHANGELOG_URL); return r.ok ? await r.text() : null; });
+    if (fresh) await tryOrAsync(async () => { await exec("mkdir", ["-p", dir]); await writeTextFile(cache, fresh, await readTextFile(cache)); });
+    const kept = fresh ? null : await tryOrAsync(() => readTextFile(cache));
+    const text = fresh || kept, from = fresh ? "github" : kept ? "cache" : null;
     this.news = text ? { entries: parseChangelog(text), error: null, from } : { entries: [], error: "GitHub could not be reached, and nothing was kept from before.", from: null };
     cx.notify();
   }

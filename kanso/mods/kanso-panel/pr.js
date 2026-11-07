@@ -22,6 +22,7 @@ import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gp
 import { exec, knownAgents, notify, run, theme } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
+import { tryOr, tryOrAsync } from "./pure.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -43,7 +44,7 @@ const BODY_FOLD = 150;
 
 // A pull request's body as Markdown to show: no template comments, no Windows line ends.
 export function cleanBody(text) {
-  return String(text ?? "").replace(/\r\n?/g, "\n").replace(/<!--[\s\S]*?(-->|$)/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  return String(text ?? "").replace(/\r\n?/g, "\n").replace(/<!-{2}[\s\S]*?(-{2}>|$)/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 // Whether it is long enough to fold: more than 6 lines or 480 characters.
 export const longBody = (text) => text.split("\n").length > 6 || text.length > 480;
@@ -70,16 +71,23 @@ function checkOf(c) {
     : ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion) ? "pass" : "fail";
   return { name: c.name, workflow: c.workflowName && c.workflowName !== c.name ? c.workflowName : "", url: c.detailsUrl, state, skipped: conclusion === "SKIPPED" };
 }
+// The checks, once each by name (the first one of a name stays).
+const onceByName = (checks) => checks.filter((ch, i) => checks.findIndex((x) => x.name === ch.name) === i);
 
+// The diff, file by file: each file's lines from its first hunk on. A file
+// starts at its "diff --git" line and runs to the next one.
+const FILE_HEAD = /^diff -{2}git a\/.* b\/(.*)$/;
 function splitDiff(text) {
-  const out = {};
-  let lines = null;
-  for (const line of text.split("\n")) {
-    const head = /^diff --git a\/.* b\/(.*)$/.exec(line);
-    if (head) { lines = out[head[1]] = []; continue; }
-    if (lines && (lines.length || line.startsWith("@@"))) lines.push(line);
-  }
-  return out;
+  const lines = text.split("\n");
+  const heads = lines.flatMap((line, i) => {
+    const head = FILE_HEAD.exec(line);
+    return head ? [{ at: i, name: head[1] }] : [];
+  });
+  return Object.fromEntries(heads.map(({ at, name }, k) => {
+    const body = lines.slice(at + 1, k + 1 < heads.length ? heads[k + 1].at : lines.length);
+    const hunk = body.findIndex((line) => line.startsWith("@@"));
+    return [name, hunk < 0 ? [] : body.slice(hunk)];
+  }));
 }
 
 // T3 Code's agent tasks, worded for a pull request reached through `gh`.
@@ -117,10 +125,7 @@ export class PullRequest {
   // reading (a draw asks several times, on every shared write anywhere).
   checks() {
     const pr = this.pr;
-    if (this.checked?.pr !== pr) {
-      const seen = new Set();
-      this.checked = { pr, list: (pr?.statusCheckRollup ?? []).map(checkOf).filter((ch) => !seen.has(ch.name) && seen.add(ch.name)) };
-    }
+    if (this.checked?.pr !== pr) this.checked = { pr, list: onceByName((pr?.statusCheckRollup ?? []).map(checkOf)) };
     return this.checked.list;
   }
 
@@ -148,7 +153,7 @@ export class PullRequest {
     this.loading = true;
     const want = this.selected;
     cx.spawn(async (cx) => {
-      let list = null;
+      const failed = (e) => { if (key() === context) this.error = { title: "GitHub could not be read.", detail: String(e?.message ?? e) }; };
       try {
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on });
         if (key() !== context) return;
@@ -162,62 +167,70 @@ export class PullRequest {
         ]);
         this.branch = branch.stdout.trim() || null;
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remote?.stdout ?? "")?.[1] ?? null;
-        // The repository's open ones, read alongside the one shown.
-        list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
-        let view;
-        try { view = await this.gh(["pr", "view", ...(want ? [want] : []), "--json", FIELDS]); }
-        catch { this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return; }
-        // A click picked another one while this read was out: drop it, the finally reads again.
-        if (key() !== context || this.selected !== want) return;
-        const open = await list;
-        if (open?.code === 0 && key() === context) {
-          try { this.openPrs = JSON.parse(open.stdout).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)); } catch {}
-        }
-        // `gh pr view` also finds the branch's merged or closed one. That one is
-        // done, so the branch counts as having none.
-        const done = (v) => { try { return ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state); } catch { return false; } };
-        const branchHasNone = !want && (view.code !== 0 ? NO_PR.test(view.stderr || view.stdout) : done(view));
-        if (branchHasNone && !this.openPrs.length) { this.none = true; this.pr = null; this.error = null; this.branchUrl = null; return; }
-        // The branch has none: the newest open one stands in, the branch offers to create its own.
-        let fallback = false;
-        if (branchHasNone) {
-          view = await this.gh(["pr", "view", this.openPrs[0].url, "--json", FIELDS]).catch(() => ({ code: 1, stdout: "", stderr: "GitHub could not be read." }));
-          if (key() !== context || this.selected !== want) return;
-          fallback = true;
-        }
-        if (view.code !== 0) {
-          const why = (view.stderr || view.stdout).trim();
-          if (NO_PR.test(why)) { this.none = true; this.pr = null; this.error = null; }
-          else { this.error = { title: "GitHub could not be read.", detail: why.split("\n")[0] }; this.pr = null; }
-          return;
-        }
-        const pr = JSON.parse(view.stdout);
-        if (this.pr?.url !== pr.url) { this.diffs = null; this.openFile = null; this.expanded.body = false; }
-        this.pr = pr; this.none = false; this.error = null; this.fallback = fallback;
-        if (!want) this.branchUrl = fallback ? null : pr.url;
-        if (!this.home && !want) this.home = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(pr.url)?.[1] ?? null;
-        const repo = this.repo();
-        if (repo) {
-          const q = await this.gh(["api", "graphql", "-f", `query=${THREADS}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`, "-F", `n=${pr.number}`]).catch(() => null);
-          if (q?.code === 0 && key() === context) {
-            const nodes = JSON.parse(q.stdout)?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
-            this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
-              const first = n.comments?.nodes?.[0];
-              return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\s+/g, " ").trim(), url: first?.url, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
-            });
-          }
-        }
-        if (!this.viewer) {
-          const me = await this.gh(["api", "user", "--jq", ".login"]).catch(() => null);
-          if (me?.code === 0) this.viewer = me.stdout.trim();
-        }
-      } catch (e) { if (key() === context) this.error = { title: "GitHub could not be read.", detail: String(e?.message ?? e) }; }
+        // The repository's open ones, read alongside the one shown, and never
+        // left running past the read they belong to.
+        const list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
+        try { await this.readShown(context, want, list); }
+        catch (e) { failed(e); }
+        finally { await list; }
+      } catch (e) { failed(e); }
       finally {
-        await list; // never left running past the read it belongs to
         this.loading = false; this.loadedAt = Date.now(); cx.notify();
         if (this.selected !== want && key() === context) this.refresh(cx);
       }
     });
+  }
+
+  // Once the repository is known: the pull request to show (`want`, a URL
+  // picked, or the branch's own, else the newest open one), its review
+  // threads and who you are. `list`: the open ones, being read.
+  async readShown(context, want, list) {
+    const asked = await tryOrAsync(async () => ({ view: await this.gh(["pr", "view", ...(want ? [want] : []), "--json", FIELDS]) }));
+    if (!asked) { this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return; }
+    // A click picked another one while this read was out: drop it, the finally reads again.
+    if (key() !== context || this.selected !== want) return;
+    const open = await list;
+    if (open?.code === 0 && key() === context) {
+      const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
+      if (sorted !== null) this.openPrs = sorted;
+    }
+    // `gh pr view` also finds the branch's merged or closed one. That one is
+    // done, so the branch counts as having none.
+    const done = (v) => tryOr(() => ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state), false);
+    const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
+    if (branchHasNone && !this.openPrs.length) { this.none = true; this.pr = null; this.error = null; this.branchUrl = null; return; }
+    // The branch has none: the newest open one stands in, the branch offers to create its own.
+    const fallback = branchHasNone;
+    const view = branchHasNone
+      ? await this.gh(["pr", "view", this.openPrs[0].url, "--json", FIELDS]).catch(() => ({ code: 1, stdout: "", stderr: "GitHub could not be read." }))
+      : asked.view;
+    if (branchHasNone && (key() !== context || this.selected !== want)) return;
+    if (view.code !== 0) {
+      const why = (view.stderr || view.stdout).trim();
+      if (NO_PR.test(why)) { this.none = true; this.pr = null; this.error = null; }
+      else { this.error = { title: "GitHub could not be read.", detail: why.split("\n")[0] }; this.pr = null; }
+      return;
+    }
+    const pr = JSON.parse(view.stdout);
+    if (this.pr?.url !== pr.url) { this.diffs = null; this.openFile = null; this.expanded = { ...this.expanded, body: false }; }
+    this.pr = pr; this.none = false; this.error = null; this.fallback = fallback;
+    if (!want) this.branchUrl = fallback ? null : pr.url;
+    if (!this.home && !want) this.home = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(pr.url)?.[1] ?? null;
+    const repo = this.repo();
+    if (repo) {
+      const q = await this.gh(["api", "graphql", "-f", `query=${THREADS}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`, "-F", `n=${pr.number}`]).catch(() => null);
+      if (q?.code === 0 && key() === context) {
+        const nodes = JSON.parse(q.stdout)?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+        this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
+          const first = n.comments?.nodes?.[0];
+          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\s+/g, " ").trim(), url: first?.url, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
+        });
+      }
+    }
+    if (!this.viewer) {
+      const me = await this.gh(["api", "user", "--jq", ".login"]).catch(() => null);
+      if (me?.code === 0) this.viewer = me.stdout.trim();
+    }
   }
 
   // The repository's finished pull requests, newest first. Never shown on
@@ -231,7 +244,7 @@ export class PullRequest {
         const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
         if (r.code === 0 && key() === context) {
           const when = (p) => Date.parse(p.mergedAt || p.closedAt || p.updatedAt) || 0;
-          this.closedPrs = JSON.parse(r.stdout).sort((a, b) => when(b) - when(a));
+          this.closedPrs = JSON.parse(r.stdout).toSorted((a, b) => when(b) - when(a));
         }
       } catch {}
       finally { this.closedLoading = false; cx.notify(); }
@@ -369,9 +382,9 @@ export class PullRequest {
         if (res.code !== 0) throw new Error((res.stderr || res.stdout).trim().split("\n")[0]);
         // Reflect it at once; the reread below confirms it.
         const pr = this.pr;
-        if (kind === "labels") pr.labels = on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }];
-        if (kind === "assignees") pr.assignees = on ? pr.assignees.filter((a) => a.login !== name) : [...pr.assignees, { login: name }];
-        if (kind === "reviewers") pr.reviewRequests = on ? pr.reviewRequests.filter((x) => x.login !== name) : [...pr.reviewRequests, { login: name }];
+        if (kind === "labels") this.pr = { ...pr, labels: on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }] };
+        if (kind === "assignees") this.pr = { ...pr, assignees: on ? pr.assignees.filter((a) => a.login !== name) : [...pr.assignees, { login: name }] };
+        if (kind === "reviewers") this.pr = { ...pr, reviewRequests: on ? pr.reviewRequests.filter((x) => x.login !== name) : [...pr.reviewRequests, { login: name }] };
         if (done) notify({ title: done, level: "success" });
       } catch (e) { notify({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }); }
       finally { this.pending = null; cx.notify(); this.loadedAt = 0; this.refresh(cx); }
@@ -429,13 +442,12 @@ export class PullRequest {
   // The repository's open pull requests, by anyone: yours first, then the newest.
   openList() {
     const me = this.viewer;
-    return [...(this.openPrs ?? [])].sort((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
+    return (this.openPrs ?? []).toSorted((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
   }
 
   // One open pull request's state, in a word and a color, from what the list reads.
   rowState(p, c) {
-    const seen = new Set();
-    const checks = (p.statusCheckRollup ?? []).map(checkOf).filter((ch) => !seen.has(ch.name) && seen.add(ch.name));
+    const checks = onceByName((p.statusCheckRollup ?? []).map(checkOf));
     const failing = checks.filter((x) => x.state === "fail").length, running = checks.filter((x) => x.state === "pending").length;
     if (p.isDraft) return { text: "Draft", color: c.dim };
     if (failing) return { text: `${failing} check${failing > 1 ? "s" : ""} failing`, color: c.red };
@@ -483,14 +495,12 @@ export class PullRequest {
   // The list page: its tabs, then the open ones (where it starts) or the
   // closed ones, each grouped as this branch, yours and others' (your colleagues').
   listPage(c) {
-    let body;
-    if (this.tab === "closed") {
-      if (this.closedPrs === null) body = div().text_size(12).text_color(c.dim).child(this.closedLoading ? "Reading the closed ones…" : "GitHub could not be read.");
-      else if (!this.closedPrs.length) body = div().text_size(12).text_color(c.dim).child("Nothing closed yet.");
-      else body = this.openPage(c, this.closedPrs);
-    } else if (!this.openPrs.length) {
-      body = div().text_size(12).text_color(c.dim).child("Nothing open.");
-    } else body = this.openPage(c);
+    const body = this.tab === "closed"
+      ? this.closedPrs === null ? div().text_size(12).text_color(c.dim).child(this.closedLoading ? "Reading the closed ones…" : "GitHub could not be read.")
+        : !this.closedPrs.length ? div().text_size(12).text_color(c.dim).child("Nothing closed yet.")
+          : this.openPage(c, this.closedPrs)
+      : !this.openPrs.length ? div().text_size(12).text_color(c.dim).child("Nothing open.")
+        : this.openPage(c);
     return v_flex().w_full().gap(G.lg).child(this.tabs(c)).child(body);
   }
 
@@ -510,9 +520,10 @@ export class PullRequest {
       [me ? "Others" : "Open", list.filter((p) => !here(p) && !mine(p))],
     ].filter(([, rows]) => rows.length);
     const create = !finished && (this.fallback || this.none) && Boolean(this.branch);
-    let n = 0;
-    const row = (p) => {
-      const on = p.url === shown, i = n++;
+    // Rows are numbered down the page, across the groups.
+    const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
+    const row = (p, i) => {
+      const on = p.url === shown;
       const state = !finished ? this.rowState(p, c)
         : p.state === "MERGED" ? { text: "Merged", color: c.violet } : { text: "Closed without merging", color: c.red };
       const when = !finished ? `updated ${ago(p.updatedAt)}`
@@ -535,9 +546,9 @@ export class PullRequest {
             .when(p.additions !== undefined, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
     };
     return v_flex().w_full().gap(G.xl)
-      .children(groups.map(([title, rows]) => v_flex().w_full().gap(2)
+      .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
         .child(section(c, title, String(rows.length)))
-        .children(rows.map(row))))
+        .children(rows.map((p, k) => row(p, firsts[g] + k)))))
       .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
         .child(div().text_size(12).text_color(c.dim).child(`${this.branch} has no pull request yet.`))
         .child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) })))))
@@ -641,7 +652,7 @@ export class PullRequest {
   // The description, as GitHub renders it: Markdown, folded to a few lines when long.
   description(c) {
     const text = cleanBody(this.pr.body), long = longBody(text), open = this.expanded.body;
-    const toggle = (cx) => { this.expanded.body = !open; cx.notify(); };
+    const toggle = (cx) => { this.expanded = { ...this.expanded, body: !open }; cx.notify(); };
     return v_flex().w_full()
       .child(section(c, "Description"))
       .child(text
@@ -692,7 +703,7 @@ export class PullRequest {
     const checks = this.checks();
     const failing = checks.filter((x) => x.state === "fail"), running = checks.filter((x) => x.state === "pending"), passed = checks.length - failing.length - running.length;
     const order = { fail: 0, pending: 1, pass: 2 };
-    const sorted = [...checks].sort((a, b) => order[a.state] - order[b.state]);
+    const sorted = checks.toSorted((a, b) => order[a.state] - order[b.state]);
     const open = this.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
     const note = [failing.length && `${failing.length} failing`, running.length && `${running.length} running`, passed && `${passed} passed`].filter(Boolean).join(" · ");
     return v_flex().w_full()
@@ -707,7 +718,7 @@ export class PullRequest {
             .when(Boolean(ch.workflow), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(ch.workflow))))
           .child(div().text_size(12).text_color(ch.state === "fail" ? c.red : ch.state === "pending" ? c.yellow : c.dim)
             .child(ch.state === "fail" ? "failed" : ch.state === "pending" ? "running" : ch.skipped ? "skipped" : "passed")))))
-      .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded.checks = !open; cx.notify(); }, c))));
+      .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded = { ...this.expanded, checks: !open }; cx.notify(); }, c))));
   }
 
   discussion(c) {
@@ -775,7 +786,7 @@ export class PullRequest {
     return v_flex().w_full()
       .child(section(c, "Files", `${pr.changedFiles} · +${pr.additions} −${pr.deletions}`))
       .children(shown.map((f, i) => {
-        const parts = f.path.split("/"), name = parts.pop(), on = this.openFile === f.path;
+        const all = f.path.split("/"), parts = all.slice(0, -1), name = all.at(-1), on = this.openFile === f.path;
         const mark = { ADDED: "added", DELETED: "deleted", RENAMED: "renamed" }[f.changeType] ?? "";
         return v_flex().w_full().when(i > 0, (el) => el.border_t(1).border_color(c.border))
           .child(Button.new(`pr-file-${i}`).w_full().py(7).cursor_pointer().hover((s) => s.opacity(0.75))
@@ -787,18 +798,15 @@ export class PullRequest {
               .child(div().text_size(11).text_color(c.dim).child(`+${f.additions} −${f.deletions}`))))
           .when(on, (el) => el.child(this.diffView(c, f.path)));
       }))
-      .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded.files = !open; cx.notify(); }, c))))
+      .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))
       .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
   }
 
-  render(cx) {
-    if (key() !== this.context) this.refresh(cx);
-    const c = tokens(theme());
-    const narrow = (this.width || 368) < 560;
-    let body;
-    if (this.listing) body = this.listPage(c);
-    else if (this.pr) {
-      body = v_flex().w_full().gap(narrow ? 36 : 48)
+  // What the page shows under its header: the list, the pull request, or why there is none.
+  body(c, narrow) {
+    if (this.listing) return this.listPage(c);
+    if (this.pr) {
+      return v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
         .child(this.description(c))
         .child(this.people(c))
@@ -807,12 +815,22 @@ export class PullRequest {
         .child(this.agent(c))
         .child(this.files(c))
         .child(div().text_size(10.5).text_color(c.dim).child(`Read from GitHub with gh${this.loadedAt ? ` · updated ${clock(this.loadedAt)}` : ""}. It rereads every minute while shown, every 20 s while a check runs.`));
-    } else if (this.outside) body = this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
-    else if (this.error) body = this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c));
-    else if (this.none) body = this.waiting(c, `No pull request for ${this.branch ?? "this branch"}.`,
-      this.note ?? "Push the branch, then open one on GitHub.",
-      quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
-    else body = this.loading || !this.context ? this.skeleton(c, narrow) : this.waiting(c, "No folder", "Focus a pane inside a repository.");
+    }
+    if (this.outside) return this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
+    if (this.error) return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c));
+    if (this.none) {
+      return this.waiting(c, `No pull request for ${this.branch ?? "this branch"}.`,
+        this.note ?? "Push the branch, then open one on GitHub.",
+        quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
+    }
+    return this.loading || !this.context ? this.skeleton(c, narrow) : this.waiting(c, "No folder", "Focus a pane inside a repository.");
+  }
+
+  render(cx) {
+    if (key() !== this.context) this.refresh(cx);
+    const c = tokens(theme());
+    const narrow = (this.width || 368) < 560;
+    const body = this.body(c, narrow);
 
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })

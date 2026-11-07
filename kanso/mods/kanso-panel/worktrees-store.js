@@ -12,6 +12,7 @@
 //   history.
 // - `scans`: the totals of each finished scan, for the days' chart.
 import { exec, appHome, writeTextFile } from "herdr";
+import { range, tryOrAsync, mapSeries } from "./pure.js";
 
 export const STORE_DIR = "data/kanso-panel";
 // Two copies of the panel (or a scan and a removal) can reach the database at
@@ -89,7 +90,9 @@ export class WorktreeStore {
   // Large writes go through a file: an argument can't hold hundreds of rows.
   async script(text) {
     if (!text.trim()) return;
-    const path = `${this.dir}/.worktrees-${Date.now()}-${this.batches++}.sql`;
+    const n = this.batches;
+    this.batches = n + 1;
+    const path = `${this.dir}/.worktrees-${Date.now()}-${n}.sql`;
     await writeTextFile(path, `BEGIN;\n${text}\nCOMMIT;\n`, null);
     try {
       const r = await exec("sqlite3", [...BUSY, this.db, `.read '${path}'`]);
@@ -98,8 +101,7 @@ export class WorktreeStore {
   }
 
   async open() {
-    let ok = null;
-    try { ok = await exec("sqlite3", ["-version"]); } catch {}
+    const ok = await tryOrAsync(() => exec("sqlite3", ["-version"]));
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the history of your worktrees.");
     await exec("mkdir", ["-p", this.dir]);
     await this.sql(SCHEMA);
@@ -121,11 +123,12 @@ export class WorktreeStore {
     const unseen = rows.filter((r) => !seen.has(r.path));
     if (!unseen.length) return 0;
     const check = unseen.filter((r) => !r.missing).map((r) => r.path);
-    const absent = new Set();
-    for (let i = 0; i < check.length; i += 200) {
-      const r = await exec("bash", ["-c", 'for p in "$@"; do [ -e "$p" ] || printf "%s\\n" "$p"; done', "sweep", ...check.slice(i, i + 200)]);
-      for (const line of String(r.stdout).split("\n")) if (line) absent.add(line);
-    }
+    // 200 paths a call, one call after another: the ones no longer there.
+    const listed = await mapSeries(range(Math.ceil(check.length / 200)), async (k) => {
+      const r = await exec("bash", ["-c", 'for p in "$@"; do [ -e "$p" ] || printf "%s\\n" "$p"; done', "sweep", ...check.slice(k * 200, k * 200 + 200)]);
+      return String(r.stdout).split("\n").filter(Boolean);
+    });
+    const absent = new Set(listed.flat());
     const gone = unseen.filter((r) => (r.missing ? repos.has(r.repo) : absent.has(r.path)));
     await this.script(gone.map((r) => `UPDATE worktrees SET gone_at=${int(now)}, gone_by='outside', freed=${r.missing ? "0" : "COALESCE(size,0)"} WHERE id=${int(r.id)};`).join("\n"));
     return gone.length;

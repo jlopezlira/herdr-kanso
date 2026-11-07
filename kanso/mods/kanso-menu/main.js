@@ -71,7 +71,8 @@ export default class KansoMenu extends View {
     const list = items(props()?.target ?? {});
     return v_flex().id("kanso-menu").track_focus(this.handle).w_full().min_h(0).p(5).bg(t.popover).text_size(12.8)
       .on_key_down((e, cx) => {
-        const move = listKey(e, this.keys ??= {});
+        const { move, gAt } = listKey(e, this.listG);
+        this.listG = gAt;
         if (!move) return;
         if (move === "enter") this.choose(this.at);
         else if (move === "escape") closeOverlay(props().overlay);

@@ -14,6 +14,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { findAsync, range } from "../pure.js";
 
 export const STORE_VERSION = 1;
 export const STORE_LOCK_STALE_MS = 10 * 60 * 1000;
@@ -50,20 +51,20 @@ export function toNonNegInt(value) {
 
 export function normalizeTokens(raw) {
   const source = isPlainObject(raw) ? raw : {};
-  const out = {
+  const counts = {
     input: toNonNegInt(source.input),
     output: toNonNegInt(source.output),
     cacheRead: toNonNegInt(source.cacheRead),
     cacheWrite: toNonNegInt(source.cacheWrite),
     reasoning: toNonNegInt(source.reasoning),
   };
-  out.nonzero =
-    out.input > 0 ||
-    out.output > 0 ||
-    out.cacheRead > 0 ||
-    out.cacheWrite > 0;
-  if (!out.nonzero && out.reasoning > 0) out.nonzero = true;
-  return out;
+  const nonzero =
+    counts.input > 0 ||
+    counts.output > 0 ||
+    counts.cacheRead > 0 ||
+    counts.cacheWrite > 0 ||
+    counts.reasoning > 0;
+  return { ...counts, nonzero };
 }
 
 export function tokenTotal(tokens) {
@@ -99,12 +100,10 @@ export function localDay(ms) {
 }
 
 export function hashKey(...parts) {
-  const hash = createHash("sha256");
-  for (const part of parts) {
-    hash.update(typeof part === "string" ? part : JSON.stringify(part));
-    hash.update("\u0000");
-  }
-  return hash.digest("hex").slice(0, 24);
+  return parts
+    .reduce((hash, part) => hash.update(typeof part === "string" ? part : JSON.stringify(part)).update("\u0000"), createHash("sha256"))
+    .digest("hex")
+    .slice(0, 24);
 }
 
 export function sessionHash(session) {
@@ -113,6 +112,23 @@ export function sessionHash(session) {
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// An error that ends a command with its own exit code (2: a usage error).
+export class ExitError extends Error {
+  constructor(message, exitCode) {
+    super(message);
+    this.exitCode = exitCode;
+  }
+}
+
+// Ends the process with `code` once what was printed is out; 0 ends as Node
+// would by itself, so the process is never cut short on success.
+export async function exitWith(code) {
+  if (!code) return;
+  await new Promise((resolve) => process.stdout.write("", resolve));
+  await new Promise((resolve) => process.stderr.write("", resolve));
+  process.exit(code);
 }
 
 export function isProcessAlive(pid) {
@@ -138,20 +154,28 @@ export async function ensureParent(file, mode = 0o700) {
   await mkdir(path.dirname(file), { recursive: true, mode });
 }
 
+// Creates `file` (it must not exist yet), writes `text` and syncs it to disk.
+// The handle is closed whether or not the write works.
+async function writeNewSynced(file, text) {
+  const handle = await open(file, "wx", 0o600);
+  try {
+    await handle.writeFile(text, "utf8");
+    await handle.sync();
+  } catch (error) {
+    await handle.close().catch(() => {});
+    throw error;
+  }
+  await handle.close();
+}
+
 export async function atomicWriteJson(file, value) {
   await ensureParent(file);
   const temp = tempSibling(file);
-  let handle;
   try {
-    handle = await open(temp, "wx", 0o600);
-    await handle.writeFile(`${JSON.stringify(value)}\n`, "utf8");
-    await handle.sync();
-    await handle.close();
-    handle = null;
+    await writeNewSynced(temp, `${JSON.stringify(value)}\n`);
     await rename(temp, file);
     await chmod(file, 0o600).catch(() => {});
   } catch (error) {
-    if (handle) await handle.close().catch(() => {});
     await unlink(temp).catch(() => {});
     throw error;
   }
@@ -165,30 +189,31 @@ export async function readJsonFile(file) {
 export async function backupCorruptStore(file) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const base = `${file}.corrupt-${stamp}`;
-  for (let index = 0; index < 100; index += 1) {
-    const target = index === 0 ? base : `${base}-${index}`;
+  // The first free name of base, base-1 ... base-99; a name already taken is
+  // skipped, any other failure stops the backup.
+  const saved = await findAsync(range(100).map((index) => (index === 0 ? base : `${base}-${index}`)), async (target) => {
     try {
       await copyFile(file, target, fsConstants.COPYFILE_EXCL);
       await chmod(target, 0o600).catch(() => {});
-      return target;
+      return true;
     } catch (error) {
       if (error?.code !== "EEXIST") throw error;
+      return false;
     }
-  }
+  });
+  if (saved) return saved;
   throw new Error(`could not preserve corrupt store ${file}`);
 }
 
 async function readLockInfo(lockPath) {
-  let ownerPath = lockPath;
-  let directory = false;
+  const kind = await stat(lockPath).then((info) => ({ directory: info.isDirectory() }), (error) => ({ failed: true, error }));
+  if (kind.failed) return kind.error?.code === "ENOENT" ? null : { invalid: true, directory: false };
+  const { directory } = kind;
   try {
-    if ((await stat(lockPath)).isDirectory()) {
-      directory = true;
-      const owners = (await readdir(lockPath)).filter((name) => /^owner-.+\.json$/.test(name));
-      // An empty acquisition directory has no provable dead owner. Fail closed.
-      if (owners.length !== 1) return { invalid: true, directory };
-      ownerPath = path.join(lockPath, owners[0]);
-    }
+    const owners = directory ? (await readdir(lockPath)).filter((name) => /^owner-.+\.json$/.test(name)) : [];
+    // An empty acquisition directory has no provable dead owner. Fail closed.
+    if (directory && owners.length !== 1) return { invalid: true, directory };
+    const ownerPath = directory ? path.join(lockPath, owners[0]) : lockPath;
     const value = JSON.parse(await readFile(ownerPath, "utf8"));
     return isPlainObject(value) ? { ...value, ownerPath, directory } : { invalid: true, directory };
   } catch (error) {
@@ -234,6 +259,24 @@ async function tryUnlinkStaleLock(lockPath, observed) {
   return true;
 }
 
+// One attempt to create the lock directory and its owner file: null when the
+// lock is ours, else { error }. A half-made lock is removed again.
+async function takeLock(lockPath, ownerPath, owner) {
+  try {
+    await mkdir(lockPath, { mode: 0o700 });
+  } catch (error) {
+    return { error };
+  }
+  try {
+    await writeNewSynced(ownerPath, owner);
+    return null;
+  } catch (error) {
+    await unlink(ownerPath).catch(() => {});
+    await rmdir(lockPath).catch(() => {});
+    return { error };
+  }
+}
+
 export async function withStoreLock(
   storePath,
   callback,
@@ -246,51 +289,37 @@ export async function withStoreLock(
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
   const ownerPath = path.join(lockPath, `owner-${token}.json`);
+  const owner = `${JSON.stringify({ pid: process.pid, host, startedAt, token })}\n`;
 
-  for (;;) {
-    let handle;
-    let created = false;
-    try {
-      await mkdir(lockPath, { mode: 0o700 });
-      created = true;
-      handle = await open(ownerPath, "wx", 0o600);
-      await handle.writeFile(
-        `${JSON.stringify({ pid: process.pid, host, startedAt, token })}\n`,
-        "utf8",
-      );
-      await handle.sync();
-      await handle.close();
-      handle = null;
-      break;
-    } catch (error) {
-      if (handle) await handle.close().catch(() => {});
-      if (created) {
-        await unlink(ownerPath).catch(() => {});
-        await rmdir(lockPath).catch(() => {});
-      }
-      if (error?.code !== "EEXIST") throw error;
+  // One try at the lock, then again after evicting a dead owner (at once) or
+  // after a short wait, until the deadline.
+  const acquire = async () => {
+    const failure = await takeLock(lockPath, ownerPath, owner);
+    if (!failure) return;
+    const { error } = failure;
+    if (error?.code !== "EEXIST") throw error;
+    const observed = await readLockInfo(lockPath);
+    const age = await lockAgeMs(lockPath);
+    const sameHost = observed?.host === host;
+    const pid = Number(observed?.pid);
+    const dead = sameHost && Number.isInteger(pid) && !isProcessAlive(pid);
+    // Only provably dead local owners can be evicted. Foreign/empty locks
+    // fail closed rather than allowing two writers based on elapsed time.
+    const malformedOld = !observed?.directory && observed?.invalid && age > Math.max(staleMs, 60_000);
 
-      const observed = await readLockInfo(lockPath);
-      const age = await lockAgeMs(lockPath);
-      const sameHost = observed?.host === host;
-      const pid = Number(observed?.pid);
-      const dead = sameHost && Number.isInteger(pid) && !isProcessAlive(pid);
-      // Only provably dead local owners can be evicted. Foreign/empty locks
-      // fail closed rather than allowing two writers based on elapsed time.
-      const malformedOld = !observed?.directory && observed?.invalid && age > Math.max(staleMs, 60_000);
-
-      if (dead || malformedOld) {
-        const removed = await tryUnlinkStaleLock(lockPath, observed);
-        if (removed) continue;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(`spend store is busy (lock ${lockPath})`, {
-          cause: error,
-        });
-      }
-      await sleep(60 + Math.floor(Math.random() * 40));
+    if (dead || malformedOld) {
+      const removed = await tryUnlinkStaleLock(lockPath, observed);
+      if (removed) return acquire();
     }
-  }
+    if (Date.now() >= deadline) {
+      throw new Error(`spend store is busy (lock ${lockPath})`, {
+        cause: error,
+      });
+    }
+    await sleep(60 + Math.floor(Math.random() * 40));
+    return acquire();
+  };
+  await acquire();
 
   try {
     return await callback();

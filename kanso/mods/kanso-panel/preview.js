@@ -11,7 +11,7 @@ import { codeState, isMarkdown, showPanel } from "./lib.js";
 import { MarkdownDoc, tildePath } from "./doc.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
-const nameOf = (path) => path.split(/[\\/]/).pop();
+const nameOf = (path) => path.split(/[\\/]/).at(-1);
 
 export class Preview {
   init(cx, p) {

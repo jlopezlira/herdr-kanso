@@ -17,20 +17,20 @@ import { MarkdownDoc, tildePath } from "./doc.js";
 const ICONS = "mods/markdown-panel/icons";
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
-const nameOf = (path) => path.split(/[\\/]/).pop();
+const nameOf = (path) => path.split(/[\\/]/).at(-1);
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
   const r = await exec("sh", ["-c", 'for f in "$1"/*.path; do [ -f "$f" ] || continue; cat "$f"; printf "\\0"; rm -f "$f"; done', "sh", dir]);
   const paths = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter((p) => p.startsWith("/"));
-  return paths.pop() ?? null;
+  return paths.at(-1) ?? null;
 }
 
 // Markdown files under a folder, nearest first: what git tracks, else a
 // shallow look (no node_modules), at most 40.
 export function markdownIn(listing) {
   return listing.split("\n").map((l) => l.trim()).filter((l) => /\.(md|markdown|mdx)$/i.test(l))
-    .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)).slice(0, 40);
+    .toSorted((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)).slice(0, 40);
 }
 
 export default class MarkdownPanel extends View {

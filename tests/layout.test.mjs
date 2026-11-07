@@ -120,11 +120,11 @@ for (const file of helpers) {
     const tree = (hidden) => ({ id: "root", children: [{ id: "work-body", children: [
       { id: "strip-ruler-h" }, { id: "strip-a" }, { id: "strip-edge-right" }, { id: "panel-body", hidden, children: [] }] }] });
     const order = (t) => t.children[0].children.map((n) => n.id);
-    const shown = tree(false); edgeBesidePanel(shown);
+    const given = tree(false), shown = edgeBesidePanel(given);
     assert.deepEqual(order(shown), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"]);
-    edgeBesidePanel(shown);
-    assert.deepEqual(order(shown), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"], "idempotent");
-    const hidden = tree(true); edgeBesidePanel(hidden);
+    assert.deepEqual(order(given), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "the tree it is given stays as it was");
+    assert.deepEqual(order(edgeBesidePanel(shown)), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"], "idempotent");
+    const hidden = edgeBesidePanel(tree(true));
     assert.deepEqual(order(hidden), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "a closed panel leaves it in place");
   });
 }
@@ -273,4 +273,20 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   view.command("space-2", cx);
   view.command("space-4", cx);
   assert.deepEqual(calls, [["space.select", { index: 2 }]]);
+});
+
+test("an agent moved to another project shows there, and only there, whatever space its terminal is in", async () => {
+  const node = () => new Proxy(() => {}, { get: (_t, k) => (k === "then" ? undefined : () => node()), apply: () => node() });
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
+    orderSessions: (l) => l, terminals: () => [], shared: () => null, setShared: () => {}, spaces: () => [], panes: () => [], agents: () => [],
+  });
+  const view = new Spaces();
+  Object.assign(view, { order: "updated", custom: {}, termBy: new Map([["t1", { address: "t1", labels: { "kanso.id": "t1-5" } }], ["t2", { address: "t2", labels: {} }]]),
+    panel: { agents: new Map([["term:t1-5", { project: "sp-kanso" }]]) }, inStripOrder: (l) => l });
+  const ctx = { all: [{ address: "t1", space: "sp-fluenty" }, { address: "t2", space: "sp-fluenty" }], strip: {}, asleep: { rows: [] }, spaceIds: new Set(["sp-fluenty", "sp-kanso"]) };
+  assert.deepEqual(clone(view.spaceRows("sp-kanso", ctx).map((a) => a.address)), ["t1"], "qb2 under herdr-kanso");
+  assert.deepEqual(clone(view.spaceRows("sp-fluenty", ctx).map((a) => a.address)), ["t2"], "and no longer under fluenty");
+  const gone = { ...ctx, spaceIds: new Set(["sp-fluenty"]) };
+  assert.deepEqual(clone(view.spaceRows("sp-fluenty", gone).map((a) => a.address)), ["t1", "t2"], "its project closed: back where it runs, never nowhere");
 });

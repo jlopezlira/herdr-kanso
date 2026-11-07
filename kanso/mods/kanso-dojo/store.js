@@ -5,6 +5,7 @@
 // played, and the level you were on. Bests, totals and the days you
 // practiced are read from the rounds.
 import { exec, appHome } from "herdr";
+import { tryOrAsync } from "./pure.js";
 
 export const STORE_DIR = "data/kanso-dojo";
 const int = (n) => (Number.isFinite(Number(n)) ? Math.round(Number(n)) : 0);
@@ -19,15 +20,15 @@ export const roundSql = (r) => `INSERT INTO rounds(at,level,score,rings,fewest,s
 // What the rounds add up to: { bests: { level: score }, rounds, rings,
 // fewest, longest (streak), days: ["YYYY-MM-DD"], first (ms) }.
 export function totalsOf(rows, days) {
-  const bests = {};
-  let rounds = 0, rings = 0, fewest = 0, longest = 0, first = null;
-  for (const r of rows ?? []) {
-    bests[r.level] = Math.max(bests[r.level] ?? 0, Number(r.best) || 0);
-    rounds += Number(r.rounds) || 0; rings += Number(r.rings) || 0; fewest += Number(r.fewest) || 0;
-    longest = Math.max(longest, Number(r.longest) || 0);
-    if (r.first != null) first = first == null ? Number(r.first) : Math.min(first, Number(r.first));
-  }
-  return { bests, rounds, rings, fewest, longest, first, days: (days ?? []).map((d) => d.day) };
+  const sum = (rows ?? []).reduce((acc, r) => ({
+    bests: { ...acc.bests, [r.level]: Math.max(acc.bests[r.level] ?? 0, Number(r.best) || 0) },
+    rounds: acc.rounds + (Number(r.rounds) || 0),
+    rings: acc.rings + (Number(r.rings) || 0),
+    fewest: acc.fewest + (Number(r.fewest) || 0),
+    longest: Math.max(acc.longest, Number(r.longest) || 0),
+    first: r.first == null ? acc.first : acc.first == null ? Number(r.first) : Math.min(acc.first, Number(r.first)),
+  }), { bests: {}, rounds: 0, rings: 0, fewest: 0, longest: 0, first: null });
+  return { ...sum, days: (days ?? []).map((d) => d.day) };
 }
 
 export class Store {
@@ -44,8 +45,7 @@ export class Store {
 
   open() {
     return (this.ready ??= (async () => {
-      let ok = null;
-      try { ok = await exec("sqlite3", ["-version"]); } catch { /* below */ }
+      const ok = await tryOrAsync(() => exec("sqlite3", ["-version"])); // null: no sqlite3, below
       if (ok?.code !== 0) { this.ready = null; throw new Error("Install sqlite3 to keep your rounds."); }
       await exec("mkdir", ["-p", `${appHome()}/${STORE_DIR}`]);
       await this.sql(SCHEMA);

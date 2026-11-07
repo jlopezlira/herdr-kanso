@@ -15,6 +15,7 @@
 // - GitHub's weekly contributor statistics, for what no machine has cloned.
 // A repository's week counts the larger of what the machines and GitHub saw.
 import { exec, appHome, home, spaces, panes, writeTextFile } from "herdr";
+import { range, tryOrAsync, mapSeries } from "./pure.js";
 
 export const STORE_DIR = "data/kanso-panel";
 const GIST_DESCRIPTION = "Kanso Shipped stats";
@@ -42,40 +43,36 @@ export function repoName(url, folder) {
   if (gh) return gh[1];
   const other = /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)[:/]+(.+)$/i.exec(u);
   if (other) return `${other[1]}/${other[2]}`;
-  return `local/${String(folder ?? "").replace(/\/+$/, "").split("/").pop() || "repository"}`;
+  return `local/${String(folder ?? "").replace(/\/+$/, "").split("/").at(-1) || "repository"}`;
 }
 
 // `git log --format='%x1e%H %at' --shortstat` as [{ hash, at (s), add, del }].
 export function parseLog(stdout) {
-  const out = [];
-  for (const chunk of String(stdout).split("\x1e").slice(1)) {
+  return String(stdout).split("\x1e").slice(1).map((chunk) => {
     const [head, ...rest] = chunk.trim().split("\n");
     const [hash, at] = head.trim().split(/\s+/);
     const stat = rest.join(" ");
-    out.push({
+    return {
       hash: hash.slice(0, HASH), at: Number(at),
       add: Number(/(\d+) insertions?\(\+\)/.exec(stat)?.[1] ?? 0),
       del: Number(/(\d+) deletions?\(-\)/.exec(stat)?.[1] ?? 0),
-    });
-  }
-  return out;
+    };
+  });
 }
 
 // SQL that adds commits, once each (a hash already read on another machine is kept as it was).
 export function insertCommits(repo, commits, machine) {
   const rows = commits.map((c) => `(${sqlText(repo)},${sqlText(c.hash)},${int(c.at)},${int(c.add)},${int(c.del)},${sqlText(machine)})`);
-  const out = [];
-  for (let i = 0; i < rows.length; i += 500) out.push(`INSERT OR IGNORE INTO commits(repo,hash,at,adds,dels,machine) VALUES ${rows.slice(i, i + 500).join(",")};`);
-  return out.join("\n");
+  // 500 rows a statement.
+  return range(Math.ceil(rows.length / 500)).map((k) => `INSERT OR IGNORE INTO commits(repo,hash,at,adds,dels,machine) VALUES ${rows.slice(k * 500, k * 500 + 500).join(",")};`).join("\n");
 }
 
 // This machine's file in the gist: its commits, compact, and the identities it signs with.
 export function machineFile(machine, identities, rows) {
-  const repos = [], index = new Map();
-  const commits = rows.map((r) => {
-    if (!index.has(r.repo)) { index.set(r.repo, repos.length); repos.push(r.repo); }
-    return [index.get(r.repo), r.hash, r.at, r.adds, r.dels];
-  });
+  // Each repository's name once, in the order first met; a commit points to it by its place.
+  const repos = [...new Set(rows.map((r) => r.repo))];
+  const index = new Map(repos.map((repo, i) => [repo, i]));
+  const commits = rows.map((r) => [index.get(r.repo), r.hash, r.at, r.adds, r.dels]);
   return { v: 1, machine, updated: Math.floor(Date.now() / 1000), identities, repos, commits };
 }
 
@@ -93,8 +90,7 @@ u AS (SELECT repo, week, a, d, c FROM l UNION ALL SELECT repo, week, adds, dels,
 SELECT repo, week, MAX(a) a, MAX(d) d, MAX(c) c FROM u GROUP BY repo, week ORDER BY repo, week;`;
 
 export function weeklyStats(rows) {
-  const repos = {};
-  for (const r of rows) (repos[r.repo] ??= { weeks: [] }).weeks.push([r.week * 1000, r.a, r.d, r.c]);
+  const repos = Object.fromEntries([...Map.groupBy(rows, (r) => r.repo)].map(([repo, list]) => [repo, { weeks: list.map((r) => [r.week * 1000, r.a, r.d, r.c]) }]));
   return { repos };
 }
 
@@ -114,7 +110,9 @@ export class Store {
   // Large writes go through a file: an argument can't hold thousands of rows.
   async script(text) {
     if (!text.trim()) return;
-    const path = `${this.dir}/.batch-${Date.now()}-${this.batches++}.sql`;
+    const n = this.batches;
+    this.batches = n + 1;
+    const path = `${this.dir}/.batch-${Date.now()}-${n}.sql`;
     await writeTextFile(path, `BEGIN;\n${text}\nCOMMIT;\n`, null);
     try {
       const r = await exec("sqlite3", [this.db, `.read '${path}'`]);
@@ -123,8 +121,7 @@ export class Store {
   }
 
   async open() {
-    let ok = null;
-    try { ok = await exec("sqlite3", ["-version"]); } catch {}
+    const ok = await tryOrAsync(() => exec("sqlite3", ["-version"]));
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep Shipped's statistics.");
     await exec("mkdir", ["-p", this.dir]);
     await this.sql(SCHEMA);
@@ -136,13 +133,17 @@ export class Store {
 
   async machine() {
     if (this.name) return this.name;
-    let name = await this.meta("machine");
-    if (!name) {
+    const stored = await this.meta("machine");
+    // The first time: this computer's short host name, kept.
+    const named = async () => {
       const r = await exec("hostname", ["-s"]).catch(() => null);
-      name = (r?.stdout ?? "").trim().replace(/[^A-Za-z0-9._-]+/g, "-") || `machine-${Date.now().toString(36)}`;
+      const name = (r?.stdout ?? "").trim().replace(/[^A-Za-z0-9._-]+/g, "-") || `machine-${Date.now().toString(36)}`;
       await this.setMeta("machine", name);
-    }
-    return (this.name = name);
+      return name;
+    };
+    const name = stored || await named();
+    this.name = name;
+    return name;
   }
 
   async weekly() { return weeklyStats(await this.sql(WEEKLY, true)); }
@@ -154,8 +155,8 @@ export class Store {
       this.sql(`SELECT CAST(strftime('%H', at, 'unixepoch', 'localtime') AS INTEGER) h, COUNT(*) n FROM commits WHERE ${span} GROUP BY h;`, true),
       this.sql(`SELECT machine, COUNT(*) n, SUM(adds) a, SUM(dels) d FROM commits WHERE ${span} GROUP BY machine ORDER BY n DESC;`, true),
     ]);
-    const byHour = Array(24).fill(0);
-    for (const r of hours) byHour[r.h] = r.n;
+    const counts = new Map(hours.map((r) => [r.h, r.n]));
+    const byHour = range(24).map((h) => (counts.has(h) ? counts.get(h) : 0));
     return { hours: byHour, machines };
   }
 
@@ -164,13 +165,14 @@ export class Store {
   async ghRepos() { return this.sql("SELECT repo, pushed, fetched, pending FROM gh_repos;", true); }
 
   async saveGithub(entries) {
-    const out = [];
-    for (const e of entries) {
-      out.push(`INSERT OR REPLACE INTO gh_repos(repo,pushed,fetched,pending) VALUES(${sqlText(e.repo)},${sqlText(e.pushed)},${int(e.fetched)},${e.pending ? 1 : 0});`);
-      if (e.pending) continue;
-      out.push(`DELETE FROM gh_weeks WHERE repo=${sqlText(e.repo)};`);
-      for (const [w, a, d, c] of e.weeks) out.push(`INSERT INTO gh_weeks(repo,week,adds,dels,commits) VALUES(${sqlText(e.repo)},${int(w / 1000)},${int(a)},${int(d)},${int(c)});`);
-    }
+    const out = entries.flatMap((e) => [
+      `INSERT OR REPLACE INTO gh_repos(repo,pushed,fetched,pending) VALUES(${sqlText(e.repo)},${sqlText(e.pushed)},${int(e.fetched)},${e.pending ? 1 : 0});`,
+      // A repository GitHub is still counting keeps the weeks it had.
+      ...(e.pending ? [] : [
+        `DELETE FROM gh_weeks WHERE repo=${sqlText(e.repo)};`,
+        ...e.weeks.map(([w, a, d, c]) => `INSERT INTO gh_weeks(repo,week,adds,dels,commits) VALUES(${sqlText(e.repo)},${int(w / 1000)},${int(a)},${int(d)},${int(c)});`),
+      ]),
+    ]);
     await this.script(out.join("\n"));
   }
 
@@ -179,26 +181,24 @@ export class Store {
   // Your repositories here, once each: where your panes and spaces are, the
   // ones read before, and those under the usual folders (4 levels deep).
   async localRepos() {
-    const folders = new Set([
+    const known = [
       ...panes().filter((p) => p.cwd && !String(p.pane).includes("/")).map((p) => p.cwd),
       ...spaces().filter((s) => !s.machine && s.folder).map((s) => s.folder),
       ...(await this.sql("SELECT path FROM scans;", true)).map((r) => r.path),
-    ]);
+    ];
     const found = await exec("sh", ["-c", 'for d in "$@"; do [ -d "$d" ] && find "$d" -maxdepth 4 -name .git -prune 2>/dev/null; done', "sh", ...ROOTS.map((r) => `${home()}/${r}`)]).catch(() => null);
-    for (const line of (found?.stdout ?? "").split("\n")) if (line.trim()) folders.add(line.trim().replace(/\/\.git$/, ""));
-    const repos = new Map();
-    const list = [...folders];
-    for (let i = 0; i < list.length; i += 8) {
-      await Promise.all(list.slice(i, i + 8).map(async (folder) => {
-        const r = await exec("sh", ["-c", 'cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir --show-toplevel && (git config --get remote.origin.url || echo) && git for-each-ref --format="%(objectname)" | cksum', "sh", folder]).catch(() => null);
-        if (r?.code !== 0) return;
-        const [common, top, url, refs] = r.stdout.split("\n").map((s) => s.trim());
-        if (!common || repos.has(common)) return;
-        const main = common.endsWith("/.git") ? common.slice(0, -5) : top;
-        repos.set(common, { path: main, repo: repoName(url, main), refs: refs ?? "" });
-      }));
-    }
-    return [...repos.values()];
+    const list = [...new Set([...known, ...(found?.stdout ?? "").split("\n").filter((line) => line.trim()).map((line) => line.trim().replace(/\/\.git$/, ""))])];
+    // Eight folders at a time: each one's repository, by its git folder.
+    const read = await mapSeries(range(Math.ceil(list.length / 8)), (k) => Promise.all(list.slice(k * 8, k * 8 + 8).map(async (folder) => {
+      const r = await exec("sh", ["-c", 'cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir --show-toplevel && (git config --get remote.origin.url || echo) && git for-each-ref --format="%(objectname)" | cksum', "sh", folder]).catch(() => null);
+      if (r?.code !== 0) return [];
+      const [common, top, url, refs] = r.stdout.split("\n").map((s) => s.trim());
+      if (!common) return [];
+      const main = common.endsWith("/.git") ? common.slice(0, -5) : top;
+      return [{ common, path: main, repo: repoName(url, main), refs: refs ?? "" }];
+    })));
+    // A repository reached from several folders (its worktrees) counts once, as first read.
+    return [...Map.groupBy(read.flat(2), (r) => r.common).values()].map(([{ path, repo, refs }]) => ({ path, repo, refs }));
   }
 
   // Reads the commits of every repository whose branches moved since the last read.
@@ -206,15 +206,14 @@ export class Store {
     const machine = await this.machine();
     const seen = new Map((await this.sql("SELECT path, refs FROM scans;", true)).map((r) => [r.path, r.refs]));
     const repos = (await this.localRepos()).filter((r) => seen.get(r.path) !== r.refs);
-    let done = 0;
-    for (const r of repos) {
+    await mapSeries(repos, async (r, i) => {
       const log = await exec("git", ["log", "--all", "--no-merges", "-F", ...identities.map((w) => `--author=${w}`), "--format=%x1e%H %at", "--shortstat"], { cwd: r.path }).catch(() => null);
       if (log?.code === 0) {
         await this.script(`${insertCommits(r.repo, parseLog(log.stdout), machine)}
 INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},${sqlText(r.repo)},${sqlText(r.refs)},${int(Date.now() / 1000)});`);
       }
-      progress?.(++done, repos.length);
-    }
+      progress?.(i + 1, repos.length);
+    });
     return repos.length;
   }
 
@@ -224,35 +223,38 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
   // Returns the identities they sign with.
   async syncMachines(identities) {
     const machine = await this.machine();
-    let id = await this.meta("gist");
-    if (!id) {
+    const stored = await this.meta("gist");
+    // Not kept here yet: the gist another machine made, found by its description.
+    const listed = async () => {
       const list = await exec("gh", ["api", "gists?per_page=100", "--paginate", "--jq", `.[] | select(.description == "${GIST_DESCRIPTION}") | .id`]);
-      id = list.code === 0 ? list.stdout.split("\n").map((s) => s.trim()).find(Boolean) ?? null : null;
-    }
+      return list.code === 0 ? list.stdout.split("\n").map((s) => s.trim()).find(Boolean) ?? null : null;
+    };
+    const id = stored || await listed();
     const mine = machineFile(machine, identities, await this.sql(`SELECT repo, hash, at, adds, dels FROM commits WHERE machine=${sqlText(machine)};`, true));
     const name = `shipped-${machine}.json`;
     const body = id ? { files: { [name]: { content: JSON.stringify(mine) } } } : { description: GIST_DESCRIPTION, public: false, files: { [name]: { content: JSON.stringify(mine) } } };
     const path = `${this.dir}/.gist-${Date.now()}.json`;
     await writeTextFile(path, JSON.stringify(body), null);
-    let sent;
-    try { sent = await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path]); }
-    finally { await exec("rm", ["-f", path]).catch(() => {}); }
+    const send = async () => {
+      try { return await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path]); }
+      finally { await exec("rm", ["-f", path]).catch(() => {}); }
+    };
+    const sent = await send();
     if (sent.code !== 0) throw new Error((sent.stderr || "the gist could not be written").trim().split("\n")[0]);
     const gist = JSON.parse(sent.stdout);
-    if (!id) { id = gist.id; }
-    await this.setMeta("gist", id);
-    const others = [];
-    for (const [file, f] of Object.entries(gist.files ?? {})) {
-      if (file === name || !file.startsWith("shipped-")) continue;
-      let text = f.content;
-      if (f.truncated && f.raw_url) { const r = await exec("curl", ["-fsSL", "--max-time", "25", f.raw_url]).catch(() => null); text = r?.code === 0 ? r.stdout : null; }
+    const gistId = id || gist.id;
+    await this.setMeta("gist", gistId);
+    // The other machines' files, one at a time: each one's commits stored.
+    const read = await mapSeries(Object.entries(gist.files ?? {}), async ([file, f]) => {
+      if (file === name || !file.startsWith("shipped-")) return null;
+      const fetched = async () => { const r = await exec("curl", ["-fsSL", "--max-time", "25", f.raw_url]).catch(() => null); return r?.code === 0 ? r.stdout : null; };
+      const text = f.truncated && f.raw_url ? await fetched() : f.content;
       const other = text && readMachineFile(text);
-      if (!other) continue;
-      others.push(other);
-      const byRepo = new Map();
-      for (const c of other.commits) (byRepo.get(c.repo) ?? byRepo.set(c.repo, []).get(c.repo)).push(c);
-      await this.script([...byRepo].map(([repo, commits]) => insertCommits(repo, commits, other.machine)).join("\n"));
-    }
-    return { gist: id, machines: others.map((o) => o.machine), identities: [...new Set(others.flatMap((o) => o.identities))] };
+      if (!other) return null;
+      await this.script([...Map.groupBy(other.commits, (c) => c.repo)].map(([repo, commits]) => insertCommits(repo, commits, other.machine)).join("\n"));
+      return other;
+    });
+    const others = read.filter(Boolean);
+    return { gist: gistId, machines: others.map((o) => o.machine), identities: [...new Set(others.flatMap((o) => o.identities))] };
   }
 }

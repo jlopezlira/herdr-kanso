@@ -106,29 +106,22 @@ exit 0`;
 const DETACH = `if command -v setsid >/dev/null 2>&1; then setsid -f "$@" >/dev/null 2>&1; else nohup "$@" >/dev/null 2>&1 & fi`;
 
 async function detect(platform) {
-  const found = {};
-  const add = (id, how) => { if (!found[id]) found[id] = how; };
   if (platform === "windows") {
     const tries = EDITORS.flatMap((e) => (e.cli ?? []).map((c) => [e, c]));
-    const hits = await Promise.all(tries.map(([e, c]) =>
-      exec("where", [c]).then((r) => (r.code === 0 ? [e, r.stdout.split(/\r?\n/)[0].trim()] : null)).catch(() => null)));
-    for (const h of hits) if (h) add(h[0].id, { cli: h[1] });
-    return found;
+    const hits = (await Promise.all(tries.map(([e, c]) =>
+      exec("where", [c]).then((r) => (r.code === 0 ? [e, r.stdout.split(/\r?\n/)[0].trim()] : null)).catch(() => null)))).filter(Boolean);
+    // An editor's first command found is the one kept.
+    return Object.fromEntries(hits.filter((h, i) => hits.findIndex((x) => x[0].id === h[0].id) === i).map((h) => [h[0].id, { cli: h[1] }]));
   }
-  const args = [];
-  for (const e of EDITORS) {
-    if (platform === "macos") for (const m of e.mac ?? []) args.push(`app:${m}`);
-    for (const c of e.cli ?? []) args.push(`cli:${c}`);
-  }
+  const args = EDITORS.flatMap((e) => [...(platform === "macos" ? (e.mac ?? []).map((m) => `app:${m}`) : []), ...(e.cli ?? []).map((c) => `cli:${c}`)]);
   const r = await exec("sh", ["-c", DETECT, "sh", ...args]);
   const hits = r.stdout.split("\n").filter(Boolean).map((l) => l.split("\t"));
-  for (const e of EDITORS) {
+  return Object.fromEntries(EDITORS.flatMap((e) => {
     const app = hits.find(([k, n]) => k === "app" && e.mac?.includes(n));
     const cli = hits.find(([k, n]) => k === "cli" && e.cli?.includes(n));
     const fp = hits.find(([k, n]) => k === "flatpak" && e.flatpak?.includes(n));
-    if (app || cli || fp) found[e.id] = { app: app?.[2], cli: cli?.[2], flatpak: fp?.[1] };
-  }
-  return found;
+    return app || cli || fp ? [[e.id, { app: app?.[2], cli: cli?.[2], flatpak: fp?.[1] }]] : [];
+  }));
 }
 
 // Files the preview panel shows: Markdown rendered, these as read-only text.
@@ -206,8 +199,8 @@ done`;
     const recent = (shared(RECENT) ?? []).filter((id) => BY_ID[id]);
     const have = EDITORS.filter((e) => this.found?.[e.id]);
     const rank = (e) => { const i = recent.indexOf(e.id); return i < 0 ? 1000 + EDITORS.indexOf(e) : i; };
-    const gui = have.filter((e) => !e.tui).sort((a, b) => rank(a) - rank(b));
-    const tui = have.filter((e) => e.tui).sort((a, b) => rank(a) - rank(b));
+    const gui = have.filter((e) => !e.tui).toSorted((a, b) => rank(a) - rank(b));
+    const tui = have.filter((e) => e.tui).toSorted((a, b) => rank(a) - rank(b));
     const own = this.target.file && TEXT.test(this.target.file) ? [PREVIEW] : [];
     return [...own, ...gui, ...tui];
   }
@@ -296,18 +289,19 @@ done`;
     const shown = file ?? folder;
     const firstTui = list.findIndex((e) => e.tui);
 
-    const body = [];
-    if (!this.found) body.push(div().px(9).py(8).text_color(t.dim).child("Looking for editors…"));
-    else if (this.error && !list.length) body.push(div().px(9).py(8).text_color(t.blocked).child(`Could not look for editors: ${this.error}`));
-    else if (!list.length) body.push(div().px(9).py(8).text_color(t.dim).child("No code editor found. Install Cursor, VS Code, Zed or another editor and open this again."));
-    list.forEach((e, i) => {
-      if (i === firstTui) body.push(div().px(9).pt(8).pb(4).text_size(11).text_color(t.dim).child("In a split"));
-      body.push(this.row(e, i, sel, t));
-    });
+    const note = !this.found ? div().px(9).py(8).text_color(t.dim).child("Looking for editors…")
+      : this.error && !list.length ? div().px(9).py(8).text_color(t.blocked).child(`Could not look for editors: ${this.error}`)
+      : !list.length ? div().px(9).py(8).text_color(t.dim).child("No code editor found. Install Cursor, VS Code, Zed or another editor and open this again.")
+      : null;
+    const body = [
+      ...(note ? [note] : []),
+      ...list.flatMap((e, i) => [...(i === firstTui ? [div().px(9).pt(8).pb(4).text_size(11).text_color(t.dim).child("In a split")] : []), this.row(e, i, sel, t)]),
+    ];
 
     return v_flex().id("open-with").track_focus(this.handle).w_full().min_h(0).bg(t.popover).p(6).text_size(12.8)
       .on_key_down((ev, cx) => {
-        const k = ev.key, move = listKey(ev, this.keys ??= {});
+        const k = ev.key, { move, gAt } = listKey(ev, this.listG);
+        this.listG = gAt;
         if (move === "escape") return this.close();
         if (move === "enter") return void this.open(pickable[this.at]);
         if (move && move !== "pending") { if (pickable.length) this.at = moveTo(move, this.at, pickable.length); }

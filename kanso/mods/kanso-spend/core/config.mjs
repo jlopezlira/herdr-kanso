@@ -145,11 +145,10 @@ function normalizeFieldSpec(value, label, { required = false } = {}) {
   if (hasLiteral && Object.hasOwn(value, "default")) {
     fail(`${label} cannot combine literal and default`);
   }
-  const out = hasPath
-    ? { path: value.path }
-    : { literal: value.literal };
-  if (Object.hasOwn(value, "default")) out.default = value.default;
-  return out;
+  return {
+    ...(hasPath ? { path: value.path } : { literal: value.literal }),
+    ...(Object.hasOwn(value, "default") ? { default: value.default } : {}),
+  };
 }
 
 function normalizeMapping(value, sourceId) {
@@ -157,67 +156,19 @@ function normalizeMapping(value, sourceId) {
   for (const key of Object.keys(value)) {
     if (!MAPPING_KEYS.has(key)) fail(`source ${sourceId} mapping has unknown field ${key}`);
   }
-  const mapping = {};
-  mapping.session = normalizeFieldSpec(value.session, `source ${sourceId} mapping.session`, {
+  const session = normalizeFieldSpec(value.session, `source ${sourceId} mapping.session`, {
     required: true,
   });
-  mapping.timestamp = normalizeFieldSpec(
+  const timestamp = normalizeFieldSpec(
     value.timestamp,
     `source ${sourceId} mapping.timestamp`,
     { required: true },
   );
-  for (const key of ["messageId", "project", "model", "provider", "role", "taskDurationMs"]) {
-    const spec = normalizeFieldSpec(value[key], `source ${sourceId} mapping.${key}`);
-    if (spec) mapping[key] = spec;
-  }
-  if (value.roles !== undefined) {
-    if (!Array.isArray(value.roles) || value.roles.length === 0) {
-      fail(`source ${sourceId} mapping.roles must be a non-empty array`);
-    }
-    if (mapping.role === undefined) {
-      fail(`source ${sourceId} mapping.roles needs mapping.role`);
-    }
-    mapping.roles = value.roles.map((role, index) => {
-      if (!nonEmptyString(role)) {
-        fail(`source ${sourceId} mapping.roles[${index}] must be a non-empty string`);
-      }
-      return role;
-    });
-  }
-  if (value.include !== undefined) {
-    if (!Array.isArray(value.include)) {
-      fail(`source ${sourceId} mapping.include must be an array`);
-    }
-    mapping.include = value.include.map((condition, index) => {
-      if (!isPlainObject(condition)) {
-        fail(`source ${sourceId} mapping.include[${index}] must be an object`);
-      }
-      const allowed = new Set(["path", "equals", "exists"]);
-      for (const key of Object.keys(condition)) {
-        if (!allowed.has(key)) {
-          fail(`source ${sourceId} mapping.include[${index}] has unknown field ${key}`);
-        }
-      }
-      if (!nonEmptyString(condition.path)) {
-        fail(`source ${sourceId} mapping.include[${index}].path must be non-empty`);
-      }
-      const keyCount =
-        (Object.hasOwn(condition, "equals") ? 1 : 0) +
-        (Object.hasOwn(condition, "exists") ? 1 : 0);
-      if (keyCount !== 1) {
-        fail(`source ${sourceId} mapping.include[${index}] needs equals or exists`);
-      }
-      if (Object.hasOwn(condition, "equals") && !primitive(condition.equals)) {
-        fail(`source ${sourceId} mapping.include[${index}].equals must be a primitive`);
-      }
-      if (Object.hasOwn(condition, "exists") && typeof condition.exists !== "boolean") {
-        fail(`source ${sourceId} mapping.include[${index}].exists must be boolean`);
-      }
-      return Object.hasOwn(condition, "equals")
-        ? { path: condition.path, equals: condition.equals }
-        : { path: condition.path, exists: condition.exists };
-    });
-  }
+  const fields = Object.fromEntries(["messageId", "project", "model", "provider", "role", "taskDurationMs"]
+    .map((key) => [key, normalizeFieldSpec(value[key], `source ${sourceId} mapping.${key}`)])
+    .filter(([, spec]) => spec));
+  const roles = value.roles === undefined ? {} : { roles: normalizeRoles(value.roles, sourceId, fields.role !== undefined) };
+  const include = value.include === undefined ? {} : { include: normalizeInclude(value.include, sourceId) };
   if (!isPlainObject(value.usage)) {
     fail(`source ${sourceId} mapping.usage must be an object`);
   }
@@ -226,25 +177,78 @@ function normalizeMapping(value, sourceId) {
       fail(`source ${sourceId} mapping.usage has unknown field ${key}`);
     }
   }
-  mapping.usage = {};
-  for (const key of ["input", "output", "cacheRead", "cacheWrite", "reasoning"]) {
-    if (value.usage[key] === undefined) continue;
-    mapping.usage[key] = normalizeFieldSpec(
+  const usage = Object.fromEntries(["input", "output", "cacheRead", "cacheWrite", "reasoning"]
+    .filter((key) => value.usage[key] !== undefined)
+    .map((key) => [key, normalizeFieldSpec(
       value.usage[key],
       `source ${sourceId} mapping.usage.${key}`,
       { required: true },
-    );
-  }
-  if (Object.keys(mapping.usage).length === 0) {
+    )]));
+  if (Object.keys(usage).length === 0) {
     fail(`source ${sourceId} mapping.usage must map at least one token field`);
   }
-  if (value.harness !== undefined) {
-    if (!nonEmptyString(value.harness)) {
-      fail(`source ${sourceId} mapping.harness must be a non-empty string`);
-    }
-    mapping.harness = value.harness;
+  if (value.harness !== undefined && !nonEmptyString(value.harness)) {
+    fail(`source ${sourceId} mapping.harness must be a non-empty string`);
   }
-  return mapping;
+  return {
+    session,
+    timestamp,
+    ...fields,
+    ...roles,
+    ...include,
+    usage,
+    ...(value.harness !== undefined ? { harness: value.harness } : {}),
+  };
+}
+
+function normalizeRoles(roles, sourceId, hasRole) {
+  if (!Array.isArray(roles) || roles.length === 0) {
+    fail(`source ${sourceId} mapping.roles must be a non-empty array`);
+  }
+  if (!hasRole) {
+    fail(`source ${sourceId} mapping.roles needs mapping.role`);
+  }
+  return roles.map((role, index) => {
+    if (!nonEmptyString(role)) {
+      fail(`source ${sourceId} mapping.roles[${index}] must be a non-empty string`);
+    }
+    return role;
+  });
+}
+
+function normalizeInclude(include, sourceId) {
+  if (!Array.isArray(include)) {
+    fail(`source ${sourceId} mapping.include must be an array`);
+  }
+  return include.map((condition, index) => {
+    if (!isPlainObject(condition)) {
+      fail(`source ${sourceId} mapping.include[${index}] must be an object`);
+    }
+    const allowed = new Set(["path", "equals", "exists"]);
+    for (const key of Object.keys(condition)) {
+      if (!allowed.has(key)) {
+        fail(`source ${sourceId} mapping.include[${index}] has unknown field ${key}`);
+      }
+    }
+    if (!nonEmptyString(condition.path)) {
+      fail(`source ${sourceId} mapping.include[${index}].path must be non-empty`);
+    }
+    const keyCount =
+      (Object.hasOwn(condition, "equals") ? 1 : 0) +
+      (Object.hasOwn(condition, "exists") ? 1 : 0);
+    if (keyCount !== 1) {
+      fail(`source ${sourceId} mapping.include[${index}] needs equals or exists`);
+    }
+    if (Object.hasOwn(condition, "equals") && !primitive(condition.equals)) {
+      fail(`source ${sourceId} mapping.include[${index}].equals must be a primitive`);
+    }
+    if (Object.hasOwn(condition, "exists") && typeof condition.exists !== "boolean") {
+      fail(`source ${sourceId} mapping.include[${index}].exists must be boolean`);
+    }
+    return Object.hasOwn(condition, "equals")
+      ? { path: condition.path, equals: condition.equals }
+      : { path: condition.path, exists: condition.exists };
+  });
 }
 
 function normalizeSource(value, index) {
@@ -268,19 +272,17 @@ function normalizeSource(value, index) {
   });
   const enabled = value.enabled === undefined ? true : value.enabled;
   if (typeof enabled !== "boolean") fail(`source ${value.id}.enabled must be boolean`);
-  const source = {
+  if (value.adapter !== "custom" && value.mapping !== undefined) {
+    fail(`source ${value.id}.mapping is only valid for the custom adapter`);
+  }
+  return {
     id: value.id,
     label: value.label,
     adapter: value.adapter,
     enabled,
     roots,
+    ...(value.adapter === "custom" ? { mapping: normalizeMapping(value.mapping, value.id) } : {}),
   };
-  if (value.adapter === "custom") {
-    source.mapping = normalizeMapping(value.mapping, value.id);
-  } else if (value.mapping !== undefined) {
-    fail(`source ${value.id}.mapping is only valid for the custom adapter`);
-  }
-  return source;
 }
 
 export function normalizeConfig(input) {
@@ -340,11 +342,10 @@ export function normalizeConfig(input) {
     input.sources === undefined ? DEFAULT_CONFIG.sources : input.sources;
   if (!Array.isArray(sourceInputs)) fail("sources must be an array");
   const sources = sourceInputs.map(normalizeSource);
-  const ids = new Set();
-  for (const source of sources) {
-    if (ids.has(source.id)) fail(`duplicate source id ${source.id}`);
-    ids.add(source.id);
-  }
+  // The first source whose id an earlier one already uses.
+  const firstWithId = new Map(sources.map((source, index) => [source.id, index]).toReversed());
+  const duplicate = sources.find((source, index) => firstWithId.get(source.id) !== index);
+  if (duplicate) fail(`duplicate source id ${duplicate.id}`);
 
   return {
     profile,

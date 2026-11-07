@@ -6,8 +6,9 @@ import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, exec, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
+import { tryOrAsync } from "./pure.js";
 
-const basename = (path) => path.replace(/\/+$/, "").split("/").pop();
+const basename = (path) => path.replace(/\/+$/, "").split("/").at(-1);
 // Kanso's own settings (kanso-settings): keys, what shows, what's new. The
 // tab bar holds the button; ⌃⇧, lands here (kanso-chrome.settings).
 const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
@@ -25,8 +26,9 @@ export default class WorkspaceChrome extends View {
     // These names stay for keys bound to them before.
     cx.spawn(async (cx) => {
       for (;;) {
-        let c;
-        try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
+        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
+        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+        const { c } = next;
         if (c === "update") this.updater.install(cx);
         else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
         else if (c === "settings") openSettings();
@@ -60,9 +62,13 @@ export default class WorkspaceChrome extends View {
     if (this.watching) return; // the last look has not answered yet
     this.watching = true;
     cx.spawn(async (cx) => {
-      let errors = [];
-      try { const r = await exec("sh", ["-c", 'HERDR_APP_HOME="$1" herdr-app status', "_", appHome()]); errors = JSON.parse(r.stdout).errors ?? []; } catch { return; }
-      finally { this.watching = false; }
+      const status = await tryOrAsync(async () => {
+        const r = await exec("sh", ["-c", 'HERDR_APP_HOME="$1" herdr-app status', "_", appHome()]);
+        return { errors: JSON.parse(r.stdout).errors ?? [] };
+      });
+      this.watching = false;
+      if (!status) return;
+      const { errors } = status;
       if (!errors.some((e) => /out of memory/i.test(String(e)))) { this.warned = false; return; }
       if (this.warned) return;
       this.warned = true;

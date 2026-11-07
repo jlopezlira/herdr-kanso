@@ -12,11 +12,41 @@ export function tilde(path) {
   return path === h ? "~" : path.startsWith(`${h}/`) ? `~${path.slice(h.length)}` : path;
 }
 
-// Runs `work` on every item, `n` at a time.
+// Pairs and answers are gathered in runs of this many, so a long list is not
+// copied once per item.
+const RUN = 64;
+
+// Runs `work` on every item, `n` at a time: the answers, in the items' order.
+// The lanes share one iterator over the items, so each takes the next one
+// left as soon as it is free; a lane keeps the [index, answer] pairs it got
+// in runs of RUN.
 export async function pool(items, n, work) {
-  let next = 0;
-  const lane = async () => { while (next < items.length) { const i = next++; await work(items[i], i); } };
-  await Promise.all(Array.from({ length: Math.min(n, items.length) }, lane));
+  const queue = items.entries();
+  const lane = async (runs, got) => {
+    const next = queue.next();
+    if (next.done) return got.length ? [...runs, got] : runs;
+    const [i, item] = next.value;
+    const pair = [i, await work(item, i)];
+    return got.length + 1 >= RUN
+      ? lane([...runs, [...got, pair]], [])
+      : lane(runs, [...got, pair]);
+  };
+  const lanes = await Promise.all(Array.from({ length: Math.min(n, items.length) }, () => lane([], [])));
+  return lanes.flat(2).toSorted((a, b) => a[0] - b[0]).map(([, answer]) => answer);
+}
+
+// `list` mapped in order with a running state: step(state, item, i) answers
+// [state, value]. A reduce that keeps every value; the values are gathered in
+// runs of 64, so a long list is not copied once per item.
+export function mapWith(list, step, init) {
+  const done = Array.from({ length: Math.ceil(list.length / RUN) }, (_, r) => r).reduce((acc, r) => {
+    const run = list.slice(r * RUN, (r + 1) * RUN).reduce((inner, item, k) => {
+      const [state, value] = step(inner.state, item, r * RUN + k);
+      return { state, values: [...inner.values, value] };
+    }, { state: acc.state, values: [] });
+    return { state: run.state, runs: [...acc.runs, run.values] };
+  }, { state: init, runs: [] });
+  return done.runs.flat();
 }
 
 // The terminal's font, for diffs and code.
@@ -42,24 +72,25 @@ export const key = () => { const { cwd, on } = location(); return JSON.stringify
 
 // Numbers each diff line once, so a frame only draws the rows on screen.
 // `max` lines at most, each cut at `width` characters (both optional).
+// The state carried down the lines is { old, next }: the line numbers the
+// next removed and added (or kept) lines have, set by each hunk header.
 export function diffRows(lines, { max, width } = {}) {
-  let old = 0, next = 0;
-  return (max ? lines.slice(0, max) : lines).map((line) => {
+  return mapWith(max ? lines.slice(0, max) : lines, (at, line) => {
     const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(line);
-    if (m) { old = +m[1]; next = +m[2]; return { kind: "@", text: line }; }
+    if (m) return [{ old: +m[1], next: +m[2] }, { kind: "@", text: line }];
     const kind = line[0], body = line.slice(1) || " ", text = width ? body.slice(0, width) : body;
-    if (kind === "-") return { kind, number: old++, text };
-    if (kind === "+") return { kind, number: next++, text };
-    if (kind === " ") { old++; return { kind, number: next++, text }; }
-    return { kind: "", text: line };
-  });
+    if (kind === "-") return [{ old: at.old + 1, next: at.next }, { kind, number: at.old, text }];
+    if (kind === "+") return [{ old: at.old, next: at.next + 1 }, { kind, number: at.next, text }];
+    if (kind === " ") return [{ old: at.old + 1, next: at.next + 1 }, { kind, number: at.next, text }];
+    return [at, { kind: "", text: line }];
+  }, { old: 0, next: 0 });
 }
 
 // ---- Showing a file --------------------------------------------------------------
 
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
 const MAX_TEXT = 400000;
-export const ext = (path) => (path.includes(".") ? path.split(".").pop().toLowerCase() : "");
+export const ext = (path) => (path.includes(".") ? path.split(".").at(-1).toLowerCase() : "");
 export const isMarkdown = (path) => ["md", "markdown", "mdx"].includes(ext(path));
 
 // A read-only editor state for a code or text file, in the terminal's font,

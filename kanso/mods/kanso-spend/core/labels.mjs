@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import * as zlib from "node:zlib";
+import { mapSeries, parseOr, tryOrAsync } from "../pure.js";
 import { atomicWriteJson, isPlainObject } from "./util.mjs";
 
 export const LABELS_VERSION = 2;
@@ -32,14 +33,10 @@ const LINKS = [
 ];
 
 export function ticketsIn(text) {
-  const found = [];
-  const add = (ref) => { if (!found.includes(ref)) found.push(ref); };
-  for (const { pattern, ref } of LINKS) for (const match of text.matchAll(pattern)) add(ref(match));
-  for (const match of text.matchAll(JIRA)) {
-    const key = match[1];
-    if (!NOT_TICKETS.has(key.slice(0, key.indexOf("-")))) add(key);
-  }
-  return found;
+  const links = LINKS.flatMap(({ pattern, ref }) => [...text.matchAll(pattern)].map((match) => ref(match)));
+  const keys = [...text.matchAll(JIRA)].map((match) => match[1]).filter((key) => !NOT_TICKETS.has(key.slice(0, key.indexOf("-"))));
+  // Each ref once, in the order it was first seen.
+  return [...new Set([...links, ...keys])];
 }
 
 function snippet(text) {
@@ -54,11 +51,10 @@ const textOf = (content) => (typeof content === "string" ? content
 
 /** Harness boilerplate injected as a user turn is not the user's prompt. */
 function cleanPrompt(text) {
-  let body = String(text ?? "");
-  const request = body.indexOf("## My request for Codex:");
-  if (request >= 0) body = body.slice(request + "## My request for Codex:".length);
-  body = body.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "");
-  const trimmed = body.trim();
+  const whole = String(text ?? "");
+  const request = whole.indexOf("## My request for Codex:");
+  const asked = request >= 0 ? whole.slice(request + "## My request for Codex:".length) : whole;
+  const trimmed = asked.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
   if (!trimmed) return "";
   if (/^<[a-z_-]+[\s>]/i.test(trimmed)) return "";
   if (/^(# AGENTS\.md|# Files mentioned by the user|Caveat:)/.test(trimmed)) return "";
@@ -86,53 +82,56 @@ function userTexts(adapter, entry) {
   return { texts: [] };
 }
 
+// Async `step(acc, item)` over an async iterable, one item at a time, until
+// it runs out or a step answers { stop: true }: the last `acc`.
+async function foldUntil(iterator, step, acc) {
+  const { value, done } = await iterator.next();
+  if (done) return acc;
+  const next = step(acc, value);
+  return next.stop ? next.acc : foldUntil(iterator, step, next.acc);
+}
+
+// One transcript line folded into what is known of the label so far.
+function readLine(adapter, seen, line) {
+  const counted = { ...seen, lines: seen.lines + 1, bytes: seen.bytes + line.length };
+  if (counted.lines > MAX_LINES || counted.bytes > MAX_BYTES) return { stop: true, acc: counted };
+  // Cheap prefilter: skip lines that cannot hold a user turn or a name.
+  if (!line.includes('"user"') && !line.includes("session_info")) return { acc: counted };
+  const found = userTexts(adapter, parseOr(line, null));
+  const named = found.name ? { ...counted, name: found.name } : counted;
+  const next = found.texts.map(cleanPrompt).filter(Boolean).reduce((acc, text) => ({
+    ...acc,
+    users: acc.users + 1,
+    // "." or "ok" says nothing about the task; wait for a real prompt.
+    prompt: !acc.prompt && (text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 8 ? snippet(text) : acc.prompt,
+    tickets: [...acc.tickets, ...ticketsIn(text).filter((ticket) => !acc.tickets.includes(ticket))],
+  }), named);
+  // Pi can rename a session later; keep reading Pi heads to the line cap.
+  return { stop: next.users >= USER_SCAN && adapter !== "pi", acc: next };
+}
+
 /** Reads a transcript head (decompressing .zst) until enough user turns are seen. */
 export async function readLabel(adapter, filePath) {
-  const label = { prompt: undefined, name: undefined, tickets: [] };
-  let users = 0;
-  let lines = 0;
-  let bytes = 0;
-  let source = createReadStream(filePath);
-  let stream = source;
-  if (filePath.endsWith(".zst")) {
-    if (typeof zlib.createZstdDecompress !== "function") return label;
-    stream = source.pipe(zlib.createZstdDecompress());
-    stream.on("error", () => {});
-  }
+  const empty = { prompt: undefined, name: undefined, tickets: [] };
+  const source = createReadStream(filePath);
+  const zst = filePath.endsWith(".zst");
+  if (zst && typeof zlib.createZstdDecompress !== "function") return empty;
+  const stream = zst ? source.pipe(zlib.createZstdDecompress()) : source;
+  if (zst) stream.on("error", () => {});
   source.on("error", () => {});
   const reader = createInterface({ input: stream, crlfDelay: Infinity });
   try {
-    for await (const line of reader) {
-      lines += 1;
-      bytes += line.length;
-      if (lines > MAX_LINES || bytes > MAX_BYTES) break;
-      // Cheap prefilter: skip lines that cannot hold a user turn or a name.
-      if (!line.includes('"user"') && !line.includes("session_info")) continue;
-      let entry;
-      try { entry = JSON.parse(line); } catch { continue; }
-      const found = userTexts(adapter, entry);
-      if (found.name) label.name = found.name;
-      for (const raw of found.texts) {
-        const text = cleanPrompt(raw);
-        if (!text) continue;
-        users += 1;
-        // "." or "ok" says nothing about the task; wait for a real prompt.
-        if (!label.prompt && (text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 8) label.prompt = snippet(text);
-        for (const ticket of ticketsIn(text)) if (!label.tickets.includes(ticket)) label.tickets.push(ticket);
-      }
-      // Pi can rename a session later; keep reading Pi heads to the line cap.
-      if (users >= USER_SCAN && adapter !== "pi") break;
-    }
+    const { prompt, name, tickets } = await foldUntil(reader[Symbol.asyncIterator](), (seen, line) => readLine(adapter, seen, line), { ...empty, users: 0, lines: 0, bytes: 0 });
+    return { prompt, name, tickets };
   } finally {
     reader.close();
     source.destroy();
     if (stream !== source) stream.destroy();
   }
-  return label;
 }
 
 export function labelText(label, sessionId) {
-  return label?.name || label?.tickets?.[0] || label?.prompt || `Session ${String(sessionId).split(":").pop().slice(0, 8)}`;
+  return label?.name || label?.tickets?.[0] || label?.prompt || `Session ${String(sessionId).split(":").at(-1).slice(0, 8)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,15 +151,12 @@ export async function loadLabels(storePath) {
 
 /** pi-usage keeps names, prompts and tickets for every Pi session it saw. */
 async function piUsageLabels(home) {
-  const out = new Map();
-  try {
+  // Nothing when pi-usage is not installed.
+  return tryOrAsync(async () => {
     const parsed = JSON.parse(await readFile(path.join(home, ".prjct/pi-usage/scan.json"), "utf8"));
-    for (const file of Object.values(parsed?.files ?? {})) {
-      if (!file?.id) continue;
-      out.set(`pi:${file.id}`, { name: file.name, prompt: file.prompt, tickets: Array.isArray(file.tickets) ? file.tickets : [] });
-    }
-  } catch { /* pi-usage not installed */ }
-  return out;
+    return new Map(Object.values(parsed?.files ?? {}).filter((file) => file?.id)
+      .map((file) => [`pi:${file.id}`, { name: file.name, prompt: file.prompt, tickets: Array.isArray(file.tickets) ? file.tickets : [] }]));
+  }, new Map());
 }
 
 /**
@@ -170,46 +166,41 @@ async function piUsageLabels(home) {
  */
 export async function updateLabels(store, storePath, { home = os.homedir(), deadline = Infinity } = {}) {
   const cache = await loadLabels(storePath);
-  let fromPiUsage = null;
   const now = Date.now();
-  let dirty = false;
-  let pending = 0;
-  const sessions = new Map();
-  for (const file of Object.values(store.files ?? {})) {
-    for (const row of file.rows ?? []) {
-      if (typeof row.session === "string" && !sessions.has(row.session)) sessions.set(row.session, file);
-    }
-  }
-  for (const [session, file] of sessions) {
+  // Each session once, with the first file that holds it.
+  const rows = Object.values(store.files ?? {}).flatMap((file) => (file.rows ?? [])
+    .filter((row) => typeof row.session === "string").map((row) => ({ session: row.session, file })));
+  const sessions = [...Map.groupBy(rows, (row) => row.session)].map(([session, [{ file }]]) => [session, file]);
+  // A session whose transcript did not grow keeps its label. A live session
+  // grows every turn; its label rarely changes. Re-read a known session at
+  // most every few minutes, not on every refresh.
+  const stale = sessions.filter(([session, file]) => {
     const cached = cache.sessions[session];
-    if (cached && cached.size === file.size) continue;
-    // A live session grows every turn; its label rarely changes. Re-read a
-    // known session at most every few minutes, not on every refresh.
-    if (cached && now - (cached.readAt ?? 0) < RELABEL_MS) continue;
-    fromPiUsage ??= await piUsageLabels(home);
+    return !(cached && cached.size === file.size) && !(cached && now - (cached.readAt ?? 0) < RELABEL_MS);
+  });
+  const fromPiUsage = stale.length ? await piUsageLabels(home) : null;
+  // One answer per stale session, in order: [session, label] to store, or
+  // "pending" when the deadline came first.
+  const answers = await mapSeries(stale, async ([session, file]) => {
+    const cached = cache.sessions[session];
     const known = fromPiUsage.get(session);
-    if (known && (known.name || known.prompt || known.tickets.length)) {
-      cache.sessions[session] = { ...known, size: file.size, readAt: now };
-      dirty = true;
-      continue;
-    }
-    if (Date.now() >= deadline) { pending += 1; continue; }
+    if (known && (known.name || known.prompt || known.tickets.length)) return [session, { ...known, size: file.size, readAt: now }];
+    if (Date.now() >= deadline) return "pending";
     // A label that never changes once the first prompts are in: only re-read
     // a growing Pi file, whose /name can change; others keep their label.
-    if (cached && file.adapter !== "pi" && (cached.prompt || cached.tickets?.length)) {
-      cache.sessions[session] = { ...cached, size: file.size, readAt: now };
-      dirty = true;
-      continue;
-    }
+    if (cached && file.adapter !== "pi" && (cached.prompt || cached.tickets?.length)) return [session, { ...cached, size: file.size, readAt: now }];
     try {
       const fileStat = await stat(file.path);
       const label = await readLabel(file.adapter, file.path);
-      cache.sessions[session] = { ...label, size: file.size ?? fileStat.size, readAt: now };
+      return [session, { ...label, size: file.size ?? fileStat.size, readAt: now }];
     } catch {
-      cache.sessions[session] = { tickets: [], size: file.size, readAt: now };
+      return [session, { tickets: [], size: file.size, readAt: now }];
     }
-    dirty = true;
-  }
-  if (dirty) await atomicWriteJson(labelsPath(storePath), cache);
-  return { labels: cache, pending };
+  });
+  const fresh = answers.filter((answer) => answer !== "pending");
+  const pending = answers.length - fresh.length;
+  if (!fresh.length) return { labels: cache, pending };
+  const labels = { ...cache, sessions: { ...cache.sessions, ...Object.fromEntries(fresh) } };
+  await atomicWriteJson(labelsPath(storePath), labels);
+  return { labels, pending };
 }

@@ -30,17 +30,16 @@ const EYES = [4, 11];
 
 //   mood: "calm" | "glad" | "sweat" | "sleep".
 export function hachiPixels(mood = "calm") {
-  const g = BODY.map((r) => r.split(""));
-  const set = (x, y, v) => { if (g[y]?.[x] !== undefined) g[y][x] = v; };
-  for (const x of EYES) {
-    if (mood === "glad") { set(x - 1, 7, "K"); set(x, 6, "K"); set(x + 1, 7, "K"); }
-    else if (mood === "sleep") { set(x - 1, 7, "K"); set(x, 7, "K"); set(x + 1, 7, "K"); }
-    else { set(x, 6, "K"); set(x, 7, "K"); }
-  }
-  if (mood === "glad") { set(6, 11, "K"); set(9, 11, "K"); set(7, 11, "T"); set(8, 11, "T"); set(7, 12, "T"); set(8, 12, "T"); }
-  else if (mood === "sweat") { set(7, 11, "K"); set(8, 11, "K"); set(15, 3, "B"); set(15, 4, "B"); }
-  else { set(6, 11, "K"); set(9, 11, "K"); set(7, 12, "K"); set(8, 12, "K"); }
-  return g;
+  // The face drawn over the body, [x, y, ink] each: the eyes, then the mouth
+  // (a later mark wins where two meet; one off the body draws nothing).
+  const eyes = EYES.flatMap((x) => (mood === "glad" ? [[x - 1, 7, "K"], [x, 6, "K"], [x + 1, 7, "K"]]
+    : mood === "sleep" ? [[x - 1, 7, "K"], [x, 7, "K"], [x + 1, 7, "K"]]
+    : [[x, 6, "K"], [x, 7, "K"]]));
+  const mouth = mood === "glad" ? [[6, 11, "K"], [9, 11, "K"], [7, 11, "T"], [8, 11, "T"], [7, 12, "T"], [8, 12, "T"]]
+    : mood === "sweat" ? [[7, 11, "K"], [8, 11, "K"], [15, 3, "B"], [15, 4, "B"]]
+    : [[6, 11, "K"], [9, 11, "K"], [7, 12, "K"], [8, 12, "K"]];
+  const face = new Map([...eyes, ...mouth].map(([x, y, v]) => [y * 100 + x, v]));
+  return BODY.map((r, y) => r.split("").map((c, x) => face.get(y * 100 + x) ?? c));
 }
 
 // Hachi at `px` pixels a cell, in the theme's colors (the tongue in its accent).

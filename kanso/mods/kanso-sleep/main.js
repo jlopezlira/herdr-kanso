@@ -15,22 +15,46 @@
 //
 // Opened from the sidebar's menus, a pane header's moon, or on its own (the
 // list of what sleeps). Props: `sleep` { scope: "agent" | "tab" | "project",
-// space, tab, pane }, `wake` { id } (or { from, name }), `wakeAll` (a
-// project key). An agent or a tab goes to sleep at once, under the name it
+// space, tab, pane }, `wake` { id } (or { from, name }), `wakeAll`
+// { from: a project key, space: a space id or null }. An agent or a tab goes to sleep at once, under the name it
 // already has (the sidebar's, shared "kanso.names"): nothing is asked, the
 // view only shows it going and closes; a project asks once. One
 // agent sleeps on its own: its pane closes and the rest of the tab stays;
-// it wakes back into that tab when the tab is still there. The tabs live in
-// data/kanso-sleep/sleep.db (store.js); shared "kanso.asleep" tells the
-// sidebar what sleeps.
+// it wakes back into that tab when the tab is still there. Asleep is one
+// status of an agent in the left nav's database (store.js, kdb.js: the
+// sidebar owns them); shared "kanso.asleep" is a copy of what it read.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile, exec } from "herdr";
 import { Store, idle, shownOf } from "./store.js";
+import { spaceFor, inPlace } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, shq, SHELLS, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
+import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries } from "./pure.js";
 
 const ARM_MS = 4000;
+
+// How async `fn` ended, as a value: { ok, value } or { ok: false, error }.
+const settled = async (fn) => {
+  try { return { ok: true, value: await fn() }; } catch (error) { return { ok: false, error }; }
+};
+// One step of a run that carries its state from step to step: `fn(st)` is
+// the state after it. A step that throws leaves the state as it found it,
+// marked `failed` with the `error`; the steps after a failed one are skipped.
+const step = async (st, fn) => {
+  if (st.failed) return st;
+  const r = await settled(() => fn(st));
+  return r.ok ? r.value : { ...st, failed: true, error: r.error };
+};
+// `fn(tell)` run to its end, as `settled` says, with `told`: the arguments
+// of its first `tell(...)` call (it may tell, then throw), or null when it
+// never told. A promise holds the call: it settles once, on the first one,
+// so the one made when `fn` is over (null) counts only when none came before.
+const telling = (fn) => new Promise((done) => {
+  const told = new Promise((tell) => {
+    done(settled(() => fn((...args) => tell(args))).then(async (end) => { tell(null); return { ...end, told: await told }; }));
+  });
+});
 
 // The command that resumes `session` the way argv ran Claude Code, or null
 // when it can't: only options known to carry over are kept; the first
@@ -45,26 +69,39 @@ const DROP_VALUE = new Set(["--resume", "-r", "--session-id"]);
 const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
 export function resumeArgv(argv, session) {
   if (!Array.isArray(argv) || !argv.length || base(argv[0]) !== "claude" || !session) return null;
-  const keep = [];
-  for (let i = 1; i < argv.length; i++) {
+  // One option at word `i`: { kept: the words that carry over, next: the
+  // word after them }, { end } at the first prompt (it and what follows are
+  // left out), or null when it can't carry over.
+  const option = (i) => {
     const a = String(argv[i]);
-    if (!a.startsWith("-")) break; // the first prompt, and anything after it
+    if (!a.startsWith("-")) return { end: true };
     const eq = a.startsWith("--") ? a.indexOf("=") : -1;
     const flag = eq > 0 ? a.slice(0, eq) : a;
-    if (KEEP_FLAG.has(flag) && eq < 0) keep.push(a);
-    else if (KEEP_MANY.has(flag)) {
-      if (eq > 0) { keep.push(a); continue; }
-      const vals = [];
-      while (i + 1 < argv.length && !String(argv[i + 1]).startsWith("-")) vals.push(String(argv[++i]));
-      if (!vals.length) return null;
-      keep.push(a, ...vals);
+    if (KEEP_FLAG.has(flag) && eq < 0) return { kept: [a], next: i + 1 };
+    if (KEEP_MANY.has(flag)) {
+      if (eq > 0) return { kept: [a], next: i + 1 };
+      const end = argv.findIndex((v, j) => j > i && String(v).startsWith("-"));
+      const vals = argv.slice(i + 1, end < 0 ? argv.length : end).map(String);
+      return vals.length ? { kept: [a, ...vals], next: i + 1 + vals.length } : null;
     }
-    else if (KEEP_VALUE.has(flag)) { if (eq > 0) keep.push(a); else if (i + 1 < argv.length) keep.push(a, String(argv[++i])); else return null; }
-    else if (DROP_VALUE.has(flag)) { if (eq < 0) i++; }
-    else if (DROP_FLAG.has(flag)) { /* left out */ }
-    else return null;
-  }
-  return [argv[0], ...keep, "--resume", session];
+    if (KEEP_VALUE.has(flag)) {
+      if (eq > 0) return { kept: [a], next: i + 1 };
+      return i + 1 < argv.length ? { kept: [a, String(argv[i + 1])], next: i + 2 } : null;
+    }
+    if (DROP_VALUE.has(flag)) return { kept: [], next: eq < 0 ? i + 2 : i + 1 };
+    if (DROP_FLAG.has(flag)) return { kept: [], next: i + 1 }; // left out
+    return null;
+  };
+  // Word by word from the first option: each step either starts at the
+  // word due next or passes; the kept words gather as parts, joined once.
+  const walked = argv.reduce((st, _, i) => {
+    if (i < 1 || st.stop || i !== st.next) return st;
+    const o = option(i);
+    if (!o) return { ...st, stop: true, failed: true };
+    if (o.end) return { ...st, stop: true };
+    return { ...st, next: o.next, parts: [...st.parts, o.kept] };
+  }, { next: 1, parts: [], stop: false, failed: false });
+  return walked.failed ? null : [argv[0], ...walked.parts.flat(), "--resume", session];
 }
 
 // What waking a pane runs: a Claude agent back on its conversation (the
@@ -74,17 +111,14 @@ export function wakeArgv(p) {
   if (!p.resume || base(p.argv[0]) !== "claude") return p.argv;
   return p.wake ?? resumeArgv(p.argv, p.resume);
 }
-export const wakeable = (a) => ({ ...a, cols: a.cols.map((c) => ({ ...c, panes: c.panes.map((p) => ({ argv: wakeArgv(p), cwd: p.cwd })) })) });
+export const wakeable = (a) => ({ ...a, cols: a.cols.map((c) => ({ ...c, panes: c.panes.map((p) => ({ argv: wakeArgv(p), cwd: p.cwd, resume: p.resume ?? null, name: p.name ?? null })) })) });
 // A sleeping tab's agents by the names they go by, the other panes by program.
 export const sleepers = (a) => a.cols.flatMap((c) => c.panes).map((p) => p.name || programOf(p.argv)).join(", ");
 
 // Why a tab can't sleep now: its agents at work or waiting on you.
 export function sleepBlocker(recs) {
-  for (const [, r] of recs) {
-    const st = r?.status?.state;
-    if (st === "working" || st === "blocked") return `${r.labels?.["kanso.name"] || r.title || r.address} is ${st === "working" ? "working" : "waiting on you"}`;
-  }
-  return null;
+  const r = [...recs].map(([, x]) => x).find((x) => x?.status?.state === "working" || x?.status?.state === "blocked");
+  return r ? `${r.labels?.["kanso.name"] || r.title || r.address} is ${r.status.state === "working" ? "working" : "waiting on you"}` : null;
 }
 
 // The same tabs, panes and agents as when the sleep view opened.
@@ -97,20 +131,83 @@ export const sameTabs = (a, b) => shapeOf(a) === shapeOf(b);
 export function promptEmpty(screen) {
   const lines = String(screen ?? "").split("\n");
   const rule = (l) => /^\s*─{8,}/.test(l ?? "");
-  for (let i = lines.length - 1; i > 0; i--) {
-    if (!/^\s*[❯>]/.test(lines[i]) || !rule(lines[i - 1])) continue;
-    const box = [lines[i].replace(/^\s*[❯>]/, "")];
-    for (let j = i + 1; j < lines.length && !rule(lines[j]); j++) box.push(lines[j]);
-    return box.every((l) => !l.trim());
-  }
-  return false;
+  // The last "❯" line right under a rule (never the first line), and the
+  // lines after it up to the rule that closes the box.
+  const i = lines.findLastIndex((l, k) => k > 0 && /^\s*[❯>]/.test(l) && rule(lines[k - 1]));
+  if (i < 0) return false;
+  const end = lines.findIndex((l, j) => j > i && rule(l));
+  const box = [lines[i].replace(/^\s*[❯>]/, ""), ...lines.slice(i + 1, end < 0 ? lines.length : end)];
+  return box.every((l) => !l.trim());
+}
+
+// The pid of a live Claude process on conversation `session`, or null when
+// none is: its session record names the conversation, the process is
+// there, is claude, and started when the record says (a pid reused by
+// another program is not it). Throws when it can't tell (a folder or a
+// record it can't look at): never "none" for what it could not see.
+const RUNNING = String.raw`d="$2"/.claude/sessions
+if ! out=$(LC_ALL=C ls -d "$d" 2>&1); then case "$out" in *": No such file or directory") exit 0;; *) echo "can't look at $d: $out" >&2; exit 2;; esac; fi
+if [ ! -r "$d" ] || [ ! -x "$d" ]; then echo "can't read $d" >&2; exit 2; fi
+for f in "$d"/*.json; do
+  [ -f "$f" ] || continue
+  grep -qF "\"sessionId\":\"$1\"" "$f"; rc=$?
+  if [ $rc -eq 1 ]; then continue; elif [ $rc -ne 0 ]; then echo "can't read $f" >&2; exit 2; fi
+  p=$(basename "$f" .json)
+  kill -0 "$p" 2>/dev/null || continue
+  comm=$(LC_ALL=C ps -p "$p" -o comm= 2>/dev/null)
+  [ "$(basename "$comm")" = claude ] || continue
+  want=$(sed -n 's/.*"procStart":"\([^"]*\)".*/\1/p' "$f")
+  if [ -n "$want" ]; then have=$(LC_ALL=C TZ=UTC ps -p "$p" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//'); [ "$have" = "$want" ] || continue; fi
+  echo "$p"; exit 0
+done
+exit 0`;
+export async function runningOn(session) {
+  const r = await exec("sh", ["-c", RUNNING, "sh", session, home()]);
+  if (r.code !== 0) throw new Error((r.stderr || "the check failed").trim().split("\n")[0]);
+  const pid = Number(r.stdout?.trim());
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
+// A terminal (`hc get --json`) at its own shell's prompt: nothing in front
+// of the shell it was opened with. Another shell in front (bash running a
+// script, say) is something running.
+export const atPrompt = (x) => Boolean(x) && (!x.foreground?.pid || x.foreground.pid === x.pid);
+
+// Is process `pid` still the claude that ran before `before` (ms)? Its
+// age, from ps: one started since is another process with that pid.
+export async function stillThere(pid, before, now = Date.now()) {
+  const p = await procOf(pid, now);
+  return p?.comm === "claude" && p.start <= before + 2000;
+}
+// Process `pid` now: its program's name and when it started (ms, to the
+// second), or null when there is none.
+export async function procOf(pid, now = Date.now()) {
+  const ps = await exec("ps", ["-p", String(pid), "-o", "etime=,comm="]).catch(() => null);
+  const m = ps?.code === 0 ? /^\s*(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)\s+(.+?)\s*$/.exec(ps.stdout) : null;
+  if (!m) return null;
+  const age = (((Number(m[1] ?? 0) * 24 + Number(m[2] ?? 0)) * 60 + Number(m[3])) * 60 + Number(m[4])) * 1000;
+  return { comm: base(m[5]), start: now - age };
+}
+
+// A terminal here whose program in front names conversation `session` in
+// its arguments (a claude resuming it, even before its session record is
+// written), or null. Throws when a live one can't be read: never "none"
+// for what it could not see.
+export async function runningIn(session) {
+  const live = terminals().filter((k) => !(k.state && k.state !== "live") && !String(k.address).includes("/"));
+  const k = await findAsync(live, async (t) => {
+    const g = await hc(["get", t.address, "--json"]).catch(() => null);
+    const x = tryOr(() => JSON.parse(g.stdout));
+    if (!x) throw new Error(`${t.address} could not be read`);
+    return (x.foreground?.argv ?? []).map(String).includes(session);
+  });
+  return k ? k.address : null;
 }
 
 // A name not taken yet: "shield", else "shield 2", "shield 3"...
 export function freeName(name, taken) {
-  let n = name, k = 2;
-  while (taken.has(n)) n = `${name} ${k++}`;
-  return n;
+  const from = (n, k) => (taken.has(n) ? from(`${name} ${k}`, k + 1) : n);
+  return from(name, 2);
 }
 
 // Back on its conversation: the agent's own session record says so (the
@@ -147,7 +244,7 @@ export default class Sleep extends View {
     cx.spawn(async (cx) => {
       try { await this.refresh(true); }
       catch (e) { this.asleep = []; this.error = String(e?.message ?? e); cx.notify(); return; }
-      const waking = ask.wakeAll ? this.asleep.filter((a) => a.from === ask.wakeAll)
+      const waking = ask.wakeAll ? this.asleep.filter((a) => inPlace(a, ask.wakeAll, spaces(), home()))
         : ask.wake ? this.asleep.filter((a) => (ask.wake.id ? a.id === ask.wake.id : a.from === ask.wake.from && a.name === ask.wake.name)) : [];
       if (waking.length) this.wake(waking[0], cx, waking.slice(1));
       else if (ask.wake || ask.wakeAll) this.error = "That tab is no longer asleep.";
@@ -161,8 +258,9 @@ export default class Sleep extends View {
   // is not published. `strict`: a failed read throws; else it is let be.
   async refresh(strict = false) {
     const started = Date.now();
-    let all;
-    try { all = await this.store.asleep(true); } catch (e) { if (strict) throw e; return; }
+    const read = await settled(() => this.store.asleep(true));
+    if (!read.ok) { if (strict) throw read.error; return; }
+    const all = read.value;
     // The list shows what can wake now; the sidebar also what is on its way.
     this.asleep = all.filter((a) => idle(a, started));
     if ((shared("kanso.asleep.at") ?? 0) > started) return;
@@ -176,39 +274,49 @@ export default class Sleep extends View {
   async readTab(tab) {
     // One agent alone (`this.onlyPane`): its pane, not the whole tab.
     const tabPanes = panes().filter((p) => p.tab === tab.id && p.terminal && (!this.onlyPane || p.pane === this.onlyPane));
-    const recs = new Map(), extra = new Map();
-    let error = this.space?.machine ? "Sleep works on this computer's agents for now" : null;
-    await Promise.all(tabPanes.map(async (p) => {
+    // Each terminal's record ([record], or null when it can't be read: reported below).
+    const read = await Promise.all(tabPanes.map(async (p) => {
       const r = await hc(["get", p.terminal, "--json"]).catch(() => null);
-      try { if (r?.code === 0) recs.set(p.terminal, JSON.parse(r.stdout)); } catch { /* reported below */ }
-      if (!recs.has(p.terminal)) error ??= `${p.terminal} could not be read`;
+      return { p, got: r?.code === 0 ? tryOr(() => [JSON.parse(r.stdout)]) : null };
     }));
-    for (const [term, r] of recs) {
+    const recs = new Map(read.flatMap(({ p, got }) => (got ? [[p.terminal, got[0]]] : [])));
+    const unread = read.filter(({ p }) => !recs.has(p.terminal)).map(({ p }) => `${p.terminal} could not be read`);
+    const claudes = [...recs].filter(([, r]) => { const fg = r.foreground; return fg?.pid && base(fg.argv?.[0]) === "claude"; });
+    const agents = await mapSeries(claudes, async ([term, r]) => {
       const fg = r.foreground;
-      if (!fg?.pid || base(fg.argv?.[0]) !== "claude") continue;
-      let ses = null;
-      try { ses = JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`)); } catch { /* reported below */ }
+      const ses = await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))); // null: reported below
       // The name the sidebar shows it by, so it sleeps under that one.
       const who = shared("kanso.names")?.[term] || r.labels?.["kanso.name"] || ses?.name || r.title || term;
       const again = ses?.sessionId ? resumeArgv(fg.argv, ses.sessionId) : null;
-      if (!ses?.sessionId || ses.pid !== fg.pid) error ??= `${who}'s conversation was not found, so it could not wake on it`;
-      else if (!again) error ??= `${who} was started with options a wake can't carry over`;
-      extra.set(term, { resume: ses?.sessionId ?? null, name: who, pid: fg.pid, terminal: term, wake: again });
-    }
-    for (const p of tabPanes) if (!extra.has(p.terminal)) extra.set(p.terminal, { terminal: p.terminal });
+      const problem = !ses?.sessionId || ses.pid !== fg.pid ? `${who}'s conversation was not found, so it could not wake on it`
+        : !again ? `${who} was started with options a wake can't carry over` : null;
+      // The name you gave it (its terminal's label), apart from the one it shows: that one goes back on wake.
+      return { problem, entry: [term, { resume: ses?.sessionId ?? null, name: who, given: r.labels?.["kanso.name"] || null, pid: fg.pid, terminal: term, wake: again }] };
+    });
+    const byAgent = new Map(agents.map((g) => g.entry));
+    const extra = new Map([...byAgent, ...tabPanes.filter((p) => !byAgent.has(p.terminal)).map((p) => [p.terminal, { terminal: p.terminal }])]);
     const capture = this.onlyPane
       ? { per: null, cols: tabPanes.map((p) => ({ w: 1, panes: [{ argv: commandOf(recs.get(p.terminal)), cwd: recs.get(p.terminal)?.foreground?.cwd || p.cwd || null, ...(extra.get(p.terminal) ?? {}) }] })) }
       : captureTab(shared("strip.state")?.[tab.id], tabPanes, recs, extra);
-    if (this.onlyPane && !capture.cols[0]?.panes[0]?.pid) error ??= "only a Claude agent can sleep on its own; this pane runs something else";
-    if (!this.onlyPane && !coversTab(capture, tabPanes.map((p) => p.terminal))) error ??= "a pane of it is still being placed; try again in a moment";
-    return { tab, capture, blocker: sleepBlocker(recs), error };
+    // The first thing that stops it, in this order.
+    const error = [
+      this.space?.machine ? "Sleep works on this computer's agents for now" : null,
+      ...unread,
+      ...agents.map((g) => g.problem),
+      this.onlyPane && !capture.cols[0]?.panes[0]?.pid ? "only a Claude agent can sleep on its own; this pane runs something else" : null,
+      !this.onlyPane && !coversTab(capture, tabPanes.map((p) => p.terminal)) ? "a pane of it is still being placed; try again in a moment" : null,
+    ].find((e) => e != null) ?? null;
+    // What ran in front of each terminal when it was read: after the sleep,
+    // that process (still there) is what slept, and ends; another one is yours.
+    const fronts = new Map([...recs].map(([t, x]) => [t, atPrompt(x) ? 0 : x?.foreground?.pid ?? null]));
+    return { tab, capture, fronts, blocker: sleepBlocker(recs), error };
   }
 
   async readTabs(tabs) {
     const all = this.space?.tabs ?? [];
     const read = await Promise.all(tabs.map((t) => this.readTab(t)));
-    read.forEach((r) => { r.name = this.onlyPane ? (r.capture.cols[0]?.panes[0]?.name ?? "Agent") : r.tab.named ? r.tab.name : `Tab ${all.indexOf(r.tab) + 1}`; });
-    return read.filter((r) => r.capture.cols.length);
+    return read.map((r) => ({ ...r, name: this.onlyPane ? (r.capture.cols[0]?.panes[0]?.name ?? "Agent") : r.tab.named ? r.tab.name : `Tab ${all.indexOf(r.tab) + 1}` }))
+      .filter((r) => r.capture.cols.length);
   }
 
   // The sleep view, for one tab (the one you are on by default) or (`whole`)
@@ -244,47 +352,89 @@ export default class Sleep extends View {
         cx.notify();
         return;
       }
-      let taken;
-      try { taken = new Set((await this.store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)); }
-      catch (e) { this.busy = null; this.error = String(e?.message ?? e); cx.notify(); return; }
-      for (const r of list) { r.name = freeName(r.name, taken); taken.add(r.name); }
-      const stayed = [], notes = [];
-      for (const r of list) {
+      const was = await settled(async () => new Set((await this.store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)));
+      if (!was.ok) { this.busy = null; this.error = String(was.error?.message ?? was.error); cx.notify(); return; }
+      // Each tab under a name no other tab asleep in the project has (nor one before it here).
+      const named = list.reduce(({ out, taken }, r) => {
+        const name = freeName(r.name, taken);
+        return { out: [...out, { ...r, name }], taken: new Set([...taken, name]) };
+      }, { out: [], taken: was.value }).out;
+      // One tab to sleep: { halt } when it stopped the whole sleep (said
+      // already), else the notes it leaves and whether its tab stayed open.
+      const sleepOne = async (r) => {
         const cap = r.capture;
         const agents = cap.cols.flatMap((c) => c.panes).filter((p) => p.pid);
-        const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, terminal: p.terminal ?? null, ...(p.pid ? { pid: p.pid } : {}) });
-        const entry = { name: r.name, space: this.space?.name ?? null, per: cap.per, saved: Date.now(),
+        const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, given: p.given ?? null, terminal: p.terminal ?? null, tab: r.tab.id, ...(p.pid ? { pid: p.pid } : {}) });
+        const entry = { name: r.name, space: this.space ? { id: this.space.id, name: this.space.name } : null, per: cap.per, saved: Date.now(),
           cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map(kept) })),
           ...(this.onlyPane ? { into: { tab: r.tab.named ? r.tab.name : null, tabId: r.tab.id } } : {}) };
-        const left = [], sent = [];
-        let id = null;
-        try {
-          id = await this.store.sleep(project, entry);
-          await this.refresh(); // the sidebar shows it falling asleep, in its place
-          for (const [i, p] of agents.entries()) {
-            this.busy = `${p.name} is leaving, ${i + 1} of ${agents.length} in ${r.name}`; cx.notify();
-            await this.leave(p, cx, () => sent.push(p));
-            left.push(p);
-          }
-        } catch (e) {
+        // The sleep as steps: its row written (`id`), then each agent out in
+        // turn. `sent`: those /exit went to; `left`: those that went.
+        const written = await step({ id: null, left: [], sent: [] }, async (st) => ({ ...st, id: await this.store.sleep(project, entry) }));
+        const shown = await step(written, async (st) => { await this.refresh(); return st; }); // the sidebar shows it falling asleep, in its place
+        const out = await reduceSeries(agents, (prev, p, i) => step(prev, async (st) => {
+          // Still this sleep's (renewed): else another window has it now, and nothing more leaves.
+          if (!(await this.store.holdSleep(st.id))) throw new Error("another window took it meanwhile");
+          this.busy = `${p.name} is leaving, ${i + 1} of ${agents.length} in ${r.name}`; cx.notify();
+          const end = await telling((tell) => this.leave(p, cx, tell));
+          const sent = end.told ? [...st.sent, p] : st.sent;
+          return end.ok ? { ...st, sent, left: [...st.left, p] } : { ...st, sent, failed: true, error: end.error };
+        }), shown);
+        const { id } = out;
+        if (out.failed) {
+          const e = out.error;
           // Only what this sleep wrote is undone. An agent that did not come
           // back stays asleep (its conversation kept); one whose terminal
           // could not be checked stays asleep with that terminal to check
           // again before it wakes, so it never runs twice. One that took
           // /exit but was slow to go is waited for, then comes back too.
-          this.busy = "Bringing the agents back"; cx.notify();
-          for (const p of sent) if (!left.includes(p) && (await this.gone(p.pid, cx, 30))) left.push(p);
-          const lost = [], unsure = [];
-          for (const p of left) {
-            const how = await this.comeBack(p, cx);
-            if (how === "out") lost.push(p);
-            else if (how === "unsure") unsure.push(p);
-          }
-          if (id) {
-            const missing = [...lost.map(kept), ...unsure.map((p) => ({ ...kept(p), check: p.terminal }))];
-            await (missing.length ? this.store.narrow(id, colsOf(missing)) : this.store.drop(id)).catch(() => {});
+          // Only while this sleep still holds its row: once another window
+          // has it (it may be waking them), nothing is brought back here.
+          if (id && !(await this.store.holdSleep(id).catch(() => false))) {
             await this.refresh();
+            this.busy = null; this.view = "list";
+            this.error = `Stopped: ${String(e?.message ?? e)}. Another window has ${r.name} now; it is left as that window has it.`;
+            cx.notify();
+            return { halt: true };
           }
+          this.busy = "Bringing the agents back"; cx.notify();
+          const slow = out.sent.filter((p) => !out.left.includes(p));
+          const wentLate = await mapSeries(slow, (p) => this.gone(p.pid, cx, 30));
+          const left = [...out.left, ...slow.filter((_, k) => wentLate[k])];
+          // Each one back only while this sleep still holds its row (renewed
+          // as it goes): one this sleep no longer holds is another window's.
+          // A back one's pid is what it told (`backPid`).
+          const came = await mapSeries(left, async (p) => {
+            if (id && !(await this.store.holdSleep(id).catch(() => false))) return { p, theirs: true };
+            const end = await telling((tell) => this.comeBack(p, cx, tell));
+            if (!end.ok) throw end.error;
+            return { p, how: end.value, backPid: end.told?.[0] };
+          });
+          const theirs = came.filter((c) => c.theirs).map((c) => c.p);
+          const lost = came.filter((c) => !c.theirs && c.how === "out").map((c) => c.p);
+          const unsure = came.filter((c) => !c.theirs && c.how === "unsure").map((c) => c.p);
+          const back = came.filter((c) => !c.theirs && c.how !== "out" && c.how !== "unsure");
+          const missing = [...lost.map(kept), ...unsure.map((p) => ({ ...kept(p), check: p.terminal }))];
+          const undone = id && !theirs.length
+            ? await (missing.length ? this.store.narrow(id, colsOf(missing)) : this.store.drop(id)).catch(() => false)
+            : true;
+          if (theirs.length || !undone) {
+            // The row still has them asleep (another window's now, or it could
+            // not be written): the ones brought back here end again, so a wake
+            // is the only thing that ever starts them.
+            const stopped = await mapSeries(back, (c) => this.stopIn(c.p.terminal, cx, c.backPid));
+            const ended = back.filter((_, k) => stopped[k]).map((c) => c.p.name);
+            const running = back.filter((_, k) => !stopped[k]).map((c) => c.p.name);
+            if (id) await this.refresh();
+            this.busy = null; this.view = "list";
+            this.error = `Stopped: ${String(e?.message ?? e)}. ${theirs.length ? `Another window has ${r.name} now` : `${r.name} could not be updated`}`
+              + (theirs.length ? `; ${theirs.map((p) => p.name).join(", ")} ${theirs.length === 1 ? "is" : "are"} left as that window has ${theirs.length === 1 ? "it" : "them"}` : "")
+              + (ended.length ? `; ${ended.join(", ")} came back here and ended again, to wake from the list` : "")
+              + (running.length ? `; ${running.join(", ")} could not be ended: end ${running.length === 1 ? "it" : "them"} before waking` : "") + ".";
+            cx.notify();
+            return { halt: true };
+          }
+          if (id) await this.refresh();
           this.busy = null;
           const names = (list) => list.map((p) => p.name).join(", ");
           this.error = `Stopped: ${String(e?.message ?? e)}. ${r.name} stays open`
@@ -293,29 +443,37 @@ export default class Sleep extends View {
             + (unsure.length ? `; ${names(unsure)} could not be checked or stopped and ${unsure.length === 1 ? "stays" : "stay"} asleep; a wake looks at ${unsure.length === 1 ? "its" : "their"} terminal first` : "") + ".";
           this.view = lost.length || unsure.length ? "list" : this.view;
           cx.notify();
-          return;
+          return { halt: true };
         }
         // Every agent has left: the tab is asleep, whatever comes next.
-        let note = null;
-        try { await this.store.settle(id); } catch (e) { note = `${r.name} is asleep but could not be marked so (${String(e?.message ?? e)}); it shows to wake in 10 minutes.`; }
+        const marked = await settled(() => this.store.settle(id));
+        const note = !marked.ok ? `${r.name} is asleep but could not be marked so (${String(marked.error?.message ?? marked.error)}); it shows to wake in 10 minutes.`
+          : !marked.value ? `${r.name} is asleep, but another window took it meanwhile.` : null;
         await this.refresh();
         const known = new Set(cap.cols.flatMap((c) => c.panes).map((p) => p.terminal));
-        // One agent alone: its pane goes, the rest of the tab stays (the tab
-        // closes only when that pane was all it had).
-        if (this.onlyPane) {
-          if (note) notes.push(note);
-          if (panes().some((p) => p.tab === r.tab.id && p.terminal && !known.has(p.terminal))) for (const t of known) run("terminal.kill", { terminal: t });
-          else run("tab.close", { id: r.tab.id, confirmed: true });
-          continue;
-        }
-        // A pane opened in the tab while it went to sleep keeps it open.
-        if (note || panes().some((p) => p.tab === r.tab.id && p.terminal && !known.has(p.terminal))) {
-          // The tab stays for what is new in it; what slept ends, so it
-          // doesn't run here and again on wake.
-          for (const t of known) run("terminal.kill", { terminal: t });
-          if (note) notes.push(note); else stayed.push(r.name);
-        } else run("tab.close", { id: r.tab.id, confirmed: true });
-      }
+        // What slept ends, so it doesn't run here and again on wake: each of
+        // its terminals at its shell's prompt now (or gone). One where
+        // something runs again (you started it meanwhile) is yours: it stays,
+        // and so does its tab.
+        const looked = await mapSeries([...known], async (t) => {
+          const now = terminals().some((k) => k.address === t) ? await this.frontOf(t) : 0;
+          return { t, idle: now === 0 || (now != null && now === r.fronts?.get(t)) };
+        });
+        const idle = looked.filter((x) => x.idle).map((x) => x.t), busy = looked.filter((x) => !x.idle).map((x) => x.t);
+        const fresh = panes().some((p) => p.tab === r.tab.id && p.terminal && !known.has(p.terminal));
+        if (!note && !fresh && !busy.length) { run("tab.close", { id: r.tab.id, confirmed: true }); return { notes: [], stayed: false }; }
+        for (const t of idle) run("terminal.kill", { terminal: t });
+        const busyNote = busy.length ? [`${r.name} is asleep; ${busy.join(", ")} ${busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${busy.length === 1 ? "stays" : "stay"} open.`] : [];
+        return { notes: [...(note ? [note] : []), ...busyNote], stayed: !busy.length && !note && !this.onlyPane };
+      };
+      // One tab after the other; one that stops the sleep stops the rest.
+      const slept = await reduceSeries(named, async (acc, r) => {
+        if (acc.halt) return acc;
+        const one = await sleepOne(r);
+        return one.halt ? { ...acc, halt: true } : { ...acc, notes: [...acc.notes, ...one.notes], stayed: one.stayed ? [...acc.stayed, r.name] : acc.stayed };
+      }, { halt: false, notes: [], stayed: [] });
+      if (slept.halt) return;
+      const { stayed, notes } = slept;
       if (stayed.length || notes.length) {
         this.busy = null; this.view = "list";
         this.error = [...notes, ...(stayed.length ? [`${stayed.join(", ")} ${stayed.length === 1 ? "is" : "are"} asleep, but ${stayed.length === 1 ? "its tab stays" : "their tabs stay"} open: a pane opened in ${stayed.length === 1 ? "it" : "them"} meanwhile.`] : [])].join(" ");
@@ -330,8 +488,7 @@ export default class Sleep extends View {
   // (a draft would go out with /exit), /exit, then its process gone.
   async leave(p, cx, onSent = () => {}) {
     const now = await hc(["get", p.terminal, "--json"]).catch(() => null);
-    let fg = null;
-    try { fg = JSON.parse(now.stdout).foreground?.pid; } catch { /* below */ }
+    const fg = tryOr(() => JSON.parse(now.stdout).foreground?.pid); // null: unread, below
     if (fg !== p.pid) throw new Error(`${p.name}'s terminal changed`);
     // ctrl+c empties the whole draft, every line of it; the screen must
     // then show the prompt empty, or /exit is not sent.
@@ -345,65 +502,107 @@ export default class Sleep extends View {
     if (!(await this.gone(p.pid, cx, 20))) throw new Error(`${p.name} did not exit`);
   }
 
+  // What runs in front in `terminal` now (its pid), 0 at its prompt, null
+  // when it can't be read.
+  async frontOf(terminal) {
+    const g = await hc(["get", terminal, "--json"]).catch(() => null);
+    try { const x = JSON.parse(g.stdout); return atPrompt(x) ? 0 : x.foreground.pid; } catch { return null; }
+  }
+
   // True once process `pid` has ended, looking for up to `secs` seconds.
   async gone(pid, cx, secs) {
-    for (let k = 0; k < secs * 2; k++) {
+    if (secs * 2 <= 0) return false;
+    return retry(secs * 2, async () => {
       await cx.sleep(500);
-      if ((await exec("kill", ["-0", String(pid)]).catch(() => null))?.code !== 0) return true;
-    }
-    return false;
+      return (await exec("kill", ["-0", String(pid)]).catch(() => null))?.code !== 0;
+    });
   }
 
   // An agent that left during a sleep that stopped: started again in its
   // terminal on its conversation. "back" when it is; "out" when it is not
   // running (it never started, or what started was stopped); "unsure" when
   // something it started could not be stopped.
-  async comeBack(p, cx) {
+  // Its terminal must be at its shell's prompt right before the line goes
+  // (a program you started there since gets nothing typed into it), and
+  // only what that line started is ever stopped. `onBack(pid)`: told the
+  // pid of the agent back on its conversation.
+  async comeBack(p, cx, onBack = () => {}) {
     const line = `cd ${shq(p.cwd || home())} && ${p.wake.map(shq).join(" ")}`;
-    for (let k = 0; k < 20; k++) {
+    const front = async () => {
       const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
-      let x = null;
-      try { x = JSON.parse(g.stdout); } catch { /* not yet */ }
-      if (x && (!x.foreground?.pid || x.foreground.pid === x.pid || SHELLS.has(base(x.foreground.argv?.[0])))) break;
-      await cx.sleep(500);
-    }
+      try { const x = JSON.parse(g.stdout); return { x, idle: atPrompt(x) }; } catch { return null; }
+    };
+    const f = await retry(20, async () => {
+      const look = await front();
+      if (!look?.idle) await cx.sleep(500);
+      return look;
+    }, { done: (look) => Boolean(look?.idle) });
+    if (!f?.idle) return "out";
     await cx.sleep(800);
+    // Its conversation started again elsewhere meanwhile (by hand, say):
+    // not a second time here. It stays asleep, and a wake waits for that
+    // one to end; one that can't be checked is not started either.
+    try { if ((await runningOn(p.resume)) || (await runningIn(p.resume))) return "out"; } catch { return "unsure"; }
+    // The last look, right before the line goes.
+    if (!(await front())?.idle) return "out";
+    const sentAt = Date.now();
     if ((await hc(["send", p.terminal, line]).catch(() => null))?.code !== 0) return "out";
-    if (await this.resumed(p.terminal, p.resume, cx)) return "back";
-    return (await this.stopIn(p.terminal, cx)) ? "out" : "unsure";
+    // What the line started: the first process seen there since, on this
+    // conversation's resume (its arguments name it) and started after the
+    // line went (`ours`). Only that one is ever stopped.
+    const check = async (fg, mine) => {
+      if (mine || !fg?.pid || !(fg.argv ?? []).map(String).includes(p.resume)) return mine;
+      const proc = await procOf(fg.pid);
+      return proc?.comm === "claude" && proc.start >= sentAt - 2000 ? fg.pid : mine;
+    };
+    const { pid, mine: ours } = await this.resumed(p.terminal, p.resume, cx, check);
+    if (pid) { onBack(pid); return "back"; }
+    // Not back on its conversation: the one it started is stopped (if it
+    // still runs there); anything else is not this one's, and a wake looks
+    // at that terminal first.
+    const now = await front();
+    if (!now) return "unsure";
+    if (now.idle) return "out";
+    if (ours && now.x.foreground?.pid === ours) return (await this.stopIn(p.terminal, cx, ours)) ? "out" : "unsure";
+    return "unsure";
   }
 
   // Whatever runs in `terminal` in front of its shell, stopped (TERM, then
   // KILL): true once nothing does.
-  async stopIn(terminal, cx) {
+  // `only`: stop that process alone; anything else running there now (it
+  // ended and you started something) is left, and counts as stopped.
+  async stopIn(terminal, cx, only = null) {
     const front = async () => {
       const g = await hc(["get", terminal, "--json"]).catch(() => null);
       try { const x = JSON.parse(g.stdout); const fg = x.foreground; return !fg?.pid || fg.pid === x.pid || SHELLS.has(base(fg.argv?.[0])) ? 0 : fg.pid; } catch { return null; }
     };
-    for (const sig of ["-TERM", "-KILL"]) {
+    // One signal: true or false when that settles it, null to send the next.
+    const signal = async (sig) => {
       const pid = await front();
-      if (pid === 0) return true;
+      if (pid === 0 || (only && pid !== only && pid != null)) return true;
       if (pid == null) return false;
       await exec("kill", [sig, String(pid)]).catch(() => null);
-      for (let k = 0; k < 10; k++) { await cx.sleep(300); if ((await front()) === 0) return true; }
-    }
-    return false;
+      return (await retry(10, async () => { await cx.sleep(300); return (await front()) === 0; })) ? true : null;
+    };
+    return (await reduceSeries(["-TERM", "-KILL"], async (got, sig) => (got === null ? signal(sig) : got), null)) === true;
   }
 
   // The pid of a Claude agent in `terminal` back on conversation `session`,
-  // once it is there and has stayed a moment (up to 30 seconds).
-  async resumed(terminal, session, cx) {
-    for (let k = 0; k < 30; k++) {
+  // once it is there and has stayed a moment (up to 30 seconds): { pid
+  // (null when it never was), mine }. `saw(fg, mine)`: told of each process
+  // seen in front there meanwhile, with what it answered so far (`mine`,
+  // from null); its answer is the next `mine`.
+  async resumed(terminal, session, cx, saw = async (_fg, mine) => mine) {
+    const look = async ({ mine }) => {
       await cx.sleep(1000);
       const g = await hc(["get", terminal, "--json"]).catch(() => null);
-      let fg = null;
-      try { fg = JSON.parse(g.stdout).foreground ?? null; } catch { /* not yet */ }
-      if (!fg?.pid || SHELLS.has(base(fg.argv?.[0]))) continue;
-      let record = null;
-      try { record = JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`)); } catch { /* none */ }
-      if (isResumed(fg, record, session)) return fg.pid;
-    }
-    return null;
+      const fg = tryOr(() => JSON.parse(g.stdout).foreground ?? null); // null: not yet
+      const seen = await saw(fg, mine);
+      if (!fg?.pid || SHELLS.has(base(fg.argv?.[0]))) return { pid: null, mine: seen };
+      const record = await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))); // null: none
+      return { pid: isResumed(fg, record, session) ? fg.pid : null, mine: seen };
+    };
+    return reduceSeries(range(30), (st) => (st.pid ? st : look(st)), { pid: null, mine: null });
   }
 
   // Back in its project's space, each agent on its conversation, checked;
@@ -417,9 +616,9 @@ export default class Sleep extends View {
     if (this.busy) return;
     this.busy = `Waking ${shown.name}`; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
-      let a;
-      try { a = await this.store.claim(shown.id); }
-      catch (e) { this.busy = null; this.error = `${shown.name} could not be woken: ${String(e?.message ?? e)}`; cx.notify(); return; }
+      const claimed = await settled(() => this.store.claim(shown.id));
+      if (!claimed.ok) { this.busy = null; this.error = `${shown.name} could not be woken: ${String(claimed.error?.message ?? claimed.error)}`; cx.notify(); return; }
+      const a = claimed.value;
       if (!a) {
         await this.refresh();
         this.busy = null; this.error = `${shown.name} is waking in another window, or is no longer asleep.`; cx.notify(); return;
@@ -429,83 +628,217 @@ export default class Sleep extends View {
       // that terminal is looked at first, and the wake waits while it runs.
       // A sleep that stopped half way (the window closed under it, say)
       // left its row pending: an agent of it that never left still runs.
-      const still = [];
-      for (const p of a.cols.flatMap((c) => c.panes)) {
-        if (p.check) {
-          const gone = !terminals().some((t) => t.address === p.check);
-          const g = gone ? null : await hc(["get", p.check, "--json"]).catch(() => null);
-          let x = null;
-          try { x = g?.code === 0 ? JSON.parse(g.stdout) : null; } catch { /* below */ }
-          const idleShell = x && (!x.foreground?.pid || x.foreground.pid === x.pid || SHELLS.has(base(x.foreground.argv?.[0])));
-          if (!gone && !idleShell) still.push(`${p.name ?? "an agent"} may still run in ${p.check}`);
-        }
-        if (a.pending && p.pid) {
-          const ps = await exec("ps", ["-p", String(p.pid), "-o", "comm="]).catch(() => null);
-          if (ps?.code === 0 && base(ps.stdout.trim()) === "claude") still.push(`${p.name ?? "an agent"} still runs (pid ${p.pid})`);
-        }
-      }
+      const mayRun = async (p) => {
+        if (!p.check) return [];
+        const gone = !terminals().some((t) => t.address === p.check);
+        const g = gone ? null : await hc(["get", p.check, "--json"]).catch(() => null);
+        const x = tryOr(() => (g?.code === 0 ? JSON.parse(g.stdout) : null)); // null: below
+        const idleShell = atPrompt(x);
+        return !gone && !idleShell ? [`${p.name ?? "an agent"} may still run in ${p.check}`] : [];
+      };
+      // Its conversation already running anywhere (brought back by a sleep
+      // that stopped, or started by hand): never a second one.
+      const runsAlready = async (p) => {
+        const look = await settled(async () => {
+          const pid = await runningOn(p.resume);
+          return { pid, term: pid ? null : await runningIn(p.resume) };
+        });
+        if (!look.ok) return [`whether ${p.name ?? "an agent"} already runs could not be checked (${String(look.error?.message ?? look.error)})`];
+        const { pid, term } = look.value;
+        return [...(pid ? [`${p.name ?? "an agent"} already runs on its conversation (pid ${pid})`] : []),
+          ...(term ? [`${p.name ?? "an agent"} is starting on its conversation in ${term}`] : [])];
+      };
+      // One with no conversation kept (an older sleep's row): its process,
+      // when it is still that one (claude, started before the sleep; a pid
+      // given to another process since is not it).
+      const stillRuns = async (p) => (a.pending && p.pid && (await stillThere(p.pid, a.saved)) ? [`${p.name ?? "an agent"} still runs (pid ${p.pid})`] : []);
+      const still = (await mapSeries(a.cols.flatMap((c) => c.panes), async (p) => [...(await mayRun(p)), ...(p.resume ? await runsAlready(p) : await stillRuns(p))])).flat();
       if (still.length) {
         await this.store.release(a.id, a.token).catch(() => {});
         await this.refresh();
         this.busy = null; this.error = `${a.name} can't wake yet: ${still.join("; ")}. End ${still.length === 1 ? "it" : "them"} there, then wake.`; cx.notify(); return;
       }
-      const space = spaces().find((sp) => projectOf(sp) === a.from) ?? null;
-      const folder = folderOfKey(a.from), machine = String(a.from).slice(0, String(a.from).indexOf(":")) || undefined;
-      const create = space ? null : { name: a.space || base(folder) || "~", folder, key: a.from, ...(machine ? { machine } : {}) };
-      // One agent that slept alone goes back into its tab when it is still
-      // there; else (and a tab that slept) it opens as a tab of its own.
-      const home = a.into && space ? (space.tabs ?? []).find((x) => x.id === a.into.tabId) ?? (a.into.tab ? (space.tabs ?? []).find((x) => x.name === a.into.tab) : null) : null;
-      let ids, failure = null;
-      try {
-        if (home) { this.busy = `${a.name}: back into ${home.name || "its tab"}`; cx.notify(); ids = [[await openInto(wakeable(a).cols[0].panes[0], cx, home.id)]]; }
-        else ids = await openTab({ ...wakeable(a), name: a.into?.tab || a.name }, cx, { space, create, progress: (t) => { this.busy = `${a.name}: ${t}`; cx.notify(); } });
-      } catch (e) { ids = e?.opened ?? []; failure = e; }
-      const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ p, pane: ids[ci]?.[ri] ?? null })));
-      // Every pane that did not open stays asleep, agent or not; an agent
-      // that opened stays asleep too until its session record proves it.
-      const missed = [];
-      for (const { p, pane } of flat) {
-        const term = pane ? panes().find((q) => q.pane === pane)?.terminal ?? null : null;
-        if (!term) { missed.push(p); continue; }
-        if (!p.resume) continue;
-        this.busy = `Checking ${p.name ?? "an agent"} is on its conversation`; cx.notify();
-        if (await this.resumed(term, p.resume, cx)) continue;
-        missed.push(p);
-        run("terminal.kill", { terminal: term });
+      // From here this wake holds the row: whatever stops it lets the row go.
+      const woke = await settled(() => this.wakeHeld(a, cx));
+      if (!woke.ok) {
+        await this.store.release(a.id, a.token).catch(() => {});
+        await this.refresh();
+        this.busy = null; this.error = `${a.name} could not be woken: ${String(woke.error?.message ?? woke.error)}`; this.view = "list"; cx.notify(); return;
       }
-      const opened = flat.some((x) => x.pane);
-      // Written, or, if it can't be after a few tries, what this wake
-      // started ends: never awake and still claimable at once.
-      let saveError = null;
-      const missedNow = missed.map(({ check, ...p }) => p);
-      for (let k = 0; k < 4; k++) {
-        try {
-          if (!opened) await this.store.release(a.id, a.token);
-          else if (missed.length) await this.store.narrow(a.id, colsOf(missedNow), a.token);
-          else await this.store.woke(a.id, a.token);
-          saveError = null; break;
-        } catch (e) { saveError = String(e?.message ?? e); await cx.sleep(1000); }
-      }
-      if (saveError && opened) {
-        for (const pane of ids.flat()) { const term = panes().find((q) => q.pane === pane)?.terminal; if (term) run("terminal.kill", { terminal: term }); }
-        saveError += "; what it opened was ended, so it wakes from here again in 10 minutes";
-      }
-      await this.refresh();
-      this.busy = null;
-      if (failure || missed.length || saveError) {
-        const why = (failure ? `Stopped: ${String(failure?.message ?? failure)}. ` : "") + (saveError ? `${a.name} could not be updated (${saveError}). ` : "");
-        this.error = why + (missed.length ? `${missed.map((p) => p.name || programOf(p.argv)).join(", ")} did not come back; ${missed.length === 1 ? "it stays" : "they stay"} asleep.` : "");
-        this.view = "list"; cx.notify(); return;
-      }
+      if (!woke.value) return;
       if (rest.length) { this.wake(rest[0], cx, rest.slice(1)); return; }
       closeOverlay(props()?.overlay);
     });
+  }
+
+  // A claimed row (`a`) opened in its space, each agent checked on its
+  // conversation; true when all of it woke. The hold is renewed while it
+  // works; if another window took the row meanwhile, what this wake opened
+  // ends, so nothing runs twice.
+  async wakeHeld(a, cx) {
+    const startedAt = Date.now();
+    // Where it wakes: { space, replacing (this wake makes the one in place of a gone one) }.
+    const where = async () => {
+      const first = spaceFor({ spaceId: a.spaceId, spaceName: a.space, project: a.from }, spaces(), home());
+      if (first || !a.spaceId) return { space: first, replacing: false };
+      // Its space is gone. One made in its place already (by a wake of
+      // another that slept there) is its space; else this wake makes it,
+      // one window at a time, and a wake that waits takes the one made.
+      const made = async () => { const to = await this.store.kdb.replacement(a.spaceId); return to ? spaces().find((w) => w.id === to) ?? null : null; };
+      const found = await made();
+      if (found) return { space: found, replacing: false };
+      if (!(await this.store.kdb.replacing(a.spaceId, a.token))) {
+        const waited = await retry(30, async () => { await cx.sleep(500); return made(); });
+        if (!waited) throw new Error("another window is making its space; wake it again in a moment");
+        return { space: waited, replacing: false };
+      }
+      // Made by another between the look and the hold: that one, not a second.
+      const late = await made();
+      if (late) { await this.store.kdb.unreplacing(a.spaceId, a.token).catch(() => {}); return { space: late, replacing: false }; }
+      return { space: null, replacing: true };
+    };
+    const { space, replacing } = await where();
+    const folder = folderOfKey(a.from), machine = String(a.from).slice(0, String(a.from).indexOf(":")) || undefined;
+    const create = space ? null : { name: a.space || base(folder) || "~", folder, key: a.from, ...(machine ? { machine } : {}) };
+    // One agent that slept alone goes back into its tab when it is still
+    // there; else (and a tab that slept) it opens as a tab of its own.
+    const intoTab = a.into && space ? (space.tabs ?? []).find((x) => x.id === a.into.tabId) ?? (a.into.tab ? (space.tabs ?? []).find((x) => x.name === a.into.tab) : null) : null;
+    // Before each agent opens: this wake still holds the row (renewed now,
+    // so no other window can have woken it meanwhile), and its conversation
+    // still runs nowhere (started by hand during a stall, say). Else nothing
+    // more opens: the opening stops at the first that throws, so none runs
+    // after the hold was lost (`lost()` tells the opening so).
+    // The hold is renewed last, so it holds when the pane opens (right after).
+    const ahead = (lost) => async (p) => {
+      const pid = p?.resume ? await runningOn(p.resume) : null;
+      if (pid) throw new Error(`${p.name ?? "an agent"} already runs on its conversation (pid ${pid})`);
+      const term = p?.resume ? await runningIn(p.resume) : null;
+      if (term) throw new Error(`${p.name ?? "an agent"} is starting on its conversation in ${term}`);
+      if (!(await this.store.renew(a.id, a.token))) { lost(); throw new Error("another window woke it meanwhile"); }
+    };
+    const opening = await telling(async (lost) => {
+      if (intoTab) {
+        this.busy = `${a.name}: back into ${intoTab.name || "its tab"}`; cx.notify();
+        const p = wakeable(a).cols[0].panes[0];
+        await ahead(lost)(p);
+        return [[await openInto(p, cx, intoTab.id)]];
+      }
+      return openTab({ ...wakeable(a), name: a.into?.tab || a.name }, cx, { space, create, before: ahead(lost), progress: (t) => { this.busy = `${a.name}: ${t}`; cx.notify(); } });
+    });
+    const failure = opening.ok ? null : opening.error;
+    const ids = opening.ok ? opening.value : opening.error?.opened ?? [];
+    // The hold, lost to another window while it opened.
+    const lostOpening = Boolean(opening.told);
+    // Asked of Herdr and not shown (yet): it may still open, so the row is
+    // held, not let go, until a wake can see whether it did.
+    const late = Number(failure?.pending) || 0;
+    const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ p, pane: ids[ci]?.[ri] ?? null })));
+    const termOf = (pane) => (pane ? panes().find((q) => q.pane === pane)?.terminal ?? null : null);
+    // Where it opened: its space, or the one made for it.
+    const tabOf = flat.map((x) => x.pane && panes().find((q) => q.pane === x.pane)?.tab).find(Boolean);
+    const nowIn = space?.id ?? (tabOf ? spaces().find((w) => (w.tabs ?? []).some((tb) => tb.id === tabOf))?.id ?? null : null);
+    // Its space was gone and one was made for it: what else slept there wakes there too.
+    if (replacing) await (nowIn && !lostOpening ? this.store.kdb.moveSpace(a.spaceId, nowIn, a.token) : this.store.kdb.unreplacing(a.spaceId, a.token)).catch(() => {});
+    // Every pane that did not open stays asleep, agent or not; an agent
+    // that opened stays asleep too until its session record proves it.
+    // What this wake started in each terminal it opened (its pid, by
+    // terminal: `owner`): only that, or a terminal back at its prompt, is
+    // ever ended by it. A program you started there since is yours.
+    const endIfOurs = async (owner, term, p) => {
+      const g = await hc(["get", term, "--json"]).catch(() => null);
+      const got = tryOr(() => [JSON.parse(g.stdout)]);
+      if (!got) return false;
+      const [x] = got;
+      const fg = x.foreground;
+      const mine = atPrompt(x) || (owner.has(term) && fg.pid === owner.get(term))
+        || (!p?.resume && !owner.has(term) && JSON.stringify(fg?.argv ?? null) === JSON.stringify(wakeArgv(p)) && ((await procOf(fg.pid))?.start ?? 0) >= startedAt - 2000);
+      if (mine) run("terminal.kill", { terminal: term });
+      return mine;
+    };
+    // Each pane in turn. `lost`: the hold, renewed before each agent is
+    // checked, was lost; `kept`: terminals left open, not this wake's to end.
+    const checked = await reduceSeries(flat, async (st, { p, pane }) => {
+      const term = termOf(pane);
+      if (!term) return { ...st, missed: [...st.missed, p] };
+      if (!p.resume) return st;
+      this.busy = `Checking ${p.name ?? "an agent"} is on its conversation`; cx.notify();
+      const lost = st.lost || !(await this.store.renew(a.id, a.token).catch(() => true));
+      // The first claude seen there on its conversation since the wake
+      // began is this wake's (`mine`), unless the terminal had one already.
+      const saw = async (fg, mine) => {
+        if (st.owner.has(term) || mine || !fg?.pid || !(fg.argv ?? []).map(String).includes(p.resume)) return mine;
+        const proc = await procOf(fg.pid);
+        return proc?.comm === "claude" && proc.start >= startedAt - 2000 ? fg.pid : mine;
+      };
+      const seen = await this.resumed(term, p.resume, cx, saw);
+      const back = seen.pid, ours = back || seen.mine || st.owner.get(term);
+      const owner = ours ? new Map([...st.owner, [term, ours]]) : st.owner;
+      if (back) {
+        // The name you gave it goes back on its new terminal, where names live.
+        const given = (a.agents ?? []).find((g) => g.id === p.resume)?.name;
+        const named = !given || (await retry(3, async () => (await hc(["label", term, `kanso.name=${given}`]).catch(() => null))?.code === 0));
+        // Not put back yet: kept with its conversation (in the same write
+        // that wakes it), and the sidebar puts it back when it can.
+        return named ? { ...st, owner, lost } : { ...st, owner, lost, unnamed: [...st.unnamed, given], restores: [...st.restores, [p.resume, given]] };
+      }
+      // Not ended (it can't be read, or what runs there is not this
+      // wake's to end): it stays asleep with that terminal to look at
+      // first, so a wake waits while anything may still run there.
+      const ended = await endIfOurs(owner, term, p);
+      return { ...st, owner, lost, kept: ended ? st.kept : [...st.kept, term], missed: [...st.missed, ended ? p : { ...p, checkNow: term }] };
+    }, { owner: new Map(), lost: lostOpening, missed: [], unnamed: [], restores: [], kept: [] });
+    const { owner, lost, missed, unnamed, restores } = checked;
+    const opened = flat.some((x) => x.pane);
+    // Every terminal it opened ended when it is this wake's: those that are not, kept.
+    const endOpened = async () => (await mapSeries(flat, async ({ p, pane }) => {
+      const term = termOf(pane);
+      return term && !(await endIfOurs(owner, term, p)) ? [term] : [];
+    })).flat();
+    // Written, or, if it can't be after a few tries, what this wake started
+    // ends: never awake and still claimable at once. A hold lost meanwhile
+    // (another window woke it) ends what this one opened.
+    const missedNow = missed.map(({ check, checkNow, ...p }) => (checkNow ? { ...p, check: checkNow } : p));
+    const write = () => (!opened && !late ? this.store.release(a.id, a.token)
+      : missed.length ? this.store.narrow(a.id, colsOf(missedNow), a.token, { space: nowIn, restores, wait: late > 0 })
+      : this.store.woke(a.id, a.token, restores));
+    // A failed write leaves the hold as it was (`held`) and is tried again a second later.
+    const saved = lost ? { held: false, error: null } : await retry(4, async () => {
+      const w = await settled(write);
+      if (w.ok) return { done: true, held: w.value, error: null };
+      const error = String(w.error?.message ?? w.error);
+      await cx.sleep(1000);
+      return { done: false, held: true, error };
+    }, { done: (v) => v.done });
+    const held = saved.held;
+    const endedNow = (!held && opened) || (saved.error && opened) ? await endOpened() : [];
+    const saveError = !held && opened ? "another window woke it meanwhile; what this one opened was ended"
+      : saved.error && opened ? `${saved.error}; what it opened was ended, so it wakes from here again in 10 minutes`
+      : saved.error;
+    const kept = [...checked.kept, ...endedNow];
+    await this.refresh();
+    this.busy = null;
+    if (failure || missed.length || saveError || (unnamed.length && held)) {
+      const why = (failure ? `Stopped: ${String(failure?.message ?? failure)}. ` : "") + (saveError ? `${a.name} could not be updated (${saveError}). ` : "")
+        + (unnamed.length && held ? `${unnamed.join(", ")} woke, but ${unnamed.length === 1 ? "its name" : "their names"} could not be put back on ${unnamed.length === 1 ? "its terminal" : "their terminals"}; the sidebar keeps trying. ` : "");
+      this.error = why + (missed.length && held ? `${missed.map((p) => p.name || programOf(p.argv)).join(", ")} did not come back; ${missed.length === 1 ? "it stays" : "they stay"} asleep.` : "")
+        + (kept.length ? ` ${[...new Set(kept)].join(", ")} ${kept.length === 1 ? "runs" : "run"} something this wake did not start and ${kept.length === 1 ? "is" : "are"} left open.` : "")
+        + (late && held ? ` Herdr had not opened ${late === 1 ? "one of them" : `${late} of them`} yet and may still: ${a.name} can be woken again in 10 minutes, and a wake then never starts a conversation that runs.` : "");
+      this.view = "list"; cx.notify(); return false;
+    }
+    return true;
   }
 
   arm(key, cx, act) {
     if (this.armed === key && Date.now() - this.armedAt <= ARM_MS) { this.armed = null; act(cx); return; }
     this.armed = key; this.armedAt = Date.now(); cx.notify();
     cx.timer.after(ARM_MS + 50, (cx) => { if (this.armed === key) { this.armed = null; cx.notify(); } });
+  }
+
+  // A key in the list (listkeys.js), its pending g kept on the view.
+  listed(e) {
+    const { move, gAt } = listKey(e, this.listG);
+    this.listG = gAt;
+    return move;
   }
 
   render() {
@@ -528,7 +861,7 @@ export default class Sleep extends View {
       .on_key_down((e, cx) => {
         // The list of what sleeps: j/k (or the arrows) along it, gg/G,
         // Enter wakes the one you are on.
-        const move = this.view === "list" ? listKey(e, this.keys ??= {}) : (e.key === "escape" ? "escape" : null);
+        const move = this.view === "list" ? this.listed(e) : (e.key === "escape" ? "escape" : null);
         if (!move) return;
         if (move !== "escape") {
           const order = this.order ?? [];
@@ -551,7 +884,8 @@ export default class Sleep extends View {
       const line = (q, i) => h_flex().id(`sl-${i}`).w_full().gap(10).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(q.pid ? t.foreground : t.muted).child(q.pid ? q.name : describe(q.argv)))
         .child(div().flex_none().max_w(180).truncate().text_size(11.5).text_color(t.dim).child(q.pid ? "keeps its conversation" : tilde(q.cwd)));
-      let i = 0;
+      // Each pane's id counts the panes before it, across the tabs.
+      const starts = list.map((_, k) => list.slice(0, k).reduce((s, r) => s + panesOf(r).length, 0));
       const ready = list.length > 0 && !stop && !this.busy;
       return shell
         .child(head(whole ? `Sleep ${project}` : alone ? "Sleep this agent" : "Sleep this tab",
@@ -559,9 +893,9 @@ export default class Sleep extends View {
           : alone ? "It exits and its pane closes; the rest of the tab stays. Wake opens it again in that tab, on its conversation."
           : "Its agents exit and the tab closes. Wake opens it again, each agent on its conversation."))
         .when(this.sleepers === null, (el) => el.child(note("Reading")))
-        .children(list.map((r) => v_flex().pt(14).gap(4)
+        .children(list.map((r, k) => v_flex().pt(14).gap(4)
           .when(whole, (el) => el.child(div().pb(3).text_size(11.5).text_color(t.dim).child(r.name)))
-          .children(panesOf(r).map((q) => line(q, i++)))))
+          .children(panesOf(r).map((q, j) => line(q, starts[k] + j)))))
         .when(this.sleepers !== null && !list.length, (el) => el.child(note("Nothing runs here to put to sleep.")))
         .when(others.length > 0, (el) => el.child(note(`${others.join(", ")} will stop now and start fresh on wake.`)))
         .when(Boolean(stop) && !this.error, (el) => el.child(note(`It can't sleep now: ${stop?.blocker || stop?.error}.`, t.blocked)))
@@ -574,7 +908,7 @@ export default class Sleep extends View {
 
     // The list: what sleeps, by project, newest first.
     const asleep = this.asleep ?? [];
-    const groups = [...asleep.reduce((m, a) => m.set(a.from, [...(m.get(a.from) ?? []), a]), new Map())];
+    const groups = [...new Set(asleep.map((a) => a.from))].map((from) => [from, asleep.filter((a) => a.from === from)]);
     this.order = groups.flatMap(([, tabs]) => tabs);
     const atId = this.order[Math.min(this.at ?? 0, Math.max(0, this.order.length - 1))]?.id;
     const spaceName = (from, list) => spaces().find((sp) => projectOf(sp) === from)?.name ?? list[0]?.space ?? (base(folderOfKey(from)) || "~");

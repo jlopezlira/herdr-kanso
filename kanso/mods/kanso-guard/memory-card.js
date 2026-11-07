@@ -73,7 +73,9 @@ export function memorySpec(data, digest) {
 export function memoryText(data, digest) {
   const w = memoryWins(data, digest);
   const long = longSpan(w.longestMin);
-  const parts = [`${w.agents} coding ${w.agents === 1 ? "agent" : "agents"} open${w.totalMB ? ` on a ${size(w.totalMB)} machine` : ""}, the oldest for ${long.big} ${long.small}`];
-  if (w.recycles) parts.push(`${w.recycles} ${w.recycles === 1 ? "recycle" : "recycles"} gave back ${size(w.recycledMB)} without losing a conversation`);
+  const parts = [
+    `${w.agents} coding ${w.agents === 1 ? "agent" : "agents"} open${w.totalMB ? ` on a ${size(w.totalMB)} machine` : ""}, the oldest for ${long.big} ${long.small}`,
+    ...(w.recycles ? [`${w.recycles} ${w.recycles === 1 ? "recycle" : "recycles"} gave back ${size(w.recycledMB)} without losing a conversation`] : []),
+  ];
   return postText(parts, "Weeks-long agent sessions, memory in check.");
 }

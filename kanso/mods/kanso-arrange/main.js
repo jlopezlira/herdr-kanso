@@ -18,6 +18,7 @@ import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "her
 import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
+import { tryOr } from "./pure.js";
 const ARM_MS = 4000;
 
 // Every saved arrangement, this project's first, then the other projects'
@@ -25,16 +26,17 @@ const ARM_MS = 4000;
 export function listFor(projects, key) {
   const tag = (k) => (projects?.[k] ?? []).map((a) => ({ ...a, from: k }));
   const others = Object.keys(projects ?? {}).filter((k) => k !== key).flatMap(tag)
-    .sort((a, b) => (b.saved ?? 0) - (a.saved ?? 0));
+    .toSorted((a, b) => (b.saved ?? 0) - (a.saved ?? 0));
   return { mine: tag(key), others };
 }
 
 // Where an arrangement was made, named by the folder most of its panes ran
-// in (the space's folder when none of them say).
+// in (the space's folder when none of them say; of folders as common, the
+// first one).
 export function originOf(a) {
-  const count = new Map();
-  for (const p of a.cols.flatMap((c) => c.panes)) if (p.cwd) count.set(p.cwd, (count.get(p.cwd) ?? 0) + 1);
-  const top = [...count].sort((x, y) => y[1] - x[1])[0]?.[0];
+  const cwds = a.cols.flatMap((c) => c.panes).map((p) => p.cwd).filter(Boolean);
+  const count = [...new Set(cwds)].map((cwd) => [cwd, cwds.filter((x) => x === cwd).length]);
+  const top = count.toSorted((x, y) => y[1] - x[1])[0]?.[0];
   return base(top || folderOfKey(a.from)) || "~";
 }
 
@@ -85,11 +87,13 @@ export default class Arrange extends View {
     cx.notify();
     const tabPanes = panes().filter((p) => p.tab === tab?.id && p.terminal);
     cx.spawn(async (cx) => {
-      const recs = new Map();
-      await Promise.all(tabPanes.map(async (p) => {
+      // A terminal whose record can't be read is left as a shell.
+      const read = await Promise.all(tabPanes.map(async (p) => {
         const r = await hc(["get", p.terminal, "--json"]).catch(() => null);
-        try { if (r?.code === 0) recs.set(p.terminal, JSON.parse(r.stdout)); } catch { /* left as a shell */ }
+        const rec = r?.code === 0 ? tryOr(() => [JSON.parse(r.stdout)]) : null;
+        return rec ? [[p.terminal, rec[0]]] : [];
       }));
+      const recs = new Map(read.flat());
       this.capture = captureTab(shared("strip.state")?.[tab?.id], tabPanes, recs);
       cx.notify();
     });
@@ -122,9 +126,9 @@ export default class Arrange extends View {
 
   // A new tab with the arrangement's panes (tabkit.js); one from another
   // project opens in this project's folder.
-  open(a, cx) {
+  open(saved, cx) {
     if (this.busy || !this.space) return;
-    if (a.from && a.from !== projectOf(this.space)) a = rebase(a, this.space.folder || home());
+    const a = saved.from && saved.from !== projectOf(this.space) ? rebase(saved, this.space.folder || home()) : saved;
     this.busy = "Opening"; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
       try {
@@ -142,6 +146,13 @@ export default class Arrange extends View {
     if (this.armed === key && Date.now() - this.armedAt <= ARM_MS) { this.armed = null; act(cx); return; }
     this.armed = key; this.armedAt = Date.now(); cx.notify();
     cx.timer.after(ARM_MS + 50, (cx) => { if (this.armed === key) { this.armed = null; cx.notify(); } });
+  }
+
+  // A key in the list (listkeys.js), its pending g kept on the view.
+  listed(e) {
+    const { move, gAt } = listKey(e, this.listG);
+    this.listG = gAt;
+    return move;
   }
 
   render() {
@@ -164,7 +175,7 @@ export default class Arrange extends View {
       .on_key_down((e, cx) => {
         // The list: j/k (or the arrows) along it, gg/G, Enter opens the
         // one you are on. Not in the save view, whose name field takes letters.
-        const move = this.view !== "save" ? listKey(e, this.keys ??= {}) : (e.key === "escape" ? "escape" : null);
+        const move = this.view !== "save" ? this.listed(e) : (e.key === "escape" ? "escape" : null);
         if (!move) return;
         if (move !== "escape") {
           const order = this.order ?? [];
@@ -181,7 +192,8 @@ export default class Arrange extends View {
       const line = (q, i) => h_flex().id(`cap-${i}`).w_full().gap(10).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(q.argv ? t.foreground : t.muted).child(describe(q.argv)))
         .child(div().flex_none().max_w(180).truncate().text_size(11.5).text_color(t.dim).child(tilde(q.cwd)));
-      let i = 0;
+      // Each pane's id counts the panes before it, across the columns.
+      const starts = cols.map((_, ci) => cols.slice(0, ci).reduce((s, c) => s + c.panes.length, 0));
       const typed = this.name.value().trim(), tg = this.target;
       const replaces = (tg && tg.name === typed) ? tg : (this.list ?? []).some((a) => a.name === typed) ? { name: typed } : null;
       return shell
@@ -192,7 +204,7 @@ export default class Arrange extends View {
         // One rule per column; a stack's panes sit on the same rule.
         .child(v_flex().gap(10).children(cols.map((c, ci) => h_flex().w_full().gap(10).items_stretch()
           .child(div().w(2).flex_none().rounded_full().bg(t.border))
-          .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q) => line(q, `${ci}-${i++}`)))))))
+          .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))))
         .child(note("Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh."))
         .when(Boolean(replaces), (el) => el.child(note(`This replaces the arrangement named ${replaces?.name}.`, t.muted)))
         .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))

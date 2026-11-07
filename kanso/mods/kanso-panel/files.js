@@ -6,7 +6,8 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec, readTextFile, watchFolder, theme, window, openOverlay, shared, setShared } from "herdr";
-import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
+import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel, mapWith } from "./lib.js";
+import { mapSeries } from "./pure.js";
 
 const PER_FOLDER = 500, TOTAL = 5000;
 const RETURN = "kanso.files.return";
@@ -28,15 +29,13 @@ async function directory(path, on) {
   const fast = await exec("find", ["-H", ".", "-mindepth", "1", "-maxdepth", "1", "!", "-name", ".git",
     "(", "-type", "d", "-print0", "-print0", "-o", "-print0", ")"], { cwd: path, on }).catch(() => null);
   if (fast?.code === 0) {
-    const out = [], text = fast.stdout;
-    for (let at = 0, last = null; at < text.length && out.length <= PER_FOLDER + 1;) {
-      const end = text.indexOf("\0", at);
-      if (end < 0) break;
-      const name = text.slice(at + 2, end); // drop "./"
-      at = end + 1;
-      if (name === last) { out[out.length - 1].dir = true; last = null; continue; }
-      out.push({ name, dir: false }); last = name;
-    }
+    // The names ended by a NUL ("./" dropped), as many as the entries kept
+    // can take: two for a folder, one for anything else.
+    const names = fast.stdout.split("\0").slice(0, -1).slice(0, 2 * (PER_FOLDER + 2)).map((name) => name.slice(2));
+    // A name the same as the one before it, when that one was not itself the
+    // second of a pair, is that folder's second print.
+    const second = mapWith(names, (last, name) => (name === last ? [null, true] : [name, false]), null);
+    const out = names.flatMap((name, i) => (second[i] ? [] : [{ name, dir: second[i + 1] === true }]));
     // One past the cap tells the panel the folder was cut short.
     return out.slice(0, PER_FOLDER + 1);
   }
@@ -56,9 +55,8 @@ done
 test -d "$1"`;
   const r = await exec("bash", ["-c", script, "files", path], { on });
   if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-  const fields = r.stdout.split("\0"), out = [];
-  for (let i = 0; i + 1 < fields.length; i += 2) out.push({ name: fields[i + 1], dir: fields[i] === "d" });
-  return out;
+  const fields = r.stdout.split("\0");
+  return Array.from({ length: Math.floor(fields.length / 2) }, (_, k) => ({ name: fields[2 * k + 1], dir: fields[2 * k] === "d" }));
 }
 
 // The panel exists only while it is shown (kanso-tabs mounts it on demand),
@@ -106,8 +104,9 @@ export class Files {
     const entries = await directory(path ? `${root}/${path}` : root, on);
     if (key() !== context || (path && !this.folders.has(path))) return;
     const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
-    this.entries.set(path, entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)));
-    this.rev++;
+    const kept = entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).toSorted((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+    this.entries = new Map([...this.entries, [path, kept]]);
+    this.rev = this.rev + 1;
     if (entries.length > PER_FOLDER || used + entries.length > TOTAL) this.limited = true;
   }
 
@@ -117,46 +116,45 @@ export class Files {
     if (context !== this.context) {
       this.context = context; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set();
       this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
-      this.rev++;
+      this.rev = this.rev + 1;
     }
     if (!cwd) return;
     this.loading = true;
     this.limited = false;
     cx.spawn(async cx => {
       try {
-        for (const path of ["", ...this.folders]) await this.loadFolder(path, context);
+        await mapSeries(["", ...this.folders], (path) => this.loadFolder(path, context));
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
-        const marks = {};
-        if (top?.code === 0) {
-          const status = await exec("git", ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null);
-          if (status?.code === 0) for (const entry of status.stdout.split("\0").filter(Boolean).slice(0, TOTAL)) {
-            const xy = entry.slice(0, 2);
-            marks[`${top.stdout.trim()}/${entry.slice(3)}`] = xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
-          }
-        }
+        const status = top?.code === 0
+          ? await exec("git", ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null)
+          : null;
+        const marks = Object.fromEntries(status?.code === 0 ? status.stdout.split("\0").filter(Boolean).slice(0, TOTAL).map((entry) => {
+          const xy = entry.slice(0, 2);
+          return [`${top.stdout.trim()}/${entry.slice(3)}`, xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M"];
+        }) : []);
         if (key() !== context) return;
-        this.marks = marks; this.rev++; this.error = null; this.watch(cwd, cx);
+        this.marks = marks; this.rev = this.rev + 1; this.error = null; this.watch(cwd, cx);
       } catch (e) { if (key() === context) this.error = String(e); }
       finally { this.loading = false; cx.notify(); }
     });
   }
 
   toggle(path, cx) {
-    this.rev++;
+    this.rev = this.rev + 1;
     if (this.folders.has(path)) {
-      for (const folder of [...this.folders]) if (folder === path || folder.startsWith(path + "/")) {
-        this.folders.delete(folder);
-        this.entries.delete(folder);
-      }
+      // The folder closes, and every open one inside it, with what was read of them.
+      const closing = (folder) => this.folders.has(folder) && (folder === path || folder.startsWith(path + "/"));
+      this.entries = new Map([...this.entries].filter(([folder]) => !closing(folder)));
+      this.folders = new Set([...this.folders].filter((folder) => !closing(folder)));
     } else {
-      this.folders.add(path);
+      this.folders = new Set([...this.folders, path]);
       if (!this.entries.has(path) && !this.pending.has(path)) {
         const context = this.context;
-        this.pending.add(path);
+        this.pending = new Set([...this.pending, path]);
         cx.spawn(async cx => {
           try { await this.loadFolder(path, context); }
           catch (e) { if (key() === context) this.error = String(e); }
-          finally { this.pending.delete(path); cx.notify(); }
+          finally { this.pending = new Set([...this.pending].filter((p) => p !== path)); cx.notify(); }
         });
       }
     }
@@ -199,20 +197,19 @@ export class Files {
   // The tree's rows, built again only when something in them changed (`rev`):
   // a draw comes with every shared write anywhere, the rows run to 5,000.
   rows() {
-    if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0, []) };
+    if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0).slice(0, TOTAL) };
     return this.shown.items;
   }
 
-  // Plain rows, so a frame builds elements only for the ones on screen.
-  flat(prefix, depth, out) {
-    if (out.length >= TOTAL || depth > 40) return out;
-    for (const entry of this.entries.get(prefix) ?? []) {
-      if (out.length >= TOTAL) break;
+  // Plain rows, so a frame builds elements only for the ones on screen: a
+  // folder's entries, each open one followed by its own, 40 deep at most.
+  flat(prefix, depth) {
+    if (depth > 40) return [];
+    return (this.entries.get(prefix) ?? []).flatMap((entry) => {
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-      out.push({ path, entry, depth, mark: this.marks[`${this.root}/${path}`] });
-      if (entry.dir && this.folders.has(path)) this.flat(path, depth + 1, out);
-    }
-    return out;
+      const row = { path, entry, depth, mark: this.marks[`${this.root}/${path}`] };
+      return entry.dir && this.folders.has(path) ? [row, ...this.flat(path, depth + 1)] : [row];
+    });
   }
 
   row({ path, entry, depth, mark }, t) {
@@ -232,7 +229,7 @@ export class Files {
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))
         .child(div().font_semibold().child("Files"))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).pop() ?? ""))
+        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).at(-1) ?? ""))
         .when(Boolean(this.file), el => el.child(div().id("files-open-with").p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip("Open with…")
           .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => this.openWith(this.file))
           .child(svg("mods/kanso-chrome/icons/open-with.svg").size(14)))))

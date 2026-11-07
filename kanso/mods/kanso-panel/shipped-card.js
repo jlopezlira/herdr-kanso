@@ -7,11 +7,12 @@ import { postText } from "./share.js";
 
 // The post's words: the numbers that brag best.
 export function shareText(s, extra) {
-  const parts = [];
-  if (s.big) parts.push(`${s.big} ${s.byDay ? "contributions" : "lines shipped"} ${s.period.toLowerCase()}`);
   const merged = s.stats.find((x) => x.unit === "pull requests merged");
-  if (merged && merged.value !== "—" && merged.value !== "0") parts.push(`${merged.value} pull requests merged`);
-  if (extra.streak > 1) parts.push(`a ${extra.streak}-day streak`);
+  const parts = [
+    ...(s.big ? [`${s.big} ${s.byDay ? "contributions" : "lines shipped"} ${s.period.toLowerCase()}`] : []),
+    ...(merged && merged.value !== "—" && merged.value !== "0" ? [`${merged.value} pull requests merged`] : []),
+    ...(extra.streak > 1 ? [`a ${extra.streak}-day streak`] : []),
+  ];
   return postText(parts, "What I shipped.");
 }
 
@@ -22,8 +23,8 @@ export function shippedSpec(s, extra) {
     { kind: "streak", title: "Streak", right: `longest ${extra.longest} ${extra.longest === 1 ? "day" : "days"}`,
       n: extra.streak, unit: extra.streak === 1 ? "day in a row" : "days in a row", weeks: extra.weeks },
     { kind: "list", title: "Records", rows: extra.records ?? [] },
+    ...(extra.rhythm ? [{ kind: "bars", title: "When you ship", right: extra.rhythm.note, values: extra.rhythm.hours, ticks: ["00", "06", "12", "18", "23"] }] : []),
   ];
-  if (extra.rhythm) blocks.push({ kind: "bars", title: "When you ship", right: extra.rhythm.note, values: extra.rhythm.hours, ticks: ["00", "06", "12", "18", "23"] });
   return {
     title: "Shipped",
     right: [s.login ? `@${s.login}` : "", s.period].filter(Boolean).join("  ·  "),

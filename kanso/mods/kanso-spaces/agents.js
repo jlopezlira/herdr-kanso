@@ -4,6 +4,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { range } from "./pure.js";
 
 export { NAME_LABEL };
 
@@ -39,7 +40,8 @@ export function segmentAt(width, i, n, pad = 3, gap = 2) {
 }
 // A row flush with the list's 10px inset (the Status and Threads views).
 export const FLUSH = 10 - AGENT_PAD;
-const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+// Asleep is one more status: its own section, after the awake ones.
+const RANK = { blocked: 4, done: 3, working: 2, idle: 1, asleep: 0.5 };
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 
@@ -77,14 +79,14 @@ const kindName = (a) => (a.app || a.program?.name || "").toLowerCase();
 // `list` comes in screen order (the stable tiebreak); `custom` is the
 // addresses in the order you dragged them, for the custom order.
 export function orderSessions(list, mode, custom = []) {
-  const by = (cmp) => list.map((a, i) => [a, i]).sort((x, y) => cmp(x[0], y[0]) || x[1] - y[1]).map(([a]) => a);
+  const by = (cmp) => list.map((a, i) => [a, i]).toSorted((x, y) => cmp(x[0], y[0]) || x[1] - y[1]).map(([a]) => a);
   const fresh = (x, y) => (y.seq ?? 0) - (x.seq ?? 0);
   const rest = mode === "attention" ? by((x, y) => (RANK[y.status] ?? 0) - (RANK[x.status] ?? 0) || fresh(x, y))
     : mode === "type" ? by((x, y) => KIND(x) - KIND(y) || kindName(x).localeCompare(kindName(y)) || fresh(x, y))
     : mode === "screen" ? list
     : mode === "custom" ? by((x, y) => { const i = custom.indexOf(x.address), j = custom.indexOf(y.address); return (i < 0 ? 1e9 : i) - (j < 0 ? 1e9 : j) || fresh(x, y); })
     : by(fresh);
-  const pinned = rest.filter((a) => a.pin != null).sort((x, y) => x.pin - y.pin);
+  const pinned = rest.filter((a) => a.pin != null).toSorted((x, y) => x.pin - y.pin);
   return [...pinned, ...rest.filter((a) => a.pin == null)];
 }
 
@@ -92,8 +94,7 @@ export function orderSessions(list, mode, custom = []) {
 export function moved(order, address, target, side) {
   const out = order.filter((x) => x !== address);
   const at = out.indexOf(target);
-  out.splice(side === "after" ? at + 1 : at, 0, address);
-  return out;
+  return out.toSpliced(side === "after" ? at + 1 : at, 0, address);
 }
 
 // Renaming a terminal: the same dialog Herdr opens to rename a space or a
@@ -116,7 +117,7 @@ export function agentLabel(a) {
   const live = liveTitle(a);
   if (live) return live;
   // A shell says nothing about itself: name it after its folder.
-  const dir = a.program?.shell && a.cwd ? a.cwd.replace(/\/+$/, "").split("/").pop() : null;
+  const dir = a.program?.shell && a.cwd ? a.cwd.replace(/\/+$/, "").split("/").at(-1) : null;
   if (dir) return dir;
   return /^\d+$/.test(a.tab_name ?? "") ? a.program?.name || a.tab_name : a.tab_name || a.program?.name || a.address;
 }
@@ -155,23 +156,19 @@ const phase = (s) => (s === "done" || s === "idle" ? "rest" : s);
 // working, else when the tab last changed; else no time at all, rather than
 // a made-up "<1m". Records of agents gone a month go.
 export function track(since, list, now, tabOf = () => null) {
-  let next = null;
-  for (const a of list) {
-    if (!a.status) continue;
+  const changed = list.flatMap((a) => {
+    if (!a.status) return [];
     const s = phase(a.status), was = since[a.address];
-    if (was?.s === s) continue;
+    if (was?.s === s) return [];
     const tab = was ? null : tabOf(a.tab);
     const at = was ? now : (s === "working" ? tab?.working_since : tab?.changed_at) ?? null;
-    next ??= { ...since };
-    next[a.address] = { s, at };
-  }
+    return [[a.address, { s, at }]];
+  });
   const listed = new Set(list.map((a) => a.address));
-  for (const [k, v] of Object.entries(since)) {
-    if (listed.has(k) || (v?.at && now - v.at < 30 * 86400000)) continue;
-    next ??= { ...since };
-    delete next[k];
-  }
-  return next;
+  const gone = new Set(Object.entries(since).filter(([k, v]) => !(listed.has(k) || (v?.at && now - v.at < 30 * 86400000))).map(([k]) => k));
+  if (!changed.length && !gone.size) return null;
+  const next = { ...since, ...Object.fromEntries(changed) };
+  return gone.size ? Object.fromEntries(Object.entries(next).filter(([k]) => !gone.has(k))) : next;
 }
 
 // The time beside a row: how long it has worked, waited on you, or since it
@@ -185,10 +182,11 @@ export function elapsed(a, since, now) {
 // The digest in a few words: "+12 −3 · 1 commit · PR #41".
 export function digestLine(d) {
   if (!d) return null;
-  const parts = [];
-  if (d.files) parts.push(d.add || d.del ? `+${d.add ?? 0} −${d.del ?? 0}` : `${d.files} ${d.files === 1 ? "file" : "files"}`);
-  if (d.ahead) parts.push(`${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}`);
-  if (d.pr?.number) parts.push(`PR #${d.pr.number}${d.pr.checks === "failing" ? " failing" : ""}`);
+  const parts = [
+    d.files ? (d.add || d.del ? `+${d.add ?? 0} −${d.del ?? 0}` : `${d.files} ${d.files === 1 ? "file" : "files"}`) : null,
+    d.ahead ? `${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}` : null,
+    d.pr?.number ? `PR #${d.pr.number}${d.pr.checks === "failing" ? " failing" : ""}` : null,
+  ].filter((x) => x !== null);
   return parts.length ? parts.join(" · ") : null;
 }
 
@@ -223,18 +221,17 @@ export function activityOf(a, digest) {
 // record's `status_ms` is not the step's time). Returns the new map, or
 // null when nothing changed.
 export function trackSteps(steps, list, now) {
-  let next = null;
-  const listed = new Set();
-  for (const a of list) {
-    if (!a.status) continue;
-    listed.add(a.address);
+  const live = list.filter((a) => a.status);
+  const listed = new Set(live.map((a) => a.address));
+  const changed = live.flatMap((a) => {
     const msg = said(a), was = steps[a.address];
-    if (was && was.msg === msg) continue;
-    next ??= { ...steps };
-    next[a.address] = { msg, at: now };
-  }
-  for (const k of Object.keys(steps)) if (!listed.has(k)) { next ??= { ...steps }; delete next[k]; }
-  return next;
+    return was && was.msg === msg ? [] : [[a.address, { msg, at: now }]];
+  });
+  const gone = Object.keys(steps).some((k) => !listed.has(k));
+  if (!changed.length && !gone) return null;
+  // What changed in place, then the agents no longer listed dropped.
+  const next = { ...steps, ...Object.fromEntries(changed) };
+  return gone ? Object.fromEntries(Object.entries(next).filter(([k]) => listed.has(k))) : next;
 }
 
 // A step that is taking long: a working agent on the same one for three
@@ -256,13 +253,13 @@ export function stepOf(a, steps, now) {
 // terminal's shell, whose one child is the agent.
 const HELPER = /\bmcp\b|^caffeinate\b/i;
 export function tasksOf(text, pid, fg = true) {
-  const rows = [];
-  for (const line of text.split("\n")) {
+  const rows = text.split("\n").flatMap((line) => {
     const m = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
-    if (m) rows.push({ pid: +m[1], ppid: +m[2], etime: m[3], command: m[4] });
-  }
-  let root = pid;
-  if (!fg) { const kid = rows.find((r) => r.ppid === pid); if (!kid) return []; root = kid.pid; }
+    return m ? [{ pid: +m[1], ppid: +m[2], etime: m[3], command: m[4] }] : [];
+  });
+  const kid = fg ? null : rows.find((r) => r.ppid === pid);
+  if (!fg && !kid) return [];
+  const root = fg ? pid : kid.pid;
   return rows.filter((r) => r.ppid === root && !HELPER.test(r.command))
     .map((r) => ({ pid: r.pid, ms: etimeMs(r.etime), command: unwrap(r.command) }));
 }
@@ -270,8 +267,8 @@ export function tasksOf(text, pid, fg = true) {
 // ps's elapsed time, "[[dd-]hh:]mm:ss", in ms.
 export function etimeMs(s) {
   const [d, rest] = s.includes("-") ? s.split("-") : ["0", s];
-  const parts = rest.split(":").map(Number);
-  while (parts.length < 3) parts.unshift(0);
+  const given = rest.split(":").map(Number);
+  const parts = [...range(3 - given.length).map(() => 0), ...given];
   return ((Number(d) * 24 + parts[0]) * 3600 + parts[1] * 60 + parts[2]) * 1000;
 }
 
@@ -296,30 +293,28 @@ export const subStatus = (s) => (s === "error" ? "blocked" : s === "done" ? "idl
 // under its parent; one without joins from terminals(), live ones only.
 export function nest(rows, all = []) {
   const listed = new Set(rows.map((a) => a.address));
-  const out = [], seen = new Set();
   const sub = (k) => ({ address: k.address, pane: null, tab: null, sub: true, status: subStatus(k.status),
     program: k.program, title: k.name || k.template || k.program?.name || k.address, name: k.labels?.[NAME_LABEL] || undefined, seq: 0 });
   // Each parent's children once: its rows first, then its live terminals without a pane.
-  const children = new Map();
-  const under = (addr) => { let list = children.get(addr); if (!list) children.set(addr, list = []); return list; };
-  for (const a of rows) if (a.parent) under(a.parent).push(a);
-  for (const k of all) if (k.parent && k.state === "live" && !listed.has(k.address)) under(k.parent).push(sub(k));
-  const walk = (addr, lead) => {
-    const kids = (children.get(addr) ?? []).filter((k) => !seen.has(k.address));
-    kids.forEach((k, i) => {
+  const pairs = [
+    ...rows.filter((a) => a.parent).map((a) => [a.parent, a]),
+    ...all.filter((k) => k.parent && k.state === "live" && !listed.has(k.address)).map((k) => [k.parent, sub(k)]),
+  ];
+  const children = new Map([...Map.groupBy(pairs, ([p]) => p)].map(([p, list]) => [p, list.map(([, k]) => k)]));
+  // Each tree, depth first: a terminal has one parent, so an address shows
+  // once; a loop of parents is cut where it comes back (`path`: the ones
+  // above), and should one still show twice, only its first place stays.
+  const tree = (a, lines, lead, path) => {
+    const kids = (children.get(a.address) ?? []).filter((k) => !path.has(k.address));
+    const below = new Set([...path, a.address]);
+    return [{ a, lines }, ...kids.flatMap((k, i) => {
       const last = i === kids.length - 1;
-      seen.add(k.address);
-      out.push({ a: k, lines: [...lead, last ? "└" : "├"] });
-      walk(k.address, [...lead, last ? "" : "│"]);
-    });
+      return tree(k, [...lead, last ? "└" : "├"], [...lead, last ? "" : "│"], below);
+    })];
   };
-  for (const a of rows) {
-    if ((a.parent && listed.has(a.parent)) || seen.has(a.address)) continue;
-    seen.add(a.address);
-    out.push({ a, lines: [] });
-    walk(a.address, []);
-  }
-  return out;
+  const placed = rows.filter((a) => !(a.parent && listed.has(a.parent))).flatMap((a) => tree(a, [], [], new Set()));
+  const first = new Map(placed.map((x, i) => [x.a.address, i]).toReversed());
+  return placed.filter((x, i) => first.get(x.a.address) === i);
 }
 
 // The Agents view: every agent in every space, by what it needs from you.
@@ -331,27 +326,25 @@ export const SECTIONS = [
   { id: "working", label: "Working" },
   { id: "done", label: "Done" },
   { id: "idle", label: "Idle" },
+  { id: "asleep", label: "Asleep" },
   { id: "other", label: "Terminals" },
 ];
 export function bySection(entries, since = {}, held = null, order = "latest") {
-  const blocks = [];
-  for (const e of entries) {
-    if (!e.lines.length) blocks.push([e]);
-    else blocks.at(-1)?.push(e);
-  }
+  // A row and the sub-agents under it are one block; lines before the first row belong to none.
+  const starts = entries.flatMap((e, i) => (e.lines.length ? [] : [i]));
+  const blocks = starts.map((i, k) => entries.slice(i, starts[k + 1] ?? entries.length));
   const rankOf = (a) => (a.address === held && a.status === "idle" ? RANK.done : RANK[a.status] ?? 0);
   const at = (a) => since[a.address]?.at ?? 0;
-  const out = SECTIONS.map((s) => ({ ...s, blocks: [] }));
-  for (const b of blocks) {
+  const sectionOf = (b) => {
     const top = Math.max(...b.map((e) => rankOf(e.a)));
-    const id = top ? Object.keys(RANK).find((k) => RANK[k] === top) : "other";
-    out.find((s) => s.id === id).blocks.push(b);
-  }
+    return top ? Object.keys(RANK).find((k) => RANK[k] === top) : "other";
+  };
+  const ids = blocks.map(sectionOf);
   const cmp = order === "longest" ? (x, y) => (at(x[0].a) || Infinity) - (at(y[0].a) || Infinity)
     : order === "project" ? (x, y) => String(x[0].a.space_name ?? "").localeCompare(String(y[0].a.space_name ?? "")) || at(y[0].a) - at(x[0].a)
     : (x, y) => at(y[0].a) - at(x[0].a);
-  for (const s of out) s.blocks.sort((x, y) => cmp(x, y) || (y[0].a.seq ?? 0) - (x[0].a.seq ?? 0));
-  return out.filter((s) => s.blocks.length).map((s) => ({ id: s.id, label: s.label, entries: s.blocks.flat() }));
+  return SECTIONS.map((s) => ({ ...s, blocks: blocks.filter((_, i) => ids[i] === s.id).toSorted((x, y) => cmp(x, y) || (y[0].a.seq ?? 0) - (x[0].a.seq ?? 0)) }))
+    .filter((s) => s.blocks.length).map((s) => ({ id: s.id, label: s.label, entries: s.blocks.flat() }));
 }
 
 // ---- Threads: pin, settle, snooze, unread, as T3 Code ------------------------------
@@ -390,38 +383,35 @@ export const STATUS_ORDERS = { latest: "Latest change first", longest: "Longest 
 export function threadSections(rows, { order = "said", group = false, now = Date.now(), since = {} } = {}) {
   const key = (r) => (order === "started" ? r.th?.began : r.th?.said ?? r.th?.at) ?? since[r.a.address]?.at ?? 0;
   const by = (f) => (x, y) => f(y) - f(x) || (y.a.seq ?? 0) - (x.a.seq ?? 0);
-  const shelf = { pinned: [], active: [], snoozed: [], settled: [] };
-  for (const r of rows) shelf[shelfOf(r.a, now)].push(r);
-  shelf.pinned.sort((x, y) => x.a.pin - y.a.pin);
-  shelf.active.sort((x, y) => Number(woke(y.a, now)) - Number(woke(x.a, now)) || by(key)(x, y));
-  shelf.snoozed.sort((x, y) => snoozedUntil(x.a.labels) - snoozedUntil(y.a.labels));
-  shelf.settled.sort(by((r) => settledOf(r.a.labels)?.at ?? 0));
-  const out = [];
-  if (shelf.pinned.length) out.push({ id: "pinned", label: "Pinned", rows: shelf.pinned });
-  if (group) {
-    const groups = new Map();
-    for (const r of shelf.active) { if (!groups.has(r.a.space)) groups.set(r.a.space, []); groups.get(r.a.space).push(r); }
-    for (const [space, list] of groups) out.push({ id: `project-${space}`, project: space, rows: list });
-  } else if (shelf.active.length) out.push({ id: "active", label: null, rows: shelf.active });
-  if (shelf.snoozed.length) out.push({ id: "snoozed", label: "Snoozed", rows: shelf.snoozed, folds: true });
-  if (shelf.settled.length) out.push({ id: "settled", label: "Settled", rows: shelf.settled, folds: true });
-  return out;
+  const shelves = rows.map((r) => shelfOf(r.a, now));
+  const on = (name) => rows.filter((_, i) => shelves[i] === name);
+  const pinned = on("pinned").toSorted((x, y) => x.a.pin - y.a.pin);
+  const active = on("active").toSorted((x, y) => Number(woke(y.a, now)) - Number(woke(x.a, now)) || by(key)(x, y));
+  const snoozed = on("snoozed").toSorted((x, y) => snoozedUntil(x.a.labels) - snoozedUntil(y.a.labels));
+  const settled = on("settled").toSorted(by((r) => settledOf(r.a.labels)?.at ?? 0));
+  const projects = () => [...new Set(active.map((r) => r.a.space))].map((space) => ({ id: `project-${space}`, project: space, rows: active.filter((r) => r.a.space === space) }));
+  return [
+    ...(pinned.length ? [{ id: "pinned", label: "Pinned", rows: pinned }] : []),
+    ...(group ? projects() : active.length ? [{ id: "active", label: null, rows: active }] : []),
+    ...(snoozed.length ? [{ id: "snoozed", label: "Snoozed", rows: snoozed, folds: true }] : []),
+    ...(settled.length ? [{ id: "settled", label: "Settled", rows: settled, folds: true }] : []),
+  ];
 }
 
 // T3 Code's snooze choices, from `now`: in an hour, in three, this evening
 // at 18:00 (while it is still ahead), tomorrow and next Monday at 9:00.
 export function snoozePresets(now) {
   const d = new Date(now);
-  const at = (days, h) => { const x = new Date(d); x.setDate(x.getDate() + days); x.setHours(h, 0, 0, 0); return x.getTime(); };
+  const at = (days, h) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + days, h, 0, 0, 0).getTime();
   const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+  const toMonday = ((8 - d.getDay()) % 7) || 7;
   const out = [
     { id: "1h", label: "In 1 hour", until: now + 3600000 },
     { id: "3h", label: "In 3 hours", until: now + 3 * 3600000 },
+    ...(at(0, 18) > now + 3600000 ? [{ id: "evening", label: "This evening", until: at(0, 18) }] : []),
+    { id: "tomorrow", label: "Tomorrow", until: at(1, 9) },
+    { id: "monday", label: "Monday", until: at(toMonday, 9) },
   ];
-  if (at(0, 18) > now + 3600000) out.push({ id: "evening", label: "This evening", until: at(0, 18) });
-  out.push({ id: "tomorrow", label: "Tomorrow", until: at(1, 9) });
-  const toMonday = ((8 - d.getDay()) % 7) || 7;
-  out.push({ id: "monday", label: "Monday", until: at(toMonday, 9) });
   return out.map((p) => ({ ...p, when: p.id.endsWith("h") ? hhmm(p.until) : `${new Date(p.until).toDateString().slice(0, 3)} ${hhmm(p.until)}` }));
 }
 
@@ -440,8 +430,7 @@ export function statusMark(t, status) {
 // sidebar shows every session in the space.
 export function withTerminals(list, ps, ss) {
   const known = new Set(list.map((a) => a.pane));
-  const where = {};
-  for (const s of ss) (s.tabs ?? []).forEach((tb, i) => { where[tb.id] = { space: s.id, space_name: s.name, tab_index: i, tab_name: tb.name }; });
+  const where = Object.fromEntries(ss.flatMap((s) => (s.tabs ?? []).map((tb, i) => [tb.id, { space: s.id, space_name: s.name, tab_index: i, tab_name: tb.name }])));
   const rest = ps.filter((p) => p.terminal && !known.has(p.pane) && where[p.tab])
     .map((p) => ({ address: p.terminal, pane: p.pane, tab: p.tab, ...where[p.tab], status: null, app: null, program: p.program, title: p.title, cwd: p.cwd, seq: 0, focused: p.focused }));
   return rest.length ? [...list, ...rest] : list;
@@ -535,9 +524,10 @@ const ROW = 32, TWO = 50, ROOMY = 64;
 export function agentRow(a, indent, t, row, more = {}) {
   const project = more.project ?? null;
   const pic = project ? null : programIcon(a.program, a.sub ? 13 : 15, t.foreground);
-  // Asleep (or on its way): in its place, by its name, with the moon; it has
-  // no pane, so a click opens its menu (Wake) instead of a pane.
-  const zz = Boolean(a.asleep) || Boolean(a.dozing);
+  // Asleep (or on its way), a status like the others: in its place, by its
+  // name, with its mark (the moon); it has no pane, so a click opens its
+  // menu (Wake) instead of a pane.
+  const zz = a.status === "asleep" || Boolean(a.dozing);
   const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
   const ink = zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -590,8 +580,7 @@ export function agentRow(a, indent, t, row, more = {}) {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
       .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13))))
-    .child(zz ? h_flex().size(15).flex_none().items_center().justify_center().child(svg("mods/kanso-chrome/icons/moon.svg").size(13).text_color(t.muted))
-      : statusMark(t, a.status));
+    .child(statusMark(t, zz ? "asleep" : a.status));
   const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
     .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
     .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))

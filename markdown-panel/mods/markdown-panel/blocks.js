@@ -10,55 +10,75 @@ const ITEM = /^\s*([-*+]|\d{1,9}[.)])(\s|$)/;
 const QUOTE = /^\s{0,3}>/;
 const DIVIDER = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
 
+import { range } from "./pure.js";
+
 const isTableStart = (lines, i) => lines[i].includes("|") && i + 1 < lines.length && DIVIDER.test(lines[i + 1]) && lines[i + 1].includes("-");
 const startsBlock = (lines, i) => FENCE.test(lines[i]) || HEADING.test(lines[i]) || RULE.test(lines[i]) || isTableStart(lines, i);
+
+// A fold over 0..n-1 that also collects what each step gives out, in order:
+// step(state, j) answers { state, emit } (emit left out when there is
+// nothing). Collecting into one array by spread would copy it once per item,
+// slow on a document of many thousands of lines, so the indexes go in runs
+// of 64: each run gathers its own items, and the runs are joined at the end.
+const RUN = 64;
+function collect(n, step, init) {
+  const done = range(Math.ceil(n / RUN)).reduce((acc, r) => {
+    const run = range(Math.min(RUN, n - r * RUN), r * RUN).reduce((inner, j) => {
+      const next = step(inner.state, j);
+      return { state: next.state, items: next.emit ? [...inner.items, next.emit] : inner.items };
+    }, { state: acc.state, items: [] });
+    return { state: run.state, runs: [...acc.runs, run.items] };
+  }, { state: init, runs: [] });
+  return done.runs.flat();
+}
+
+// How a block goes on: given the next line's index, the way it goes on after
+// that line when the line is still the block's, or null when the block ended
+// before it.
+const ended = () => null;
+const whileLine = (test) => {
+  const more = (j) => (test(j) ? more : null);
+  return more;
+};
+
+// The block that line i starts, when it is not part of the one before:
+// { kind, next } (next as above).
+function opening(lines, i) {
+  const line = lines[i];
+  if (!line.trim()) return { kind: "blank", next: ended };
+  const fence = FENCE.exec(line);
+  if (fence) {
+    // Everything up to the closing fence, that one included (or to the end).
+    const closing = new RegExp(`^\\s{0,3}\\${fence[1][0]}{${fence[1].length},}\\s*$`);
+    const inside = (j) => (closing.test(lines[j]) ? ended : inside);
+    return { kind: "code", next: inside };
+  }
+  if (HEADING.test(line)) return { kind: "heading", next: ended };
+  if (RULE.test(line)) return { kind: "rule", next: ended };
+  // The divider line is the table's, then the rows with a pipe.
+  if (isTableStart(lines, i)) return { kind: "table", next: () => whileLine((j) => lines[j].trim() && lines[j].includes("|")) };
+  if (QUOTE.test(line)) return { kind: "quote", next: whileLine((j) => lines[j].trim() && QUOTE.test(lines[j])) };
+  if (ITEM.test(line)) return { kind: "list", next: whileLine((j) => lines[j].trim() && (ITEM.test(lines[j]) || /^\s/.test(lines[j])) && !startsBlock(lines, j)) };
+  return { kind: "paragraph", next: whileLine((j) => lines[j].trim() && !startsBlock(lines, j) && !QUOTE.test(lines[j]) && !ITEM.test(lines[j])) };
+}
 
 // [{ kind, lines }]; kinds: front, code, heading, rule, table, list, quote,
 // paragraph, blank.
 export function parseBlocks(text) {
-  const lines = text.split("\n"), out = [];
-  let i = 0;
-  const take = (kind, end) => { out.push({ kind, lines: lines.slice(i, end) }); i = end; };
-  if (lines[0] === "---") {
-    const end = lines.indexOf("---", 1);
-    if (end > 0) take("front", end + 1);
-  }
-  while (i < lines.length) {
-    const line = lines[i];
-    if (!line.trim()) { take("blank", i + 1); continue; }
-    const fence = FENCE.exec(line);
-    if (fence) {
-      const mark = fence[1][0], size = fence[1].length;
-      let j = i + 1;
-      while (j < lines.length && !new RegExp(`^\\s{0,3}\\${mark}{${size},}\\s*$`).test(lines[j])) j++;
-      take("code", Math.min(j + 1, lines.length));
-      continue;
-    }
-    if (HEADING.test(line)) { take("heading", i + 1); continue; }
-    if (RULE.test(line)) { take("rule", i + 1); continue; }
-    if (isTableStart(lines, i)) {
-      let j = i + 2;
-      while (j < lines.length && lines[j].trim() && lines[j].includes("|")) j++;
-      take("table", j);
-      continue;
-    }
-    if (QUOTE.test(line)) {
-      let j = i + 1;
-      while (j < lines.length && lines[j].trim() && QUOTE.test(lines[j])) j++;
-      take("quote", j);
-      continue;
-    }
-    if (ITEM.test(line)) {
-      let j = i + 1;
-      while (j < lines.length && lines[j].trim() && (ITEM.test(lines[j]) || /^\s/.test(lines[j])) && !startsBlock(lines, j)) j++;
-      take("list", j);
-      continue;
-    }
-    let j = i + 1;
-    while (j < lines.length && lines[j].trim() && !startsBlock(lines, j) && !QUOTE.test(lines[j]) && !ITEM.test(lines[j])) j++;
-    take("paragraph", j);
-  }
-  return out;
+  const lines = text.split("\n");
+  // Front matter: from the first line's --- to the next one.
+  const frontEnd = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
+  const front = frontEnd > 0;
+  // One pass over the lines: each either goes on with the block it is in, or
+  // starts the next one. Only the starts are kept; a block ends where the next begins.
+  const starts = collect(lines.length, (next, j) => {
+    const more = next(j);
+    if (more) return { state: more };
+    const b = opening(lines, j);
+    return { state: b.next, emit: { kind: b.kind, start: j } };
+  }, front ? whileLine((j) => j <= frontEnd) : ended);
+  const all = front ? [{ kind: "front", start: 0 }, ...starts] : starts;
+  return all.map((b, k) => ({ kind: b.kind, lines: lines.slice(b.start, k + 1 < all.length ? all[k + 1].start : lines.length) }));
 }
 
 export const joinBlocks = (blocks) => blocks.flatMap((b) => b.lines).join("\n");
@@ -72,18 +92,11 @@ export const headingLine = (level, text) => `${"#".repeat(level)} ${text.replace
 
 // A row's cells: split on pipes that aren't escaped, outer pipes dropped.
 export function cellsOf(line) {
-  let s = line.trim();
-  if (s.startsWith("|")) s = s.slice(1);
-  if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
-  const cells = [];
-  let cur = "";
-  for (let k = 0; k < s.length; k++) {
-    if (s[k] === "\\" && s[k + 1] === "|") { cur += "|"; k++; }
-    else if (s[k] === "|") { cells.push(cur.trim()); cur = ""; }
-    else cur += s[k];
-  }
-  cells.push(cur.trim());
-  return cells;
+  const trimmed = line.trim();
+  const opened = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
+  const s = opened.endsWith("|") && !opened.endsWith("\\|") ? opened.slice(0, -1) : opened;
+  // A pipe right after a backslash is the cell's own; the backslash goes.
+  return s.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, "|").trim());
 }
 
 // { head: [...], align: ["left"|"center"|"right"|null], rows: [[...]] }
@@ -92,8 +105,9 @@ export function parseTable(lines) {
   const align = cellsOf(lines[1]).map((c) => (c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : null));
   const rows = lines.slice(2).map(cellsOf);
   const n = Math.max(head.length, ...rows.map((r) => r.length));
-  const pad = (r) => [...r, ...Array(Math.max(0, n - r.length)).fill("")];
-  return { head: pad(head), align: [...align, ...Array(Math.max(0, n - align.length)).fill(null)].slice(0, n), rows: rows.map(pad) };
+  const filler = (length, value) => Array.from({ length: Math.max(0, length) }, () => value);
+  const pad = (r) => [...r, ...filler(n - r.length, "")];
+  return { head: pad(head), align: [...align, ...filler(n - align.length, null)].slice(0, n), rows: rows.map(pad) };
 }
 
 const cellText = (c) => String(c ?? "").replace(/\n+/g, " ").trim().replace(/\|/g, "\\|");

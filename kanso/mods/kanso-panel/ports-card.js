@@ -42,9 +42,10 @@ export function portsSpec(data, now = Date.now()) {
 /** The post's words. */
 export function portsText(data, now = Date.now()) {
   const s = portStats(data, now);
-  const parts = [];
-  if (s.stoppedLoose) parts.push(`${plural(s.stoppedLoose, "dev server", "dev servers")} my agents left running, found and stopped${s.stoppedLooseMB ? `: ${size(s.stoppedLooseMB)} back` : ""}`);
-  if (s.openedWeek) parts.push(`${plural(s.openedWeek, "dev server", "dev servers")} opened this week, ${s.weekPeak} at once at the peak`);
-  parts.push(!s.running ? "none running now" : `${s.running} running now${s.loose ? `, ${s.loose} with no pane` : ", every one in a pane"}`);
+  const parts = [
+    ...(s.stoppedLoose ? [`${plural(s.stoppedLoose, "dev server", "dev servers")} my agents left running, found and stopped${s.stoppedLooseMB ? `: ${size(s.stoppedLooseMB)} back` : ""}`] : []),
+    ...(s.openedWeek ? [`${plural(s.openedWeek, "dev server", "dev servers")} opened this week, ${s.weekPeak} at once at the peak`] : []),
+    !s.running ? "none running now" : `${s.running} running now${s.loose ? `, ${s.loose} with no pane` : ", every one in a pane"}`,
+  ];
   return postText(parts, "Every dev server accounted for.");
 }

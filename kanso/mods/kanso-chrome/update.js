@@ -14,6 +14,7 @@
 // release changed them: a key you changed yourself is never replaced, and the
 // layout you had is kept as layouts/kanso.json.old-<time>.
 import { exec, readTextFile, writeTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
+import { tryOr, tryOrAsync } from "./pure.js";
 
 export const SOURCE = {
   remote: "https://github.com/jlopezlira/herdr-kanso.git",
@@ -47,17 +48,16 @@ export const parseVersion = (v) => {
 
 export function compareVersions(a, b) {
   const x = parseVersion(a), y = parseVersion(b);
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
-  return 0;
+  const i = [0, 1, 2].find((k) => x[k] !== y[k]);
+  return i === undefined ? 0 : x[i] - y[i];
 }
 
 // The newest vX.Y.Z in `git ls-remote --tags --refs` output, without the v.
 export function newestTag(stdout) {
-  let best = null;
-  for (const line of String(stdout).split("\n")) {
+  const best = String(stdout).split("\n").reduce((best, line) => {
     const tag = line.split("refs/tags/")[1]?.trim();
-    if (parseVersion(tag) && (!best || compareVersions(tag, best) > 0)) best = tag;
-  }
+    return parseVersion(tag) && (!best || compareVersions(tag, best) > 0) ? tag : best;
+  }, null);
   return best && best.replace(/^v/, "");
 }
 
@@ -67,29 +67,35 @@ export function newestTag(stdout) {
 // one you left as shipped follows the release, also when it drops it; one you
 // changed stays yours and is reported in `kept`.
 export function mergeKeys(user, before, after) {
-  const keys = JSON.parse(JSON.stringify(user));
-  const kept = [];
-  let changed = false;
-  const sections = new Set([...Object.keys(before), ...Object.keys(after)]);
-  for (const section of sections) {
+  const copy = JSON.parse(JSON.stringify(user));
+  const sections = [...new Set([...Object.keys(before), ...Object.keys(after)])].map((section) => {
     const was = before[section] ?? {}, now = after[section] ?? {};
-    const mine = keys[section] ?? {};
-    for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {
-      if (was[key] === now[key]) continue;
-      if (!(key in mine)) {
-        if (!(key in was) && key in now) { mine[key] = now[key]; changed = true; }
-      } else if (mine[key] === now[key]) {
-        continue;
-      } else if (mine[key] === was[key]) {
-        if (key in now) mine[key] = now[key]; else delete mine[key];
-        changed = true;
-      } else {
-        kept.push(key);
-      }
-    }
-    if (Object.keys(mine).length || section in keys) keys[section] = mine;
-  }
-  return { keys, changed, kept };
+    const mine = copy[section] ?? {};
+    // What becomes of each key the release changed: added, followed (set to
+    // the release's or dropped with it), kept as yours, or nothing.
+    const fate = (key) => {
+      if (was[key] === now[key]) return null;
+      if (!(key in mine)) return !(key in was) && key in now ? "add" : null;
+      if (mine[key] === now[key]) return null;
+      if (mine[key] === was[key]) return key in now ? "set" : "drop";
+      return "kept";
+    };
+    const fates = [...new Set([...Object.keys(was), ...Object.keys(now)])].map((key) => [key, fate(key)]);
+    const of = new Map(fates);
+    const changed = fates.some(([, f]) => f && f !== "kept");
+    // Your keys keep their places; the ones the release adds come after.
+    const next = !changed ? mine : Object.fromEntries([
+      ...Object.entries(mine).filter(([k]) => of.get(k) !== "drop").map(([k, v]) => [k, of.get(k) === "set" ? now[k] : v]),
+      ...fates.filter(([k, f]) => f === "add" || (f === "set" && !Object.hasOwn(mine, k))).map(([k]) => [k, now[k]]),
+    ]);
+    const kept = fates.filter(([, f]) => f === "kept").map(([k]) => k);
+    return { section, next, changed, kept, put: Object.keys(next).length > 0 || section in copy };
+  });
+  return {
+    keys: { ...copy, ...Object.fromEntries(sections.filter((x) => x.put).map((x) => [x.section, x.next])) },
+    changed: sections.some((x) => x.changed),
+    kept: sections.flatMap((x) => x.kept),
+  };
 }
 
 const sameJson = (a, b) => {
@@ -132,7 +138,7 @@ done
 rm -rf "$1"
 `;
 
-const lastLine = (r, fallback) => (r?.stderr || r?.stdout || "").trim().split("\n").pop() || fallback;
+const lastLine = (r, fallback) => (r?.stderr || r?.stdout || "").trim().split("\n").at(-1) || fallback;
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
 
 export class Updater {
@@ -176,8 +182,9 @@ export class Updater {
   // Grows the footer while the row is shown and gives the room back after.
   // A footer you sized yourself is left alone.
   fit() {
-    let size;
-    try { size = findNode(layout()?.root ?? layout(), FOOTER)?.size?.px; } catch { return; }
+    const found = tryOr(() => ({ size: findNode(layout()?.root ?? layout(), FOOTER)?.size?.px }));
+    if (!found) return;
+    const { size } = found;
     const want = this.available() ? FOOTER_UPDATE_PX : FOOTER_PX;
     if (size !== want && (size === FOOTER_PX || size === FOOTER_UPDATE_PX)) run("layout.resize", { id: FOOTER, px: want });
   }
@@ -198,12 +205,11 @@ export class Updater {
     if (!this.busy) await this.readInstalled();
     const { checked } = this.state();
     if (this.busy || this.checking || (!force && checked && Date.now() - checked < EVERY)) return;
-    let r = null;
     // One look at a time; a remote that stalls gives up instead of waiting
     // (no credential prompt, under 1 KB/s for 20 s), so none stack up.
     this.checking = true;
-    try { r = await exec("git", ["-c", "core.askPass=true", "-c", "credential.interactive=never", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20", "ls-remote", "--tags", "--refs", this.source.remote]); } catch {}
-    finally { this.checking = false; }
+    const r = await tryOrAsync(() => exec("git", ["-c", "core.askPass=true", "-c", "credential.interactive=never", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20", "ls-remote", "--tags", "--refs", this.source.remote]));
+    this.checking = false;
     if (r?.code !== 0) { // offline: the next tick tries again
       if (report) notify({ title: "kansō could not check for updates", body: "GitHub could not be reached.", level: "warning" });
       return;
@@ -269,24 +275,24 @@ export class Updater {
     };
     const [oldKeys, oldLayout] = await Promise.all([shipped("kanso/keys.json"), shipped("kanso/layouts/kanso.json")]);
     const newKeys = await readTextFile(`${src}/keys.json`), newLayout = await readTextFile(`${src}/layouts/kanso.json`);
-    const notes = [];
-    if (oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout)) {
+    // The layout first, then the keys (read only after it is staged).
+    const layoutNotes = async () => {
+      if (oldLayout === null || newLayout === null || sameJson(oldLayout, newLayout)) return [];
       await writeTextFile(`${stage}/kanso.json`, newLayout, null);
-      notes.push("New layout; the one you had is in layouts/kanso.json.old-*.");
-    }
-    const userKeys = await readTextFile(`${home}/keys.json`);
-    if (oldKeys !== null && newKeys !== null && userKeys !== null && !sameJson(oldKeys, newKeys)) {
+      return ["New layout; the one you had is in layouts/kanso.json.old-*."];
+    };
+    const keyNotes = async () => {
+      const userKeys = await readTextFile(`${home}/keys.json`);
+      if (oldKeys === null || newKeys === null || userKeys === null || sameJson(oldKeys, newKeys)) return [];
       try {
         const merged = mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys));
-        if (merged.changed) {
-          await writeTextFile(`${stage}/keys.json`, `${JSON.stringify(merged.keys, null, 2)}\n`, null);
-          notes.push("kansō's keys updated.");
-        }
-        if (merged.kept.length) notes.push(`Kept your own ${merged.kept.join(", ")}.`);
+        if (merged.changed) await writeTextFile(`${stage}/keys.json`, `${JSON.stringify(merged.keys, null, 2)}\n`, null);
+        return [...(merged.changed ? ["kansō's keys updated."] : []), ...(merged.kept.length ? [`Kept your own ${merged.kept.join(", ")}.`] : [])];
       } catch {
-        notes.push("Your keys.json could not be read, so kansō's keys were left as they are.");
+        return ["Your keys.json could not be read, so kansō's keys were left as they are."];
       }
-    }
+    };
+    const notes = [...(await layoutNotes()), ...(await keyNotes())];
     return notes.join(" ");
   }
 }

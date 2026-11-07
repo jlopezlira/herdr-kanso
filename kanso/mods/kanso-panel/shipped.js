@@ -24,6 +24,7 @@ import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share } from "./share.js";
 import { G, tokens, iconButton, section } from "./ui.js";
+import { range, tryOrAsync, mapSeries } from "./pure.js";
 
 const DAY = 86400000;
 const RECORDS = "kanso.shipped.bests";
@@ -49,11 +50,11 @@ const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 // offset 0 for the current one, -1 for the one before.
 export function periodRange(kind, offset, now = Date.now()) {
   const t = new Date(now), y = t.getFullYear(), m = t.getMonth(), d = t.getDate();
-  let start, end;
-  if (kind === "day") { start = new Date(y, m, d + offset); end = new Date(y, m, d + offset + 1); }
-  else if (kind === "week") { const monday = d - ((t.getDay() + 6) % 7) + 7 * offset; start = new Date(y, m, monday); end = new Date(y, m, monday + 7); }
-  else if (kind === "month") { start = new Date(y, m + offset, 1); end = new Date(y, m + offset + 1, 1); }
-  else { start = new Date(y + offset, 0, 1); end = new Date(y + offset + 1, 0, 1); }
+  const monday = d - ((t.getDay() + 6) % 7) + 7 * offset;
+  const [start, end] = kind === "day" ? [new Date(y, m, d + offset), new Date(y, m, d + offset + 1)]
+    : kind === "week" ? [new Date(y, m, monday), new Date(y, m, monday + 7)]
+      : kind === "month" ? [new Date(y, m + offset, 1), new Date(y, m + offset + 1, 1)]
+        : [new Date(y + offset, 0, 1), new Date(y + offset + 1, 0, 1)];
   return { start: start.getTime(), end: end.getTime() };
 }
 
@@ -96,41 +97,38 @@ export function yourWeeks(body, login) {
 export const weekAt = (w) => w + 1.5 * DAY;
 
 // Lines and commits of the weeks that land in [start, end), in total and per
-// repository. Kept per span while the stats are the same reading: a draw asks
-// for the period, the one before and all time, on every shared write anywhere.
-const SUMS = new WeakMap();
+// repository. The panel keeps what this gives while the stats are the same
+// reading (its sumsIn below), so this stays a plain function of its inputs.
 export function sumWeeks(stats, start, end) {
-  const memo = stats ? SUMS.get(stats) ?? SUMS.set(stats, new Map()).get(stats) : null;
-  const span = `${start}:${end}`;
-  if (memo?.has(span)) return memo.get(span);
-  const byRepo = [];
-  let add = 0, del = 0, commits = 0;
-  for (const [name, entry] of Object.entries(stats?.repos ?? {})) {
-    let a = 0, d = 0, c = 0;
-    for (const w of entry.weeks ?? []) {
-      const at = weekAt(w[0]);
-      if (at >= start && at < end) { a += w[1]; d += w[2]; c += w[3]; }
-    }
-    if (a || d || c) byRepo.push({ name, add: a, del: d, commits: c });
-    add += a; del += d; commits += c;
-  }
-  byRepo.sort((x, y) => (y.add + y.del) - (x.add + x.del) || y.commits - x.commits);
-  const out = { add, del, commits, byRepo };
-  memo?.set(span, out);
-  return out;
+  // Each repository's sums in the span, then the totals over all of them.
+  const sum = (list, pick) => list.reduce((n, x) => n + pick(x), 0);
+  const repos = Object.entries(stats?.repos ?? {}).map(([name, entry]) => {
+    const weeks = (entry.weeks ?? []).filter((w) => { const at = weekAt(w[0]); return at >= start && at < end; });
+    return { name, add: sum(weeks, (w) => w[1]), del: sum(weeks, (w) => w[2]), commits: sum(weeks, (w) => w[3]) };
+  });
+  const byRepo = repos.filter((r) => r.add || r.del || r.commits).toSorted((x, y) => (y.add + y.del) - (x.add + x.del) || y.commits - x.commits);
+  return { add: sum(repos, (r) => r.add), del: sum(repos, (r) => r.del), commits: sum(repos, (r) => r.commits), byRepo };
 }
+
+// How many spans the panel keeps sums for: a draw asks for up to four (the
+// period, the one before, all time, the breakdown's week), and a running
+// period's "this point last time" is a new span on every draw.
+const KEPT_SPANS = 8;
 
 // The current and longest run of days with at least one contribution. Today
 // without one yet does not break the current run.
 export function streaks(days, today) {
-  let longest = { n: 0, end: null }, run = 0;
-  for (const d of days ?? []) {
-    if (d.contributionCount > 0) { run++; if (run > longest.n) longest = { n: run, end: d.date }; }
-    else run = 0;
-  }
-  let current = 0, i = (days ?? []).length - 1;
-  if (i >= 0 && days[i].date === today && days[i].contributionCount === 0) i--;
-  for (; i >= 0 && days[i].contributionCount > 0; i--) current++;
+  const list = days ?? [];
+  const { longest } = list.reduce((acc, d) => {
+    if (!(d.contributionCount > 0)) return { run: 0, longest: acc.longest };
+    const run = acc.run + 1;
+    return { run, longest: run > acc.longest.n ? { n: run, end: d.date } : acc.longest };
+  }, { run: 0, longest: { n: 0, end: null } });
+  // The current run: the days with some up to the last one (today left out while it has none).
+  const last = list.length - 1;
+  const upTo = last >= 0 && list[last].date === today && list[last].contributionCount === 0 ? last : last + 1;
+  const counted = list.slice(0, upTo);
+  const current = counted.length - 1 - counted.findLastIndex((d) => !(d.contributionCount > 0));
   return { current, longest };
 }
 
@@ -138,9 +136,7 @@ export function streaks(days, today) {
 // included) when it reaches back that far, else the period's totals.
 export function contributionsIn(days, start, end, totals) {
   if (days?.length && fromIsoDay(days[0].date) <= start) {
-    let n = 0;
-    for (const d of days) { const at = fromIsoDay(d.date); if (at >= start && at < end) n += d.contributionCount; }
-    return n;
+    return days.reduce((n, d) => { const at = fromIsoDay(d.date); return at >= start && at < end ? n + d.contributionCount : n; }, 0);
   }
   if (!totals) return null;
   return totals.totalCommitContributions + totals.totalPullRequestContributions + totals.totalPullRequestReviewContributions
@@ -149,25 +145,29 @@ export function contributionsIn(days, start, end, totals) {
 
 // Personal bests from the calendar and the weekly sums.
 export function computeRecords({ days, stats }) {
-  const r = {};
-  for (const d of days ?? []) if (d.contributionCount > 0 && (!r.bestDay || d.contributionCount > r.bestDay.n)) r.bestDay = { n: d.contributionCount, date: d.date };
+  // The first of the best: `score(x)` above 0 and above every one before it.
+  const best = (list, score, make) => list.reduce((top, x) => (score(x) > 0 && (!top || score(x) > top.score) ? { score: score(x), value: make(x) } : top), null)?.value ?? null;
+  const bestDay = best(days ?? [], (d) => d.contributionCount, (d) => ({ n: d.contributionCount, date: d.date }));
   const { longest } = streaks(days, null);
-  if (longest.n) r.longestStreak = longest;
-  const weeks = new Map(), months = new Map();
-  for (const entry of Object.values(stats?.repos ?? {})) {
-    for (const [w, a, , c] of entry.weeks ?? []) {
-      const at = weekAt(w), week = periodRange("week", 0, at).start, month = periodRange("month", 0, at).start;
-      const row = weeks.get(week) ?? { add: 0, commits: 0 };
-      row.add += a; row.commits += c; weeks.set(week, row);
-      months.set(month, (months.get(month) ?? 0) + a);
-    }
-  }
-  for (const [start, w] of weeks) {
-    if (w.add > 0 && (!r.bestWeek || w.add > r.bestWeek.add)) r.bestWeek = { add: w.add, start };
-    if (w.commits > 0 && (!r.busiestWeek || w.commits > r.busiestWeek.n)) r.busiestWeek = { n: w.commits, start };
-  }
-  for (const [start, add] of months) if (add > 0 && (!r.bestMonth || add > r.bestMonth.add)) r.bestMonth = { add, start };
-  return r;
+  // Every repository-week, at its local week and month.
+  const rows = Object.values(stats?.repos ?? {}).flatMap((entry) => (entry.weeks ?? []).map(([w, a, , c]) => {
+    const at = weekAt(w);
+    return { week: periodRange("week", 0, at).start, month: periodRange("month", 0, at).start, a, c };
+  }));
+  const weeks = [...Map.groupBy(rows, (x) => x.week)].map(([start, list]) => ({
+    start, add: list.reduce((n, x) => n + x.a, 0), commits: list.reduce((n, x) => n + x.c, 0),
+  }));
+  const months = [...Map.groupBy(rows, (x) => x.month)].map(([start, list]) => ({ start, add: list.reduce((n, x) => n + x.a, 0) }));
+  const bestWeek = best(weeks, (w) => w.add, (w) => ({ add: w.add, start: w.start }));
+  const busiestWeek = best(weeks, (w) => w.commits, (w) => ({ n: w.commits, start: w.start }));
+  const bestMonth = best(months, (m) => m.add, (m) => ({ add: m.add, start: m.start }));
+  return {
+    ...(bestDay ? { bestDay } : {}),
+    ...(longest.n ? { longestStreak: longest } : {}),
+    ...(bestWeek ? { bestWeek } : {}),
+    ...(busiestWeek ? { busiestWeek } : {}),
+    ...(bestMonth ? { bestMonth } : {}),
+  };
 }
 
 const BETTER = {
@@ -182,17 +182,14 @@ const recordAt = (k, r) => k === "bestDay" ? fromIsoDay(r.date) : k === "longest
 // month for the best month). A first reading beats nothing, and an older best
 // found later (a repository read for the first time) updates it quietly.
 export function mergeRecords(stored, found, now = Date.now()) {
-  const kept = { ...(stored ?? {}) }, beaten = [];
-  for (const [k, better] of Object.entries(BETTER)) {
+  return Object.entries(BETTER).reduce(({ kept, beaten }, [k, better]) => {
     const r = found[k];
-    if (!r) continue;
-    if (!kept[k]) kept[k] = r;
-    else if (better(r, kept[k])) {
-      kept[k] = r;
-      if (stored?.[k] && now - recordAt(k, r) <= (k === "bestMonth" ? 31 : 7) * DAY) beaten.push(k);
-    }
-  }
-  return { kept, beaten };
+    if (!r) return { kept, beaten };
+    if (!kept[k]) return { kept: { ...kept, [k]: r }, beaten };
+    if (!better(r, kept[k])) return { kept, beaten };
+    const recent = stored?.[k] && now - recordAt(k, r) <= (k === "bestMonth" ? 31 : 7) * DAY;
+    return { kept: { ...kept, [k]: r }, beaten: recent ? [...beaten, k] : beaten };
+  }, { kept: { ...(stored ?? {}) }, beaten: [] });
 }
 
 export function recordText(k, r) {
@@ -251,8 +248,8 @@ async function gh(args) {
 }
 
 async function gql(query, vars = {}) {
-  const args = ["api", "graphql", "-f", `query=${query}`];
-  for (const [k, v] of Object.entries(vars)) if (v !== null && v !== undefined) args.push("-f", `${k}=${v}`);
+  const args = ["api", "graphql", "-f", `query=${query}`,
+    ...Object.entries(vars).flatMap(([k, v]) => (v !== null && v !== undefined ? ["-f", `${k}=${v}`] : []))];
   const out = JSON.parse(await gh(args));
   if (!out.data) throw new Error(out.errors?.[0]?.message ?? "GitHub could not be read.");
   return out.data;
@@ -273,6 +270,19 @@ export class Shipped {
 
   key() { return `${this.kind}:${this.offset}`; }
 
+  // sumWeeks over this.stats, kept per span while the stats are the same
+  // reading: a draw asks for the period, the one before and all time on every
+  // shared write anywhere. `this.sums` is { stats, bySpan }, replaced whole
+  // when a span is added or a new reading comes in, never changed.
+  sumsIn(start, end) {
+    const span = `${start}:${end}`, kept = this.sums?.stats === this.stats ? this.sums.bySpan : [];
+    const hit = kept.find(([s]) => s === span);
+    if (hit) return hit[1];
+    const out = sumWeeks(this.stats, start, end);
+    this.sums = { stats: this.stats, bySpan: [...kept.slice(1 - KEPT_SPANS), [span, out]] };
+    return out;
+  }
+
   pick(kind, offset, cx) {
     this.kind = kind; this.offset = Math.min(0, offset);
     this.refresh(cx);
@@ -291,13 +301,13 @@ export class Shipped {
         if (again || !this.github[key]) {
           try {
             const data = await gql(periodQuery(cur, prev, now));
-            this.github[key] = data;
+            this.github = { ...this.github, [key]: data };
             this.login = data.viewer.login; this.name = data.viewer.name;
             this.weeks = data.viewer.cal.contributionCalendar.weeks;
             this.days = this.weeks.flatMap((w) => w.contributionDays);
           } catch (e) {
             const why = String(e?.message ?? e);
-            this.github[key] = { error: why.includes("ENOENT") ? "Install the GitHub CLI (gh) and run `gh auth login`." : why };
+            this.github = { ...this.github, [key]: { error: why.includes("ENOENT") ? "Install the GitHub CLI (gh) and run `gh auth login`." : why } };
           }
         }
         this.checkRecords();
@@ -356,40 +366,42 @@ export class Shipped {
     cx.notify();
 
     this.phase = "your repositories on GitHub"; cx.notify();
-    const repos = new Map();
-    let databaseId = null;
-    for (const field of ["contributed", "access"]) {
-      let after = null;
-      for (;;) {
-        const v = (await gql(REPOS, field === "contributed" ? { after } : { own: after })).viewer;
-        databaseId = v.databaseId; const page = v[field];
-        for (const n of page.nodes ?? []) if (n?.nameWithOwner) repos.set(n.nameWithOwner, n.pushedAt);
-        if (!page.pageInfo.hasNextPage) break;
-        after = page.pageInfo.endCursor;
-      }
-    }
+    // Every page of one of the two lists, one after another: [{ databaseId, nodes }].
+    const pagesOf = async (field, after = null, got = []) => {
+      const v = (await gql(REPOS, field === "contributed" ? { after } : { own: after })).viewer;
+      const page = v[field];
+      const all = [...got, { databaseId: v.databaseId, nodes: page.nodes ?? [] }];
+      return page.pageInfo.hasNextPage ? pagesOf(field, page.pageInfo.endCursor, all) : all;
+    };
+    const pages = (await mapSeries(["contributed", "access"], (field) => pagesOf(field))).flat();
+    const databaseId = pages.at(-1).databaseId;
+    const listed = new Map(pages.flatMap((p) => p.nodes.filter((n) => n?.nameWithOwner).map((n) => [n.nameWithOwner, n.pushedAt])));
     const known = new Map((await this.store.ghRepos()).map((r) => [r.repo, r]));
-    for (const [name, r] of known) if (!repos.has(name)) repos.set(name, r.pushed);
-    let due = [...repos].filter(([name, pushed]) => { const had = known.get(name); return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched); });
-    for (let round = 0; due.length && round < RETRIES; round++) {
+    const repos = new Map([...listed, ...[...known].filter(([name]) => !listed.has(name)).map(([name, r]) => [name, r.pushed])]);
+    const due = [...repos].filter(([name, pushed]) => { const had = known.get(name); return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched); });
+    // Up to RETRIES rounds, 5 s apart: each asks for the repositories still
+    // due, PARALLEL at a time, and the next one for those GitHub was still computing.
+    const rounds = async (due, round) => {
+      if (!due.length || round >= RETRIES) return;
       if (round) await exec("sleep", ["5"]);
-      const later = [], read = [];
-      for (let i = 0; i < due.length; i += PARALLEL) {
-        this.phase = `GitHub's sums, ${fmt(Math.max(0, due.length - i))} repositories to go`; cx.notify();
-        await Promise.all(due.slice(i, i + PARALLEL).map(async ([repo, pushed]) => {
-          let weeks;
-          try { weeks = yourWeeks(JSON.parse(await gh(["api", `repos/${repo}/stats/contributors`]) || "{}"), this.login); }
-          catch { weeks = []; } // gone, or not yours to read: nothing to add
-          if (weeks === null) { later.push([repo, pushed]); read.push({ repo, pushed, fetched: known.get(repo)?.fetched ?? 0, pending: true }); }
-          else read.push({ repo, pushed, fetched: Date.now(), weeks });
+      const answers = await mapSeries(range(Math.ceil(due.length / PARALLEL)), async (k) => {
+        this.phase = `GitHub's sums, ${fmt(Math.max(0, due.length - k * PARALLEL))} repositories to go`; cx.notify();
+        return Promise.all(due.slice(k * PARALLEL, k * PARALLEL + PARALLEL).map(async ([repo, pushed]) => {
+          // Gone, or not yours to read: nothing to add.
+          const weeks = await tryOrAsync(async () => yourWeeks(JSON.parse(await gh(["api", `repos/${repo}/stats/contributors`]) || "{}"), this.login), []);
+          return weeks === null
+            ? { later: [repo, pushed], read: { repo, pushed, fetched: known.get(repo)?.fetched ?? 0, pending: true } }
+            : { later: null, read: { repo, pushed, fetched: Date.now(), weeks } };
         }));
-      }
-      await this.store.saveGithub(read); // GitHub still computing after a while: asked again next time
-      due = later;
-    }
+      });
+      const read = answers.flat();
+      await this.store.saveGithub(read.map((x) => x.read)); // GitHub still computing after a while: asked again next time
+      return rounds(read.filter((x) => x.later).map((x) => x.later), round + 1);
+    };
+    await rounds(due, 0);
 
     const ids = await this.identities(databaseId);
-    const idKey = JSON.stringify([...ids.all].sort());
+    const idKey = JSON.stringify(ids.all.toSorted());
     if ((await this.store.meta("scanned-identities")) !== idKey) { await this.store.sql("DELETE FROM scans;"); await this.store.setMeta("scanned-identities", idKey); }
     this.phase = "this machine's repositories"; cx.notify();
     await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this machine's repositories, ${fmt(total - done)} to go`; cx.notify(); });
@@ -412,8 +424,8 @@ export class Shipped {
     const { kept, beaten } = mergeRecords(shared(RECORDS), computeRecords({ days: this.days, stats: whole }));
     this.records = kept;
     setShared(RECORDS, kept);
+    this.fresh = new Set([...this.fresh, ...beaten]);
     for (const k of beaten) {
-      this.fresh.add(k);
       const t = recordText(k, kept[k]);
       notify({ title: `New record: ${RECORD_NAMES[k].toLowerCase()}`, body: `${t.value} ${t.unit} · ${t.detail}`, level: "success" });
     }
@@ -464,8 +476,8 @@ export class Shipped {
     const gh = this.github[this.key()], v = gh?.viewer;
     const contributions = v ? contributionsIn(this.days, cur.start, cur.end, v.cur) : null;
     const contributionsBefore = v ? contributionsIn(this.days, prev.start, prev.end, v.prev) : null;
-    const sums = this.stats ? sumWeeks(this.stats, cur.start, cur.end) : null;
-    const sumsBefore = this.stats ? sumWeeks(this.stats, before.start, before.end) : null;
+    const sums = this.stats ? this.sumsIn(cur.start, cur.end) : null;
+    const sumsBefore = this.stats ? this.sumsIn(before.start, before.end) : null;
     const byDay = this.kind === "day"; // GitHub's sums are weekly: a day leads with contributions
     const value = byDay ? contributions : sums?.add, was = byDay ? contributionsBefore : sumsBefore?.add;
     const settled = byDay || !(this.syncing && this.firstRead);
@@ -480,7 +492,7 @@ export class Shipped {
       { value: v ? fmt(v.cur.totalPullRequestReviewContributions) : "—", unit: "reviews" },
       byDay ? null : { value: sums ? fmt(sums.byRepo.length) : "—", unit: sums?.byRepo.length === 1 ? "repository" : "repositories" },
     ].filter(Boolean);
-    const ever = this.stats ? sumWeeks(this.stats, 0, Infinity) : null;
+    const ever = this.stats ? this.sumsIn(0, Infinity) : null;
     const everText = gh?.ever ? [
       `${fmt(gh.ever.issueCount)} pull requests merged`,
       ever?.add ? `+${fmt(ever.add)} lines and ${fmt(ever.commits)} commits in ${fmt(ever.byRepo.length)} repositories` : "",
@@ -563,7 +575,7 @@ export class Shipped {
     const now = Date.now(), cur = periodRange(this.kind, this.kind === "day" ? 0 : this.offset, now);
     // A day's lines live in its week: the breakdown shows that week.
     const span = this.kind === "day" ? periodRange("week", 0, cur.start) : cur;
-    const { byRepo } = sumWeeks(this.stats, span.start, span.end);
+    const { byRepo } = this.sumsIn(span.start, span.end);
     const note = this.kind === "day" ? `this week · ${fmt(byRepo.length)}` : fmt(byRepo.length);
     if (!byRepo.length) return v_flex().w_full().child(section(c, "By repository", "")).child(div().text_size(12).text_color(c.dim).child(this.syncing ? "Adding up…" : "Nothing in this period yet."));
     const top = Math.max(1, ...byRepo.map((r) => r.add + r.del)), rows = this.reposOpen ? byRepo : byRepo.slice(0, REPO_ROWS);

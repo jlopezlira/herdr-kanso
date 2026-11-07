@@ -9,6 +9,7 @@
 // only reads it, only while the Threads view is open, and never sends the
 // agent anything.
 import { exec, hc } from "herdr";
+import { tryOr, tryOrAsync } from "./pure.js";
 
 const TAIL = 8192;
 const RS = "\u001e";
@@ -53,8 +54,7 @@ export const claudeFile = (home, cwd, session) => `${home}/.claude/projects/${cw
 export function parseLocated(text, home) {
   const [kind, a, b] = (text ?? "").replace(/\n$/, "").split("\t");
   if (kind === "codex" && a) {
-    let name = null;
-    try { name = JSON.parse(b).thread_name?.trim() || null; } catch { /* no name yet */ }
+    const name = tryOr(() => JSON.parse(b).thread_name?.trim() || null); // null: no name yet
     return { kind, file: a, name };
   }
   if (kind === "claude" && a) {
@@ -94,22 +94,27 @@ export function readThread(kind, titleLine, head, recent, tail, name = null) {
   const prompt = kind === "codex" ? codexPrompt : claudePrompt;
   const firstPrompt = lines(head).map(prompt).find(Boolean) ?? null;
   // Only what you wrote lately: an agent that has only heard from other agents shows none.
-  const last = lines(recent).reverse().find((e) => prompt(e));
+  const last = lines(recent).findLast((e) => prompt(e));
   const title = name ?? (kind === "claude" ? lines(titleLine).find((e) => e?.type === "ai-title" && e.aiTitle)?.aiTitle ?? null : null);
   return {
     title: title ?? firstPrompt,
     prompt: last ? prompt(last) : null,
     said: ms(last?.timestamp),
     began: ms(lines(head).find((e) => e?.timestamp)?.timestamp),
-    at: ms(lines(tail).reverse().find((e) => e?.timestamp)?.timestamp),
+    at: ms(lines(tail).findLast((e) => e?.timestamp)?.timestamp),
   };
 }
 
 // One terminal's conversation, or null: where it is (`hc get`, then
-// LOCATE), its size, and when the file grew, what it says (READ).
+// LOCATE), its size, and when the file grew, what it says (READ). `pid`:
+// the process it was found from, so a reading is never taken for another
+// program started later in the same terminal.
 async function findThread({ address, app }, known, home) {
-  let got = null;
-  try { const r = await hc(["get", address, "--json"]); if (r.code === 0) got = JSON.parse(r.stdout); } catch { return null; }
+  // A terminal that can't be read has no conversation (no pid below).
+  const got = await tryOrAsync(async () => {
+    const r = await hc(["get", address, "--json"]);
+    return r.code === 0 ? JSON.parse(r.stdout) : null;
+  });
   const pid = got?.foreground?.pid;
   if (!pid) return null;
   const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
@@ -117,11 +122,11 @@ async function findThread({ address, app }, known, home) {
   if (!where) return null;
   const size = Number((await exec("sh", ["-c", "wc -c < \"$1\"", "sh", where.file])).stdout.trim());
   if (!size) return null;
-  if (known?.file === where.file && known.size === size && known.name === where.name) return known;
+  if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return known;
   const r = await exec("sh", ["-c", READ, "sh", where.file]);
   if (r.code !== 0 && !r.stdout) return null;
   const [titleLine, head, recent, tail] = r.stdout.split(`\n${RS}\n`);
-  return { kind, file: where.file, name: where.name, size, ...readThread(kind, titleLine, head, recent, tail, where.name) };
+  return { kind, file: where.file, name: where.name, size, pid, ...readThread(kind, titleLine, head, recent, tail, where.name) };
 }
 
 // How many terminals are looked at at once: each takes three or four processes.
@@ -132,15 +137,14 @@ const AT_ONCE = 4;
 // hasn't changed since is not read again.
 export async function findThreads(list, known = {}) {
   const home = (await exec("sh", ["-c", "printf %s \"$HOME\""])).stdout;
-  const out = {};
-  let next = 0;
-  const lane = async () => {
-    while (next < list.length) {
-      const item = list[next++];
-      const thread = await findThread(item, known[item.address], home);
-      if (thread) out[item.address] = thread;
-    }
+  // The lanes share one iterator: each takes the next terminal as it is
+  // free, and keeps what it found.
+  const queue = list.values();
+  const lane = async (got = []) => {
+    const { value: item, done } = queue.next();
+    if (done) return got;
+    return lane([...got, [item.address, await findThread(item, known[item.address], home)]]);
   };
-  await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
-  return out;
+  const found = await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
+  return Object.fromEntries(found.flat().filter(([, thread]) => thread));
 }

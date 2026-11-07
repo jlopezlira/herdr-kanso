@@ -27,8 +27,7 @@ const tilde = (cwd) => {
 export function targetsOf(all, from, last) {
   const list = all.filter((p) => p.pane !== from && p.terminal && (p.program?.agent || p.status));
   const i = list.findIndex((p) => p.terminal === last);
-  if (i > 0) list.unshift(...list.splice(i, 1));
-  return list;
+  return i > 0 ? [list[i], ...list.toSpliced(i, 1)] : list;
 }
 
 // The message it starts with: where the work is. You edit it before sending.
@@ -84,7 +83,7 @@ export default class Send extends View {
     const row = (q) => {
       const on = q.terminal === this.to;
       const where = [spaceOf(q)?.name, q.branch].filter(Boolean).join(" on ");
-      return h_flex().id(`to-${q.pane}`).h(34).px(10).gap(10).items_center().rounded(7).cursor_pointer()
+      return h_flex().id(`to-${q.pane}`).flex_none().h(34).px(10).gap(10).items_center().rounded(7).cursor_pointer()
         .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
         .on_click((_e, cx) => { this.to = q.terminal; this.error = null; cx.notify(); })
         .child(programIcon(q.program, 15, t.muted) ?? div().size(15))
@@ -113,7 +112,9 @@ export default class Send extends View {
       .when(Boolean(from), (el) => el.child(div().pt(4).truncate().text_size(11.5).text_color(t.dim).child(from)))
       .child(label("To"))
       .child(list.length
-        ? v_flex().id("send-list").max_h(34 * 5).overflow_y_scrollbar().gap(2).children(list.map(row))
+        // Five rows show, the rest scroll: a set height (rows never shrink
+        // to fit it, or there would be nothing to scroll).
+        ? v_flex().id("send-list").flex_none().h(Math.min(list.length, 5) * 36 - 2).overflow_y_scrollbar().gap(2).children(list.map(row))
         : div().py(8).text_size(12).text_color(t.muted).child("No other agent is running. Start one in a pane, then send."))
       .child(label("Message"))
       .child(Textarea.new(this.box).px(10).py(8).rounded(9).border_1().border_color(t.input).bg(t.background).text_size(12.8).text_color(t.foreground))

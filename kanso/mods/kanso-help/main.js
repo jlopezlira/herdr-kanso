@@ -104,7 +104,7 @@ export default class Help extends View {
     const bound = this.shown();
     const chosen = bound.get(this.picked);
     const layerName = this.lists ? "In every list and menu" : this.mods.length ? this.mods.map((m) => MOD_GLYPH[m]).join("") : "No modifier";
-    const list = [...bound.entries()].sort((a, b) => describe(a[1].action).localeCompare(describe(b[1].action)));
+    const list = [...bound.entries()].toSorted((a, b) => describe(a[1].action).localeCompare(describe(b[1].action)));
     const chordOf = (d) => (this.lists ? d.chord.split(" ").map((x) => glyphs(x)).join(" ") : glyphs(d.chord));
     return v_flex().gap(G.lg)
       .child(h_flex().gap(G.sm).items_center().flex_wrap()

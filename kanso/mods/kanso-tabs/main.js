@@ -9,6 +9,7 @@ import { spaces, panes, run, openOverlay, props, theme, window, shared, setShare
 import { stateMark, programIcon } from "./marks.js";
 import { walkLayout, commitLayout } from "./layout.js";
 import { Updater } from "./update.js";
+import { tryOr, tryOrAsync } from "./pure.js";
 
 function storedObject(key) {
   try {
@@ -64,22 +65,19 @@ function panelList() {
   const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
   const order = list(ORDER), off = new Set(list(OFF));
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
-  return all.sort((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: !off.has(p.id) }));
+  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: !off.has(p.id) }));
 }
 
 // Puts panel `from` where `to` is.
 function movePanel(from, to) {
   const ids = panelList().map((p) => p.id), i = ids.indexOf(from), j = ids.indexOf(to);
   if (i < 0 || j < 0 || i === j) return;
-  ids.splice(i, 1);
-  ids.splice(j, 0, from);
-  setShared(ORDER, ids);
+  setShared(ORDER, ids.toSpliced(i, 1).toSpliced(j, 0, from));
 }
 
 function setPanelOn(id, on) {
   const off = new Set(list(OFF));
-  if (on) off.delete(id); else off.add(id);
-  setShared(OFF, [...off]);
+  setShared(OFF, on ? [...off].filter((x) => x !== id) : [...new Set([...off, id])]);
 }
 
 const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
@@ -99,7 +97,7 @@ const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chose
 export async function takeOpens(dir) {
   const r = await exec("sh", ["-c", 'for f in "$1"/*.path; do [ -f "$f" ] || continue; cat "$f"; printf "\\0"; rm -f "$f"; done', "sh", dir]);
   const paths = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter((p) => p.startsWith("/"));
-  return paths.pop() ?? null;
+  return paths.at(-1) ?? null;
 }
 
 export default class Tabs extends View {
@@ -108,8 +106,7 @@ export default class Tabs extends View {
     this.dragPanel = null;
     this.hoverPanel = null;
     // Opened as the Panels popup: this copy draws the list, not the bar.
-    let given = null;
-    try { given = props(); } catch { /* a host without props */ }
+    const given = tryOr(() => props()); // null on a host without props
     this.arrange = Boolean(given?.arrange);
     this.panels = storedObject("panels");
     if (!this.arrange && cx) {
@@ -122,9 +119,9 @@ export default class Tabs extends View {
       // closes a panel by its place in the bar.
       cx.spawn(async (cx) => {
         for (;;) {
-          let c;
-          try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
-          const name = String(c).replace(/^kanso-tabs\./, "");
+          const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
+          if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+          const name = String(next.c).replace(/^kanso-tabs\./, "");
           if (name === "update") this.updater.install(cx);
           else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
           else if (name === "settings" || name.startsWith("settings-")) openSettings(name.slice(9) || "keys"); // settings-mods, -news, -credits
@@ -264,8 +261,10 @@ export default class Tabs extends View {
     // drawn, kept) say where it goes, and it eases there natively.
     this.tabW ??= {};
     for (const id of Object.keys(this.tabW)) if (!shown.some((c) => c.id === id)) delete this.tabW[id]; // tabs gone take their width with them
-    let at = null, x = 0;
-    for (const c of shown) { const w = this.tabW[c.id]; if (c.active && w) at = { left: x, width: w }; x += (w ?? 0) + 2; }
+    const { at } = shown.reduce((acc, c) => {
+      const w = this.tabW[c.id];
+      return { at: c.active && w ? { left: acc.x, width: w } : acc.at, x: acc.x + (w ?? 0) + 2 };
+    }, { at: null, x: 0 });
     const tabPill = at && shown.every((c) => this.tabW[c.id])
       ? div().id("tab-pill").absolute().top(0).left(at.left).w(at.width).h(TAB_H).rounded(6).bg(t.foreground + "12").transition("left", GLIDE).transition("width", GLIDE)
       : null;

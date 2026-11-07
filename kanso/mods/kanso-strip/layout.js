@@ -31,65 +31,105 @@ export function walkLayout(node, id) {
   return null;
 }
 
+// Where the node with this id is under `node`, as the child indices that lead
+// to it (the one walkLayout finds), or null.
+export function pathTo(node, id) {
+  if (node?.id === id) return [];
+  return (node?.children ?? []).reduce((found, child, i) => found ?? (() => {
+    const rest = pathTo(child, id);
+    return rest && [i, ...rest];
+  })(), null);
+}
+
+// `node` with what `fn` makes of the node at `path` in place of it. Only the
+// nodes on the way there are new; every other node is shared with `node`.
+const changedAt = (node, path, fn, depth = 0) => (depth === path.length ? fn(node)
+  : { ...node, children: node.children.with(path[depth], changedAt(node.children[path[depth]], path, fn, depth + 1)) });
+
+// `tree` with what `fn` makes of the node with this id in place of it, or
+// `tree` itself when there is none.
+export function changeLayout(tree, id, fn) {
+  const path = pathTo(tree, id);
+  return path ? changedAt(tree, path, fn) : tree;
+}
+
 // What every writer keeps, put back onto `tree`: the strip's columns (not
 // with `nodes: false`, when the strip places its own), the panel, the rail.
+// The tree it is given stays as it was; the painted one is returned.
 export function paintLayout(tree, { preserveSizes = true, nodes = true } = {}) {
-  if (!tree) return;
+  if (!tree) return tree;
   const intent = { ...(shared(LAYOUT_INTENT) ?? {}), ...(shared(STRIP_INTENT) ?? {}) };
-  if (nodes && intent.nodes) {
-    const body = walkLayout(tree, "work-body");
-    if (body?.children) {
-      const mine = (n) => n.id === "main" || String(n.id).startsWith("strip-");
-      const at = body.children.findIndex(mine);
-      const rest = body.children.filter((n) => !mine(n));
-      const i = Math.max(0, at);
-      const columns = JSON.parse(JSON.stringify(intent.nodes));
-      // Native dividers leave px sizes before the strip's adopt timer runs.
-      // Keep those edits, but not sizes from the tree a pending strip write
-      // was based on: replaying those would undo an explicit width command.
-      const keepSize = (node) => {
-        const before = intent.sizesBefore?.[node.id], live = walkLayout(body, node.id);
-        if (before !== undefined && live?.size?.px !== undefined
-          && JSON.stringify(live.size) !== JSON.stringify(before)) node.size = { ...live.size };
-        for (const child of node.children ?? []) keepSize(child);
-      };
-      if (preserveSizes) columns.forEach(keepSize);
-      body.children = [...rest.slice(0, i), ...columns, ...rest.slice(i)];
-    }
-  }
-  if ("panel" in intent) {
-    const body = walkLayout(tree, "panel-body");
-    const wrap = walkLayout(tree, "panel") ?? body;
-    if (body) {
-      const child = intent.panel ? JSON.parse(JSON.stringify(intent.panel)) : null;
-      body.children = child ? [child] : [];
-      if (child) body.active = child.id;
-      else delete body.active;
-      if (wrap) wrap.hidden = !child;
-    }
-  }
-  if (intent.rail) {
-    const sidebar = (tree.children ?? []).find((n) => n.id === "sidebar");
-    if (sidebar) {
-      tree.resizable = intent.rail.open;
-      sidebar.min = intent.rail.min;
-    }
-  }
-  edgeBesidePanel(tree);
+  const withColumns = nodes && intent.nodes ? paintColumns(tree, intent, preserveSizes) : tree;
+  const withPanel = "panel" in intent ? paintPanel(withColumns, intent.panel) : withColumns;
+  const withRail = intent.rail ? paintRail(withPanel, intent.rail) : withPanel;
+  return edgeBesidePanel(withRail);
+}
+
+// The strip's columns in work-body, where "main" or the strip's own were.
+function paintColumns(tree, intent, preserveSizes) {
+  const body = walkLayout(tree, "work-body");
+  if (!body?.children) return tree;
+  const mine = (n) => n.id === "main" || String(n.id).startsWith("strip-");
+  const at = body.children.findIndex(mine);
+  const rest = body.children.filter((n) => !mine(n));
+  const i = Math.max(0, at);
+  const columns = JSON.parse(JSON.stringify(intent.nodes));
+  // Native dividers leave px sizes before the strip's adopt timer runs.
+  // Keep those edits, but not sizes from the tree a pending strip write
+  // was based on: replaying those would undo an explicit width command.
+  // A node comes back as it was when neither it nor any node under it moved.
+  const keepSize = (node) => {
+    const before = intent.sizesBefore?.[node.id], live = walkLayout(body, node.id);
+    const sized = before !== undefined && live?.size?.px !== undefined
+      && JSON.stringify(live.size) !== JSON.stringify(before) ? { ...node, size: { ...live.size } } : node;
+    if (!sized.children) return sized;
+    const children = sized.children.map(keepSize);
+    return children.some((c, k) => c !== sized.children[k]) ? { ...sized, children } : sized;
+  };
+  const kept = preserveSizes ? columns.map(keepSize) : columns;
+  return changeLayout(tree, "work-body", (b) => ({ ...b, children: [...rest.slice(0, i), ...kept, ...rest.slice(i)] }));
+}
+
+// The side panel: its one child (or none) in panel-body, and the panel
+// shown or hidden. Where and which nodes are both looked up in the tree as
+// it was given: a "panel" node that was inside panel-body is gone with the
+// children it had, so it is left alone.
+function paintPanel(tree, panel) {
+  const bodyAt = pathTo(tree, "panel-body");
+  if (!bodyAt) return tree;
+  const wrapAt = pathTo(tree, "panel") ?? bodyAt;
+  const child = panel ? JSON.parse(JSON.stringify(panel)) : null;
+  const same = wrapAt === bodyAt;
+  const inside = !same && wrapAt.length > bodyAt.length && bodyAt.every((k, d) => wrapAt[d] === k);
+  const withBody = changedAt(tree, bodyAt, (body) => {
+    const { active: _active, ...rest } = body;
+    const filled = child ? { ...body, children: [child], active: child.id } : { ...rest, children: [] };
+    return same ? { ...filled, hidden: !child } : filled;
+  });
+  return same || inside ? withBody : changedAt(withBody, wrapAt, (wrap) => ({ ...wrap, hidden: !child }));
+}
+
+// The sidebar rail: whether the root row's edge drags, and how narrow it gets.
+function paintRail(tree, rail) {
+  const kids = tree.children ?? [];
+  const at = kids.findIndex((n) => n.id === "sidebar");
+  if (at < 0) return tree;
+  return { ...tree, resizable: rail.open, children: kids.with(at, { ...kids[at], min: rail.min }) };
 }
 
 // A side panel's left border is Herdr's divider, which moves only the two
 // nodes beside it, so a fixed-width neighbor pins it. While a panel shows,
 // the strip's right edge rail (28 px, fixed) stands after the panel instead
-// of before it, and a strip column keeps the border draggable.
+// of before it, and a strip column keeps the border draggable. The tree it
+// is given stays as it was; the one returned has the rail in its place.
 export function edgeBesidePanel(tree) {
-  const kids = walkLayout(tree, "work-body")?.children;
+  const body = walkLayout(tree, "work-body"), kids = body?.children;
   const at = kids ? kids.findIndex((n) => n.id === "strip-edge-right") : -1;
-  if (at < 0) return;
-  const [edge] = kids.splice(at, 1);
-  const panel = kids[at];
+  if (at < 0) return tree;
+  const edge = kids[at], rest = kids.toSpliced(at, 1);
+  const panel = rest[at];
   const beside = panel && (panel.id === "panel-body" || panel.id === "panel") && !panel.hidden;
-  kids.splice(beside ? at + 1 : at, 0, edge);
+  return changeLayout(tree, "work-body", (b) => ({ ...b, children: rest.toSpliced(beside ? at + 1 : at, 0, edge) }));
 }
 
 // A writer's piece, kept for every write to come.
@@ -102,7 +142,7 @@ export function commitLayout(patch) {
   rememberLayout(patch);
   const tree = layout();
   if (!tree) return false;
-  paintLayout(tree);
-  if (isKansoTree(tree)) run("layout.set", { layout: tree });
+  const painted = paintLayout(tree);
+  if (isKansoTree(painted)) run("layout.set", { layout: painted });
   return true;
 }

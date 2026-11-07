@@ -18,7 +18,7 @@ const HEADING_SIZE = [0, 22, 18, 16, 15, 14, 13.5];
 // YAML front matter (skills, agents, docs sites) as a code block, so it
 // reads as data instead of running into the first paragraph.
 export function readable(text) {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/.exec(text);
+  const m = /^-{3}\r?\n([\s\S]*?)\r?\n-{3}[ \t]*(\r?\n|$)/.exec(text);
   const body = m ? "```yaml\n" + m[1] + "\n```\n\n" + text.slice(m[0].length) : text;
   return body.length > MAX_TEXT ? body.slice(0, MAX_TEXT) + "\n\n… (file truncated)" : body;
 }
@@ -28,13 +28,10 @@ export function readable(text) {
 export function linkTarget(url, docPath) {
   if (/^(https?:|mailto:)/i.test(url)) return { web: url };
   if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^file:/i.test(url)) return null;
-  let p = decodeURIComponent(url.replace(/^file:\/\//i, "").replace(/[?#].*$/, ""));
-  if (!p) return null;
-  if (!p.startsWith("/")) p = docPath.replace(/\/[^/]*$/, "") + "/" + p;
-  const out = [];
-  for (const part of p.split("/")) {
-    if (part === "..") out.pop(); else if (part && part !== ".") out.push(part);
-  }
+  const given = decodeURIComponent(url.replace(/^file:\/\//i, "").replace(/[?#].*$/, ""));
+  if (!given) return null;
+  const p = given.startsWith("/") ? given : docPath.replace(/\/[^/]*$/, "") + "/" + given;
+  const out = p.split("/").reduce((parts, part) => (part === ".." ? parts.slice(0, -1) : part && part !== "." ? [...parts, part] : parts), []);
   return { file: "/" + out.join("/") };
 }
 
@@ -95,15 +92,14 @@ export class MarkdownDoc {
     const b = this.blocks[i];
     if (!b) return;
     this.active = i;
-    if (b.kind === "table") this.openTable(b, cx);
+    if (b.kind === "table") this.openTable(i, cx);
     else {
       const value = b.kind === "heading" ? headingOf(b.lines[0]).text : b.lines.join("\n");
       const box = TextareaState.new({ value, placeholder: b.kind === "heading" ? "Heading" : "Write…" });
       box.set_auto_grow(1, 40);
       box.on("change", (_e, cx) => {
         const v = box.value();
-        b.lines = b.kind === "heading" ? [headingLine(headingOf(b.lines[0]).level, v)] : v.split("\n");
-        this.changed(cx);
+        this.setLines(i, b.kind === "heading" ? [headingLine(headingOf(b.lines[0]).level, v)] : v.split("\n"), cx);
       });
       this.box = box;
       box.focus();
@@ -111,27 +107,42 @@ export class MarkdownDoc {
     cx.notify();
   }
 
-  openTable(b, cx) {
-    const table = parseTable(b.lines);
+  // The open block's lines are new: the block is replaced in the document.
+  setLines(i, lines, cx) {
+    this.blocks = this.blocks.with(i, { ...this.blocks[i], lines });
+    this.changed(cx);
+  }
+
+  // Block i, a table, as a grid of cells. A cell typed in makes a new table
+  // (put answers it from the one before), and the block follows.
+  openTable(i, cx) {
+    const table = parseTable(this.blocks[i].lines);
     const cell = (value, put) => {
       const s = TextareaState.new({ value });
       s.set_auto_grow(1, 8);
-      s.on("change", (_e, cx) => { put(s.value()); b.lines = tableLines(table); this.changed(cx); });
+      s.on("change", (_e, cx) => {
+        if (!this.cells) return;
+        this.cells = { ...this.cells, table: put(this.cells.table, s.value()) };
+        this.setLines(i, tableLines(this.cells.table), cx);
+      });
       return s;
     };
     this.cells = {
-      table, block: b,
-      head: table.head.map((v, c) => cell(v, (x) => { table.head[c] = x; })),
-      rows: table.rows.map((r, ri) => r.map((v, c) => cell(v, (x) => { table.rows[ri][c] = x; }))),
+      table, block: i,
+      head: table.head.map((v, c) => cell(v, (tb, x) => ({ ...tb, head: tb.head.with(c, x) }))),
+      rows: table.rows.map((r, ri) => r.map((v, c) => cell(v, (tb, x) => ({ ...tb, rows: tb.rows.with(ri, tb.rows[ri].with(c, x)) })))),
     };
     this.cells.head[0]?.focus();
   }
 
   // A row or a column added or removed: the grid is built again from the table.
+  // fn answers the new table; a caller that changes the table it is handed
+  // instead gets a copy, so the open one is never changed in place.
   reshape(fn, cx) {
     const { table, block } = this.cells;
-    fn(table);
-    block.lines = tableLines(table);
+    const copy = { ...table, head: [...table.head], align: [...table.align], rows: table.rows.map((r) => [...r]) };
+    const next = fn(copy) ?? copy;
+    this.blocks = this.blocks.with(block, { ...this.blocks[block], lines: tableLines(next) });
     this.releaseCells();
     this.openTable(block, cx);
     this.changed(cx);
@@ -156,10 +167,13 @@ export class MarkdownDoc {
   append(cx) {
     if (!this.canEdit || this.conflict) return;
     this.close();
-    const last = this.blocks[this.blocks.length - 1];
-    if (last && last.kind !== "blank") this.blocks.push({ kind: "blank", lines: [""] });
-    this.blocks.push({ kind: "paragraph", lines: [""] });
-    this.blocks.push({ kind: "blank", lines: [""] }); // the file ends with a newline
+    const last = this.blocks.at(-1);
+    this.blocks = [
+      ...this.blocks,
+      ...(last && last.kind !== "blank" ? [{ kind: "blank", lines: [""] }] : []),
+      { kind: "paragraph", lines: [""] },
+      { kind: "blank", lines: [""] }, // the file ends with a newline
+    ];
     this.open(this.blocks.length - 2, cx);
   }
 
@@ -172,7 +186,8 @@ export class MarkdownDoc {
   // ---- Saving ----------------------------------------------------------------
 
   later(cx) {
-    const seq = ++this.seq;
+    const seq = this.seq + 1;
+    this.seq = seq;
     cx.timer.after(AUTOSAVE_MS, (cx) => { if (seq === this.seq) this.save(cx); });
   }
 
@@ -199,7 +214,7 @@ export class MarkdownDoc {
   // Saves now, before the panel closes or shows another file. False when
   // it could not (the file changed on disk: the choice is shown).
   async flush() {
-    this.seq++;
+    this.seq = this.seq + 1;
     if (!this.dirty || this.on) return !this.conflict;
     if (this.conflict) return false;
     try { await writeTextFile(this.path, this.text, this.saved); this.saved = this.text; return true; }
@@ -246,7 +261,7 @@ export class MarkdownDoc {
   // Cmd+S saves now; Escape closes the block being edited.
   key(e, cx) {
     const cmd = e.modifiers?.platform || e.modifiers?.control;
-    if (cmd && e.key === "s") { this.seq++; this.save(cx); cx.stop_propagation(); }
+    if (cmd && e.key === "s") { this.seq = this.seq + 1; this.save(cx); cx.stop_propagation(); }
     else if (e.key === "escape" && this.active !== null) { this.close(); cx.notify(); cx.stop_propagation(); }
   }
 
@@ -260,18 +275,16 @@ export class MarkdownDoc {
 
   // The header's part: where the saving is, and Source.
   controls(t, prefix) {
-    const out = [];
     const state = this.on ? "Read only" : this.big ? "Too large to edit" : this.conflict ? "" : this.saving ? "Saving…" : this.dirty ? "Edited" : this.savedAt ? "Saved" : "";
-    if (state) out.push(div().text_size(11.5).text_color(t.dim).child(state));
-    if (this.canEdit) {
-      out.push(div().id(`${prefix}-source`).h(24).px(9).flex().items_center().rounded(6).cursor_pointer().text_size(12).font_medium()
+    return [
+      ...(state ? [div().text_size(11.5).text_color(t.dim).child(state)] : []),
+      ...(this.canEdit ? [div().id(`${prefix}-source`).h(24).px(9).flex().items_center().rounded(6).cursor_pointer().text_size(12).font_medium()
         .when(Boolean(this.source), (el) => el.bg(t.selected).text_color(t.foreground))
         .when(!this.source, (el) => el.text_color(t.muted))
         .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .tooltip(this.source ? "Back to the formatted document" : "Edit the whole file as Markdown")
-        .on_click((_e, cx) => this.toggleSource(cx)).child(this.source ? "Formatted" : "Source"));
-    }
-    return out;
+        .on_click((_e, cx) => this.toggleSource(cx)).child(this.source ? "Formatted" : "Source")] : []),
+    ];
   }
 
   body(t, id) {
@@ -326,7 +339,7 @@ export class MarkdownDoc {
     const line = (cells, key, strong, end) => h_flex().id(key).w_full().items_start().border_b(1).border_color(t.border)
       .when(strong, (el) => el.bg(t.raised)).children(cells).child(div().w(26).flex_none().pt(4).flex().justify_center().child(end));
     const removeCol = h_flex().w_full().children(head.map((_s, c) => div().flex_1().min_w(96).flex().justify_center()
-      .child(n > 1 ? icon(`${id}-col-x-${c}`, "Remove this column", (cx) => this.reshape((tb) => { tb.head.splice(c, 1); tb.align.splice(c, 1); tb.rows.forEach((r) => r.splice(c, 1)); }, cx)) : div())))
+      .child(n > 1 ? icon(`${id}-col-x-${c}`, "Remove this column", (cx) => this.reshape((tb) => ({ ...tb, head: tb.head.toSpliced(c, 1), align: tb.align.toSpliced(c, 1), rows: tb.rows.map((r) => r.toSpliced(c, 1)) }), cx)) : div())))
       .child(div().w(26).flex_none());
     return v_flex().w_full().gap(6)
       .child(div().id(`${id}-grid`).w_full().overflow_x_scrollbar()
@@ -334,10 +347,10 @@ export class MarkdownDoc {
           .child(v_flex().rounded(6).border_1().border_color(t.input).overflow_hidden()
             .child(line(head.map((s, c) => cell(s, `${id}-h${c}`, true)), `${id}-hrow`, true, div()))
             .children(rows.map((r, ri) => line(r.map((s, c) => cell(s, `${id}-c${ri}-${c}`)), `${id}-row${ri}`, false,
-              icon(`${id}-row-x-${ri}`, "Remove this row", (cx) => this.reshape((tb) => { tb.rows.splice(ri, 1); }, cx))))))))
+              icon(`${id}-row-x-${ri}`, "Remove this row", (cx) => this.reshape((tb) => ({ ...tb, rows: tb.rows.toSpliced(ri, 1) }), cx))))))))
       .child(h_flex().gap(6)
-        .child(this.pill(`${id}-add-row`, "Add row", t, (cx) => this.reshape((tb) => { tb.rows.push(Array(n).fill("")); }, cx)))
-        .child(this.pill(`${id}-add-col`, "Add column", t, (cx) => this.reshape((tb) => { tb.head.push(""); tb.align.push(null); tb.rows.forEach((r) => r.push("")); }, cx)))
+        .child(this.pill(`${id}-add-row`, "Add row", t, (cx) => this.reshape((tb) => ({ ...tb, rows: [...tb.rows, Array.from({ length: n }, () => "")] }), cx)))
+        .child(this.pill(`${id}-add-col`, "Add column", t, (cx) => this.reshape((tb) => ({ ...tb, head: [...tb.head, ""], align: [...tb.align, null], rows: tb.rows.map((r) => [...r, ""]) }), cx)))
         .child(div().flex_1())
         .child(this.pill(`${id}-done`, "Done", t, (cx) => { this.close(); cx.notify(); })));
   }

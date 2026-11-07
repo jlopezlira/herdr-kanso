@@ -28,35 +28,32 @@ const price = (value) => {
 export function parseCatalog(payload) {
   const rows = payload?.data;
   if (!Array.isArray(rows)) return [];
-  const rates = [];
-  for (const row of rows) {
+  const rates = rows.flatMap((row) => {
     const id = typeof row?.id === "string" ? row.id : "";
-    if (!id || id.includes(":") || id.startsWith("~")) continue;
+    if (!id || id.includes(":") || id.startsWith("~")) return [];
     const input = price(row.pricing?.prompt);
     const output = price(row.pricing?.completion);
-    if (input === undefined || output === undefined) continue;
+    if (input === undefined || output === undefined) return [];
     const cacheRead = price(row.pricing?.input_cache_read);
     const cacheWrite = price(row.pricing?.input_cache_write);
-    rates.push({ id, input, output, ...(cacheRead !== undefined ? { cacheRead } : {}), ...(cacheWrite !== undefined ? { cacheWrite } : {}) });
-  }
+    return [{ id, input, output, ...(cacheRead !== undefined ? { cacheRead } : {}), ...(cacheWrite !== undefined ? { cacheWrite } : {}) }];
+  });
   return sortRates(rates);
 }
 
 function sortRates(rates) {
-  return rates.sort((a, b) => tail(b.id).length - tail(a.id).length);
+  return rates.toSorted((a, b) => tail(b.id).length - tail(a.id).length);
 }
 
 export function rateFor(rates, provider, model) {
   const name = tail(model);
   const vendor = dash(provider).split("-")[0];
   const needles = vendor && !name.startsWith(`${vendor}-`) ? [name, `${vendor}-${name}`] : [name];
-  for (const needle of needles) {
-    for (const rate of rates) {
-      const key = tail(rate.id);
-      if (needle === key || needle.startsWith(`${key}-`)) return rate;
-    }
-  }
-  return undefined;
+  // The bare name is tried against every rate before the vendor-prefixed one.
+  return needles.reduce((found, needle) => found ?? rates.find((rate) => {
+    const key = tail(rate.id);
+    return needle === key || needle.startsWith(`${key}-`);
+  }), undefined);
 }
 
 export const isFree = (provider, model) =>
@@ -90,20 +87,26 @@ export function catalogPath(storePath) {
 export async function loadCatalog(storePath, { home = os.homedir(), refresh = false } = {}) {
   const own = await readCatalog(catalogPath(storePath));
   const shared = await readCatalog(path.join(home, ".prjct/pi-usage/pricing.json"));
-  let best = [own, shared].filter(Boolean).sort((a, b) => b.fetchedAt - a.fetchedAt)[0] ?? null;
-  if (refresh && (!best || Date.now() - best.fetchedAt > CATALOG_TTL)) {
-    try {
-      const response = await fetch(CATALOG_URL, { signal: AbortSignal.timeout(FETCH_MS), headers: { accept: "application/json" } });
-      if (response.ok) {
-        const rates = parseCatalog(await response.json());
-        if (rates.length) {
-          best = { fetchedAt: Date.now(), rates };
-          await atomicWriteJson(catalogPath(storePath), best);
-        }
-      }
-    } catch { /* offline: keep the cached catalog */ }
+  const cached = [own, shared].filter(Boolean).toSorted((a, b) => b.fetchedAt - a.fetchedAt)[0] ?? null;
+  const fetched = refresh && (!cached || Date.now() - cached.fetchedAt > CATALOG_TTL) ? await fetchCatalog(storePath) : null;
+  return fetched ?? cached ?? { fetchedAt: 0, rates: [] };
+}
+
+// A fresh catalog from OpenRouter, saved next to the store; null when offline
+// or when the answer has no rates (the cached catalog is kept then). A fresh
+// catalog that cannot be saved is still used for this run.
+async function fetchCatalog(storePath) {
+  try {
+    const response = await fetch(CATALOG_URL, { signal: AbortSignal.timeout(FETCH_MS), headers: { accept: "application/json" } });
+    if (!response.ok) return null;
+    const rates = parseCatalog(await response.json());
+    if (!rates.length) return null;
+    const fresh = { fetchedAt: Date.now(), rates };
+    await atomicWriteJson(catalogPath(storePath), fresh).catch(() => {});
+    return fresh;
+  } catch {
+    return null;
   }
-  return best ?? { fetchedAt: 0, rates: [] };
 }
 
 /**
@@ -114,21 +117,20 @@ export async function loadCatalog(storePath, { home = os.homedir(), refresh = fa
 export async function loadOverrides(storePath) {
   try {
     const parsed = JSON.parse(await readFile(path.join(path.dirname(storePath), "prices.json"), "utf8"));
-    const models = {};
-    for (const [model, value] of Object.entries(isPlainObject(parsed?.models) ? parsed.models : {})) {
+    const models = Object.fromEntries(Object.entries(isPlainObject(parsed?.models) ? parsed.models : {}).flatMap(([model, value]) => {
       const input = price(value?.input);
       const output = price(value?.output);
-      if (input === undefined || output === undefined) continue;
+      if (input === undefined || output === undefined) return [];
       const cacheRead = price(value.cacheRead);
       const cacheWrite = price(value.cacheWrite);
-      models[dash(model)] = {
+      return [[dash(model), {
         id: `override/${model}`,
         input: input / 1e6,
         output: output / 1e6,
         ...(cacheRead !== undefined ? { cacheRead: cacheRead / 1e6 } : {}),
         ...(cacheWrite !== undefined ? { cacheWrite: cacheWrite / 1e6 } : {}),
-      };
-    }
+      }]];
+    }));
     const plans = (Array.isArray(parsed?.plans) ? parsed.plans : [])
       .map((plan) => ({ name: String(plan?.name ?? "Plan"), usdPerMonth: price(plan?.usdPerMonth) ?? 0 }))
       .filter((plan) => plan.usdPerMonth > 0);
@@ -167,22 +169,24 @@ function anthropicRate(model, harness) {
   };
 }
 
-function pricer(catalog, overrides) {
-  const memo = new Map();
-  return (provider, model, harness = "") => {
-    const key = `${provider}\u0001${model}\u0001${harness}`;
-    if (memo.has(key)) return memo.get(key);
-    let rate = null;
-    if (isFree(provider, model)) rate = { id: "free", input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-    else if (model && model !== "unknown") {
-      rate = overrides.models[dash(model)]
-        ?? anthropicRate(model, harness)
-        ?? rateFor(catalog.rates, provider, model)
-        ?? null;
-    }
-    memo.set(key, rate);
-    return rate;
-  };
+function rateOf(catalog, overrides, provider, model, harness = "") {
+  if (isFree(provider, model)) return { id: "free", input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  if (!model || model === "unknown") return null;
+  return overrides.models[dash(model)]
+    ?? anthropicRate(model, harness)
+    ?? rateFor(catalog.rates, provider, model)
+    ?? null;
+}
+
+// The rate of each provider, model and harness the priced rows use, looked
+// up once (a catalog search per row would be slow over a long history): the
+// first row with a key stands for every row with it.
+function pricer(catalog, overrides, rows) {
+  const keyOf = (provider, model, harness = "") => `${provider}\u0001${model}\u0001${harness}`;
+  const first = new Map(rows.filter((row) => sumTokens(row.tokens ?? {})).toReversed()
+    .map((row) => [keyOf(row.provider, row.model, row.harness), row]));
+  const rates = new Map([...first].map(([key, row]) => [key, rateOf(catalog, overrides, row.provider, row.model, row.harness)]));
+  return (provider, model, harness = "") => rates.get(keyOf(provider, model, harness)) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,27 +234,27 @@ function previousRange(range, today, firstDay) {
   if (range.period === "all") return null;
   const now = parseDay(today);
   const start = parseDay(range.start);
-  let offset;
-  if (range.period === "year") offset = start.getFullYear() - now.getFullYear() - 1;
-  else if (range.period === "month") offset = (start.getFullYear() - now.getFullYear()) * 12 + start.getMonth() - now.getMonth() - 1;
-  else offset = Math.round((parseDay(range.end) - now) / (30 * 86400000)) - 1;
+  const offset = range.period === "year" ? start.getFullYear() - now.getFullYear() - 1
+    : range.period === "month" ? (start.getFullYear() - now.getFullYear()) * 12 + start.getMonth() - now.getMonth() - 1
+      : Math.round((parseDay(range.end) - now) / (30 * 86400000)) - 1;
   return costRange(range.period, offset, today, firstDay);
 }
 
+// `first`, next(first), next(next(first)) ... while `keep` holds.
+const unfold = (first, next, keep) => (keep(first) ? [first, ...unfold(next(first), next, keep)] : []);
+// The same local time one day or one month later (what setDate(+1) and
+// setMonth(+1) give, without changing a Date).
+const dayAfter = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+const monthAfter = (d) => new Date(d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+
 function buckets(range) {
-  const out = [];
+  const end = parseDay(range.end);
   if (range.unit === "day") {
-    const end = parseDay(range.end);
-    for (let d = parseDay(range.start); d <= end; d.setDate(d.getDate() + 1)) {
-      out.push({ key: dayKey(d), label: String(d.getDate()), tip: dayLabelShort(d), usd: 0, tokens: 0 });
-    }
-  } else {
-    const end = parseDay(range.end);
-    for (let d = parseDay(range.start); d <= end; d.setMonth(d.getMonth() + 1)) {
-      out.push({ key: dayKey(d).slice(0, 7), label: MONTHS[d.getMonth()], tip: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, usd: 0, tokens: 0 });
-    }
+    return unfold(parseDay(range.start), dayAfter, (d) => d <= end)
+      .map((d) => ({ key: dayKey(d), label: String(d.getDate()), tip: dayLabelShort(d), usd: 0, tokens: 0 }));
   }
-  return out;
+  return unfold(parseDay(range.start), monthAfter, (d) => d <= end)
+    .map((d) => ({ key: dayKey(d).slice(0, 7), label: MONTHS[d.getMonth()], tip: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, usd: 0, tokens: 0 }));
 }
 
 // ---------------------------------------------------------------------------
@@ -271,13 +275,11 @@ export function usdText(value, exact = false) {
 }
 export function compactText(value) {
   const n = Number(value) || 0;
-  for (const [d, s] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]]) {
-    if (n >= d * 0.9995) {
-      const v = n / d;
-      return `${v >= 100 ? Math.round(v) : Number(v.toFixed(v >= 10 ? 1 : 2))}${s}`;
-    }
-  }
-  return String(Math.round(n));
+  const unit = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]].find(([d]) => n >= d * 0.9995);
+  if (!unit) return String(Math.round(n));
+  const [d, s] = unit;
+  const v = n / d;
+  return `${v >= 100 ? Math.round(v) : Number(v.toFixed(v >= 10 ? 1 : 2))}${s}`;
 }
 const intText = (n) => group3(Number(n) || 0);
 const rateText = (n) => (n >= 1 ? String(Number(n.toFixed(2))) : String(Number(n.toPrecision(2))));
@@ -293,14 +295,21 @@ const sumTokens = (t) => (t.input || 0) + (t.output || 0) + (t.cacheRead || 0) +
 const projectLabel = (p) => {
   const text = String(p ?? "").replace(/[\\/]+$/, "");
   if (!text || text === "unknown") return "Unknown project";
-  return text.split(/[\\/]/).pop() || text;
+  return text.split(/[\\/]/).at(-1) || text;
 };
 
-function group(map, key, init) {
-  let entry = map.get(key);
-  if (!entry) { entry = { ...init(), usd: 0, tokens: 0, unpriced: 0 }; map.set(key, entry); }
-  return entry;
-}
+// Totals are summed in row order, as a running total would, so every
+// figure comes out to the same last digit.
+const sumOf = (list, value) => list.reduce((sum, item) => sum + value(item), 0);
+// `list` in groups by `key`, in the order each key first appears (items keep
+// list order), each group made into one value by `make(items)`. One pass to
+// group and one per group, so it stays linear over a long history.
+const groupInto = (list, key, make) => new Map([...Map.groupBy(list, key)].map(([k, items]) => [k, make(items)]));
+const usdOf = (item) => item.usd;
+const countOf = (item) => item.count;
+const unpricedOf = (item) => item.unpriced;
+const earliest = (days) => days.reduce((min, day) => (day < min ? day : min));
+const latest = (days) => days.reduce((max, day) => (day > max ? day : max));
 
 /**
  * Everything the Costs view shows, compact enough for QuickJS. `rows` are the
@@ -313,32 +322,32 @@ function group(map, key, init) {
  */
 function liveCosts(rows, live, price, labels) {
   if (!live?.size) return [];
-  const sessions = new Map();
-  for (const row of rows) {
-    if (!live.has(row.session)) continue;
+  const items = rows.flatMap((row) => {
+    if (!live.has(row.session)) return [];
     const tokens = row.tokens ?? {};
     const count = sumTokens(tokens);
-    if (!count) continue;
+    if (!count) return [];
     const rate = price(row.provider, row.model, row.harness);
-    const usd = rate ? estimate(tokens, rate).usd : 0;
-    let s = sessions.get(row.session);
-    if (!s) {
-      s = { session: row.session, harness: row.harness, project: row.project, usd: 0, tokens: 0, models: new Map(), breakdown: newBreakdown() };
-      sessions.set(row.session, s);
-    }
-    addToBreakdown(s.breakdown, row, usd, count);
-    s.usd += usd;
-    s.tokens += count;
-    s.models.set(row.model, (s.models.get(row.model) ?? 0) + usd + count * 1e-12);
-  }
+    return [{ row, tokens, count, usd: rate ? estimate(tokens, rate).usd : 0 }];
+  });
+  const sessions = groupInto(items, (item) => item.row.session, (group) => ({
+    session: group[0].row.session,
+    harness: group[0].row.harness,
+    project: group[0].row.project,
+    usd: sumOf(group, usdOf),
+    tokens: sumOf(group, countOf),
+    // A model's weight is its cost, with its tokens breaking ties between free ones.
+    models: groupInto(group, (item) => item.row.model, (same) => same.reduce((sum, item) => sum + item.usd + item.count * 1e-12, 0)),
+    breakdown: breakdownOf(group),
+  }));
   const harnessName = HARNESS_NAMES;
   return [...sessions.values()]
-    .sort((a, b) => (live.get(b.session) ?? 0) - (live.get(a.session) ?? 0))
+    .toSorted((a, b) => (live.get(b.session) ?? 0) - (live.get(a.session) ?? 0))
     .slice(0, 5)
     .map((s) => {
       const label = labels?.sessions?.[s.session];
       const ticket = label?.tickets?.[0] ?? null;
-      const model = [...s.models.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
+      const model = [...s.models.entries()].toSorted((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
       const minutes = Math.max(0, Math.round((Date.now() - (live.get(s.session) ?? Date.now())) / 60000));
       return {
         detail: breakdownDetail(s.breakdown, {
@@ -356,27 +365,28 @@ function liveCosts(rows, live, price, labels) {
 
 const HARNESS_NAMES = { claude: "Claude Code", codex: "Codex", pi: "Pi", opencode: "OpenCode" };
 
-/** Per-task (or per-session) breakdown, filled row by row, for the detail view. */
-function newBreakdown() {
-  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, models: new Map(), sessions: new Map(), harnesses: new Set() };
-}
-
-function addToBreakdown(b, row, usd, count) {
-  const t = row.tokens ?? {};
-  b.input += t.input || 0; b.output += t.output || 0; b.cacheRead += t.cacheRead || 0; b.cacheWrite += t.cacheWrite || 0;
-  b.harnesses.add(row.harness);
-  const m = b.models.get(row.model) ?? { usd: 0, tokens: 0 };
-  m.usd += usd; m.tokens += count; b.models.set(row.model, m);
-  const s = b.sessions.get(row.session) ?? { usd: 0, tokens: 0, first: row.day, last: row.day };
-  s.usd += usd; s.tokens += count;
-  if (row.day < s.first) s.first = row.day;
-  if (row.day > s.last) s.last = row.day;
-  b.sessions.set(row.session, s);
+/**
+ * Per-task (or per-session) breakdown for the detail view, from its priced
+ * rows ({ row, tokens, usd, count }) in order.
+ */
+function breakdownOf(items) {
+  return {
+    input: sumOf(items, (item) => item.tokens.input || 0),
+    output: sumOf(items, (item) => item.tokens.output || 0),
+    cacheRead: sumOf(items, (item) => item.tokens.cacheRead || 0),
+    cacheWrite: sumOf(items, (item) => item.tokens.cacheWrite || 0),
+    models: groupInto(items, (item) => item.row.model, (group) => ({ usd: sumOf(group, usdOf), tokens: sumOf(group, countOf) })),
+    sessions: groupInto(items, (item) => item.row.session, (group) => {
+      const days = group.map((item) => item.row.day);
+      return { usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), first: earliest(days), last: latest(days) };
+    }),
+    harnesses: new Set(items.map((item) => item.row.harness)),
+  };
 }
 
 function breakdownDetail(b, { title, ticket, project, usd, tokens }) {
   const span = (first, last) => (first === last ? dayText(first) : `${dayText(first)} – ${dayText(last)}`);
-  const sessions = [...b.sessions.entries()].sort((a, c) => c[1].usd - a[1].usd);
+  const sessions = [...b.sessions.entries()].toSorted((a, c) => c[1].usd - a[1].usd);
   const first = sessions.reduce((min, [, s]) => (!min || s.first < min ? s.first : min), null);
   const last = sessions.reduce((max, [, s]) => (!max || s.last > max ? s.last : max), null);
   return {
@@ -395,10 +405,10 @@ function breakdownDetail(b, { title, ticket, project, usd, tokens }) {
       { label: "Cache read", value: compactText(b.cacheRead) },
       { label: "Cache write", value: compactText(b.cacheWrite) },
     ],
-    models: [...b.models.entries()].sort((a, c) => c[1].usd - a[1].usd).slice(0, 6)
+    models: [...b.models.entries()].toSorted((a, c) => c[1].usd - a[1].usd).slice(0, 6)
       .map(([name, m]) => ({ name, usdText: usdText(m.usd), tokensText: compactText(m.tokens) })),
     sessions: sessions.slice(0, 8).map(([id, s]) => ({
-      name: `Session ${String(id).split(":").pop().slice(0, 8)}`,
+      name: `Session ${String(id).split(":").at(-1).slice(0, 8)}`,
       when: span(s.first, s.last),
       usdText: usdText(s.usd),
       tokensText: compactText(s.tokens),
@@ -413,95 +423,98 @@ function cleanTitle(text) {
 }
 
 export function deriveCosts(rows, { catalog, overrides, labels, options = {}, today, live = null }) {
-  const price = pricer(catalog ?? { rates: [] }, overrides ?? { models: {}, plans: [] });
+  const price = pricer(catalog ?? { rates: [] }, overrides ?? { models: {}, plans: [] }, rows);
   const firstDay = rows.reduce((min, row) => (!min || row.day < min ? row.day : min), null);
   const range = costRange(options.period ?? "month", Number(options.offset) || 0, today, firstDay);
   const previous = previousRange(range, today, firstDay);
   const project = options.project && options.project !== "all" ? options.project : null;
   const model = options.model && options.model !== "all" ? options.model : null;
 
-  const chart = buckets(range);
-  const chartIndex = new Map(chart.map((bucket, index) => [bucket.key, index]));
-  const projects = new Map();
-  const models = new Map();
-  const tasks = new Map();
-  const projectFacet = new Map();
-  const modelFacet = new Map();
-  const total = { usd: 0, tokens: 0, unpriced: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, sessions: new Set() };
-  let previousUsd = 0;
-
-  for (const row of rows) {
+  // Every row with tokens in this period or the one before, priced once.
+  const priced = rows.flatMap((row) => {
     const tokens = row.tokens ?? {};
     const count = sumTokens(tokens);
-    if (!count) continue;
+    if (!count) return [];
     const rate = price(row.provider, row.model, row.harness);
-    let usd = 0;
-    let unpriced = count;
-    if (rate) ({ usd, unpriced } = estimate(tokens, rate));
-
+    const { usd, unpriced } = rate ? estimate(tokens, rate) : { usd: 0, unpriced: count };
     const inPrevious = previous && row.day >= previous.start && row.day <= previous.end;
     const inRange = row.day >= range.start && row.day <= range.end;
-    if (!inRange && !inPrevious) continue;
+    return inRange || inPrevious ? [{ row, tokens, count, rate, usd, unpriced, inRange }] : [];
+  });
 
-    // Facets ignore their own filter so the menu always lists every choice.
-    if (inRange && (!model || row.model === model)) {
-      const f = group(projectFacet, row.project, () => ({}));
-      f.usd += usd; f.tokens += count;
-    }
-    if (inRange && (!project || row.project === project)) {
-      const f = group(modelFacet, row.model, () => ({ provider: row.provider }));
-      f.usd += usd; f.tokens += count;
-    }
-    if ((project && row.project !== project) || (model && row.model !== model)) continue;
-    if (inPrevious && !inRange) { previousUsd += usd; continue; }
+  // Facets ignore their own filter so the menu always lists every choice.
+  const projectFacet = groupInto(priced.filter((item) => item.inRange && (!model || item.row.model === model)), (item) => item.row.project,
+    (group) => ({ usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: 0 }));
+  const modelFacet = groupInto(priced.filter((item) => item.inRange && (!project || item.row.project === project)), (item) => item.row.model,
+    (group) => ({ provider: group[0].row.provider, usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: 0 }));
+  const chosen = priced.filter((item) => !((project && item.row.project !== project) || (model && item.row.model !== model)));
+  const previousUsd = sumOf(chosen.filter((item) => !item.inRange), usdOf);
+  const current = chosen.filter((item) => item.inRange);
 
-    total.usd += usd; total.tokens += count; total.unpriced += unpriced;
-    total.input += tokens.input || 0; total.output += tokens.output || 0;
-    total.cacheRead += tokens.cacheRead || 0; total.cacheWrite += tokens.cacheWrite || 0;
-    total.sessions.add(row.session);
+  const total = {
+    usd: sumOf(current, usdOf),
+    tokens: sumOf(current, countOf),
+    unpriced: sumOf(current, unpricedOf),
+    input: sumOf(current, (item) => item.tokens.input || 0),
+    output: sumOf(current, (item) => item.tokens.output || 0),
+    cacheRead: sumOf(current, (item) => item.tokens.cacheRead || 0),
+    cacheWrite: sumOf(current, (item) => item.tokens.cacheWrite || 0),
+    sessions: new Set(current.map((item) => item.row.session)),
+  };
 
-    const bucket = chart[chartIndex.get(range.unit === "day" ? row.day : row.day.slice(0, 7))];
-    if (bucket) { bucket.usd += usd; bucket.tokens += count; }
+  const perBucket = Map.groupBy(current, (item) => (range.unit === "day" ? item.row.day : item.row.day.slice(0, 7)));
+  const chart = buckets(range).map((bucket) => {
+    const group = perBucket.get(bucket.key) ?? [];
+    return { ...bucket, usd: sumOf(group, usdOf), tokens: sumOf(group, countOf) };
+  });
 
-    const p = group(projects, row.project, () => ({ sessions: new Set() }));
-    p.usd += usd; p.tokens += count; p.unpriced += unpriced; p.sessions.add(row.session);
+  const projects = groupInto(current, (item) => item.row.project, (group) => ({
+    sessions: new Set(group.map((item) => item.row.session)),
+    usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf),
+  }));
 
-    const m = group(models, row.model, () => ({
-      model: row.model, providers: new Set(), rate, input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
-    }));
-    m.providers.add(row.provider);
-    if (!m.rate && rate) m.rate = rate;
-    m.usd += usd; m.tokens += count; m.unpriced += unpriced;
-    m.input += tokens.input || 0; m.output += tokens.output || 0;
-    m.cacheRead += tokens.cacheRead || 0; m.cacheWrite += tokens.cacheWrite || 0;
+  const models = groupInto(current, (item) => item.row.model, (group) => ({
+    model: group[0].row.model,
+    providers: new Set(group.map((item) => item.row.provider)),
+    // The first rate any of its rows found.
+    rate: group.find((item) => item.rate)?.rate ?? group[0].rate,
+    input: sumOf(group, (item) => item.tokens.input || 0),
+    output: sumOf(group, (item) => item.tokens.output || 0),
+    cacheRead: sumOf(group, (item) => item.tokens.cacheRead || 0),
+    cacheWrite: sumOf(group, (item) => item.tokens.cacheWrite || 0),
+    usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf),
+  }));
 
-    // A task is a ticket when the session names one, else the session itself.
+  // A task is a ticket when the session names one, else the session itself;
+  // its first row names it.
+  const taskKey = (item) => {
+    const ticket = labels?.sessions?.[item.row.session]?.tickets?.[0];
+    return ticket ? `ticket:${item.row.project}:${ticket}` : item.row.session;
+  };
+  const tasks = groupInto(current, taskKey, (group) => {
+    const { row } = group[0];
     const label = labels?.sessions?.[row.session];
     const ticket = label?.tickets?.[0];
-    const taskKey = ticket ? `ticket:${row.project}:${ticket}` : row.session;
-    const t = group(tasks, taskKey, () => ({
+    const days = group.map((item) => item.row.day);
+    return {
       label: ticket ? (label?.name ? `${ticket} · ${label.name}` : ticket) : labelText(label, row.session),
       prompt: ticket && label?.prompt ? label.prompt : "",
       ticket: ticket ?? null,
       project: row.project,
       harness: row.harness,
-      sessions: new Set(),
-      models: new Map(),
-      first: row.day,
-      last: row.day,
-      breakdown: newBreakdown(),
-    }));
-    addToBreakdown(t.breakdown, row, usd, count);
-    t.usd += usd; t.tokens += count; t.unpriced += unpriced; t.sessions.add(row.session);
-    t.models.set(row.model, (t.models.get(row.model) ?? 0) + usd);
-    if (row.day < t.first) t.first = row.day;
-    if (row.day > t.last) t.last = row.day;
-  }
+      sessions: new Set(group.map((item) => item.row.session)),
+      models: groupInto(group, (item) => item.row.model, (same) => sumOf(same, usdOf)),
+      first: earliest(days),
+      last: latest(days),
+      breakdown: breakdownOf(group),
+      usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf),
+    };
+  });
 
   const share = (usd) => (total.usd > 0 ? usd / total.usd : 0);
   const byUsd = (a, b) => b.usd - a.usd || b.tokens - a.tokens;
   const sessions = total.sessions.size;
-  const taskList = [...tasks.values()].sort(byUsd);
+  const taskList = [...tasks.values()].toSorted(byUsd);
   const plans = overrides?.plans ?? [];
   const planMonthly = plans.reduce((sum, plan) => sum + plan.usdPerMonth, 0);
   const planUsd = planMonthly * range.months;
@@ -514,11 +527,11 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
   const when = catalog?.fetchedAt ? new Date(catalog.fetchedAt) : null;
 
   const prevName = previous ? (range.period === "30d" ? "the 30 days before" : previous.name) : null;
-  let note = "";
-  if (change !== null && Math.abs(change) >= 0.01) note = `${Math.abs(Math.round(change * 100))}% ${change > 0 ? "more" : "less"} than ${prevName}`;
-  else if (change !== null) note = `About the same as ${prevName}`;
-  else if (range.period === "all") note = `${usdText(perMonth)} a month ${range.name}`;
-  note = note ? note[0].toUpperCase() + note.slice(1) : "";
+  const said = change !== null && Math.abs(change) >= 0.01 ? `${Math.abs(Math.round(change * 100))}% ${change > 0 ? "more" : "less"} than ${prevName}`
+    : change !== null ? `About the same as ${prevName}`
+      : range.period === "all" ? `${usdText(perMonth)} a month ${range.name}`
+        : "";
+  const note = said ? said[0].toUpperCase() + said.slice(1) : "";
 
   return {
     version: 3,
@@ -559,9 +572,9 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     projects: [...projects.entries()].map(([value, p]) => ({
       value, name: projectLabel(value), detail: value, usd: p.usd, share: share(p.usd),
       usdText: usdText(p.usd), tokensText: compactText(p.tokens),
-    })).sort((a, b) => b.usd - a.usd).slice(0, 30),
+    })).toSorted((a, b) => b.usd - a.usd).slice(0, 30),
     projectCount: intText(projects.size),
-    models: [...models.values()].sort(byUsd).slice(0, 30).map((m) => {
+    models: [...models.values()].toSorted(byUsd).slice(0, 30).map((m) => {
       const providers = [...m.providers].join(", ");
       const rate = m.rate;
       return {
@@ -576,7 +589,7 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     modelCount: intText(models.size),
     tasks: taskList.slice(0, 20).map((t) => {
       const days = t.first === t.last ? dayText(t.first) : `${dayText(t.first)} – ${dayText(t.last)}`;
-      const top = [...t.models.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
+      const top = [...t.models.entries()].toSorted((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
       const title = cleanTitle(t.ticket ? (t.prompt || t.label.replace(`${t.ticket} · `, "")) : t.label);
       return {
         detail: breakdownDetail(t.breakdown, { title: cleanTitle(t.prompt || t.label), ticket: t.ticket, project: t.project, usd: t.usd, tokens: t.tokens }),
@@ -591,9 +604,9 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     }),
     tasksNote: `${intText(tasks.size)} in ${range.label}`,
     facets: {
-      project: [...projectFacet.entries()].sort((a, b) => b[1].usd - a[1].usd).slice(0, 80)
+      project: [...projectFacet.entries()].toSorted((a, b) => b[1].usd - a[1].usd).slice(0, 80)
         .map(([value, f]) => ({ value, label: projectLabel(value), meta: usdText(f.usd) })),
-      model: [...modelFacet.entries()].sort((a, b) => b[1].usd - a[1].usd).slice(0, 80)
+      model: [...modelFacet.entries()].toSorted((a, b) => b[1].usd - a[1].usd).slice(0, 80)
         .map(([value, f]) => ({ value, label: value, detail: f.provider, meta: usdText(f.usd) })),
     },
     footnote: [

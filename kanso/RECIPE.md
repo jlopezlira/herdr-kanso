@@ -498,13 +498,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     lists its threads: the pinned ones first, in the order you drag them,
     then the rest in the order chosen with the order button at the top of
     the sidebar (a Popover over the list, a check on the current one,
-    remembered in panel.db `spaces.order`): last update (Herdr's `seq`,
+    remembered in kanso.db `spaces.order`): last update (Herdr's `seq`,
     the default, as in T3 Code), needs you first (blocked, done, working,
     idle, then last update), by kind (agents by their program, then
     shells, then the rest), as on screen (the strip's order, tab by tab,
     with the panes stacked in one column held together in one soft slab,
     `foreground` at 3%, radius 6), or your own order (drag an agent where
-    you want it; per space, panel.db `spaces.custom`; new ones
+    you want it; per space, kanso.db `spaces.custom`; new ones
     join at the end by last update). The pin is the `kanso.pin` label on
     the terminal (its number is its place; pinning adds it last among the
     pinned, a drag among the pinned renumbers them through `hc label`),
@@ -517,7 +517,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     in its state (11px `dim`, 28 wide, right-aligned): how long it has been
     working, waiting on you, or since it finished ("<1m", "4m", "2h", "3d";
     seen/idle: none). Done and idle are one phase, so looking at a finished
-    agent keeps its time. Stamps are kept in panel.db `spaces.since`
+    agent keeps its time. Stamps are kept in kanso.db `spaces.since`
     (address -> state and ms), taken every 0.5 s outside render; an agent
     first seen after a start takes its tab's `working_since` or
     `changed_at`, else shows no time. On hover the pin takes the time's
@@ -567,7 +567,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     14px of space under it;
     the chosen one on `raised` with a 1px `border`, semibold; a 6px
     `blocked` dot on Status while a space needs you and another view
-    shows; panel.db `spaces.view`: `spaces`, `agents`, `threads`). No
+    shows; kanso.db `spaces.view`: `spaces`, `agents`, `threads`). No
     caption: each view says how it is arranged by its shape.
   - Status and Threads mix projects, so each of their rows leads with the
     project's square (20px, radius 6, its avatar color at 18%, the initial
@@ -577,7 +577,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     Working, Done, Idle, Terminals (no status). A section's header (13px
     semibold; 44 tall with 12px above it, the first 32): the ensō of its
     state, its name (Needs you in `blocked`), its count in `dim`, a
-    chevron; it folds the section (panel.db `spaces.sections`). A
+    chevron; it folds the section (kanso.db `spaces.sections`). A
     parent and its sub-agents go together where the most urgent of them
     would; the done agent you are looking at stays in Done until you leave
     it. Within a section, by the sort button: latest change first (the
@@ -605,7 +605,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     (agents.js `threadSections`): Pinned (a pin glyph; by pin number),
     then the rest with no header, woken ones first, then by the sort
     button: your last message (else the last record; the default) or when
-    the conversation started (panel.db `spaces.threadOrder`); "Grouped
+    the conversation started (kanso.db `spaces.threadOrder`); "Grouped
     by project" (`spaces.threadGroup`) makes one section per project
     instead, headed by its square and name. Then Snoozed (a clock; by when
     they wake, showing that time) and Settled (a check; latest first),
@@ -636,7 +636,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     first, then by" and its orders; Status, "In each section, by"; Threads,
     "Threads, pinned first, then by" and "Grouped by project". Then a rule
     and "Show" with two checks, "What
-    each agent is on" (panel.db `spaces.activity`) and "Projects,
+    each agent is on" (kanso.db `spaces.activity`) and "Projects,
     Status and Threads" (`spaces.switch`; off, the view goes back to
     Projects).
   - Every terminal in the space is listed, not only the agents that report
@@ -776,10 +776,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     strip's columns; opening (tabkit.js, shared with kanso-sleep) runs
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
-  - `kanso-sleep`: a dialog (520 wide), asks nothing; names from
-    `kanso.names`. Keeps each pane's session and terminal (`sleep.db`),
-    /exit, closes it; Wake: `claude --resume <id>`. `kanso.asleep`: the
-    sidebar keeps each row in place (moon, no pane).
+  - `kanso-sleep`: a dialog (520 wide), asks nothing. Asleep is a status
+    in the left nav's `kanso.db` (kanso-spaces' kdb.js): session, space
+    id; /exit; Wake: `claude --resume <id>` there. `kanso.asleep`: a copy.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

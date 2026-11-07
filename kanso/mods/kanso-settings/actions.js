@@ -93,9 +93,10 @@ export function conflictsOf(all, chord, action) {
 // in that section that pointed at the same action when `replace` is on.
 export function rebound(doc, section, { drop = [], set = {}, replaceAction = null }) {
   const out = JSON.parse(JSON.stringify(doc));
-  const sec = out[section] ?? (out[section] = {});
-  for (const k of drop) delete sec[k];
-  if (replaceAction) for (const k of Object.keys(sec)) if (sec[k] === replaceAction) delete sec[k];
-  for (const [k, v] of Object.entries(set)) { delete sec[k]; sec[k] = v; }
-  return out;
+  const gone = new Set([...drop, ...Object.keys(set)]);
+  // The section's chords in their order, less the dropped ones, the set
+  // ones and (with `replaceAction`) the others bound to it; then the set
+  // ones, at the end, in the order given.
+  const kept = Object.entries(out[section] ?? {}).filter(([k, v]) => !gone.has(k) && !(replaceAction && v === replaceAction));
+  return { ...out, [section]: Object.fromEntries([...kept, ...Object.entries(set)]) };
 }

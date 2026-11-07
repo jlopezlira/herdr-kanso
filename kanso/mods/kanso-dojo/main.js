@@ -76,9 +76,8 @@ export default class Dojo extends View {
     const r = this.round, n = this.level.n;
     if (!r) return;
     this.round = null;
-    r.ms = Date.now() - r.at;
     this.record = kept && r.score > 0 && r.score > (this.bests[n] ?? 0);
-    this.over = { ...r, kept };
+    this.over = { ...r, ms: Date.now() - r.at, kept };
     this.pending = ""; this.say = null;
     if (this.level.world === "text") { this.snippet += 1; this.world = textWorld(this.snippet); this.at = { x: 0, y: 0 }; this.next(); }
     if (!kept) return;
@@ -119,14 +118,16 @@ export default class Dojo extends View {
     if (!ch || ch.length !== 1) return;
     this.light(ch.toLowerCase(), cx);
     const lv = this.level, p = this.pending;
-    let motion = null;
-    if (/^[ftFT]$/.test(p)) motion = p + ch;
-    else if (p === "g") { if (ch === "g") motion = "gg"; }
-    else if (/^\d+$/.test(p) && /[hjkl]/.test(ch)) motion = p + ch;
-    else if (lv.counts && /[1-9]/.test(ch)) { this.pending = (p + ch).slice(-1); cx.notify(); return; }
-    else if (ch === "g" && lv.motions.includes("gg")) { this.pending = "g"; cx.notify(); return; }
-    else if (/^[ftFT]$/.test(ch) && lv.motions.includes(ch)) { this.pending = ch; cx.notify(); return; }
-    else motion = ch;
+    // The key ends a motion, or is one, or waits for the next key (`wait`).
+    const step = /^[ftFT]$/.test(p) ? { motion: p + ch }
+      : p === "g" ? { motion: ch === "g" ? "gg" : null }
+      : /^\d+$/.test(p) && /[hjkl]/.test(ch) ? { motion: p + ch }
+      : lv.counts && /[1-9]/.test(ch) ? { wait: (p + ch).slice(-1) }
+      : ch === "g" && lv.motions.includes("gg") ? { wait: "g" }
+      : /^[ftFT]$/.test(ch) && lv.motions.includes(ch) ? { wait: ch }
+      : { motion: ch };
+    if ("wait" in step) { this.pending = step.wait; cx.notify(); return; }
+    const { motion } = step;
     this.pending = "";
     const base = motion.replace(/^[1-9]\d*/, "")[0] === "g" ? "gg" : motion.replace(/^[1-9]\d*/, "")[0];
     if (!lv.motions.includes(base)) {
@@ -147,12 +148,10 @@ export default class Dojo extends View {
     this.moves += 1;
     this.idleAt = Date.now();
     if (same(this.at, this.target)) {
-      const r = this.round, fine = this.moves <= this.need;
-      r.score += points(this.moves, this.need, r.streak);
-      r.hits += 1;
-      if (fine) { r.perfect += 1; r.streak += 1; r.longest = Math.max(r.longest, r.streak); } else r.streak = 0;
+      const r = this.round, fine = this.moves <= this.need, streak = fine ? r.streak + 1 : 0;
+      this.round = { ...r, score: r.score + points(this.moves, this.need, r.streak), hits: r.hits + 1, perfect: r.perfect + (fine ? 1 : 0), streak, longest: fine ? Math.max(r.longest, streak) : r.longest };
       this.last = { moves: this.moves, need: this.need, fine };
-      if (r.hits >= TARGETS) { this.endRound(cx); cx.notify(); return; }
+      if (this.round.hits >= TARGETS) { this.endRound(cx); cx.notify(); return; }
       this.next();
     }
     cx.notify();

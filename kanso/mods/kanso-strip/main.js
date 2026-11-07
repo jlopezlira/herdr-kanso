@@ -42,7 +42,8 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
-import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout } from "./layout.js";
+import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from "./layout.js";
+import { tryOr, tryOrAsync } from "./pure.js";
 
 // How many panes the view holds at once (`st.n`, 1 to 8; you choose). A new
 // column takes 1/n of the view; dragging the divider between two columns
@@ -193,19 +194,19 @@ export async function readDigest(cwd, run) {
     git("status", "--porcelain"), git("diff", "--shortstat", "HEAD"),
     git("rev-list", "--count", "@{upstream}..HEAD"), git("symbolic-ref", "--quiet", "--short", "HEAD")]);
   const files = (status ?? "").split("\n").filter((l) => l.trim()).length;
-  let ahead = upstream == null ? null : Number(upstream.trim()) || 0, pushed = upstream != null;
-  if (ahead == null) {
-    const base = await git("rev-list", "--count", "origin/HEAD..HEAD");
-    ahead = base == null ? 0 : Number(base.trim()) || 0;
-  }
-  let pr = null;
-  if (branch?.trim()) {
+  const pushed = upstream != null;
+  // Without an upstream, ahead of the default branch.
+  const aheadOfBase = async () => { const base = await git("rev-list", "--count", "origin/HEAD..HEAD"); return base == null ? 0 : Number(base.trim()) || 0; };
+  const ahead = pushed ? Number(upstream.trim()) || 0 : await aheadOfBase();
+  const prOf = async () => {
+    if (!branch?.trim()) return null;
     const out = await run("gh", ["pr", "view", "--json", "number,state,statusCheckRollup"], cwd);
-    try {
+    return tryOr(() => { // null: not a pull request
       const v = out ? JSON.parse(out) : null;
-      if (v?.number && v.state === "OPEN") pr = { number: v.number, state: v.state, checks: checksOf(v.statusCheckRollup) };
-    } catch { /* not a pull request */ }
-  }
+      return v?.number && v.state === "OPEN" ? { number: v.number, state: v.state, checks: checksOf(v.statusCheckRollup) } : null;
+    });
+  };
+  const pr = await prOf();
   return { files, ...parseShortstat(stat), ahead, pushed, pr };
 }
 
@@ -213,10 +214,11 @@ export async function readDigest(cwd, run) {
 export function digestTip(d) {
   if (!d) return "";
   const n = (k, one, many) => `${d[k]} ${d[k] === 1 ? one : many}`;
-  const parts = [];
-  if (d.files) parts.push(`${n("files", "changed file", "changed files")} (+${d.add} −${d.del})`);
-  if (d.ahead) parts.push(`${n("ahead", "commit", "commits")} ${d.pushed ? "not pushed" : "not on the default branch"}`);
-  if (d.pr) parts.push(`pull request #${d.pr.number}${d.pr.checks ? `, checks ${d.pr.checks}` : ""}`);
+  const parts = [
+    d.files ? `${n("files", "changed file", "changed files")} (+${d.add} −${d.del})` : null,
+    d.ahead ? `${n("ahead", "commit", "commits")} ${d.pushed ? "not pushed" : "not on the default branch"}` : null,
+    d.pr ? `pull request #${d.pr.number}${d.pr.checks ? `, checks ${d.pr.checks}` : ""}` : null,
+  ].filter((x) => x !== null);
   return parts.length ? `In its folder now: ${parts.join("; ")}.` : "";
 }
 
@@ -245,14 +247,14 @@ export default class Strip extends View {
     this.sets = [];
     // Scrolling writes the layout at most every WRITE_MS, however fast the wheel.
     this.seq = 0; // bumped by whatever changes the model outside render (see render's key)
-    cx.timer.every(WRITE_MS / 2, (cx) => { if (this.dirty) { this.dirty = false; this.seq++; cx.notify(); } });
+    cx.timer.every(WRITE_MS / 2, (cx) => { if (this.dirty) { this.dirty = false; this.seq += 1; cx.notify(); } });
     // A drag on one of Herdr's dividers changes the tree without telling us.
     cx.timer.every(150, (cx) => {
       // A pane let go where nothing takes drops (a gutter) is held until
       // the next press or move over a pane; failing those, it ends here.
       const held = shared("strip.drag");
       if (held && Date.now() - held.at > DRAG_MAX) endDrag();
-      if (this.adopt()) { this.seq++; cx.notify(); }
+      if (this.adopt()) { this.seq += 1; cx.notify(); }
     });
     // The headers' digests: read when an agent stops working.
     this.lastStatus = new Map();
@@ -260,10 +262,10 @@ export default class Strip extends View {
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
     cx.spawn(async (cx) => {
       for (;;) {
-        let c;
-        try { c = await nextCommand(); cx.notify(); } catch { break; } // a replaced build (hot reload, update) stops here, before acting
-        this.command(String(c).replace(/^kanso-strip\./, ""));
-        this.seq++;
+        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
+        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+        this.command(String(next.c).replace(/^kanso-strip\./, ""));
+        this.seq += 1;
         cx.notify();
       }
     });
@@ -656,50 +658,75 @@ export default class Strip extends View {
   }
 
   where(st, id) {
-    for (let ci = 0; ci < st.cols.length; ci++) {
-      const ri = st.cols[ci].panes.indexOf(id);
-      if (ri >= 0) return { ci, ri };
-    }
-    return null;
+    const ci = st.cols.findIndex((c) => c.panes.includes(id));
+    return ci < 0 ? null : { ci, ri: st.cols[ci].panes.indexOf(id) };
   }
 
   // Positions on the sliding row count only columns that aren't pinned; the
   // sliding view is what the pinned ones leave of the screen.
-  start(st, ci) { let s = 0; for (let i = 0; i < ci; i++) if (!st.cols[i].pin) s += st.cols[i].w; return s; }
+  start(st, ci) { return st.cols.slice(0, ci).reduce((s, c) => s + (c.pin ? 0 : c.w), 0); }
   total(st) { return st.cols.reduce((s, c) => s + (c.pin ? 0 : c.w), 0); }
+  // A tab's state is a value: every change below takes one and returns the
+  // next (its columns too are new where they change, never edited), and
+  // `commit` is the one place the next is kept, in place of the tab's old
+  // one. The headers read it from shared "strip.state", where save puts it.
+  commit(tab, st) {
+    this.state = { ...this.state, [tab]: st };
+    return st;
+  }
+
+  // A change from the minimap, made when it comes on the tab's state as it
+  // is then. `st` is the state it was drawn from, for a tab no longer kept.
+  edit(tab, st, fn) {
+    const now = this.state[tab];
+    const next = fn(now ?? st);
+    if (now) this.commit(tab, next);
+  }
+
   // Columns are kept in screen order: pinned left, the sliding row, pinned
   // right. A split or move that crosses a group lands at its edge.
   order(st) {
     const rank = (c) => (c.pin === "left" ? 0 : c.pin === "right" ? 2 : 1);
-    st.cols = st.cols.map((c, i) => [c, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([c]) => c);
+    return { ...st, cols: st.cols.map((c, i) => [c, i]).toSorted((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([c]) => c) };
   }
   // The sliding row: the unpinned columns with where they start and end.
+  // Gathered in runs of 64, so a long row is not copied once per column.
   row(st) {
-    const out = []; let x = 0;
-    st.cols.forEach((c, ci) => { if (!c.pin) { out.push({ ci, s: x, e: x + c.w }); x += c.w; } });
-    return out;
+    const RUN = 64;
+    const done = Array.from({ length: Math.ceil(st.cols.length / RUN) }, (_, r) => r).reduce((acc, r) => {
+      const run = st.cols.slice(r * RUN, (r + 1) * RUN).reduce((inner, c, k) => (c.pin
+        ? inner
+        : { x: inner.x + c.w, out: [...inner.out, { ci: r * RUN + k, s: inner.x, e: inner.x + c.w }] }),
+        { x: acc.x, out: [] });
+      return { x: run.x, runs: [...acc.runs, run.out] };
+    }, { x: 0, runs: [] });
+    return done.runs.flat();
   }
   pinnedW(st) { return st.cols.reduce((s, c) => s + (c.pin ? c.w : 0), 0); }
   viewW(st) { return Math.max(MIN_VIEW, 1 - this.pinnedW(st)); }
 
+  // The tab's state (the kept one, else a new one) with its columns matched
+  // to its panes now: the ones gone dropped, the new ones placed.
   sync(tab, ps) {
-    const st = this.state[tab] ?? { cols: [], vx: 0, n: shared("strip.n") ?? DEFAULT_N };
-    if (st.vx === undefined) st.vx = 0;
-    if (!st.n) st.n = shared("strip.n") ?? DEFAULT_N;
+    const was = this.state[tab] ?? { cols: [], vx: 0, n: shared("strip.n") ?? DEFAULT_N };
+    const withVx = was.vx === undefined ? { ...was, vx: 0 } : was;
+    const withN = !withVx.n ? { ...withVx, n: shared("strip.n") ?? DEFAULT_N } : withVx;
     const ids = new Set(ps.map((p) => p.pane));
-    st.cols = st.cols.map((c) => ({ ...c, panes: c.panes.filter((id) => ids.has(id)) })).filter((c) => c.panes.length);
-    for (const c of st.cols) if (c.hs) c.hs = Object.fromEntries(c.panes.filter((id) => id in c.hs).map((id) => [id, c.hs[id]]));
+    const st = { ...withN, cols: withN.cols.map((c) => {
+      const kept = c.panes.filter((id) => ids.has(id));
+      return c.hs ? { ...c, panes: kept, hs: Object.fromEntries(kept.filter((id) => id in c.hs).map((id) => [id, c.hs[id]])) } : { ...c, panes: kept };
+    }).filter((c) => c.panes.length) };
     const known = new Set(st.cols.flatMap((c) => c.panes));
     const fresh = ps.filter((p) => !known.has(p.pane));
-    if (fresh.length && !st.cols.length) {
-      // First sight of this tab: a lone pane fills the view; more sit side by side.
-      for (const p of fresh) st.cols.push({ panes: [p.pane], w: fresh.length === 1 ? 1 : newW(st) });
-    } else {
-      for (const p of fresh) { this.place(st, p.pane); st.focus = p.pane; this.pendingFocus = p.terminal; this.reveal(st, p.pane); }
-    }
-    this.order(st);
-    this.state[tab] = st;
-    return st;
+    // First sight of this tab: a lone pane fills the view; more sit side by side.
+    const placed = fresh.length && !st.cols.length
+      ? { ...st, cols: [...st.cols, ...fresh.map((p) => ({ panes: [p.pane], w: fresh.length === 1 ? 1 : newW(st) }))] }
+      : fresh.reduce((s, p) => {
+        const chosen = { ...this.place(s, p.pane), focus: p.pane };
+        this.pendingFocus = p.terminal;
+        return this.reveal(chosen, p.pane);
+      }, st);
+    return this.order(placed);
   }
 
   place(st, id) {
@@ -709,18 +736,20 @@ export default class Strip extends View {
     const dir = usable ? intent.dir : "right";
     const at = this.where(st, usable ? intent.from : st.focus) ?? { ci: st.cols.length - 1, ri: 0 };
     // Down or up: stacked in the same column, under or over the pane it came from.
-    if (dir === "down" || dir === "up") st.cols[at.ci].panes.splice(dir === "down" ? at.ri + 1 : at.ri, 0, id);
-    else st.cols.splice(dir === "left" ? at.ci : at.ci + 1, 0, { panes: [id], w: newW(st) });
+    if (dir === "down" || dir === "up") {
+      const col = st.cols[at.ci];
+      return { ...st, cols: st.cols.with(at.ci, { ...col, panes: col.panes.toSpliced(dir === "down" ? at.ri + 1 : at.ri, 0, id) }) };
+    }
+    return { ...st, cols: st.cols.toSpliced(dir === "left" ? at.ci : at.ci + 1, 0, { panes: [id], w: newW(st) }) };
   }
 
   // The view starts where a column starts: the last start at or before vx,
   // and never past the first start from which the rest of the row fits.
+  // (`tx`, kept by older builds, goes.)
   clampView(st) {
-    const row = this.row(st);
-    let at = 0;
-    for (const r of row) if (r.s <= Math.min(st.vx ?? 0, this.lastStart(st)) + EPS) at = r.s;
-    st.vx = at;
-    delete st.tx;
+    const most = Math.min(st.vx ?? 0, this.lastStart(st)) + EPS;
+    const { tx: _tx, ...rest } = st;
+    return { ...rest, vx: this.row(st).findLast((r) => r.s <= most)?.s ?? 0 };
   }
   lastStart(st) {
     const row = this.row(st), vw = this.viewW(st), total = this.total(st);
@@ -732,15 +761,19 @@ export default class Strip extends View {
   // to a column's start.
   reveal(st, id) {
     const at = this.where(st, id);
-    if (!at || st.cols[at.ci].pin) return; // a pinned pane is always in view
+    if (!at || st.cols[at.ci].pin) return st; // a pinned pane is always in view
     const row = this.row(st), vw = this.viewW(st);
     const me = row.find((r) => r.ci === at.ci);
-    if (!me) return;
-    const was = st.vx;
-    if (me.s < st.vx - EPS) st.vx = me.s;
-    else if (me.e > st.vx + vw + EPS) st.vx = (row.find((r) => me.e - r.s <= vw + EPS) ?? me).s;
-    if (st.vx !== was) this.dirty = true;
-    this.clampView(st);
+    if (!me) return st;
+    const vx = me.s < st.vx - EPS ? me.s
+      : me.e > st.vx + vw + EPS ? (row.find((r) => me.e - r.s <= vw + EPS) ?? me).s : st.vx;
+    if (vx !== st.vx) this.dirty = true;
+    return this.clampView(vx === st.vx ? st : { ...st, vx });
+  }
+
+  // The column at `ci` one step wider (W_STEPS, round again after the widest).
+  widen(st, ci) {
+    return { ...st, cols: st.cols.with(ci, { ...st.cols[ci], w: step(W_STEPS, st.cols[ci].w) }) };
   }
 
 
@@ -751,19 +784,18 @@ export default class Strip extends View {
   watchDigests(cx) {
     const store = shared(DIGEST) ?? {};
     const all = panes();
-    let next = null;
-    const drop = (id) => { next ??= { ...store }; delete next[id]; };
-    for (const p of all) {
-      if (!p.terminal || !p.cwd || !p.status) continue;
+    // Pane by pane, in order: a working one's digest goes, a stopped one's is read.
+    const working = all.filter((p) => p.terminal && p.cwd && p.status).flatMap((p) => {
       const was = this.lastStatus.get(p.pane);
       this.lastStatus.set(p.pane, p.status);
-      if (p.status === "working") { if (p.pane in store) drop(p.pane); continue; }
+      if (p.status === "working") return p.pane in store ? [p.pane] : [];
       if ((was === "working" || (was === undefined && !(p.pane in store))) && !this.digesting.has(p.pane)) this.digest(p, cx);
-    }
+      return [];
+    });
     const live = new Set(all.map((p) => p.pane));
-    for (const id of Object.keys(store)) if (!live.has(id)) drop(id);
+    const gone = new Set([...working, ...Object.keys(store).filter((id) => !live.has(id))]);
     for (const id of [...this.lastStatus.keys()]) if (!live.has(id)) this.lastStatus.delete(id);
-    if (next) setShared(DIGEST, next);
+    if (gone.size) setShared(DIGEST, Object.fromEntries(Object.entries(store).filter(([id]) => !gone.has(id))));
   }
 
   digest(p, cx) {
@@ -818,72 +850,81 @@ export default class Strip extends View {
     const tab = this.tab();
     const st = tab && this.state[tab];
     if (!st) return;
-    const ps = panes().filter((p) => p.tab === tab);
+    const next = this.commandOn(st, name, panes().filter((p) => p.tab === tab));
+    if (next !== st) this.commit(tab, next);
+  }
+
+  // What a strip command makes of the tab's state (`ps`: the tab's panes).
+  commandOn(st, name, ps) {
     const id = this.focusPane(ps) ?? (ps.some((p) => p.pane === st.focus) ? st.focus : null) ?? st.cols[0]?.panes[0] ?? null;
     const at = id && this.where(st, id);
     const go = (ci, ri) => {
       const col = st.cols[ci];
-      if (!col) return;
-      this.focusOn(st, col.panes[clamp(ri ?? 0, 0, col.panes.length - 1)], ps);
+      return col ? this.focusOn(st, col.panes[clamp(ri ?? 0, 0, col.panes.length - 1)], ps) : st;
     };
     const split = (dir) => {
-      if (!id) return;
-      setShared("strip.intent", { dir, from: id, at: Date.now() });
-      run("pane.split", { pane: id, direction: dir === "down" || dir === "up" ? "down" : "right" });
+      if (id) {
+        setShared("strip.intent", { dir, from: id, at: Date.now() });
+        run("pane.split", { pane: id, direction: dir === "down" || dir === "up" ? "down" : "right" });
+      }
+      return st;
     };
     switch (name) {
       // Left of the first column is the sidebar's list, as in vim.
-      case "go-left": if (at) { if (at.ci > 0) go(at.ci - 1, at.ri); else run("kanso-spaces.list"); } break;
-      case "go-right": if (at) go(at.ci + 1, at.ri); break;
-      case "go-up": if (at && at.ri > 0) go(at.ci, at.ri - 1); break;
-      case "go-down": if (at && at.ri < st.cols[at.ci].panes.length - 1) go(at.ci, at.ri + 1); break;
-      case "new-down": split("down"); break;
-      case "new-up": split("up"); break;
-      case "move-left": case "move-right":
-        if (at) {
-          const to = at.ci + (name === "move-left" ? -1 : 1);
-          if (to >= 0 && to < st.cols.length && !st.cols[at.ci].pin && !st.cols[to].pin) { [st.cols[at.ci], st.cols[to]] = [st.cols[to], st.cols[at.ci]]; this.reveal(st, id); }
-        }
-        break;
-      case "move-up": case "move-down":
-        if (at) {
-          const col = st.cols[at.ci].panes, to = at.ri + (name === "move-up" ? -1 : 1);
-          if (to >= 0 && to < col.length) { [col[at.ri], col[to]] = [col[to], col[at.ri]]; this.reveal(st, id); }
-        }
-        break;
-      case "new-right": split("right"); break;
-      case "new-left": split("left"); break;
-      case "close": if (id) run("pane.close", { pane: id }); break;
-      case "width": if (at) { st.cols[at.ci].w = step(W_STEPS, st.cols[at.ci].w); this.reveal(st, id); } break;
-      case "scroll-left": this.step(st, -1); break;
-      case "scroll-right": this.step(st, 1); break;
-      case "center": if (id) this.reveal(st, id); break;
-      case "pin": if (id) this.pin(st, id); break;
-      case "fit": this.fit(st, id); break;
-      case "more": this.setN(st, (st.n ?? DEFAULT_N) + 1, id); break;
-      case "fewer": this.setN(st, (st.n ?? DEFAULT_N) - 1, id); break;
-      case "first": go(0); break;
-      case "last": go(st.cols.length - 1); break;
+      case "go-left":
+        if (at && at.ci > 0) return go(at.ci - 1, at.ri);
+        if (at) run("kanso-spaces.list");
+        return st;
+      case "go-right": return at ? go(at.ci + 1, at.ri) : st;
+      case "go-up": return at && at.ri > 0 ? go(at.ci, at.ri - 1) : st;
+      case "go-down": return at && at.ri < st.cols[at.ci].panes.length - 1 ? go(at.ci, at.ri + 1) : st;
+      case "new-down": return split("down");
+      case "new-up": return split("up");
+      case "move-left": case "move-right": {
+        const to = at ? at.ci + (name === "move-left" ? -1 : 1) : -1;
+        if (!at || !(to >= 0 && to < st.cols.length && !st.cols[at.ci].pin && !st.cols[to].pin)) return st;
+        return this.reveal({ ...st, cols: st.cols.with(at.ci, st.cols[to]).with(to, st.cols[at.ci]) }, id);
+      }
+      case "move-up": case "move-down": {
+        const col = at ? st.cols[at.ci] : null, to = at ? at.ri + (name === "move-up" ? -1 : 1) : -1;
+        if (!at || !(to >= 0 && to < col.panes.length)) return st;
+        const swapped = col.panes.with(at.ri, col.panes[to]).with(to, col.panes[at.ri]);
+        return this.reveal({ ...st, cols: st.cols.with(at.ci, { ...col, panes: swapped }) }, id);
+      }
+      case "new-right": return split("right");
+      case "new-left": return split("left");
+      case "close": if (id) run("pane.close", { pane: id }); return st;
+      case "width": return at ? this.reveal(this.widen(st, at.ci), id) : st;
+      case "scroll-left": return this.step(st, -1);
+      case "scroll-right": return this.step(st, 1);
+      case "center": return id ? this.reveal(st, id) : st;
+      case "pin": return id ? this.pin(st, id) : st;
+      case "fit": return this.fit(st, id);
+      case "more": return this.setN(st, (st.n ?? DEFAULT_N) + 1, id);
+      case "fewer": return this.setN(st, (st.n ?? DEFAULT_N) - 1, id);
+      case "first": return go(0);
+      case "last": return go(st.cols.length - 1);
       default: {
         const n = /^col-(\d)$/.exec(name);
-        if (n) go(Number(n[1]) - 1);
+        const went = n ? go(Number(n[1]) - 1) : st;
         const per = /^per-(\d)$/.exec(name);
-        if (per) this.setN(st, Number(per[1]), id);
+        return per ? this.setN(went, Number(per[1]), id) : went;
       }
     }
   }
 
-  // Choose how many panes fit in the view; every column becomes 1/n wide.
+  // Choose how many panes fit in the view; every column becomes 1/n wide
+  // (a pinned pane keeps its width) and every stack shares its height evenly.
   setN(st, n, keep) {
-    st.n = clamp(Math.round(n), 1, N_MAX);
-    setShared("strip.n", st.n);
-    for (const c of st.cols) { if (!c.pin) c.w = 1 / st.n; delete c.hs; } // a pinned pane keeps its width
-    this.clampView(st);
-    if (keep) this.reveal(st, keep);
+    const per = clamp(Math.round(n), 1, N_MAX);
+    setShared("strip.n", per);
+    const cols = st.cols.map(({ hs: _hs, ...c }) => (c.pin ? c : { ...c, w: 1 / per }));
+    const even = this.clampView({ ...st, n: per, cols });
+    return keep ? this.reveal(even, keep) : even;
   }
 
   // Even out the columns to the current count without changing it.
-  fit(st, keep) { this.setN(st, st.n ?? DEFAULT_N, keep); }
+  fit(st, keep) { return this.setN(st, st.n ?? DEFAULT_N, keep); }
 
   // ---- Resizing: Herdr's own dividers --------------------------------------------
   // The boundaries between columns and between stacked panes are Herdr's
@@ -891,13 +932,10 @@ export default class Strip extends View {
   // sizes have stayed put for SETTLE ms, this reads them back and turns them
   // into shares, so the next tree the strip writes keeps what you dragged.
   sizesOf(nodes) {
-    const sig = {};
-    for (const n of nodes) {
-      if (!this.isCol(n)) continue;
-      sig[n.id] = n.size ?? null;
-      if (String(n.id).startsWith("strip-col-")) for (const c of n.children ?? []) sig[c.id] = c.size ?? null;
-    }
-    return sig;
+    return Object.fromEntries(nodes.filter((n) => this.isCol(n)).flatMap((n) => [
+      [n.id, n.size ?? null],
+      ...(String(n.id).startsWith("strip-col-") ? (n.children ?? []).map((c) => [c.id, c.size ?? null]) : []),
+    ]));
   }
   isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge") && !id.startsWith("strip-ruler"); }
 
@@ -931,20 +969,24 @@ export default class Strip extends View {
       const free = Math.max(0, total - fixed);
       return new Map(nodes.map((n) => [n.id, n.size?.px ?? free * (n.size?.weight ?? 1) / wsum]));
     };
-    let changed = false;
-    for (const c of inTree) {
+    // Every column in the tree takes what was dragged (each one, none
+    // skipped), as a new column where it moved; whether any moved.
+    const fit = (c) => {
       const n = colNodes.find((k) => k.id === nodeId(c));
       const w = clamp(width(c) / span * sumW, MIN_W, 1);
-      if (Math.abs(w - c.w) > EPS) { c.w = w; changed = true; }
-      if (c.panes.length > 1 && n.children) {
-        const hs = pxOf(n.children, H, GAP);
-        const tot = c.panes.reduce((s, id) => s + (hs.get(`strip-${id}`) ?? 0), 0) || 1;
-        const next = Object.fromEntries(c.panes.map((id) => [id, (hs.get(`strip-${id}`) ?? 0) / tot]));
-        if (JSON.stringify(next) !== JSON.stringify(c.hs ?? null)) { c.hs = next; changed = true; }
-      }
-    }
+      const wider = Math.abs(w - c.w) > EPS;
+      const sized = wider ? { ...c, w } : c;
+      if (!(c.panes.length > 1 && n.children)) return { col: sized, moved: wider };
+      const hs = pxOf(n.children, H, GAP);
+      const tot = c.panes.reduce((s, id) => s + (hs.get(`strip-${id}`) ?? 0), 0) || 1;
+      const next = Object.fromEntries(c.panes.map((id) => [id, (hs.get(`strip-${id}`) ?? 0) / tot]));
+      const taller = JSON.stringify(next) !== JSON.stringify(c.hs ?? null);
+      return { col: taller ? { ...sized, hs: next } : sized, moved: wider || taller };
+    };
+    const dragged = new Set(inTree);
+    const fitted = st.cols.map((c) => (dragged.has(c) ? fit(c) : { col: c, moved: false }));
     this.drift = null;
-    if (changed) this.clampView(st);
+    if (fitted.some((f) => f.moved)) this.commit(tab, this.clampView({ ...st, cols: fitted.map((f) => f.col) }));
     // Write the tree again either way: weights in place of the px the drag
     // left, so the row keeps filling the view when the window changes.
     this.applied = null;
@@ -953,51 +995,45 @@ export default class Strip extends View {
 
   // Wheel travel adds up; a quarter of the view moves the view one column.
   slide(st, d) {
-    st.acc = (st.acc ?? 0) + d;
-    if (Math.abs(st.acc) < WHEEL_STEP) return;
-    const dir = st.acc > 0 ? 1 : -1;
-    st.acc = 0;
-    this.step(st, dir);
+    const summed = { ...st, acc: (st.acc ?? 0) + d };
+    if (Math.abs(summed.acc) < WHEEL_STEP) return summed;
+    const dir = summed.acc > 0 ? 1 : -1;
+    return this.step({ ...summed, acc: 0 }, dir);
   }
 
   // Moves the view one column; the focus follows if its pane left the view,
   // to the nearest pane still in view.
   step(st, dir) {
     const row = this.row(st);
-    if (!row.length) return;
-    let k = row.findIndex((r) => Math.abs(r.s - st.vx) < EPS);
-    if (k < 0) k = 0;
-    k = clamp(k + dir, 0, row.length - 1);
+    if (!row.length) return st;
+    const k = clamp(Math.max(0, row.findIndex((r) => Math.abs(r.s - st.vx) < EPS)) + dir, 0, row.length - 1);
     const to = Math.min(row[k].s, this.lastStart(st));
-    if (Math.abs(to - st.vx) < EPS) return;
-    st.vx = to;
+    if (Math.abs(to - st.vx) < EPS) return st;
+    const moved = { ...st, vx: to };
     this.dirty = true;
     this.slidAt = Date.now();
-    const shown = new Set(this.shownCols(st));
-    const at = this.where(st, st.focus);
-    if (at && (st.cols[at.ci].pin || shown.has(at.ci))) return;
-    let best = null;
-    for (const ci of shown) if (best === null || Math.abs(ci - (at?.ci ?? 0)) < Math.abs(best - (at?.ci ?? 0))) best = ci;
-    if (best === null) return;
-    const id = st.cols[best].panes[0];
+    const shown = new Set(this.shownCols(moved));
+    const at = this.where(moved, moved.focus);
+    if (at && (moved.cols[at.ci].pin || shown.has(at.ci))) return moved;
+    const best = [...shown].reduce((b, ci) => (b === null || Math.abs(ci - (at?.ci ?? 0)) < Math.abs(b - (at?.ci ?? 0)) ? ci : b), null);
+    if (best === null) return moved;
+    const id = moved.cols[best].panes[0];
     const p = panes().find((q) => q.pane === id);
-    st.focus = id; st.lastSeen = id;
     if (p?.terminal) this.pendingFocus = p.terminal;
+    return { ...moved, focus: id, lastSeen: id };
   }
 
   // Which columns (indices) the view shows whole from vx: as many as fit, and
   // always the first.
   shownCols(st) {
     const row = this.row(st), vw = this.viewW(st);
-    let k = row.findIndex((r) => Math.abs(r.s - st.vx) < EPS);
-    if (k < 0) k = 0;
-    const out = []; let used = 0;
-    for (let i = k; i < row.length; i++) {
-      const c = st.cols[row[i].ci];
-      if (out.length && used + c.w > vw + EPS) break;
-      out.push(row[i].ci); used += c.w;
-    }
-    return out;
+    const k = Math.max(0, row.findIndex((r) => Math.abs(r.s - st.vx) < EPS));
+    // From k on, while the next still fits (`full` once one doesn't).
+    return row.slice(k).reduce((acc, r) => {
+      const c = st.cols[r.ci];
+      if (acc.full || (acc.out.length && acc.used + c.w > vw + EPS)) return { ...acc, full: true };
+      return { out: [...acc.out, r.ci], used: acc.used + c.w, full: false };
+    }, { out: [], used: 0, full: false }).out;
   }
 
 
@@ -1013,16 +1049,15 @@ export default class Strip extends View {
     this.lastTab = tab;
     const f = focused();
     const p = f?.pane && ps.find((q) => q.pane === f.pane);
-    if (!p?.terminal) return;
+    if (!p?.terminal) return st;
     // Herdr's own focus doesn't follow the blocks, so it only moves when
     // something chose a pane: then that pane is the choice. Otherwise only
     // coming to the tab counts, so a side panel you click keeps the keyboard.
     const moved = st.model != null && f.pane !== st.model;
-    st.model = f.pane;
-    if (!entered && !moved) return;
-    const id = !moved && ps.some((q) => q.pane === st.focus) ? st.focus : f.pane;
-    st.lastSeen = id; // not a new choice: nothing to slide for
-    this.focusOn(st, id, ps);
+    const noted = { ...st, model: f.pane };
+    if (!entered && !moved) return noted;
+    const id = !moved && ps.some((q) => q.pane === noted.focus) ? noted.focus : f.pane;
+    return this.focusOn({ ...noted, lastSeen: id }, id, ps); // not a new choice: nothing to slide for
   }
 
   // Pins the pane's column to the side of the view it is on now, or lets a
@@ -1030,48 +1065,53 @@ export default class Strip extends View {
   // slide is refused.
   pin(st, id) {
     const at = this.where(st, id);
-    if (!at) return;
+    if (!at) return st;
     const c = st.cols[at.ci];
-    if (c.pin) { delete c.pin; this.reveal(st, id); this.dirty = true; return; }
-    if (1 - this.pinnedW(st) - c.w < MIN_VIEW) return;
+    if (c.pin) {
+      const { pin: _pin, ...free } = c;
+      const freed = this.reveal({ ...st, cols: st.cols.with(at.ci, free) }, id);
+      this.dirty = true;
+      return freed;
+    }
+    if (1 - this.pinnedW(st) - c.w < MIN_VIEW) return st;
     const left = this.start(st, at.ci) + c.w / 2 - st.vx < this.viewW(st) / 2;
-    c.pin = left ? "left" : "right";
-    this.order(st);
-    this.clampView(st);
+    const pinned = this.clampView(this.order({ ...st, cols: st.cols.with(at.ci, { ...c, pin: left ? "left" : "right" }) }));
     this.dirty = true;
+    return pinned;
   }
 
   focusOn(st, id, ps) {
     const p = ps.find((q) => q.pane === id);
-    if (!p) return;
-    st.focus = id;
-    this.reveal(st, id);
+    if (!p) return st;
+    const shown = this.reveal({ ...st, focus: id }, id);
     this.pendingFocus = p.terminal;
+    return shown;
   }
 
   request(st, ps) {
     const req = shared("strip.req");
-    if (!req || req.n === this.lastReq) return;
+    if (!req || req.n === this.lastReq) return st;
     this.lastReq = req.n;
     if (shared("strip.ack") !== req.n) setShared("strip.ack", req.n);
-    if (req.op === "scroll") this.slide(st, req.d);
-    else if (req.op === "focus") this.focusOn(st, req.pane, ps);
-    else if (req.op === "width") {
+    if (req.op === "scroll") return this.slide(st, req.d);
+    if (req.op === "focus") return this.focusOn(st, req.pane, ps);
+    if (req.op === "width") {
       const at = this.where(st, req.pane);
-      if (at) { st.cols[at.ci].w = step(W_STEPS, st.cols[at.ci].w); this.reveal(st, req.pane); }
+      return at ? this.reveal(this.widen(st, at.ci), req.pane) : st;
     }
-    else if (req.op === "per") this.setN(st, req.n, st.focus);
+    if (req.op === "per") return this.setN(st, req.n, st.focus);
     // An arrangement just opened: its columns' widths and panes per view.
-    else if (req.op === "widths") {
-      if (req.per) st.n = clamp(req.per, 1, N_MAX);
-      for (const c of req.cols ?? []) { const at = this.where(st, c.pane); if (at && c.w > 0) st.cols[at.ci].w = clamp(c.w, MIN_W, 1); }
-      this.clampView(st);
+    if (req.op === "widths") {
+      const per = req.per ? { ...st, n: clamp(req.per, 1, N_MAX) } : st;
+      const sized = (req.cols ?? []).reduce((s, c) => {
+        const at = this.where(s, c.pane);
+        return at && c.w > 0 ? { ...s, cols: s.cols.with(at.ci, { ...s.cols[at.ci], w: clamp(c.w, MIN_W, 1) }) } : s;
+      }, per);
+      return this.clampView(sized);
     }
-    else if (req.op === "pin") this.pin(st, req.pane);
-    else if (req.op === "move") {
-      this.move(st, req.pane, req.to, req.side);
-      this.focusOn(st, req.pane, ps);
-    }
+    if (req.op === "pin") return this.pin(st, req.pane);
+    if (req.op === "move") return this.focusOn(this.move(st, req.pane, req.to, req.side), req.pane, ps);
+    return st;
   }
 
   // A pane dragged onto another lands as its own column before or after
@@ -1082,21 +1122,25 @@ export default class Strip extends View {
   // its column (any number can stack; the layout's 90px minimum is the limit).
   move(st, id, to, side) {
     const from = this.where(st, id), target = this.where(st, to);
-    if (!from || !target || id === to) return;
+    if (!from || !target || id === to) return st;
     const into = side === "above" || side === "below";
-    if (!into && from.ci === target.ci && st.cols[from.ci].panes.length === 1) return;
+    if (!into && from.ci === target.ci && st.cols[from.ci].panes.length === 1) return st;
     // A pinned pane never changes place, and nothing lands among the pinned
     // (stacking under a pinned pane is fine: the column keeps its place).
-    if (st.cols[from.ci].pin || (st.cols[target.ci].pin && !into)) return;
+    if (st.cols[from.ci].pin || (st.cols[target.ci].pin && !into)) return st;
     const col = st.cols[from.ci];
     const after = side ? side === "after" : from.ci < target.ci;
-    col.panes.splice(from.ri, 1);
-    if (!col.panes.length) st.cols.splice(from.ci, 1);
-    const t = this.where(st, to);
-    if (into) { const c = st.cols[t.ci]; c.panes.splice(side === "above" ? t.ri : t.ri + 1, 0, id); if (c.hs) delete c.hs; }
-    else st.cols.splice(after ? t.ci + 1 : t.ci, 0, { panes: [id], w: col.w });
-    this.order(st);
-    this.clampView(st);
+    // Out of its column first (a column left empty goes), then in where it lands.
+    const left = col.panes.toSpliced(from.ri, 1);
+    const out = { ...st, cols: left.length ? st.cols.with(from.ci, { ...col, panes: left }) : st.cols.toSpliced(from.ci, 1) };
+    const t = this.where(out, to);
+    const stack = (c) => {
+      const { hs: _hs, ...even } = c; // stacked anew: the panes share the height evenly
+      return { ...(c.hs ? even : c), panes: c.panes.toSpliced(side === "above" ? t.ri : t.ri + 1, 0, id) };
+    };
+    const landed = into ? { ...out, cols: out.cols.with(t.ci, stack(out.cols[t.ci])) }
+      : { ...out, cols: out.cols.toSpliced(after ? t.ci + 1 : t.ci, 0, { panes: [id], w: col.w }) };
+    return this.clampView(this.order(landed));
   }
 
   // ---- The tree ----------------------------------------------------------------
@@ -1134,9 +1178,11 @@ export default class Strip extends View {
     this.shown = new Set(shown);
     const k = row.findIndex((r) => r.ci === shown[0]);
     const after = k + shown.length;
-    const out = shown.map((ci) => whole(st.cols[ci]));
-    if (k > 0) out.unshift(edge(row[k - 1].ci, "left", row.slice(0, k)));
-    if (after < row.length) out.push(edge(row[after].ci, "right", row.slice(after)));
+    const out = [
+      ...(k > 0 ? [edge(row[k - 1].ci, "left", row.slice(0, k))] : []),
+      ...shown.map((ci) => whole(st.cols[ci])),
+      ...(after < row.length ? [edge(row[after].ci, "right", row.slice(after))] : []),
+    ];
     // Pinned columns stay at their side, in their order, always whole.
     const pinned = (side) => st.cols.filter((c) => c.pin === side).map(whole);
     // The height ruler, 1px wide and fixed, stands at the start: Herdr's
@@ -1168,7 +1214,7 @@ export default class Strip extends View {
     // The coalescing above allows 30 writes in 3 s; more means something
     // got past it and is rewriting the tree in a loop.
     if (this.sets.length > 3000 / WRITE_MS) { this.halted = now; return false; }
-    this.sets.push(now);
+    this.sets = [...this.sets, now];
     this.writing = true;
     try {
       this.applied = text;
@@ -1178,9 +1224,8 @@ export default class Strip extends View {
       setShared(STRIP_INTENT, { nodes, sizesBefore: this.sizesOf(body.children) });
       const at = Math.max(0, body.children.findIndex(mine));
       const rest = body.children.filter((n) => !mine(n));
-      body.children = [...rest.slice(0, at), ...nodes, ...rest.slice(at)];
-      paintLayout(tree, { nodes: false }); // the columns are in place: the panel and the rail
-      run("layout.set", { layout: tree });
+      const placed = changeLayout(tree, "work-body", (b) => ({ ...b, children: [...rest.slice(0, at), ...nodes, ...rest.slice(at)] }));
+      run("layout.set", { layout: paintLayout(placed, { nodes: false }) }); // the columns are in place: the panel and the rail
     } catch { this.halted = now; this.applied = null; return false; }
     finally { this.writing = false; }
     return true;
@@ -1188,7 +1233,8 @@ export default class Strip extends View {
 
   save() {
     const tabs = new Set(spaces().flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
-    for (const id of Object.keys(this.state)) if (!tabs.has(id)) delete this.state[id];
+    // Tabs that are gone go (a new object only when one has).
+    if (!Object.keys(this.state).every((id) => tabs.has(id))) this.state = Object.fromEntries(Object.entries(this.state).filter(([id]) => tabs.has(id)));
     const text = JSON.stringify(this.state);
     if (text !== this.saved) { this.saved = text; setShared(KEY, JSON.parse(text)); }
     // Measurements of panes that are gone go too.
@@ -1203,8 +1249,40 @@ export default class Strip extends View {
 
   // ---- Drawing -----------------------------------------------------------------
 
-  wheel(ev, st) {
-    this.slide(st, wheelDelta(ev) / WHEEL_PX);
+  wheel(ev, tab, st) {
+    this.edit(tab, st, (now) => this.slide(now, wheelDelta(ev) / WHEEL_PX));
+  }
+
+  // The model again, on what render's key names: the tab's columns synced
+  // to its panes, the focus followed, the tree written. The tab's state,
+  // kept (commit) before the tree is built from it.
+  refresh(tab, ps, key, drag) {
+    this.lastKey = key;
+    const asked = this.request(this.sync(tab, ps), ps);
+    const kept = this.keepKeyboard(tab, asked, ps);
+    const now = this.focusPane(ps);
+    // A focus change right after a slide is the slide's own doing: don't
+    // slide back to it.
+    const seen = now && now !== kept.lastSeen ? { ...kept, lastSeen: now } : kept;
+    const followed = seen !== kept && Date.now() - (this.slidAt ?? 0) > 600 ? this.reveal({ ...seen, focus: now }, now) : seen;
+    const clamped = this.clampView(followed);
+    // Sorting while one of this tab's panes is held; when it ends, the
+    // keyboard goes back to the pane that had it (its terminal was away).
+    const sorting = Boolean(drag) && ps.some((p) => p.pane === drag.pane);
+    const ended = this.sorting && !sorting;
+    if (ended && shared("strip.drop")) setShared("strip.drop", null);
+    const st = this.commit(tab, ended ? this.focusOn(clamped, clamped.focus, ps) : clamped);
+    this.sorting = sorting;
+    this.apply(this.build(st, ps, sorting));
+    this.save();
+
+    if (this.pendingFocus) {
+      if (showsTerminal(walkLayout(layout(), "work-body"), this.pendingFocus)) {
+        run("pane.focus", { terminal: this.pendingFocus });
+        this.pendingFocus = null;
+      }
+    }
+    return st;
   }
 
   render() {
@@ -1227,35 +1305,7 @@ export default class Strip extends View {
     const f = focused(), drag = shared("strip.drag");
     const key = [tab, ps.map((p) => `${p.pane}:${p.terminal}`).join(","), f?.pane ?? "", f?.terminal ?? "", drag?.pane ?? "",
       shared("strip.req")?.n ?? "", shared("strip.intent")?.at ?? "", this.seq].join("|");
-    let st = this.state[tab];
-    if (key !== this.lastKey || this.pendingFocus || !st) {
-      this.lastKey = key;
-      st = this.sync(tab, ps);
-      this.request(st, ps);
-      this.keepKeyboard(tab, st, ps);
-      const now = this.focusPane(ps);
-      // A focus change right after a slide is the slide's own doing: don't
-      // slide back to it.
-      if (now && now !== st.lastSeen) {
-        st.lastSeen = now;
-        if (Date.now() - (this.slidAt ?? 0) > 600) { st.focus = now; this.reveal(st, now); }
-      }
-      this.clampView(st);
-      // Sorting while one of this tab's panes is held; when it ends, the
-      // keyboard goes back to the pane that had it (its terminal was away).
-      const sorting = Boolean(drag) && ps.some((p) => p.pane === drag.pane);
-      if (this.sorting && !sorting) { if (shared("strip.drop")) setShared("strip.drop", null); this.focusOn(st, st.focus, ps); }
-      this.sorting = sorting;
-      this.apply(this.build(st, ps, sorting));
-      this.save();
-
-      if (this.pendingFocus) {
-        if (showsTerminal(walkLayout(layout(), "work-body"), this.pendingFocus)) {
-          run("pane.focus", { terminal: this.pendingFocus });
-          this.pendingFocus = null;
-        }
-      }
-    }
+    const st = key !== this.lastKey || this.pendingFocus || !this.state[tab] ? this.refresh(tab, ps, key, drag) : this.state[tab];
 
     // Minimap: one soft pill per column, as wide as its share of the view, no
     // frame. In view `muted`, off-screen `input`, the focused one
@@ -1266,7 +1316,7 @@ export default class Strip extends View {
       // A stacked column shows one thin bar per pane.
       const w = Math.round(6 + c.w * 18), k = c.panes.length;
       return v_flex().id(`strip-mark-${i}`).h(14).px(1).gap(1).flex_none().justify_center().cursor_pointer()
-        .on_click(() => { this.focusOn(st, c.panes[0], ps); this.dirty = true; })
+        .on_click(() => { this.edit(tab, st, (now) => this.focusOn(now, c.panes[0], ps)); this.dirty = true; })
         .children(c.panes.map((id, r) => div().id(`strip-cell-${id}`).w(w).h(k > 1 ? 2 : 4).rounded_full()
           .bg(at?.ci === i && at?.ri !== r ? t.muted : tone)));
     });
@@ -1280,12 +1330,12 @@ export default class Strip extends View {
       .child(label);
     return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()
       .on_mouse_up("left", () => { if (shared("strip.drag")) endDrag(); }) // a held pane let go here goes back
-      .on_scroll_wheel((ev) => this.wheel(ev, st))
+      .on_scroll_wheel((ev) => this.wheel(ev, tab, st))
       .children(pills)
       .child(div().w(8))
-      .child(tiny("strip-fewer", "\u2212", "Fewer panes per view", () => this.setN(st, n - 1, st.focus)))
+      .child(tiny("strip-fewer", "\u2212", "Fewer panes per view", () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
       .child(div().id("strip-n").text_size(11).text_color(t.muted).tooltip(`${n} per view · click to even out`).cursor_pointer()
-        .on_click(() => { this.fit(st, st.focus); this.dirty = true; }).child(String(n)))
-      .child(tiny("strip-more", "+", "More panes per view", () => this.setN(st, n + 1, st.focus)));
+        .on_click(() => { this.edit(tab, st, (now) => this.fit(now, now.focus)); this.dirty = true; }).child(String(n)))
+      .child(tiny("strip-more", "+", "More panes per view", () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
   }
 }

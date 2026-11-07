@@ -14,6 +14,7 @@ import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, l
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
+import { tryOr, tryOrAsync } from "./pure.js";
 
 // The folder name: change it here if you install the mod under another name.
 const MOD = "kanso-spend";
@@ -56,7 +57,7 @@ function parseRuntimeNode(raw) {
 
 function projectName(value) {
   const text = String(value ?? "").replace(/[\\/]+$/, "");
-  return text.split(/[\\/]/).pop() || text || "Unknown project";
+  return text.split(/[\\/]/).at(-1) || text || "Unknown project";
 }
 
 /**
@@ -66,15 +67,15 @@ function projectName(value) {
  */
 function hiddenInLayout() {
   try {
-    const path = [];
-    const walk = (node) => {
-      path.push(node);
-      if (node?.content?.mod === MOD) return true;
-      for (const child of node?.children ?? []) if (walk(child)) return true;
-      path.pop();
-      return false;
+    // The nodes from the root down to this mod's block, depth first, the
+    // first match only; null when the block is not in the layout.
+    const pathTo = (node) => {
+      if (node?.content?.mod === MOD) return [node];
+      const below = (node?.children ?? []).reduce((found, child) => found ?? pathTo(child), null);
+      return below ? [node, ...below] : null;
     };
-    if (!walk(layout())) return false; // a pane or overlay: shown whenever it runs
+    const path = pathTo(layout());
+    if (!path) return false; // a pane or overlay: shown whenever it runs
     return path.some((node, index) => node.hidden
       || (node.type === "stack" && node.active && path[index + 1] && node.active !== path[index + 1].id));
   } catch {
@@ -128,13 +129,13 @@ export default class TokenSpend extends View {
 
     this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
-        let command;
-        try {
-          command = await nextCommand();
-          commandCx.notify(); // a replaced build (hot reload, update) stops here, before acting
-        } catch {
-          break;
-        }
+        const next = await tryOrAsync(async () => {
+          const command = await nextCommand();
+          commandCx.notify();
+          return { command };
+        });
+        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+        const { command } = next;
         const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
         if (name === "refresh") this.run("snapshot", commandCx);
         else if (name === "open") this.wake(commandCx);
@@ -217,10 +218,11 @@ export default class TokenSpend extends View {
     if (this.closed || !this.nodeBinary) return;
     if (this.running) {
       if (command === "configure") this.queuedSources = extra;
-      this.queued[command === "configure" ? "snapshot" : command] = true;
+      this.queued = { ...this.queued, [command === "configure" ? "snapshot" : command]: true };
       return;
     }
-    const generation = ++this.generation;
+    this.generation += 1;
+    const generation = this.generation;
     const sent = this.options();
     this.running = command;
     if (command === "snapshot") this.lastSnapshotAt = Date.now();
@@ -235,34 +237,45 @@ export default class TokenSpend extends View {
     });
 
     this.task = cx.spawn(async (taskCx) => {
-      let failure = null;
-      let payload = null;
-      try {
-        const result = await exec(this.nodeBinary, [
-          `${appHome()}/${PRESENTER_FILE}`, command,
-          "--store", `${appHome()}/${DATA_DIR}/store.json`,
-          "--home", home(),
-          "--options", JSON.stringify(sent),
-          ...(command === "configure" ? ["--sources", JSON.stringify(extra ?? {})] : []),
-        ]);
-        if (result.code !== 0) throw new Error(resultError(result));
-        payload = JSON.parse(String(result.stdout ?? ""));
-        if (payload?.kind !== PAYLOAD_KIND || payload.version !== PAYLOAD_VERSION || !payload.costs) {
-          throw new Error("Spend got an answer it does not understand. Reload the panel.");
-        }
-      } catch (error) {
-        failure = sanitizeError(error);
-      }
+      // A payload that parses but is not one this view knows still comes back
+      // with its failure, as it always has: the view keeps what it can use.
+      const { payload, failure } = await this.ask(command, sent, extra).then(
+        (answer) => ({
+          payload: answer,
+          failure: answer?.kind !== PAYLOAD_KIND || answer.version !== PAYLOAD_VERSION || !answer.costs
+            ? "Spend got an answer it does not understand. Reload the panel."
+            : null,
+        }),
+        (error) => ({ payload: null, failure: sanitizeError(error) }),
+      );
       if (generation !== this.generation || this.closed) return;
       if (payload) {
         this.scan = payload.scan ?? this.scan;
         if (this.awake) this.costs = payload.costs;
         if (payload.settings) this.settings = payload.settings;
         // Filters changed while this ran: price again with the current ones.
-        if (JSON.stringify(sent.cost) !== JSON.stringify(this.cost)) this.queued.prepare = true;
+        if (JSON.stringify(sent.cost) !== JSON.stringify(this.cost)) this.queued = { ...this.queued, prepare: true };
       }
       this.finish(taskCx, failure);
     });
+  }
+
+  /**
+   * The presenter's answer to one command, parsed; a failed run throws.
+   * Node 22 calls node:sqlite experimental on every run; that notice is kept
+   * out of the stderr an error is read from.
+   */
+  async ask(command, sent, extra) {
+    const result = await exec(this.nodeBinary, [
+      "--disable-warning=ExperimentalWarning",
+      `${appHome()}/${PRESENTER_FILE}`, command,
+      "--store", `${appHome()}/${DATA_DIR}/store.json`,
+      "--home", home(),
+      "--options", JSON.stringify(sent),
+      ...(command === "configure" ? ["--sources", JSON.stringify(extra ?? {})] : []),
+    ]);
+    if (result.code !== 0) throw new Error(resultError(result));
+    return JSON.parse(String(result.stdout ?? ""));
   }
 
   finish(cx, failure) {
@@ -279,7 +292,7 @@ export default class TokenSpend extends View {
         if (sources) this.run("configure", cx, sources);
         else this.run("snapshot", cx);
       } else if (this.queued.prepare) {
-        this.queued.prepare = false;
+        this.queued = { ...this.queued, prepare: false };
         this.run("prepare", cx);
       } else if (this.scan?.partial && !failure && this.awake) {
         // The first scan is time-boxed; keep going until it has read everything.
@@ -362,9 +375,12 @@ export default class TokenSpend extends View {
     cx.spawn(async (saveCx) => {
       try {
         const before = await readTextFile(file);
-        let data = {};
-        try { data = before ? JSON.parse(before) : {}; } catch { data = {}; }
-        data.plans = plans;
+        // Unreadable JSON starts over. JSON that is null or a plain value
+        // cannot take a plans key, so the save fails; an array is written back
+        // as it was (a key on an array never reaches its JSON), as it always was.
+        const kept = tryOr(() => (before ? JSON.parse(before) : {}), {});
+        if (!kept || typeof kept !== "object") throw new TypeError("prices.json is not a JSON object.");
+        const data = Array.isArray(kept) ? kept : { ...kept, plans };
         await writeTextFile(file, `${JSON.stringify(data, null, 2)}\n`, before);
         this.settingsNote = plans.length ? `Saved ${plans.length} ${plans.length === 1 ? "plan" : "plans"}.` : "Saved. No plans.";
         this.run("prepare", saveCx);
@@ -399,10 +415,9 @@ export default class TokenSpend extends View {
     const c = tokens(theme());
     const narrow = (this.width || 960) < 560;
     const top = this.stack[this.stack.length - 1];
-    let body;
-    if (this.page === "settings") body = this.settingsView(c);
-    else if (top?.kind === "task") body = this.taskView(c, top.task, narrow);
-    else body = this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
+    const body = this.page === "settings" ? this.settingsView(c)
+      : top?.kind === "task" ? this.taskView(c, top.task, narrow)
+      : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
     return v_flex().id("spend-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => {

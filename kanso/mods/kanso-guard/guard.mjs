@@ -27,6 +27,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tryOr, parseOr, retry, findAsync, mapSeries, reduceSeries } from "./pure.js";
 
 const HOME = homedir();
 const APP_HOME = process.env.HERDR_APP_HOME || join(HOME, ".config/herdr-app");
@@ -53,7 +54,9 @@ const DEFAULTS = {
 };
 const limits = { ...DEFAULTS, ...(readJSON(join(DATA, "settings.json")) ?? {}) };
 
-process.env.PATH = [join(HOME, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin", process.env.PATH ?? ""].join(":");
+// What every command guard runs sees: its tools first (launchd starts it
+// with a bare PATH). Node finds a command through the PATH it is given.
+const ENV = { ...process.env, PATH: [join(HOME, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin", process.env.PATH ?? ""].join(":") };
 mkdirSync(DATA, { recursive: true });
 
 // ---- small tools --------------------------------------------------------------
@@ -61,6 +64,11 @@ mkdirSync(DATA, { recursive: true });
 function readJSON(path) { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; } }
 function writeJSON(path, value) { const tmp = `${path}.${process.pid}.tmp`; writeFileSync(tmp, JSON.stringify(value)); renameSync(tmp, path); }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// The first answer of async `fn(item)` over `list` that is not null, in
+// order, or null: the walk stops at it.
+const firstOf = async (list, fn, i = 0) => (i >= list.length ? null : (await fn(list[i])) ?? firstOf(list, fn, i + 1));
+// The terminals of this computer that are live (a remote one has a "/").
+const liveHere = (ls) => (ls?.terminals ?? []).filter((t) => t.state === "live" && !t.address.includes("/"));
 
 // Claude Code's prompt on screen (`hc read`) holds nothing: the box under
 // the last rule, from its "❯" line to the rule that closes it, is blank.
@@ -68,13 +76,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export function promptEmpty(screen) {
   const lines = String(screen ?? "").split("\n");
   const rule = (l) => /^\s*─{8,}/.test(l ?? "");
-  for (let i = lines.length - 1; i > 0; i--) {
-    if (!/^\s*[❯>]/.test(lines[i]) || !rule(lines[i - 1])) continue;
-    const box = [lines[i].replace(/^\s*[❯>]/, "")];
-    for (let j = i + 1; j < lines.length && !rule(lines[j]); j++) box.push(lines[j]);
-    return box.every((l) => !l.trim());
-  }
-  return false;
+  // The last prompt line right under a rule (never the first line).
+  const i = lines.findLastIndex((l, k) => k > 0 && /^\s*[❯>]/.test(l) && rule(lines[k - 1]));
+  if (i < 0) return false;
+  const rest = lines.slice(i + 1);
+  const end = rest.findIndex(rule);
+  const box = [lines[i].replace(/^\s*[❯>]/, ""), ...(end < 0 ? rest : rest.slice(0, end))];
+  return box.every((l) => !l.trim());
 }
 
 // A draft left in an agent's prompt, gone: ctrl+c empties every line of
@@ -89,7 +97,7 @@ async function clearPrompt(term) {
 /** Runs a program with a deadline; never throws. */
 function run(cmd, args, timeout = 10_000) {
   return new Promise((resolve) => {
-    execFile(cmd, args, { timeout, killSignal: "SIGKILL", maxBuffer: 32 * MB, env: process.env }, (error, stdout, stderr) => {
+    execFile(cmd, args, { timeout, killSignal: "SIGKILL", maxBuffer: 32 * MB, env: ENV }, (error, stdout, stderr) => {
       resolve({ ok: !error, code: error ? (error.code ?? 1) : 0, stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), timedOut: Boolean(error?.killed) });
     });
   });
@@ -104,7 +112,7 @@ function recentEvents(n = 40) {
   try {
     const lines = readFileSync(join(DATA, "events.jsonl"), "utf8").trim().split("\n");
     if (lines.length > 3000) writeFileSync(join(DATA, "events.jsonl"), `${lines.slice(-2000).join("\n")}\n`);
-    return lines.slice(-n).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean).reverse();
+    return lines.slice(-n).map((l) => parseOr(l)).filter(Boolean).toReversed();
   } catch { return []; }
 }
 
@@ -124,29 +132,25 @@ export function etimeMinutes(e) {
 
 async function processes() {
   const r = await run("ps", ["-axo", "pid=,ppid=,rss=,etime=,lstart=,command="], 10_000);
-  const list = [];
-  for (const line of r.stdout.split("\n")) {
+  return r.stdout.split("\n").flatMap((line) => {
     // lstart is five words: "Thu Nov  5 12:36:01 2026".
     const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\w+\s+\w+\s+\d+\s+[\d:]+\s+\d+)\s+(.*)$/.exec(line);
-    if (!m) continue;
+    if (!m) return [];
     const command = m[6];
     const exe = command.split(" ")[0];
-    list.push({ pid: Number(m[1]), ppid: Number(m[2]), rssMB: Math.round(Number(m[3]) / 1024), ageMin: etimeMinutes(m[4]), lstart: m[5].replace(/\s+/g, " "), command, name: exe.split("/").pop() });
-  }
-  return list;
+    return [{ pid: Number(m[1]), ppid: Number(m[2]), rssMB: Math.round(Number(m[3]) / 1024), ageMin: etimeMinutes(m[4]), lstart: m[5].replace(/\s+/g, " "), command, name: exe.split("/").at(-1) }];
+  });
 }
 
 /** Physical footprint (what Activity Monitor calls Memory) in MB, per pid. */
 async function footprints(pids) {
-  const out = new Map();
   const want = [...new Set(pids.filter(Boolean))];
-  if (!want.length) return out;
+  if (!want.length) return new Map();
   const file = join(tmpdir(), `kanso-guard-fp-${process.pid}.json`);
   await run("footprint", [...want.flatMap((p) => ["-p", String(p)]), "--noCategories", "-j", file], 20_000);
   const j = readJSON(file);
   rmSync(file, { force: true });
-  for (const p of j?.processes ?? []) out.set(Number(p.pid), Math.round(Number(p.footprint ?? 0) / MB));
-  return out;
+  return new Map([...(j?.processes ?? [])].map((p) => [Number(p.pid), Math.round(Number(p.footprint ?? 0) / MB)]));
 }
 
 async function windowPid() {
@@ -198,42 +202,42 @@ const KIND = (argv0 = "", agent = "") => {
   return "other";
 };
 
-/** Every agent in a Herdr terminal on this computer, with what we know of it. */
-// Each terminal's shell pid -> its address, filled by agentsNow (for Ports' owners).
-let shellPids = new Map();
+/** The agent in front in terminal `t` (`g` its details), or null when none is. */
+function agentIn(t, g, procs, fp) {
+  const pid = g?.foreground?.pid ?? null;
+  if (!pid) return null;
+  const proc = procs.find((p) => p.pid === pid);
+  // Codex runs under node: what it is shows in its arguments.
+  const kind = KIND((g.foreground.argv ?? []).slice(0, 2).join(" "), t.agent);
+  if (kind === "other") return null;
+  const s = kind === "claude" ? claudeSession(pid, procs) : null;
+  const status = s ? (s.status === "idle" ? "idle" : "working") : (t.status === "working" ? "working" : "idle");
+  const idleMin = s && s.status === "idle" ? Math.floor((Date.now() - (s.statusUpdatedAt ?? Date.now())) / MIN) : (status === "idle" ? 0 : null);
+  const why = kind !== "claude" ? "Only Claude Code agents can be resumed automatically"
+    : !s ? "Its session record was not found"
+    : !resumeArgv(g.foreground.argv ?? [], s.sessionId) ? "Started with options that can't be carried over"
+    : g.pid === pid ? "No shell behind it to start it again"
+    : status !== "idle" ? "It is working" : null;
+  return {
+    pid, kind, terminal: t.address, where: t.where ?? null, cwd: g.foreground.cwd ?? t.cwd,
+    name: g.labels?.["kanso.name"] || s?.name || t.where || t.address,
+    mb: fp.get(pid) ?? proc?.rssMB ?? 0, status, idleMin, session: s?.sessionId ?? null,
+    ageMin: proc?.ageMin ?? null, shellPid: g.pid, argv: g.foreground.argv ?? [],
+    why, recyclable: why === null,
+  };
+}
 
+/**
+ * Every agent in a Herdr terminal on this computer, with what we know of it,
+ * and each terminal's shell pid -> its address (for Ports' owners).
+ */
 async function agentsNow(procs, fp) {
   const ls = await hcJSON(["ls"]);
-  const out = [];
-  shellPids = new Map();
-  for (const t of ls?.terminals ?? []) {
-    if (t.state !== "live" || t.address.includes("/")) continue; // this computer's only
+  const looks = await mapSeries(liveHere(ls), async (t) => {
     const g = await hcJSON(["get", t.address], 5000);
-    if (g?.pid) shellPids.set(Number(g.pid), t.address);
-    const pid = g?.foreground?.pid ?? null;
-    if (!pid) continue;
-    const proc = procs.find((p) => p.pid === pid);
-    // Codex runs under node: what it is shows in its arguments.
-    const kind = KIND((g.foreground.argv ?? []).slice(0, 2).join(" "), t.agent);
-    if (kind === "other") continue;
-    const s = kind === "claude" ? claudeSession(pid, procs) : null;
-    const status = s ? (s.status === "idle" ? "idle" : "working") : (t.status === "working" ? "working" : "idle");
-    const idleMin = s && s.status === "idle" ? Math.floor((Date.now() - (s.statusUpdatedAt ?? Date.now())) / MIN) : (status === "idle" ? 0 : null);
-    const a = {
-      pid, kind, terminal: t.address, where: t.where ?? null, cwd: g.foreground.cwd ?? t.cwd,
-      name: g.labels?.["kanso.name"] || s?.name || t.where || t.address,
-      mb: fp.get(pid) ?? proc?.rssMB ?? 0, status, idleMin, session: s?.sessionId ?? null,
-      ageMin: proc?.ageMin ?? null, shellPid: g.pid, argv: g.foreground.argv ?? [],
-    };
-    a.why = kind !== "claude" ? "Only Claude Code agents can be resumed automatically"
-      : !s ? "Its session record was not found"
-      : !resumeArgv(g.foreground.argv ?? [], s.sessionId) ? "Started with options that can't be carried over"
-      : g.pid === pid ? "No shell behind it to start it again"
-      : status !== "idle" ? "It is working" : null;
-    a.recyclable = a.why === null;
-    out.push(a);
-  }
-  return out;
+    return { shell: g?.pid ? [Number(g.pid), t.address] : null, agent: agentIn(t, g, procs, fp) };
+  });
+  return { agents: looks.map((l) => l.agent).filter(Boolean), shells: new Map(looks.map((l) => l.shell).filter(Boolean)) };
 }
 
 // ---- recycling an agent ------------------------------------------------------------
@@ -250,36 +254,45 @@ const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
 
 /** The command that resumes `session` the way argv ran, or null when it can't. */
 export function resumeArgv(argv, session) {
-  if (!argv.length || argv[0].split("/").pop() !== "claude") return null;
-  const keep = [];
-  let positional = false;
-  for (let i = 1; i < argv.length; i++) {
+  if (!argv.length || argv[0].split("/").at(-1) !== "claude") return null;
+  // The options from argv[i] on that carry over, or null when one can't.
+  const options = (i, keep) => {
+    if (i >= argv.length) return keep;
     const a = argv[i];
-    if (positional || !a.startsWith("-")) { positional = true; continue; } // the first prompt, and anything after it
+    if (!a.startsWith("-")) return keep; // the first prompt, and anything after it
     const eq = a.startsWith("--") ? a.indexOf("=") : -1;
     const flag = eq > 0 ? a.slice(0, eq) : a;
-    if (KEEP_FLAG.has(flag) && eq < 0) keep.push(a);
-    else if (KEEP_VALUE.has(flag)) { if (eq > 0) keep.push(a); else if (i + 1 < argv.length) keep.push(a, argv[++i]); else return null; }
-    else if (DROP_VALUE.has(flag)) { if (eq < 0) i++; }
-    else if (DROP_FLAG.has(flag)) { /* left out */ }
-    else return null;
-  }
-  return [argv[0], ...keep, "--resume", session];
+    if (KEEP_FLAG.has(flag) && eq < 0) return options(i + 1, [...keep, a]);
+    if (KEEP_VALUE.has(flag)) return eq > 0 ? options(i + 1, [...keep, a]) : i + 1 < argv.length ? options(i + 2, [...keep, a, argv[i + 1]]) : null;
+    if (DROP_VALUE.has(flag)) return options(eq < 0 ? i + 2 : i + 1, keep);
+    if (DROP_FLAG.has(flag)) return options(i + 1, keep); // left out
+    return null;
+  };
+  const keep = options(1, []);
+  return keep && [argv[0], ...keep, "--resume", session];
 }
-const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replace(/'/g, `'\\''`)}'`);
+const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replaceAll("'", "'\\''")}'`);
 
+/** The live terminal on this computer with `pid` in front, as { term, g }, or null. */
+async function terminalOf(pid) {
+  const ls = await hcJSON(["ls"]);
+  return firstOf(liveHere(ls), async (t) => {
+    const x = await hcJSON(["get", t.address], 5000);
+    return x?.foreground?.pid === pid ? { term: t.address, g: x } : null;
+  });
+}
+
+// Up to 30 s for `pid` to leave: true once it is gone.
+const exited = (pid) => retry(30, async () => { await sleep(1000); return !(await run("kill", ["-0", String(pid)], 2000)).ok; });
+
+// A recycle or close answers with its outcome: { ok: true, beforeMB,
+// afterMB } or { ok: false, why }, what a batch reports.
 async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) {
   const procs = await processes();
   const s = claudeSession(pid, procs);
   if (!s) return skip(pid, "its Claude session record was not found for this process");
   if (s.status !== "idle") return skip(pid, "it is working");
-  const ls = await hcJSON(["ls"]);
-  let term = null, g = null;
-  for (const t of ls?.terminals ?? []) {
-    if (t.state !== "live" || t.address.includes("/")) continue; // this computer's only
-    const x = await hcJSON(["get", t.address], 5000);
-    if (x?.foreground?.pid === pid) { term = t.address; g = x; break; }
-  }
+  const { term = null, g = null } = (await terminalOf(pid)) ?? {};
   if (!term) return skip(pid, "it is not in a Herdr terminal");
   if (g.pid === pid) return skip(pid, "no shell behind it would start it again");
   const name = g.labels?.["kanso.name"] || s.name || term;
@@ -308,55 +321,53 @@ async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) 
   // A draft left in its prompt would go out with /exit: cleared first.
   if (!(await clearPrompt(term))) return skip(pid, "its prompt could not be cleared");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return skip(pid, "its terminal did not take /exit");
-  let gone = false;
-  for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
-  if (!gone) {
+  if (!(await exited(pid))) {
     event("error", `${name} did not exit; left as it was`, { pid, terminal: term });
-    lastOutcome = { ok: false, why: "it did not exit; left as it was" };
-    return false;
+    return { ok: false, why: "it did not exit; left as it was" };
   }
   // The shell must be back in front before anything is typed into it.
-  let ready = false;
-  for (let i = 0; i < 20 && !ready; i++) {
+  const ready = await retry(20, async () => {
     const x = await hcJSON(["get", term], 5000);
-    ready = x && x.pid === g.pid && (!x.foreground?.pid || x.foreground.pid === g.pid);
-    if (!ready) await sleep(500);
-  }
+    const back = x && x.pid === g.pid && (!x.foreground?.pid || x.foreground.pid === g.pid);
+    if (!back) await sleep(500);
+    return back;
+  });
   if (!ready) {
     event("error", `${name} exited, but its shell is busy; start it with: ${line}`, { pid, terminal: term, session: s.sessionId });
     await notify(`${name} needs a manual restart`, `It exited, but its terminal is busy. Run: claude --resume ${s.sessionId}`);
-    lastOutcome = { ok: false, why: "it exited, but its terminal was busy; see Events for the command" };
-    return false;
+    return { ok: false, why: "it exited, but its terminal was busy; see Events for the command" };
   }
   await sleep(1000); // the prompt draws after the shell takes the terminal back
   if (!(await run("hc", ["send", term, line], 20_000)).ok) {
     event("error", `${name} exited, but its terminal did not take the restart; run: ${line}`, { pid, terminal: term, session: s.sessionId });
     await notify(`${name} needs a manual restart`, `Run in its terminal: claude --resume ${s.sessionId}`);
-    lastOutcome = { ok: false, why: "its terminal did not take the restart; see Events" };
-    return false;
+    return { ok: false, why: "its terminal did not take the restart; see Events" };
   }
   // Attached when a process in that terminal holds the same conversation.
-  let after = null;
-  for (let i = 0; i < 30 && !after; i++) {
+  const after = await retry(30, async () => {
     await sleep(1000);
     const x = await hcJSON(["get", term], 5000);
     const np = x?.foreground?.pid;
-    if (np && np !== x.pid && readJSON(join(SESSIONS, `${np}.json`))?.sessionId === s.sessionId) after = np;
-  }
+    return np && np !== x.pid && readJSON(join(SESSIONS, `${np}.json`))?.sessionId === s.sessionId ? np : null;
+  });
   if (!after) {
     event("error", `${name} was ended but did not come back on its conversation; run: ${line}`, { pid, terminal: term, session: s.sessionId });
     await notify(`${name} did not resume`, `Run in its terminal: claude --resume ${s.sessionId}`);
-    lastOutcome = { ok: false, why: "it did not come back on its conversation; see Events" };
-    return false;
+    return { ok: false, why: "it did not come back on its conversation; see Events" };
   }
   const now = (await footprints([after])).get(after) ?? 0;
   event("recycle", `${name} recycled: ${before} MB to ${now} MB (${reason})`, { pid, newPid: after, terminal: term, session: s.sessionId, beforeMB: before, afterMB: now, freedMB: Math.max(0, before - now) });
-  lastOutcome = { ok: true, beforeMB: before, afterMB: now };
   if (!manual) await notify(`${name} restarted`, `It held ${before} MB; the same conversation goes on in a fresh process (${now} MB).`);
-  return true;
+  return { ok: true, beforeMB: before, afterMB: now };
 }
-let lastOutcome = null; // why the last recycle stopped, or what it freed: for the batch's report
-function skip(pid, why, verb = "recycled") { lastOutcome = { ok: false, why }; console.log(`not ${verb} (${pid}): ${why}`); event("skip", `Not ${verb}: ${why}`, { pid }); return false; }
+function skip(pid, why, verb = "recycled") { console.log(`not ${verb} (${pid}): ${why}`); event("skip", `Not ${verb}: ${why}`, { pid }); return { ok: false, why }; }
+
+// A batch's progress file: each save stamps its beat and writes it whole.
+const saveBatch = (batch) => {
+  const next = { ...batch, beat: Date.now() };
+  writeJSON(join(DATA, "batch.json"), next);
+  return next;
+};
 
 // Every idle agent that can be recycled (only those from `overMB`), heaviest
 // first, one after another, never the one you are on. data/kanso-guard/
@@ -364,28 +375,24 @@ function skip(pid, why, verb = "recycled") { lastOutcome = { ok: false, why }; c
 async function recycleBatch(overMB = 0) {
   const snap = await sample();
   const focused = snap.focused;
-  const batch = { at: Date.now(), beat: Date.now(), owner: process.pid, overMB, total: 0, current: null, done: [], skippedFocused: null, finished: false };
-  const save = () => { batch.beat = Date.now(); writeJSON(join(DATA, "batch.json"), batch); };
+  const start = { at: Date.now(), beat: Date.now(), owner: process.pid, overMB, total: 0, current: null, done: [], skippedFocused: null, finished: false };
   if (focused === undefined) {
-    batch.finished = true; batch.finishedAt = Date.now(); batch.error = "The window did not say which agent you are on, so nothing was recycled.";
-    save(); event("error", batch.error); return;
+    const error = "The window did not say which agent you are on, so nothing was recycled.";
+    saveBatch({ ...start, finished: true, finishedAt: Date.now(), error }); event("error", error); return;
   }
   const want = snap.agents.filter((a) => a.recyclable && a.mb >= overMB);
-  const list = want.filter((a) => a.terminal !== focused).sort((a, b) => b.mb - a.mb);
-  batch.total = list.length;
-  batch.skippedFocused = want.some((a) => a.terminal === focused) ? focused : null;
-  save();
+  const list = want.filter((a) => a.terminal !== focused).toSorted((a, b) => b.mb - a.mb);
+  const begun = saveBatch({ ...start, total: list.length, skippedFocused: want.some((a) => a.terminal === focused) ? focused : null });
   event("recycle-batch", list.length ? `Recycling ${list.length} ${list.length === 1 ? "agent" : "agents"}${overMB ? ` over ${overMB} MB` : ""}` : "Nothing to recycle");
-  for (const a of list) {
-    batch.current = a.name; save();
-    lastOutcome = null;
-    const ok = await recycle(a.pid, overMB ? `all over ${overMB} MB, asked from Memory` : "all idle, asked from Memory", { manual: true, focusOnly: true });
-    batch.done.push({ name: a.name, terminal: a.terminal, ok, beforeMB: lastOutcome?.beforeMB ?? a.mb, afterMB: lastOutcome?.afterMB ?? null, why: ok ? null : lastOutcome?.why ?? "not recycled" });
-    batch.current = null; save();
+  const ran = await reduceSeries(list, async (batch, a) => {
+    const going = saveBatch({ ...batch, current: a.name });
+    const o = await recycle(a.pid, overMB ? `all over ${overMB} MB, asked from Memory` : "all idle, asked from Memory", { manual: true, focusOnly: true });
+    const done = saveBatch({ ...going, done: [...going.done, { name: a.name, terminal: a.terminal, ok: o.ok, beforeMB: o.beforeMB ?? a.mb, afterMB: o.afterMB ?? null, why: o.ok ? null : o.why ?? "not recycled" }], current: null });
     // The panel's picture stays fresh while the batch holds the lock.
     await check({ act: false, locked: true });
-  }
-  batch.finished = true; batch.finishedAt = Date.now(); save();
+    return done;
+  }, begun);
+  const batch = saveBatch({ ...ran, finished: true, finishedAt: Date.now() });
   const freed = batch.done.reduce((s, d) => s + (d.ok ? Math.max(0, d.beforeMB - (d.afterMB ?? d.beforeMB)) : 0), 0);
   const okN = batch.done.filter((d) => d.ok).length;
   if (list.length) event("recycle-batch", `Recycled ${okN} of ${list.length}, ${freed} MB freed`);
@@ -419,13 +426,7 @@ async function closeAgent(pid, why, minIdle = 0) {
   if (s.status !== "idle") return no("it is working");
   const idleMin = Math.floor((Date.now() - (s.statusUpdatedAt ?? Date.now())) / MIN);
   if (idleMin < minIdle) return no("it was used since it was picked");
-  const ls = await hcJSON(["ls"]);
-  let term = null, g = null;
-  for (const t of ls?.terminals ?? []) {
-    if (t.state !== "live" || t.address.includes("/")) continue;
-    const x = await hcJSON(["get", t.address], 5000);
-    if (x?.foreground?.pid === pid) { term = t.address; g = x; break; }
-  }
+  const { term = null, g = null } = (await terminalOf(pid)) ?? {};
   if (!term) return no("it is not in a Herdr terminal");
   const name = g.labels?.["kanso.name"] || s.name || term;
   const pane = await paneOf(term);
@@ -441,42 +442,36 @@ async function closeAgent(pid, why, minIdle = 0) {
   if (still?.foreground?.pid !== pid || still.pid !== g.pid) return no("its terminal changed");
   if (!(await clearPrompt(term))) return no("its prompt could not be cleared");
   if (!(await run("hc", ["send", term, "/exit"], 20_000)).ok) return no("its terminal did not take /exit");
-  let gone = false;
-  for (let i = 0; i < 30 && !gone; i++) { await sleep(1000); gone = !(await run("kill", ["-0", String(pid)], 2000)).ok; }
-  if (!gone) { lastOutcome = { ok: false, why: "it did not exit; left as it was" }; event("error", `${name} did not exit; left as it was`, { pid }); return false; }
+  if (!(await exited(pid))) { event("error", `${name} did not exit; left as it was`, { pid }); return { ok: false, why: "it did not exit; left as it was" }; }
   // Its shell is back in front and nothing else started there; still not the one you are on.
   const after = await hcJSON(["get", term], 5000);
   if (!after || after.pid !== g.pid || (after.foreground?.pid && after.foreground.pid !== g.pid) || (await focusedTerminal()) === term || (pane && (await paneOf(term)) !== pane)) {
-    lastOutcome = { ok: false, why: "it exited, but its terminal changed; the pane was left open" };
     event("close", `${name} exited (${mb} MB back) but its pane was left open: its terminal changed; to reopen: ${resume}`, { pid, terminal: term, session: s.sessionId, resume, freedMB: mb, beforeMB: mb });
-    return false;
+    return { ok: false, why: "it exited, but its terminal changed; the pane was left open" };
   }
-  let closed = pane ? (await run("herdr-app", ["do", "pane.close", "--pane", pane], 15_000)).ok : false;
-  if (!closed) closed = (await run("hc", ["kill", term], 15_000)).ok;
-  lastOutcome = { ok: true, beforeMB: mb, afterMB: 0 };
+  // Its pane closed, or else its terminal ended.
+  const closed = (pane ? (await run("herdr-app", ["do", "pane.close", "--pane", pane], 15_000)).ok : false)
+    || (await run("hc", ["kill", term], 15_000)).ok;
   event("close", `${name} closed after ${Math.round(idleMin / 60)} h idle, ${mb} MB back (${why})${closed ? "" : "; its pane could not be closed"}; to reopen: ${resume}`,
     { pid, terminal: term, session: s.sessionId, resume, freedMB: mb, beforeMB: mb });
-  return true;
+  return { ok: true, beforeMB: mb, afterMB: 0 };
 }
 
 /** Every idle agent not used for `minIdle` minutes (Claude's own idle time), oldest first. */
 async function closeStale(minIdle) {
   const snap = await sample();
   const list = snap.agents.filter((a) => a.kind === "claude" && a.status === "idle" && (a.idleMin ?? 0) >= minIdle && a.terminal !== snap.focused)
-    .sort((a, b) => (b.idleMin ?? 0) - (a.idleMin ?? 0));
-  const batch = { kind: "close", at: Date.now(), beat: Date.now(), owner: process.pid, overMB: 0, minIdle, total: list.length, current: null, done: [], skippedFocused: null, finished: false };
-  const save = () => { batch.beat = Date.now(); writeJSON(join(DATA, "batch.json"), batch); };
-  if (snap.focused === undefined) { batch.finished = true; batch.finishedAt = Date.now(); batch.error = "The window did not say which agent you are on, so nothing was closed."; save(); return; }
-  save();
-  for (const a of list) {
-    batch.current = a.name; save();
-    lastOutcome = null;
-    const ok = await closeAgent(a.pid, `not used for ${Math.round(a.idleMin / 60)} h, asked from Memory`, minIdle);
-    batch.done.push({ name: a.name, terminal: a.terminal, ok, beforeMB: a.mb, afterMB: ok ? 0 : null, why: ok ? null : lastOutcome?.why ?? "not closed" });
-    batch.current = null; save();
+    .toSorted((a, b) => (b.idleMin ?? 0) - (a.idleMin ?? 0));
+  const start = { kind: "close", at: Date.now(), beat: Date.now(), owner: process.pid, overMB: 0, minIdle, total: list.length, current: null, done: [], skippedFocused: null, finished: false };
+  if (snap.focused === undefined) { saveBatch({ ...start, finished: true, finishedAt: Date.now(), error: "The window did not say which agent you are on, so nothing was closed." }); return; }
+  const ran = await reduceSeries(list, async (batch, a) => {
+    const going = saveBatch({ ...batch, current: a.name });
+    const o = await closeAgent(a.pid, `not used for ${Math.round(a.idleMin / 60)} h, asked from Memory`, minIdle);
+    const done = saveBatch({ ...going, done: [...going.done, { name: a.name, terminal: a.terminal, ok: o.ok, beforeMB: a.mb, afterMB: o.ok ? 0 : null, why: o.ok ? null : o.why ?? "not closed" }], current: null });
     await check({ act: false, locked: true });
-  }
-  batch.finished = true; batch.finishedAt = Date.now(); save();
+    return done;
+  }, saveBatch(start));
+  const batch = saveBatch({ ...ran, finished: true, finishedAt: Date.now() });
   const okN = batch.done.filter((d) => d.ok).length;
   if (list.length) event("close-batch", `Closed ${okN} of ${list.length} agents not used for ${Math.round(minIdle / 60)} h`);
 }
@@ -494,62 +489,75 @@ async function restartWindow(reason) {
   if (!pid) return false;
   event("restart", `Window restarted: ${reason}`, { pid });
   await run("herdr-app", ["do", "app.quit"], 10_000);
-  for (let i = 0; i < 20; i++) { if (!(await run("kill", ["-0", String(pid)], 2000)).ok) break; await sleep(500); }
+  // Up to 10 s for it to quit by itself.
+  await retry(20, async () => {
+    const gone = !(await run("kill", ["-0", String(pid)], 2000)).ok;
+    if (!gone) await sleep(500);
+    return gone;
+  });
   if ((await run("kill", ["-0", String(pid)], 2000)).ok) { await run("kill", ["-TERM", String(pid)]); await sleep(2000); }
   if ((await run("kill", ["-0", String(pid)], 2000)).ok) await run("kill", ["-KILL", String(pid)]);
   await sleep(1000);
   const app = [join(HOME, "Applications/Herdr.app"), "/Applications/Herdr.app"].find((p) => existsSync(p));
   const env = ["--env", `HERDR_APP_HOME=${APP_HOME}`];
   if (app) await run("open", ["-g", "-n", ...env, app], 10_000);
-  else execFile("sh", ["-c", "nohup herdr-app >/dev/null 2>&1 &"], { env: { ...process.env, HERDR_APP_HOME: APP_HOME } });
+  else execFile("sh", ["-c", "nohup herdr-app >/dev/null 2>&1 &"], { env: { ...ENV, HERDR_APP_HOME: APP_HOME } });
   await notify("Herdr window restarted", `${reason}. Your terminals and agents kept running.`);
   return true;
 }
 
+// The guard's state after this look at the window: what it keeps between
+// checks (when it grew too big, its restarts, a pause, the last notice).
 async function guardWindow(win, state) {
-  if (!win.pid) { state.overSince = null; return; }
+  if (!win.pid) return { ...state, overSince: null };
   const reason = win.mb > limits.windowMB ? `It used ${win.mb} MB (limit ${limits.windowMB})` : win.oom ? "Its mod runtime ran out of memory" : null;
-  if (!reason) { state.overSince = null; return; }
-  state.overSince ??= Date.now();
+  if (!reason) return { ...state, overSince: null };
   // At most 3 restarts an hour: past that, something restarts it bloated.
-  state.restarts = (state.restarts ?? []).filter((t) => Date.now() - t < HOUR);
-  if (state.restarts.length >= 3) {
-    if (!state.paused) { state.paused = true; event("error", `Window restarts paused: 3 in the last hour and still ${reason.toLowerCase()}`); await notify("Herdr keeps outgrowing its limit", "Automatic restarts are paused for an hour. Open Memory in kansō to see what grows."); }
-    return;
+  const over = { ...state, overSince: state.overSince ?? Date.now(), restarts: (state.restarts ?? []).filter((t) => Date.now() - t < HOUR) };
+  if (over.restarts.length >= 3) {
+    if (over.paused) return over;
+    event("error", `Window restarts paused: 3 in the last hour and still ${reason.toLowerCase()}`);
+    await notify("Herdr keeps outgrowing its limit", "Automatic restarts are paused for an hour. Open Memory in kansō to see what grows.");
+    return { ...over, paused: true };
   }
-  state.paused = false;
-  if (state.restarts.length && Date.now() - state.restarts[state.restarts.length - 1] < 10 * MIN) return;
+  const going = { ...over, paused: false };
+  if (going.restarts.length && Date.now() - going.restarts.at(-1) < 10 * MIN) return going;
   // Only after a minute without input: never under your hands, even past the
   // grace period (which only ends the notices).
   const typing = (await idleSeconds()) < 60;
   if (typing) {
-    if (Date.now() - state.overSince < limits.graceMin * MIN && (!state.overNoticed || Date.now() - state.overNoticed > 10 * MIN)) {
-      state.overNoticed = Date.now();
+    if (Date.now() - going.overSince < limits.graceMin * MIN && (!going.overNoticed || Date.now() - going.overNoticed > 10 * MIN)) {
+      const noticed = { ...going, overNoticed: Date.now() };
       await notify("Herdr will restart its window", `${reason}. It restarts when you pause for a minute; terminals keep running.`);
+      return noticed;
     }
-    return;
+    return going;
   }
-  if (await restartWindow(reason)) { state.restarts.push(Date.now()); state.overSince = null; }
+  return (await restartWindow(reason)) ? { ...going, restarts: [...going.restarts, Date.now()], overSince: null } : going;
 }
 
 // ---- hung helpers -------------------------------------------------------------------
 
 // What the Kanso mods start, by signature. Each answers in seconds.
 const HELPERS = [
-  /^git --no-optional-locks status /, /^lsof -nP -iTCP -sTCP:LISTEN/, /^ps -axo pid=,ppid=,etime=,/,
-  /^gh pr (view|list) .*--json /, /(^| )ls-remote --tags --refs https:\/\/github\.com\/jlopezlira\/herdr-kanso/,
-  /^hc machine ls --json/, /herdr-app status/, /said\(\) \{/, /kanso-spend\/presenter\.mjs/,
+  /^git -{2}no-optional-locks status /, /^lsof -nP -iTCP -sTCP:LISTEN/, /^ps -axo pid=,ppid=,etime=,/,
+  /^gh pr (view|list) .*-{2}json /, /(^| )ls-remote -{2}tags -{2}refs https:\/\/github\.com\/jlopezlira\/herdr-kanso/,
+  /^hc machine ls -{2}json/, /herdr-app status/, /said\(\) \{/, /kanso-spend\/presenter\.mjs/,
 ];
 export const isHelper = (command) => HELPERS.some((re) => re.test(command));
 
 async function reap(procs, winPid, { manual = false } = {}) {
-  let n = 0;
-  for (const p of procs) {
+  const hung = procs.filter((p) => {
     const mine = (winPid && p.ppid === winPid) || (p.ppid === 1 && p.command.includes(join(APP_HOME, "mods/kanso-spend/presenter.mjs")));
     const patience = /presenter\.mjs/.test(p.command) ? 10 : 3;
-    if (!mine || !isHelper(p.command) || p.ageMin < patience) continue;
-    if ((await run("kill", ["-TERM", String(p.pid)])).ok) { n++; event("reap", `Ended a hung helper after ${p.ageMin} min: ${p.command.slice(0, 100)}`, { pid: p.pid }); }
-  }
+    return mine && isHelper(p.command) && p.ageMin >= patience;
+  });
+  // How many were ended, one after another.
+  const n = await reduceSeries(hung, async (ended, p) => {
+    if (!(await run("kill", ["-TERM", String(p.pid)])).ok) return ended;
+    event("reap", `Ended a hung helper after ${p.ageMin} min: ${p.command.slice(0, 100)}`, { pid: p.pid });
+    return ended + 1;
+  }, 0);
   // Half-written copies of shared.json a crashed window left behind.
   await run("find", [APP_HOME, "-maxdepth", "1", "-name", "shared.json.tmp.*", "-mmin", "+60", "-delete"], 5000);
   if (manual && !n) event("reap", "No hung helpers");
@@ -558,182 +566,195 @@ async function reap(procs, winPid, { manual = false } = {}) {
 
 // ---- history ---------------------------------------------------------------------------
 
-export function addToHistory(h, row, agents, at = Date.now()) {
-  h ??= {};
-  h.v = 1;
-  h.minutes = (h.minutes ?? []).filter((r) => at - r[0] < DAY);
-  h.minutes.push(row);
+// history.json after this minute's row, as a new value (`prev` is left as it was).
+export function addToHistory(prev, row, agents, at = Date.now()) {
+  const h = prev ?? {};
+  // A history.json that is not an object (a bare number, string or boolean)
+  // stops the check here, with the error setting a field on it gives.
+  if (typeof h !== "object" && typeof h !== "function") throw new TypeError(`Cannot create property 'v' on ${typeof h} '${String(h)}'`);
   const [, free, swap, win, agentsMB] = row;
   const hourAt = Math.floor(at / HOUR) * HOUR;
-  h.hours = (h.hours ?? []).filter((r) => at - r[0] < 90 * DAY);
-  const last = h.hours[h.hours.length - 1];
-  if (last && last[0] === hourAt) {
-    const n = (h.hourN ?? 1) + 1;
-    last[1] = Math.min(last[1], free); last[2] = Math.round(((last[2] * (n - 1)) + free) / n);
-    last[3] = Math.max(last[3], swap); last[4] = Math.max(last[4], win); last[5] = Math.max(last[5], agentsMB);
-    h.hourN = n;
-  } else { h.hours.push([hourAt, free, free, swap, win, agentsMB]); h.hourN = 1; }
-  h.agents ??= {};
-  for (const a of agents) {
-    const key = a.session ?? `${a.kind}:${a.name}`;
-    const e = (h.agents[key] ??= { name: a.name, kind: a.kind, points: [] });
-    e.name = a.name;
-    const p = e.points[e.points.length - 1];
-    if (p && p[0] === hourAt) p[1] = Math.max(p[1], a.mb); else e.points.push([hourAt, a.mb]);
-  }
-  for (const [k, e] of Object.entries(h.agents)) {
-    e.points = e.points.filter((p) => at - p[0] < 14 * DAY);
-    if (!e.points.length) delete h.agents[k];
-  }
+  const minutes = [...(h.minutes ?? []).filter((r) => at - r[0] < DAY), row];
+  // This hour's row folds the minute in: lowest and mean free, the most swap,
+  // window and agents.
+  const kept = (h.hours ?? []).filter((r) => at - r[0] < 90 * DAY);
+  const last = kept.at(-1);
+  const same = Boolean(last && last[0] === hourAt);
+  const hourN = same ? (h.hourN ?? 1) + 1 : 1;
+  const hours = same
+    ? kept.with(-1, [last[0], Math.min(last[1], free), Math.round(((last[2] * (hourN - 1)) + free) / hourN), Math.max(last[3], swap), Math.max(last[4], win), Math.max(last[5], agentsMB), ...last.slice(6)])
+    : [...kept, [hourAt, free, free, swap, win, agentsMB]];
+  // Each agent's hourly peak. The agents seen now are grouped by key in one
+  // pass; two under one key fold in turn, as they come.
+  const old = h.agents ?? {};
+  const seen = Map.groupBy(agents, (a) => a.session ?? `${a.kind}:${a.name}`);
+  const fold = (entry, group) => group.reduce((e, a) => {
+    const p = e.points.at(-1);
+    return { ...e, name: a.name, points: p && p[0] === hourAt ? e.points.with(-1, [p[0], Math.max(p[1], a.mb), ...p.slice(2)]) : [...e.points, [hourAt, a.mb]] };
+  }, entry ?? { name: group[0].name, kind: group[0].kind, points: [] });
+  const merged = [
+    ...Object.keys(old).map((k) => [k, seen.has(k) ? fold(old[k], seen.get(k)) : old[k]]),
+    ...[...seen].filter(([k]) => !Object.hasOwn(old, k)).map(([k, group]) => [k, fold(null, group)]),
+  ].map(([k, e]) => [k, { ...e, points: e.points.filter((p) => at - p[0] < 14 * DAY) }]).filter(([, e]) => e.points.length);
   // At most 40 agents (the latest seen), so the file stays far under the
   // 1 MiB the panel can read: about 450 KB at the most.
-  const keys = Object.keys(h.agents);
-  if (keys.length > 40) {
-    const last = (k) => h.agents[k].points[h.agents[k].points.length - 1][0];
-    for (const k of keys.sort((a, b) => last(b) - last(a)).slice(40)) delete h.agents[k];
-  }
-  return h;
+  const latest = (e) => e.points.at(-1)[0];
+  const keep = merged.length > 40 ? new Set(merged.toSorted(([, a], [, b]) => latest(b) - latest(a)).slice(0, 40).map(([k]) => k)) : null;
+  return { ...h, v: 1, minutes, hours, hourN, agents: Object.fromEntries(keep ? merged.filter(([k]) => keep.has(k)) : merged) };
 }
 
 /** What the guard has done, from its event log. */
 function totals() {
-  const t = { recycles: 0, closed: 0, restarts: 0, reaped: 0, freedMB: 0, recycledMB: 0, closedMB: 0, since: null };
-  for (const e of recentEvents(3000)) {
-    t.since = e.at;
-    if (e.kind === "recycle") { t.recycles++; t.recycledMB += e.freedMB ?? 0; t.freedMB += e.freedMB ?? 0; }
-    else if (e.kind === "close") { t.closed++; t.closedMB += e.freedMB ?? 0; t.freedMB += e.freedMB ?? 0; }
-    else if (e.kind === "restart") t.restarts++;
-    else if (e.kind === "reap" && e.pid) t.reaped++;
+  const zero = { recycles: 0, closed: 0, restarts: 0, reaped: 0, freedMB: 0, recycledMB: 0, closedMB: 0, since: null };
+  return recentEvents(3000).reduce((t, e) => {
+    const at = { ...t, since: e.at };
+    const freed = e.freedMB ?? 0;
+    if (e.kind === "recycle") return { ...at, recycles: t.recycles + 1, recycledMB: t.recycledMB + freed, freedMB: t.freedMB + freed };
+    if (e.kind === "close") return { ...at, closed: t.closed + 1, closedMB: t.closedMB + freed, freedMB: t.freedMB + freed };
+    if (e.kind === "restart") return { ...at, restarts: t.restarts + 1 };
+    if (e.kind === "reap" && e.pid) return { ...at, reaped: t.reaped + 1 };
     // a batch's own lines are summaries; each agent in it is counted above
-  }
-  return t;
+    return at;
+  }, zero);
 }
 
 // ---- dev servers (the Ports panel's history) ---------------------------------------
 
+// `lsof -F` output as one block per process: its "p" line, then the lines
+// under it (whatever comes before the first "p" line belongs to none).
+const lsofBlocks = (text) => {
+  const lines = String(text ?? "").split("\n");
+  const starts = lines.flatMap((line, i) => (line[0] === "p" ? [i] : []));
+  return starts.map((start, j) => ({ pid: Number(lines[start].slice(1)), lines: lines.slice(start + 1, starts[j + 1] ?? lines.length) }));
+};
+
 /** pid -> { command, ports } from `lsof -F pcn` of the listening sockets. */
 export function parseListen(text) {
-  const out = new Map();
-  let cur = null;
-  for (const line of String(text ?? "").split("\n")) {
-    const k = line[0], v = line.slice(1);
-    if (k === "p") { cur = { pid: Number(v), command: "", ports: [] }; out.set(cur.pid, cur); }
-    else if (k === "c" && cur) cur.command = v;
-    else if (k === "n" && cur) { const port = Number(v.slice(v.lastIndexOf(":") + 1)); if (port && !cur.ports.includes(port)) cur.ports.push(port); }
-  }
-  for (const x of out.values()) x.ports.sort((a, b) => a - b);
-  return out;
+  return new Map(lsofBlocks(text).map(({ pid, lines }) => {
+    // The last "c" line names it; each "n" line is an address ending in its port.
+    const command = lines.findLast((line) => line[0] === "c")?.slice(1) ?? "";
+    const ports = [...new Set(lines.filter((line) => line[0] === "n").map((line) => {
+      const v = line.slice(1);
+      return Number(v.slice(v.lastIndexOf(":") + 1));
+    }).filter(Boolean))].toSorted((a, b) => a - b);
+    return [pid, { pid, command, ports }];
+  }));
 }
 
-const shortArgs = (command) => { const [cmd, ...rest] = String(command).split(" "); return [cmd.split("/").pop(), ...rest].join(" ").slice(0, 120); };
+const shortArgs = (command) => { const [cmd, ...rest] = String(command).split(" "); return [cmd.split("/").at(-1), ...rest].join(" ").slice(0, 120); };
 
 /** The process and everything under it, from the ps listing. */
 function treeOf(root, procs) {
-  const kids = new Map();
-  for (const p of procs) { if (!kids.has(p.ppid)) kids.set(p.ppid, []); kids.get(p.ppid).push(p); }
-  const out = [], seen = new Set(), stack = [procs.find((p) => p.pid === root)].filter(Boolean);
-  while (stack.length) { const p = stack.pop(); if (seen.has(p.pid)) continue; seen.add(p.pid); out.push(p); stack.push(...(kids.get(p.pid) ?? [])); }
-  return out;
+  const kids = Map.groupBy(procs, (p) => p.ppid);
+  // Depth first, the last child first; a pid already on the way down is not
+  // walked again.
+  const walk = (p, above) => (above.has(p.pid) ? [] : [p, ...(kids.get(p.pid) ?? []).toReversed().flatMap((k) => walk(k, new Set([...above, p.pid])))]);
+  const top = procs.find((p) => p.pid === root);
+  return top ? walk(top, new Set()) : [];
 }
 
-/** The dev servers listening now: a terminal's, or started in a folder of your home (not ~/Library). */
-/** Each terminal's shell pid, from herdr-core (when no agent sample filled them). */
+/** Each terminal's shell pid -> its address, from herdr-core (when no agent sample has them). */
 async function loadShells() {
-  shellPids = new Map();
-  for (const t of (await hcJSON(["ls"]))?.terminals ?? []) {
-    if (t.state !== "live" || t.address.includes("/")) continue;
-    const g = await hcJSON(["get", t.address], 5000);
-    if (g?.pid) shellPids.set(Number(g.pid), t.address);
-  }
+  const looks = await mapSeries(liveHere(await hcJSON(["ls"])), async (t) => [t.address, await hcJSON(["get", t.address], 5000)]);
+  return new Map(looks.filter(([, g]) => g?.pid).map(([address, g]) => [Number(g.pid), address]));
 }
 
-/** The dev servers listening now, or null when lsof could not say (nothing is concluded then). */
-async function serversNow(procs) {
+/**
+ * The dev servers listening now (a terminal's, by `shells`, or started in a
+ * folder of your home, not ~/Library), or null when lsof could not say
+ * (nothing is concluded then).
+ */
+async function serversNow(procs, shells) {
   const ls = await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"], 10_000);
   // lsof exits 1 with no output when nothing listens; anything else unexplained is a failure.
   if (ls.timedOut || (!ls.ok && (ls.stderr.trim() || ls.stdout.trim()))) return null;
   const listen = parseListen(ls.stdout);
   const pids = [...listen.keys()];
-  const cwds = new Map();
-  if (pids.length) {
-    let pid = null;
-    for (const line of (await run("lsof", ["-a", "-d", "cwd", "-p", pids.join(","), "-F", "pn"], 10_000)).stdout.split("\n")) {
-      if (line[0] === "p") pid = Number(line.slice(1)); else if (line[0] === "n" && pid != null) cwds.set(pid, line.slice(1));
-    }
-  }
+  // Each one's folder: the last "n" line under its pid.
+  const cwds = pids.length
+    ? new Map(lsofBlocks((await run("lsof", ["-a", "-d", "cwd", "-p", pids.join(","), "-F", "pn"], 10_000)).stdout)
+      .flatMap(({ pid, lines }) => lines.filter((line) => line[0] === "n").map((line) => [pid, line.slice(1)])))
+    : new Map();
   const byPid = new Map(procs.map((p) => [p.pid, p]));
-  const ownerOf = (pid) => { for (let p = pid, hops = 0; p > 1 && hops < 64; p = byPid.get(p)?.ppid ?? 0, hops++) if (shellPids.has(p)) return shellPids.get(p); return null; };
-  const out = [];
-  for (const l of listen.values()) {
+  // The terminal whose shell it runs under, up to 64 parents up.
+  const ownerOf = (p, hops = 0) => (p > 1 && hops < 64 ? (shells.has(p) ? shells.get(p) : ownerOf(byPid.get(p)?.ppid ?? 0, hops + 1)) : null);
+  return [...listen.values()].flatMap((l) => {
     const proc = byPid.get(l.pid);
-    if (!proc) continue;
+    if (!proc) return [];
     const cwd = cwds.get(l.pid) ?? null, owner = ownerOf(l.pid);
     const mine = cwd && cwd.startsWith(`${HOME}/`) && !cwd.startsWith(`${HOME}/Library/`);
-    if (!owner && !mine) continue;
+    if (!owner && !mine) return [];
     const startedAt = Date.parse(proc.lstart) || null;
-    out.push({
+    return [{
       key: `${l.pid}@${startedAt}`, pid: l.pid, ports: l.ports, command: l.command, args: shortArgs(proc.command), cwd,
-      project: cwd ? cwd.split("/").filter(Boolean).pop() : null, owner, mb: treeOf(l.pid, procs).reduce((t, p) => t + p.rssMB, 0),
+      project: cwd ? cwd.split("/").filter(Boolean).at(-1) : null, owner, mb: treeOf(l.pid, procs).reduce((t, p) => t + p.rssMB, 0),
       startedAt, lstart: proc.lstart,
-    });
-  }
-  return out.sort((a, b) => Boolean(a.owner) - Boolean(b.owner) || a.ports[0] - b.ports[0]);
+    }];
+  }).toSorted((a, b) => Boolean(a.owner) - Boolean(b.owner) || a.ports[0] - b.ports[0]);
 }
 
 /** ports.json after this minute's look at `now` (the servers listening). */
+/** ports.json after this minute's look at `now` (the servers listening), as a new value. */
 export function updatePorts(prev, now, at = Date.now()) {
   const p = prev?.v === 1 ? prev : { v: 1, minutes: [], hours: [], servers: [], totals: { opened: 0, stopped: 0, exited: 0, freedMB: 0, since: at } };
-  p.totals ??= { opened: 0, stopped: 0, exited: 0, freedMB: 0, since: at };
+  const totals = p.totals ?? { opened: 0, stopped: 0, exited: 0, freedMB: 0, since: at };
   const byKey = new Map((p.servers ?? []).map((x) => [x.key, x]));
   const live = new Set(now.map((x) => x.key));
-  for (const x of now) {
-    let rec = byKey.get(x.key);
-    if (rec?.ended) { // listening again after a look that missed it: it never ended
-      if (rec.ended.how === "exited") p.totals.exited = Math.max(0, p.totals.exited - 1);
-      if (rec.ended.how !== "stopped") rec.ended = null;
-    }
-    if (!rec) {
-      rec = { key: x.key, pid: x.pid, ports: x.ports, command: x.command, args: x.args, cwd: x.cwd, project: x.project, startedAt: x.startedAt, firstSeen: at, lastSeen: at, peakMB: x.mb, owner: x.owner, everLoose: !x.owner, ended: null };
-      byKey.set(x.key, rec);
-      p.totals.opened++;
-    }
-    rec.lastSeen = at; rec.ports = x.ports; rec.peakMB = Math.max(rec.peakMB ?? 0, x.mb);
-    if (x.owner) rec.owner = x.owner; else rec.everLoose = true;
-    x.firstSeen = rec.firstSeen;
-  }
+  // Each server seen now, by key (one look lists a key once; a repeat folds
+  // in turn): its record brought up to this look.
+  const looks = [...Map.groupBy(now, (x) => x.key)].map(([key, xs]) => {
+    const was = byKey.get(key);
+    // Listening again after a look that missed it: it never ended.
+    const back = was?.ended && was.ended.how !== "stopped" ? { ...was, ended: null } : was;
+    const first = back ?? { key: xs[0].key, pid: xs[0].pid, ports: xs[0].ports, command: xs[0].command, args: xs[0].args, cwd: xs[0].cwd, project: xs[0].project, startedAt: xs[0].startedAt, firstSeen: at, lastSeen: at, peakMB: xs[0].mb, owner: xs[0].owner, everLoose: !xs[0].owner, ended: null };
+    const rec = xs.reduce((r, x) => ({ ...r, lastSeen: at, ports: x.ports, peakMB: Math.max(r.peakMB ?? 0, x.mb), ...(x.owner ? { owner: x.owner } : { everLoose: true }) }), first);
+    return { key, rec, opened: !was, reopened: was?.ended?.how === "exited" };
+  });
+  const seen = new Map(looks.map((l) => [l.key, l.rec]));
   // Gone since the last look, and not stopped from Ports: it exited on its own.
-  for (const rec of byKey.values()) {
-    if (!rec.ended && !live.has(rec.key)) { rec.ended = { at, how: "exited", freedMB: 0 }; p.totals.exited++; }
-  }
+  const gone = (r) => !r.ended && !live.has(r.key);
+  const merged = [...new Map([...byKey, ...seen]).values()];
+  const exitedNow = merged.filter(gone).length;
+  const records = merged.map((r) => (gone(r) ? { ...r, ended: { at, how: "exited", freedMB: 0 } } : r));
   // At most 300: every running one, then the latest ended within 30 days.
-  const all = [...byKey.values()].filter((r) => !r.ended || at - r.ended.at < 30 * DAY);
-  const running = all.filter((r) => !r.ended), ended = all.filter((r) => r.ended).sort((a, b) => b.ended.at - a.ended.at);
-  p.servers = [...running, ...ended.slice(0, Math.max(0, 300 - running.length))].sort((a, b) => b.firstSeen - a.firstSeen);
-  p.now = now.map(({ lstart, ...x }) => x);
+  const all = records.filter((r) => !r.ended || at - r.ended.at < 30 * DAY);
+  const running = all.filter((r) => !r.ended), ended = all.filter((r) => r.ended).toSorted((a, b) => b.ended.at - a.ended.at);
+  const servers = [...running, ...ended.slice(0, Math.max(0, 300 - running.length))].toSorted((a, b) => b.firstSeen - a.firstSeen);
   const active = now.length, loose = now.filter((x) => !x.owner).length, mb = now.reduce((t, x) => t + x.mb, 0);
-  p.minutes = (p.minutes ?? []).filter((r) => at - r[0] < DAY);
-  p.minutes.push([at, active, loose, mb]);
   const hourAt = Math.floor(at / HOUR) * HOUR;
-  p.hours = (p.hours ?? []).filter((r) => at - r[0] < 90 * DAY);
-  const last = p.hours[p.hours.length - 1];
-  if (last && last[0] === hourAt) { last[1] = Math.max(last[1], active); last[2] = Math.max(last[2], loose); last[3] = Math.max(last[3], mb); }
-  else p.hours.push([hourAt, active, loose, mb]);
-  p.at = at;
-  return p;
+  const kept = (p.hours ?? []).filter((r) => at - r[0] < 90 * DAY);
+  const last = kept.at(-1);
+  const hours = last && last[0] === hourAt
+    ? kept.with(-1, [last[0], Math.max(last[1], active), Math.max(last[2], loose), Math.max(last[3], mb), ...last.slice(4)])
+    : [...kept, [hourAt, active, loose, mb]];
+  return {
+    ...p,
+    totals: {
+      ...totals,
+      opened: totals.opened + looks.filter((l) => l.opened).length,
+      // Back after one look away: the exit counted then is taken back first.
+      exited: Math.max(0, totals.exited - looks.filter((l) => l.reopened).length) + exitedNow,
+    },
+    servers,
+    now: now.map(({ lstart, ...x }) => ({ ...x, firstSeen: seen.get(x.key).firstSeen })),
+    minutes: [...(p.minutes ?? []).filter((r) => at - r[0] < DAY), [at, active, loose, mb]],
+    hours,
+    at,
+  };
 }
 
-async function samplePorts(procs) {
+async function samplePorts(procs, shells) {
   const path = join(DATA, "ports.json");
-  const now = await serversNow(procs);
+  const now = await serversNow(procs, shells);
   if (now) writeJSON(path, updatePorts(readJSON(path), now));
 }
 
 /** Stops a dev server Ports lists: TERM (KILL with `force`), and records what it gave back. */
 async function stopServer(pid, force = false, shownStart = null) {
   const path = join(DATA, "ports.json");
-  await loadShells();
+  const shells = await loadShells();
   const procs = await processes();
-  const now = await serversNow(procs);
+  const now = await serversNow(procs, shells);
   if (!now) { console.log("lsof could not list the servers"); return false; }
   const x = now.find((s) => s.pid === pid);
   if (!x) { console.log(`not a dev server Ports lists: ${pid}`); return false; }
@@ -741,23 +762,24 @@ async function stopServer(pid, force = false, shownStart = null) {
   if (shownStart && x.startedAt && Math.abs(x.startedAt - shownStart) > 2 * MIN) { console.log(`pid ${pid} is another process now`); return false; }
   const tree = treeOf(pid, procs).map((p) => ({ pid: p.pid, lstart: p.lstart, mb: p.rssMB }));
   await run("kill", [force ? "-KILL" : "-TERM", String(pid)]);
-  let after = null;
-  for (let i = 0; i < 10; i++) {
+  // Up to 5 s for it to go: pid -> start of what runs then.
+  const after = await retry(10, async () => {
     await sleep(500);
-    after = new Map((await processes()).map((p) => [p.pid, p.lstart]));
-    if (after.get(pid) !== x.lstart) break;
-  }
+    return new Map((await processes()).map((p) => [p.pid, p.lstart]));
+  }, { done: (running) => running.get(pid) !== x.lstart });
   const gone = (t) => after.get(t.pid) !== t.lstart;
   if (!gone(tree[0])) { event("skip", `${x.project ?? "A dev server"} did not stop yet${force ? "" : "; Stop again forces it"}`, { pid }); return false; }
   const freed = tree.filter(gone).reduce((t, p) => t + p.mb, 0);
   // Recorded as listening first (one stopped before its first minute's look
   // still counts as opened), then as stopped.
-  const p = updatePorts(readJSON(path), now);
-  const rec = p.servers.find((r) => r.key === x.key);
-  if (rec) rec.ended = { at: Date.now(), how: "stopped", freedMB: freed };
-  p.now = (p.now ?? []).filter((s) => s.key !== x.key);
-  p.totals.stopped++; p.totals.freedMB += freed;
-  writeJSON(path, p);
+  const listed = updatePorts(readJSON(path), now);
+  const i = listed.servers.findIndex((r) => r.key === x.key);
+  writeJSON(path, {
+    ...listed,
+    servers: i < 0 ? listed.servers : listed.servers.with(i, { ...listed.servers[i], ended: { at: Date.now(), how: "stopped", freedMB: freed } }),
+    now: (listed.now ?? []).filter((s) => s.key !== x.key),
+    totals: { ...listed.totals, stopped: listed.totals.stopped + 1, freedMB: listed.totals.freedMB + freed },
+  });
   event("stop", `Stopped the dev server in ${x.project ?? "a folder"}${x.owner ? "" : " (no pane ran it)"}: ${freed} MB back`, { pid, freedMB: freed });
   return true;
 }
@@ -773,39 +795,47 @@ async function sample() {
   const swapTotal = Number(/total = ([\d.]+)M/.exec(swapText.stdout)?.[1] ?? 0);
   const winPid = await windowPid();
   const corePids = procs.filter((p) => /\/herdr-core$/.test(p.command.split(" ")[0]) && !/ connect\b/.test(p.command)).map((p) => p.pid);
-  const heavy = [...procs].sort((a, b) => b.rssMB - a.rssMB).slice(0, 14).map((p) => p.pid);
+  const heavy = procs.toSorted((a, b) => b.rssMB - a.rssMB).slice(0, 14).map((p) => p.pid);
   const fp0 = await footprints([winPid, ...corePids, ...heavy]);
-  const agents = await agentsNow(procs, fp0);
-  const missing = agents.filter((a) => !fp0.has(a.pid)).map((a) => a.pid);
-  if (missing.length) for (const [k, v] of await footprints(missing)) { fp0.set(k, v); const a = agents.find((x) => x.pid === k); if (a) a.mb = v; }
-  const win = { pid: winPid, mb: winPid ? fp0.get(winPid) ?? 0 : 0, oom: winPid ? await windowOOM() : false, limitMB: limits.windowMB };
+  const found = await agentsNow(procs, fp0);
+  // An agent outside the first footprint gets its own, in a second call.
+  const missing = found.agents.filter((a) => !fp0.has(a.pid)).map((a) => a.pid);
+  const extra = missing.length ? await footprints(missing) : new Map();
+  const fp = new Map([...fp0, ...extra]);
+  // Each pid's first agent takes it (entries reversed: the first one wins).
+  const firstWith = new Map(found.agents.map((a, i) => [a.pid, i]).toReversed());
+  const agents = found.agents.map((a, i) => (extra.has(a.pid) && firstWith.get(a.pid) === i ? { ...a, mb: extra.get(a.pid) } : a));
+  const win = { pid: winPid, mb: winPid ? fp.get(winPid) ?? 0 : 0, oom: winPid ? await windowOOM() : false, limitMB: limits.windowMB };
   const agentPids = new Set(agents.map((a) => a.pid));
   const heaviest = heavy.map((pid) => procs.find((p) => p.pid === pid)).filter(Boolean)
-    .map((p) => ({ pid: p.pid, name: p.command.startsWith("claude") || /^\d+\.\d+\.\d+$/.test(p.name) ? "claude" : p.name, mb: fp0.get(p.pid) ?? p.rssMB, ageMin: p.ageMin, agent: agentPids.has(p.pid) }))
-    .sort((a, b) => b.mb - a.mb).slice(0, 8);
+    .map((p) => ({ pid: p.pid, name: p.command.startsWith("claude") || /^\d+\.\d+\.\d+$/.test(p.name) ? "claude" : p.name, mb: fp.get(p.pid) ?? p.rssMB, ageMin: p.ageMin, agent: agentPids.has(p.pid) }))
+    .toSorted((a, b) => b.mb - a.mb).slice(0, 8);
   return {
     procs, win, agents, heaviest, focused: await focusedTerminal(),
     machine: { totalMB: Math.round(Number(memsize.stdout) / MB), freePct: Number(level.stdout) || 0, swapMB: Math.round(swapUsed), swapTotalMB: Math.round(swapTotal) },
-    core: { mb: corePids.reduce((s, p) => s + (fp0.get(p) ?? 0), 0) },
+    core: { mb: corePids.reduce((s, p) => s + (fp.get(p) ?? 0), 0) },
+    shells: found.shells,
   };
 }
 
 function writeNow(snap, state, helpers) {
   writeJSON(join(DATA, "now.json"), {
     v: 1, at: Date.now(), machine: snap.machine, window: snap.win, core: snap.core, focused: snap.focused ?? null,
-    agents: snap.agents.map(({ shellPid, argv, ...a }) => a).sort((a, b) => b.mb - a.mb),
+    agents: snap.agents.map(({ shellPid, argv, ...a }) => a).toSorted((a, b) => b.mb - a.mb),
     heaviest: snap.heaviest, helpers, limits, paused: Boolean(state.paused), events: recentEvents(40),
   });
 }
 
+// The state after telling you the machine runs low (at most once in a while).
 async function pressure(snap, state) {
   const { freePct, swapMB } = snap.machine;
-  if (!isLow(snap.machine)) return;
-  if (state.lowNoticed && Date.now() - state.lowNoticed < limits.noticeEveryMin * MIN) return;
-  state.lowNoticed = Date.now();
+  if (!isLow(snap.machine)) return state;
+  if (state.lowNoticed && Date.now() - state.lowNoticed < limits.noticeEveryMin * MIN) return state;
+  const noticed = { ...state, lowNoticed: Date.now() };
   const top = snap.heaviest.slice(0, 4).map((p) => `${p.name} ${p.mb} MB`).join(", ");
   event("low", `Memory low: ${freePct}% free, ${swapMB} MB swapped. Heaviest: ${top}`);
   await notify(`Memory low: ${freePct}% free, ${(swapMB / 1024).toFixed(1)} GB swapped`, `Heaviest: ${top}`);
+  return noticed;
 }
 
 const isLow = (m) => m.freePct < limits.lowFreePct || m.swapMB > limits.lowSwapMB;
@@ -815,11 +845,12 @@ async function recycleDue(snap) {
   const low = isLow(snap.machine);
   const due = snap.agents
     .filter((a) => a.recyclable && a.idleMin >= limits.agentIdleMin && (a.mb > limits.agentMB || (low && a.mb > limits.pressureAgentMB)))
-    .sort((a, b) => b.mb - a.mb);
-  for (const a of due) {
+    .toSorted((a, b) => b.mb - a.mb);
+  // One per check: the heaviest that recycles.
+  await findAsync(due, async (a) => {
     const why = a.mb > limits.agentMB ? `${a.mb} MB, over ${limits.agentMB}` : `machine low: ${snap.machine.freePct}% free, ${snap.machine.swapMB} MB swapped`;
-    if (await recycle(a.pid, why)) return; // one per check
-  }
+    return (await recycle(a.pid, why)).ok;
+  });
 }
 
 /** One guard at a time, for checks and actions alike. Taken from an owner
@@ -827,42 +858,45 @@ async function recycleDue(snap) {
 async function lock(waitMs = 0) {
   const path = join(DATA, "lock");
   const until = Date.now() + waitMs;
-  for (;;) {
-    try {
+  const attempt = async () => {
+    const release = tryOr(() => {
       writeFileSync(path, JSON.stringify({ pid: process.pid, at: Date.now() }), { flag: "wx" });
       return () => { try { if (readJSON(path)?.pid === process.pid) rmSync(path, { force: true }); } catch {} };
-    } catch {
-      const held = readJSON(path);
-      let alive = false;
-      if (held?.pid) { try { process.kill(held.pid, 0); alive = true; } catch {} }
-      if (!alive && (held || Date.now() - statSync(path).mtimeMs > 10_000)) { rmSync(path, { force: true }); continue; }
-      if (Date.now() >= until) return null;
-      await sleep(1000);
-    }
-  }
+    });
+    if (release) return release;
+    const held = readJSON(path);
+    const alive = Boolean(held?.pid) && tryOr(() => { process.kill(held.pid, 0); return true; }, false);
+    // An owner gone (or a lock file nobody wrote whole for 10 s): taken over.
+    if (!alive && (held || Date.now() - statSync(path).mtimeMs > 10_000)) { rmSync(path, { force: true }); return attempt(); }
+    if (Date.now() >= until) return null;
+    await sleep(1000);
+    return attempt();
+  };
+  return attempt();
 }
 
 async function check({ act = true, locked = false } = {}) {
   const release = locked ? () => {} : await lock();
   if (!release) return;
   try {
-    const state = readJSON(join(DATA, "state.json")) ?? {};
+    const before = readJSON(join(DATA, "state.json")) ?? {};
     const snap = await sample();
     const agentsMB = snap.agents.reduce((s, a) => s + a.mb, 0);
     const histPath = join(DATA, "history.json");
     const hist = addToHistory(readJSON(histPath), [Date.now(), snap.machine.freePct, snap.machine.swapMB, snap.win.mb, agentsMB], snap.agents);
-    hist.totals = totals();
-    writeJSON(histPath, hist);
-    await samplePorts(snap.procs);
+    writeJSON(histPath, { ...hist, totals: totals() });
+    await samplePorts(snap.procs, snap.shells);
     const helpers = snap.procs.filter((p) => snap.win.pid && p.ppid === snap.win.pid && isHelper(p.command) && p.ageMin >= 3).length;
-    writeNow(snap, state, helpers);
-    if (act) {
-      await guardWindow(snap.win, state);
+    writeNow(snap, before, helpers);
+    // Acting moves the state on: the window's watch, then the low notice.
+    const state = act ? await (async () => {
+      const watched = await guardWindow(snap.win, before);
       const ended = await reap(snap.procs, snap.win.pid);
       await recycleDue(snap);
-      await pressure(snap, state);
-      writeNow(snap, state, Math.max(0, helpers - ended));
-    }
+      const after = await pressure(snap, watched);
+      writeNow(snap, after, Math.max(0, helpers - ended));
+      return after;
+    })() : before;
     writeJSON(join(DATA, "state.json"), state);
   } finally { release(); }
 }
@@ -907,31 +941,41 @@ async function uninstall() {
 // ---- main --------------------------------------------------------------------------------------
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === (await import("node:fs")).realpathSync(process.argv[1]);
+// A command's answer as its exit status: 0 ends as Node would by itself;
+// another ends once what was printed is out.
+const exitWith = (code) => (code ? new Promise(() => process.stdout.write("", () => process.exit(code))) : undefined);
 if (isMain) {
   const [cmd = "check", arg] = process.argv.slice(2);
+  // Under the lock (another guard busy: 1), its answer, then a fresh sample.
   const manual = async (fn) => {
     const release = await lock(120_000);
-    if (!release) { console.log("another guard is busy; try again"); process.exitCode = 1; return; }
-    try { await fn(); await check({ act: false, locked: true }); } finally { release(); }
+    if (!release) { console.log("another guard is busy; try again"); return 1; }
+    try { const code = await fn(); await check({ act: false, locked: true }); return code ?? 0; } finally { release(); }
   };
-  if (cmd === "check") await check();
-  else if (cmd === "sample") await check({ act: false });
-  else if (cmd === "stop-server") await manual(async () => { const [p, start] = String(arg).split("@"); process.exitCode = (await stopServer(Number(p), process.argv[4] === "force", Number(start) || null)) ? 0 : 1; });
-  else if (cmd === "close") await manual(async () => { process.exitCode = (await closeAgent(Number(arg), "asked from Memory")) ? 0 : 1; });
-  else if (cmd === "close-stale") await manual(() => closeStale(arg !== undefined && Number.isFinite(Number(arg)) ? Number(arg) : limits.staleIdleMin));
-  else if (cmd === "recycle-all") await manual(() => recycleBatch(Number(arg) || 0));
-  else if (cmd === "recycle") await manual(async () => { process.exitCode = (await recycle(Number(arg), "asked from Memory", { manual: true })) ? 0 : 1; });
-  else if (cmd === "restart-window") await manual(() => restartWindow("Asked from Memory"));
-  else if (cmd === "reap") await manual(async () => { await reap(await processes(), await windowPid(), { manual: true }); });
-  else if (cmd === "install") { await install(); }
-  else if (cmd === "uninstall") { await uninstall(); }
-  else if (cmd === "status") {
+  const status = () => {
     const n = readJSON(join(DATA, "now.json"));
-    if (!n) console.log("no sample yet");
-    else {
-      console.log(`${new Date(n.at).toLocaleString()}  free ${n.machine.freePct}%  swap ${n.machine.swapMB} MB  window ${n.window.mb} MB  core ${n.core.mb} MB`);
-      for (const a of n.agents) console.log(`  ${String(a.mb).padStart(5)} MB  ${a.kind.padEnd(6)} ${a.terminal.padEnd(5)} ${a.status === "idle" ? `idle ${a.idleMin}m` : "working"}  ${a.name}${a.why ? `  (${a.why})` : ""}`);
-      for (const e of n.events.slice(0, 8)) console.log(`  ${new Date(e.at).toLocaleTimeString()} ${e.kind}: ${e.text}`);
-    }
-  } else { console.log("usage: guard.mjs check|recycle <pid>|recycle-all [overMB]|close <pid>|close-stale [minIdle]|stop-server <pid> [force]|restart-window|reap|install|uninstall|status"); process.exitCode = 2; }
+    if (!n) { console.log("no sample yet"); return 0; }
+    console.log(`${new Date(n.at).toLocaleString()}  free ${n.machine.freePct}%  swap ${n.machine.swapMB} MB  window ${n.window.mb} MB  core ${n.core.mb} MB`);
+    for (const a of n.agents) console.log(`  ${String(a.mb).padStart(5)} MB  ${a.kind.padEnd(6)} ${a.terminal.padEnd(5)} ${a.status === "idle" ? `idle ${a.idleMin}m` : "working"}  ${a.name}${a.why ? `  (${a.why})` : ""}`);
+    for (const e of n.events.slice(0, 8)) console.log(`  ${new Date(e.at).toLocaleTimeString()} ${e.kind}: ${e.text}`);
+    return 0;
+  };
+  const commands = {
+    check: async () => { await check(); },
+    sample: async () => { await check({ act: false }); },
+    "stop-server": () => manual(async () => { const [p, start] = String(arg).split("@"); return (await stopServer(Number(p), process.argv[4] === "force", Number(start) || null)) ? 0 : 1; }),
+    close: () => manual(async () => ((await closeAgent(Number(arg), "asked from Memory")).ok ? 0 : 1)),
+    "close-stale": () => manual(async () => { await closeStale(arg !== undefined && Number.isFinite(Number(arg)) ? Number(arg) : limits.staleIdleMin); }),
+    "recycle-all": () => manual(async () => { await recycleBatch(Number(arg) || 0); }),
+    recycle: () => manual(async () => ((await recycle(Number(arg), "asked from Memory", { manual: true })).ok ? 0 : 1)),
+    "restart-window": () => manual(async () => { await restartWindow("Asked from Memory"); }),
+    reap: () => manual(async () => { await reap(await processes(), await windowPid(), { manual: true }); }),
+    install: async () => { await install(); },
+    uninstall: async () => { await uninstall(); },
+    status,
+  };
+  const run = Object.hasOwn(commands, cmd) ? commands[cmd]
+    : () => { console.log("usage: guard.mjs check|recycle <pid>|recycle-all [overMB]|close <pid>|close-stale [minIdle]|stop-server <pid> [force]|restart-window|reap|install|uninstall|status"); return 2; };
+  const code = await run();
+  await exitWith(typeof code === "number" ? code : 0);
 }

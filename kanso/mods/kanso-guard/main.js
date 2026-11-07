@@ -12,6 +12,7 @@ import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, appHome, theme, nextCommand, readTextFile, layout } from "herdr";
 import { G, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
+import { tryOr, tryOrAsync } from "./pure.js";
 import { memorySpec, memoryText } from "./memory-card.js";
 import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords } from "./model.js";
 
@@ -35,15 +36,17 @@ const HEAVY_ROWS = 6;
  */
 function hiddenInLayout() {
   try {
-    const path = [];
-    const walk = (node) => {
-      path.push(node);
-      if (node?.content?.mod === MOD) return true;
-      for (const child of node?.children ?? []) if (walk(child)) return true;
-      path.pop();
-      return false;
+    // The nodes from the root down to this mod's block, or null.
+    const pathTo = (node) => {
+      if (node?.content?.mod === MOD) return [node];
+      for (const child of node?.children ?? []) {
+        const below = pathTo(child);
+        if (below) return [node, ...below];
+      }
+      return null;
     };
-    if (!walk(layout())) return false;
+    const path = pathTo(layout());
+    if (!path) return false;
     return path.some((node, index) => node.hidden
       || (node.type === "stack" && node.active && path[index + 1] && node.active !== path[index + 1].id));
   } catch {
@@ -75,14 +78,14 @@ export default class Memory extends View {
 
     this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
-        let command;
-        try {
-          command = await nextCommand();
+        // A replaced build (hot reload, update) stops here.
+        const next = await tryOrAsync(async () => {
+          const command = await nextCommand();
           commandCx.notify();
-        } catch {
-          break;
-        }
-        const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
+          return { command };
+        });
+        if (!next) break;
+        const name = String(next.command).replace(new RegExp(`^${MOD}\\.`), "");
         if (name === "refresh") this.check(commandCx);
         else if (name === "open") this.wake(commandCx);
         else if (name === "back") { this.armed.clear(); this.showAll = false; commandCx.notify(); }
@@ -129,17 +132,18 @@ export default class Memory extends View {
     this.reading = true;
     cx.spawn(async (readCx) => {
       const dir = `${appHome()}/${DATA_DIR}`;
-      let now;
-      try { now = parseNow(await readTextFile(`${dir}/now.json`)); } catch { now = { state: "bad", data: null }; }
-      let digest = this.digest;
-      if (now.data && (!digest || Date.now() - this.historyAt >= HISTORY_MS)) {
-        try {
-          digest = digestHistory(await readTextFile(`${dir}/history.json`), Date.now(), now.data.limits?.lowFreePct ?? null);
+      const now = await tryOrAsync(async () => parseNow(await readTextFile(`${dir}/now.json`)), { state: "bad", data: null });
+      const last = this.digest;
+      // history.json once a minute; one that can't be read keeps the last digest.
+      const fresh = now.data && (!last || Date.now() - this.historyAt >= HISTORY_MS)
+        ? await tryOrAsync(async () => {
+          const read = digestHistory(await readTextFile(`${dir}/history.json`), Date.now(), now.data.limits?.lowFreePct ?? null);
           this.historyAt = Date.now();
-        } catch { /* keep the last one */ }
-      }
-      let batch = null;
-      try { batch = parseBatch(await readTextFile(`${dir}/batch.json`)); } catch { /* none */ }
+          return { read };
+        })
+        : null;
+      const digest = fresh ? fresh.read : last;
+      const batch = await tryOrAsync(async () => parseBatch(await readTextFile(`${dir}/batch.json`)), null);
       this.reading = false;
       if (this.closed || !this.awake) return;
       this.now = now;
@@ -179,19 +183,19 @@ export default class Memory extends View {
       try {
         if (!this.node) {
           const raw = await readTextFile(`${appHome()}/${RUNTIME_FILE}`).catch(() => null);
-          let node = "node";
-          try { const v = JSON.parse(raw ?? "{}")?.node; if (typeof v === "string" && v.trim()) node = v.trim(); } catch { /* the default */ }
-          this.node = node;
+          const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
+          this.node = typeof v === "string" && v.trim() ? v.trim() : "node";
         }
         await exec("sh", ["-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', this.node, `${appHome()}/${GUARD_FILE}`, ...args]);
       } catch {
         delete this.busy[key];
       }
       if (this.closed || !this.awake) return; // hidden meanwhile: nothing scheduled
-      for (const ms of [3000, 8000, 20_000]) {
-        this.timers.push(actCx.timer.after(ms, (timerCx) => { this.historyAt = 0; this.read(timerCx); }));
-      }
-      while (this.timers.length > 12) { try { this.timers.shift()?.cancel(); } catch { /* already gone */ } }
+      const timers = [...this.timers, ...[3000, 8000, 20_000].map((ms) => actCx.timer.after(ms, (timerCx) => { this.historyAt = 0; this.read(timerCx); }))];
+      // At most 12 kept: the oldest are cancelled.
+      const extra = Math.max(0, timers.length - 12);
+      for (const handle of timers.slice(0, extra)) { try { handle?.cancel(); } catch { /* already gone */ } }
+      this.timers = timers.slice(extra);
       actCx.notify();
     });
   }
@@ -376,8 +380,7 @@ export default class Memory extends View {
 
   agents(c, data) {
     const list = data.agents;
-    const { ready, working, other } = groupAgents(list, data.focused);
-    const batchable = ready.batchable;
+    const { ready, batchable, working, other } = groupAgents(list, data.focused);
     const limit = data.limits.agentMB;
     const over = num(data.limits.pressureAgentMB) ?? 500;
     const heavy = batchable.filter((a) => a.mb >= over);
