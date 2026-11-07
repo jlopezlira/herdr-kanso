@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.6.2] - 2026-11-07
+
+### Fixed
+
+- The minimap under the panes always fits its place: with many columns, or one pane per view, its marks shrink instead of being cut off, so the first one no longer shows as a dot and the + to show more panes per view is always there.
+
 ## [3.6.1] - 2026-11-07
 
 ### Fixed
