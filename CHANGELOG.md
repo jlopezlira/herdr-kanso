@@ -8,6 +8,14 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.6.1] - 2026-11-07
+
+### Fixed
+
+- An agent asleep that runs again, resumed by hand or woken before 3.6.0, is awake: it no longer shows twice in the sidebar, and its tab no longer offers a wake that says it already runs. A tab with none of its agents left asleep is no longer listed.
+- Move to project: its list scrolls instead of squeezing the projects.
+- Send: a search that hides the project you chose clears it, so Send never does nothing.
+
 ## [3.6.0] - 2026-11-07
 
 ### Added

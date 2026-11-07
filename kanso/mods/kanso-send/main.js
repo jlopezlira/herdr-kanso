@@ -101,6 +101,8 @@ export default class Send extends View {
     const groups = everyone(terminals(), panes(), { from: this.from?.terminal ?? null, last: shared(LAST), query: this.query.value(),
       nameOf: name, projectOf: (q) => spaceOf(q)?.name ?? null });
     const list = groups.flatMap((g) => g.agents);
+    // A search that hides the chosen project drops it, so Send always means what is shown.
+    if (this.toProject && !groups.some((g) => g.project === this.toProject)) this.toProject = null;
     if (!this.toProject && !list.some((q) => q.terminal === this.to)) this.to = list[0]?.terminal ?? null;
     const label = (text) => div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(text);
     const dot = (st) => ({ working: t.working, blocked: t.blocked, done: t.done }[st] ?? t.idle);

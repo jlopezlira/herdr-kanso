@@ -80,6 +80,7 @@ export class Panel {
       const keep = !a.given && was?.restore;
       this.agents.set(a.conversation, { ...was, name: keep ? was.name : a.given ?? null, restore: a.given ? null : was?.restore ?? null, title: a.title ?? was?.title ?? null, said: a.said ?? was?.said ?? null, space: a.space, pos: a.pos, program: a.program, status: a.status });
     }
-    return this.write(() => this.kdb.observe(due, at));
+    // Freed from its sleep first, so this sighting is what the row shows.
+    return this.write(async () => { await this.kdb.awake(list, at); return this.kdb.observe(due, at); });
   }
 }

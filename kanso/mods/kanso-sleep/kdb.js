@@ -2,6 +2,7 @@
 // Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
 import { exec, appHome } from "herdr";
+import { mapSeries, parseOr } from "./pure.js";
 
 export const DIR = "data/kanso";
 export const VERSION = 1;
@@ -66,6 +67,13 @@ export function inPlace(a, place, spaces, home = "") {
 const restoreSql = (restores, mine) => restores.map(([c, name]) => `UPDATE agents SET restore=${q(name)} WHERE id=${q(c)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`).join("");
 
 const free = (col, now) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - STALE_MS)})`;
+
+// A sleep's layout without the panes of these conversations; a column left empty goes, the rest share its width.
+export function layoutWithout(layout, ids) {
+  const cols = (layout?.cols ?? []).map((c) => ({ ...c, panes: (c.panes ?? []).filter((p) => !ids.includes(p.resume)) })).filter((c) => c.panes.length);
+  const total = cols.reduce((sum, c) => sum + (Number(c.w) || 0), 0);
+  return { ...layout, cols: cols.map((c) => ({ ...c, w: total > 0 ? (Number(c.w) || 0) / total : 1 / cols.length })) };
+}
 
 export class Kdb {
   constructor(dir = `${appHome()}/${DIR}`) {
@@ -216,6 +224,27 @@ export class Kdb {
     const mine = `id=${q(id)} AND ${free("waking", now)}`;
     return this.held(`BEGIN;UPDATE agents SET status='gone',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
+  }
+
+  // An agent of a sleep seen running again (resumed by hand, or before this Kanso) is awake:
+  // the sleep lets it go, and ends once no agent of it is left asleep. Only a process other than
+  // the one put to sleep, seen after the sleep was saved, counts; a sleep or wake in progress is left alone.
+  async awake(live, now = Date.now()) {
+    const running = new Map(live.filter((a) => a.conversation && a.terminal && a.program && a.pid != null).map((a) => [a.conversation, a.pid]));
+    if (!running.size) return [];
+    const slept = (s) => new Map(parseOr(s.layout, { cols: [] }).cols?.flatMap((c) => c.panes ?? []).map((p) => [p.resume, p.pid]) ?? []);
+    const awakeIn = (s) => { const pids = slept(s); return s.agents.filter((a) => running.has(a.id) && running.get(a.id) !== pids.get(a.id)).map((a) => a.id); };
+    const ours = (await this.sleeps()).filter((s) => s.saved < now && awakeIn(s).length);
+    return mapSeries(ours, async (s) => {
+      const gone = awakeIn(s);
+      const layout = layoutWithout(parseOr(s.layout, { cols: [] }), gone);
+      // Only the layout read here is changed: another window that changed it first wins, and the next sighting looks again.
+      const mine = `id=${q(s.id)} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now)}`;
+      const after = gone.length < s.agents.length && layout.cols.length ? `UPDATE sleeps SET layout=${q(JSON.stringify(layout))} WHERE ${mine} RETURNING id;` : `DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
+      const freed = await this.held(`BEGIN;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(s.id)} AND id IN (${gone.map(q).join(",")}) AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+        ${after}COMMIT;`);
+      return freed ? s.id : null;
+    }).then((ids) => ids.filter(Boolean));
   }
 
   async sleeps() {

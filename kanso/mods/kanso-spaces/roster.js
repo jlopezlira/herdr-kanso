@@ -30,7 +30,7 @@ export function seenNow(sp, ctx, threads, kept, nameFor, since = {}) {
     const conversation = agentKey(th, k, ctx.alive), was = conversation ? kept.get(conversation) : null;
     return [[a.address, { conversation, given: a.name || null, name: nameFor(a), title: th?.title ?? was?.title ?? null, said: th?.said ?? th?.at ?? was?.said ?? null,
       space: w.id, tab: a.tab ?? null, pos: i, program: a.program ? JSON.stringify(a.program) : null, status: a.status || "unknown",
-      terminal: a.address, cwd: a.cwd ?? null, since: since[a.address]?.at ?? null }]];
+      terminal: a.address, cwd: a.cwd ?? null, since: since[a.address]?.at ?? null, pid: readNow(th, k, ctx.alive) ? th.pid : null }]];
   })));
 }
 

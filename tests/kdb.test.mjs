@@ -373,3 +373,49 @@ test("a database made before agents had a project gets the column, and keeps its
   await db.setProject("c1", "sp-kanso");
   assert.deepEqual(clone((await db.agents()).map((r) => [r.id, r.name, r.project])), [["c1", "Alice", "sp-kanso"]]);
 });
+
+test("an agent of a sleep seen running again is awake: the sleep lets it go, and ends when none is left asleep", async (t) => {
+  const { db } = await database(t);
+  const live = (c, terminal, pid) => ({ ...seen(c, null, "sp-kanso", 0, "idle", terminal), program: "{\"kind\":\"claude-code\"}", pid });
+  const panes = { per: null, cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "c1", pid: 11 }, { argv: ["claude"], resume: "c2", pid: 12 }] }] };
+  const saved = Date.now();
+  const { id, token } = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
+  assert.deepEqual(clone(await db.awake([live("c1", "t7", 21)], saved + 1)), [], "a sleep still going is left alone");
+  await db.settle(id, token);
+  assert.deepEqual(clone(await db.awake([live("c1", "t7", 21)], saved - 1)), [], "a sighting from before the sleep wakes no one");
+  assert.deepEqual(clone(await db.awake([live("c1", "t1", 11)], saved + 1)), [], "the process that was put to sleep is not a new one");
+  assert.deepEqual(clone(await db.awake([{ ...live("c1", "t7", 21), program: null }], saved + 1)), [], "a terminal with no agent in front wakes no one");
+  assert.deepEqual(clone(await db.awake([live("c1", "t7", 21)], saved + 1)), [id]);
+  const [row] = await db.sleeps();
+  assert.deepEqual(clone(row.agents.map((a) => a.id)), ["c2"], "the other one stays asleep");
+  assert.deepEqual(clone(JSON.parse(row.layout).cols[0].panes.map((p) => p.resume)), ["c2"], "and is all that a wake opens");
+  await db.observe([live("c1", "t7", 21)], saved + 2);
+  assert.equal(clone(await db.read("SELECT status FROM agents WHERE id='c1'"))[0].status, "idle", "the sighting shows it as it runs");
+  const claim = await db.claim(id, saved + 3);
+  assert.deepEqual(clone(await db.awake([live("c2", "t8", 22)], saved + 4)), [], "a wake in progress is left alone");
+  await db.release(id, claim.token);
+  assert.deepEqual(clone(await db.awake([live("c2", "t8", 22)], saved + 5)), [id], "released: free again");
+  assert.deepEqual(clone(await db.sleeps()), [], "no one left asleep: the sleep is over");
+});
+
+test("two windows freeing different agents of one sleep never lose each other's change", async (t) => {
+  const { db, dir } = await database(t);
+  const other = new (await database(t, dir)).Kdb(join(dir, "kanso"));
+  const live = (c, pid) => ({ ...seen(c, null, "sp-kanso", 0, "idle", `t${pid}`), program: "{}", pid });
+  const panes = { per: null, cols: [{ w: 1, panes: ["c1", "c2", "c3"].map((c, i) => ({ argv: ["claude"], resume: c, pid: i + 1 })) }] };
+  const saved = Date.now();
+  const { id, token } = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, agents: ["c1", "c2", "c3"].map((conversation) => ({ conversation })) });
+  await db.settle(id, token);
+  await Promise.all([db.awake([live("c1", 21)], saved + 1), other.awake([live("c2", 22)], saved + 1)]);
+  await db.awake([live("c1", 21)], saved + 2); await other.awake([live("c2", 22)], saved + 2);
+  const [row] = await db.sleeps();
+  assert.deepEqual(clone(row.agents.map((a) => a.id)), ["c3"]);
+  assert.deepEqual(clone(JSON.parse(row.layout).cols[0].panes.map((p) => p.resume)), ["c3"], "every freed agent's pane is gone, whichever window went first");
+});
+
+test("a sleep's layout without some conversations keeps the rest, widths shared", async () => {
+  const { layoutWithout } = await load("kanso-spaces/kdb.js", ["layoutWithout"], { exec, appHome: () => "/tmp" });
+  const two = { per: 4, cols: [{ w: 0.5, panes: [{ resume: "a" }] }, { w: 0.5, panes: [{ resume: "b" }, { resume: null }] }] };
+  assert.deepEqual(clone(layoutWithout(two, ["a"])), { per: 4, cols: [{ w: 1, panes: [{ resume: "b" }, { resume: null }] }] });
+  assert.deepEqual(clone(layoutWithout(two, ["b"])).cols.map((c) => c.panes.length), [1, 1]);
+});
