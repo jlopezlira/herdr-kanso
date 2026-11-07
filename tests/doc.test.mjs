@@ -173,3 +173,12 @@ test("the standalone panel lists a folder's Markdown, shallowest first", async (
   assert.deepEqual(clone(markdownIn("docs/guide/setup.md\nREADME.md\nsrc/a.ts\ndocs/PLAN.md\nCHANGELOG.markdown\n")),
     ["CHANGELOG.markdown", "README.md", "docs/PLAN.md", "docs/guide/setup.md"]);
 });
+
+test("the standalone panel looks in the focused pane's machine and folder", async () => {
+  const { placeOf } = await load("../../markdown-panel/mods/markdown-panel/main.js", ["placeOf"]);
+  const list = [{ id: "s1", machine: null, folder: "/here" }, { id: "vps/s2", machine: "vps", folder: "" }];
+  assert.deepEqual(clone(placeOf({ space: "vps/s2", cwd: "/srv/app" }, list, "/Users/me")), { on: "vps", folder: "/srv/app" });
+  assert.deepEqual(clone(placeOf({ space: "vps/s2", cwd: null }, list, "/Users/me")), { on: "vps", folder: "" });
+  assert.deepEqual(clone(placeOf({ space: "s1", cwd: null }, list, "/Users/me")), { on: null, folder: "/here" });
+  assert.deepEqual(clone(placeOf(null, list, "/Users/me")), { on: null, folder: "/Users/me" });
+});
