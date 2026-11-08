@@ -36,13 +36,14 @@ export async function temporary(t) {
   return dir;
 }
 
-// Herdr's exec, backed by the real programs.
+// Herdr's exec, backed by the real programs, and like Herdr's it kills one that runs past its
+// limit (30 s; `limit` in ms makes it shorter for a test).
 export async function exec(command, args, options = {}) {
   try {
-    const result = await runFile(command, args, { cwd: options.cwd, maxBuffer: 4 * 1024 * 1024 });
+    const result = await runFile(command, args, { cwd: options.cwd, maxBuffer: 4 * 1024 * 1024, timeout: options.limit ?? 30000, killSignal: "SIGKILL" });
     return { code: 0, ...result };
   } catch (error) {
-    return { code: error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? String(error) };
+    return { code: error.killed ? 137 : error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? String(error) };
   }
 }
 

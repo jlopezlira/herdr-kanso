@@ -17,6 +17,8 @@ const EVERY = 4 * 60 * 1000;
 // buttons show: the install lock (HOLD) is what keeps two installs apart, and it never expires.
 const LOOK_MS = 60 * 1000;
 const SHOWN_MS = 15 * 60 * 1000;
+// Under Herdr's home: the lock, and per install its staging folder, pid, log and outcome.
+const UPDATES = ".kanso-updates";
 // The footer is its account chip and a 34px row (and its gap) for each of Update, Settings and
 // Add machine that shows; a row a switch hides gives its place back.
 const FOOTER = "sidebar-footer";
@@ -101,51 +103,113 @@ export const HOLD = `hold() {
 }
 `;
 
-// The whole install, one process: the lock is its own, from before the download to the last
-// mod swapped, and its EXIT trap removes its staging on every way out, even once the swap has
-// replaced the mod that started it. 75: another install holds the lock; 4: one already put a
-// newer version in place; 3: the tag's files say another version.
+// restore STAGE: undo a swap that started and did not finish, from STAGE's backups: the mods it
+// moved in (listed in STAGE/in) out, every mod it moved aside (STAGE/old/mods) back, and the keys
+// and layout as they were. Backups stay where they are if one cannot be put back.
+const RESTORE = `restore() {
+  back=0
+  if [ -f "$1/in" ]; then
+    while IFS= read -r name; do if [ -n "$name" ]; then chmod -R u+w "$home/mods/$name" 2>/dev/null; rm -rf "$home/mods/$name"; fi; done < "$1/in"
+  fi
+  for kept in "$1/old/mods"/*/; do
+    [ -d "$kept" ] || continue
+    name=$(basename "$kept")
+    rm -rf "$home/mods/$name"
+    mv "$1/old/mods/$name" "$home/mods/$name" || back=1
+  done
+  if [ -f "$1/old/keys.json" ]; then mv -f "$1/old/keys.json" "$home/keys.json" || back=1; fi
+  if [ -f "$1/old/kanso.json" ]; then mv -f "$1/old/kanso.json" "$home/layouts/kanso.json" || back=1; fi
+  if [ "$back" = 0 ]; then rm -f "$1/swapping"; fi
+  return "$back"
+}
+`;
+
+// The whole install, one detached process (LAUNCH): neither exec's 30 s limit nor a mod reload
+// reaches it, and the lock is its own from before the download to the last mod swapped. Its
+// outcome goes to <id>.status, one write, after the swap has finished or been undone: ok, busy
+// (another install holds the lock), already (one put a newer version in place) or error, then
+// the reason. The swap moves every mod aside before moving any new one in, so a failure, or a
+// kill the trap never sees (undone by the next install), puts back all of them.
 export const INSTALL_SCRIPT = `set -eu
 ${HOLD}
-url="$1"; home="$2"; stage="$3"; want="$4"; from="$5"; checker="$6"; stamp="$7"; keys="$8"; layout="$9"
-taken=0; hold "$home/.kanso-update.lock" || taken=$?
-[ "$taken" = 0 ] || { [ "$taken" = 75 ] || echo "the update lock could not be taken" >&2; exit "$taken"; }
-trap 'chmod -R u+w "$stage" 2>/dev/null; rm -rf "$stage"' EXIT
+${RESTORE}
+url="$1"; home="$2"; dir="$3"; id="$4"; want="$5"; from="$6"; checker="$7"; stamp="$8"; shift 8
+keys="$1"; layout="$2"; stage="$dir/$id"
+say() { printf '%s\\n%s\\n' "$1" "$2" > "$dir/$id.status.part" && mv -f "$dir/$id.status.part" "$dir/$id.status"; }
+finish() {
+  code=$?; set +e; trap - EXIT
+  why=$(tail -n 1 "$dir/$id.log" 2>/dev/null)
+  if [ -f "$stage/swapping" ] && ! restore "$stage"; then
+    why="$why; some of the mods you had are still in $stage/old"
+  elif [ -d "$stage" ]; then chmod -R u+w "$stage" 2>/dev/null; rm -rf "$stage"; fi
+  case $code in 0) say ok "" ;; 75) say busy "" ;; 4) say already "$why" ;; *) say error "\${why:-the update failed}" ;; esac
+}
+trap finish EXIT
 trap 'exit 1' HUP INT TERM
+taken=0; hold "$dir/lock" || taken=$?
+[ "$taken" = 0 ] || { [ "$taken" = 75 ] || echo "the update lock could not be taken" >&2; exit "$taken"; }
+say running download
+# A staging folder lives only while its install holds the lock: any other is a dead one's, and
+# one that died mid-swap is undone first.
+for left in "$dir"/*/; do
+  left=\${left%/}
+  [ -d "$left" ] && [ "$left" != "$stage" ] || continue
+  if [ ! -f "$left/swapping" ] || restore "$left"; then chmod -R u+w "$left" 2>/dev/null; rm -rf "$left"; fi
+done
+find "$dir" -maxdepth 1 -type f -mtime +1 ! -name lock ! -name "$id.*" -exec rm -f {} + 2>/dev/null || true
 version() { sed -n 's/.*"version"[^"]*"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null || true; }
 have=$(version "$home/mods/kanso-chrome/version.json")
 [ "$have" = "$from" ] || { echo "kansō is already at \${have:-another version}" >&2; exit 4; }
-# A staging folder lives only while its install holds the lock: any other here is a dead one's.
-for left in "$home"/.kanso-update-*; do if [ -d "$left" ] && [ "$left" != "$stage" ]; then chmod -R u+w "$left" 2>/dev/null; rm -rf "$left"; fi; done
 mkdir -p "$stage/src"
-curl -fsSL --max-time 25 -o "$stage/release.tar.gz" "$url" || { echo "the download failed" >&2; exit 1; }
+curl -fsSL --max-time 120 -o "$stage/release.tar.gz" "$url" || { echo "the download failed" >&2; exit 1; }
 tar -xzf "$stage/release.tar.gz" -C "$stage/src" --strip-components=1 || { echo "the download could not be opened" >&2; exit 1; }
 rm -f "$stage/release.tar.gz"
 src="$stage/src/kanso"
 got=$(version "$src/mods/kanso-chrome/version.json")
 [ "$got" = "$want" ] || { echo "the v$want release says it is \${got:-no version}" >&2; exit 3; }
-for dir in "$src/mods"/*/; do
-  name=$(basename "$dir")
+say running check
+for new in "$src/mods"/*/; do
+  name=$(basename "$new")
   out=$("$checker" check "$src/mods/$name" 2>&1 9>&-) || { echo "$name does not load on this Herdr: $(printf '%s\\n' "$out" | tail -n 1)" >&2; exit 1; }
 done
 if [ -n "$keys" ]; then printf '%s\\n' "$keys" > "$stage/keys.json"; fi
 if [ "$layout" = 1 ]; then cp "$src/layouts/kanso.json" "$stage/kanso.json"; fi
-mkdir -p "$stage/old" "$home/mods" "$home/themes" "$home/layouts"
-if [ -f "$stage/keys.json" ]; then mv "$stage/keys.json" "$home/keys.json"; fi
+mkdir -p "$stage/old/mods" "$home/mods" "$home/themes" "$home/layouts"
+say running swap
+: > "$stage/swapping"
+if [ -f "$stage/keys.json" ]; then
+  if [ -f "$home/keys.json" ]; then cp "$home/keys.json" "$stage/old/keys.json"; fi
+  mv "$stage/keys.json" "$home/keys.json"
+fi
 if [ -f "$stage/kanso.json" ]; then
-  if [ -f "$home/layouts/kanso.json" ]; then cp "$home/layouts/kanso.json" "$home/layouts/kanso.json.old-$stamp"; fi
+  if [ -f "$home/layouts/kanso.json" ]; then
+    cp "$home/layouts/kanso.json" "$stage/old/kanso.json"
+    cp "$home/layouts/kanso.json" "$home/layouts/kanso.json.old-$stamp"
+  fi
   mv "$stage/kanso.json" "$home/layouts/kanso.json"
 fi
 cp "$src"/themes/*.json "$home/themes/"
 cp "$src/layouts/kanso.png" "$home/layouts/kanso.png"
-for dir in "$src/mods"/*/; do
-  name=$(basename "$dir")
-  if [ -e "$home/mods/$name" ]; then rm -rf "$stage/old/$name"; mv "$home/mods/$name" "$stage/old/$name"; fi
-  if ! mv "$src/mods/$name" "$home/mods/$name"; then
-    if [ -e "$stage/old/$name" ]; then mv "$stage/old/$name" "$home/mods/$name"; fi
-    echo "could not put $name in place" >&2; exit 1
-  fi
+for new in "$src/mods"/*/; do
+  name=$(basename "$new")
+  if [ -e "$home/mods/$name" ]; then mv "$home/mods/$name" "$stage/old/mods/$name"; fi
 done
+for new in "$src/mods"/*/; do
+  name=$(basename "$new")
+  echo "$name" >> "$stage/in"
+  mv "$src/mods/$name" "$home/mods/$name" || { echo "could not put $name in place" >&2; exit 1; }
+done
+rm -f "$stage/swapping"
+`;
+
+// Starts INSTALL_SCRIPT in its own session, its output to <id>.log, and returns at once with
+// its pid in <id>.pid: the follower tells a dead install from a running one by it.
+export const LAUNCH = `dir="$1"; id="$2"; body="$3"; shift 3
+mkdir -p "$dir"
+if command -v setsid >/dev/null 2>&1; then setsid sh -c "$body" sh "$@" </dev/null >"$dir/$id.log" 2>&1 &
+else nohup sh -c "$body" sh "$@" </dev/null >"$dir/$id.log" 2>&1 &
+fi
+echo "$!" > "$dir/$id.pid"
 `;
 
 const lastLine = (r, fallback) => (r?.stderr || r?.stdout || "").trim().split("\n").at(-1) || fallback;
@@ -159,13 +223,20 @@ export class Updater {
     this.installed = null;
     this.working = false;
     this.error = null;
+    this.following = {};
+    this.pauseS = source.pauseS ?? 2;
   }
 
   // The tab bar and the footer each hold an Updater: an install either started shows on both.
-  get busy() { return this.working || fresh(this.state().installing, SHOWN_MS); }
+  get busy() { return this.working || Object.values(this.installs()).some((mark) => fresh(mark, SHOWN_MS)); }
 
   state() { return shared(STATE) ?? {}; }
   setState(patch) { setShared(STATE, { ...this.state(), ...patch }); }
+  // Installs in flight from this window, by id: { version, notes, at }. Kept in shared state, so a
+  // copy started by the swap's reload follows them on.
+  installs() { return this.state().installs ?? {}; }
+  mark(id, patch) { this.setState({ installs: { ...this.installs(), [id]: { ...this.installs()[id], ...patch } } }); }
+  unmark(id) { this.setState({ installs: Object.fromEntries(Object.entries(this.installs()).filter(([k]) => k !== id)) }); }
   autoCheckEnabled() { return this.state().autoCheck !== false; }
 
   available() {
@@ -189,6 +260,8 @@ export class Updater {
     cx.spawn(async (cx) => {
       await this.readInstalled();
       this.finished();
+      // The tab bar copy picks up an install a replaced copy started; it reports the outcome.
+      if (polls) Object.keys(this.installs()).forEach((id) => cx.spawn((cx) => this.follow(cx, id)));
       if (polling()) await this.check(cx, true);
       this.fit();
       cx.notify();
@@ -216,11 +289,11 @@ export class Updater {
     if (size !== want && OURS(size)) run("layout.resize", { id: FOOTER, px: want });
   }
 
-  // The update replaces this mod mid-run, so whichever copy sees `done` first reports it once.
+  // The updater of an older release notes `done` before its swap; the copy that swap starts reports it.
   finished() {
     const { done } = this.state();
     if (!done) return;
-    this.setState({ done: null, installing: null });
+    this.setState({ done: null });
     if (done.version !== this.installed) return;
     notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
   }
@@ -254,7 +327,8 @@ export class Updater {
     }
   }
 
-  // The keys and layout are decided here; the rest is INSTALL_SCRIPT, one process under the lock.
+  // The keys and layout are decided here; the rest is INSTALL_SCRIPT, started detached. This copy
+  // then follows it to the end, unless the swap replaces it first: the fresh tab bar copy goes on.
   async install(cx) {
     const v = this.available();
     if (!v || this.working) return;
@@ -262,36 +336,66 @@ export class Updater {
     const id = opId();
     this.working = true;
     this.error = null;
-    this.setState({ installing: { id, at: Date.now() } });
+    this.mark(id, { version: v, notes: "", at: Date.now() });
     cx.notify();
-    const home = appHome();
-    try {
+    const home = appHome(), dir = `${home}/${UPDATES}`;
+    const started = await tryOrAsync(async () => {
       const plan = await this.plan(v, home);
-      // Swapping kanso-chrome restarts this mod; the fresh copy reports.
-      this.setState({ done: { version: v, notes: plan.notes, id } });
-      const r = await exec("sh", ["-c", INSTALL_SCRIPT, "sh", this.source.tarball(v), home, `${home}/.kanso-update-${id}`,
+      this.mark(id, { notes: plan.notes });
+      return exec("sh", ["-c", LAUNCH, "sh", dir, id, INSTALL_SCRIPT, this.source.tarball(v), home, dir, id,
         v, this.installed, this.source.checker ?? SOURCE.checker, stamp(), plan.keys, plan.layout ? "1" : ""]);
-      // 75: another install of this version runs, and its swap reloads this window too, so the
-      // note stays for the fresh copy to report.
-      if (r.code === 75) return this.elsewhere();
-      if (this.state().done?.id === id && r.code !== 0) this.setState({ done: null });
-      if (r.code === 4) return this.elsewhere();
-      if (r.code !== 0) throw new Error(lastLine(r, "the files could not be put in place"));
-      this.installed = v;
-      this.finished();
-    } catch (e) {
-      this.error = String(e?.message ?? e);
-      notify({ title: "kansō was not updated", body: this.error, level: "error" });
-    } finally {
-      this.settle(cx, id);
+    });
+    this.working = false;
+    if (started?.code !== 0) {
+      this.unmark(id);
+      return this.report(cx, "error", lastLine(started, "the update could not start"));
     }
+    return this.follow(cx, id);
   }
 
-  settle(cx, id) {
-    this.working = false;
-    if (this.state().installing?.id === id) this.setState({ installing: null });
+  // Reads <id>.status every few seconds until it says how the install ended; an install whose
+  // process is gone without saying (killed outright) ended in error, its swap undone by the next.
+  async follow(cx, id) {
+    if (this.following[id]) return;
+    this.following = { ...this.following, [id]: true };
+    const dir = `${appHome()}/${UPDATES}`;
+    const read = async () => {
+      const [state, why] = String(await readTextFile(`${dir}/${id}.status`) ?? "running").split("\n");
+      return { state, why: why ?? "" };
+    };
+    const end = async () => {
+      for (;;) {
+        if (!this.installs()[id]) return null;
+        const now = await read();
+        if (now.state !== "running") return now;
+        const alive = await tryOrAsync(() => exec("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", `${dir}/${id}.pid`]));
+        if (alive?.code !== 0) {
+          const last = await read(); // it may have said so just before it ended
+          return last.state !== "running" ? last : { state: "error", why: "the update stopped before it finished" };
+        }
+        await tryOrAsync(() => exec("sleep", [String(this.pauseS)]));
+      }
+    };
+    const outcome = await end();
+    this.following = Object.fromEntries(Object.entries(this.following).filter(([k]) => k !== id));
+    const mark = this.installs()[id];
+    if (!outcome || !mark) return; // another copy reported it
+    this.unmark(id);
+    await tryOrAsync(() => exec("rm", ["-f", `${dir}/${id}.status`, `${dir}/${id}.pid`, `${dir}/${id}.log`]));
+    return this.report(cx, outcome.state, outcome.why, mark);
+  }
+
+  async report(cx, state, why, mark = {}) {
+    await this.readInstalled();
+    const told = state === "busy" || state === "already" ? this.elsewhere() : undefined;
+    if (state === "ok") notify({ title: `kansō updated to ${mark.version}`, body: mark.notes || undefined, level: "success" });
+    if (state === "error") {
+      this.error = why || "the update failed";
+      notify({ title: "kansō was not updated", body: this.error, level: "error" });
+    }
     this.fit();
     cx.notify();
+    return told;
   }
 
   elsewhere() {
