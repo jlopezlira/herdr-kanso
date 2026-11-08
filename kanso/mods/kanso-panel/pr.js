@@ -62,6 +62,14 @@ function checksLine(sum, c) {
   const n = sum[sum.state], words = CHECK_WORDS[sum.state];
   return { text: `${n} check${n > 1 ? "s" : ""} ${words.verb}`, color: c[words.color] };
 }
+// What holds a pull request back, the same in its row and its verdict: failing checks, then changes
+// asked for, then checks still running or unknown. Null when nothing does.
+function holdUp(sum, review, c) {
+  const line = checksLine(sum, c);
+  if (sum.state === "fail") return line;
+  if (review === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
+  return line;
+}
 // The counts by verb, worst first: "1 failing · 3 passed" (skipped ones count as passed).
 const checksNote = (sum) => [...new Set(STATES.map((s) => CHECK_WORDS[s].verb))]
   .map((verb) => ({ verb, n: STATES.filter((s) => CHECK_WORDS[s].verb === verb).reduce((k, s) => k + sum[s], 0) }))
@@ -414,11 +422,9 @@ export class PullRequest {
   }
 
   rowState(p, c) {
-    const sum = summaryOf(checksIn(p.statusCheckRollup)), line = checksLine(sum, c);
+    const sum = summaryOf(checksIn(p.statusCheckRollup)), held = holdUp(sum, p.reviewDecision, c);
     if (p.isDraft) return { text: "Draft", color: c.dim };
-    if (sum.state === "fail") return line;
-    if (p.reviewDecision === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
-    if (line) return line;
+    if (held) return held;
     if (p.reviewDecision === "APPROVED") return { text: "Approved", color: c.green };
     if (p.reviewDecision === "REVIEW_REQUIRED") return { text: "Waiting for a review", color: c.yellow };
     if (sum.state === "pass") return { text: "Checks passed", color: c.green };
@@ -546,15 +552,13 @@ export class PullRequest {
   }
 
   verdict(c) {
-    const pr = this.pr, sum = summaryOf(this.checks()), line = checksLine(sum, c);
+    const pr = this.pr, held = holdUp(summaryOf(this.checks()), pr.reviewDecision, c);
     const conflicting = pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "DIRTY", ms = pr.mergeStateStatus;
     if (pr.state === "MERGED") return { text: "Merged", color: c.violet };
     if (pr.state === "CLOSED") return { text: "Closed without merging", color: c.red };
     if (pr.isDraft) return { text: "Draft, not ready for review", color: c.dim };
     if (conflicting) return { text: `Conflicts with ${pr.baseRefName}`, color: c.red };
-    if (sum.state === "fail") return line;
-    if (pr.reviewDecision === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
-    if (line) return line;
+    if (held) return held;
     if (ms === "BLOCKED") return { text: pr.reviewDecision === "REVIEW_REQUIRED" ? "Waiting for a review" : "Blocked by branch rules", color: c.yellow };
     if (ms === "BEHIND") return { text: `Behind ${pr.baseRefName}`, color: c.yellow };
     if (ms === "CLEAN" || ms === "HAS_HOOKS" || ms === "UNSTABLE") return { text: "Ready to merge", color: c.green };
