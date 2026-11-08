@@ -230,6 +230,31 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
   assert.equal(toasts.at(-1).title, "kansō could not check for updates");
 });
 
+test("Automatic update checks can be disabled while manual checks still work", async () => {
+  const store = { "kanso.update": { autoCheck: false } };
+  let asked = 0, tick = null;
+  const host = {
+    appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
+    notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
+    layout: () => null, run: () => null,
+    exec: async () => { asked++; return { code: 0, stdout: "x\trefs/tags/v1.3.1\n", stderr: "" }; },
+  };
+  const { Updater } = await updater(host);
+  const u = new Updater();
+  const { cx, drain } = context();
+  cx.timer = { every(_ms, fn) { if (!tick) tick = fn; } };
+  u.start(cx);
+  await drain();
+  assert.equal(asked, 0, "disabled means no startup check");
+
+  tick(cx);
+  await drain();
+  assert.equal(asked, 0, "disabled means no periodic check");
+
+  await u.check(cx, true, true);
+  assert.equal(asked, 1, "an explicit check still works");
+});
+
 test("The footer is as tall as the rows it shows: one switched off in Kanso's settings gives its place back", async (t) => {
   const f = await fixture(t);
   f.store["kanso.hidden"] = ["footer.machine"];

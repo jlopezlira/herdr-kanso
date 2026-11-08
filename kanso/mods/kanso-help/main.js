@@ -187,7 +187,7 @@ export default class Help extends View {
         "Your keys, the panels and what shows are in kansō settings (Settings, at the top right here): rebind a key by clicking it and pressing the new chord.",
         "Two themes come with kansō: kanso (dark) and kanso-day (light). Pick one in Herdr's settings, under Appearance.",
         "Your keys are in ~/.config/herdr-app/keys.json, the layout in layouts/kanso.json, kansō's data under data/. An update changes a key only where the release changed it, never one you set.",
-        "kansō checks for a new release on start and every few minutes; the row above Settings updates it. What changed is in kansō settings, What's new.",
+        "kansō checks for a new release on start and every few minutes; turn automatic checks off or check now in kansō settings, What's new. Installing an update is always your choice.",
       ]));
   }
 

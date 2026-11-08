@@ -222,8 +222,9 @@ export default class Settings extends View {
 
   newsPage(t, c) {
     const { entries, error, from } = this.news;
-    if (entries === null) return div().py(G.md).text_size(12.5).text_color(c.dim).child("Reading");
     const have = this.installed;
+    const updateState = shared("kanso.update") ?? {};
+    const autoCheck = updateState.autoCheck !== false;
     const entry = (e) => {
       const rel = have ? compare(e.version, have) : null;
       const tag = rel === 0 ? "installed" : rel > 0 ? "newer than yours" : null;
@@ -242,6 +243,18 @@ export default class Settings extends View {
     const latest = shared("kanso.update")?.latest ?? null;
     const waiting = have && latest && compare(latest, have) > 0 ? latest : null;
     return v_flex().w_full()
+      .child(h_flex().w_full().gap(G.md).items_center()
+        .child(v_flex().flex_1().min_w(0).gap(2)
+          .child(div().text_size(13).text_color(c.text).child("Check for updates automatically"))
+          .child(div().text_size(11.5).text_color(c.dim).child("Checks on start and every few minutes; updates are only installed when you choose.")))
+        .child(toggleSwitch("auto-update-check", autoCheck, (next) => setShared("kanso.update", { ...(shared("kanso.update") ?? {}), autoCheck: next }), c, { label: "Check for updates automatically" })))
+      .child(h_flex().w_full().pt(G.sm).items_center()
+        .child(
+          div().id("check-kanso-update").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
+            .text_size(13).font_semibold().text_color(c.canvas).hover((s) => s.opacity(0.88))
+            .on_click(() => run("kanso-tabs.check"))
+            .child("Check for updates")))
+      .when(entries === null, (el) => el.child(div().py(G.md).text_size(12.5).text_color(c.dim).child("Reading")))
       .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(c.accent + "1a")
         .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
         .child(div().id("update-kanso").flex_none().h(28).px(12).rounded(6).bg(c.primary).text_color(c.primaryText).text_size(12.5).font_medium()
@@ -249,7 +262,7 @@ export default class Settings extends View {
           .on_click((_e, _cx) => { run("kanso-tabs.update"); closeOverlay(props().overlay); }))))
       .when(Boolean(error), (el) => el.child(div().text_size(12.5).text_color(c.red).child(error)))
       .when(from === "cache", (el) => el.child(div().text_size(11.5).text_color(c.dim).child("GitHub could not be reached; this is the last copy read.")))
-      .children(entries.map(entry));
+      .children((entries ?? []).map(entry));
   }
 
   creditsPage(t, c) {

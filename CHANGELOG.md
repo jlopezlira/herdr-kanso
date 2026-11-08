@@ -11,6 +11,14 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.15.1] - 2026-11-08
+
+### Changed
+
+- Automatic update checks can be turned off in kansō settings.
+- Check for updates there whenever you like.
+- Add scripts to do local install instead.
+
 ## [3.15.0] - 2026-11-08
 
 ### Added
