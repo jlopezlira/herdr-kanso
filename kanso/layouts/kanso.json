@@ -191,5 +191,6 @@
     16
   ],
   "preview": "layouts/kanso.png",
-  "terminal_menu": "kanso-menu"
+  "terminal_menu": "kanso-menu",
+  "toast": "kanso-toast"
 }

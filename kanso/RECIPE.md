@@ -764,6 +764,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     split right, left and down through the strip, width, right-clicks
     to the program, send back, "Open with…" (when the pane has a folder),
     "Send to an agent…", close.
+  - `kanso-toast`: notifications (root `toast`): one already up isn't shown
+    again; the newest 3 stay (shared `kanso.toasts`).
   - `kanso-send`: a dialog (520 wide), `{pane}`: every other agent pane
     (the one sent to last first, shared `kanso.send.last`), a textarea
     drafted as "Review the changes on branch <b> in <folder>." (plus its
@@ -782,14 +784,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With
-    `{file}` (a full path; the Files panel sends it on a right-click or
-    its open button) the editors open that file, and a text file (by
-    extension: md, txt, json, yaml, code and the like) is offered first to
-    "Preview in the panel": `kanso-panel` with `{panel: "preview", path,
-    on}` mounted in `panel-body` the way kanso-tabs mounts its panels. It lists the
-    editors found on this computer (macOS app folders, `command -v`, Flatpak),
-    the last one used first (shared `open-with.recent`), with each app's own
-    icon on macOS. Enter, 1 to 9 or a click opens; Esc leaves. Terminal
+    `{file}` (a full path, from the Files panel) the editors open that file,
+    and a text file is offered first to "Preview in the panel":
+    `kanso-panel` with `{panel: "preview", path, on}` mounted in
+    `panel-body` the way kanso-tabs mounts its panels. It lists the editors
+    found here (app folders, `command -v`, Flatpak), the last one used first
+    (shared `open-with.recent`), with each app's own icon on macOS. Terminal
     editors open with `terminal.open {place: "right"}`. A folder on another
     machine opens over SSH in the VS Code family (`--remote ssh-remote+<machine>`)
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
