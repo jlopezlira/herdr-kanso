@@ -267,7 +267,7 @@ export class Kdb {
   async addProject({ name, folder, machine = "" }, now = Date.now()) {
     const was = (await this.read(`SELECT * FROM projects WHERE machine=${q(machine)} AND folder=${q(folder)};`))[0] ?? null;
     const [row] = await this.run(`INSERT INTO projects(id,name,folder,machine,added) VALUES(${q(newId())},${q(name)},${q(folder)},${q(machine)},${n(now)})
-      ON CONFLICT(machine,folder) DO UPDATE SET removed=NULL RETURNING *;`);
+      ON CONFLICT(machine,folder) DO UPDATE SET name=CASE WHEN projects.removed IS NULL THEN projects.name ELSE excluded.name END, removed=NULL RETURNING *;`);
     return { row, existed: Boolean(was && was.removed == null) };
   }
   removeProject(id, now = Date.now()) { return this.held(`UPDATE projects SET removed=${n(now)} WHERE id=${q(id)} AND removed IS NULL RETURNING id;`); }

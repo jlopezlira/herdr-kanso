@@ -61,16 +61,18 @@ test("projects are kept in the database: added once, removed without coming back
   await db.migrateProjects([{ name: "agile", folder: "/a/agile", machine: "" }, { name: "fury", folder: "/a/fury", machine: "" }], 1);
   await db.migrateProjects([{ name: "late", folder: "/a/late", machine: "" }], 2);
   assert.deepEqual(clone((await db.projects()).map((p) => p.name)), ["agile", "fury"], "once for every window and start");
-  const again = await db.addProject({ name: "agile", folder: "/a/agile" }, 3);
+  const again = await db.addProject({ name: "other", folder: "/a/agile" }, 3);
   assert.equal(again.existed, true);
+  assert.equal(again.row.name, "agile", "one you keep keeps its name");
   assert.equal((await db.projects()).length, 2, "a place added twice is one project");
   const fury = (await db.projects()).find((p) => p.name === "fury");
   assert.equal(await db.removeProject(fury.id, 4), true);
   assert.deepEqual(clone((await db.projects()).map((p) => p.name)), ["agile"]);
   await db.migrateProjects([{ name: "fury", folder: "/a/fury", machine: "" }], 5);
   assert.deepEqual(clone((await db.projects()).map((p) => p.name)), ["agile"], "removed stays removed");
-  const back = await db.addProject({ name: "fury", folder: "/a/fury" }, 6);
+  const back = await db.addProject({ name: "fury app", folder: "/a/fury" }, 6);
   assert.equal(back.existed, false, "added again by you: it comes back");
+  assert.equal(back.row.name, "fury app", "under the name you give it now");
   assert.equal(back.row.id, fury.id, "the same project, with its own id");
   await assert.rejects(db.relocateProject(fury.id, "/a/agile"), /already a project/);
   const gone = await db.addProject({ name: "gone", folder: "/a/gone" }, 7);
@@ -79,7 +81,7 @@ test("projects are kept in the database: added once, removed without coming back
   assert.equal((await db.projects()).find((p) => p.id === fury.id).folder, "/a/gone", "a removed project does not hold its folder");
   await db.relocateProject(fury.id, "/b/fury");
   await db.setProjectAgent(fury.id, "codex");
-  assert.deepEqual(clone((await db.projects()).map((p) => [p.name, p.folder, p.agent])), [["agile", "/a/agile", null], ["fury", "/b/fury", "codex"]]);
+  assert.deepEqual(clone((await db.projects()).map((p) => [p.name, p.folder, p.agent])), [["agile", "/a/agile", null], ["fury app", "/b/fury", "codex"]]);
 });
 
 test("a worktree is made in Kanso's folder, and a branch that has one already is found there", async (t) => {
@@ -137,7 +139,7 @@ test("worktree lists are read from git's porcelain", async () => {
   ]);
 });
 
-test("Projects: Add project at the top, a closed project keeps its row, and its + starts the agent used there last", async () => {
+test("the top + adds a project in Projects and starts a conversation in Threads; a closed project keeps its row, and its + starts the agent used there last", async () => {
   const handlers = {};
   const node = () => {
     let id = null;
@@ -151,7 +153,7 @@ test("Projects: Add project at the top, a closed project keeps its row, and its 
     });
     return proxy;
   };
-  const calls = [];
+  const calls = [], overlays = [];
   const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", agent: "codex", missing: false }];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
@@ -164,12 +166,20 @@ test("Projects: Add project at the top, a closed project keeps its row, and its 
     spaces: () => [{ id: "sp-agile", name: "agile", folder: "/Users/me/agile", machine: null, active: true, tabs: [] }],
     panes: () => [], agents: () => [], machines: () => [{ name: null, layout: "ready" }],
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), home: () => "/Users/me",
+    openOverlay: (o) => overlays.push(clone({ kind: o.kind, props: o.props })),
     knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }],
   });
   const view = new Spaces();
-  Object.assign(view, { git: {}, shown: new Set(["sp-agile"]), born: {}, custom: {}, order: "updated", machines: [], folded: new Set(), agentsFolded: new Set(), orderPicker: node });
+  Object.assign(view, { view: "spaces", git: {}, shown: new Set(["sp-agile"]), born: {}, custom: {}, order: "updated", machines: [], folded: new Set(), agentsFolded: new Set(), orderPicker: node });
   view.render();
-  assert.ok(handlers["on_click:add-project"], "Add project is there");
+  handlers["on_click:space-new"]({}, { stop_propagation() {}, notify() {} });
+  assert.deepEqual(overlays.at(-1), { kind: "dialog", props: { newProject: { start: false } } }, "in Projects, the top + asks a new project's name and folder");
+  view.view = "threads";
+  view.render();
+  handlers["on_click:space-new"]({}, { stop_propagation() {}, notify() {} });
+  assert.deepEqual(overlays.at(-1), { kind: "popup", props: { newConversation: true } }, "in Threads, it asks which project the conversation is in");
+  view.view = "spaces";
+  view.render();
   const plus = handlers[`on_mouse_up:closed-plus-:/Users/me/fury`];
   assert.ok(plus, "fury has no space open: it keeps its row, with its +");
   plus({}, { stop_propagation() {} });
@@ -183,4 +193,76 @@ test("a local folder that is gone marks only this computer's project, never anot
   });
   const list = [{ id: "here", name: "api", folder: "/srv/api", machine: "" }, { id: "odin", name: "api", folder: "/srv/api", machine: "odin" }];
   assert.deepEqual(clone((await publishRegistry({ projects: async () => list })).map((p) => [p.id, p.missing])), [["here", true], ["odin", false]]);
+});
+
+test("New project with a conversation: the name you give it, its folder, and the agent starts there in a space of that name", async (t) => {
+  const dir = await temporary(t);
+  const calls = [], closed = [], shared = new Map();
+  const { Spaces, Kdb } = await load("kanso-spaces/main.js", ["Spaces", "Kdb"], {
+    exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
+    props: () => ({ newProject: { start: true }, overlay: "ov1" }), closeOverlay: (id) => closed.push(id),
+    shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v), notify: () => {},
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }],
+  });
+  const view = new Spaces();
+  Object.assign(view, { kdb: new Kdb(join(dir, "kanso")), projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
+  const { cx, drain } = (await import("./helpers.mjs")).context();
+  view.createProject(cx);
+  await drain();
+  assert.deepEqual(calls, [["space.new", { folder: "/Users/me/Apps/fury-api", name: "Fury", machine: "", argv: ["claude"] }]]);
+  assert.deepEqual(closed, ["ov1"]);
+  assert.deepEqual(clone(shared.get("kanso.registry").map((p) => [p.name, p.folder, p.agent])), [["Fury", "/Users/me/Apps/fury-api", "claude"]], "the agent it started is the one its + starts later");
+
+  const noFolder = new Spaces();
+  Object.assign(noFolder, { kdb: view.kdb, projectFolder: null, projectName: { value: () => "x" } });
+  noFolder.createProject(cx);
+  assert.equal(noFolder.projectError, "Choose its folder.");
+});
+
+test("Remove project takes it out for good, closes its open space, and only then closes the menu", async (t) => {
+  const dir = await temporary(t);
+  const calls = [], shared = new Map();
+  const { Spaces, Kdb } = await load("kanso-spaces/main.js", ["Spaces", "Kdb"], {
+    exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
+    props: () => ({ overlay: "ov1" }), closeOverlay: (id) => calls.push(["close", id]),
+    shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v),
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+  });
+  const kdb = new Kdb(join(dir, "kanso"));
+  const { row } = await kdb.addProject({ name: "fury", folder: "/Users/me/fury" });
+  const view = Object.assign(new Spaces(), { kdb });
+  view.removeProject(row, { id: "sp-fury" });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(calls, [["space.close", { id: "sp-fury" }], ["close", "ov1"]], "the space goes, then the menu");
+  assert.deepEqual(clone(await kdb.projects()), []);
+  assert.deepEqual(clone(shared.get("kanso.registry") ?? []), [], "every view draws it gone");
+});
+
+test("New conversation in a closed project: one space however often it is clicked, under the project's own name", async () => {
+  const calls = [];
+  const registry = [
+    { id: "p-a", name: "api", folder: "/work/client-a/api", machine: "", agent: "codex", missing: false },
+    { id: "p-b", name: "api", folder: "/work/client-b/api", machine: "", agent: "codex", missing: false },
+  ];
+  const keys = [], scrolled = [];
+  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : k === "on_key_down" ? (f) => { keys.push(f); return p; } : () => p) }); return p; };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node },
+    v_virtual_list: (_id, n, _size, _key, render) => { render({ start: 0, end: n }); return node(); },
+    VirtualListScrollHandle: { new: () => ({ scroll_to_item: (i) => scrolled.push(i), release: () => true }) },
+    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
+    shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
+    spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1" }), closeOverlay: () => {},
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    knownAgents: async () => [{ key: "codex", installed: true, run: ["codex"] }],
+  });
+  const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
+  view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
+  keys.at(-1)({ key: "down", modifiers: {} }, { stop_propagation() {}, notify() {} });
+  assert.deepEqual(scrolled, [1], "the list follows the keyboard's selection");
+  view.menuActs[0]({});
+  view.menuActs[0]({});
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(calls, [["space.new", { folder: "/work/client-a/api", machine: "", argv: ["codex"] }]], "one space, named by its folder like the project, not by the label that tells the two apart");
 });
