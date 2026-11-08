@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { load, context, exec, temporary, clone } from "./helpers.mjs";
 
-const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE"];
+const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx"];
 const repo = new URL("../kanso/", import.meta.url);
 
 async function updater(host) {
@@ -114,7 +114,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.match(f.toasts[0].title, /kansō 1\.1\.0 is available/);
   assert.equal(f.toasts[0].action.name, "kanso-tabs.update", "the tab bar installs: it is on screen even with the sidebar hidden");
   assert.equal(f.toasts[0].timeout, 30000, "long enough to be seen");
-  assert.deepEqual(f.resizes, [192], "the footer grows a row for it");
+  assert.deepEqual(f.resizes, [264], "the 3.9.0 footer (156) grows a row for it and one each for Help and the dōjō");
 
   // Another check does not toast the same version again.
   await f.updater.check(cx, true);
@@ -154,7 +154,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.equal(done.level, "success");
   assert.match(done.body, /layouts\/kanso\.json\.old-/);
   assert.equal(f.store["kanso.update"].done, null, "reported once");
-  assert.deepEqual(f.resizes, [192, 156], "and gives the room back");
+  assert.deepEqual(f.resizes, [264, 228], "and gives the room back");
 });
 
 test("A copy that started before version.json arrived stops offering what is installed", async (t) => {
@@ -179,7 +179,7 @@ test("A release that kept the layout leaves yours as it is", async (t) => {
   f.footer.size = { px: 240 }; // sized by you
   await f.updater.install(cx);
   assert.equal(f.updater.error, null, f.updater.error);
-  assert.deepEqual(f.resizes, [192], "a footer you sized is left alone");
+  assert.deepEqual(f.resizes, [264], "a footer you sized is left alone");
   assert.equal(await readFile(join(f.home, "layouts/kanso.json"), "utf8"), '{"root":{"id":"live"}}');
   assert.ok(!(await readdir(join(f.home, "layouts"))).some((n) => n.startsWith("kanso.json.old-")));
 });
@@ -228,4 +228,16 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
   offline = true;
   await u.check(cx, true, true);
   assert.equal(toasts.at(-1).title, "kansō could not check for updates");
+});
+
+test("The footer is as tall as the rows it shows: one switched off in Kanso's settings gives its place back", async (t) => {
+  const f = await fixture(t);
+  f.store["kanso.hidden"] = ["footer.help", "footer.dojo"];
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+  assert.deepEqual(f.resizes, [192], "Update, Settings and Add machine, as before");
+  const { footerPx } = await updater({ shared: () => null });
+  assert.equal(footerPx(new Set(), false), 228);
+  assert.equal(footerPx(new Set(["footer.help", "footer.dojo", "footer.machine"]), false), 120);
 });

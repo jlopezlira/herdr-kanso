@@ -159,3 +159,20 @@ test("a stack started from a file no search finds still gets its controls, from 
   assert.deepEqual(clone(knownStacks([], [], new Map([["/w/app", [{ name: "app", files: ["/w/app/dev.yaml"] }]]]))).map((s) => s.file), ["/w/app/dev.yaml"]);
   assert.equal(clone(knownStacks([{ dir: "/w/app", file: "/w/app/compose.yaml", name: "app" }], [c], new Map())).length, 1, "never twice");
 });
+
+test("the panel draws every part with each element in one place", async () => {
+  const { singleUse } = await import("./helpers.mjs");
+  const host = { ...singleUse(), theme: () => ({}), exec: async () => ({ code: 1, stdout: "", stderr: "" }), run: () => {}, spaces: () => [], panes: () => [],
+    home: () => "/Users/me", shared: () => null, setShared: () => {}, InputState: { new: () => ({ on() {}, value: () => "", set_value() {}, release() {}, focus() {} }) } };
+  const { Containers } = await load("kanso-containers/main.js", ["Containers"], host);
+  const m = await model();
+  const view = new Containers();
+  view.init({}, { timer: { every: () => ({ cancel() {} }), after() {} }, spawn: () => {}, notify() {} });
+  const groups = m.byProject(m.parseContainers(PS), PROJECTS, [{ dir: "/Users/me/Apps/kanzo/app", file: "/Users/me/Apps/kanzo/app/compose.yaml", name: "app" }]);
+  Object.assign(view, { state: "ok", groups, held: 600, limit: 4000, images: [{ id: "i1", name: "pg:16", tags: ["pg:16"], mb: 400, age: "1 day", users: [], projects: [], unused: true }],
+    volumes: [{ name: "pgdata", users: [], unused: true, anonymous: false }], spare: { "Build Cache": 1200 },
+    show: { images: true, volumes: true }, opened: new Set(groups.flatMap((g) => g.containers.map((c) => c.id))), error: "x", note: "y" });
+  assert.doesNotThrow(() => view.render());
+  Object.assign(view, { state: "down" });
+  assert.doesNotThrow(() => view.render());
+});

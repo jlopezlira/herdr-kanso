@@ -25,6 +25,8 @@ export const PIECES = [
   { id: "sidebar.switch", label: "Projects, Status and Threads", note: "The switch at the top of the sidebar; without it the sidebar stays on Projects" },
   { id: "sidebar.activity", label: "What each agent is on", note: "The line under each agent in the sidebar" },
   { id: "tabs.arrange", label: "Arrangements", note: "The button in the tab bar; the key still opens them" },
+  { id: "footer.help", label: "Help and keys", note: "In the sidebar's footer; ⌘⇧/ still opens it" },
+  { id: "footer.dojo", label: "hjkl dōjō", note: "In the sidebar's footer; Help still leads to it" },
   { id: "footer.machine", label: "Add machine", note: "In the sidebar's footer" },
   { id: "status.agents", label: "Agents at work", note: "The count in the status bar" },
   { id: "status.palette", label: "Command palette key", note: "In the status bar" },

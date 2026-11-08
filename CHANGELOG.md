@@ -8,6 +8,16 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.9.1] - 2026-11-08
+
+### Fixed
+
+- The hjkl dōjō no longer fails to draw at the end of a round ("element div was already added to a parent"): its result's Leave button is its own, beside the header's.
+
+### Changed
+
+- Help and keys and the hjkl dōjō are in the sidebar's footer, beside Settings, instead of the dōjō only inside Help. Each can be hidden in Kanso's settings.
+
 ## [3.9.0] - 2026-11-08
 
 ### Added

@@ -52,3 +52,26 @@ export function context() {
   const cx = { notify() {}, spawn(fn) { const task = fn(cx); pending.push(task); return task; } };
   return { cx, async drain() { while (pending.length) await pending.shift(); } };
 }
+
+// GPUI's elements are single-use: one added to a second parent fails the render
+// ("element was already added to a parent"). These fakes fail the same way.
+export function singleUse() {
+  const make = () => {
+    const self = { parented: false };
+    const adopt = (c) => {
+      if (c && c.__single) { if (c.__single.parented) throw new Error("element was already added to a parent; elements are single-use values"); c.__single.parented = true; }
+    };
+    const proxy = new Proxy(() => {}, {
+      get: (_t, prop) => {
+        if (prop === "__single") return self;
+        if (prop === "child") return (c) => { adopt(c); return proxy; };
+        if (prop === "children") return (list) => { [...(list ?? [])].forEach(adopt); return proxy; };
+        if (prop === "when") return (cond, f) => (cond ? f(proxy) : proxy);
+        return () => proxy;
+      },
+    });
+    return proxy;
+  };
+  const factory = { new: () => make() };
+  return { div: make, svg: make, v_flex: make, h_flex: make, Button: factory, Toggle: factory, Input: factory, Textarea: factory };
+}

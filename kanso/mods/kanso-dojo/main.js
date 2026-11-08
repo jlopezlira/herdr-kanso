@@ -223,7 +223,8 @@ export default class Dojo extends View {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { act(); cx.notify(); })
       .child(text);
-    const leave = button("dojo-leave", leaving ? "Click again to leave" : "Leave the dōjō",
+    // A new element each place it shows: an element can have one parent, and the result shows it beside the header's.
+    const leave = (id) => button(id, leaving ? "Click again to leave" : "Leave the dōjō",
       () => { if (Date.now() - this.armed <= ARM_MS) closeOverlay(props()?.overlay); else this.armed = Date.now(); }, { warn: leaving });
     const o = this.over;
     const result = o ? v_flex().gap(G.lg).p(24).rounded(12).bg(c.accent + "10").border_1().border_color(c.accent + "50")
@@ -238,7 +239,7 @@ export default class Dojo extends View {
       .child(h_flex().gap(G.md).flex_wrap()
         .child(button("dojo-again", "Play again  ↩", () => this.again(), { strong: true }))
         .when(lv.n < LEVELS.length, (el) => el.child(button("dojo-next", `Next level: ${LEVELS[lv.n].name}  n`, () => this.setLevel(lv.n + 1))))
-        .child(leave)) : null;
+        .child(leave("dojo-leave-result"))) : null;
     return v_flex().id("kanso-dojo").track_focus(this.handle).size_full().min_h(0).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().h(44).px(16).gap(G.md).items_center().border_b_1().border_color(c.border)
@@ -249,7 +250,7 @@ export default class Dojo extends View {
         .when(this.totals.rounds > 0, (el) => el.child(div().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
           .child(iconButton("dojo-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }))))
         .when(Boolean(r), (el) => el.child(button("dojo-end", "End round", () => this.endRound(null, false))))
-        .child(leave))
+        .child(leave("dojo-leave")))
       .child(h_flex().flex_1().min_h(0).items_start().gap(G.xl).p(20)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .child(v_flex().w(196).flex_none().gap(G.lg)

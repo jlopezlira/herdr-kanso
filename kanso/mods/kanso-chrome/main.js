@@ -107,6 +107,9 @@ export default class WorkspaceChrome extends View {
         .child(row("settings", "mods/kanso-chrome/icons/settings.svg", ready ? "Settings · update ready" : "Settings", () => run("app.settings"))
           .when(ready && !collapsed, el => el.child(dot()))
           .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
+        // Help and the dōjō where Settings is: one place to find them, not one inside another.
+        .when(!hidden().has("footer.help"), el => el.child(row("help", "mods/kanso-chrome/icons/help.svg", "Help and keys", () => run("mod.open", { name: "kanso-help" }))))
+        .when(!hidden().has("footer.dojo"), el => el.child(row("dojo", "mods/kanso-chrome/icons/enso.svg", "hjkl dōjō", () => run("mod.open", { name: "kanso-dojo" }))))
         // A server, not a second "+": the rail already has one for New space.
         .when(!hidden().has("footer.machine"), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add machine", () => run("mod.open", { name: "machine-add" }))))
         .child(div().h(8).flex_none())
