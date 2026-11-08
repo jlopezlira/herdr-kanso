@@ -26,10 +26,10 @@ test("the list script's lines become pets, a broken pet.json keeps its id, a str
   assert.deepEqual(list.map((p) => [p.id, p.name]), [["bad", "Bad"], ["rocky", "Rocky"]]);
 });
 
-test("the agents' pets: Codex's eight from OpenAI, Claude's Clawd, Mistral's cat and a shiba, each from its own place", async () => {
+test("the agents' pets: Codex's eight from OpenAI, Claude's Clawd, a cat who codes, Mistral's cat and a shiba, each from its own place", async () => {
   const { AGENT_PETS } = await pets();
   const list = clone(AGENT_PETS);
-  assert.deepEqual(list.map((p) => p.id), ["codex", "dewey", "fireball", "rocky", "seedy", "stacky", "bsod", "null-signal", "clawd", "le-chaton-fat", "aka-shiba"]);
+  assert.deepEqual(list.map((p) => p.id), ["codex", "dewey", "fireball", "rocky", "seedy", "stacky", "bsod", "null-signal", "clawd-crab", "moomew-coder-cat", "le-chaton-fat", "aka-shiba"]);
   assert.ok(list.filter((p) => p.from === "Codex").every((p) => p.url.startsWith("https://persistent.oaistatic.com/codex/pets/v1/") && !p.zip));
   assert.ok(list.filter((p) => p.zip).every((p) => p.url.startsWith("https://codex-pets.net/api/pets/")));
 });
@@ -37,10 +37,13 @@ test("the agents' pets: Codex's eight from OpenAI, Claude's Clawd, Mistral's cat
 test("each reaction is its own row, played at its own pace", async () => {
   const { petOf, frameOf } = await pets();
   const p = petOf("codex", "codex.png", {});
-  assert.deepEqual(clone(frameOf(p, "jumping", 0)), { row: 4, col: 0 });
-  assert.equal(frameOf(p, "jumping", 140 * 6).col, 1, "jumping has five frames: the sixth step wraps");
+  assert.deepEqual(clone(frameOf(p, "jumping", 5000, 5000)), { row: 4, col: 0 }, "a reaction starts at its first frame");
+  assert.equal(frameOf(p, "jumping", 5000 + 140 * 6, 5000).col, 1, "jumping has five frames: the sixth step wraps");
   assert.equal(frameOf(p, "unknown", 0).row, 0, "an unknown state is idle");
-  const cols = new Set(Array.from({ length: 40 }, (_, i) => frameOf(p, "waving", i * 140).col));
+  const still = Array.from({ length: 70 }, (_, i) => frameOf(p, "idle", i * 100).col);
+  assert.ok(still.filter((c) => c === 0).length > 55, "at rest it holds still, and only now and then breathes");
+  assert.ok(still.some((c) => c > 0), "but it is alive");
+  const cols = new Set(Array.from({ length: 40 }, (_, i) => frameOf(p, "waving", i * 140, 0).col));
   assert.deepEqual([...cols].sort(), [0, 1, 2, 3], "waving has four frames");
 });
 
@@ -106,17 +109,27 @@ test("the dōjō draws its pet at each reaction, and the chooser with every pet"
   dojo.init({}, cx);
   const rocky = petOf("rocky", "rocky.png", { displayName: "Rocky" });
   dojo.pal.pets = [dojo.pal.pets[0], rocky]; dojo.pal.id = "rocky";
-  assert.equal(dojo.petState(), "idle");
+  assert.equal(dojo.petState(), "idle", "still until the game gives it something");
   dojo.render();
   assert.ok(images.includes("data/kanso-dojo/pets/rocky.png"), "the pet's own atlas");
-  dojo.hitAt = Date.now();
-  assert.equal(dojo.petState(), "jumping", "a target reached");
-  dojo.hitAt = 0; dojo.missAt = Date.now();
+  dojo.round = { at: Date.now(), score: 0, hits: 0, perfect: 0, streak: 0, longest: 0 }; dojo.moves = 0; dojo.need = 9;
+  dojo.idleAt = Date.now();
+  assert.equal(dojo.petState(), "idle", "moving about is no reason to jump");
+  dojo.hitAt = Date.now(); dojo.cheer = false;
+  assert.equal(dojo.petState(), "jumping", "a target in the fewest moves");
+  dojo.cheer = true;
+  assert.equal(dojo.petState(), "waving", "a streak");
+  dojo.hitAt = Date.now() - 5000;
+  assert.equal(dojo.petState(), "idle", "and still again");
+  dojo.missAt = Date.now();
   assert.equal(dojo.petState(), "failed", "a key that is no move here");
-  dojo.missAt = 0; dojo.over = { kept: true, score: 9, hits: 10, perfect: 3, longest: 2, ms: 1000 }; dojo.overAt = Date.now();
-  assert.equal(dojo.petState(), "waving", "the round won");
+  dojo.missAt = null; dojo.round = null; dojo.record = true;
+  dojo.over = { kept: true, score: 9, hits: 10, perfect: 3, longest: 2, ms: 1000 }; dojo.overAt = Date.now();
+  assert.equal(dojo.petState(), "jumping", "a new best");
+  dojo.record = false;
+  assert.equal(dojo.petState(), "waving", "a round won");
   dojo.overAt = Date.now() - 5000;
-  assert.equal(dojo.petState(), "review", "then the result, looked over");
+  assert.equal(dojo.petState(), "idle", "the result read, it rests");
   dojo.render();
   dojo.over = null; dojo.choosing = true;
   images.length = 0;
