@@ -12,9 +12,14 @@ const STATE = "kanso.update";
 // ls-remote costs no GitHub API quota; EVERY keeps copies from asking twice.
 const TICK = 5 * 60 * 1000;
 const EVERY = 4 * 60 * 1000;
-// FOOTER_UPDATE_PX is FOOTER_PX plus one 34px row and its gap.
+// The footer is its account chip and a 34px row (and its gap) for each of Update, Settings,
+// Help, the dōjō and Add machine that shows; the rows a switch hides give their place back.
 const FOOTER = "sidebar-footer";
-const FOOTER_PX = 156, FOOTER_UPDATE_PX = 192;
+const FOOTER_BASE_PX = 84, ROW_PX = 36;
+const OPTIONAL = ["footer.help", "footer.dojo", "footer.machine"];
+export const footerPx = (hidden, update) => FOOTER_BASE_PX + ROW_PX * (1 + (update ? 1 : 0) + OPTIONAL.filter((id) => !hidden.has(id)).length);
+// Every size this sets, now or before (156 and 192 until 3.9.0), so one you sized yourself stays.
+const OURS = (px) => px >= FOOTER_BASE_PX + ROW_PX && px <= FOOTER_BASE_PX + ROW_PX * 5 && (px - FOOTER_BASE_PX) % ROW_PX === 0;
 
 function findNode(node, id) {
   if (node?.id === id) return node;
@@ -146,6 +151,11 @@ export class Updater {
       cx.notify();
     });
     cx.timer.every(TICK, (cx) => cx.spawn(async (cx) => { await this.check(cx); this.fit(); cx.notify(); }));
+    // A footer row turned on or off in Kanso's settings: the footer takes its new height at once.
+    cx.timer.every(1500, () => {
+      const now = JSON.stringify(shared("kanso.hidden") ?? []);
+      if (now !== this.hiddenSeen) { this.hiddenSeen = now; this.fit(); }
+    });
   }
 
   // Resized only when at a size we set, so a footer you sized yourself is left alone.
@@ -153,8 +163,9 @@ export class Updater {
     const found = tryOr(() => ({ size: findNode(layout()?.root ?? layout(), FOOTER)?.size?.px }));
     if (!found) return;
     const { size } = found;
-    const want = this.available() ? FOOTER_UPDATE_PX : FOOTER_PX;
-    if (size !== want && (size === FOOTER_PX || size === FOOTER_UPDATE_PX)) run("layout.resize", { id: FOOTER, px: want });
+    const hidden = new Set(tryOr(() => (Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []), []));
+    const want = footerPx(hidden, Boolean(this.available()));
+    if (size !== want && OURS(size)) run("layout.resize", { id: FOOTER, px: want });
   }
 
   // The update replaces this mod mid-run, so whichever copy sees `done` first reports it once.

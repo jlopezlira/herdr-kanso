@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { load, clone, temporary, exec, singleUse } from "./helpers.mjs";
 
 const HOME = "/Users/me";
 
@@ -388,7 +388,7 @@ test("A dōjō round ends after ten targets, with its result kept; End round sto
   const host = {
     theme: () => ({}), props: () => ({ overlay: "o" }), closeOverlay: () => {}, appHome: () => "/x", settings: () => ({}),
     exec: async () => ({ code: 0, stdout: "", stderr: "" }), notify: () => {}, window: () => ({ platform: "macos" }),
-    div: () => null, svg: () => null, v_flex: () => null, h_flex: () => null,
+    ...singleUse(),
   };
   const { Dojo, shortest } = await load("kanso-dojo/main.js", ["Dojo", "shortest"], host);
   const cx = { focus_handle: () => ({ focus() {} }), spawn: (f) => f(cx), notify() {}, stop_propagation() {}, timer: { every() {}, after() {} } };
@@ -402,6 +402,7 @@ test("A dōjō round ends after ten targets, with its result kept; End round sto
   assert.ok(game.over?.kept, "the round is over after ten targets");
   assert.equal(game.over.hits, 10);
   assert.equal(game.over.perfect, 10, "each in the fewest moves");
+  assert.doesNotThrow(() => game.render(cx), "the result draws, its Leave a button of its own beside the header's");
   assert.equal(added.length, 1, "and kept");
   press("enter");
   assert.equal(game.over, null, "Enter plays again");
