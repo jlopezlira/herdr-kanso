@@ -1,1 +1,1 @@
-{ "place": "none", "title": "kansō settings" }
+{ "place": "none", "title": "kansō settings", "overlay": { "kind": "dialog", "width": 860, "height": 680 } }

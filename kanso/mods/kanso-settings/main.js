@@ -25,8 +25,6 @@ export const PIECES = [
   { id: "sidebar.switch", label: "Projects, Status and Threads", note: "The switch at the top of the sidebar; without it the sidebar stays on Projects" },
   { id: "sidebar.activity", label: "What each agent is on", note: "The line under each agent in the sidebar" },
   { id: "tabs.arrange", label: "Arrangements", note: "The button in the tab bar; the key still opens them" },
-  { id: "footer.help", label: "Help and keys", note: "In the sidebar's footer; ⌘⇧/ still opens it" },
-  { id: "footer.dojo", label: "hjkl dōjō", note: "In the sidebar's footer; Help still leads to it" },
   { id: "footer.machine", label: "Add machine", note: "In the sidebar's footer" },
   { id: "status.agents", label: "Agents at work", note: "The count in the status bar" },
   { id: "status.palette", label: "Command palette key", note: "In the status bar" },
@@ -279,13 +277,16 @@ export default class Settings extends View {
   render() {
     const t = theme(), c = tokens(t), p = props() ?? {};
     const page = this.page === "mods" ? this.modsPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.keysPage(t, c);
-    return v_flex().id("kanso-settings").track_focus(this.handle).size_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
+    // The same window as kansō help, in its place: each leads to the other, so you can always go back.
+    return v_flex().id("kanso-settings").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().w_full().items_center().gap(G.md)
-        .child(div().flex_1().text_size(15).font_semibold().child(this.installed ? `kansō ${this.installed}` : "kansō"))
-        .child(quietLink("settings-help", "Help and keys", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
+        .child(svg("mods/kanso-chrome/icons/settings.svg").size(17).text_color(c.accent))
+        .child(div().flex_1().text_size(15).font_semibold().child("kansō settings"))
+        .when(Boolean(this.installed), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.installed ?? "")))
+        .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
-      .child(v_flex().flex_1().min_h(0).pt(G.md).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
+      .child(v_flex().flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

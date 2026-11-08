@@ -7,11 +7,12 @@ import { glyphs } from "./marks.js";
 import { hachi } from "./mascot.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
 
+// kansō help and kansō settings: one window size, so going from one to the other feels like a page.
+const DIALOG = { width: 860, height: 680 };
 const PAGES = [
   { key: "keys", label: "Keyboard" },
   { key: "dojo", label: "hjkl dōjō" },
   { key: "guide", label: "Guide" },
-  { key: "setup", label: "Configure" },
 ];
 const U = 40, GAP = 5; // a key's unit and the space between keys
 
@@ -166,32 +167,26 @@ export default class Help extends View {
       ]))
       .child(this.block(c, "Every list and menu", [
         "J and K (or the arrows) move, gg and G go to the first and last, Enter chooses, Esc closes.",
+      ]))
+      .child(this.block(c, "Your setup", [
+        "Your keys, the panels and what shows are in kansō settings (Settings, at the top right here): rebind a key by clicking it and pressing the new chord.",
+        "Two themes come with kansō: kanso (dark) and kanso-day (light). Pick one in Herdr's settings, under Appearance.",
+        "Your keys are in ~/.config/herdr-app/keys.json, the layout in layouts/kanso.json, kansō's data under data/. An update changes a key only where the release changed it, never one you set.",
+        "kansō checks for a new release on start and every few minutes; the row above Settings updates it. What changed is in kansō settings, What's new.",
       ]));
-  }
-
-  setupPage(t, c) {
-    const settings = (page) => () => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
-    const item = (id, title, note, link, act) => h_flex().w_full().py(10).gap(G.lg).items_start().border_b_1().border_color(c.border)
-      .child(v_flex().flex_1().min_w(0).gap(3)
-        .child(div().text_size(13.5).font_medium().text_color(c.text).child(title))
-        .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child(note)))
-      .when(Boolean(link), (el) => el.child(quietLink(id, link, act, c, { color: c.accent })));
-    return v_flex()
-      .child(item("setup-keys", "Your keys", "kansō's own keys are rebound in kansō settings: click one and press the new chord. Herdr's keys for tabs and spaces stay in Herdr's settings.", "Open Keys", settings("keys")))
-      .child(item("setup-mods", "Panels and pieces", "Order the panels in the tab bar, turn off the ones you don't use, hide the activity line or the Projects, Status and Threads switch.", "Open Mods", settings("mods")))
-      .child(item("setup-theme", "Themes", "Two themes come with kansō: kanso (dark) and kanso-day (light). Pick one in Herdr's settings, under Appearance.", null, null))
-      .child(item("setup-files", "Where it lives", "Your keys are in ~/.config/herdr-app/keys.json, the layout in layouts/kanso.json, kansō's data under data/. An update changes a key only where the release changed it, never one you set.", null, null))
-      .child(item("setup-update", "Updates", "kansō checks for a new release on start and every few minutes; the row above Settings updates it. What changed is in kansō settings, What's new.", "Open What's new", settings("news")));
   }
 
   render() {
     const t = theme(), c = tokens(t);
-    const page = this.page === "dojo" ? this.dojoPage(t, c) : this.page === "guide" ? this.guidePage(t, c) : this.page === "setup" ? this.setupPage(t, c) : this.keysPage(t, c);
+    const page = this.page === "dojo" ? this.dojoPage(t, c) : this.page === "guide" ? this.guidePage(t, c) : this.keysPage(t, c);
+    // The same window as kansō settings, in its place: each leads to the other, so you can always go back.
+    const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.width, height: DIALOG.height, props: { page: "keys" } }); };
     return v_flex().id("kanso-help").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/enso.svg").size(17).text_color(c.accent))
+        .child(svg("mods/kanso-chrome/icons/help.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
+        .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(G.md).child(quietTabs("help-pages", PAGES, this.page, (key, cx) => { this.page = key; cx.notify(); }, c)))
       .child(v_flex().flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
