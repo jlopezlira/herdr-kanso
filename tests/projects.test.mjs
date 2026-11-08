@@ -212,7 +212,7 @@ test("New project with a conversation: the name you give it, its folder, and the
   await drain();
   assert.deepEqual(calls, [["space.new", { folder: "/Users/me/Apps/fury-api", name: "Fury", machine: "", argv: ["claude"] }]]);
   assert.deepEqual(closed, ["ov1"]);
-  assert.deepEqual(clone(shared.get("kanso.registry").map((p) => [p.name, p.folder])), [["Fury", "/Users/me/Apps/fury-api"]]);
+  assert.deepEqual(clone(shared.get("kanso.registry").map((p) => [p.name, p.folder, p.agent])), [["Fury", "/Users/me/Apps/fury-api", "claude"]], "the agent it started is the one its + starts later");
 
   const noFolder = new Spaces();
   Object.assign(noFolder, { kdb: view.kdb, projectFolder: null, projectName: { value: () => "x" } });

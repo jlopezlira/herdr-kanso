@@ -305,7 +305,10 @@ export default class Spaces extends View {
         if (start) {
           const place = open ? placeOfSpace(open) : placeOfKey(keyOfProject(row), row);
           const list = await knownAgents({ on: null }).catch(() => []);
-          startIn(place, agentFor(row, list)?.run ?? null);
+          const agent = agentFor(row, list);
+          startIn(place, agent?.run ?? null);
+          // Remembered like the +'s first start, so the project keeps starting it whatever Herdr lists first later.
+          if (agent && row.agent !== agent.key) await this.kdb.setProjectAgent(row.id, agent.key).then(() => publishRegistry(this.kdb)).catch(() => {});
         } else if (open) run("space.select", { id: open.id });
         closeOverlay(props().overlay);
       } catch (e) { this.projectError = String(e?.message ?? e); }
