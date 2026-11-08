@@ -17,11 +17,12 @@ const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kan
 export const exhausted = (e) => /out of memory|\bNull\b\s*["'“]?null/i.test(String(e));
 
 export default class WorkspaceChrome extends View {
-  // Only the footer copy looks for Kanso releases (update.js); the top bar's never does.
+  // Only the footer copy has an Updater (update.js), and it does not poll: the tab bar,
+  // always on screen, looks for releases; the footer shows what it found and installs on a click.
   init(_props, cx) {
     if (!props()?.footer) return;
     this.updater = new Updater();
-    this.updater.start(cx);
+    this.updater.start(cx, { polls: false });
     // Command names stay kanso-tabs.* for keys bound to them before.
     cx.spawn(async (cx) => {
       for (;;) {

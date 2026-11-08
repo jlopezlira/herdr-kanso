@@ -55,15 +55,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       `vX.Y.Z` tag than `version.json` exists, an "Update Kanso to X" row
       (refresh icon, 6 `accent` dot) sits above Settings and the footer
       grows to 192 while it shows (back to 156 after; a size you set is kept).
-      The tab bar and footer read tags (`git ls-remote`) on start, every 5
-      min and on `kanso-tabs.check` ("up to date" toast); one 30 s toast per
-      version runs `kanso-tabs.update`; a dot on the gear. Updating downloads the tag into
-      `.kanso-update/`, refuses it unless its `version.json` matches, runs
-      `herdr-app check` on each mod, merges `keys.json` three-way against the
-      installed release's (your own keys stay), replaces the layout only if
-      the release changed it (the old one kept as `kanso.json.old-<time>`),
-      copies the themes, then swaps each mod folder whole. The fresh copy
-      toasts "Kanso updated to X".
+      The tab bar reads tags (`git ls-remote`) on start, every 5 min (if
+      on in settings) and on `kanso-tabs.check`; one 30 s toast per version
+      runs `kanso-tabs.update`; a dot on the gear. Keys merge three-way (yours
+      stay); the layout is replaced only if the release changed it (old kept
+      as `kanso.json.old-<time>`). A detached shell holding a kernel lock
+      downloads into `.kanso-updates/<id>/`, checks `version.json` and
+      `herdr-app check`, swaps each file and mod in turn, `kanso-chrome`
+      last (all put back if it fails or dies), writes `<id>.status`; the tab
+      bar toasts "Kanso updated to X".
 - **Corners**: two radii and nothing else. Surfaces (panes, cards, popovers,
   menus) are 8; controls and rows (buttons, tabs, list rows, tiles, chips,
   fields) are 6; dots are circles.

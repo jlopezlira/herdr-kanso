@@ -100,7 +100,7 @@ export default class Tabs extends View {
     this.panels = storedObject("panels");
     if (!this.arrange && cx) {
       this.watchOpens(cx);
-      // The bar is always on screen; the sidebar's footer may not be.
+      // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
       this.updater.start(cx);
       // keys.json: tab-N and panel-N arrive here as commands.
