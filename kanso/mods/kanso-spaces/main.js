@@ -279,14 +279,16 @@ export default class Spaces extends View {
     openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 460, height: 270, props: { newProject: { start } } });
   }
 
+  // The click's context ends with the click: the dialog redraws from its own spawned one.
   chooseProjectFolder(cx) {
-    pickFolder({ prompt: "Choose" }).then((folder) => {
+    cx.spawn(async (cx) => {
+      const folder = await pickFolder({ prompt: "Choose" }).catch(() => null);
       if (!folder) return;
       this.projectFolder = trimmed(folder);
       if (!this.projectName.value().trim()) this.projectName.set_value(folderName(folder));
       this.projectError = null;
       cx.notify();
-    }).catch(() => {});
+    });
   }
 
   createProject(cx) {
@@ -370,11 +372,14 @@ export default class Spaces extends View {
     const item = (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
     const closed = closedProjects(registry(), sp, home()).filter((p) => !p.missing);
     const names = shownNames(registry());
-    const row = (id, place, hint) => item(id, place.name ?? "~", () => this.thenClose(this.quickStart(place)), { hint, keep: true })
+    // One conversation per popup: a second click or Enter while the first is written starts nothing.
+    const start = (place) => { if (this.starting) return; this.starting = true; this.thenClose(this.quickStart(place)); };
+    const row = (id, place, hint, label = place.name) => item(id, label ?? "~", () => start(place), { hint, keep: true })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); closeOverlay(props().overlay); this.newAgentMenu(place); });
     const rows = [
       ...sp.map((w) => row(`conv-${w.id}`, placeOfSpace(w), w.machine ?? null)),
-      ...closed.map((p) => row(`conv-${p.id}`, { ...placeOfKey(keyOfProject(p), p), name: names.get(p.id) ?? p.name }, p.machine || "closed")),
+      // The shown name tells two alike apart; the space keeps the project's own.
+      ...closed.map((p) => row(`conv-${p.id}`, placeOfKey(keyOfProject(p), p), p.machine || "closed", names.get(p.id) ?? p.name)),
     ];
     return this.menuFrame(t)
       .child(this.menuTitle(t, "New conversation in"))

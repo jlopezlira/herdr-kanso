@@ -236,3 +236,26 @@ test("Remove project takes it out for good, closes its open space, and only then
   assert.deepEqual(clone(await kdb.projects()), []);
   assert.deepEqual(clone(shared.get("kanso.registry") ?? []), [], "every view draws it gone");
 });
+
+test("New conversation in a closed project: one space however often it is clicked, under the project's own name", async () => {
+  const calls = [];
+  const registry = [
+    { id: "p-a", name: "api", folder: "/work/client-a/api", machine: "", agent: "codex", missing: false },
+    { id: "p-b", name: "api", folder: "/work/client-b/api", machine: "", agent: "codex", missing: false },
+  ];
+  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
+    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
+    shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
+    spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1" }), closeOverlay: () => {},
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    knownAgents: async () => [{ key: "codex", installed: true, run: ["codex"] }],
+  });
+  const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
+  view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
+  view.menuActs[0]({});
+  view.menuActs[0]({});
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(calls, [["space.new", { folder: "/work/client-a/api", machine: "", argv: ["codex"] }]], "one space, named by its folder like the project, not by the label that tells the two apart");
+});
