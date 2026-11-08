@@ -79,7 +79,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - After the tabs, a + (16 icon, 28 square) opens the shipped
         `new-menu`.
       - At the right are the panel buttons: Files, Spend, PR,
-        Shipped, Worktrees, Ports and Memory, as icons only (15, in a 26 square ghost
+        Shipped, Worktrees, Ports, Containers, Memory, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
         box eases from 0 to its width and fades in over 180 ms
@@ -826,7 +826,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
     home (not `~/Library`) with none is "No pane runs it". Read every 10 s
-    while shown; Stop is SIGTERM on a second press, then SIGKILL.
+    while shown; Stop: SIGTERM on a second press, then SIGKILL.
+  - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
   - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
     and minimalistic forks, and all use `"place": "none"`.
   - Herdr loads a mod's files from its own folder only, so what several mods

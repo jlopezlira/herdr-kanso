@@ -230,6 +230,18 @@ each row shows the memory it holds, and the panel keeps a history: how many
 ran at once over 24 hours, 7 or 30 days (the ones with no pane marked), what
 opened today, what ended and how, and what stopping them gave back.
 
+### Docker, simply
+
+The **Containers** panel answers what Docker is doing on this computer. First,
+how much memory Docker and its VM hold, which they keep even with nothing
+running; **Quit Docker** (a second press confirms) gives it back. Then every
+container, grouped by the Kanso project it is for (its compose folder, else
+its name): its state, memory, ports (a click copies `localhost:<port>`) and
+how long it has run, with Start, Stop, Restart, Logs (a tab following
+`docker logs`) and Remove for a stopped one. A project has Start all and Stop
+all; the images list what uses each, and **Remove unused images** clears the
+rest. When Docker isn't running, the panel says so and opens it.
+
 ### Weeks without a restart
 
 The **Memory** panel shows what the memory guard sees in a long session: how

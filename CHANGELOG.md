@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.8.0] - 2026-11-08
+
+### Added
+
+- Containers, a new panel on the right: Docker made simple. First, how much memory Docker and its VM hold on this computer, with Quit Docker to get it back. Then every container grouped by the Kanso project it is for (its compose folder, else its name), each with its state, memory, ports to copy and how long it has run, and Start, Stop, Restart, Logs and Remove. Start all and Stop all per project, and the images with what uses each and Remove unused images. When Docker isn't running it says so and opens it.
+
 ## [3.7.0] - 2026-11-07
 
 ### Added
