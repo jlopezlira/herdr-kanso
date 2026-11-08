@@ -495,7 +495,9 @@ minor, and anything else means patch. `npm run check:version` checks this, and
 CI runs it on every pull request. Merging to main tags and releases the new
 version with its changelog section as the notes
 (`.github/workflows/release.yml`), and that release is what the updater
-offers.
+offers. Technical debt, a change that keeps what you see and do, merges
+without a version: it is listed under `## [Unreleased]` and goes out with the
+next release, which moves those entries into its own section.
 
 How every part is built, in enough detail to rebuild it:
 [kanso/RECIPE.md](kanso/RECIPE.md), with Spend's brief in

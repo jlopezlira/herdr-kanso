@@ -36,6 +36,19 @@ test("A change to what Kanso installs needs a new version and its section", () =
   assert.match(check({ version: "1.1.0", changelog, ...ok }).join(), /says 1\.1\.0, but the newest CHANGELOG\.md section is 1\.0\.0/);
 });
 
+test("Technical debt merges without a version: listed under Unreleased, it goes out with the next release", () => {
+  const one = section("1.0.0", "2026-11-01", "### Added\n\n- First.");
+  const debt = "## [Unreleased]\n\n### Changed\n\n- One process reading instead of two.\n";
+  const changed = { tags: ["1.0.0"], installedChangedSince: () => true };
+  assert.deepEqual(check({ version: "1.0.0", changelog: log(debt, one), ...changed }), [], "a change to what Kanso installs, waiting under Unreleased");
+  assert.match(check({ version: "1.0.0", changelog: log("## [Unreleased]\n", one), ...changed }).join(), /Unreleased lists no changes/, "an empty Unreleased lets nothing through");
+  assert.match(check({ version: "1.0.0", changelog: log(one, debt), ...changed }).join(), /goes first/);
+  const release = section("1.0.1", "2026-11-02", "### Changed\n\n- One process reading instead of two.");
+  assert.deepEqual(check({ version: "1.0.1", changelog: log(release, one), ...changed }), [], "the next release takes the entries");
+  assert.match(check({ version: "1.0.1", changelog: log(debt, release, one), ...changed }).join(), /move the "## \[Unreleased\]" entries into its CHANGELOG\.md section/, "and leaves nothing behind");
+  assert.equal(notes(log(debt, one), "1.0.0"), "### Added\n\n- First.", "release notes never carry what waits");
+});
+
 test("The changelog keeps every release, newest first, in the agreed shape", () => {
   const one = section("1.0.0", "2026-11-01", "### Added\n\n- First.");
   const two = section("1.1.0", "2026-11-02", "### Added\n\n- Second.");
