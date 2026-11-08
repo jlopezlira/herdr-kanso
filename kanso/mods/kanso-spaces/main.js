@@ -5,17 +5,18 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Popover } from "gpui-base";
+import { v_flex, h_flex, Popover, InputState, Input } from "gpui-base";
 import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
 import { findThreads } from "./threads.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
-import { spaceFor, inPlace } from "./kdb.js";
+import { Kdb, spaceFor, inPlace } from "./kdb.js";
+import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, agentFor, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
 import { sleepingNow, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
   "spaces.shelvesOpen", "spaces.custom", "spaces.view", "spaces.sections", "spaces.since"];
@@ -95,6 +96,46 @@ const FROM_LABEL = "kanso.from";
 const fromOf = (a) => (isUnread(a.labels) ? a.labels?.[FROM_LABEL] || null : null); // a terminal label write not seen yet is sent again after this
 const label = (address, key, value) => hc(["label", address, `${key}=${value ?? ""}`]).catch(() => {});
 
+// The projects, as every view of the sidebar draws them (the database read last, which local folders are gone).
+const registry = () => (Array.isArray(shared(REGISTRY)) ? shared(REGISTRY) : []);
+async function publishRegistry(kdb) {
+  const list = await kdb.projects();
+  const missing = await missingFolders(list.filter((p) => !p.machine).map((p) => p.folder));
+  // Only this computer's folders are looked at: another machine's project is never called gone from here.
+  const shown = list.map((p) => ({ id: p.id, name: p.name, folder: p.folder, machine: p.machine ?? "", agent: p.agent ?? null, missing: !p.machine && missing.has(p.folder) }));
+  if (JSON.stringify(shown) !== JSON.stringify(registry())) setShared(REGISTRY, shown);
+  return shown;
+}
+// A sleep's key as a project's (a trailing / never makes two of one place).
+const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
+const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
+// Kanso's worktrees: beside its database here; on another machine, ~/.kanso/worktrees (the script's default).
+const kansoWorktrees = (machine) => (machine ? "" : `${appHome()}/${WORKTREES}`);
+// Where a new agent of a project goes. Plain data, so a menu can be given it.
+const placeOfSpace = (w) => {
+  const project = registry().find((p) => keyOfProject(p) === keyOfSpace(w, home())) ?? null;
+  return { space: w.id, folder: w.folder || (w.machine ? null : home()), machine: w.machine ?? "", project: project?.id ?? null, name: w.name };
+};
+const placeOfKey = (key, project = projectAt(key)) => {
+  const i = key.indexOf(":"), machine = key.slice(0, i), at = key.slice(i + 1);
+  // Another machine's space at its home was kept under this computer's home: there, its own home (no folder) is meant.
+  const folder = project?.folder ?? (machine && trimmed(at) === trimmed(home()) ? null : at);
+  return { space: null, folder, machine, project: project?.id ?? null, name: project?.name ?? folderName(at) };
+};
+// An agent (argv; none: a shell) in a project: in its open space, else a new space at its folder.
+function startIn(place, argv = null) {
+  const agent = argv ? { argv } : {};
+  const at = place.folder ? { folder: place.folder } : {};
+  if (place.space) { run("space.select", { id: place.space }); run("tab.new", { space: place.space, ...at, ...agent }); }
+  else run("space.new", { ...at, machine: place.machine ?? "", ...agent });
+}
+// In another folder of the project (a worktree): a closed project gets its space at its own folder first.
+function openAt(place, folder, argv = null, name = null) {
+  if (place.space) run("space.select", { id: place.space });
+  else run("space.new", { ...(place.folder ? { folder: place.folder } : {}), machine: place.machine ?? "" });
+  run("tab.new", { ...(place.space ? { space: place.space } : {}), folder, ...(name ? { name } : {}), ...(argv ? { argv } : {}) });
+}
+
 export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
@@ -102,7 +143,7 @@ export function tone(t, status) {
 export default class Spaces extends View {
   init(_props, cx) {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.spaceMenu) { this.confirmClose = false; this.menuAt = 0; this.handle = cx.focus_handle(); this.handle.focus(); return; }
+    if (props()?.menu || props()?.spaceMenu || props()?.newAgent || props()?.worktree) { this.confirmClose = false; this.menuAt = 0; this.handle = cx.focus_handle(); this.openPopup(cx); return; }
     this.asleepReads = 0;
     this.asleepApplied = 0;
     this.loadAsleep().catch(() => {});
@@ -174,6 +215,102 @@ export default class Spaces extends View {
     return (this.navStore ??= new Store());
   }
 
+  // A popup of this mod: what it shows that has to be read first is read here.
+  openPopup(cx) {
+    const p = props();
+    this.kdb = new Kdb();
+    if (p.worktree) {
+      this.branch = InputState.new({ placeholder: "feat/my-change" });
+      this.branch.on("submit", (_e, cx) => this.makeWorktree(cx));
+      this.branch.focus();
+      return;
+    }
+    this.handle.focus();
+    if (p.newAgent) {
+      knownAgents({ on: p.newAgent.machine || null }).then((list) => { this.known = list; cx.notify(); }).catch(() => { this.known = []; cx.notify(); });
+    }
+    const place = p.spaceMenu ? this.menuPlace(p.spaceMenu) : null;
+    // A worktree whose folder was deleted (prunable) is only git's note of it: not listed.
+    if (place?.folder) {
+      worktreesOf(place.folder, place.machine || null).then((list) => { this.trees = list.filter((x) => !x.main && !x.prunable); cx.notify(); });
+    }
+  }
+
+  close() {
+    try { this.branch?.release(); } catch { /* already gone */ }
+  }
+
+  menuPlace(m) {
+    const w = m.id ? spaces().find((s) => s.id === m.id) : null;
+    return w ? placeOfSpace(w) : m.key ? placeOfKey(m.key) : null;
+  }
+
+  // Projects: the database's, read again after each change so every window draws the same.
+  async loadProjects(kdb, rows) {
+    // Once, when every machine's spaces are in: the spaces open now (and the places asleep whole) become your projects.
+    // Read here, after the waits before it, so spaces that came in meanwhile are not left out.
+    if (!this.projectsIn && !machines().some((m) => m.layout === "loading")) {
+      await kdb.migrateProjects(startingProjects(spaces(), [...new Set(rows.map((a) => a.from).filter(Boolean))], home()));
+      this.projectsIn = true;
+    }
+    await publishRegistry(kdb);
+  }
+
+  addProject() {
+    const kdb = this.leftNavStore().kdb;
+    pickFolder({ prompt: "Add project" }).then(async (folder) => {
+      if (!folder) return;
+      const { row, existed } = await kdb.addProject({ name: folderName(folder), folder: trimmed(folder), machine: "" });
+      await publishRegistry(kdb);
+      const open = spaces().find((w) => keyOfSpace(w, home()) === keyOfProject(row));
+      if (open) run("space.select", { id: open.id });
+      if (existed) notify({ title: `${row.name} is already one of your projects`, level: "info", timeout: 4000 });
+    }).catch((e) => notify({ title: "The project was not added", body: String(e?.message ?? e), level: "error" }));
+  }
+
+  // The project's + : the agent used there last (or the first installed), at once.
+  quickStart(place) {
+    const key = place.machine ?? "";
+    // Read again after a minute, so an agent installed meanwhile counts.
+    const cached = (this.knownBy ??= new Map()).get(key);
+    const known = cached && Date.now() - cached.at < 60_000 ? cached.list : null;
+    const go = (list) => {
+      const project = registry().find((p) => p.id === place.project) ?? null;
+      const agent = agentFor(project, list);
+      startIn(place, agent?.run ?? null);
+      // The first one it starts is remembered, so the + keeps starting it whatever Herdr lists first later.
+      if (project && agent && project.agent !== agent.key) {
+        const kdb = this.leftNavStore().kdb;
+        kdb.setProjectAgent(project.id, agent.key).then(() => publishRegistry(kdb)).catch(() => {});
+      }
+    };
+    if (known) { go(known); return; }
+    knownAgents({ on: key || null }).then((list) => { this.knownBy.set(key, { list, at: Date.now() }); go(list); }).catch(() => startIn(place));
+  }
+
+  newAgentMenu(place) {
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, at: "pointer", props: { newAgent: place } });
+  }
+
+  // Left click: the agent used there last; right click: choose.
+  plus(id, t, place) {
+    return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.dim)
+      .tooltip("New agent (right-click to choose)")
+      .hover((s) => s.bg(t.input).text_color(t.foreground))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.quickStart(place); })
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
+      .child(svg("mods/kanso-chrome/icons/plus.svg").size(13));
+  }
+
+  addProjectRow(t) {
+    return h_flex().id("add-project").h(30).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer().text_size(13).text_color(t.muted)
+      .hover((s) => s.bg(t.foreground + "0c").text_color(t.foreground))
+      .on_click(() => this.addProject())
+      .child(h_flex().size(22).flex_none().items_center().justify_center().child(svg("mods/kanso-chrome/icons/folder-plus.svg").size(15)))
+      .child(div().child("Add project"));
+  }
+
   async loadAsleep() {
     this.asleepReads += 1;
     const started = Date.now(), seq = this.asleepReads;
@@ -183,6 +320,7 @@ export default class Spaces extends View {
     if (rows) {
       const found = rows.filter((a) => !a.spaceId).map((a) => ({ sleep: a.id, space: spaceFor({ spaceName: a.space, project: a.from }, sp, home())?.id })).filter((x) => x.space);
       if (found.length) await st.kdb.adoptSpaces(found).catch(() => {});
+      await this.loadProjects(st.kdb, rows).catch(() => {});
     }
     if (!rows || seq < this.asleepApplied || (shared("kanso.asleep.at") ?? 0) > started) return;
     this.asleepApplied = seq;
@@ -601,7 +739,7 @@ export default class Spaces extends View {
 
   // A popup is as tall as its items; height is only the most.
   menu(w) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 360, at: "pointer", props: { spaceMenu: { id: w.id } } });
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 460, at: "pointer", props: { spaceMenu: { id: w.id } } });
   }
 
   // A project that sleeps whole has no space left: it stays in Projects as a quiet row of its own.
@@ -610,19 +748,30 @@ export default class Spaces extends View {
     return [...new Set(rows.map((a) => a.asleep.from))].map((key) => [key, rows.filter((a) => a.asleep.from === key)]);
   }
 
-  asleepProjectRow(t, key, list) {
-    const name = list[0].asleep.spaceName || key.slice(key.indexOf(":") + 1).split("/").at(-1) || "~";
-    const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, at: "pointer", props: { spaceMenu: { key } } });
-    return h_flex().id(`asleep-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
+  // The projects on machine `m` with no space open: the ones you added, and places asleep whole. Each with what sleeps in it.
+  closedOn(m, ctx) {
+    const asleep = this.asleepProjects(ctx).filter(([key]) => key.slice(0, key.indexOf(":")) === (m ?? ""));
+    const added = closedProjects(ctx.registry.filter((p) => (p.machine || null) === (m ?? null)), ctx.spaces, home());
+    const keys = [...new Set([...added.map(keyOfProject), ...asleep.map(([key]) => sameKey(key))])];
+    return keys.map((key) => ({ key, project: added.find((p) => keyOfProject(p) === key) ?? null, list: asleep.filter(([k]) => sameKey(k) === key).flatMap(([, list]) => list) }));
+  }
+
+  closedRow(t, { key, project, list }, names) {
+    const name = project ? names.get(project.id) ?? project.name : list[0]?.asleep.spaceName || folderName(key.slice(key.indexOf(":") + 1));
+    const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, at: "pointer", props: { spaceMenu: { key } } });
+    const missing = Boolean(project?.missing);
+    return h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
       .hover((s) => s.bg(t.foreground + "0c"))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
-      .when(this.navMark(`asleep-project:${key}`, () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, props: { spaceMenu: { key } } })), (el) => el.border_1().border_color(t.accent))
+      .when(this.navMark(`asleep-project:${key}`, () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, props: { spaceMenu: { key } } })), (el) => el.border_1().border_color(t.accent))
       .on_click(open)
       .on_mouse_down("right", open)
       .child(h_flex().size(22).flex_none().rounded(6).bg(t.foreground + "12").items_center().justify_center().text_size(12).font_semibold().text_color(t.muted).child(name[0]?.toUpperCase() ?? "?"))
-      .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_semibold().text_color(t.muted).child(name))
+      .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_semibold().text_color(missing ? t.dim : t.muted).child(name))
+      .when(missing, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Folder not found")))
       .when(this.hoverSpace === key, (el) => el.child(this.dots(`asleep-dots-${key}`, t, open)))
-      .child(svg("mods/kanso-chrome/icons/moon.svg").size(13).flex_none().text_color(t.dim));
+      .when(list.length > 0, (el) => el.child(svg("mods/kanso-chrome/icons/moon.svg").size(13).flex_none().text_color(t.dim)))
+      .when(!missing, (el) => el.child(this.plus(`closed-plus-${key}`, t, placeOfKey(key, project))));
   }
 
   zzProject(a, t) {
@@ -675,33 +824,139 @@ export default class Spaces extends View {
       });
   }
 
+  // One line of a popup: added to menuActs as it draws, so the keyboard walks them in screen order.
+  menuItem(t, id, text, act, { icon = null, hint = null, ink = t.foreground, keep = false } = {}) {
+    const close = () => closeOverlay(props().overlay);
+    const at = this.menuActs.length;
+    this.menuActs = [...this.menuActs, (cx) => { act(cx); if (!keep) close(); }];
+    return h_flex().id(`menu-${id}`).flex_none().h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
+      .when(at === this.menuAt, (el) => el.bg(t.selected))
+      .hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); })
+      .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
+      .child(div().flex_1().truncate().child(text))
+      .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
+  }
+
+  menuTitle(t, text) { return div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child(text); }
+
+  // Opens a worktree's folder: where something already runs there it is shown; else a shell starts there.
+  openTree(place, x) {
+    // A pane's machine is its space's (panes don't name one).
+    const machineOf = new Map(spaces().flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, w.machine ?? ""])));
+    const p = panes().find((k) => k.cwd && (k.cwd === x.path || k.cwd.startsWith(`${x.path}/`)) && (machineOf.get(k.tab) ?? "") === (place.machine ?? ""));
+    if (p) run("pane.focus", { pane: p.pane });
+    else openAt(place, x.path, null, x.branch);
+  }
+
+  worktreeDialog(place) {
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 440, height: 230, props: { worktree: place } });
+  }
+
+  async afterWrite(cx) { await publishRegistry(this.kdb).catch(() => {}); cx?.notify(); }
+
   spaceMenuView(t) {
-    const m = props().spaceMenu, close = () => closeOverlay(props().overlay);
+    const m = props().spaceMenu;
     const w = m.id ? spaces().find((s) => s.id === m.id) : null;
     const key = w ? projectKey(w) : m.key;
+    const place = this.menuPlace(m);
+    const project = place?.project ? registry().find((p) => p.id === place.project) ?? null : null;
     const asleep = (shared("kanso.asleep") ?? []).filter((a) => inPlace(a, { from: key, space: w?.id ?? null }, spaces(), home()));
-    if (!w && !asleep.length) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Nothing here sleeps any more.");
+    if (!w && !asleep.length && !project) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Nothing here sleeps any more.");
     this.menuActs = [];
-    const item = (id, text, act, { icon = null, hint = null } = {}) => {
-      const at = this.menuActs.length;
-      this.menuActs = [...this.menuActs, (cx) => { act(cx); close(); }];
-      return h_flex().id(`menu-${id}`).flex_none().h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(t.foreground)
-        .when(at === this.menuAt, (el) => el.bg(t.selected))
-        .hover((s) => s.bg(t.hover))
-        .on_click((_e, cx) => { act(cx); close(); cx.notify(); })
-        .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
-        .child(div().flex_1().truncate().child(text))
-        .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
-    };
+    const item = (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
     const active = w?.tabs?.find((x) => x.active);
+    const trees = this.trees ?? [];
+    const home_ = trimmed(home()), base = trimmed(kansoWorktrees(place?.machine));
+    const where = (path) => (base && path.startsWith(`${base}/`) ? "kans\u014d" : path.startsWith(`${home_}/`) ? `~/${path.slice(home_.length + 1).split("/").slice(-2).join("/")}` : path.split("/").slice(-2).join("/"));
+    // Keeping it: a space's folder (not home) can be a project of yours.
+    const keepable = Boolean(w && !project && w.folder && trimmed(w.folder) !== home_);
     return this.menuFrame(t)
       .when(asleep.length > 0, (el) => el
-        .child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Asleep"))
+        .child(this.menuTitle(t, "Asleep"))
         .children(asleep.map((a, i) => item(`wake-${i}`, `Wake ${a.name}`, () => wakeRow(a.id), { icon: "sun", hint: since(a.saved) })))
         .when(asleep.length > 1, (el) => el.child(item("wake-all", `Wake all ${asleep.length}`, () => arrange({ wakeAll: { from: key, space: w?.id ?? null } }), { icon: "undo" }))))
+      .when(Boolean(place) && !project?.missing, (el) => el
+        .child(item("new-agent", "New agent\u2026", () => this.newAgentMenu(place), { icon: "plus" }))
+        .child(item("new-worktree", "New agent in a worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })))
+      .when(trees.length > 0, (el) => el.child(this.menuTitle(t, "Worktrees"))
+        .child(v_flex().id("tree-list").flex_none().h(Math.min(trees.length, 4) * 30).overflow_y_scrollbar()
+          .children(trees.map((x, i) => item(`tree-${i}`, x.branch ?? "detached", () => this.openTree(place, x), { icon: "branch", hint: where(x.path) })))))
       .when(Boolean(active), (el) => el.child(item("sleep-tab", "Sleep this tab\u2026", () => sleepTab(w.id, active.id), { icon: "moon" })))
       .when((w?.tabs?.length ?? 0) > 1, (el) => el.child(item("sleep-project", "Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })))
-      .when(Boolean(w), (el) => el.child(item("space-options", "Project options\u2026", () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } }), { icon: "settings" })));
+      .when(Boolean(w), (el) => el.child(item("space-options", "Project options\u2026", () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } }), { icon: "settings" })))
+      .when(keepable, (el) => el.child(item("keep-project", "Keep as a project", () => {
+        this.kdb.addProject({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }).then(() => this.afterWrite()).catch(() => {});
+      }, { icon: "pin" })))
+      .when(Boolean(project?.missing) && !project?.machine, (el) => el.child(item("locate", "Locate folder\u2026", () => {
+        pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.kdb.relocateProject(project.id, trimmed(folder)).then(() => this.afterWrite()))
+          .catch((e) => notify({ title: "The folder was not changed", body: String(e?.message ?? e), level: "error" }));
+      }, { icon: "file" })))
+      .when(Boolean(project), (el) => el.child(this.confirmClose
+        ? item("remove-project", "Click again to remove it", () => this.kdb.removeProject(project.id).then(() => this.afterWrite()).catch(() => {}), { icon: "close", ink: t.blocked })
+        : item("remove-project", "Remove from projects", () => { this.confirmClose = true; }, { icon: "close", ink: t.muted, keep: true })));
+  }
+
+  // Right click on a project's + : which agent, or a shell, or in a new worktree.
+  newAgentView(t) {
+    const place = props().newAgent;
+    const project = registry().find((p) => p.id === place.project) ?? null;
+    if (!this.known) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Looking for your agents\u2026");
+    this.menuActs = [];
+    const item = (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
+    const installed = this.known.filter((a) => a.installed);
+    const last = agentFor(project, this.known);
+    const pick = (a) => {
+      startIn(place, a?.run ?? null);
+      if (project && a) this.kdb.setProjectAgent(project.id, a.key).then(() => this.afterWrite()).catch(() => {});
+    };
+    return this.menuFrame(t)
+      .child(this.menuTitle(t, `New in ${place.name ?? "this project"}`))
+      .children(installed.map((a) => item(`agent-${a.key}`, a.name, () => pick(a), { hint: a.key === last?.key ? "last" : null })))
+      .child(item("agent-shell", "Terminal", () => pick(null)))
+      .child(div().mx(8).my(4).h(1).bg(t.border))
+      .child(item("agent-worktree", "In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" }));
+  }
+
+  makeWorktree(cx) {
+    if (this.making) return;
+    const place = props().worktree, branch = this.branch.value().trim();
+    this.making = true;
+    this.wtError = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        const r = await addWorktree({ folder: place.folder, machine: place.machine || null, branch, base: kansoWorktrees(place.machine) });
+        if (r.error) { this.wtError = r.error; return; }
+        const project = registry().find((p) => p.id === place.project) ?? null;
+        const agent = agentFor(project, await knownAgents({ on: place.machine || null }).catch(() => []));
+        openAt(place, r.path, agent?.run ?? null, branch);
+        if (!r.made) notify({ title: `${branch} already had a worktree`, body: r.path, level: "info", timeout: 5000 });
+        closeOverlay(props().overlay);
+      } finally { this.making = false; cx.notify(); }
+    });
+  }
+
+  worktreeView(t) {
+    const place = props().worktree;
+    const base = kansoWorktrees(place.machine);
+    const shownBase = base ? base.replace(trimmed(home()), "~") : "~/.kanso/worktrees";
+    const button = (id, text, act, primary) => div().id(id).h(28).px(12).flex().items_center().rounded(6).cursor_pointer().text_size(12.5)
+      .when(primary, (el) => el.bg(t.accent).text_color(t.accent_foreground ?? t.background))
+      .when(!primary, (el) => el.border_1().border_color(t.border).text_color(t.foreground))
+      .hover((s) => s.opacity(0.85))
+      .on_click((_e, cx) => act(cx))
+      .child(text);
+    return v_flex().id("worktree-dialog").size_full().p(18).gap(10).bg(t.popover).text_color(t.foreground)
+      .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
+      .child(div().text_size(15).font_semibold().child(`New agent in a worktree of ${place.name ?? "this project"}`))
+      .child(div().text_size(12).text_color(t.muted).child(`A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`))
+      .child(div().h(32).flex_none().px(8).flex().items_center().rounded(6).border_1().border_color(this.wtError ? t.blocked : t.border)
+        .child(Input.new(this.branch).flex_1().h_full().text_size(13)))
+      .child(div().min_h(16).text_size(12).text_color(this.wtError ? t.blocked : t.dim).child(this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel.")))
+      .child(h_flex().gap(8).justify_end()
+        .child(button("wt-cancel", "Cancel", () => closeOverlay(props().overlay), false))
+        .child(button("wt-make", this.making ? "Making\u2026" : "Make worktree", (cx) => this.makeWorktree(cx), true)));
   }
 
   // Each worktree space moves under its main checkout's.
@@ -929,15 +1184,16 @@ export default class Spaces extends View {
         || rows.length < sp.length && sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
     const loadingRow = m => item(div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…"), 28);
-    // Projects asleep whole (no space left), on their machine ("" here).
-    const sleepingOn = (m) => this.asleepProjects(ctx).filter(([key]) => key.slice(0, key.indexOf(":")) === (m ?? ""));
-    const sleeping = (m) => collapsed ? [] : sleepingOn(m).flatMap(([key, list]) => {
-      const under = list.map((a) => { const more = this.more({ a, lines: [] }, ctx); return item(agentRow(a, 0, t, this.navRow(a, this.rowFor(a)), more), agentRowH(a, more)); });
-      return [item(div().h(10).flex_none(), 10), item(this.asleepProjectRow(t, key, list), rowHeight({ tree: null })), ...under];
+    // Projects with no space open (added, or asleep whole), on their machine; each keeps a + to start an agent in it.
+    const names = shownNames(ctx.registry);
+    const closed = (m) => collapsed ? [] : this.closedOn(m, ctx).flatMap((c) => {
+      const under = c.list.map((a) => { const more = this.more({ a, lines: [] }, ctx); return item(agentRow(a, 0, t, this.navRow(a, this.rowFor(a)), more), agentRowH(a, more)); });
+      return [item(div().h(10).flex_none(), 10), item(this.closedRow(t, c, names), rowHeight({ tree: null })), ...under];
     });
-    if (!remote.length) return loading(null) && !rows.length && !sleepingOn(null).length ? [loadingRow(null)] : [...rows.flatMap(draw), ...sleeping(null)];
+    const cta = collapsed ? [] : [item(this.addProjectRow(t), 30), item(div().h(4).flex_none(), 4)];
+    if (!remote.length) return loading(null) && !rows.length && !this.closedOn(null, ctx).length ? [loadingRow(null)] : [...cta, ...rows.flatMap(draw), ...closed(null)];
     const machineNames = [null, ...remote];
-    return machineNames.flatMap((m) => {
+    const byMachine = machineNames.flatMap((m) => {
       const mine = rows.filter((r) => (r.w.machine ?? null) === m);
       const machine = this.machines.find(k => k.name === m);
       const connected = !m || machine?.state === "connected";
@@ -962,9 +1218,10 @@ export default class Spaces extends View {
         .on_click(() => run("space.new", { machine: m ?? "" }))
         .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
       if (folded) return [headItem];
-      const asleep = sleepingOn(m).length > 0;
-      return [headItem, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...sleeping(m)];
+      const asleep = this.closedOn(m, ctx).length > 0;
+      return [headItem, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
     });
+    return [...cta, ...byMachine];
   }
 
   // Only a worktree row drops the branch: its name already is the branch.
@@ -1097,7 +1354,7 @@ export default class Spaces extends View {
           .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(fill + "26").items_center().justify_center().text_size(12).font_semibold().text_color(fill).child(w.name[0]?.toUpperCase() ?? "?")))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(this.hoverSpace === w.id, (el) => el.child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
+          .when(this.hoverSpace === w.id, (el) => el.child(this.plus(`space-plus-${w.id}`, t, placeOfSpace(w))).child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
           .when(mine.length > 0, (el) => el.child(this.fold(w, mine, t))),
       );
   }
@@ -1399,6 +1656,8 @@ export default class Spaces extends View {
     const t = theme();
     if (props()?.menu) return this.menuView(t);
     if (props()?.spaceMenu) return this.spaceMenuView(t);
+    if (props()?.newAgent) return this.newAgentView(t);
+    if (props()?.worktree) return this.worktreeView(t);
     const collapsed = shared("sidebar.collapsed") === true;
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && (collapsed || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
@@ -1430,7 +1689,7 @@ export default class Spaces extends View {
     this.termBy = new Map(read.terms.map((k) => [k.address, k]));
     // Every row built once per draw, for every view.
     const asleep = this.sleepingNow(sp, read.terms);
-    const rowsCtx = { ...read, asleep, spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).map((a) => (asleep.dozing.has(a.address) ? { ...a, dozing: true } : a)) };
+    const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).map((a) => (asleep.dozing.has(a.address) ? { ...a, dozing: true } : a)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer

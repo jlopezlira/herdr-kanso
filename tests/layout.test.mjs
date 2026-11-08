@@ -239,7 +239,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
     shared: () => null, setShared: () => {},
     spaces: spList, panes: () => [], agents: () => [],
     machines: () => [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), home: () => "/Users/me",
   });
   const view = new Spaces();
   Object.assign(view, {

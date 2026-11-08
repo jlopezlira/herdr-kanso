@@ -8,6 +8,16 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.10.0] - 2026-11-08
+
+### Added
+
+- Projects you keep. A project is now a folder you added, and it stays in the sidebar when its last agent closes: closing a failed agent no longer takes its project with it. Every space you have open (and every project asleep whole) becomes one of your projects the first time this version starts; your home folder does not.
+- Add project, at the top of Projects: pick a folder and it is one of your projects. A folder added twice is one project (you are taken to it).
+- A + on every project: a click starts the agent you used there last (the first one installed otherwise), a right click lets you choose Claude Code, Codex, any other agent or a plain terminal. A project with no space open starts one at its folder.
+- New agent in a worktree, from a project's + or its menu: name a branch (new, or one you have) and Kanso makes the worktree in its own folder, beside its database (`~/.config/herdr-app/data/kanso/worktrees`, or `~/.kanso/worktrees` on another machine), and starts the agent there. Nothing is written to any agent's settings or instructions. A branch that already has a worktree opens that one instead.
+- A project's menu lists its worktrees, wherever they are, and opens one with a click (where something runs there already, it is shown).
+- Keep as a project, for a space you opened at a folder; Remove from projects (files are never touched, and agents running there keep running); Locate folder, for a project whose folder moved or is gone.
 ## [3.9.3] - 2026-11-08
 
 ### Fixed
