@@ -8,6 +8,13 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.12.0] - 2026-11-08
+
+### Added
+
+- Pets in the dōjō. Click Hachi to choose another: the pets you have in `~/.codex/pets`, or one of the most popular on codex-pets.net, which Kanso installs there when you pick it. Kanso itself ships none. Each pet reacts with its own moves: it jumps when you reach a target, slumps on a key that is no move, waves when you win a round, looks the result over, and waits when you stop.
+- Codex's own pet is the dōjō's when you have it, until you choose another; Hachi stays for everyone else.
+
 ## [3.11.0] - 2026-11-08
 
 ### Added

@@ -4,9 +4,10 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
 import { G, tokens, iconButton } from "./ui.js";
 import { Store } from "./store.js";
-import { Share } from "./share.js";
+import { Share, openPath } from "./share.js";
 import { dojoShare } from "./card.js";
 import { hachi } from "./mascot.js";
+import { HACHI, SITE, TICK_MS, installedPets, catalog, install, petFrame, frameOf, posterImage } from "./pets.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
 const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, ARM_MS = 3000, SLEEP_MS = 20000;
@@ -34,6 +35,66 @@ export default class Dojo extends View {
       cx.notify();
     });
     cx.timer.every(500, (cx) => { if (this.round || this.lit || this.armed) cx.notify(); });
+    this.pets = [HACHI]; this.petId = HACHI.id; this.choosing = false; this.catalog = null; this.getting = null;
+    cx.spawn(async (cx) => {
+      const [mine, chosen] = await Promise.all([installedPets().catch(() => []), this.store.pet().catch(() => null)]);
+      this.pets = [HACHI, ...mine];
+      // Codex's own pet, when you have it, until you choose another.
+      this.petId = chosen ?? (mine.some((p) => p.id === "codex") ? "codex" : HACHI.id);
+      cx.notify();
+    });
+    // A pet moves on its own: a redraw only when its frame changes.
+    cx.timer.every(TICK_MS, (cx) => {
+      const p = this.pet();
+      if (!p.sheet) return;
+      const f = frameOf(p, this.petState()), key = `${f.row}:${f.col}`;
+      if (key !== this.frameKey) { this.frameKey = key; cx.notify(); }
+    });
+  }
+
+  pet() { return this.pets.find((p) => p.id === this.petId) ?? HACHI; }
+
+  // What the pet does: each row of its sheet is a reaction.
+  petState(now = Date.now()) {
+    const o = this.over;
+    if (o) return !o.kept ? "idle" : now - this.overAt < 2600 ? (this.record ? "jumping" : "waving") : "review";
+    if (now - (this.hitAt ?? 0) < 900) return "jumping";
+    if (now - (this.missAt ?? 0) < 1200 || (this.round && this.moves > this.need + 2)) return "failed";
+    if (this.round && now - this.idleAt < 700) return "running";
+    if (this.mood() === "sleep" || (this.round && now - this.idleAt >= HINT_MS)) return "waiting";
+    return "idle";
+  }
+
+  toggleChooser(cx) {
+    this.choosing = !this.choosing; this.petError = null;
+    if (!this.choosing) return;
+    cx.spawn(async (cx) => {
+      // Read again: one Codex installed meanwhile shows too.
+      this.pets = [HACHI, ...await installedPets().catch(() => this.pets.filter((p) => p.sheet))];
+      cx.notify();
+      if (this.catalog?.length) return;
+      try { this.catalog = await catalog(); } catch (e) { this.catalog = []; this.petError = String(e?.message ?? e); }
+      cx.notify();
+    });
+  }
+
+  choose(id) {
+    this.petId = id; this.choosing = false; this.frameKey = null;
+    this.store.setPet(id).catch(() => {});
+  }
+
+  get(pet, cx) {
+    if (this.getting) return;
+    this.getting = pet.id; this.petError = null;
+    cx.spawn(async (cx) => {
+      try {
+        await install(pet);
+        this.pets = [HACHI, ...await installedPets()];
+        if (this.pets.some((p) => p.id === pet.id)) this.choose(pet.id);
+      } catch (e) { this.petError = String(e?.message ?? e); }
+      this.getting = null;
+      cx.notify();
+    });
   }
 
   get bests() { return this.totals.bests ?? {}; }
@@ -62,7 +123,7 @@ export default class Dojo extends View {
     if (!r) return;
     this.round = null;
     this.record = kept && r.score > 0 && r.score > (this.bests[n] ?? 0);
-    this.over = { ...r, ms: Date.now() - r.at, kept };
+    this.over = { ...r, ms: Date.now() - r.at, kept }; this.overAt = Date.now();
     this.pending = ""; this.say = null;
     if (this.level.world === "text") { this.snippet += 1; this.world = textWorld(this.snippet); this.at = { x: 0, y: 0 }; this.next(); }
     if (!kept) return;
@@ -85,6 +146,7 @@ export default class Dojo extends View {
     const k = String(e.key ?? "").toLowerCase(), m = e.modifiers ?? {};
     if (m.platform || m.control || m.alt) return;
     cx.stop_propagation();
+    if (this.choosing) { if (k === "escape") { this.choosing = false; cx.notify(); } return; }
     if (k === "escape") {
       if (this.pending) { this.pending = ""; cx.notify(); return; }
       if (Date.now() - this.armed <= ARM_MS) { closeOverlay(props()?.overlay); return; }
@@ -92,7 +154,7 @@ export default class Dojo extends View {
     }
     this.armed = 0;
     const ch = e.key_char ?? (m.shift && k.length === 1 ? k.toUpperCase() : k);
-    if (["left", "right", "up", "down"].includes(k)) { this.say = "The arrows don't count in the dōjō: h j k l."; cx.notify(); return; }
+    if (["left", "right", "up", "down"].includes(k)) { this.say = "The arrows don't count in the dōjō: h j k l."; this.missAt = Date.now(); cx.notify(); return; }
     if (this.over) {
       if (k === "enter" || k === "space") this.again();
       else if (k === "n" && this.level.n < LEVELS.length) this.setLevel(this.level.n + 1);
@@ -115,6 +177,7 @@ export default class Dojo extends View {
     if (!lv.motions.includes(base)) {
       const later = LEVELS.find((L) => L.motions.includes(base));
       this.say = later ? `${base} comes at level ${later.n}. Here: ${lv.motions.join(" ")}` : `${ch} is not a move here: ${lv.motions.join(" ")}`;
+      this.missAt = Date.now();
       cx.notify(); return;
     }
     this.play(motion, cx);
@@ -131,7 +194,7 @@ export default class Dojo extends View {
     if (same(this.at, this.target)) {
       const r = this.round, fine = this.moves <= this.need, streak = fine ? r.streak + 1 : 0;
       this.round = { ...r, score: r.score + points(this.moves, this.need, r.streak), hits: r.hits + 1, perfect: r.perfect + (fine ? 1 : 0), streak, longest: fine ? Math.max(r.longest, streak) : r.longest };
-      this.last = { moves: this.moves, need: this.need, fine };
+      this.last = { moves: this.moves, need: this.need, fine }; this.hitAt = Date.now();
       if (this.round.hits >= TARGETS) { this.endRound(cx); cx.notify(); return; }
       this.next();
     }
@@ -188,6 +251,46 @@ export default class Dojo extends View {
         .flex().items_center().justify_center().text_size(14).font_semibold().text_color(lit ? ink : c.text).child(key))
       .child(div().text_size(11).text_color(hinted ? c.accent : c.muted).child(word))
       .when(Boolean(sub), (el) => el.child(div().text_size(9.5).text_color(c.dim).child(sub)));
+  }
+
+  // The pet, at its reaction; a click chooses another.
+  petView(t, c, now) {
+    const p = this.pet(), asleep = this.mood() === "sleep";
+    return v_flex().id("dojo-pet").gap(6).cursor_pointer().tooltip("Choose your pet")
+      .hover((s) => s.opacity(0.85))
+      .on_click((_e, cx) => { this.toggleChooser(cx); cx.notify(); })
+      .child(h_flex().h(128).gap(G.md).items_end()
+        .child(p.sheet ? petFrame(p, this.petState(now), { now }) : hachi(t, { mood: this.mood(), px: 8 }))
+        .child(div().pb(4).text_size(11).text_color(c.dim).child(asleep ? "z z" : "")))
+      .child(div().text_size(11.5).text_color(this.choosing ? c.accent : c.dim).child(p.name));
+  }
+
+  // Yours (Hachi first), then the popular ones on codex-pets.net: one click gets it and it is yours.
+  chooser(t, c, button) {
+    const tile = (id, label, face, { on = false, note = null, act }) => v_flex().id(`pet-${id}`).w(96).gap(6).p(8).items_center()
+      .rounded(10).cursor_pointer().border_1().border_color(on ? c.accent : c.text + "00").bg(on ? c.accent + "1c" : c.text + "00")
+      .hover((s) => s.bg(c.text + "0a"))
+      .on_click((_e, cx) => { act(cx); cx.notify(); })
+      .child(h_flex().h(84).items_end().justify_center().child(face))
+      .child(div().w_full().text_center().truncate().text_size(11.5).text_color(on ? c.text : c.muted).child(label))
+      .when(Boolean(note), (el) => el.child(div().text_size(10).text_color(c.accent).child(note)));
+    const heading = (text) => div().text_size(12).font_semibold().text_color(c.text).child(text);
+    const have = new Set(this.pets.map((p) => p.id));
+    const mine = this.pets.map((p) => tile(p.id, p.name,
+      p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 }),
+      { on: p.id === this.petId, act: () => this.choose(p.id) }));
+    const popular = (this.catalog ?? []).filter((p) => !have.has(p.id)).map((p) => tile(`site-${p.id}`, p.name, posterImage(p.id, 77),
+      { note: this.getting === p.id ? "Getting\u2026" : null, act: (cx) => this.get(p, cx) }));
+    const status = this.petError ?? (this.catalog ? (popular.length ? null : "You have every popular one.") : "Looking at codex-pets.net\u2026");
+    return v_flex().id("dojo-pets").flex_1().min_w(0).min_h(0).gap(G.lg).overflow_y_scrollbar()
+      .child(heading("Your pets"))
+      .child(h_flex().flex_wrap().gap(G.sm).children(mine))
+      .child(heading("Popular on codex-pets.net"))
+      .when(Boolean(status), (el) => el.child(div().text_size(12).text_color(this.petError ? c.red ?? c.accent : c.dim).child(status)))
+      .child(h_flex().flex_wrap().gap(G.sm).children(popular))
+      .child(h_flex().gap(G.md).pt(G.sm)
+        .child(button("pets-done", "Done  esc", () => { this.choosing = false; }, { strong: true }))
+        .child(button("pets-site", "More on codex-pets.net", () => { openPath(SITE); })));
   }
 
   render() {
@@ -254,9 +357,7 @@ export default class Dojo extends View {
       .child(h_flex().flex_1().min_h(0).items_start().gap(G.xl).p(20)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .child(v_flex().w(196).flex_none().gap(G.lg)
-          .child(h_flex().gap(G.md).items_end()
-            .child(hachi(t, { mood: this.mood(), px: 8 }))
-            .child(div().pb(4).text_size(11).text_color(c.dim).child(this.mood() === "sleep" ? "z z" : "")))
+          .child(this.petView(t, c, now))
           .child(h_flex().gap(G.lg)
             .child(stat("Score", r ? r.score : this.over ? this.over.score : 0, true))
             .child(stat("Time", elapsed)))
@@ -264,7 +365,7 @@ export default class Dojo extends View {
             .child(stat("Streak", r ? r.streak : 0))
             .child(stat("Best", best ?? "–")))
           .child(v_flex().gap(2).children(LEVELS.map(levelRow))))
-        .child(v_flex().flex_1().min_w(0).gap(G.lg)
+        .child(this.choosing ? this.chooser(t, c, button) : v_flex().flex_1().min_w(0).gap(G.lg)
           .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, () => ({ ...dojoShare(this.totals), name: "dojo", title: "hjkl dōjō" }),
             "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
           .child(div().text_size(12.8).line_height(1.5).text_color(c.muted).child(lv.tip))
