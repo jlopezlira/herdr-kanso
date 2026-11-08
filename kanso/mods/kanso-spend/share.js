@@ -182,12 +182,34 @@ const CHROMIUMS = [
 const exists = async (path) => (await exec("sh", ["-c", 'test -s "$1"', "sh", path]).catch(() => null))?.code === 0;
 const macos = () => window()?.platform === "macos";
 const pause = (seconds) => exec("sleep", [String(seconds)]).catch(() => null);
+// The first of `tries` ([bin, args]) that runs, and after which `made()` holds; false when none does.
+const firstRuns = async (tries, made = async () => true) =>
+  (await findAsync(tries, async ([bin, args]) => (await exec(bin, args).catch(() => null))?.code === 0 && await made())) !== null;
+const folderOf = (path) => path.replace(/\/[^/]+$/, "");
+
+// QuickLook's picture of `file` (macOS), `size` px on its long side, as pngPath. It runs in the file's folder.
+export async function quickLook(file, size, pngPath) {
+  const made = `${folderOf(pngPath)}/${file.split("/").at(-1)}.png`;
+  if (!macos()) return false;
+  const r = await exec("qlmanage", ["-t", "-s", String(size), "-o", folderOf(pngPath), file], { cwd: folderOf(file) }).catch(() => null);
+  if (!(r?.code === 0 && await exists(made))) return false;
+  if (made !== pngPath) await exec("mv", ["-f", made, pngPath]);
+  return true;
+}
+
+// A picture GPUI can't draw (HEIC, TIFF) as a PNG: sips on macOS, ImageMagick elsewhere.
+export const toPng = (file, pngPath) =>
+  firstRuns(macos() ? [["sips", ["-s", "format", "png", file, "--out", pngPath]]] : [["magick", [file, pngPath]]], () => exists(pngPath));
+
+// A PDF's first page, `size` px on its long side: QuickLook, else Poppler's pdftoppm.
+export const firstPage = async (file, size, pngPath) => await quickLook(file, size, pngPath)
+  || firstRuns([["pdftoppm", ["-png", "-singlefile", "-f", "1", "-scale-to", String(size), file, pngPath.replace(/\.png$/, "")]]], () => exists(pngPath));
 
 // The card's files are made anew each time: removed first, then written as new, so nothing is read back
 // (a card with a picture can pass the 1 MiB readTextFile allows).
 export async function renderPng(card, svgPath, pngPath) {
   const html = svgPath.replace(/\.svg$/, ".html");
-  const dir = svgPath.replace(/\/[^/]+$/, ""); // what the card points to by name lives beside it, and every renderer runs there
+  const dir = folderOf(svgPath); // what the card points to by name lives beside it, and every renderer runs there
   await exec("rm", ["-f", svgPath, html, pngPath]).catch(() => {});
   await writeTextFile(svgPath, card.svg, null);
   await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, null);
@@ -202,10 +224,7 @@ export async function renderPng(card, svgPath, pngPath) {
     return tried !== null && tried.r.code === 0 && await exists(pngPath);
   });
   if (made) return made[0].split("/").at(-1);
-  if (macos()) {
-    const r = await exec("qlmanage", ["-t", "-s", String(card.width * 2), "-o", dir, svgPath], { cwd: dir }).catch(() => null);
-    if (r?.code === 0 && await exists(`${svgPath}.png`)) { await exec("mv", ["-f", `${svgPath}.png`, pngPath]); return "QuickLook"; }
-  }
+  if (await quickLook(svgPath, card.width * 2, pngPath)) return "QuickLook";
   throw new Error("Install Chrome, Chromium or rsvg-convert to make the image.");
 }
 
@@ -213,7 +232,7 @@ export async function copyImage(pngPath) {
   const tries = macos()
     ? [["osascript", ["-e", `set the clipboard to (read (POSIX file "${pngPath.replace(/"/g, '\\"')}") as «class PNGf»)`]]]
     : [["sh", ["-c", 'wl-copy --type image/png < "$1"', "sh", pngPath]], ["xclip", ["-selection", "clipboard", "-t", "image/png", "-i", pngPath]]];
-  return (await findAsync(tries, async ([bin, args]) => (await exec(bin, args).catch(() => null))?.code === 0)) !== null;
+  return firstRuns(tries);
 }
 
 export const openPath = (target) => exec(macos() ? "open" : "xdg-open", [target]).catch(() => null);
@@ -235,8 +254,7 @@ async function pasteInto(network, before) {
     return r?.code === 0;
   }
   await pause(network.wait);
-  const keys = [["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]];
-  return (await findAsync(keys, async ([bin, args]) => (await exec(bin, args).catch(() => null))?.code === 0)) !== null;
+  return firstRuns([["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]]);
 }
 
 export async function outputPath(name) {

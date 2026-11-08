@@ -2,8 +2,9 @@
 // props.pane: the pane whose work the draft is about.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea, InputState, Input } from "gpui-base";
-import { panes, spaces, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home } from "herdr";
+import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
+import { deliver, sendKey, waitingNote } from "./deliver.js";
 
 const LAST = "kanso.send.last";
 
@@ -72,15 +73,11 @@ export default class Send extends View {
     const targets = this.toProject ? (groups.find((g) => g.project === this.toProject)?.agents ?? []) : all.filter((x) => x.terminal === this.to);
     if (!text || !targets.length || this.sending) return;
     const waiting = targets.filter((x) => x.status === "blocked"), ready = targets.filter((x) => x.status !== "blocked");
-    if (!ready.length) { this.error = `${waiting.map((x) => x.name).join(", ")} ${waiting.length === 1 ? "is" : "are"} waiting on ${waiting.length === 1 ? "its" : "their"} own question. Answer it first, then send.`; cx.notify(); return; }
+    if (!ready.length) { this.error = waitingNote(waiting.map((x) => x.name)); cx.notify(); return; }
     const sender = this.from?.terminal ? terminals().find((k) => k.address === this.from.terminal)?.labels?.["kanso.shown"] || nameOf(this.from, givenNames()) : "you";
     this.sending = true; this.error = null; cx.notify();
     cx.spawn(async (cx) => {
-      const results = await Promise.all(ready.map(async (x) => {
-        const r = await hc(["send", x.terminal, text]).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
-        if (r.code === 0) await hc(["label", x.terminal, "kanso.unread=1", `kanso.from=${sender}`]).catch(() => null);
-        return { x, r };
-      }));
+      const results = await Promise.all(ready.map(async (x) => ({ x, r: await deliver(x.terminal, text, sender) })));
       this.sending = false;
       const failed = results.filter(({ r }) => r.code !== 0);
       const skipped = waiting.length ? ` ${waiting.map((x) => x.name).join(", ")} waited on ${waiting.length === 1 ? "its" : "their"} own question and got nothing.` : "";
@@ -139,7 +136,7 @@ export default class Send extends View {
     return v_flex().id("kanso-send").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => {
         if (e.key === "escape") { closeOverlay(p.overlay); cx.stop_propagation(); }
-        else if (e.key === "enter" && (e.modifiers?.platform || e.modifiers?.control)) { this.send(cx, groups); cx.stop_propagation(); }
+        else if (sendKey(e)) { this.send(cx, groups); cx.stop_propagation(); }
       })
       .child(h_flex().items_center()
         .child(div().flex_1().text_size(15).font_semibold().child("Send to an agent"))

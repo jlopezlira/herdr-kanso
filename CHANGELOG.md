@@ -11,7 +11,11 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [Unreleased]
+## [3.17.0] - 2026-11-08
+
+### Added
+
+- Look, a new panel (the eye in the tab bar): the screenshots, pictures and PDFs the agent in focus made, shown beside it instead of in Preview, with its documents and code a click away in the preview panel and its audio and video in their own app. The newest picture shows by itself unless you picked another, and again when the agent writes it again. Click on it to drop numbered pins, write a note under it and send it with ⌘↩: the agent gets "About <file>: <note>" and where each pin sits. Links and HTML pages keep opening in the browser. An agent can open a file there itself with `herdr-app do 'kanso-tabs.look <path>'`.
 
 ### Fixed
 

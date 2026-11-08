@@ -24,6 +24,7 @@ const PANELS = {
   shipped: { mod: "kanso-panel", props: { panel: "shipped" } },
   worktrees: { mod: "kanso-panel", props: { panel: "worktrees" } },
   ports: { mod: "kanso-panel", props: { panel: "ports" } },
+  look: { mod: "kanso-panel", props: { panel: "look" } },
   containers: { mod: "kanso-containers" },
   insights: { mod: "kanso-spend" },
   memory: { mod: "kanso-guard" },
@@ -47,6 +48,7 @@ const BUILTIN = [
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
   { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
   { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
+  { id: "look", label: "Look", icon: `${ICON}eye.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
@@ -121,7 +123,11 @@ export default class Tabs extends View {
 
   command(name) {
     const tab = /^tab-(\d)$/.exec(name), panel = /^panel-(\d)$/.exec(name);
-    if (tab) {
+    // Herdr passes a mod command no arguments, so the path rides in its name: `herdr-app do 'kanso-tabs.look <path>'`.
+    // `at` makes each one new props, so an open Look starts over on it.
+    const look = /^look(?:[\s:]+([\s\S]+))?$/.exec(name);
+    if (look) this.show("look", look[1]?.trim() ? { panel: "look", path: look[1].trim(), at: Date.now() } : { panel: "look" });
+    else if (tab) {
       const tabs = spaces().find((s) => s.active)?.tabs ?? [];
       if (Number(tab[1]) <= tabs.length) run("tab.select", { index: Number(tab[1]) });
     } else if (panel) {
@@ -147,11 +153,14 @@ export default class Tabs extends View {
     });
   }
 
-  preview(path) {
+  preview(path) { this.show("preview", { panel: "preview", path, on: null }); }
+
+  // A kanso-panel panel with what to show in it: the preview's file, Look's.
+  show(id, props) {
     if (!walkLayout(layout(), "panel-body")) return;
-    this.want = "preview";
+    this.want = id;
     this.mountedAt = Date.now();
-    commitLayout({ panel: { id: "preview", type: "block", content: { mod: "kanso-panel", props: { panel: "preview", path, on: null } } } });
+    commitLayout({ panel: { id, type: "block", content: { mod: "kanso-panel", props } } });
   }
 
   // Herdr folds a single-child wrapper: the node that hides is the "panel" wrapper if the layout has one, else the stack.

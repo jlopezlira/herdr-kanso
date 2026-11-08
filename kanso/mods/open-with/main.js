@@ -6,6 +6,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, home, appHome, shared, setShared, layout, window as win } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
+import { isText } from "./kinds.js";
 
 // PowerShell treats U+2018..U+201B as single quotes too: double every one so paths stay data inside -Command.
 function psQuote(s) {
@@ -109,8 +110,6 @@ async function detect(platform) {
   }));
 }
 
-// Files the preview panel shows: Markdown rendered, these as read-only text.
-const TEXT = /\.(md|markdown|mdx|txt|text|log|json|jsonc|ya?ml|toml|csv|tsv|rst|adoc|org|ini|cfg|conf|env|sh|zsh|bash|fish|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cs|php|lua|sql|html|css|scss|xml|svg)$/i;
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file-text.svg", builtin: true };
 
 function showPreview(file, machine) {
@@ -183,7 +182,7 @@ done`;
     const rank = (e) => { const i = recent.indexOf(e.id); return i < 0 ? 1000 + EDITORS.indexOf(e) : i; };
     const gui = have.filter((e) => !e.tui).toSorted((a, b) => rank(a) - rank(b));
     const tui = have.filter((e) => e.tui).toSorted((a, b) => rank(a) - rank(b));
-    const own = this.target.file && TEXT.test(this.target.file) ? [PREVIEW] : [];
+    const own = this.target.file && isText(this.target.file) ? [PREVIEW] : [];
     return [...own, ...gui, ...tui];
   }
 

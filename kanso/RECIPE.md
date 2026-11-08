@@ -79,7 +79,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - After the tabs, a + (16 icon, 28 square) opens the shipped
         `new-menu`.
       - At the right are the panel buttons: Files, Spend, PR,
-        Shipped, Worktrees, Ports, Containers, Memory, as icons only (15, in a 26 square ghost
+        Shipped, Worktrees, Ports, Containers, Memory, Look, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
         box eases from 0 to its width and fades in over 180 ms
@@ -241,15 +241,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - a header: "Shipped" (20), a share icon and a refresh icon. Share
         opens a row: "Share to" X, LinkedIn, Bluesky, and "Save image"
         (outlined buttons, 26 tall), with a `dim` note under it.
-        Sharing is one module for every panel, `share.js` (Spend has a
-        byte-for-byte copy, since Herdr loads a mod's files from its own
-        folder only; `npm run sync:share` copies it and a test fails when
-        they differ). A panel hands it a card spec: a title and the
+        Sharing is one module for every panel, `share.js` (copied by
+        `npm run sync:share`). A panel hands it a card spec: a title and the
         period, a hero, numbers three to a row, a note, and blocks
         (`streak` with 53 columns of the calendar, `list`, `bars`).
-        `shipped-card.js` makes Shipped's: @login and the period, the
-        hero, the numbers, the totals, the streak, the records and when
-        you ship. It has no repository or machine names. `share.js`
+        `shipped-card.js` makes Shipped's, with no repository or machine
+        names. `share.js`
         draws a 1200-wide SVG, which becomes a PNG at 2x through the first
         renderer found: a Chromium browser headless (`--screenshot`),
         `rsvg-convert`, `magick`, or QuickLook on macOS. The PNG is saved
@@ -258,10 +255,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         the text filled in, and once the browser is in front and the page
         had a few seconds to load (3 to 5, by network) the image is pasted
         into it: System Events Cmd-V on macOS (needs Accessibility), `wtype`
-        or `xdotool` on Linux. It never pastes into an app you moved to.
-        When it can't paste, the toast says to paste it. The text is the
-        big numbers and the streak plus the repository link, at most 280
-        characters.
+        or `xdotool` on Linux, never into an app you moved to; else the
+        toast says to paste. The text: the big numbers, the streak and the
+        repository link, 280 characters at most.
       - Day, Week, Month and Year tabs (26 tall, a `selected` wash on the
         active one), with previous and next arrows around the period's name
         ("This week", "Last week", "19 Oct – 25 Oct"). Next stops at now.
@@ -449,9 +445,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
   status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
-  `stateMark` (with `programIcon` and `nameOf`; `npm run sync:share` copies it
-  into kanso-tabs, kanso-strip, kanso-status and kanso-send; a test checks
-  the copies). An ensō, the brush circle
+  `stateMark` (with `programIcon` and `nameOf`; copied by `npm run
+  sync:share`). An ensō, the brush circle
   (`kanso-chrome/icons/enso*.svg`, tinted), 13px (12 in the status bar, 15
   in the sidebar):
   - Working: the idle ring as a faint track (r 5.6 in 16, 1.5 stroke at
@@ -488,11 +483,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Double-click an agent row to rename the terminal: the same dialog
     Herdr opens for a space or a tab (`kanso-prompt`, 420 wide, with the
     name it shows now selected; Enter saves, Esc leaves it). The name is
-    the terminal's own `kanso.name` label in herdr-core (`hc label <t>
-    kanso.name=<name>`; empty removes it and the automatic name is back),
-    so it survives a restart and the pane header, the edge tabs and the
-    drop cards show the same name. Herdr has no terminal rename of its
-    own; labels are its metadata.
+    the terminal's own `kanso.name` label in herdr-core (`hc label`; empty:
+    the automatic name), so it survives a restart and the pane header, the
+    edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
   - Click an agent row to focus its pane. Agents are listed as T3 Code
     lists its threads: the pinned ones first, in the order you drag them,
@@ -582,9 +575,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     would; the done agent you are looking at stays in Done until you leave
     it. Within a section, by the sort button: latest change first (the
     default), longest in its state first, or by project (localStorage
-    `spaces.statusOrder`). Empty: "No agents yet" and "Start one from + in
-    the tab bar; it shows here by what it needs from you." The collapsed
-    rail always shows spaces.
+    `spaces.statusOrder`). Empty: "No agents yet". The collapsed rail
+    always shows spaces.
   - Threads (kanso-spaces/threads.js) lists the conversation of each agent
     on this computer, two lines a row: its title, the time since your last
     message and its state; under it, its space and your last message in
@@ -827,18 +819,25 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
     home (not `~/Library`) with none is "No pane runs it". Read every 10 s
     while shown; Stop: SIGTERM on a second press, then SIGKILL.
+    `look.js` (Look, `eye.svg`): no mod hears a click on a terminal's
+    link, so Look reads the terminal in focus (`hc read --lines 400`, every
+    4 s while shown and on a focus change; the pin keeps one) for paths to
+    files that exist, newest first; links and HTML stay the browser's.
+    Pictures show as copies in `data/kanso-panel/look` (`image()` reads only
+    the app's folder): HEIC and TIFF via `sips`/`magick`, a PDF's first page
+    via QuickLook or `pdftoppm`. Text opens in `preview.js` (`back:
+    "look"`), media outside. The newest new picture shows unless you picked
+    one. Clicks drop numbered pins; ⌘↩ sends "About <path>: <note>" with
+    each pin as % of the picture (`deliver.js`, kanso-send's). `herdr-app
+    do 'kanso-tabs.look <path>'` opens a file: mod commands get no
+    arguments and reach shown copies only.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
   - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
     and minimalistic forks, and all use `"place": "none"`.
-  - Herdr loads a mod's files from its own folder only, so what several mods
-    need is one file copied into each: `layout.js` (the layout writers, from
-    kanso-tabs into kanso-strip, kanso-spaces, kanso-panel and open-with),
-    `ui.js` (the panels' kit, from kanso-panel into the other panels), `share.js`
-    and `marks.js`. `npm run sync:share` copies them; a test fails when a
-    copy differs.
-- Spend and Memory are included. Specs (`sdd-focused`, by José
-  Gutiérrez, from the minimalistic layout) was offered when installed, up to
-  1.5; Kanso no longer shows it.
+  - Herdr loads a mod's files from its own folder only, so a file several
+    mods need (`layout.js`, `ui.js`, `share.js`, `marks.js`, `deliver.js`,
+    `kinds.js`...: `scripts/sync-share.mjs`) is copied into each by `npm run
+    sync:share`; a test fails when a copy differs.
 - **Herdr functions**: `spaces`, `panes`, `agents`, `terminals`, `machines`,
   `layout`, `theme`, `shared`/`setShared`, `window`, `exec`, `hc`,
   `watchFolder`, `readTextFile`, `openOverlay`, `run`, `home`, `appHome`,
@@ -934,8 +933,6 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - Keep one-time fixes (`kanso.row`) in `init`, never in `render`.
 - The macOS window layout (traffic lights, the empty top strip) assumes
   `titlebar: "none"`.
-- Mod names are prefixed `kanso-`, so they can sit beside the minimalistic
-  layout's `mn-*` mods.
 
 ## Done when
 
