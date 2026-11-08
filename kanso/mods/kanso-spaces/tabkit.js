@@ -2,9 +2,9 @@
 // Shared source: npm run sync:share copies it, and a test fails when a copy differs.
 import { spaces, panes, shared, setShared, run, home, hc } from "herdr";
 import { retry, tryOr, findAsync, mapSeries, reduceSeries } from "./pure.js";
-import { sessionWords } from "./resume.js";
+import { sessionWords, base } from "./resume.js";
 
-export const base = (s) => String(s ?? "").split("/").at(-1).replace(/^-/, "");
+export { base };
 export const tilde = (cwd) => {
   if (!cwd) return "~";
   const h = home();

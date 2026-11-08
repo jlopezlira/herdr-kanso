@@ -12,8 +12,9 @@ export const KEEP_FLAG = new Set(["--dangerously-skip-permissions", "--allow-dan
 export const DROP_VALUE = new Set(["--resume", "-r", "--session-id"]);
 export const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
 
-const program = (s) => String(s ?? "").split("/").at(-1).replace(/^-/, "");
-export const isClaude = (argv) => Array.isArray(argv) && argv.length > 0 && program(argv[0]) === "claude";
+// A program's name from its path; a login shell's leading "-" dropped.
+export const base = (s) => String(s ?? "").split("/").at(-1).replace(/^-/, "");
+export const isClaude = (argv) => Array.isArray(argv) && argv.length > 0 && base(argv[0]) === "claude";
 
 const split = (a) => {
   const eq = a.startsWith("--") ? a.indexOf("=") : -1;

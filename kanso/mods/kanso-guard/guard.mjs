@@ -191,6 +191,8 @@ async function agentsNow(procs, fp) {
 }
 
 const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replaceAll("'", "'\\''")}'`);
+// What to type to start it again, in its folder.
+const commandLine = (cwd, argv) => `cd ${shq(cwd)} && ${argv.map(shq).join(" ")}`;
 
 async function terminalOf(pid) {
   const ls = await hcJSON(["ls"]);
@@ -217,7 +219,7 @@ async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) 
   const before = (await footprints([pid])).get(pid) ?? 0;
   const argv = resumeArgv(g.foreground.argv ?? [], s.sessionId);
   if (!argv) return skip(pid, "it was started with options that can't be carried over");
-  const line = `cd ${shq(s.cwd ?? g.foreground.cwd)} && ${argv.map(shq).join(" ")}`;
+  const line = commandLine(s.cwd ?? g.foreground.cwd, argv);
 
   // Right before /exit: still idle, still the same idle spell.
   const again = readJSON(join(SESSIONS, `${pid}.json`));
@@ -247,13 +249,13 @@ async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) 
   });
   if (!ready) {
     event("error", `${name} exited, but its shell is busy; start it with: ${line}`, { pid, terminal: term, session: s.sessionId });
-    await notify(`${name} needs a manual restart`, `It exited, but its terminal is busy. Run: claude --resume ${s.sessionId}`);
+    await notify(`${name} needs a manual restart`, `It exited, but its terminal is busy. Run: ${line}`);
     return { ok: false, why: "it exited, but its terminal was busy; see Events for the command" };
   }
   await sleep(1000); // the prompt draws after the shell takes the terminal back
   if (!(await run("hc", ["send", term, line], 20_000)).ok) {
     event("error", `${name} exited, but its terminal did not take the restart; run: ${line}`, { pid, terminal: term, session: s.sessionId });
-    await notify(`${name} needs a manual restart`, `Run in its terminal: claude --resume ${s.sessionId}`);
+    await notify(`${name} needs a manual restart`, `Run in its terminal: ${line}`);
     return { ok: false, why: "its terminal did not take the restart; see Events" };
   }
   const after = await retry(30, async () => {
@@ -264,7 +266,7 @@ async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) 
   });
   if (!after) {
     event("error", `${name} was ended but did not come back on its conversation; run: ${line}`, { pid, terminal: term, session: s.sessionId });
-    await notify(`${name} did not resume`, `Run in its terminal: claude --resume ${s.sessionId}`);
+    await notify(`${name} did not resume`, `Run in its terminal: ${line}`);
     return { ok: false, why: "it did not come back on its conversation; see Events" };
   }
   const now = (await footprints([after])).get(after) ?? 0;
@@ -330,7 +332,8 @@ async function closeAgent(pid, why, minIdle = 0) {
   const name = g.labels?.["kanso.name"] || s.name || term;
   const pane = await paneOf(term);
   const mb = (await footprints([pid])).get(pid) ?? 0;
-  const resume = `cd ${shq(s.cwd ?? HOME)} && claude --resume ${s.sessionId}`;
+  // To reopen it by hand: its own options when they carry over, else a plain resume.
+  const resume = commandLine(s.cwd ?? HOME, resumeArgv(g.foreground?.argv ?? [], s.sessionId) ?? resumeArgv(["claude"], s.sessionId));
   // Right before /exit: not the one you are on, the same idle spell, the same process in front.
   const on = await focusedTerminal();
   if (on === undefined) return no("the window did not say which agent you are on");
