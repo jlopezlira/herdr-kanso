@@ -12,6 +12,10 @@ const basename = (path) => path.replace(/\/+$/, "").split("/").at(-1);
 const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
 
+// The runtime out of memory says so, or, with no room left for the error itself, throws null:
+// a mod then "did not load: Null "null"".
+export const exhausted = (e) => /out of memory|\bNull\b\s*["'“]?null/i.test(String(e));
+
 export default class WorkspaceChrome extends View {
   // Only the footer copy looks for Kanso releases (update.js); the top bar's never does.
   init(_props, cx) {
@@ -47,7 +51,7 @@ export default class WorkspaceChrome extends View {
     });
   }
 
-  // Hot reloads leak mod-runtime memory until the window restarts; terminals live in herdr-core and survive it.
+  // Hot reloads (each update is some) leak mod-runtime memory until the window restarts; terminals live in herdr-core and survive it.
   watch(cx) {
     if (this.watching) return;
     this.watching = true;
@@ -59,7 +63,7 @@ export default class WorkspaceChrome extends View {
       this.watching = false;
       if (!status) return;
       const { errors } = status;
-      if (!errors.some((e) => /out of memory/i.test(String(e)))) { this.warned = false; return; }
+      if (!errors.some(exhausted)) { this.warned = false; return; }
       if (this.warned) return;
       this.warned = true;
       notify({ title: "Herdr's mod runtime is out of memory", level: "error", action: { name: "kanso-chrome.restart" },

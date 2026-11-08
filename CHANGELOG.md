@@ -10,6 +10,10 @@ checks all of this, and merging to main releases the version in
 
 ## [3.9.2] - 2026-11-08
 
+### Fixed
+
+- A mod that did not load because Herdr's mod runtime ran out of memory ("kanso-menu did not load: Null "null"", seen after a day of updates) now brings the same notice as any out-of-memory error, with a click to restart the window; your terminals and agents stay.
+
 ### Changed
 
 - kansō help has its own icon at the top right, beside kansō settings' gear and drawn the same, instead of rows in the sidebar's footer; the footer is as it was before 3.9.1.

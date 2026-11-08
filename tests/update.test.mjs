@@ -242,3 +242,10 @@ test("The footer is as tall as the rows it shows: one switched off in Kanso's se
   assert.equal(footerPx(new Set(), false), 156);
   assert.equal(footerPx(new Set(["footer.machine"]), false), 120);
 });
+
+test("A mod that did not load for want of memory asks for a restart, however the runtime words it", async () => {
+  const { exhausted } = await load("kanso-chrome/main.js", ["exhausted"], { window: () => ({}) });
+  assert.equal(exhausted("kanso-panel: out of memory"), true);
+  assert.equal(exhausted('kanso-menu did not load: Null "null"'), true, "no room left even for the error");
+  assert.equal(exhausted("kanso-menu did not load: SyntaxError: unexpected token"), false, "a broken file is not memory");
+});
