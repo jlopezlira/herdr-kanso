@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
 // Herdr's side: posting opens a copy of the mod with the notification as its props.
-async function screen() {
+async function screen(clock = null) {
   const store = {}, closed = [];
   const current = { props: null };
   const host = {
@@ -12,6 +12,7 @@ async function screen() {
     props: () => current.props,
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
     closeOverlay: (id) => closed.push(id),
+    ...(clock ? { Date: { now: () => clock.now } } : {}),
   };
   const { Toast } = await load("kanso-toast/main.js", ["Toast"], host);
   const post = (overlay, n) => {
@@ -83,4 +84,15 @@ test("Toasts from before a restart, or from another window, are never read or cl
   assert.deepEqual(up().filter((id) => id !== "o1"), ["o2", "o3", "o4"]);
   const { keep } = await load("kanso-toast/stack.js", ["keep"]);
   assert.deepEqual(Object.keys(keep({ gone: [{ id: "x", until: 1 }], here: [{ id: "y", until: 9 }] }, "now", [], 5)), ["here"], "a start with nothing up is dropped");
+});
+
+test("Clicking one away closes those past their clock too, so none is forgotten while still drawn", async () => {
+  const clock = { now: 1000 };
+  const { post, up, closed } = await screen(clock);
+  post("t1", { title: "Saved", timeout: 100 });
+  const two = post("t2", { title: "Other", timeout: 60000 });
+  clock.now = 1200;
+  two.dismiss();
+  assert.deepEqual(closed, ["t1", "t2"], "t1 is past its clock but maybe still drawn: closed, not just dropped");
+  assert.deepEqual(up(), []);
 });

@@ -5,7 +5,7 @@
 import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
-import { onScreen, admit, marked, keep } from "./stack.js";
+import { sorted, admit, marked, keep } from "./stack.js";
 
 const KEY = "kanso.toasts";
 // This window's mods, as they run now: the top of the file runs once for all their copies.
@@ -24,9 +24,9 @@ export default class Toast extends View {
   mine() { return marked(shared(KEY))[MARK]; }
 
   dismiss() {
-    const p = props() ?? {}, now = Date.now();
-    setShared(KEY, keep(shared(KEY), MARK, onScreen(this.mine(), now).filter((s) => s.id !== p.overlay), now));
-    closeOverlay(p.overlay);
+    const p = props() ?? {}, now = Date.now(), { showing, late } = sorted(this.mine(), now);
+    [...late, p.overlay].forEach(closeOverlay);
+    setShared(KEY, keep(shared(KEY), MARK, showing.filter((s) => s.id !== p.overlay), now));
   }
 
   render(_cx) {
