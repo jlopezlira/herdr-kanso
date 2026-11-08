@@ -73,6 +73,7 @@ test("An arrangement keeps what each pane runs with its flags, without the sessi
   assert.deepEqual(clone(cleanArgv(["claude", "--model", "opus", "--resume", "51fb0c9a", "--effort", "high"])), ["claude", "--model", "opus", "--effort", "high"]);
   assert.deepEqual(clone(cleanArgv(["claude", "-c", "--model=sonnet"])), ["claude", "--model=sonnet"]);
   assert.deepEqual(clone(cleanArgv(["claude", "--resume"])), ["claude"], "an interactive resume with no id");
+  assert.deepEqual(clone(cleanArgv(["claude", "--resume", "--model", "x", "--session-id=abc", "--fork-session"])), ["claude", "--model", "x"], "a picker's --resume takes no option for its id");
   assert.deepEqual(clone(cleanArgv(["codex", "resume", "0199a", "-m", "gpt-5.5"])), ["codex", "-m", "gpt-5.5"]);
   assert.deepEqual(clone(cleanArgv(["codex", "-c", "model_reasoning_effort=high"])), ["codex", "-c", "model_reasoning_effort=high"], "Codex's -c is its config, kept");
   assert.equal(commandOf({ argv: ["/bin/zsh", "-l"], foreground: { argv: ["-zsh"], cwd: HOME } }), null, "a shell at its prompt");

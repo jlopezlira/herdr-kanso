@@ -25,6 +25,9 @@ export const SHARED = [
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-sleep/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js"] },
   // Opening a tab from data: arrangements and sleeping tabs.
   { source: "kanso/mods/kanso-arrange/tabkit.js", copies: ["kanso/mods/kanso-sleep/tabkit.js", "kanso/mods/kanso-spaces/tabkit.js"] },
+  // How a Claude Code command resumes a conversation: Sleep wakes with it, Memory
+  // recycles with it (under Node), and a tab opened fresh drops what it names.
+  { source: "kanso/mods/kanso-sleep/resume.js", copies: ["kanso/mods/kanso-guard/resume.js", "kanso/mods/kanso-arrange/resume.js", "kanso/mods/kanso-spaces/resume.js"] },
   // The left nav's one database and what sleeps in it (sleep is a state of an
   // agent there): the sidebar owns them, Sleep uses the same files.
   { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-sleep/kdb.js"] },

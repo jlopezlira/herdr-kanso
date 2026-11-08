@@ -8,6 +8,7 @@ import { Store, idle, shownOf } from "./store.js";
 import { spaceFor, inPlace } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, shq, SHELLS, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
+import { resumeArgv, promptEmpty, isClaude } from "./resume.js";
 import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries } from "./pure.js";
 
 const ARM_MS = 4000;
@@ -28,49 +29,9 @@ const telling = (fn) => new Promise((done) => {
   });
 });
 
-// Resume without repeating the first prompt or forking the conversation: only options known to carry over are kept.
-const KEEP_VALUE = new Set(["--model", "--permission-mode", "--settings", "--agent", "--effort", "--fallback-model", "--append-system-prompt", "--system-prompt", "--plugin-dir", "--setting-sources", "--name"]);
-// These take every word after them up to the next option: those words are theirs, not a prompt.
-const KEEP_MANY = new Set(["--add-dir", "--mcp-config", "--allowedTools", "--allowed-tools", "--disallowedTools", "--disallowed-tools"]);
-const KEEP_FLAG = new Set(["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--verbose", "--chrome", "--no-chrome", "--ide", "--strict-mcp-config", "--brief", "--debug"]);
-const DROP_VALUE = new Set(["--resume", "-r", "--session-id"]);
-const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
-export function resumeArgv(argv, session) {
-  if (!Array.isArray(argv) || !argv.length || base(argv[0]) !== "claude" || !session) return null;
-  // { kept, next } for an option at word i, { end } at the first prompt, null when it can't carry over.
-  const option = (i) => {
-    const a = String(argv[i]);
-    if (!a.startsWith("-")) return { end: true };
-    const eq = a.startsWith("--") ? a.indexOf("=") : -1;
-    const flag = eq > 0 ? a.slice(0, eq) : a;
-    if (KEEP_FLAG.has(flag) && eq < 0) return { kept: [a], next: i + 1 };
-    if (KEEP_MANY.has(flag)) {
-      if (eq > 0) return { kept: [a], next: i + 1 };
-      const end = argv.findIndex((v, j) => j > i && String(v).startsWith("-"));
-      const vals = argv.slice(i + 1, end < 0 ? argv.length : end).map(String);
-      return vals.length ? { kept: [a, ...vals], next: i + 1 + vals.length } : null;
-    }
-    if (KEEP_VALUE.has(flag)) {
-      if (eq > 0) return { kept: [a], next: i + 1 };
-      return i + 1 < argv.length ? { kept: [a, String(argv[i + 1])], next: i + 2 } : null;
-    }
-    if (DROP_VALUE.has(flag)) return { kept: [], next: eq < 0 ? i + 2 : i + 1 };
-    if (DROP_FLAG.has(flag)) return { kept: [], next: i + 1 };
-    return null;
-  };
-  const walked = argv.reduce((st, _, i) => {
-    if (i < 1 || st.stop || i !== st.next) return st;
-    const o = option(i);
-    if (!o) return { ...st, stop: true, failed: true };
-    if (o.end) return { ...st, stop: true };
-    return { ...st, next: o.next, parts: [...st.parts, o.kept] };
-  }, { next: 1, parts: [], stop: false, failed: false });
-  return walked.failed ? null : [argv[0], ...walked.parts.flat(), "--resume", session];
-}
-
 export function wakeArgv(p) {
   if (!p.argv) return null;
-  if (!p.resume || base(p.argv[0]) !== "claude") return p.argv;
+  if (!p.resume || !isClaude(p.argv)) return p.argv;
   return p.wake ?? resumeArgv(p.argv, p.resume);
 }
 export const wakeable = (a) => ({ ...a, cols: a.cols.map((c) => ({ ...c, panes: c.panes.map((p) => ({ argv: wakeArgv(p), cwd: p.cwd, resume: p.resume ?? null, name: p.name ?? null })) })) });
@@ -83,18 +44,6 @@ export function sleepBlocker(recs) {
 
 const shapeOf = (list) => JSON.stringify(list.map((r) => [r.tab.id, r.capture.cols.flatMap((c) => c.panes).map((p) => [p.terminal ?? null, p.pid ?? null, p.resume ?? null, p.argv])]));
 export const sameTabs = (a, b) => shapeOf(a) === shapeOf(b);
-
-// False when no prompt box shows: a screen it can't read must stop /exit.
-export function promptEmpty(screen) {
-  const lines = String(screen ?? "").split("\n");
-  const rule = (l) => /^\s*─{8,}/.test(l ?? "");
-  // The last "❯" under a rule (never the first line), to the rule that closes the box.
-  const i = lines.findLastIndex((l, k) => k > 0 && /^\s*[❯>]/.test(l) && rule(lines[k - 1]));
-  if (i < 0) return false;
-  const end = lines.findIndex((l, j) => j > i && rule(l));
-  const box = [lines[i].replace(/^\s*[❯>]/, ""), ...lines.slice(i + 1, end < 0 ? lines.length : end)];
-  return box.every((l) => !l.trim());
-}
 
 // The pid still on conversation `session`, matched by start time (a reused pid is not it); throws when it can't tell: never "none" for what it could not see.
 const RUNNING = String.raw`d="$2"/.claude/sessions
@@ -215,7 +164,7 @@ export default class Sleep extends View {
     }));
     const recs = new Map(read.flatMap(({ p, got }) => (got ? [[p.terminal, got[0]]] : [])));
     const unread = read.filter(({ p }) => !recs.has(p.terminal)).map(({ p }) => `${p.terminal} could not be read`);
-    const claudes = [...recs].filter(([, r]) => { const fg = r.foreground; return fg?.pid && base(fg.argv?.[0]) === "claude"; });
+    const claudes = [...recs].filter(([, r]) => { const fg = r.foreground; return fg?.pid && isClaude(fg.argv); });
     const agents = await mapSeries(claudes, async ([term, r]) => {
       const fg = r.foreground;
       const ses = await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))); // null: reported below
