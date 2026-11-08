@@ -16,6 +16,8 @@ export const SHARED = [
   // Kanso's own updates: the footer shows the row, the tab bar (always on
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
+  // A pull request's checks, read one way in the PR panel and the header's digest.
+  { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
   { source: "kanso/mods/kanso-dojo/mascot.js", copies: ["kanso/mods/kanso-help/mascot.js"] },
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.

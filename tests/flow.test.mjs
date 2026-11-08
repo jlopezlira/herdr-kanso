@@ -30,6 +30,8 @@ test("The digest reads changed files, lines, commits and checks", async () => {
   assert.equal(checksOf([{ status: "IN_PROGRESS", conclusion: "" }, { conclusion: "SUCCESS" }]), "running");
   assert.equal(checksOf([{ conclusion: "FAILURE" }, { status: "IN_PROGRESS" }]), "failing", "a failure wins over one still running");
   assert.equal(checksOf([{ conclusion: "SKIPPED" }, { conclusion: "NEUTRAL" }]), "passing");
+  assert.equal(checksOf([{ status: "COMPLETED", conclusion: "STALE" }]), "failing", "stale is not a pass");
+  assert.equal(checksOf([{ status: "COMPLETED", conclusion: "SUCCESS" }, { status: "COMPLETED", conclusion: "NEW_VALUE" }]), "unknown", "never passing by elimination");
   assert.equal(digestTip({ files: 0, ahead: 0, pr: null }), "");
   assert.equal(digestTip({ files: 2, add: 5, del: 1, ahead: 1, pushed: true, pr: { number: 41, state: "OPEN", checks: "failing" } }),
     "In its folder now: 2 changed files (+5 −1); 1 commit not pushed; pull request #41, checks failing.");
