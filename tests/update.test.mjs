@@ -82,26 +82,43 @@ async function fixture(t, { layoutChanged = true } = {}) {
     tarball: (v) => url(`v${v}.tar.gz`),
     file: (v, path) => url(`v${v}/${path}`),
   };
-  const store = {}, toasts = [], checks = [], resizes = [];
-  const footer = { id: "sidebar-footer", size: { px: 156 } };
-  const host = {
-    layout: () => ({ id: "root", children: [{ id: "sidebar", children: [footer] }] }),
-    run: (name, args) => { resizes.push(args.px); footer.size = { px: args.px }; return null; },
-    appHome: () => home,
-    shared: (k) => store[k],
-    setShared: (k, v) => { store[k] = v; },
-    notify: (n) => { toasts.push(n); return String(toasts.length); },
-    readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
-    writeTextFile: async (p, text) => { await writeFile(p, text); return null; },
-    exec: async (command, args, options) => {
-      if (command === "herdr-app") { checks.push(args[1].split("/").pop()); return { code: 0, stdout: "check passed", stderr: "" }; }
-      if (command === "git") return { code: 0, stdout: "x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n", stderr: "" };
-      return exec(command, args, options);
-    },
+  const checks = [];
+  // A window: its own shared state and toasts, the same Herdr home as every other.
+  const window = async () => {
+    const store = {}, toasts = [], resizes = [];
+    const footer = { id: "sidebar-footer", size: { px: 156 } };
+    const host = {
+      layout: () => ({ id: "root", children: [{ id: "sidebar", children: [footer] }] }),
+      run: (name, args) => { resizes.push(args.px); footer.size = { px: args.px }; return null; },
+      appHome: () => home,
+      shared: (k) => store[k],
+      setShared: (k, v) => { store[k] = v; },
+      notify: (n) => { toasts.push(n); return String(toasts.length); },
+      readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
+      writeTextFile: async (p, text) => { await writeFile(p, text); return null; },
+      exec: async (command, args, options) => {
+        if (command === "herdr-app") { checks.push(args[1].split("/").pop()); return { code: 0, stdout: "check passed", stderr: "" }; }
+        if (command === "git") return { code: 0, stdout: "x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n", stderr: "" };
+        return exec(command, args, options);
+      },
+    };
+    const { Updater } = await updater(host);
+    return { store, toasts, resizes, footer, Updater, updater: new Updater(source) };
   };
-  const { Updater } = await updater(host);
-  return { home, store, toasts, checks, resizes, footer, updater: new Updater(source), userKeys };
+  return { home, checks, source, window, userKeys, ...(await window()) };
 }
+
+// What a stage left in the home: staging folders and locks are dot folders.
+const staged = (home) => readdir(home).then((n) => n.filter((x) => x.startsWith(".")));
+const lockOf = (home) => join(home, ".kanso-update.lock");
+async function holdLock(home, id, { pid = "-", at = Math.floor(Date.now() / 1000) } = {}) {
+  await mkdir(join(home, `.kanso-update-${id}/src`), { recursive: true });
+  await mkdir(lockOf(home));
+  await writeFile(join(lockOf(home), "owner"), `${id} ${pid} ${at}\n`);
+}
+const version = async (home) => JSON.parse(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8")).version;
+const told = (toasts) => toasts.filter((n) => n.title === "kansō is already being updated");
+const updated = (toasts) => toasts.filter((n) => n.title === "kansō updated to 1.1.0");
 
 test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
   const f = await fixture(t);
@@ -194,7 +211,142 @@ test("A tag whose files say another version is not installed", async (t) => {
   assert.ok(f.updater.error);
   assert.equal(f.toasts.at(-1).level, "error");
   assert.equal(await readFile(join(f.home, "mods/kanso-chrome/main.js"), "utf8"), "// 1.0.0\n", "nothing replaced");
-  assert.deepEqual(await readdir(f.home).then((n) => n.filter((x) => x.startsWith("."))), []);
+  assert.deepEqual(await staged(f.home), [], "its staging and its lock both gone");
+  assert.equal(f.updater.busy, false);
+
+  // A failed install holds nothing back: the next one goes ahead.
+  f.store["kanso.update"].latest = "1.1.0";
+  await f.updater.install(cx);
+  assert.equal(f.updater.error, null, f.updater.error);
+  assert.equal(await version(f.home), "1.1.0");
+  assert.deepEqual(await staged(f.home), []);
+});
+
+test("Update from the footer and from the tab bar at once: one installs, the other is told", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+  // The same window: the footer's copy and the tab bar's, one shared state.
+  const tabs = new f.Updater(f.source);
+  await tabs.readInstalled();
+  assert.equal(tabs.available(), "1.1.0");
+  const [a, b] = await Promise.all([f.updater.install(cx), tabs.install(cx)]);
+  assert.equal(b, "busy", "the second sees the first at once");
+  assert.equal(a, undefined);
+  assert.equal(updated(f.toasts).length, 1);
+  assert.equal(told(f.toasts).length, 1);
+  assert.equal(f.updater.error, null, f.updater.error);
+  assert.equal(await version(f.home), "1.1.0");
+  assert.deepEqual(await staged(f.home), []);
+  assert.equal(f.updater.busy, false);
+  assert.equal(tabs.busy, false);
+});
+
+test("Two windows installing at once share no state, and the lock lets one through", async (t) => {
+  const f = await fixture(t);
+  const other = await f.window();
+  const { cx } = context();
+  for (const w of [f, other]) {
+    w.store["kanso.update"] = { latest: "1.1.0" };
+    await w.updater.readInstalled();
+  }
+  const results = await Promise.all([f.updater.install(cx), other.updater.install(cx)]);
+  assert.deepEqual(results.toSorted(), ["busy", undefined], "one installs, one is told");
+  const toasts = [...f.toasts, ...other.toasts];
+  assert.equal(updated(toasts).length, 1);
+  assert.equal(told(toasts).length, 1);
+  assert.equal(toasts.filter((n) => n.level === "error").length, 0, "neither breaks the other");
+  assert.equal(await version(f.home), "1.1.0");
+  assert.deepEqual(await staged(f.home), []);
+});
+
+test("A lock whose owner is alive is left alone; one gone or held too long is taken back, with its staging", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+
+  await holdLock(f.home, "live1");
+  assert.equal(await f.updater.install(cx), "busy");
+  assert.equal(f.updater.error, null);
+  assert.equal(await version(f.home), "1.0.0", "nothing replaced");
+  assert.deepEqual((await staged(f.home)).toSorted(), [".kanso-update-live1", ".kanso-update.lock"], "the owner's lock and staging stay");
+  assert.equal(f.updater.busy, false, "told, not waiting");
+
+  // The same owner, an hour later: its window went away without letting go.
+  await writeFile(join(lockOf(f.home), "owner"), `live1 - ${Math.floor(Date.now() / 1000) - 3600}\n`);
+  await f.updater.install(cx);
+  assert.equal(f.updater.error, null, f.updater.error);
+  assert.equal(await version(f.home), "1.1.0");
+  assert.deepEqual(await staged(f.home), [], "the abandoned staging went with it");
+});
+
+test("An install whose Herdr died is taken back at once", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+  const gone = await exec("sh", ["-c", "echo $$"]); // a pid that has just exited
+  await holdLock(f.home, "dead1", { pid: gone.stdout.trim() });
+  await f.updater.install(cx);
+  assert.equal(f.updater.error, null, f.updater.error);
+  assert.equal(await version(f.home), "1.1.0");
+  assert.deepEqual(await staged(f.home), []);
+});
+
+test("The tab bar looks for releases; the footer reads what it found", async () => {
+  const store = {}, toasts = [], timers = [];
+  let asked = 0;
+  const host = {
+    appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
+    notify: (n) => { toasts.push(n); return "1"; }, readTextFile: async () => '{ "version": "1.3.1" }',
+    layout: () => null, run: () => null,
+    exec: async (command) => { asked++; return command === "git" ? { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" } : { code: 1, stdout: "", stderr: "" }; },
+  };
+  const { Updater } = await updater(host);
+  const tabs = new Updater(), footer = new Updater();
+  const { cx, drain } = context();
+  cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
+  tabs.start(cx); footer.start(cx, { polls: false }); await drain();
+  assert.equal(asked, 1, "one forced look on start, not one per copy");
+  assert.equal(footer.available(), "1.4.0", "the footer offers what the tab bar found");
+  assert.equal(toasts.filter((n) => n.title === "kansō 1.4.0 is available").length, 1);
+
+  // Minutes later both ticks fire: only the tab bar's looks.
+  store["kanso.update"] = { ...store["kanso.update"], checked: null };
+  for (const { ms, fn } of timers.filter((x) => x.ms > 60000)) fn(cx);
+  await drain();
+  assert.equal(asked, 2);
+
+  // Both asked at once (the footer's Check and the tab bar's command): GitHub is asked once.
+  await Promise.all([tabs.check(cx, true), footer.check(cx, true)]);
+  assert.equal(asked, 3);
+});
+
+test("With automatic checks off neither copy polls, and a Check from settings still looks once", async () => {
+  const store = { "kanso.update": { autoCheck: false } }, timers = [];
+  let asked = 0;
+  const host = {
+    appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
+    notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
+    layout: () => null, run: () => null,
+    exec: async () => { asked++; return { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" }; },
+  };
+  const { Updater } = await updater(host);
+  const tabs = new Updater(), footer = new Updater();
+  const { cx, drain } = context();
+  cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
+  tabs.start(cx); footer.start(cx, { polls: false }); await drain();
+  for (const { ms, fn } of timers.filter((x) => x.ms > 60000)) fn(cx);
+  await drain();
+  assert.equal(asked, 0, "no look on start or on the tick");
+
+  // Settings runs kanso-tabs.check while the footer's Check is pressed: one look, both see it.
+  await Promise.all([tabs.check(cx, true, true), footer.check(cx, true, true)]);
+  assert.equal(asked, 1);
+  assert.equal(footer.available(), "1.4.0");
+  assert.equal(store["kanso.update"].autoCheck, false, "the setting survives the copies' writes");
 });
 
 test("Kanso looks for releases on every start, every few minutes, and when asked", async () => {

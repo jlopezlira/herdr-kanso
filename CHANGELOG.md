@@ -28,6 +28,7 @@ release.
 - Memory recycles a Claude Code agent started with `--add-dir`, `--mcp-config` or allowed and disallowed tools, as Sleep already resumed it: both now rebuild the command the same way, and an arrangement drops the same session options when it starts an agent fresh.
 - The dōjō's share image is made again with your pet in it: the pet's sheet goes beside the card instead of inside it, where it passed the 1 MiB a mod may write ("The image could not be made").
 - A pane header's digest and the pull request panel read checks the same way: a stale check no longer shows green in the header, and a result GitHub has not told kansō about reads as unknown in both, never as passed.
+- One kansō update at a time: an Update clicked in the footer and one from the tab bar or Settings, or in two windows, no longer run together on the same files; the second is told, each stages in its own folder, and one left behind by a crash is taken back. Only the tab bar looks for new releases on its own, so a start asks GitHub once.
 
 ## [3.15.1] - 2026-11-08
 

@@ -12,6 +12,9 @@ const STATE = "kanso.update";
 // ls-remote costs no GitHub API quota; EVERY keeps copies from asking twice.
 const TICK = 5 * 60 * 1000;
 const EVERY = 4 * 60 * 1000;
+// A look or an install whose copy was replaced mid-way stops counting after these.
+const LOOK_MS = 60 * 1000;
+const HOLD_MIN = 10;
 // The footer is its account chip and a 34px row (and its gap) for each of Update, Settings and
 // Add machine that shows; a row a switch hides gives its place back.
 const FOOTER = "sidebar-footer";
@@ -112,18 +115,59 @@ for dir in "$src/mods"/*/; do
   fi
 done
 rm -rf "$1"
+if [ "$(cut -d' ' -f1 "$4/owner" 2>/dev/null)" = "$5" ]; then rm -rf "$4"; fi
 `;
+
+// One install at a time across windows: mkdir is atomic, and the lock names its
+// owner (id, Herdr's pid, when) so a crashed or replaced owner's lock is taken
+// back, with its staging, after HOLD_MIN or once that Herdr is gone. Taking it
+// back happens under a second mkdir, so two windows never both do it.
+export const LOCK_SCRIPT = `set -u
+lock="$1"; id="$2"; mins="$3"; stages="$4"
+now=$(date +%s); pid=$PPID
+herdr() { case $(LC_ALL=C ps -p "$1" -o comm= 2>/dev/null) in *[Hh]erdr*) return 0 ;; esac; return 1; }
+herdr "$pid" || pid=-
+claim() { mkdir "$lock" 2>/dev/null && printf '%s %s %s\\n' "$id" "$pid" "$now" > "$lock/owner"; }
+gone() {
+  if read -r who held at 2>/dev/null < "$lock/owner"; then
+    case "$at" in ''|*[!0-9]*) return 0 ;; esac
+    [ $((now - at)) -gt $((mins * 60)) ] && return 0
+    [ "$held" = - ] && return 1
+    herdr "$held" && return 1
+    return 0
+  fi
+  [ -n "$(find "$lock" -maxdepth 0 -mmin +"$mins" 2>/dev/null)" ]
+}
+if claim; then echo ok; exit 0; fi
+[ -n "$(find "$lock.break" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$lock.break" 2>/dev/null
+mkdir "$lock.break" 2>/dev/null || { echo busy; exit 0; }
+if gone; then
+  who=$(cut -d' ' -f1 "$lock/owner" 2>/dev/null)
+  case "$who" in ''|*[!A-Za-z0-9]*) ;; *) rm -rf "$stages$who" ;; esac
+  rm -rf "$lock"
+fi
+if claim; then echo ok; else echo busy; fi
+rmdir "$lock.break"
+`;
+
+// Only the owner lets go: a lock taken back from it belongs to someone else now.
+export const RELEASE_SCRIPT = `if [ "$(cut -d' ' -f1 "$1/owner" 2>/dev/null)" = "$2" ]; then rm -rf "$1"; fi`;
 
 const lastLine = (r, fallback) => (r?.stderr || r?.stdout || "").trim().split("\n").at(-1) || fallback;
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
+const opId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+const fresh = (mark, ms) => Boolean(mark?.at) && Date.now() - mark.at < ms;
 
 export class Updater {
   constructor(source = SOURCE) {
     this.source = source;
     this.installed = null;
-    this.busy = false;
+    this.working = false;
     this.error = null;
   }
+
+  // The tab bar and the footer each hold an Updater: an install either started shows on both.
+  get busy() { return this.working || fresh(this.state().installing, HOLD_MIN * 60 * 1000); }
 
   state() { return shared(STATE) ?? {}; }
   setState(patch) { setShared(STATE, { ...this.state(), ...patch }); }
@@ -143,22 +187,26 @@ export class Updater {
     } catch {}
   }
 
-  start(cx) {
+  // One copy polls GitHub (the tab bar, always on screen), and only while automatic checks are
+  // on in Kanso's settings; otherwise it only reads what a check asked for found.
+  start(cx, { polls = true } = {}) {
+    const polling = () => polls && this.autoCheckEnabled();
     cx.spawn(async (cx) => {
       await this.readInstalled();
       this.finished();
-      if (this.autoCheckEnabled()) await this.check(cx, true);
+      if (polling()) await this.check(cx, true);
       this.fit();
       cx.notify();
     });
     cx.timer.every(TICK, (cx) => cx.spawn(async (cx) => {
-      if (this.autoCheckEnabled()) await this.check(cx);
+      if (polling()) await this.check(cx);
+      else if (!this.busy) await this.readInstalled();
       this.fit();
       cx.notify();
     }));
-    // A footer row turned on or off in Kanso's settings: the footer takes its new height at once.
+    // A footer row turned on or off in Kanso's settings, or a release the poller found: the footer takes its new height at once.
     cx.timer.every(1500, () => {
-      const now = JSON.stringify(shared("kanso.hidden") ?? []);
+      const now = JSON.stringify([shared("kanso.hidden") ?? [], this.state().latest ?? null]);
       if (now !== this.hiddenSeen) { this.hiddenSeen = now; this.fit(); }
     });
   }
@@ -177,19 +225,21 @@ export class Updater {
   finished() {
     const { done } = this.state();
     if (!done) return;
-    this.setState({ done: null });
+    this.setState({ done: null, installing: null });
     if (done.version !== this.installed) return;
     notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
   }
 
   async check(cx, force = false, report = false) {
     if (!this.busy) await this.readInstalled();
-    const { checked } = this.state();
-    if (this.busy || this.checking || (!force && checked && Date.now() - checked < EVERY)) return;
+    const { checked, looking } = this.state();
+    if (this.busy || fresh(looking, LOOK_MS) || (!force && checked && Date.now() - checked < EVERY)) return;
+    // Marked in the window's shared state, so the other copy does not look at the same time.
+    const id = opId();
+    this.setState({ looking: { id, at: Date.now() } });
     // The git flags keep a credential prompt or a stalled remote from hanging the check.
-    this.checking = true;
     const r = await tryOrAsync(() => exec("git", ["-c", "core.askPass=true", "-c", "credential.interactive=never", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=20", "ls-remote", "--tags", "--refs", this.source.remote]));
-    this.checking = false;
+    if (this.state().looking?.id === id) this.setState({ looking: null });
     if (r?.code !== 0) {
       if (report) notify({ title: "kansō could not check for updates", body: "GitHub could not be reached.", level: "warning" });
       return;
@@ -209,13 +259,25 @@ export class Updater {
     }
   }
 
+  // Exclusive across copies and windows (LOCK_SCRIPT); each install stages in its own folder.
   async install(cx) {
     const v = this.available();
-    if (!v || this.busy) return;
-    this.busy = true;
+    if (!v || this.working) return;
+    if (this.busy) return this.elsewhere();
+    const id = opId();
+    this.working = true;
     this.error = null;
+    this.setState({ installing: { id, at: Date.now() } });
     cx.notify();
-    const home = appHome(), stage = `${home}/.kanso-update`, src = `${stage}/src/kanso`;
+    const home = appHome(), lock = `${home}/.kanso-update.lock`, stage = `${home}/.kanso-update-${id}`, src = `${stage}/src/kanso`;
+    const held = await tryOrAsync(() => exec("sh", ["-c", LOCK_SCRIPT, "sh", lock, id, String(HOLD_MIN), `${home}/.kanso-update-`]));
+    if (held?.code !== 0 || held.stdout.trim() !== "ok") {
+      this.settle(cx, id);
+      if (held?.code === 0) return this.elsewhere();
+      this.error = lastLine(held, "the update could not start");
+      notify({ title: "kansō was not updated", body: this.error, level: "error" });
+      return;
+    }
     try {
       const staged = await exec("sh", ["-c", STAGE_SCRIPT, "sh", this.source.tarball(v), stage, v]);
       if (staged.code !== 0) throw new Error(lastLine(staged, "the download failed"));
@@ -226,7 +288,7 @@ export class Updater {
       const notes = await this.stageKeysAndLayout(v, home, stage, src);
       this.setState({ done: { version: v, notes } });
       // Swapping kanso-chrome restarts this mod; the fresh copy reports.
-      const swapped = await exec("sh", ["-c", SWAP_SCRIPT, "sh", stage, home, stamp()]);
+      const swapped = await exec("sh", ["-c", SWAP_SCRIPT, "sh", stage, home, stamp(), lock, id]);
       if (swapped.code !== 0) {
         this.setState({ done: null });
         throw new Error(lastLine(swapped, "the files could not be put in place"));
@@ -236,12 +298,24 @@ export class Updater {
     } catch (e) {
       this.error = String(e?.message ?? e);
       notify({ title: "kansō was not updated", body: this.error, level: "error" });
-      try { await exec("rm", ["-rf", stage]); } catch {}
+      // Only this install's own folder and lock: another may hold the lock by now.
+      await tryOrAsync(() => exec("rm", ["-rf", stage]));
+      await tryOrAsync(() => exec("sh", ["-c", RELEASE_SCRIPT, "sh", lock, id]));
     } finally {
-      this.busy = false;
-      this.fit();
-      cx.notify();
+      this.settle(cx, id);
     }
+  }
+
+  settle(cx, id) {
+    this.working = false;
+    if (this.state().installing?.id === id) this.setState({ installing: null });
+    this.fit();
+    cx.notify();
+  }
+
+  elsewhere() {
+    notify({ title: "kansō is already being updated", body: "Another window or the other Update button started it; it finishes on its own.", level: "info" });
+    return "busy";
   }
 
   async stageKeysAndLayout(v, home, stage, src) {
