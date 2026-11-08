@@ -245,24 +245,38 @@ test("New conversation in a closed project: one space however often it is clicke
     { id: "p-a", name: "api", folder: "/work/client-a/api", machine: "", agent: "codex", missing: false },
     { id: "p-b", name: "api", folder: "/work/client-b/api", machine: "", agent: "codex", missing: false },
   ];
-  const keys = [], scrolled = [];
-  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : k === "on_key_down" ? (f) => { keys.push(f); return p; } : () => p) }); return p; };
+  const keys = [], scrolled = [], items = {};
+  let inRenderer = false, rendering = false;
+  const HANDLERS = ["on_click", "on_mouse_down", "on_mouse_up"];
+  const node = () => { const p = new Proxy({}, { get: (_t, k) => {
+    if (k === "when") return (c, f) => (c ? f(p) : p);
+    if (k === "on_key_down") return (f) => { keys.push(f); return p; };
+    if (k === "on_item_click" || k === "on_item_secondary_click") return (f) => { items[k] = f; return p; };
+    // Herdr: a handler registered inside a virtual list's item renderer throws.
+    if (HANDLERS.includes(k) && inRenderer) return () => { throw new Error(`${k} inside an item renderer`); };
+    return () => p;
+  } }); return p; };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node },
-    v_virtual_list: (_id, n, _size, _key, render) => { render({ start: 0, end: n }); return node(); },
-    VirtualListScrollHandle: { new: () => ({ scroll_to_item: (i) => scrolled.push(i), release: () => true }) },
+    v_virtual_list: (_id, n, _size, _key, render) => { inRenderer = true; try { render({ start: 0, end: n }); } finally { inRenderer = false; } return node(); },
+    // Herdr: a scroll handle made during render throws; it belongs in init().
+    VirtualListScrollHandle: { new: () => { if (rendering) throw new Error("VirtualListScrollHandle.new() cannot run during render"); return { scroll_to_item: (i) => scrolled.push(i), release: () => true }; } },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
     shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
-    spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1" }), closeOverlay: () => {},
+    spaces: () => [], home: () => "/Users/me", appHome: () => "/tmp/kanso-none", exec: async () => ({ code: 1, stdout: "", stderr: "" }), props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
     knownAgents: async () => [{ key: "codex", installed: true, run: ["codex"] }],
   });
   const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
+  view.init({}, { focus_handle: () => ({ focus() {} }), spawn: () => {}, notify() {} });
+  rendering = true;
   view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
+  rendering = false;
   keys.at(-1)({ key: "down", modifiers: {} }, { stop_propagation() {}, notify() {} });
   assert.deepEqual(scrolled, [1], "the list follows the keyboard's selection");
-  view.menuActs[0]({});
+  items.on_item_click("conv-p-a", { notify() {} });
+  items.on_item_click("conv-p-a", { notify() {} });
   view.menuActs[0]({});
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(calls, [["space.new", { folder: "/work/client-a/api", machine: "", argv: ["codex"] }]], "one space, named by its folder like the project, not by the label that tells the two apart");
+  assert.deepEqual(calls, [["space.new", { folder: "/work/client-a/api", machine: "", argv: ["codex"] }]], "a click on a row (the list's, by its key) starts one space, named by its folder like the project, not by the label that tells the two apart");
 });

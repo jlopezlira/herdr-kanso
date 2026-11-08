@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.14.1] - 2026-11-08
+
+### Fixed
+
+- New conversation opens again: the + in Status and Threads showed "This view could not be rendered" instead of the list of projects since 3.11.0. A project in it starts the conversation on a click or Enter, and a right click chooses the agent.
+
 ## [3.14.0] - 2026-11-08
 
 ### Added

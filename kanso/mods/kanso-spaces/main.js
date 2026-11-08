@@ -148,7 +148,12 @@ export function tone(t, status) {
 export default class Spaces extends View {
   init(_props, cx) {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) { this.confirmClose = false; this.menuAt = 0; this.handle = cx.focus_handle(); this.openPopup(cx); return; }
+    if (props()?.menu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) {
+      this.confirmClose = false; this.menuAt = 0; this.handle = cx.focus_handle();
+      // A scroll handle is state: made here, never during render (Herdr refuses it there).
+      if (props()?.newConversation) this.convScroll = VirtualListScrollHandle.new();
+      this.openPopup(cx); return;
+    }
     this.asleepReads = 0;
     this.asleepApplied = 0;
     this.loadAsleep().catch(() => {});
@@ -385,15 +390,22 @@ export default class Spaces extends View {
     ];
     // Every row's act is there for the keyboard, drawn or not; the list draws only what shows, and follows the selection.
     this.menuActs = entries.map((e) => (cx) => start(e.place));
-    this.convScroll ??= VirtualListScrollHandle.new();
-    this.menuScroll = { handle: this.convScroll, count: entries.length };
-    const row = (e, at) => this.menuRow(t, e.id, e.label ?? e.place.name ?? "~", at, () => start(e.place), { hint: e.hint, keep: true })
-      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); closeOverlay(props().overlay); this.newAgentMenu(e.place); });
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: entries.length } : null;
+    // Drawn inside the virtual list: no handlers on the rows; the list's own say which row, by its key.
+    const row = (e, at) => this.menuRow(t, e.id, e.label ?? e.place.name ?? "~", at, null, { hint: e.hint });
+    const byKey = (key) => entries.find((e) => e.id === key) ?? null;
     return this.menuFrame(t)
       .child(this.menuTitle(t, "New conversation in"))
       .child(v_flex().relative().flex_none().h(Math.min(330, entries.length * MENU_ROW))
         .child(v_virtual_list("conv-list", entries.length, MENU_ROW, (i) => entries[i].id,
-          (range) => entries.slice(range.start, range.end).map((e, k) => row(e, range.start + k))).track_scroll(this.convScroll))
+          (range) => entries.slice(range.start, range.end).map((e, k) => row(e, range.start + k)))
+          .when(Boolean(this.convScroll), (el) => el.track_scroll(this.convScroll))
+          .on_item_click((key, cx) => { const e = byKey(key); if (e) start(e.place); cx.notify(); })
+          .on_item_secondary_click((key, _ev, cx) => {
+            const e = byKey(key);
+            if (!e) return;
+            cx.stop_propagation(); closeOverlay(props().overlay); this.newAgentMenu(e.place);
+          }))
         .child(Scrollbar.vertical("conv-list").absolute().inset_0()))
       .child(div().mx(8).my(4).h(1).bg(t.border))
       .child(item("conv-add-project", "New project with a conversation\u2026", () => this.addProject(true), { icon: "folder-plus" }))
@@ -445,6 +457,7 @@ export default class Spaces extends View {
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
     else if (c === "add-project") this.addProject();
     else if (c === "add-project-start") this.addProject(true);
+    else if (c === "new-conversation") this.newConversationMenu();
     else if (c === "open-folder") pickFolder({ prompt: "Open" }).then((folder) => folder && run("space.new", { folder, machine: "" })).catch(() => {});
     else if (c === "list-up" || c === "list-down") {
       if (this.kbd) this.listKeyDown({ key: c === "list-up" ? "up" : "down", modifiers: {} }, cx);
@@ -951,7 +964,8 @@ export default class Spaces extends View {
     return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
       .when(at === this.menuAt, (el) => el.bg(t.selected))
       .hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); })
+      // A row of a virtual list takes no handler of its own (registering one there throws): its list's on_item_click acts.
+      .when(Boolean(act), (el) => el.on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); }))
       .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
       .child(div().flex_1().truncate().child(text))
       .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
