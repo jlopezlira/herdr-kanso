@@ -127,6 +127,7 @@ export class Updater {
 
   state() { return shared(STATE) ?? {}; }
   setState(patch) { setShared(STATE, { ...this.state(), ...patch }); }
+  autoCheckEnabled() { return this.state().autoCheck !== false; }
 
   available() {
     const { latest } = this.state();
@@ -146,11 +147,15 @@ export class Updater {
     cx.spawn(async (cx) => {
       await this.readInstalled();
       this.finished();
-      await this.check(cx, true);
+      if (this.autoCheckEnabled()) await this.check(cx, true);
       this.fit();
       cx.notify();
     });
-    cx.timer.every(TICK, (cx) => cx.spawn(async (cx) => { await this.check(cx); this.fit(); cx.notify(); }));
+    cx.timer.every(TICK, (cx) => cx.spawn(async (cx) => {
+      if (this.autoCheckEnabled()) await this.check(cx);
+      this.fit();
+      cx.notify();
+    }));
     // A footer row turned on or off in Kanso's settings: the footer takes its new height at once.
     cx.timer.every(1500, () => {
       const now = JSON.stringify(shared("kanso.hidden") ?? []);

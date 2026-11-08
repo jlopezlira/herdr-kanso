@@ -323,17 +323,17 @@ Herdr users find it.
 
 ## Install
 
-Ask your agent: "add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso". Or by hand, from a
-clone of this repository:
+Ask your agent: "add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso". Or, from
+a clone of this repository, run:
 
 ```sh
-cp kanso/layouts/kanso.json ~/.config/herdr-app/layouts/
-cp kanso/layouts/kanso.png  ~/.config/herdr-app/layouts/
-cp kanso/themes/*.json      ~/.config/herdr-app/themes/
-cp -R kanso/mods/kanso-* kanso/mods/open-with ~/.config/herdr-app/mods/
-# then add the "layout:kanso" section of kanso/keys.json to ~/.config/herdr-app/keys.json
-herdr-app do layout.switch --name kanso
+sh ./scripts/local-install.sh
 ```
+
+The script copies kansō's layout, themes and mods, then switches to the layout.
+Merge the `"layout:kanso"` section of `kanso/keys.json` into
+`~/.config/herdr-app/keys.json` to install its layout keys. Set
+`HERDR_APP_HOME` if Herdr uses a different app folder.
 
 Only want the editor picker? **Open with** is also listed on its own: ask your
 agent to "add herdr.dev/mods/jlopezlira/herdr-kanso--open-with" to add it to the
