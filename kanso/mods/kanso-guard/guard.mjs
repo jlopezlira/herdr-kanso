@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { tryOr, parseOr, retry, findAsync, mapSeries, reduceSeries } from "./pure.js";
 // The same rebuild Sleep wakes an agent with: an agent Sleep can resume, Memory can recycle.
 import { resumeArgv, promptEmpty } from "./resume.js";
+import { etimeSecs } from "./procs.js";
 export { resumeArgv, promptEmpty };
 
 const HOME = homedir();
@@ -78,13 +79,8 @@ async function notify(title, body) {
   await run("osascript", ["-e", "on run a", "-e", "display notification (item 2 of a) with title (item 1 of a)", "-e", "end run", title, body], 5000);
 }
 
-// "dd-hh:mm:ss" / "hh:mm:ss" / "mm:ss" as minutes.
-export function etimeMinutes(e) {
-  const [d, rest] = e.includes("-") ? e.split("-") : ["0", e];
-  const p = rest.split(":").map(Number);
-  const [h, m] = p.length === 3 ? [p[0], p[1]] : [0, p[0]];
-  return Number(d) * 1440 + h * 60 + m;
-}
+// ps's elapsed time in whole minutes, read the way every Kanso reader of ps reads it.
+export const etimeMinutes = (e) => Math.floor(etimeSecs(e) / 60);
 
 async function processes() {
   const r = await run("ps", ["-axo", "pid=,ppid=,rss=,etime=,lstart=,command="], 10_000);

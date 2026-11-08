@@ -1,5 +1,5 @@
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-// This is the source copy; `npm run sync:share` copies it into kanso-panel (ports), and a test fails when a copy differs.
+// This is the source copy; `npm run sync:share` copies it into kanso-panel (ports), kanso-guard and kanso-sleep, and a test fails when a copy differs.
 // Reading `ps -axo pid=,ppid=,etime=,command=` (args= gives the same last column), with no host: the sidebar's
 // tasks and liveness and the panel's ports all read the table the same way.
 
