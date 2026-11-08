@@ -237,10 +237,14 @@ how much memory Docker and its VM hold, which they keep even with nothing
 running; **Quit Docker** (a second press confirms) gives it back. Then every
 container, grouped by the Kanso project it is for (its compose folder, else
 its name): its state, memory, ports (a click copies `localhost:<port>`) and
-how long it has run, with Start, Stop, Restart, Logs (a tab following
-`docker logs`) and Remove for a stopped one. A project has Start all and Stop
-all; the images list what uses each, and **Remove unused images** clears the
-rest. When Docker isn't running, the panel says so and opens it.
+how long it has run, with Start, Stop, Restart, Shell, Open (a web port),
+Logs, Details (ports, mounts, networks, restart policy, environment names)
+and Remove for a stopped one. A project has Start all and Stop all, and its
+compose files show with **Up**, **Rebuild** and **Down** even before anything
+runs. **Pull** takes an image by name and **Run…** starts one with a name and
+a port; images and volumes list what uses each, with Remove unused, and the
+build cache can be cleared. Pulls, compose, shells and logs run in a tab of
+their own. When Docker isn't running, the panel says so and opens it.
 
 ### Weeks without a restart
 

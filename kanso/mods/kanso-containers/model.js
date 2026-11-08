@@ -5,8 +5,17 @@ const TAB = "\t";
 const label = (key) => `{{.Label "${key}"}}`;
 // One line per container; tabs never appear in these fields.
 export const PS_FORMAT = ["{{.ID}}", "{{.Names}}", "{{.State}}", "{{.Status}}", "{{.Image}}", "{{.Ports}}",
-  label("com.docker.compose.project"), label("com.docker.compose.project.working_dir"), label("com.docker.compose.service")].join(TAB);
-export const INSPECT_FORMAT = "{{.Id}}\t{{.Image}}";
+  label("com.docker.compose.project"), label("com.docker.compose.project.working_dir"), label("com.docker.compose.service"),
+  label("com.docker.compose.project.config_files")].join(TAB);
+// JSON for the lists: no raw tab or newline gets in, so a line is one container.
+export const INSPECT_FORMAT = ["{{.Id}}", "{{.Image}}", "{{json .Mounts}}", "{{.HostConfig.RestartPolicy.Name}}", "{{json .NetworkSettings.Networks}}", "{{json .Config.Env}}", "{{.Created}}"].join("\t");
+export const VOLUMES_FORMAT = "{{.Name}}\t{{.Driver}}";
+export const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
+// Ports a browser can open.
+const WEB = new Set([80, 443, 3000, 3001, 4000, 4200, 4321, 5000, 5173, 5174, 8000, 8008, 8080, 8081, 8443, 8888, 9000]);
+export const isWeb = (p) => WEB.has(p.inside) || WEB.has(p.port);
+// The container's own port says whether it speaks TLS, whatever port it is published on.
+export const urlOf = (p) => `${p.inside === 443 || p.inside === 8443 ? "https" : "http"}://localhost:${p.port}`;
 export const CONTEXT_FORMAT = "{{.Name}}\t{{.Endpoints.docker.Host}}";
 export const IMAGES_FORMAT = ["{{.ID}}", "{{.Repository}}", "{{.Tag}}", "{{.Size}}", "{{.CreatedSince}}"].join(TAB);
 export const OTHER = "Other";
@@ -35,7 +44,7 @@ export function health(c) {
 export function parseContainers(text) {
   return lines(text).map((l) => l.split(TAB)).filter((f) => f.length >= 5 && f[0]).map((f) => ({
     id: f[0], name: f[1], state: f[2], status: f[3], image: f[4], ports: hostPorts(f[5]),
-    compose: clean(f[6]), dir: clean(f[7]), service: clean(f[8]),
+    compose: clean(f[6]), dir: clean(f[7]), service: clean(f[8]), files: (clean(f[9]) ?? "").split(",").map((x) => x.trim()).filter(Boolean),
   }));
 }
 
@@ -67,9 +76,54 @@ export function parseImages(text) {
   });
 }
 
-// `docker inspect --format '{{.Id}}\t{{.Image}}'`: container id (12) -> the id of the image it runs.
-export const parseImageIds = (text) => new Map(lines(text).map((l) => l.split(TAB)).filter((f) => f.length >= 2)
-  .map((f) => [f[0].slice(0, 12), f[1].replace(/^sha256:/, "")]));
+const json = (text, fallback) => { try { return JSON.parse(text) ?? fallback; } catch { return fallback; } };
+
+// `docker inspect` with INSPECT_FORMAT: container id (12) -> what it runs on and with. Of its
+// environment only the names are kept: values are often secrets.
+export const parseInspect = (text) => new Map(lines(text).map((l) => l.split(TAB)).filter((f) => f.length >= 2).map((f) => [f[0].slice(0, 12), {
+  imageId: f[1].replace(/^sha256:/, ""),
+  mounts: json(f[2], []).map((m) => ({ type: m.Type, name: m.Name ?? null, source: m.Source ?? "", dest: m.Destination ?? "" })),
+  restart: f[3] && f[3] !== "no" ? f[3] : null,
+  networks: Object.keys(json(f[4], {})),
+  env: json(f[5], []).map((e) => String(e).split("=")[0]).filter(Boolean),
+  created: f[6] ?? null,
+}]));
+export const parseImageIds = (text) => new Map([...parseInspect(text)].map(([id, d]) => [id, d.imageId]));
+
+// Volumes, with the containers whose mounts name them; one nobody mounts can go.
+export function volumeRows(text, containers) {
+  return lines(text).map((l) => l.split(TAB)).filter((f) => f[0]).map(([name, driver]) => {
+    const users = containers.filter((c) => (c.mounts ?? []).some((m) => m.type === "volume" && m.name === name));
+    return { name, driver: driver ?? "", users: users.map((c) => c.service ?? c.name), unused: users.length === 0, anonymous: /^[0-9a-f]{64}$/.test(name) };
+  }).toSorted((a, b) => Number(a.unused) - Number(b.unused) || Number(a.anonymous) - Number(b.anonymous) || a.name.localeCompare(b.name));
+}
+
+// `docker system df --format '{{json .}}'`: what each kind could give back, in MB.
+export const reclaimable = (text) => Object.fromEntries(lines(text).map((l) => json(l, null)).filter(Boolean)
+  .map((r) => [r.Type, sizeMB(String(r.Reclaimable ?? "").split(" ")[0])]));
+
+// `find` of compose files: one per folder, the one Docker Compose itself would take first.
+// Folders to look in for compose files: each project folder's own two levels (find -maxdepth 2), and
+// its parents up to `up` levels (find -maxdepth 1), never home, what holds it, or a top folder.
+export function lookIn(folders, homeDir, up = 3) {
+  const parentsOf = (f) => Array.from({ length: up }, (_, i) => f.split("/").slice(0, -(i + 1)).join("/"))
+    .filter((p) => p.split("/").length > 2 && p !== homeDir && !homeDir.startsWith(`${p}/`));
+  const deep = [...new Set(folders)];
+  return { deep, shallow: [...new Set(deep.flatMap(parentsOf))].filter((p) => !deep.includes(p)) };
+}
+
+// Stacks Compose knows that no file search found (a file named otherwise, like dev.yaml): from the
+// containers' labels and the names kept after a Down.
+export function knownStacks(files, containers, names) {
+  const dirs = [...new Set([...containers.filter((c) => c.dir && c.compose).map((c) => c.dir), ...names.keys()])].filter((d) => !files.some((f) => f.dir === d));
+  return [...files, ...dirs.map((dir) => ({ dir, file: containers.find((c) => c.dir === dir && c.files?.length)?.files[0] ?? names.get(dir)?.[0]?.files?.[0] ?? dir, name: dir.split("/").at(-1) }))];
+}
+
+export function composeFiles(text) {
+  const found = lines(text).filter((p) => COMPOSE_FILES.includes(p.split("/").at(-1)));
+  const dirs = [...new Set(found.map((p) => p.slice(0, p.lastIndexOf("/"))))];
+  return dirs.map((dir) => ({ dir, file: `${dir}/${COMPOSE_FILES.find((f) => found.includes(`${dir}/${f}`))}`, name: dir.split("/").at(-1) }));
+}
 
 // The containers on an image: by the image id Docker gave each, else as `docker ps` names it.
 export function imageUsedBy(image, containers) {
@@ -85,13 +139,18 @@ export function contextOf(text) {
 
 const words = (s) => String(s ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
-// The Kanso project a container is for, among `projects` [{ name, folder }]: the one whose folder
-// holds its compose file (the deepest), else the one its compose project or its name starts with.
+const foldersOf = (p) => p.folders ?? (p.folder ? [p.folder] : []);
+const within = (dir, f) => dir === f || dir.startsWith(`${f}/`) || f.startsWith(`${dir}/`);
+
+// The Kanso project a container is for, among `projects` [{ name, folders }] (where its panes work;
+// never home itself): the one with the deepest folder holding its compose folder, else the one working
+// closest inside it, else the one whose whole name starts its compose project's or its own.
 export function projectOf(c, projects) {
   const dir = c.dir;
-  const byDir = dir ? projects.filter((p) => p.folder && (dir === p.folder || dir.startsWith(`${p.folder}/`)))
-    .toSorted((a, b) => b.folder.length - a.folder.length)[0] : null;
-  if (byDir) return byDir.name;
+  const pairs = dir ? projects.flatMap((p) => foldersOf(p).filter((f) => within(dir, f)).map((f) => ({ p, f, holds: dir === f || dir.startsWith(`${f}/`) }))) : [];
+  const byDir = pairs.filter((x) => x.holds).toSorted((a, b) => b.f.length - a.f.length)[0]
+    ?? pairs.filter((x) => !x.holds).toSorted((a, b) => a.f.length - b.f.length)[0];
+  if (byDir) return byDir.p.name;
   // The project whose whole name starts the container's, the longest: kanso-api-db is kanso-api's, not kanso-web's.
   const own = words(c.compose ?? c.name);
   const byName = projects.map((p) => ({ p, w: words(p.name) }))
@@ -103,13 +162,29 @@ export function projectOf(c, projects) {
 
 const order = { running: 0, busy: 1, failed: 2, stopped: 3 };
 
-// By project: the ones with something running first, then by name; Other last.
-export function byProject(containers, projects) {
+// By project, with its compose stacks (`stacks` from composeFiles), up or not: the ones with
+// something running first, then by name; Other last.
+export function byProject(containers, projects, stacks = [], names = new Map()) {
   const named = containers.map((c) => ({ ...c, project: projectOf(c, projects), health: health(c) }));
-  const groups = [...new Set(named.map((c) => c.project))].map((project) => {
+  const placed = stacks.map((s) => ({ ...s, project: projectOf({ dir: s.dir, name: s.name }, projects) }));
+  const groups = [...new Set([...named.map((c) => c.project), ...placed.map((s) => s.project)])].map((project) => {
     const list = named.filter((c) => c.project === project)
       .toSorted((a, b) => order[a.health] - order[b.health] || (a.service ?? a.name).localeCompare(b.service ?? b.name));
-    return { project, containers: list, running: list.filter((c) => c.health === "running").length };
+    // One row per Compose project in the folder: each keeps the name it was started under
+    // (`-p` or its file's `name:`), so Down and Up reach the same containers. `names` (folder ->
+    // [{ name, files }]) remembers them after Down.
+    const own = placed.filter((s) => s.project === project).flatMap((s) => {
+      const of = named.filter((c) => c.dir === s.dir);
+      const known = names.get(s.dir) ?? [];
+      const seen = [...new Set([...of.map((c) => c.compose).filter(Boolean), ...known.map((k) => k.name)])];
+      return (seen.length ? seen : [null]).map((compose) => {
+        const mine = of.filter((c) => (c.compose ?? null) === compose);
+        // The files it was started with (-f), so Up and Rebuild keep its configuration.
+        const files = mine.find((c) => c.files?.length)?.files ?? known.find((k) => k.name === compose)?.files ?? [];
+        return { ...s, compose, files, total: mine.length, running: mine.filter((c) => c.health === "running").length };
+      });
+    });
+    return { project, containers: list, stacks: own, running: list.filter((c) => c.health === "running").length };
   });
   return groups.toSorted((a, b) => (a.project === OTHER) - (b.project === OTHER) || (b.running > 0) - (a.running > 0) || a.project.localeCompare(b.project));
 }

@@ -45,7 +45,7 @@ const BUILTIN = [
   { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
   { id: "worktrees", label: "Worktrees", icon: `${ICON}worktree.svg` },
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
-  { id: "containers", label: "Containers", icon: `${ICON}layers.svg` },
+  { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
   { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };

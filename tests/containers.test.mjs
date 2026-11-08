@@ -94,3 +94,68 @@ test("Docker installed but its daemon not running is told apart from any other f
   assert.equal(m.daemonDown({ code: 1, stderr: "unknown flag: --format" }), false);
   assert.equal(m.daemonDown({ code: 0, stdout: "" }), false);
 });
+
+test("details from docker inspect: mounts, networks, restart policy, and of the environment only the names", async () => {
+  const { parseInspect } = await load("kanso-containers/model.js", ["parseInspect"]);
+  const line = ["8362461c1aa3ffff", "sha256:feed", JSON.stringify([{ Type: "volume", Name: "pgdata", Source: "/var/lib/docker/volumes/pgdata/_data", Destination: "/var/lib/postgresql/data" }]),
+    "unless-stopped", JSON.stringify({ bridge: {} }), JSON.stringify(["POSTGRES_PASSWORD=hunter2", "PATH=/usr/bin"]), "2026-11-06T06:05:45Z"].join("\t");
+  const d = clone(parseInspect(line).get("8362461c1aa3"));
+  assert.deepEqual(d.env, ["POSTGRES_PASSWORD", "PATH"], "names only: no value is kept");
+  assert.ok(!JSON.stringify(d).includes("hunter2"));
+  assert.deepEqual([d.imageId, d.restart, d.networks, d.mounts[0].name], ["feed", "unless-stopped", ["bridge"], "pgdata"]);
+});
+
+test("volumes with who mounts them; unused ones can go", async () => {
+  const { volumeRows } = await load("kanso-containers/model.js", ["volumeRows"]);
+  const anon = "f".repeat(64);
+  const rows = clone(volumeRows(`pgdata\tlocal\nold\tlocal\n${anon}\tlocal`, [{ name: "pg", mounts: [{ type: "volume", name: "pgdata" }] }]));
+  assert.deepEqual(rows.map((v) => [v.name.slice(0, 6), v.unused, v.anonymous, v.users]), [["pgdata", false, false, ["pg"]], ["old", true, false, []], ["ffffff", true, true, []]]);
+});
+
+test("compose files: one per folder, the one Compose takes first; projects show their stacks even before any container", async () => {
+  const m = await load("kanso-containers/model.js", ["composeFiles", "byProject", "reclaimable", "isWeb"]);
+  const files = clone(m.composeFiles("/a/api/docker-compose.yml\n/a/api/compose.yaml\n/a/api/docker-compose.override.yml\n/b/web/docker-compose.yml\n"));
+  assert.deepEqual(files, [{ dir: "/a/api", file: "/a/api/compose.yaml", name: "api" }, { dir: "/b/web", file: "/b/web/docker-compose.yml", name: "web" }]);
+  const projects = [{ name: "fluenty", folders: ["/a/api/src"] }, { name: "shop", folders: ["/b"] }];
+  const groups = clone(m.byProject([{ id: "x1", name: "api-db-1", state: "running", status: "Up 1 minute", image: "postgres", ports: [], compose: "api", dir: "/a/api", service: "db" }], projects, files));
+  assert.deepEqual(groups.map((g) => [g.project, g.stacks.map((s) => [s.name, s.running, s.total]), g.containers.length]),
+    [["fluenty", [["api", 1, 1]], 1], ["shop", [["web", 0, 0]], 0]], "a pane working inside the compose folder places it; a stack with nothing up still shows");
+  assert.equal(Math.round(clone(m.reclaimable('{"Type":"Build Cache","Reclaimable":"1.2GB"}\n{"Type":"Images","Reclaimable":"86.05kB (0%)"}'))["Build Cache"]), 1200);
+  assert.equal(m.isWeb({ port: 55432, inside: 5432 }), false);
+  assert.equal(m.isWeb({ port: 8081, inside: 80 }), true);
+});
+
+test("a compose folder belongs to the project that holds it, not to one working deeper inside; https ports open as https", async () => {
+  const m = await load("kanso-containers/model.js", ["projectOf", "urlOf", "byProject"]);
+  const projects = [{ name: "app", folders: ["/work/app"] }, { name: "svc", folders: ["/work/app/service/src"] }];
+  assert.equal(m.projectOf({ dir: "/work/app", name: "x" }, projects), "app");
+  assert.equal(m.projectOf({ dir: "/work/app/service", name: "x" }, projects), "app", "the one holding it wins over one inside it");
+  assert.equal(m.projectOf({ dir: "/work/other", name: "x" }, [{ name: "inner", folders: ["/work/other/pkg"] }]), "inner", "else the one working inside it");
+  assert.equal(m.urlOf({ port: 8443, inside: 443 }), "https://localhost:8443");
+  assert.equal(m.urlOf({ port: 8443, inside: 80 }), "http://localhost:8443", "the container's port decides, not where it is published");
+  assert.equal(m.urlOf({ port: 3000, inside: 3000 }), "http://localhost:3000");
+  const [g] = clone(m.byProject([{ id: "a", name: "custom-db-1", state: "running", status: "Up", image: "pg", ports: [], compose: "custom", dir: "/work/app", service: "db" }],
+    projects, [{ dir: "/work/app", file: "/work/app/compose.yaml", name: "app" }]));
+  assert.equal(g.stacks[0].compose, "custom", "a stack started under another project name keeps it");
+});
+
+test("two Compose projects in one folder are two stacks; a name seen before stays for Up after Down; parents are looked in too", async () => {
+  const m = await load("kanso-containers/model.js", ["byProject", "lookIn"]);
+  const c = (id, compose) => ({ id, name: `${compose}-db-1`, state: "running", status: "Up", image: "pg", ports: [], compose, dir: "/w/app", service: "db" });
+  const projects = [{ name: "app", folders: ["/w/app"] }], file = [{ dir: "/w/app", file: "/w/app/compose.yaml", name: "app" }];
+  const [g] = clone(m.byProject([c("a", "blue"), c("b", "green")], projects, file));
+  assert.deepEqual(g.stacks.map((s) => [s.compose, s.total]), [["blue", 1], ["green", 1]]);
+  const [after] = clone(m.byProject([], projects, file, new Map([["/w/app", [{ name: "blue", files: ["/w/app/compose.yaml", "/w/app/compose.dev.yaml"] }]]])));
+  assert.deepEqual(after.stacks[0].files, ["/w/app/compose.yaml", "/w/app/compose.dev.yaml"], "and the files it was started with");
+  assert.deepEqual(after.stacks.map((s) => [s.compose, s.total]), [["blue", 0]], "after Down, Up still says -p blue");
+  assert.deepEqual(clone(m.lookIn(["/Users/me/w/app/src"], "/Users/me")), { deep: ["/Users/me/w/app/src"], shallow: ["/Users/me/w/app", "/Users/me/w"] }, "parents, never home");
+  assert.deepEqual(clone(m.lookIn(["/Volumes/Work/app/src"], "/Users/me")).shallow, ["/Volumes/Work/app", "/Volumes/Work"], "outside home too, never a top folder");
+});
+
+test("a stack started from a file no search finds still gets its controls, from its labels or after Down", async () => {
+  const { knownStacks } = await load("kanso-containers/model.js", ["knownStacks"]);
+  const c = { dir: "/w/app", compose: "app", files: ["/w/app/dev.yaml"] };
+  assert.deepEqual(clone(knownStacks([], [c], new Map())), [{ dir: "/w/app", file: "/w/app/dev.yaml", name: "app" }]);
+  assert.deepEqual(clone(knownStacks([], [], new Map([["/w/app", [{ name: "app", files: ["/w/app/dev.yaml"] }]]]))).map((s) => s.file), ["/w/app/dev.yaml"]);
+  assert.equal(clone(knownStacks([{ dir: "/w/app", file: "/w/app/compose.yaml", name: "app" }], [c], new Map())).length, 1, "never twice");
+});
