@@ -44,8 +44,7 @@ export function petOf(id, file, manifest = {}) {
   const name = typeof m.displayName === "string" && m.displayName.trim() ? m.displayName.trim()
     : id.split(/[-_.]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
   // `thumb`: the same atlas, smaller, for the chooser (a whole atlas each would weigh 11 MB drawn).
-  const thumb = file.endsWith(".png") ? `${DIR}/thumbs/${file}` : `${DIR}/${file}`;
-  return { id, name, sheet: `${DIR}/${file}`, thumb, rows, frames, cell, columns: count(m.columns, COLUMNS) };
+  return { id, name, sheet: `${DIR}/${file}`, thumb: `${DIR}/thumbs/${file}`, rows, frames, cell, columns: count(m.columns, COLUMNS) };
 }
 
 // The list script's lines: id, atlas file and pet.json, tab-separated.
@@ -87,7 +86,7 @@ for d in "$@"; do [ -d "$d" ] && printf '%s\\n' "$d"/*/; done | while IFS= read 
     if command -v sips >/dev/null 2>&1 && sips -s format png "$s" --out "$out/.$f" >/dev/null 2>&1; then
       mkdir -p "$out/thumbs" && sips -Z 749 "$out/.$f" --out "$out/thumbs/$f" >/dev/null 2>&1 || cp -f "$out/.$f" "$out/thumbs/$f"
       mv -f "$out/.$f" "$out/$f"
-    else f="$id.\${s##*.}"; cp -f "$s" "$out/$f" || continue; fi
+    else f="$id.\${s##*.}"; mkdir -p "$out/thumbs" && cp -f "$s" "$out/$f" && cp -f "$s" "$out/thumbs/$f" || continue; fi
   fi
   seen="$seen$id "
   printf '%s\\t%s\\t' "$id" "$f"; head -c 4096 "$j" | tr '\\n\\r\\t' '   '; echo
