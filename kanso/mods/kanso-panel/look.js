@@ -6,7 +6,7 @@ import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setS
 import { tilde, showPanel } from "./lib.js";
 import { G, R, tokens, quietLink, iconButton } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
-import { deliver, sendKey, waitingNote } from "./deliver.js";
+import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng, firstPage } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, keyOf } from "./look-model.js";
 
@@ -19,8 +19,13 @@ const ROWS = 5;
 // $1 the copies' folder, $2 one file's key: its older copies go, and any left from yesterday.
 const FRESH = 'mkdir -p "$1" && rm -f "$1/$2"-* && find "$1" -type f -mtime +1 -exec rm -f {} + 2>/dev/null; true';
 const EXISTING = 'for f; do [ -f "$f" ] && printf "%s\\n" "$f"; done; true';
-// A terminal on this computer that still runs (another machine's files are not here), or null.
-const live = (address) => (address && !String(address).includes("/") && terminals().some((k) => k.address === address) ? address : null);
+// An agent's terminal on this computer that still runs, or null: a shell would run the note, and another
+// machine's files are not here.
+function live(address) {
+  if (!address || String(address).includes("/")) return null;
+  const term = terminals().find((k) => k.address === address);
+  return term && isAgent(term, panes().find((q) => q.terminal === address)) ? address : null;
+}
 
 export class Look {
   init(cx, p) {
@@ -30,6 +35,7 @@ export class Look {
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
+    this.job = 0; this.drawing = null; this.again = false; // the latest draw, the file it is on, one more asked for meanwhile
     this.box = TextareaState.new({ placeholder: "A note for the agent", rows: 3 });
     this.box.on("change", (_e, cx) => { this.note = null; cx.notify(); });
     this.handle = cx.focus_handle();
@@ -102,15 +108,21 @@ export class Look {
 
   // image() draws only from the app's folder, so each picture is a copy there, under a new name each time
   // so a changed file is never an old picture kept by the image cache.
+  // Only the latest draw lands. One for the file already being drawn waits and runs once after it.
   draw(item, cx) {
-    const key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
+    if (this.drawing === item.path) { this.again = true; return; }
+    const job = this.job + 1, key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
     const name = `${key}-${Date.now()}.${item.kind === "image" ? item.path.split(".").at(-1).toLowerCase() : "png"}`, out = `${dir}/${name}`;
+    this.job = job; this.drawing = item.path; this.again = false;
     this.shown = { path: item.path, busy: true };
     cx.spawn(async (cx) => {
       const made = await exec("sh", ["-c", FRESH, "sh", dir, key]).then(() =>
         item.kind === "image" ? exec("cp", ["-f", item.path, out]).then((r) => r.code === 0)
           : item.kind === "convert" ? toPng(item.path, out)
             : firstPage(item.path, Math.round(this.width * 3), out)).catch(() => false);
+      if (job !== this.job) return; // a newer draw owns the preview
+      this.drawing = null;
+      if (this.again) { this.draw(item, cx); return; }
       if (this.selected?.path !== item.path) return;
       const missing = { image: "This picture can't be read", convert: "Nothing here turns this into a picture", pdf: "Nothing here draws a PDF" }[item.kind];
       this.shown = made ? { path: item.path, image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : { path: item.path, error: missing };

@@ -19,6 +19,11 @@ test("Look finds the files an agent printed, newest first and once each, never a
   ], "backticks, parentheses, Markdown links, file:// and colors read; URLs and HTML left to the browser; the last mention counts");
   assert.deepEqual(clone(mentions("see out.png. and x.png, y.pdf;")), ["y.pdf", "x.png", "out.png"], "a sentence's punctuation is not the name");
   assert.deepEqual(clone(mentions("")), []);
+  assert.deepEqual(clone(mentions(`Saved "/tmp/home page.png" and \`~/Shots/a b.pdf\`, then 'out/x y.webp'.`)),
+    ["out/x y.webp", "~/Shots/a b.pdf", "/tmp/home page.png"], "a quoted path with spaces is one path, not the name after its last space");
+  assert.deepEqual(clone(mentions(`Then 'see shot.png' and "home page.png"`)), ["home page.png", "page.png", "see shot.png", "shot.png"],
+    "quoted without a folder may be a sentence: both, and only the files that exist stay");
+  assert.deepEqual(clone(mentions(`it's in shot.png, not 'x.png`)), ["x.png", "shot.png"], "a lone quote leaves bare names alone");
   assert.equal(mentions(Array.from({ length: 60 }, (_, i) => `f${i}.png`).join(" ")).length, 40, "a long screen gives the newest 40");
 });
 
@@ -58,22 +63,24 @@ test("A note to the agent names the file and where each pin sits on the picture"
   assert.match(keyOf("/r/a.png"), /^[0-9a-z]+$/);
 });
 
-// The panel in a fake Herdr: one agent whose screen shows `screen`, and the files in `files`.
-async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1" } = {}) {
+// The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
+// `copy(args)`: what cp answers, a promise a test can hold back.
+async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
+  copy = async () => ({ code: 0, stdout: "" }) } = {}) {
   const calls = [], store = {};
   const box = { text: "", value() { return this.text; }, set_value(v) { this.text = v; }, on() {}, focus() {} };
   const host = {
     ...singleUse(), image: singleUse().div, TextareaState: { new: () => box },
     focused: () => ({ terminal: focus }), theme: () => ({}), home: () => "/home/me", appHome: () => "/app",
-    terminals: () => [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }],
-    panes: () => [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }],
+    terminals: () => [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
+    panes: () => [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
     watchFolder: async () => { throw new Error("no watch in a test"); },
     hc: async (args) => { calls.push(["hc", ...args]); return args[0] === "read" ? { code: 0, stdout: screen } : { code: 0, stdout: "" }; },
     exec: async (cmd, args) => {
       calls.push([cmd, ...args]);
       if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => files.includes(p)).map((p) => `${p}\n`).join("") };
-      return { code: 0, stdout: "" };
+      return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
   };
   const { Look } = await load("kanso-panel/look.js", ["Look"], host);
@@ -123,6 +130,44 @@ test("Look sends nothing to an agent waiting on its own question", async () => {
   await drain();
   assert.equal(calls.some((c) => c[1] === "send"), false);
   assert.equal(look.note.text, "web agent is waiting on its own question. Answer it first, then send.");
+});
+
+test("Look never takes a shell as the one to send to: it would run the note", async () => {
+  const { look, cx, drain, calls, box } = await panel({ focus: "t2" });
+  assert.equal(look.agent(), null, "a shell in focus is no recipient");
+  assert.equal(calls.some((c) => c[1] === "read"), false, "and its screen is not read");
+  look.ask("/repo/tests/shot.png", cx);
+  await drain();
+  box.text = "crop it";
+  look.send(cx);
+  await drain();
+  assert.equal(calls.some((c) => c[1] === "send"), false, "nothing pasted into the shell");
+  look.follow = "t1";
+  look.tick(cx);
+  assert.equal(look.follow, "t1", "a shell taking focus keeps the agent Look was on");
+});
+
+test("Only the latest drawing of a picture lands, and one file is never drawn twice at once", async () => {
+  const held = [];
+  const copy = () => new Promise((resolve) => { held.push(() => resolve({ code: 0, stdout: "" })); });
+  const { look, cx, drain } = await panel({ files: [], copy });
+  const [a, b] = ["/repo/a.png", "/repo/b.png"].map((path) => ({ path, name: path.split("/").at(-1), kind: "image" }));
+  look.select(a, cx, true);
+  look.draw(a, cx);
+  look.draw(a, cx);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(held.length, 1, "asked again while drawing: waits for the one running");
+  look.select(b, cx, true);
+  await new Promise((r) => setImmediate(r));
+  held[1]();
+  await new Promise((r) => setImmediate(r));
+  assert.match(look.shown.image, /\.png$/);
+  const bShown = look.shown.image;
+  held[0]();
+  await drain();
+  assert.equal(look.shown.path, "/repo/b.png", "a's late copy does not replace b's");
+  assert.equal(look.shown.image, bShown);
+  assert.equal(held.length, 2, "a's second draw was dropped once b was picked");
 });
 
 test("Look opens what kanso-tabs.look names, as if you picked it, and refuses what is not a file it shows", async () => {

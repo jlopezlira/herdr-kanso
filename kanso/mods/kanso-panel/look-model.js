@@ -4,15 +4,25 @@ import { KINDS, kindOf } from "./kinds.js";
 const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
 // A path as agents print it: bare, quoted, in backticks, brackets or parentheses, after "file://".
 const PATH = new RegExp(`(?<=^|[\\s"'\`(\\[<=:])(?:file://)?([\\w@+.~/-]*\\.(?:${EXT}))(?=$|[\\s"'\`)\\]>,;:!?]|\\.(?:\\s|$))`, "gim");
+// One with spaces, whole between matching quotes or backticks: "/tmp/home page.png".
+const QUOTED = new RegExp(`(["'\`])(?:file://)?([^\\s"'\`][^"'\`\\n]* [^"'\`\\n]*\\.(?:${EXT}))\\1`, "gim");
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 // Links open in the browser: a URL's path is never one of these.
 const LINK = /\b(?!file:)[a-z][\w+.-]*:\/\/\S*/gi;
 // Look shows these itself; the rest it opens elsewhere.
 const SHOWN = ["image", "convert", "pdf"];
 
-// The paths in a terminal's text, newest (lowest) first, each once.
+// The paths in a terminal's text, newest (lowest) first, each once. A quoted one with a folder in it is
+// one path, not the bare name after its last space; without a folder ("'see shot.png'") it may be a
+// sentence, so the bare name stays too, and only the files that exist are kept.
 export function mentions(text, max = 40) {
-  const found = [...String(text ?? "").replace(ANSI, "").replace(LINK, " ").matchAll(PATH)].map((m) => m[1]);
+  const clean = String(text ?? "").replace(ANSI, "").replace(LINK, " ");
+  const quoted = [...clean.matchAll(QUOTED)].map((m) => ({ path: m[2], from: m.index, end: m.index + m[0].length }));
+  const whole = quoted.filter((q) => q.path.includes("/"));
+  const bare = [...clean.matchAll(PATH)].filter((m) => !whole.some((q) => m.index > q.from && m.index < q.end))
+    .map((m) => ({ path: m[1], end: m.index + m[0].length }));
+  // By where each ends, so a quoted path counts after the bare name inside it.
+  const found = [...bare, ...quoted].toSorted((a, b) => a.end - b.end).map((x) => x.path);
   return [...new Set(found.toReversed())].slice(0, max);
 }
 

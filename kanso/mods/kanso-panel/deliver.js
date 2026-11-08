@@ -3,6 +3,10 @@
 // Text for an agent, the same from Send and from Look.
 import { hc } from "herdr";
 
+// Only an agent takes text: it reports a status or Herdr knows its program as one. A shell would run the text.
+// `infos`: the terminal and its pane, either may be missing.
+export const isAgent = (...infos) => infos.some((x) => Boolean(x?.status || x?.program?.agent));
+
 // Cmd+Enter (Ctrl+Enter off macOS) sends.
 export const sendKey = (e) => e?.key === "enter" && Boolean(e.modifiers?.platform || e.modifiers?.control);
 

@@ -4,7 +4,7 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea, InputState, Input } from "gpui-base";
 import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
-import { deliver, sendKey, waitingNote } from "./deliver.js";
+import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 
 const LAST = "kanso.send.last";
 
@@ -15,7 +15,7 @@ const tilde = (cwd) => {
 };
 
 export function targetsOf(all, from, last) {
-  const list = all.filter((p) => p.pane !== from && p.terminal && (p.program?.agent || p.status));
+  const list = all.filter((p) => p.pane !== from && p.terminal && isAgent(p));
   const i = list.findIndex((p) => p.terminal === last);
   return i > 0 ? [list[i], ...list.toSpliced(i, 1)] : list;
 }
@@ -26,7 +26,7 @@ export function everyone(terms, ps, { from = null, last = null, query = "", name
   const mine = from ? terms.find((k) => k.address === from)?.labels?.["kanso.project"] ?? projectOf(paneOf.get(from)) : null;
   const q = query.trim().toLowerCase();
   const list = terms
-    .filter((k) => k.address !== from && !String(k.address).includes("/") && (!k.state || k.state === "live") && (k.status || k.program?.agent || paneOf.get(k.address)?.program?.agent))
+    .filter((k) => k.address !== from && !String(k.address).includes("/") && (!k.state || k.state === "live") && isAgent(k, paneOf.get(k.address)))
     .map((k) => {
       const pane = paneOf.get(k.address) ?? null;
       return { terminal: k.address, pane, status: k.status ?? pane?.status ?? null, program: k.program ?? pane?.program ?? null,
