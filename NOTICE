@@ -6,3 +6,7 @@ The kanso-* mods are derived from mods shipped with Herdr
 0oz-design fork by 0OZ (https://github.com/0OZ/0oz-design) and the
 minimalistic layout by José Gutiérrez (https://github.com/josedugu/minimalistic).
 Each file's header lists who changed what.
+
+The markdown panel's reviews (md-review and Done), its Escape key and its
+"From this terminal" list come from herdr-md-review by Johannes Hund
+(https://github.com/h0ru5/herdr-md-review, Apache License 2.0).

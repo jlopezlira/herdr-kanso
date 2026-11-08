@@ -8,6 +8,14 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.7.0] - 2026-11-07
+
+### Added
+
+- Markdown reviews with your agents: an agent runs `md-review plan.md`, the file opens in the Markdown panel with a Done button, you write your comments into it, and Done hands your changes back to the agent as a diff. By Johannes Hund ([h0ru5](https://github.com/h0ru5)), from his remix [herdr-md-review](https://github.com/h0ru5/herdr-md-review).
+- The Markdown panel lists first the Markdown files the focused terminal mentioned (a copied path, paths on its screen, its Claude Code scratchpad), by Johannes Hund.
+- Escape in the Markdown panel leaves the block you are editing, or closes the panel, by Johannes Hund.
+
 ## [3.6.2] - 2026-11-07
 
 ### Fixed

@@ -49,7 +49,9 @@ files next to it are one build of it.
 - **The list** (no file open): one row per Markdown file in the folder, 30
   tall, the name then its subfolder (11.5, `dim`); "Looking for Markdown…"
   while it looks; "No Markdown files in this folder. Cmd-click a .md path in
-  a terminal to read it here." when there are none.
+  a terminal to read it here." when there are none. Above it, when the
+  focused terminal mentioned any, "From this terminal" (11, `dim`) with those
+  files, the name then its folder, and "In this folder" over the rest.
 
 ## How it behaves
 
@@ -80,6 +82,33 @@ files next to it are one build of it.
   `.md` (relative to the document, `#anchor` dropped) opens here.
 - **Source** edits the whole file in an `Editor` (`language: "markdown"`,
   soft wrap, no line numbers), saved the same way.
+- **Escape** leaves the block being edited; with none open it saves and
+  closes the window. It is a key binding (`cx.bind_keys`, contexts
+  `MarkdownPanel` and `MarkdownPanel > Input`, action `markdown_panel_escape`),
+  since a focused `Textarea` takes Escape before `on_key_down`.
+- **From this terminal**: when the window opens, `recent.sh <terminal>` (the
+  focused pane's) lists up to 15 existing Markdown files above the folder's,
+  best first: a path on the clipboard, paths in `hc read <terminal>` from
+  newest to oldest, then the `*.md` in the scratchpad of a Claude Code session
+  in that terminal. The list then has two headings, "From this terminal" and
+  "In this folder". Not for a pane on another machine.
+- **Reviews**: `md-review <file>` (in the mod's folder; link it into your
+  `PATH`) records itself in `data/markdown-review-waiting/<pid>.path`, leaves
+  the path in `data/markdown-review/` to open it, opens the window unless
+  `herdr-app status` lists it, and waits. While a live `md-review` waits on a
+  file, the file shows **Done** in the header (12 px on `raised`, a `border`
+  line, radius 6, tooltip "Review done: tell the agent"), also after the
+  window was closed and opened again. Done saves, answers every `md-review`
+  waiting on that file with `data/markdown-review-done/<pid>`, then shows the
+  next review waiting or closes; each `md-review` prints `Review done:
+  <path>` and a `diff -u` of what you changed, removes its files, and exits.
+  With no file shown, the list starts with "Waiting for your review". A
+  step `md-review` can't take (writing its files, opening the window) makes
+  it exit 1 and say why, instead of waiting.
+  Outside Herdr (`HC_TERMINAL_ID` unset) it exits 2 and says so.
+  `md-review --rule` prints a short rule for agents, only inside Herdr: add it
+  to an agent's instructions yourself (for Claude Code, a `SessionStart` hook
+  running `md-review --rule`) if you want agents to ask for reviews this way.
 - **From outside Herdr**: the mod watches `data/kanso-open/` (under
   `appHome()`), takes the newest `*.path` file there, removes them all, and
   opens that path.
@@ -94,6 +123,8 @@ files next to it are one build of it.
     byte for byte; tables to cells and back (escaped pipes kept, alignment
     row kept);
   - `markdown-handler.sh`: Kanso Markdown, below;
+  - `md-review`: the review command; `recent.sh`: the "From this terminal"
+    search (`hc`, `python3`, `pbpaste` or `wl-paste`);
   - `icons/`: `close`, `refresh`, `chevron-left` (16 px strokes);
   - `mod.json`: `{ "place": "none", "title": "Markdown", "overlay": {
     "kind": "window", "width": 560, "height": 0.9, "key": "markdown-panel" } }`.
@@ -147,3 +178,9 @@ and made the default with `LSSetDefaultRoleHandlerForContentType` (through
 - Changing the file from a terminal while a block has unsaved text shows the
   conflict bar, and the file is untouched until you choose.
 - With Kanso Markdown installed, `open some.md` shows it in the window.
+
+## Credits
+
+Reviews with `md-review` and Done, Escape, and "From this terminal" are by
+Johannes Hund ([h0ru5](https://github.com/h0ru5)), from his remix
+[herdr-md-review](https://github.com/h0ru5/herdr-md-review).
