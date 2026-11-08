@@ -11,6 +11,11 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [Unreleased]
+
+### Fixed
+
+- One kansō update at a time: an Update clicked in the footer and one from the tab bar or Settings, or in two windows, no longer run together on the same files; the second is told, however long the first takes. An install runs on its own, past Herdr's 30 s limit for a command and through the reload it causes, and a failure partway through the swap puts back every mod you had, not only the one that failed. One stopped outright, even while it was putting things back or clearing up, is finished or undone the next time kansō starts: mods are replaced one at a time, the tab bar and kanso-chrome last, so one of them is always there to do it. Only the tab bar looks for new releases on its own, so a start asks GitHub once.
 ## [3.16.0] - 2026-11-08
 
 ### Added
@@ -28,7 +33,6 @@ release.
 - Memory recycles a Claude Code agent started with `--add-dir`, `--mcp-config` or allowed and disallowed tools, as Sleep already resumed it: both now rebuild the command the same way, and an arrangement drops the same session options when it starts an agent fresh.
 - The dōjō's share image is made again with your pet in it: the pet's sheet goes beside the card instead of inside it, where it passed the 1 MiB a mod may write ("The image could not be made").
 - A pane header's digest and the pull request panel read checks the same way: a stale check no longer shows green in the header, and a result GitHub has not told kansō about reads as unknown in both, never as passed.
-- One kansō update at a time: an Update clicked in the footer and one from the tab bar or Settings, or in two windows, no longer run together on the same files; the second is told, however long the first takes. An install runs on its own, past Herdr's 30 s limit for a command and through the reload it causes, and a failure partway through the swap puts back every mod you had, not only the one that failed; one stopped outright is finished or undone the next time kansō starts. Only the tab bar looks for new releases on its own, so a start asks GitHub once.
 
 ## [3.15.1] - 2026-11-08
 

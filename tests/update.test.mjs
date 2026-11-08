@@ -70,14 +70,14 @@ async function fixture(t, { layoutChanged = true } = {}) {
   await writeFile(join(site, "v1.1.0/kanso/keys.json"), await readFile(new URL("keys.json", repo), "utf8"));
   await writeFile(join(site, "v1.1.0/kanso/layouts/kanso.json"), shippedLayout);
 
-  // Herdr's `herdr-app check`, faked: it notes each mod, and on a file's say holds the last
-  // one (slow) or makes it impossible to move into place (sabotage).
+  // Herdr's `herdr-app check`, faked: it notes each mod, and on a file's say holds open-with
+  // (slow) or makes kanso-chrome, the last to go in, impossible to move into place (sabotage).
   const checker = join(root, "check.sh");
   await writeFile(checker, [
     "name=$(basename \"$2\")",
     `echo "$name" >> "${root}/checks"`,
     `if [ -f "${root}/slow" ] && [ "$name" = open-with ]; then while [ ! -f "${root}/go" ]; do sleep 0.05; done; fi`,
-    `if [ -f "${root}/sabotage" ] && [ "$name" = open-with ]; then chmod 555 "$2"; fi`,
+    `if [ -f "${root}/sabotage" ] && [ "$name" = kanso-chrome ]; then chmod 555 "$2"; fi`,
     "",
   ].join("\n"), { mode: 0o755 });
 
@@ -378,22 +378,23 @@ test("A swap that fails on its last mod puts back every one before it: the old v
   cx.timer = { every() {} };
   f.updater.start(cx); await drain();
   const keysBefore = await readFile(join(f.home, "keys.json"), "utf8");
-  await f.flag("sabotage"); // open-with, the last mod moved in, cannot be
+  await f.flag("sabotage"); // kanso-chrome, the last mod moved in, cannot be
   await f.updater.install(cx);
-  assert.match(f.updater.error, /could not put open-with in place/);
+  assert.match(f.updater.error, /could not put kanso-chrome in place/);
   assert.equal(f.toasts.at(-1).level, "error");
-  assert.equal(await version(f.home), "1.0.0", "kanso-chrome was swapped, then put back");
+  assert.equal(await version(f.home), "1.0.0", "kanso-chrome was moved aside, then put back");
   assert.equal(await readFile(join(f.home, "mods/kanso-chrome/main.js"), "utf8"), "// 1.0.0\n");
   assert.deepEqual((await readdir(join(f.home, "mods"))).toSorted(), ["kanso-chrome", "token-spend"], "the mods it brought are gone again");
   assert.equal(await readFile(join(f.home, "keys.json"), "utf8"), keysBefore, "your keys as they were");
   assert.equal(await readFile(join(f.home, "layouts/kanso.json"), "utf8"), '{"root":{"id":"live"}}', "your layout as it was");
+  assert.deepEqual(await readdir(join(f.home, "themes")), [], "the release's themes taken back too");
   assert.deepEqual(await staged(f.home), [], "backups removed only once everything is back");
   assert.ok((await holder(t, f)).got, "the lock went with its process");
   assert.equal(f.updater.available(), "1.1.0", "and the update is offered again");
 });
 
-// A small release (three mods, a theme, the layout) and a home with two of them, for running
-// INSTALL_SCRIPT itself many times.
+// A small release (three mods, a theme, the layout and its picture) and a home with two of those
+// mods, for running INSTALL_SCRIPT itself many times.
 async function small(t) {
   const root = await temporary(t);
   const site = join(root, "site"), base = join(root, "base");
@@ -422,8 +423,27 @@ async function small(t) {
   await writeFile(join(base, "layouts/kanso.png"), "png 1.0.0\n");
   await writeFile(join(base, "keys.json"), '{"yours":true}\n');
   const checker = join(root, "check.sh");
-  await writeFile(checker, `if [ -f "${root}/sabotage" ] && [ "$(basename "$2")" = open-with ]; then chmod 555 "$2"; fi\n`, { mode: 0o755 });
-  return { root, base, checker, url: pathToFileURL(join(site, "v1.1.0.tar.gz")).href };
+  await writeFile(checker, `if [ -f "${root}/sabotage" ] && [ "$(basename "$2")" = kanso-chrome ]; then chmod 555 "$2"; fi\n`, { mode: 0o755 });
+  const url = pathToFileURL(join(site, "v1.1.0.tar.gz")).href;
+  const { INSTALL_SCRIPT, RECOVER } = await updater();
+  // An install of 1.1.0 over `from`, killed after its `stop`-th step (0: never). By default it
+  // brings merged keys and a new layout; a reinstall over 1.1.0 brings neither.
+  const run = async (home, stop, { from = "1.0.0", sabotage = false } = {}) => {
+    const dir = join(home, ".kanso-updates");
+    await mkdir(dir, { recursive: true }); // as LAUNCH makes it
+    if (sabotage) await writeFile(join(root, "sabotage"), "");
+    const [keys, layout] = from === "1.0.0" ? ['{"merged":true}', "1"] : ["", ""];
+    const how = await new Promise((resolve) => execFile("sh", ["-c", INSTALL_SCRIPT, "sh", url, home, dir, "op", "1.1.0", from, checker, "20261108-1200", keys, layout],
+      { env: { ...process.env, KANSO_UPDATE_STOP: String(stop) } }, (error, _out, err) => resolve(error?.signal === "SIGKILL" ? "killed" : error ? `failed: ${err.trim().split("\n").at(-1)}` : "ok")));
+    await rm(join(root, "sabotage"), { force: true });
+    return how;
+  };
+  const recover = (home) => exec("sh", ["-c", RECOVER, "sh", home, join(home, ".kanso-updates")]);
+  const fresh = async (name) => { const home = join(root, name); await cp(base, home, { recursive: true }); return home; };
+  const before = await tree(base);
+  const whole = await fresh("whole");
+  assert.equal(await run(whole, 0), "ok");
+  return { root, run, recover, fresh, before, after: await tree(whole) };
 }
 
 // Every file under a home, by path, with its content; .kanso-updates aside.
@@ -435,56 +455,82 @@ async function tree(dir, at = "") {
   }));
   return Object.assign({}, ...parts);
 }
+const stages = async (home) => (await readdir(updates(home), { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
+// Recovery, run as a copy that starts would, must end at one whole install, change nothing run
+// again, leave nothing staged, and let the next install through.
+async function recovered(s, home, at) {
+  assert.equal((await s.recover(home)).code, 0, `recovery after ${at}`);
+  const once = await tree(home);
+  const end = JSON.stringify(once) === JSON.stringify(s.before) ? "old" : JSON.stringify(once) === JSON.stringify(s.after) ? "new" : null;
+  assert.ok(end, `after ${at}, recovery left neither install whole`);
+  assert.equal((await s.recover(home)).code, 0);
+  assert.deepEqual(await tree(home), once, `a second recovery after ${at} changed something`);
+  assert.deepEqual(await stages(home), [], `nothing staged left after ${at}`);
+  assert.equal(await s.run(home, 0, { from: end === "old" ? "1.0.0" : "1.1.0" }), "ok", `the next install after ${at}`);
+  assert.deepEqual(await tree(home), s.after, `the next install after ${at} is whole`);
+  return end;
+}
 
-test("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one; a second recovery changes nothing", async (t) => {
+test("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one, and the next install goes through", async (t) => {
   const s = await small(t);
-  const { INSTALL_SCRIPT, RECOVER } = await updater();
-  const run = async (home, stop) => {
-    const dir = join(home, ".kanso-updates");
-    await mkdir(dir, { recursive: true }); // as LAUNCH makes it
-    return new Promise((resolve) => execFile("sh", ["-c", INSTALL_SCRIPT, "sh", s.url, home, dir, "op", "1.1.0", "1.0.0", s.checker, "20261108-1200", '{"merged":true}', "1"],
-      { env: { ...process.env, KANSO_UPDATE_STOP: String(stop) } }, (error, _out, err) => resolve(error?.signal === "SIGKILL" ? "killed" : error ? `failed: ${err.trim().split("\n").at(-1)}` : "ok")));
-  };
-  const recover = (home) => exec("sh", ["-c", RECOVER, "sh", home, join(home, ".kanso-updates")]);
-  const fresh = async (name) => { const home = join(s.root, name); await cp(s.base, home, { recursive: true }); return home; };
-  const before = await tree(s.base);
-  const whole = await fresh("whole");
-  assert.equal(await run(whole, 0), "ok");
-  const after = await tree(whole);
-  assert.equal(after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
-  assert.equal(after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
-
+  assert.equal(s.after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
+  assert.equal(s.after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
+  assert.equal(s.after["themes/kanso-day.json"], '{"theme":"1.1.0"}\n');
+  const updaters = (home) => tree(home).then((files) => ["kanso-chrome", "kanso-tabs"].filter((name) => files[`mods/${name}/main.js`]));
   const sweep = async (sabotage) => {
     const kills = [];
-    for (const stop of Array.from({ length: 40 }, (_, i) => i + 1)) {
-      const home = await fresh(`${sabotage ? "s" : "k"}${stop}`);
-      if (sabotage) await writeFile(join(s.root, "sabotage"), "");
-      const how = await run(home, stop);
-      await rm(join(s.root, "sabotage"), { force: true });
+    for (const stop of Array.from({ length: 60 }, (_, i) => i + 1)) {
+      const home = await s.fresh(`${sabotage ? "s" : "k"}${stop}`);
+      const how = await s.run(home, stop, { sabotage });
       if (how !== "killed") {
-        if (sabotage) assert.match(how, /could not put open-with in place/); else assert.equal(how, "ok");
+        if (sabotage) assert.match(how, /could not put kanso-chrome in place/); else assert.equal(how, "ok");
         return { kills, last: await tree(home) };
       }
-      assert.equal((await recover(home)).code, 0, `recovery after step ${stop}`);
-      const once = await tree(home);
-      const end = JSON.stringify(once) === JSON.stringify(before) ? "old" : JSON.stringify(once) === JSON.stringify(after) ? "new" : null;
-      assert.ok(end, `after step ${stop}${sabotage ? " (undoing)" : ""}, recovery left neither install whole`);
-      kills.push(end);
-      assert.equal((await recover(home)).code, 0);
-      assert.deepEqual(await tree(home), once, `a second recovery after step ${stop} changed something`);
-      assert.deepEqual((await readdir(join(home, ".kanso-updates"), { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name), [], "nothing staged left");
+      // Herdr started cold now loads what is on disk: an updater, to start the recovery, is there.
+      assert.ok((await updaters(home)).length > 0, `no updater on disk after step ${stop}`);
+      kills.push(await recovered(s, home, `step ${stop}${sabotage ? " (undoing)" : ""}`));
     }
     assert.fail("more steps than expected");
   };
-  // Forward: 4 aside (keys, layout, kanso-tabs, kanso-chrome), 5 in, the commit. Killed before the
-  // commit it is undone; after, finished.
+  // Forward, slot by slot, each aside and in: keys, layout, picture, theme (8), open-with in (1),
+  // kanso-tabs and kanso-chrome (4); then the commit, the layout you had kept, the journal gone.
   const forward = await sweep(false);
-  assert.deepEqual(forward.kills, [...Array(9).fill("old"), "new"]);
-  assert.deepEqual(forward.last, after);
-  // open-with cannot go in: 4 aside and 3 in, then the undoing's 7 renames, each a place to die.
+  assert.deepEqual(forward.kills, [...Array(13).fill("old"), ...Array(3).fill("new")]);
+  assert.deepEqual(forward.last, s.after);
+  // kanso-chrome cannot go in: 12 steps forward, then back in reverse, each slot's renames and its
+  // line out of the journal (19), then the journal gone.
   const back = await sweep(true);
-  assert.deepEqual(back.kills, Array(14).fill("old"));
-  assert.deepEqual(back.last, before, "a failed swap undone in full");
+  assert.deepEqual(back.kills, Array(32).fill("old"));
+  assert.deepEqual(back.last, s.before, "a failed swap undone in full");
+});
+
+test("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
+  const s = await small(t);
+  // The sabotaged install, killed once every slot is back (its last step, the journal emptied,
+  // before the journal goes); then all the stage holds but its journal is gone, as a removal
+  // cut short could leave it: the release's keys.json, your backups.
+  const home = await s.fresh("undone");
+  assert.equal(await s.run(home, 31, { sabotage: true }), "killed");
+  const [stage] = await stages(home);
+  const st = join(updates(home), stage);
+  assert.equal(await readFile(join(st, "slots"), "utf8"), "", "every slot is out of the journal");
+  await exec("chmod", ["-R", "u+w", st]); // the sabotaged kanso-chrome
+  await Promise.all(["keys.json", "kanso.json", "old", "src"].map((x) => rm(join(st, x), { recursive: true, force: true })));
+  assert.equal(await recovered(s, home, "a removal cut short"), "old");
+});
+
+test("A finished install killed as its stage was being removed is not done again: the next install goes through", async (t) => {
+  const s = await small(t);
+  // Killed after the commit and the layout you had kept; then the stage loses all but its journal
+  // and the `committed` mark, as a removal cut short could leave it: the release's themes and
+  // picture, its other files, your backups, the stamp.
+  const home = await s.fresh("committed");
+  assert.equal(await s.run(home, 15), "killed");
+  const [stage] = await stages(home);
+  const st = join(updates(home), stage);
+  await Promise.all(["src", "old", "stamp", "slots.part"].map((x) => rm(join(st, x), { recursive: true, force: true })));
+  assert.deepEqual((await readdir(st)).toSorted(), ["committed", "slots"]);
+  assert.equal(await recovered(s, home, "a removal cut short"), "new");
 });
 
 test("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
@@ -492,9 +538,12 @@ test("A copy that starts after an install died mid-swap undoes it before it read
   const { cx, drain } = context();
   cx.timer = { every() {} };
   f.updater.start(cx); await drain();
-  // Killed right after the new kanso-chrome went in (its version.json says 1.1.0), before the commit.
+  // Killed right after the new kanso-chrome went in (its version.json says 1.1.0), before the commit:
+  // keys and layout aside and in (4), the picture, each theme and every mod but kanso-chrome in
+  // (none of them here before), then kanso-chrome aside and in (2).
   const mods = (await readdir(new URL("mods/", repo))).length;
-  process.env.KANSO_UPDATE_STOP = String(3 + 2 + mods);
+  const themes = (await readdir(new URL("themes/", repo))).length;
+  process.env.KANSO_UPDATE_STOP = String(4 + 1 + themes + (mods - 1) + 2);
   t.after(() => { delete process.env.KANSO_UPDATE_STOP; });
   await f.flag("slow");
   f.ctl.abandon = true;

@@ -61,9 +61,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       stay); the layout is replaced only if the release changed it (old kept
       as `kanso.json.old-<time>`). A detached shell holding a kernel lock
       downloads into `.kanso-updates/<id>/`, checks `version.json` and
-      `herdr-app check`, moves every mod aside, then every new one in (all
-      put back if it fails or dies), and writes `<id>.status`; the tab bar reads it
-      and toasts "Kanso updated to X".
+      `herdr-app check`, swaps each file and mod in turn, `kanso-chrome`
+      last (all put back if it fails or dies), writes `<id>.status`; the tab
+      bar toasts "Kanso updated to X".
 - **Corners**: two radii and nothing else. Surfaces (panes, cards, popovers,
   menus) are 8; controls and rows (buttons, tabs, list rows, tiles, chips,
   fields) are 6; dots are circles.

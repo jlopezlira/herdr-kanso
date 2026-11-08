@@ -107,59 +107,55 @@ export const HOLD = `hold() {
 `;
 
 // The swap, as a journal that can be replayed from any point. <stage>/slots lists each thing the
-// install replaces, one per line ("<had> <slot>": had 1 when you had one before), kanso-chrome
-// last so its version.json changes only once every other mod is in. A slot is three paths: L where
-// it lives, B the one you had (moved aside), S the release's. Every step looks at the disk, makes
-// one rename or none, and deletes nothing, so each copy is always in exactly one place and running
-// a step twice does nothing more. Forward: every L aside to B, then every S to L, then the
-// `committed` mark. Back, in reverse: L to S where the release's is in place, then B to L.
-// `step` counts renames; KANSO_UPDATE_STOP=<n> kills the process after the n-th (the tests).
+// install replaces, one per line ("<had> <slot>": had 1 when you had one before). A slot is three
+// paths: L where it lives, B the one you had (moved aside), S the release's. Every step looks at
+// the disk and makes one rename or none, so running it twice does nothing more.
+// Forward, slot by slot: L aside to B, then S to L. The updaters (kanso-tabs, then kanso-chrome,
+// whose version.json says which release is in) go last, so whenever the install dies one of them
+// is on disk, old or new, to start recovery. Every B stays until the `committed` mark.
+// Back, in reverse: L to S where the release's is in place, then B to L; then the slot's line
+// leaves the journal. Its S stays until then, so a slot already put back is never undone again.
+// Either way the journal goes before the stage does: a stage without one is leftovers.
+// `step` counts what is done; KANSO_UPDATE_STOP=<n> kills the process after the n-th (the tests).
 const JOURNAL = `step() { n=$((n + 1)); if [ "$n" = "\${KANSO_UPDATE_STOP:-0}" ]; then kill -9 $$; fi; }
 slot() {
   case $1 in
     keys) L="$home/keys.json"; B="$st/old/keys.json"; S="$st/keys.json" ;;
     layout) L="$home/layouts/kanso.json"; B="$st/old/kanso.json"; S="$st/kanso.json" ;;
+    picture) L="$home/layouts/kanso.png"; B="$st/old/kanso.png"; S="$st/src/kanso/layouts/kanso.png" ;;
+    themes/*) L="$home/$1"; B="$st/old/$1"; S="$st/src/kanso/$1" ;;
     *) L="$home/mods/$1"; B="$st/old/mods/$1"; S="$st/src/kanso/mods/$1" ;;
   esac
 }
-aside() { slot "$2"; if [ "$1" = 1 ] && [ -e "$S" ] && [ -e "$L" ] && [ ! -e "$B" ]; then mv "$L" "$B" || return 1; step; fi; }
-bring() { slot "$2"; if [ -e "$S" ] && [ ! -e "$L" ]; then mv "$S" "$L" || { echo "could not put $2 in place" >&2; return 1; }; step; fi; }
+swap() {
+  slot "$2"
+  if [ "$1" = 1 ] && [ -e "$S" ] && [ -e "$L" ] && [ ! -e "$B" ]; then mv "$L" "$B" || return 1; step; fi
+  if [ -e "$S" ] && [ ! -e "$L" ]; then mv "$S" "$L" || { echo "could not put $2 in place" >&2; return 1; }; step; fi
+}
 undo() {
   slot "$2"
   if [ ! -e "$S" ] && [ -e "$L" ]; then mv "$L" "$S" || return 1; step; fi
   if [ "$1" = 1 ] && [ -e "$B" ] && [ ! -e "$L" ]; then mv "$B" "$L" || return 1; step; fi
+  [ -e "$S" ] && { [ "$1" = 0 ] || { [ -e "$L" ] && [ ! -e "$B" ]; }; } || return 1
+  awk -v line="$1 $2" '$0 != line' "$st/slots" > "$st/slots.part" && mv "$st/slots.part" "$st/slots" || return 1
+  step
 }
-forward() {
-  while read -r had name; do aside "$had" "$name" || return 1; done < "$st/slots"
-  while read -r had name; do bring "$had" "$name" || return 1; done < "$st/slots"
-}
+forward() { while read -r had name; do swap "$had" "$name" || return 1; done < "$st/slots"; }
 backward() {
   sed '1!G;h;$!d' "$st/slots" > "$st/slots.back" || return 1
-  bad=0
-  while read -r had name; do undo "$had" "$name" || bad=1; done < "$st/slots.back"
-  return "$bad"
+  while read -r had name; do undo "$had" "$name" || return 1; done < "$st/slots.back"
 }
-restored() {
-  while read -r had name; do
-    slot "$name"; [ -e "$S" ] || return 1
-    if [ "$had" = 1 ]; then [ -e "$L" ] && [ ! -e "$B" ] || return 1; fi
-  done < "$st/slots"
-}
-# Committed: what is left is copies (themes, the layout you had as kanso.json.old-<time>), then the
-# backups go.
-done_new() {
-  if [ -f "$st/old/kanso.json" ]; then cp "$st/old/kanso.json" "$home/layouts/kanso.json.old-$(cat "$st/stamp")" || return 1; fi
-  cp "$st/src/kanso"/themes/*.json "$home/themes/" && cp "$st/src/kanso/layouts/kanso.png" "$home/layouts/kanso.png" || return 1
-  chmod -R u+w "$st" 2>/dev/null; rm -rf "$st"
-}
+# Committed, nothing is copied (themes and the picture are slots too): the layout you had is kept
+# as kanso.json.old-<time>, a rename done once, so a stage half removed only finishes going.
+keep() { if [ -e "$st/old/kanso.json" ]; then mv "$st/old/kanso.json" "$home/layouts/kanso.json.old-$(cat "$st/stamp")" || return 1; step; fi; }
 # Ends the stage $st either way: committed, it finishes; otherwise it is undone, and removed only
-# once every slot is back as it was (what it holds then is the release's copies alone).
+# once every slot is back as it was. What it holds then is only backups and copies no slot needs.
 settle() {
-  if [ ! -f "$st/slots" ]; then chmod -R u+w "$st" 2>/dev/null; rm -rf "$st"; return 0; fi
-  if [ -f "$st/committed" ]; then done_new; return; fi
-  backward
-  if restored; then chmod -R u+w "$st" 2>/dev/null; rm -rf "$st"; return 0; fi
-  return 1
+  if [ -f "$st/slots" ]; then
+    if [ -f "$st/committed" ]; then keep || return 1; else backward || return 1; fi
+    rm -f "$st/slots"; step
+  fi
+  chmod -R u+w "$st" 2>/dev/null; rm -rf "$st"
 }
 # A stage lives only while its install holds the lock, so under the lock any other is a dead one's.
 recover() {
@@ -211,22 +207,22 @@ for new in "$src/mods"/*/; do
 done
 if [ -n "$keys" ]; then printf '%s\\n' "$keys" > "$stage/keys.json"; fi
 if [ "$layout" = 1 ]; then cp "$src/layouts/kanso.json" "$stage/kanso.json"; fi
-mkdir -p "$stage/old/mods" "$home/mods" "$home/themes" "$home/layouts"
+mkdir -p "$stage/old/mods" "$stage/old/themes" "$home/mods" "$home/themes" "$home/layouts"
 printf '%s\\n' "$stamp" > "$stage/stamp"
-had() { if [ -e "$1" ]; then echo 1; else echo 0; fi; }
+st=$stage
+entry() { slot "$1"; [ -e "$S" ] || return 0; if [ -e "$L" ]; then echo "1 $1"; else echo "0 $1"; fi; }
 {
-  if [ -f "$stage/keys.json" ]; then echo "$(had "$home/keys.json") keys"; fi
-  if [ -f "$stage/kanso.json" ]; then echo "$(had "$home/layouts/kanso.json") layout"; fi
-  for new in "$src/mods"/*/; do name=$(basename "$new"); if [ "$name" != kanso-chrome ]; then echo "$(had "$home/mods/$name") $name"; fi; done
-  if [ -d "$src/mods/kanso-chrome" ]; then echo "$(had "$home/mods/kanso-chrome") kanso-chrome"; fi
+  entry keys; entry layout; entry picture
+  for theme in "$src/themes"/*.json; do entry "themes/\${theme##*/}"; done
+  for new in "$src/mods"/*/; do name=$(basename "$new"); case $name in kanso-tabs|kanso-chrome) ;; *) entry "$name" ;; esac; done
+  entry kanso-tabs; entry kanso-chrome
 } > "$stage/slots.part"
 say running swap
 mv "$stage/slots.part" "$stage/slots"
-st=$stage
 forward
 : > "$stage/committed"
 step
-done_new
+settle
 `;
 
 // Recovery on its own, for any copy that starts: under the lock (an install that holds it is alive
@@ -235,7 +231,7 @@ export const RECOVER = `set -u
 ${HOLD}
 ${JOURNAL}
 home="$1"; dir="$2"; n=0; stage=
-ls "$dir"/*/slots >/dev/null 2>&1 || exit 0
+ls -d "$dir"/*/ >/dev/null 2>&1 || exit 0
 taken=0; hold "$dir/lock" || taken=$?
 [ "$taken" = 0 ] || exit "$taken"
 recover
