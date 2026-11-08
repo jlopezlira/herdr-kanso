@@ -15,8 +15,10 @@ export const SITE = "https://codex-pets.net";
 export const ROWS = ["idle", "running-right", "running-left", "waving", "jumping", "failed", "waiting", "running", "review"];
 export const FRAMES = { idle: 6, "running-right": 8, "running-left": 8, waving: 4, jumping: 5, failed: 8, waiting: 6, running: 6, review: 6 };
 const CELL = { width: 192, height: 208 }, COLUMNS = 8;
-// Idle and waiting breathe slower than the rest.
-const FRAME_MS = { idle: 220, waiting: 260 };
+// A reaction plays from its first frame at this pace; at rest a pet holds still and only now and
+// then plays its row once (a blink, a breath): `every` ms, at `ms` a frame.
+const REACT_MS = 140;
+const REST = { idle: { every: 7000, ms: 180 }, waiting: { every: 3200, ms: 260 } };
 export const TICK_MS = 120;
 export const HACHI = { id: "hachi", name: "Hachi" };
 const DIR = "data/kanso-dojo/pets";
@@ -24,16 +26,19 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export const petsHome = () => `${home()}/.codex/pets`;
 const OPENAI = "https://persistent.oaistatic.com/codex/pets/v1";
 
-// The agents' pets: Codex's eight from OpenAI, Claude's Clawd, Mistral's cat, and a shiba like Hachi.
+// The agents' pets: Codex's eight from OpenAI, Claude's Clawd, a cat who codes, Mistral's cat, and a shiba like Hachi.
 // `from`: who made it; `zip`: a codex-pets.net package, else an OpenAI atlas.
 export const AGENT_PETS = [
   ...[["codex", "Codex"], ["dewey", "Dewey"], ["fireball", "Fireball"], ["rocky", "Rocky"], ["seedy", "Seedy"],
     ["stacky", "Stacky"], ["bsod", "BSOD"], ["null-signal", "Null Signal"]]
     .map(([id, name]) => ({ id, name, from: "Codex", url: `${OPENAI}/${id}-spritesheet-v4.webp` })),
-  { id: "clawd", name: "Clawd", from: "Claude Code", url: `${SITE}/api/pets/clawd/download`, zip: true },
+  { id: "clawd-crab", name: "Clawd", from: "Claude Code", url: `${SITE}/api/pets/clawd-crab/download`, zip: true },
+  { id: "moomew-coder-cat", name: "MooMew", from: "a cat who codes", url: `${SITE}/api/pets/moomew-coder-cat/download`, zip: true },
   { id: "le-chaton-fat", name: "Le Chaton", from: "Mistral", url: `${SITE}/api/pets/le-chaton-fat/download`, zip: true },
   { id: "aka-shiba", name: "July", from: "a shiba, like Hachi", url: `${SITE}/api/pets/aka-shiba/download`, zip: true },
 ];
+// Pets Kanso brought once and replaced by a better one: gone from its folder, and a choice of one moves to its successor.
+export const RETIRED = { clawd: "clawd-crab" };
 
 const count = (n, fallback) => (Number.isInteger(n) && n > 0 && n <= 64 ? n : fallback);
 
@@ -61,16 +66,20 @@ export function parsePets(stdout) {
 }
 
 // The row and column a state shows at `now`; an unknown state shows idle.
-export function frameOf(pet, state, now = Date.now()) {
-  const row = Math.max(0, pet.rows.indexOf(pet.rows.includes(state) ? state : "idle"));
-  const n = Math.min(pet.columns, pet.frames[pet.rows[row]] ?? 1);
-  return { row, col: Math.floor(now / (FRAME_MS[pet.rows[row]] ?? 140)) % n };
+// `since`: when a reaction began, so it plays from its first frame.
+export function frameOf(pet, state, now = Date.now(), since = 0) {
+  const name = pet.rows.includes(state) ? state : "idle";
+  const row = Math.max(0, pet.rows.indexOf(name));
+  const n = Math.min(pet.columns, pet.frames[name] ?? 1);
+  const rest = REST[name];
+  if (rest) { const at = Math.floor((now % rest.every) / rest.ms); return { row, col: at < n ? at : 0 }; }
+  return { row, col: Math.floor(Math.max(0, now - since) / REACT_MS) % n };
 }
 
 // One cell of the atlas: the whole sheet, moved under a window the size of a cell.
-export function petFrame(pet, state, { scale = 0.6, now = Date.now(), still = false, small = false } = {}) {
+export function petFrame(pet, state, { scale = 0.6, now = Date.now(), since = 0, still = false, small = false } = {}) {
   const w = Math.round(pet.cell.width * scale), h = Math.round(pet.cell.height * scale);
-  const { row, col } = still ? { row: 0, col: 0 } : frameOf(pet, state, now);
+  const { row, col } = still ? { row: 0, col: 0 } : frameOf(pet, state, now, since);
   return div().relative().w(w).h(h).flex_none().overflow_hidden()
     .child(image(small ? pet.thumb : pet.sheet).absolute().left(-col * w).top(-row * h).w(w * pet.columns).h(h * pet.rows.length));
 }
@@ -133,6 +142,7 @@ export async function installedPets() {
 
 // Brings the agents' pets you do not have yet; the ids that could not be had, if any.
 export async function bringAgentPets(have = new Set(), list = AGENT_PETS) {
+  await exec("rm", ["-rf", ...Object.keys(RETIRED).map((id) => `${brought()}/${id}`)]);
   const want = list.filter((p) => !have.has(p.id));
   if (!want.length) return [];
   const r = await exec("sh", ["-c", BRING, "sh", brought(), ...want.flatMap((p) => [p.id, p.name, p.url, p.zip ? "zip" : "webp"])]);
@@ -148,7 +158,8 @@ export class Companion {
     this.bringing = false; this.brought = false; this.error = null; this.frameKey = null;
   }
 
-  get pet() { return this.pets.find((p) => p.id === this.id) ?? HACHI; }
+  // A retired pet you chose shows as its successor.
+  get pet() { return this.pets.find((p) => p.id === this.id) ?? this.pets.find((p) => p.id === RETIRED[this.id]) ?? HACHI; }
 
   load(cx) {
     cx.spawn(async (cx) => {
@@ -184,19 +195,19 @@ export class Companion {
   }
 
   // True when the pet's frame for `state` changed since the last call: the one redraw a timer needs.
-  moved(state) {
+  moved(state, since = 0) {
     const p = this.pet;
     if (!p.sheet) return false;
-    const f = frameOf(p, state), key = `${f.row}:${f.col}`;
+    const f = frameOf(p, state, Date.now(), since), key = `${f.row}:${f.col}`;
     if (key === this.frameKey) return false;
     this.frameKey = key;
     return true;
   }
 
   // `mood`: Hachi's face, which has no sheet of reactions.
-  face(t, state, { now = Date.now(), scale = 0.6, mood = "calm", px = 8 } = {}) {
+  face(t, state, { now = Date.now(), since = 0, scale = 0.6, mood = "calm", px = 8 } = {}) {
     const p = this.pet;
-    return p.sheet ? petFrame(p, state, { now, scale }) : hachi(t, { mood, px });
+    return p.sheet ? petFrame(p, state, { now, since, scale }) : hachi(t, { mood, px });
   }
 
   // Every pet at rest, a click and it is yours. `onChoose` after the choice.

@@ -31,8 +31,9 @@ export default class Help extends View {
     this.pal.load(cx);
     // The agents' pets come the first time the dōjō's page shows.
     if (this.page === "dojo") this.pal.bring(cx);
-    // Your pet waves on the dōjō's page; a redraw only when its frame changes.
-    cx.timer.every(TICK_MS, (cx) => { if (this.page === "dojo" && this.pal.moved("waving")) cx.notify(); });
+    // Your pet waves once when the dōjō's page shows, then is still; a redraw only when its frame changes.
+    this.hello = Date.now();
+    cx.timer.every(TICK_MS, (cx) => { if (this.page === "dojo" && this.pal.moved(this.petState(), this.hello)) cx.notify(); });
     this.mods = ["cmd", "alt"]; // the layer shown first: the vim panes
     this.lists = false;
     this.picked = "h";
@@ -130,16 +131,18 @@ export default class Help extends View {
     run("mod.open", { name: "kanso-dojo" });
   }
 
+  petState() { return Date.now() - this.hello < 1800 ? "waving" : "idle"; }
+
   dojoPage(t, c) {
     const ink = t.accent_foreground ?? c.canvas, pet = this.pal.pet;
     return v_flex().gap(G.xl).pt(G.lg)
       .child(h_flex().gap(G.xl).items_center()
-      .child(h_flex().w(150).h(150).flex_none().items_center().justify_center().child(this.pal.face(t, "waving", { scale: 0.7, mood: "glad", px: 9 })))
+      .child(h_flex().w(150).h(150).flex_none().items_center().justify_center().child(this.pal.face(t, this.petState(), { since: this.hello, scale: 0.7, mood: "glad", px: 9 })))
       .child(v_flex().flex_1().gap(G.md)
         .child(div().text_size(20).font_semibold().text_color(c.text).child("hjkl dōjō"))
         .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; rounds of ten targets, points for the fewest moves, a streak, and a hint when you stop to think."))
         .child(div().text_size(13).line_height(1.55).text_color(c.muted).child(pet.sheet
-          ? `${pet.name} keeps you company: running as you move, jumping on a target, slumping on a key that is no move, waving when you win.`
+          ? `${pet.name} keeps you company, still until you earn it: a jump for a target in the fewest moves, a wave for a streak or a round won, a slump for a key that is no move or the long way round.`
           : "Hachi, the dōjō's shiba, keeps you company: tongue out on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
         .child(h_flex().pt(G.sm).gap(G.md).items_center()
           .child(div().id("enter-dojo").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
@@ -200,7 +203,7 @@ export default class Help extends View {
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(quietTabs("help-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "dojo") this.pal.bring(cx); cx.notify(); }, c)))
+      .child(div().pt(G.md).child(quietTabs("help-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); }, c)))
       .child(v_flex().id(`help-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

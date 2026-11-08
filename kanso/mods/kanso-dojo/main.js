@@ -37,19 +37,21 @@ export default class Dojo extends View {
     this.pal = new Companion(this.store); this.choosing = false;
     this.pal.load(cx);
     // A pet moves on its own: a redraw only when its frame changes.
-    cx.timer.every(TICK_MS, (cx) => { if (this.pal.moved(this.petState())) cx.notify(); });
+    cx.timer.every(TICK_MS, (cx) => { const r = this.reaction(); if (this.pal.moved(r.state, r.since)) cx.notify(); });
   }
 
-  // What the pet does: each row of its sheet is a reaction.
-  petState(now = Date.now()) {
-    const o = this.over;
-    if (o) return !o.kept ? "idle" : now - this.overAt < 2600 ? (this.record ? "jumping" : "waving") : "review";
-    if (now - (this.hitAt ?? 0) < 900) return "jumping";
-    if (now - (this.missAt ?? 0) < 1200 || (this.round && this.moves > this.need + 2)) return "failed";
-    if (this.round && now - this.idleAt < 700) return "running";
-    if (this.mood() === "sleep" || (this.round && now - this.idleAt >= HINT_MS)) return "waiting";
-    return "idle";
+  // The pet is still until the game gives it something: a target in the fewest moves, a streak,
+  // a key that is no move, the long way round, a round won or a new best. Then a while, and still again.
+  // `since`: when it began, so the reaction plays from its first frame.
+  reaction(now = Date.now()) {
+    const o = this.over, at = (t, ms) => t != null && now - t < ms;
+    if (o?.kept && at(this.overAt, this.record ? 3000 : 2200)) return { state: this.record ? "jumping" : "waving", since: this.overAt };
+    if (!o && at(this.hitAt, this.cheer ? 1600 : 900)) return { state: this.cheer ? "waving" : "jumping", since: this.hitAt };
+    if (!o && at(this.missAt, 1200)) return { state: "failed", since: this.missAt };
+    if (this.mood() === "sleep") return { state: "waiting", since: 0 };
+    return { state: "idle", since: 0 };
   }
+  petState(now = Date.now()) { return this.reaction(now).state; }
 
   toggleChooser(cx) {
     this.choosing = !this.choosing;
@@ -150,10 +152,14 @@ export default class Dojo extends View {
     this.at = move(this.world, this.at, motion);
     this.moves += 1;
     this.idleAt = Date.now();
+    // Gone the long way round: it winces once, as it happens.
+    if (this.moves === this.need + 3) this.missAt = Date.now();
     if (same(this.at, this.target)) {
       const r = this.round, fine = this.moves <= this.need, streak = fine ? r.streak + 1 : 0;
       this.round = { ...r, score: r.score + points(this.moves, this.need, r.streak), hits: r.hits + 1, perfect: r.perfect + (fine ? 1 : 0), streak, longest: fine ? Math.max(r.longest, streak) : r.longest };
-      this.last = { moves: this.moves, need: this.need, fine }; this.hitAt = Date.now();
+      this.last = { moves: this.moves, need: this.need, fine };
+      // Only the fewest moves earn a jump; a streak of three or more, a wave.
+      if (fine) { this.hitAt = Date.now(); this.cheer = streak >= 3; }
       if (this.round.hits >= TARGETS) { this.endRound(cx); cx.notify(); return; }
       this.next();
     }
@@ -219,7 +225,7 @@ export default class Dojo extends View {
       .hover((s) => s.opacity(0.85))
       .on_click((_e, cx) => { this.toggleChooser(cx); cx.notify(); })
       .child(h_flex().h(128).gap(G.md).items_end()
-        .child(this.pal.face(t, this.petState(now), { now, mood: this.mood() }))
+        .child(this.pal.face(t, this.reaction(now).state, { now, since: this.reaction(now).since, mood: this.mood() }))
         .child(div().pb(4).text_size(11).text_color(c.dim).child(asleep ? "z z" : "")))
       .child(div().text_size(11.5).text_color(this.choosing ? c.accent : c.dim).child(this.pal.pet.name));
   }

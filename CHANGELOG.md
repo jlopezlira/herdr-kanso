@@ -8,6 +8,17 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.14.0] - 2026-11-08
+
+### Added
+
+- MooMew, a tuxedo cat who codes, among the dōjō's pets.
+
+### Changed
+
+- A pet is still until the game gives it something, with a breath now and then: a jump for a target in the fewest moves, a wave for a streak of three or a round won, a bigger jump for a new best, a slump for a key that is no move or the long way round. It no longer runs with every key, and on kansō help's page it waves once, then rests.
+- Clawd is a better-drawn one, with all its moves. If you had chosen the old one, the new one takes its place.
+
 ## [3.13.0] - 2026-11-08
 
 ### Added
