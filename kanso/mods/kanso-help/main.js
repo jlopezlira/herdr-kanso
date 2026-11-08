@@ -4,7 +4,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, openOverlay, run } from "herdr";
 import { G, tokens, quietTabs, quietLink } from "./ui.js";
 import { glyphs } from "./marks.js";
-import { hachi } from "./mascot.js";
+import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
 
 // kansō help and kansō settings: one window size, so going from one to the other feels like a page.
@@ -27,6 +27,12 @@ export default class Help extends View {
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
+    this.pal = new Companion();
+    this.pal.load(cx);
+    // The agents' pets come the first time the dōjō's page shows.
+    if (this.page === "dojo") this.pal.bring(cx);
+    // Your pet waves on the dōjō's page; a redraw only when its frame changes.
+    cx.timer.every(TICK_MS, (cx) => { if (this.page === "dojo" && this.pal.moved("waving")) cx.notify(); });
     this.mods = ["cmd", "alt"]; // the layer shown first: the vim panes
     this.lists = false;
     this.picked = "h";
@@ -125,19 +131,25 @@ export default class Help extends View {
   }
 
   dojoPage(t, c) {
-    const ink = t.accent_foreground ?? c.canvas;
-    return h_flex().gap(G.xl).items_center().pt(G.lg)
-      .child(hachi(t, { mood: "glad", px: 9 }))
+    const ink = t.accent_foreground ?? c.canvas, pet = this.pal.pet;
+    return v_flex().gap(G.xl).pt(G.lg)
+      .child(h_flex().gap(G.xl).items_center()
+      .child(h_flex().w(150).h(150).flex_none().items_center().justify_center().child(this.pal.face(t, "waving", { scale: 0.7, mood: "glad", px: 9 })))
       .child(v_flex().flex_1().gap(G.md)
         .child(div().text_size(20).font_semibold().text_color(c.text).child("hjkl dōjō"))
         .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Practice vim's moves until your fingers know them. Nine levels, from h and l alone to w b e, f t and gg G on real lines of code; rounds of ten targets, points for the fewest moves, a streak, and a hint when you stop to think."))
-        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child("Hachi, the dōjō's shiba, keeps you company: tongue out on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
+        .child(div().text_size(13).line_height(1.55).text_color(c.muted).child(pet.sheet
+          ? `${pet.name} keeps you company: running as you move, jumping on a target, slumping on a key that is no move, waving when you win.`
+          : "Hachi, the dōjō's shiba, keeps you company: tongue out on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
         .child(h_flex().pt(G.sm).gap(G.md).items_center()
           .child(div().id("enter-dojo").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
             .text_size(13).font_semibold().text_color(ink).hover((s) => s.opacity(0.88))
             .on_click(() => this.enterDojo())
             .child("Enter the dōjō"))
-          .child(div().text_size(11.5).text_color(c.dim).child("or press Enter"))));
+          .child(div().text_size(11.5).text_color(c.dim).child("or press Enter")))))
+      .child(v_flex().gap(G.md)
+        .child(div().text_size(14).font_semibold().text_color(c.text).child("Your pet"))
+        .child(this.pal.grid(t, c)));
   }
 
   block(c, title, lines) {
@@ -188,7 +200,7 @@ export default class Help extends View {
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(quietTabs("help-pages", PAGES, this.page, (key, cx) => { this.page = key; cx.notify(); }, c)))
+      .child(div().pt(G.md).child(quietTabs("help-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "dojo") this.pal.bring(cx); cx.notify(); }, c)))
       .child(v_flex().id(`help-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }
