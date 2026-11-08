@@ -165,10 +165,51 @@ test("guard: resume command keeps safe options and refuses what it can't rebuild
   const g = await import("../kanso/mods/kanso-guard/guard.mjs");
   assert.deepEqual(g.resumeArgv(["claude", "--model", "haiku", "fix it"], "S"), ["claude", "--model", "haiku", "--resume", "S"]);
   assert.deepEqual(g.resumeArgv(["claude", "--resume", "old", "--fork-session", "--dangerously-skip-permissions"], "S"), ["claude", "--dangerously-skip-permissions", "--resume", "S"]);
-  assert.equal(g.resumeArgv(["claude", "--disallowedTools", "Bash", "Edit"], "S"), null);
+  assert.deepEqual(g.resumeArgv(["claude", "--disallowedTools", "Bash", "Edit"], "S"), ["claude", "--disallowedTools", "Bash", "Edit", "--resume", "S"], "every value of an option that takes several");
+  assert.equal(g.resumeArgv(["claude", "--something-new"], "S"), null);
   assert.equal(g.resumeArgv(["node", "/x/cli.js"], "S"), null);
   assert.equal(g.sameStart("Sun Nov  1 06:12:52 2026", new Date(Date.UTC(2026, 10, 1, 6, 12, 52)).toString().slice(0, 24)), true);
   assert.equal(g.sameStart("Sun Nov  1 06:12:52 2026", new Date(Date.UTC(2026, 10, 1, 6, 42, 52)).toString().slice(0, 24)), false);
+});
+
+test("resume: one rebuild of a Claude Code command, the options it keeps and the ones it refuses", async () => {
+  const { resumeArgv, sessionWords } = await import("../kanso/mods/kanso-sleep/resume.js");
+  assert.deepEqual(resumeArgv(["claude", "--add-dir", "../api", "../web", "--mcp-config", "a.json", "b.json", "--disallowed-tools", "Bash"], "S"),
+    ["claude", "--add-dir", "../api", "../web", "--mcp-config", "a.json", "b.json", "--disallowed-tools", "Bash", "--resume", "S"], "every value of an option that takes several");
+  assert.deepEqual(resumeArgv(["claude", "--model=opus", "--add-dir=/tmp/p", "--resume=old", "--session-id=x"], "S"), ["claude", "--model=opus", "--add-dir=/tmp/p", "--resume", "S"], "inline values");
+  assert.equal(resumeArgv(["claude", "--verbose=yes"], "S"), null, "a plain flag given a value is not the flag");
+  assert.equal(resumeArgv(["claude", "--model", "x", "--something-new", "v"], "S"), null, "an option not known to carry over");
+  assert.equal(resumeArgv(["claude", "--model"], "S"), null, "an option missing its value");
+  assert.deepEqual(resumeArgv(["claude", "--effort", "high", "fix the login bug", "--model", "x"], "S"), ["claude", "--effort", "high", "--resume", "S"], "the first prompt and all after it");
+  assert.deepEqual(resumeArgv(["claude", "--resume", "--model", "x"], "S"), ["claude", "--model", "x", "--resume", "S"], "a picker's --resume takes no option for its id");
+  assert.deepEqual(resumeArgv(["/opt/bin/claude"], "S"), ["/opt/bin/claude", "--resume", "S"]);
+  assert.equal(resumeArgv(["claude", "--model", "x"], null), null, "no session, nothing to resume");
+  assert.equal(resumeArgv(["claude"], ""), null);
+  assert.equal(resumeArgv([], "S"), null);
+  assert.equal(resumeArgv(null, "S"), null);
+  assert.deepEqual([["--resume", "id"], ["--resume", "--model"], ["--resume=id", "x"], ["-c", "x"], ["--model", "x"]].map(([a, b]) => sessionWords(a, b)), [2, 1, 1, 1, 0]);
+});
+
+test("resume: Sleep and the guard rebuild the same command, from the same file", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const copy = (mod) => readFile(new URL(`../kanso/mods/${mod}/resume.js`, import.meta.url), "utf8");
+  const source = await copy("kanso-sleep");
+  for (const mod of ["kanso-guard", "kanso-arrange", "kanso-spaces"]) assert.equal(await copy(mod), source, `${mod}'s copy`);
+  const g = await import("../kanso/mods/kanso-guard/guard.mjs");
+  const sleep = await load("kanso-sleep/main.js", ["resumeArgv", "promptEmpty"], { home: () => "/Users/me" });
+  const cases = [
+    ["claude", "--add-dir", "/tmp/project"],
+    ["claude", "--allowedTools", "Edit", "Bash", "--model", "x", "fix it"],
+    ["claude", "--mcp-config=a.json", "--permission-mode", "plan"],
+    ["claude", "-c", "--fork-session", "--dangerously-skip-permissions"],
+    ["claude", "--add-dir"],
+    ["claude", "--something-new"],
+    ["codex", "--model", "x"],
+  ];
+  for (const argv of cases) assert.deepEqual(clone(sleep.resumeArgv(argv, "S")), g.resumeArgv(argv, "S"), argv.join(" "));
+  assert.deepEqual(g.resumeArgv(["claude", "--add-dir", "/tmp/project"], "S"), ["claude", "--add-dir", "/tmp/project", "--resume", "S"], "an agent Sleep can resume, the guard can recycle");
+  const rule = "─".repeat(40);
+  for (const screen of [`x\n${rule}\n❯ \n${rule}`, `x\n${rule}\n❯ draft\n${rule}`, "no prompt"]) assert.equal(sleep.promptEmpty(screen), g.promptEmpty(screen));
 });
 
 test("guard: history keeps a day by the minute and at most 40 agents", async () => {

@@ -2,6 +2,7 @@
 // Shared source: npm run sync:share copies it, and a test fails when a copy differs.
 import { spaces, panes, shared, setShared, run, home, hc } from "herdr";
 import { retry, tryOr, findAsync, mapSeries, reduceSeries } from "./pure.js";
+import { sessionWords } from "./resume.js";
 
 export const base = (s) => String(s ?? "").split("/").at(-1).replace(/^-/, "");
 export const tilde = (cwd) => {
@@ -11,7 +12,8 @@ export const tilde = (cwd) => {
 };
 export const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + String(s).replaceAll("'", "'\\''") + "'");
 
-// Resume/session flags are dropped so an arrangement starts each agent fresh.
+// Resume/session flags are dropped so an arrangement starts each agent fresh:
+// Claude's are the ones Sleep and Memory replace when they resume it.
 export function cleanArgv(argv) {
   if (!Array.isArray(argv) || !argv.length) return null;
   const [cmd, ...rest] = argv.map(String);
@@ -20,10 +22,8 @@ export function cleanArgv(argv) {
   // `skip`: the argument is the id of the flag before it, left out with it.
   return rest.reduce(({ out, skip }, a, i) => {
     if (skip) return { out, skip: false };
-    if (name === "claude") {
-      if (a === "--resume" || a === "-r" || a === "--session-id") return { out, skip: value(i) };
-      if (a.startsWith("--resume=") || a.startsWith("--session-id=") || a === "--continue" || a === "-c") return { out, skip: false };
-    }
+    const session = name === "claude" ? sessionWords(a, rest[i + 1]) : 0;
+    if (session) return { out, skip: session === 2 };
     if (name === "codex" && i === 0 && a === "resume") return { out, skip: value(i) };
     return { out: [...out, a], skip: false };
   }, { out: [cmd], skip: false }).out;

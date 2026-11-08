@@ -7,6 +7,9 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tryOr, parseOr, retry, findAsync, mapSeries, reduceSeries } from "./pure.js";
+// The same rebuild Sleep wakes an agent with: an agent Sleep can resume, Memory can recycle.
+import { resumeArgv, promptEmpty } from "./resume.js";
+export { resumeArgv, promptEmpty };
 
 const HOME = homedir();
 const APP_HOME = process.env.HERDR_APP_HOME || join(HOME, ".config/herdr-app");
@@ -42,18 +45,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const firstOf = async (list, fn, i = 0) => (i >= list.length ? null : (await fn(list[i])) ?? firstOf(list, fn, i + 1));
 // A remote terminal's address has a "/".
 const liveHere = (ls) => (ls?.terminals ?? []).filter((t) => t.state === "live" && !t.address.includes("/"));
-
-// False when no prompt box shows, so a screen it can't read stops /exit.
-export function promptEmpty(screen) {
-  const lines = String(screen ?? "").split("\n");
-  const rule = (l) => /^\s*─{8,}/.test(l ?? "");
-  const i = lines.findLastIndex((l, k) => k > 0 && /^\s*[❯>]/.test(l) && rule(lines[k - 1]));
-  if (i < 0) return false;
-  const rest = lines.slice(i + 1);
-  const end = rest.findIndex(rule);
-  const box = [lines[i].replace(/^\s*[❯>]/, ""), ...(end < 0 ? rest : rest.slice(0, end))];
-  return box.every((l) => !l.trim());
-}
 
 async function clearPrompt(term) {
   if (!(await run("hc", ["keys", term, "ctrl+c"], 10_000)).ok) return false;
@@ -199,29 +190,6 @@ async function agentsNow(procs, fp) {
   return { agents: looks.map((l) => l.agent).filter(Boolean), shells: new Map(looks.map((l) => l.shell).filter(Boolean)) };
 }
 
-// An option not listed here means the command can't be rebuilt faithfully, so that agent is not recycled.
-const KEEP_VALUE = new Set(["--model", "--permission-mode", "--settings", "--agent", "--effort", "--fallback-model", "--append-system-prompt", "--system-prompt", "--plugin-dir", "--setting-sources", "--name"]);
-const KEEP_FLAG = new Set(["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--verbose", "--chrome", "--no-chrome", "--ide", "--strict-mcp-config", "--brief", "--debug"]);
-const DROP_VALUE = new Set(["--resume", "-r", "--session-id"]);
-const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
-
-export function resumeArgv(argv, session) {
-  if (!argv.length || argv[0].split("/").at(-1) !== "claude") return null;
-  const options = (i, keep) => {
-    if (i >= argv.length) return keep;
-    const a = argv[i];
-    if (!a.startsWith("-")) return keep; // the first prompt, and anything after it
-    const eq = a.startsWith("--") ? a.indexOf("=") : -1;
-    const flag = eq > 0 ? a.slice(0, eq) : a;
-    if (KEEP_FLAG.has(flag) && eq < 0) return options(i + 1, [...keep, a]);
-    if (KEEP_VALUE.has(flag)) return eq > 0 ? options(i + 1, [...keep, a]) : i + 1 < argv.length ? options(i + 2, [...keep, a, argv[i + 1]]) : null;
-    if (DROP_VALUE.has(flag)) return options(eq < 0 ? i + 2 : i + 1, keep);
-    if (DROP_FLAG.has(flag)) return options(i + 1, keep);
-    return null;
-  };
-  const keep = options(1, []);
-  return keep && [argv[0], ...keep, "--resume", session];
-}
 const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${String(s).replaceAll("'", "'\\''")}'`);
 
 async function terminalOf(pid) {
