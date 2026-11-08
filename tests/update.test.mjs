@@ -614,6 +614,40 @@ test("A follower whose recovery finds the lock taken waits for it, then reports 
   assert.deepEqual(await staged(f.home), []);
 });
 
+test("A recovery killed partway is not taken for done: the follower tries again and reports what it left", async (t) => {
+  const f = await fixture(t);
+  const { cx } = await killed(t, f, await chromeIn());
+  assert.equal(await version(f.home), "1.1.0", "it died half new");
+  process.env.KANSO_UPDATE_STOP = "1"; // every recovery is killed after its first step
+  const fresh = new f.Updater(f.source);
+  await fresh.follow(cx, pending(f)[0]);
+  delete process.env.KANSO_UPDATE_STOP;
+  assert.equal(await version(f.home), "1.0.0", "undone, a step at a time");
+  assert.equal(updated(f.toasts).length, 0, "never told as updated");
+  assert.equal(f.toasts.filter((n) => n.level === "error").length, 1, "told once, as stopped");
+  assert.deepEqual(pending(f), []);
+  assert.deepEqual(await staged(f.home), []);
+});
+
+test("A window that starts while another recovers, which then dies, recovers itself", async (t) => {
+  const f = await fixture(t);
+  await killed(t, f, await chromeIn());
+  // The other recoverer: it holds the lock, then dies without settling anything.
+  const other = await holder(t, f);
+  assert.ok(other.got);
+  const w = await f.window(); // no install of its own to follow
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  w.updater.start(cx);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await version(f.home), "1.1.0", "left alone while another holds the lock");
+  await other.kill();
+  await drain();
+  assert.equal(await version(f.home), "1.0.0", "undone once the lock is free");
+  assert.equal(w.updater.available(), "1.1.0", "and the update offered again");
+  assert.deepEqual(await stages(f.home), []);
+});
+
 test("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = await killed(t, f, await chromeIn());

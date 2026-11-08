@@ -21,8 +21,9 @@ const SHOWN_MS = 15 * 60 * 1000;
 // preparing after this lost its copy before it started anything.
 const PREPARE_MS = 2 * 60 * 1000;
 // Recovery is busy while another copy recovers, or while what a killed install started (its
-// download, up to 120 s) still holds its lock. A follower waits this long for its turn, then
-// leaves the install marked for the next start to recover and report.
+// download, up to 120 s) still holds its lock, and is cut short if it is killed itself. It is
+// tried again for this long; then the next tick tries, and a follower leaves its install marked
+// for the next start to recover and report.
 const RECOVER_MS = 5 * 60 * 1000;
 // HOLD's answer when another holds the lock, and so INSTALL_SCRIPT's and RECOVER's.
 const BUSY = 75;
@@ -260,6 +261,9 @@ const lastLine = (r, fallback) => (r?.stderr || r?.stdout || "").trim().split("\
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
 const opId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 const fresh = (mark, ms) => Boolean(mark?.at) && Date.now() - mark.at < ms;
+// A RECOVER worth running again: busy, or cut short (killed: no exit code, or 128 and the signal's
+// number). Any other code is its own answer (0 done, 1 a stage it could not undo), the same again.
+const retried = (r) => r?.code === BUSY || !Number.isInteger(r?.code) || r.code > 128;
 
 export class Updater {
   constructor(source = SOURCE) {
@@ -268,6 +272,7 @@ export class Updater {
     this.working = false;
     this.error = null;
     this.following = {};
+    this.recovering = null;
     this.pauseS = source.pauseS ?? 2;
   }
 
@@ -303,7 +308,7 @@ export class Updater {
     const polling = () => polls && this.autoCheckEnabled();
     cx.spawn(async (cx) => {
       // Before the version is read: a swap a dead install left half done is finished or undone.
-      await this.recover();
+      await this.recovered();
       await this.readInstalled();
       this.finished();
       // The tab bar copy picks up an install a replaced copy started; it reports the outcome.
@@ -313,6 +318,8 @@ export class Updater {
       cx.notify();
     });
     cx.timer.every(TICK, (cx) => cx.spawn(async (cx) => {
+      // A recovery that never got its turn at the start, or was cut short, is tried again.
+      await this.recovered();
       if (polling()) await this.check(cx);
       else if (!this.busy) await this.readInstalled();
       this.fit();
@@ -388,7 +395,7 @@ export class Updater {
     const started = await tryOrAsync(async () => {
       // Planned on what recovery leaves, never on a swap a dead install left half done (its keys.json
       // would read as yours). Busy, another install holds the lock: this one would be told so too.
-      if (await this.recover() === BUSY) return { code: BUSY };
+      if ((await this.recover())?.code === BUSY) return { code: BUSY };
       const plan = await this.plan(v, home);
       this.mark(id, { notes: plan.notes });
       return exec("sh", ["-c", LAUNCH, "sh", dir, id, INSTALL_SCRIPT, this.source.tarball(v), home, dir, id,
@@ -406,29 +413,34 @@ export class Updater {
 
   pause() { return tryOrAsync(() => exec("sleep", [String(this.pauseS)])); }
 
-  // RECOVER's exit code: 0 once every dead install's stage is settled (or there was none), BUSY
-  // while the lock is another's, anything else when one could not be undone.
-  async recover() {
+  // RECOVER, once. Its code is 0 once every dead install's stage is settled (or there was none),
+  // BUSY while the lock is another's; anything else (killed, or a stage that could not be undone)
+  // is not done either.
+  recover() {
     const home = appHome();
-    return (await tryOrAsync(() => exec("sh", ["-c", RECOVER, "sh", home, `${home}/${UPDATES}`])))?.code;
+    return tryOrAsync(() => exec("sh", ["-c", RECOVER, "sh", home, `${home}/${UPDATES}`]));
   }
 
-  // Recovery that waits its turn: true once it ran, false while the lock stayed another's past RECOVER_MS.
-  async recovered() {
-    const deadline = Date.now() + RECOVER_MS;
-    for (;;) {
-      if (await this.recover() !== BUSY) return true;
-      if (Date.now() > deadline) return false;
+  // RECOVER, tried again after a pause while busy or cut short, for about RECOVER_MS (a count of
+  // tries, so a pause that fails at once cannot make it spin); its last result. One at a time in
+  // a copy: its start, its ticks and its followers all wait on the same one.
+  recovered() {
+    const attempt = async (left) => {
+      const r = await this.recover();
+      if (!retried(r) || left <= 1) return r;
       await this.pause();
-    }
+      return attempt(left - 1);
+    };
+    this.recovering ??= attempt(Math.ceil(RECOVER_MS / (this.pauseS * 1000))).finally(() => { this.recovering = null; });
+    return this.recovering;
   }
 
   // Reads <id>.status every few seconds until it says how the install ended. While the install is
   // still being prepared (no process yet) it waits; one whose copy went away before starting it is
   // dropped once its mark has expired. A process gone without saying (killed outright) is settled
-  // by recovery, and the version then in place says how it ended; recovery that never got the lock
-  // reports nothing and leaves the mark to the next start. The follower that claims the pid file
-  // (a rename: one wins) is the one that reports.
+  // by recovery, and the version then in place says how it ended; recovery that never ended with 0
+  // leaves the mark to the next start. The follower that claims the pid file (a rename: one wins)
+  // is the one that reports.
   async follow(cx, id) {
     if (this.following[id]) return;
     this.following = { ...this.following, [id]: true };
@@ -452,8 +464,13 @@ export class Updater {
         if (alive?.code !== 0) {
           const last = await read(); // it may have said so just before it ended
           if (last.state !== "running") return last;
-          // Until recovery has run, the version on disk may be a half swap's: it says nothing yet.
-          if (!(await this.recovered())) return null;
+          // Until recovery has ended with 0, the version on disk may be a half swap's: it says
+          // nothing yet, and the mark stays for the next start. One that failed says why meanwhile.
+          const recovery = await this.recovered();
+          if (recovery?.code !== 0) {
+            if (recovery?.code !== BUSY) await this.report(cx, "error", lastLine(recovery, "an update that stopped could not be undone yet"));
+            return null;
+          }
           await this.readInstalled();
           return this.installed === mark.version ? { state: "ok", why: "" } : { state: "error", why: "the update stopped before it finished; what you had is back" };
         }
