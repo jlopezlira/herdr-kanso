@@ -5,7 +5,7 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Popover, InputState, Input } from "gpui-base";
+import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
 import { findThreads } from "./threads.js";
 import { Panel } from "./panel.js";
@@ -31,6 +31,7 @@ function placesOf(sp, ps) {
   }));
 }
 const TREE_ROW = 32;
+const MENU_ROW = 30; // a popup row: the conversation picker's virtual list places rows by it
 const PLAIN_ROW = 36;
 const GUIDE_X = 19; // under the parent's avatar centre: 8px row padding + half its 22px width
 const ELBOW_W = 11;
@@ -252,7 +253,7 @@ export default class Spaces extends View {
   }
 
   close() {
-    try { this.branch?.release(); this.projectName?.release(); } catch { /* already gone */ }
+    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); } catch { /* already gone */ }
   }
 
   menuPlace(m) {
@@ -377,16 +378,23 @@ export default class Spaces extends View {
     const names = shownNames(registry());
     // One conversation per popup: a second click or Enter while the first is written starts nothing.
     const start = (place) => { if (this.starting) return; this.starting = true; this.thenClose(this.quickStart(place)); };
-    const row = (id, place, hint, label = place.name) => item(id, label ?? "~", () => start(place), { hint, keep: true })
-      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); closeOverlay(props().overlay); this.newAgentMenu(place); });
-    const rows = [
-      ...sp.map((w) => row(`conv-${w.id}`, placeOfSpace(w), w.machine ?? null)),
+    const entries = [
+      ...sp.map((w) => ({ id: `conv-${w.id}`, place: placeOfSpace(w), hint: w.machine ?? null })),
       // The shown name tells two alike apart; the space keeps the project's own.
-      ...closed.map((p) => row(`conv-${p.id}`, placeOfKey(keyOfProject(p), p), p.machine || "closed", names.get(p.id) ?? p.name)),
+      ...closed.map((p) => ({ id: `conv-${p.id}`, place: placeOfKey(keyOfProject(p), p), hint: p.machine || "closed", label: names.get(p.id) ?? p.name })),
     ];
+    // Every row's act is there for the keyboard, drawn or not; the list draws only what shows, and follows the selection.
+    this.menuActs = entries.map((e) => (cx) => start(e.place));
+    this.convScroll ??= VirtualListScrollHandle.new();
+    this.menuScroll = { handle: this.convScroll, count: entries.length };
+    const row = (e, at) => this.menuRow(t, e.id, e.label ?? e.place.name ?? "~", at, () => start(e.place), { hint: e.hint, keep: true })
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); closeOverlay(props().overlay); this.newAgentMenu(e.place); });
     return this.menuFrame(t)
       .child(this.menuTitle(t, "New conversation in"))
-      .child(v_flex().id("conv-list").flex_none().max_h(330).overflow_y_scrollbar().children(rows))
+      .child(v_flex().relative().flex_none().h(Math.min(330, entries.length * MENU_ROW))
+        .child(v_virtual_list("conv-list", entries.length, MENU_ROW, (i) => entries[i].id,
+          (range) => entries.slice(range.start, range.end).map((e, k) => row(e, range.start + k))).track_scroll(this.convScroll))
+        .child(Scrollbar.vertical("conv-list").absolute().inset_0()))
       .child(div().mx(8).my(4).h(1).bg(t.border))
       .child(item("conv-add-project", "New project with a conversation\u2026", () => this.addProject(true), { icon: "folder-plus" }))
       .child(item("conv-folder", "Open a folder, no project\u2026", () => run("kanso-spaces.open-folder"), { icon: "file" }));
@@ -924,17 +932,23 @@ export default class Spaces extends View {
         if (move === "escape") closeOverlay(props().overlay);
         else if (move === "enter") acts[this.menuAt]?.(cx);
         else this.menuAt = moveTo(move, this.menuAt, acts.length);
+        if (this.menuScroll && this.menuAt < this.menuScroll.count) this.menuScroll.handle.scroll_to_item(this.menuAt);
         cx.stop_propagation();
         cx.notify();
       });
   }
 
   // One line of a popup: added to menuActs as it draws, so the keyboard walks them in screen order.
-  menuItem(t, id, text, act, { icon = null, hint = null, ink = t.foreground, keep = false } = {}) {
-    const close = () => closeOverlay(props().overlay);
+  menuItem(t, id, text, act, opts = {}) {
     const at = this.menuActs.length;
-    this.menuActs = [...this.menuActs, (cx) => { act(cx); if (!keep) close(); }];
-    return h_flex().id(`menu-${id}`).flex_none().h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
+    this.menuActs = [...this.menuActs, (cx) => { act(cx); if (!opts.keep) closeOverlay(props().overlay); }];
+    return this.menuRow(t, id, text, at, act, opts);
+  }
+
+  // The row itself, at its place `at` in the keyboard's order.
+  menuRow(t, id, text, at, act, { icon = null, hint = null, ink = t.foreground, keep = false } = {}) {
+    const close = () => closeOverlay(props().overlay);
+    return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
       .when(at === this.menuAt, (el) => el.bg(t.selected))
       .hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); })

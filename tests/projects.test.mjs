@@ -245,9 +245,12 @@ test("New conversation in a closed project: one space however often it is clicke
     { id: "p-a", name: "api", folder: "/work/client-a/api", machine: "", agent: "codex", missing: false },
     { id: "p-b", name: "api", folder: "/work/client-b/api", machine: "", agent: "codex", missing: false },
   ];
-  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
+  const keys = [], scrolled = [];
+  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : k === "on_key_down" ? (f) => { keys.push(f); return p; } : () => p) }); return p; };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
+    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node },
+    v_virtual_list: (_id, n, _size, _key, render) => { render({ start: 0, end: n }); return node(); },
+    VirtualListScrollHandle: { new: () => ({ scroll_to_item: (i) => scrolled.push(i), release: () => true }) },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
     shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
     spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1" }), closeOverlay: () => {},
@@ -256,6 +259,8 @@ test("New conversation in a closed project: one space however often it is clicke
   });
   const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
   view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
+  keys.at(-1)({ key: "down", modifiers: {} }, { stop_propagation() {}, notify() {} });
+  assert.deepEqual(scrolled, [1], "the list follows the keyboard's selection");
   view.menuActs[0]({});
   view.menuActs[0]({});
   await new Promise((r) => setTimeout(r, 0));
