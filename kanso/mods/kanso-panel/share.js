@@ -187,6 +187,7 @@ const pause = (seconds) => exec("sleep", [String(seconds)]).catch(() => null);
 // (a card with a picture can pass the 1 MiB readTextFile allows).
 export async function renderPng(card, svgPath, pngPath) {
   const html = svgPath.replace(/\.svg$/, ".html");
+  const dir = svgPath.replace(/\/[^/]+$/, ""); // what the card points to by name lives beside it, and every renderer runs there
   await exec("rm", ["-f", svgPath, html, pngPath]).catch(() => {});
   await writeTextFile(svgPath, card.svg, null);
   await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, null);
@@ -197,13 +198,12 @@ export async function renderPng(card, svgPath, pngPath) {
     ["magick", ["-density", "192", svgPath, pngPath]],
   ];
   const made = await findAsync(tries, async ([bin, args]) => {
-    const tried = await tryOrAsync(async () => ({ r: await exec(bin, args) })); // null: not installed here
+    const tried = await tryOrAsync(async () => ({ r: await exec(bin, args, { cwd: dir }) })); // null: not installed here
     return tried !== null && tried.r.code === 0 && await exists(pngPath);
   });
   if (made) return made[0].split("/").at(-1);
   if (macos()) {
-    const dir = svgPath.replace(/\/[^/]+$/, "");
-    const r = await exec("qlmanage", ["-t", "-s", String(card.width * 2), "-o", dir, svgPath]).catch(() => null);
+    const r = await exec("qlmanage", ["-t", "-s", String(card.width * 2), "-o", dir, svgPath], { cwd: dir }).catch(() => null);
     if (r?.code === 0 && await exists(`${svgPath}.png`)) { await exec("mv", ["-f", `${svgPath}.png`, pngPath]); return "QuickLook"; }
   }
   throw new Error("Install Chrome, Chromium or rsvg-convert to make the image.");
