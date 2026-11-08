@@ -10,6 +10,7 @@ import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, 
 import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from "./layout.js";
 import { tryOr, tryOrAsync } from "./pure.js";
+import { rollupState } from "./ghchecks.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -121,16 +122,9 @@ export function parseShortstat(text) {
   return { add: n(/(\d+) insertions?\(\+\)/), del: n(/(\d+) deletions?\(-\)/) };
 }
 
-// From gh's statusCheckRollup: check runs carry status and conclusion, commit statuses a state.
-const FAILED = new Set(["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
-const RUNNING = new Set(["", "PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "WAITING", "REQUESTED"]);
-export function checksOf(rollup) {
-  if (!Array.isArray(rollup) || !rollup.length) return null;
-  const states = rollup.map((r) => String(r?.conclusion || r?.state || r?.status || "").toUpperCase());
-  if (states.some((s) => FAILED.has(s))) return "failing";
-  if (states.some((s) => RUNNING.has(s))) return "running";
-  return "passing";
-}
+// gh's statusCheckRollup, read as the pull request panel reads it (ghchecks.js), in the header's words.
+const CHECKS = { fail: "failing", pending: "running", unknown: "unknown", pass: "passing" };
+export const checksOf = (rollup) => CHECKS[rollupState(rollup)] ?? null;
 
 // `run(cmd, args)` resolves with stdout, or null when the command fails.
 export async function readDigest(cwd, run) {

@@ -16,6 +16,7 @@ release.
 ### Fixed
 
 - Memory recycles a Claude Code agent started with `--add-dir`, `--mcp-config` or allowed and disallowed tools, as Sleep already resumed it: both now rebuild the command the same way, and an arrangement drops the same session options when it starts an agent fresh.
+- A pane header's digest and the pull request panel read checks the same way: a stale check no longer shows green in the header, and a result GitHub has not told kansō about reads as unknown in both, never as passed.
 
 ## [3.15.1] - 2026-11-08
 
