@@ -69,11 +69,15 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   copy = async () => ({ code: 0, stdout: "" }) } = {}) {
   const calls = [], store = {};
   const box = { text: "", value() { return this.text; }, set_value(v) { this.text = v; }, on() {}, focus() {} };
+  // What Herdr reports, changed by a test as the agent ends.
+  const world = {
+    terminals: [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
+    panes: [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
+  };
   const host = {
     ...singleUse(), image: singleUse().div, TextareaState: { new: () => box },
     focused: () => ({ terminal: focus }), theme: () => ({}), home: () => "/home/me", appHome: () => "/app",
-    terminals: () => [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
-    panes: () => [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
+    terminals: () => world.terminals, panes: () => world.panes,
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
     watchFolder: async () => { throw new Error("no watch in a test"); },
     hc: async (args) => { calls.push(["hc", ...args]); return args[0] === "read" ? { code: 0, stdout: screen } : { code: 0, stdout: "" }; },
@@ -88,8 +92,10 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   const look = new Look();
   look.init({ ...cx, timer: { every() {}, after() {} }, focus_handle: () => ({}) }, {});
   await drain();
-  return { look, cx, drain, calls, box, store };
+  return { look, cx, drain, calls, box, store, world };
 }
+
+const settle = () => new Promise((r) => setImmediate(r));
 
 test("The Look panel reads the agent in focus and shows its newest picture, copied where Herdr can draw it", async () => {
   const { look, calls } = await panel();
@@ -145,6 +151,48 @@ test("Look never takes a shell as the one to send to: it would run the note", as
   look.follow = "t1";
   look.tick(cx);
   assert.equal(look.follow, "t1", "a shell taking focus keeps the agent Look was on");
+});
+
+test("An agent that ends leaves a shell: Look sends it nothing and lets go of its pin", async () => {
+  const { look, cx, drain, calls, box, world } = await panel();
+  look.pinned = "t1";
+  world.terminals = [{ address: "t1", cwd: "/repo", status: null, labels: {} }];
+  world.panes = [{ pane: "p1", terminal: "t1", program: { name: "zsh", shell: true } }];
+  box.text = "crop it";
+  look.send(cx);
+  await drain();
+  assert.equal(calls.some((c) => c[1] === "send"), false, "the note never reaches the shell");
+  assert.equal(look.note.text, "No agent to send to");
+  look.tick(cx);
+  await drain();
+  assert.equal(look.pinned, null, "the pin goes with its agent");
+  assert.equal(look.agent(), null, "nor does Look follow the shell");
+});
+
+test("A, B, then A again while A still draws: A's draws run in turn and the shown copy is never cleared away", async () => {
+  const held = [];
+  const copy = () => new Promise((resolve) => { held.push(() => resolve({ code: 0, stdout: "" })); });
+  const { look, cx, drain, calls } = await panel({ files: [], copy });
+  const { keyOf } = await model();
+  const [a, b] = ["/repo/a.png", "/repo/b.png"].map((path) => ({ path, name: path.split("/").at(-1), kind: "image" }));
+  const cleared = () => calls.flatMap((c, i) => (c[0] === "sh" && c[2].startsWith("mkdir") && c[5] === keyOf(a.path) ? [i] : []));
+  const copied = () => calls.flatMap((c, i) => (c[0] === "cp" && c[2] === a.path ? [i] : []));
+  look.select(a, cx, true); await settle();
+  look.select(b, cx, true); await settle();
+  look.select(a, cx, true); await settle();
+  assert.equal(held.length, 2, "the second A waits for the first");
+  assert.equal(cleared().length, 1);
+  held[0](); await settle(); await settle();
+  assert.equal(look.shown.busy, true, "the first A's copy, about to be replaced, never shows");
+  assert.equal(held.length, 3, "the second A starts once the first is done");
+  assert.ok(cleared()[1] > copied()[0], "its cleanup runs after the first copy, never during it");
+  held[2](); await settle(); await settle();
+  const shown = look.shown.image;
+  assert.equal(`/app/${shown}`, calls[copied()[1]][3], "the second A's copy shows");
+  held[1]();
+  await drain();
+  assert.equal(look.shown.image, shown, "B's late copy does not replace it");
+  assert.ok(cleared().every((i) => i < copied()[1]), "nothing cleared A's copies after the shown one was made");
 });
 
 test("Only the latest drawing of a picture lands, and one file is never drawn twice at once", async () => {

@@ -16,6 +16,7 @@ const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
 const KEPT = "kanso.look"; // { follow, pinned }: who Look is about, kept while it is closed
 const ROWS = 5;
+const MISSING = { image: "This picture can't be read", convert: "Nothing here turns this into a picture", pdf: "Nothing here draws a PDF" };
 // $1 the copies' folder, $2 one file's key: its older copies go, and any left from yesterday.
 const FRESH = 'mkdir -p "$1" && rm -f "$1/$2"-* && find "$1" -type f -mtime +1 -exec rm -f {} + 2>/dev/null; true';
 const EXISTING = 'for f; do [ -f "$f" ] && printf "%s\\n" "$f"; done; true';
@@ -35,7 +36,7 @@ export class Look {
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
-    this.job = 0; this.drawing = null; this.again = false; // the latest draw, the file it is on, one more asked for meanwhile
+    this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
     this.box = TextareaState.new({ placeholder: "A note for the agent", rows: 3 });
     this.box.on("change", (_e, cx) => { this.note = null; cx.notify(); });
     this.handle = cx.focus_handle();
@@ -46,12 +47,14 @@ export class Look {
 
   focusedTerminal() { return live(focused()?.terminal); }
 
-  agent() { return this.pinned ?? this.follow; }
+  // Asked again each time: an agent that ends leaves its terminal to the shell, which must never get a note.
+  agent() { return this.pinned ? live(this.pinned) : live(this.follow); }
 
   keep() { setShared(KEPT, { follow: this.follow, pinned: this.pinned }); }
 
   // A click on another terminal moves Look to it, unless you pinned one; a click on Look itself keeps it.
   tick(cx) {
+    if (this.pinned && !live(this.pinned)) { this.pinned = null; this.keep(); cx.notify(); } // its agent ended
     const now = this.pinned ? null : this.focusedTerminal();
     if (now && now !== this.follow) {
       // A note goes to the agent shown, so what another agent made is not left selected.
@@ -108,26 +111,37 @@ export class Look {
 
   // image() draws only from the app's folder, so each picture is a copy there, under a new name each time
   // so a changed file is never an old picture kept by the image cache.
-  // Only the latest draw lands. One for the file already being drawn waits and runs once after it.
+  // A file's draws run one after another (each clears that file's older copies first, so two at once could
+  // delete the one shown); one waiting is already the newest, so no other joins it. Only the last lands,
+  // and one whose file you left before it started does nothing.
   draw(item, cx) {
-    if (this.drawing === item.path) { this.again = true; return; }
-    const job = this.job + 1, key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
-    const name = `${key}-${Date.now()}.${item.kind === "image" ? item.path.split(".").at(-1).toLowerCase() : "png"}`, out = `${dir}/${name}`;
-    this.job = job; this.drawing = item.path; this.again = false;
-    this.shown = { path: item.path, busy: true };
+    const path = item.path;
+    if (this.selected?.path === path) this.shown = { path, busy: true };
+    if (this.waiting.has(path)) return;
+    this.waiting.add(path);
+    const done = (this.chains.get(path) ?? Promise.resolve())
+      .then(() => { this.waiting.delete(path); return this.selected?.path === path ? this.copy(item) : null; })
+      .catch(() => null);
+    this.chains.set(path, done);
     cx.spawn(async (cx) => {
-      const made = await exec("sh", ["-c", FRESH, "sh", dir, key]).then(() =>
-        item.kind === "image" ? exec("cp", ["-f", item.path, out]).then((r) => r.code === 0)
-          : item.kind === "convert" ? toPng(item.path, out)
-            : firstPage(item.path, Math.round(this.width * 3), out)).catch(() => false);
-      if (job !== this.job) return; // a newer draw owns the preview
-      this.drawing = null;
-      if (this.again) { this.draw(item, cx); return; }
-      if (this.selected?.path !== item.path) return;
-      const missing = { image: "This picture can't be read", convert: "Nothing here turns this into a picture", pdf: "Nothing here draws a PDF" }[item.kind];
-      this.shown = made ? { path: item.path, image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : { path: item.path, error: missing };
+      const made = await done;
+      const last = this.chains.get(path) === done;
+      if (last) this.chains.delete(path);
+      if (!last || this.selected?.path !== path) return;
+      this.shown = made ? { path, ...made } : { path, error: MISSING[item.kind] };
       cx.notify();
     });
+  }
+
+  // The copy image() draws: { image, picture } (the file the pins are on), or null.
+  async copy(item) {
+    const key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
+    const name = `${key}-${Date.now()}.${item.kind === "image" ? item.path.split(".").at(-1).toLowerCase() : "png"}`, out = `${dir}/${name}`;
+    await exec("sh", ["-c", FRESH, "sh", dir, key]);
+    const made = item.kind === "image" ? (await exec("cp", ["-f", item.path, out])).code === 0
+      : item.kind === "convert" ? await toPng(item.path, out)
+        : await firstPage(item.path, Math.round(this.width * 3), out);
+    return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
   }
 
   // A file the agent writes again shows again. One watch at a time: picking another ends this one at its next change.
@@ -162,7 +176,8 @@ export class Look {
 
   send(cx) {
     const text = this.box.value().trim(), item = this.selected, address = this.agent();
-    if (!text || !item || !address || this.sending) return;
+    if (!text || !item || this.sending) return;
+    if (!address) { this.note = { error: true, text: "No agent to send to" }; cx.notify(); return; }
     const { name, status } = this.who(address);
     if (status === "blocked") { this.note = { error: true, text: waitingNote([name]) }; cx.notify(); return; }
     const picture = this.shown?.path === item.path ? this.shown.picture : undefined;
