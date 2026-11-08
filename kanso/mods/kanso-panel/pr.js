@@ -6,7 +6,7 @@ import { exec, knownAgents, notify, run, theme } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
-import { checkState, latestChecks } from "./ghchecks.js";
+import { checkState, latestChecks, checkSummary } from "./ghchecks.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -40,14 +40,21 @@ const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); ret
 const openUrl = (url) => exec("open", [url]).catch(() => exec("xdg-open", [url])).catch(() => {});
 
 // One check to show, as either kind GitHub reports: a check run or a commit status.
-// Its state comes from ghchecks.js, which the pane strip reads too.
+// Its state, counts and what they say together come from ghchecks.js, which the pane strip reads too.
 function checkOf(c) {
   const state = checkState(c);
   if (c.__typename === "StatusContext") return { name: c.context, url: c.targetUrl, state };
-  return { name: c.name, workflow: c.workflowName && c.workflowName !== c.name ? c.workflowName : "", url: c.detailsUrl, state, skipped: String(c.conclusion ?? "").toUpperCase() === "SKIPPED" };
+  return { name: c.name, workflow: c.workflowName && c.workflowName !== c.name ? c.workflowName : "", url: c.detailsUrl, state };
 }
 const checksIn = (rollup) => latestChecks(rollup).map(checkOf);
-const count = (checks, state) => checks.filter((x) => x.state === state).length;
+const summaryOf = (checks) => checkSummary(checks.map((x) => x.state));
+// Each state in the panel's words: a row's label and color, and the count's verb.
+const CHECK_WORDS = { fail: ["failed", "red", "failing"], pending: ["running", "yellow", "running"], unknown: ["unknown", "yellow", "unknown"], pass: ["passed", "dim"], skipped: ["skipped", "dim"] };
+// What the checks hold against a pull request, as one line; null when they all passed.
+function checksLine(sum, c) {
+  const words = CHECK_WORDS[sum.state], n = sum[sum.state];
+  return words?.[2] ? { text: `${n} check${n > 1 ? "s" : ""} ${words[2]}`, color: c[words[1]] } : null;
+}
 
 const FILE_HEAD = /^diff -{2}git a\/.* b\/(.*)$/;
 function splitDiff(text) {
@@ -396,16 +403,14 @@ export class PullRequest {
   }
 
   rowState(p, c) {
-    const checks = checksIn(p.statusCheckRollup);
-    const failing = count(checks, "fail"), running = count(checks, "pending"), unknown = count(checks, "unknown");
+    const sum = summaryOf(checksIn(p.statusCheckRollup)), line = checksLine(sum, c);
     if (p.isDraft) return { text: "Draft", color: c.dim };
-    if (failing) return { text: `${failing} check${failing > 1 ? "s" : ""} failing`, color: c.red };
+    if (sum.state === "fail") return line;
     if (p.reviewDecision === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
-    if (running) return { text: `${running} check${running > 1 ? "s" : ""} running`, color: c.yellow };
-    if (unknown) return { text: `${unknown} check${unknown > 1 ? "s" : ""} unknown`, color: c.yellow };
+    if (line) return line;
     if (p.reviewDecision === "APPROVED") return { text: "Approved", color: c.green };
     if (p.reviewDecision === "REVIEW_REQUIRED") return { text: "Waiting for a review", color: c.yellow };
-    if (checks.length) return { text: "Checks passed", color: c.green };
+    if (sum.state === "pass") return { text: "Checks passed", color: c.green };
     return { text: "Open", color: c.dim };
   }
 
@@ -530,17 +535,15 @@ export class PullRequest {
   }
 
   verdict(c) {
-    const pr = this.pr, checks = this.checks();
-    const failing = count(checks, "fail"), running = count(checks, "pending"), unknown = count(checks, "unknown");
+    const pr = this.pr, sum = summaryOf(this.checks()), line = checksLine(sum, c);
     const conflicting = pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "DIRTY", ms = pr.mergeStateStatus;
     if (pr.state === "MERGED") return { text: "Merged", color: c.violet };
     if (pr.state === "CLOSED") return { text: "Closed without merging", color: c.red };
     if (pr.isDraft) return { text: "Draft, not ready for review", color: c.dim };
     if (conflicting) return { text: `Conflicts with ${pr.baseRefName}`, color: c.red };
-    if (failing) return { text: `${failing} check${failing > 1 ? "s" : ""} failing`, color: c.red };
+    if (sum.state === "fail") return line;
     if (pr.reviewDecision === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
-    if (running) return { text: `${running} check${running > 1 ? "s" : ""} running`, color: c.yellow };
-    if (unknown) return { text: `${unknown} check${unknown > 1 ? "s" : ""} unknown`, color: c.yellow };
+    if (line) return line;
     if (ms === "BLOCKED") return { text: pr.reviewDecision === "REVIEW_REQUIRED" ? "Waiting for a review" : "Blocked by branch rules", color: c.yellow };
     if (ms === "BEHIND") return { text: `Behind ${pr.baseRefName}`, color: c.yellow };
     if (ms === "CLEAN" || ms === "HAS_HOOKS" || ms === "UNSTABLE") return { text: "Ready to merge", color: c.green };
@@ -637,11 +640,11 @@ export class PullRequest {
 
   checksList(c) {
     const checks = this.checks();
-    const failing = count(checks, "fail"), running = count(checks, "pending"), unknown = count(checks, "unknown"), passed = count(checks, "pass");
-    const order = { fail: 0, pending: 1, unknown: 2, pass: 3 };
+    const sum = summaryOf(checks), passed = sum.pass + sum.skipped;
+    const order = { fail: 0, pending: 1, unknown: 2, pass: 3, skipped: 3 };
     const sorted = checks.toSorted((a, b) => order[a.state] - order[b.state]);
     const open = this.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
-    const note = [failing && `${failing} failing`, running && `${running} running`, unknown && `${unknown} unknown`, passed && `${passed} passed`].filter(Boolean).join(" · ");
+    const note = [sum.fail && `${sum.fail} failing`, sum.pending && `${sum.pending} running`, sum.unknown && `${sum.unknown} unknown`, passed && `${passed} passed`].filter(Boolean).join(" · ");
     return v_flex().w_full()
       .child(section(c, "Checks", note))
       .children(shown.map((ch, i) => Button.new(`pr-check-${i}`).w_full().py(7).cursor_pointer()
@@ -652,8 +655,7 @@ export class PullRequest {
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().truncate().text_size(13).text_color(c.text).child(ch.name))
             .when(Boolean(ch.workflow), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(ch.workflow))))
-          .child(div().text_size(12).text_color(ch.state === "fail" ? c.red : ch.state === "pending" || ch.state === "unknown" ? c.yellow : c.dim)
-            .child(ch.state === "fail" ? "failed" : ch.state === "pending" ? "running" : ch.state === "unknown" ? "unknown" : ch.skipped ? "skipped" : "passed")))))
+          .child(div().text_size(12).text_color(c[CHECK_WORDS[ch.state][1]]).child(CHECK_WORDS[ch.state][0])))))
       .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded = { ...this.expanded, checks: !open }; cx.notify(); }, c))));
   }
 

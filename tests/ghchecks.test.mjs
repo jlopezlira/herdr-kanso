@@ -10,7 +10,7 @@ test("A check run reads by its status, then its conclusion", async () => {
   const { checkState } = await load("kanso-panel/ghchecks.js", ["checkState"]);
   assert.equal(checkState(run("COMPLETED", "SUCCESS")), "pass");
   assert.equal(checkState(run("COMPLETED", "NEUTRAL")), "pass");
-  assert.equal(checkState(run("COMPLETED", "SKIPPED")), "pass");
+  assert.equal(checkState(run("COMPLETED", "SKIPPED")), "skipped", "its own state, counted as passed");
   for (const c of ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"]) assert.equal(checkState(run("COMPLETED", c)), "fail", c);
   assert.equal(checkState(run("COMPLETED", "STALE")), "fail", "GitHub gave up on it: only a rerun passes");
   for (const s of ["QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "PENDING"]) assert.equal(checkState(run(s)), "pending", s);
@@ -46,7 +46,38 @@ test("All of a pull request's checks: none, then failure, running, unknown, and 
   assert.equal(rollupState([run("COMPLETED", "SUCCESS"), commit("EXPECTED")]), "pending");
   assert.equal(rollupState([run("IN_PROGRESS"), run("COMPLETED", "SOMETHING_NEW")]), "pending", "still running before unknown");
   assert.equal(rollupState([run("IN_PROGRESS"), run("COMPLETED", "STALE")]), "fail", "a failure wins over one still running");
-  assert.equal(rollupState([run("COMPLETED", "SUCCESS", "test"), run("COMPLETED", "FAILURE", "test")]), "pass", "the first of a name, as the panel lists it");
+  assert.equal(rollupState([run("COMPLETED", "SKIPPED"), run("COMPLETED", "SKIPPED")]), "pass", "all skipped");
+});
+
+test("The counts of each state, and what they say together", async () => {
+  const { checkSummary } = await load("kanso-panel/ghchecks.js", ["checkSummary"]);
+  assert.deepEqual({ ...checkSummary(["pass", "skipped", "fail", "pending", "pending"]) }, { fail: 1, pending: 2, unknown: 0, pass: 1, skipped: 1, total: 5, state: "fail" });
+  assert.equal(checkSummary([]).state, null);
+  assert.equal(checkSummary(["pass", "unknown"]).state, "unknown");
+});
+
+const job = (workflowName, name, conclusion, startedAt) => ({ ...run("COMPLETED", conclusion, name), workflowName, startedAt });
+
+test("One job is its kind, workflow and name: a namesake never hides a failure", async () => {
+  const { rollupState, latestChecks } = await load("kanso-panel/ghchecks.js", ["rollupState", "latestChecks"]);
+  const twoWorkflows = [job("CI", "test", "SUCCESS"), job("Nightly", "test", "FAILURE")];
+  assert.equal(latestChecks(twoWorkflows).length, 2);
+  assert.equal(rollupState(twoWorkflows), "fail", "two workflows, each with a job called test");
+  const kinds = [run("COMPLETED", "SUCCESS", "deploy"), commit("FAILURE", "deploy")];
+  assert.equal(latestChecks(kinds).length, 2);
+  assert.equal(rollupState(kinds), "fail", "a check run and a commit status with the same name");
+  assert.equal(rollupState([job("CI", "lint", "SUCCESS"), job("Other", "lint", "SOMETHING_NEW")]), "unknown", "an unknown is not hidden by a successful namesake");
+  const viaSuite = (workflow, conclusion) => ({ ...run("COMPLETED", conclusion, "test"), checkSuite: { workflowRun: { workflow: { name: workflow } } } });
+  assert.equal(rollupState([viaSuite("CI", "SUCCESS"), viaSuite("Nightly", "FAILURE")]), "fail", "the workflow from its check suite");
+});
+
+test("A rerun of the same job replaces the run before it", async () => {
+  const { rollupState, latestChecks } = await load("kanso-panel/ghchecks.js", ["rollupState", "latestChecks"]);
+  const rerun = [job("CI", "test", "FAILURE", "2026-11-08T10:00:00Z"), job("CI", "test", "SUCCESS", "2026-11-08T11:00:00Z")];
+  assert.equal(rollupState(rerun), "pass", "the later run counts");
+  assert.equal(rollupState(rerun.toReversed()), "pass", "whatever the order listed");
+  assert.equal(latestChecks([job("CI", "test", "SUCCESS"), job("CI", "test", "FAILURE")]).length, 1, "started together: the first listed");
+  assert.equal(latestChecks([run("COMPLETED", "SUCCESS"), run("COMPLETED", "FAILURE")]).length, 2, "nameless ones are all kept");
 });
 
 test("The header's digest and the PR panel agree on the same checks", async () => {
@@ -68,7 +99,10 @@ test("The header's digest and the PR panel agree on the same checks", async () =
     [run("QUEUED", "", "a"), run("COMPLETED", "TIMED_OUT", "b")],
     [run("COMPLETED", "", "a")],
     [commit("ERROR", "a"), run("COMPLETED", "SKIPPED", "b")],
-    [run("COMPLETED", "SUCCESS", "a"), run("COMPLETED", "FAILURE", "a")],
+    [job("CI", "test", "SUCCESS"), job("Nightly", "test", "FAILURE")],
+    [run("COMPLETED", "SUCCESS", "deploy"), commit("PENDING", "deploy")],
+    [job("CI", "test", "FAILURE", "2026-11-08T10:00:00Z"), job("CI", "test", "SUCCESS", "2026-11-08T11:00:00Z")],
+    [run("COMPLETED", "SKIPPED", "a"), run("COMPLETED", "NEUTRAL", "b")],
   ];
   for (const rollup of cases) assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
 });
