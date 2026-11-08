@@ -114,3 +114,20 @@ export async function findThreads(list, known = {}) {
   const found = await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
   return Object.fromEntries(found.flat().filter(([, thread]) => thread));
 }
+
+// Whether each conversation's process still runs. Conversations are found every 15-60 s, so asking every 10 s
+// (every minute behind other windows or with the sidebar collapsed) misses nothing; a new set of pids is asked at once.
+export const ALIVE_MS = 10000;
+export const ALIVE_BEHIND_MS = 60000;
+
+// Sorted, so the same processes always give the same signature.
+export const pidsOf = (threads) => [...new Set(Object.values(threads ?? {}).map((th) => th?.pid).filter((p) => Number.isInteger(p) && p > 0))]
+  .toSorted((a, b) => a - b);
+
+// What `ps -o pid= -p` lists: one pid a line.
+export const pidsListed = (text) => new Set(String(text ?? "").split("\n").map((line) => Number(line.trim())).filter((p) => p > 0));
+// `listed`: anything with has(pid), that Set or checkTasks' table by pid, so neither is read twice.
+export const aliveIn = (listed, pids) => new Set(pids.filter((p) => listed.has(p)));
+
+// `last`: the signature and start of the last look, its own or checkTasks'; none yet is due.
+export const aliveDue = (last, sig, now, every) => last?.at == null || last.sig !== sig || now - last.at >= every;

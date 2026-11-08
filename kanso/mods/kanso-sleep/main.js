@@ -9,6 +9,7 @@ import { spaceFor, inPlace } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, shq, SHELLS, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, promptEmpty, isClaude } from "./resume.js";
+import { etimeMs } from "./procs.js";
 import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries } from "./pure.js";
 
 const ARM_MS = 4000;
@@ -79,10 +80,9 @@ export async function stillThere(pid, before, now = Date.now()) {
 }
 export async function procOf(pid, now = Date.now()) {
   const ps = await exec("ps", ["-p", String(pid), "-o", "etime=,comm="]).catch(() => null);
-  const m = ps?.code === 0 ? /^\s*(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)\s+(.+?)\s*$/.exec(ps.stdout) : null;
+  const m = ps?.code === 0 ? /^\s*(\S+)\s+(.+?)\s*$/.exec(ps.stdout) : null;
   if (!m) return null;
-  const age = (((Number(m[1] ?? 0) * 24 + Number(m[2] ?? 0)) * 60 + Number(m[3])) * 60 + Number(m[4])) * 1000;
-  return { comm: base(m[5]), start: now - age };
+  return { comm: base(m[2]), start: now - etimeMs(m[1]) };
 }
 
 // A claude resuming `session` names it in its argv even before its session record exists;

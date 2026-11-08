@@ -4,7 +4,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
-import { range } from "./pure.js";
+import { parseProcesses, etimeMs } from "./procs.js";
 
 export { NAME_LABEL };
 
@@ -189,25 +189,14 @@ export function stepOf(a, steps, now) {
 }
 
 // With `fg` false, `pid` is the terminal's shell and the agent is its one child.
+// `table`: procs.js parseProcesses' index, read once for every terminal (the text itself is read on the spot).
 const HELPER = /\bmcp\b|^caffeinate\b/i;
-export function tasksOf(text, pid, fg = true) {
-  const rows = text.split("\n").flatMap((line) => {
-    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/);
-    return m ? [{ pid: +m[1], ppid: +m[2], etime: m[3], command: m[4] }] : [];
-  });
-  const kid = fg ? null : rows.find((r) => r.ppid === pid);
+export function tasksOf(table, pid, fg = true) {
+  const { byParent } = typeof table === "string" ? parseProcesses(table) : table;
+  const kid = fg ? null : byParent.get(pid)?.[0];
   if (!fg && !kid) return [];
-  const root = fg ? pid : kid.pid;
-  return rows.filter((r) => r.ppid === root && !HELPER.test(r.command))
+  return (byParent.get(fg ? pid : kid.pid) ?? []).filter((r) => !HELPER.test(r.command))
     .map((r) => ({ pid: r.pid, ms: etimeMs(r.etime), command: unwrap(r.command) }));
-}
-
-// ps's elapsed time, "[[dd-]hh:]mm:ss", in ms.
-export function etimeMs(s) {
-  const [d, rest] = s.includes("-") ? s.split("-") : ["0", s];
-  const given = rest.split(":").map(Number);
-  const parts = [...range(3 - given.length).map(() => 0), ...given];
-  return ((Number(d) * 24 + parts[0]) * 3600 + parts[1] * 60 + parts[2]) * 1000;
 }
 
 // Claude Code runs each command as `zsh -c … eval '<command>' …`; this recovers what was typed.
