@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.13.0] - 2026-11-08
+
+### Added
+
+- kansō help's dōjō page shows your pet, waving, and every pet to choose from: a click there and it is the dōjō's too. The first visit brings the agents' pets you lack, as the dōjō does.
+
 ## [3.12.0] - 2026-11-08
 
 ### Added

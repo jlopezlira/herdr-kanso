@@ -6,8 +6,7 @@ import { G, tokens, iconButton } from "./ui.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
-import { hachi } from "./mascot.js";
-import { HACHI, AGENT_PETS, TICK_MS, installedPets, bringAgentPets, petFrame, frameOf } from "./pets.js";
+import { TICK_MS, Companion } from "./pets.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
 const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, ARM_MS = 3000, SLEEP_MS = 20000;
@@ -35,24 +34,11 @@ export default class Dojo extends View {
       cx.notify();
     });
     cx.timer.every(500, (cx) => { if (this.round || this.lit || this.armed) cx.notify(); });
-    this.pets = [HACHI]; this.petId = HACHI.id; this.choosing = false; this.bringing = false;
-    cx.spawn(async (cx) => {
-      const [mine, chosen] = await Promise.all([installedPets().catch(() => []), this.store.pet().catch(() => null)]);
-      this.pets = [HACHI, ...mine];
-      // Codex's own pet, when you have it, until you choose another.
-      this.petId = chosen ?? (mine.some((p) => p.id === "codex") ? "codex" : HACHI.id);
-      cx.notify();
-    });
+    this.pal = new Companion(this.store); this.choosing = false;
+    this.pal.load(cx);
     // A pet moves on its own: a redraw only when its frame changes.
-    cx.timer.every(TICK_MS, (cx) => {
-      const p = this.pet();
-      if (!p.sheet) return;
-      const f = frameOf(p, this.petState()), key = `${f.row}:${f.col}`;
-      if (key !== this.frameKey) { this.frameKey = key; cx.notify(); }
-    });
+    cx.timer.every(TICK_MS, (cx) => { if (this.pal.moved(this.petState())) cx.notify(); });
   }
-
-  pet() { return this.pets.find((p) => p.id === this.petId) ?? HACHI; }
 
   // What the pet does: each row of its sheet is a reaction.
   petState(now = Date.now()) {
@@ -65,28 +51,9 @@ export default class Dojo extends View {
     return "idle";
   }
 
-  // The first time it opens, the agents' pets you do not have are brought: one download, then they are here.
   toggleChooser(cx) {
-    this.choosing = !this.choosing; this.petError = null;
-    if (!this.choosing || this.bringing) return;
-    this.bringing = true;
-    cx.spawn(async (cx) => {
-      try {
-        // Read again: one Codex installed meanwhile shows too.
-        this.pets = [HACHI, ...await installedPets()];
-        cx.notify();
-        const missed = await bringAgentPets(new Set(this.pets.map((p) => p.id)));
-        this.pets = [HACHI, ...await installedPets()];
-        if (missed.length) this.petError = `${missed.map((id) => AGENT_PETS.find((p) => p.id === id)?.name ?? id).join(", ")} could not be brought. Open this again to retry.`;
-      } catch (e) { this.petError = String(e?.message ?? e); }
-      this.bringing = false;
-      cx.notify();
-    });
-  }
-
-  choose(id) {
-    this.petId = id; this.choosing = false; this.frameKey = null;
-    this.store.setPet(id).catch(() => {});
+    this.choosing = !this.choosing;
+    if (this.choosing) this.pal.bring(cx);
   }
 
   get bests() { return this.totals.bests ?? {}; }
@@ -247,34 +214,20 @@ export default class Dojo extends View {
 
   // The pet, at its reaction; a click chooses another.
   petView(t, c, now) {
-    const p = this.pet(), asleep = this.mood() === "sleep";
+    const asleep = this.mood() === "sleep";
     return v_flex().id("dojo-pet").gap(6).cursor_pointer().tooltip("Choose your pet")
       .hover((s) => s.opacity(0.85))
       .on_click((_e, cx) => { this.toggleChooser(cx); cx.notify(); })
       .child(h_flex().h(128).gap(G.md).items_end()
-        .child(p.sheet ? petFrame(p, this.petState(now), { now }) : hachi(t, { mood: this.mood(), px: 8 }))
+        .child(this.pal.face(t, this.petState(now), { now, mood: this.mood() }))
         .child(div().pb(4).text_size(11).text_color(c.dim).child(asleep ? "z z" : "")))
-      .child(div().text_size(11.5).text_color(this.choosing ? c.accent : c.dim).child(p.name));
+      .child(div().text_size(11.5).text_color(this.choosing ? c.accent : c.dim).child(this.pal.pet.name));
   }
 
-  // Hachi, then the agents' pets and yours: each at rest, a click and it is the dōjō's.
+  // Every pet: a click and it is the dōjō's.
   chooser(t, c, button) {
-    const tile = (p) => {
-      const on = p.id === this.petId;
-      return v_flex().id(`pet-${p.id}`).w(104).gap(4).p(8).items_center().rounded(10).cursor_pointer()
-        .border_1().border_color(on ? c.accent : c.text + "00").bg(on ? c.accent + "1c" : c.text + "00")
-        .hover((s) => s.bg(c.text + "0a"))
-        .on_click((_e, cx) => { this.choose(p.id); cx.notify(); })
-        .child(h_flex().h(84).items_end().justify_center()
-          .child(p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 })))
-        .child(div().w_full().text_center().truncate().text_size(12).font_medium().text_color(on ? c.text : c.muted).child(p.name))
-        .child(div().w_full().text_center().truncate().text_size(10.5).text_color(c.dim).child(p.from ?? (p.sheet ? "yours" : "Kanso")));
-    };
-    const coming = this.bringing ? AGENT_PETS.filter((a) => !this.pets.some((p) => p.id === a.id)).length : 0;
-    const note = this.petError ?? (coming ? `Bringing ${coming} more\u2026` : null);
     return v_flex().id("dojo-pets").flex_1().min_w(0).min_h(0).gap(G.lg).overflow_y_scrollbar()
-      .child(h_flex().flex_wrap().gap(G.sm).children(this.pets.map(tile)))
-      .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(this.petError ? c.red ?? c.accent : c.dim).child(note)))
+      .child(this.pal.grid(t, c, () => { this.choosing = false; }))
       .child(h_flex().pt(G.sm).child(button("pets-done", "Done  esc", () => { this.choosing = false; }, { strong: true })));
   }
 

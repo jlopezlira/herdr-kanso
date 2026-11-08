@@ -3,9 +3,13 @@
 // 8 columns by 9 rows of 192 x 208 cells, a row per state. Kanso ships none: it reads the ones
 // you have in ~/.codex/pets, and brings the agents' own (from OpenAI and codex-pets.net) into its
 // folder the first time you open the chooser, for you only, never into Codex's.
+// Kept byte for byte in kanso-help/ (`npm run sync:share`): edit kanso-dojo/pets.js.
 import { div, image } from "gpui-kit";
+import { v_flex, h_flex } from "gpui-base";
 import { exec, appHome, home } from "herdr";
 import { parseOr } from "./pure.js";
+import { hachi } from "./mascot.js";
+import { Store } from "./store.js";
 
 export const SITE = "https://codex-pets.net";
 export const ROWS = ["idle", "running-right", "running-left", "waving", "jumping", "failed", "waiting", "running", "review"];
@@ -134,3 +138,85 @@ export async function bringAgentPets(have = new Set(), list = AGENT_PETS) {
   const r = await exec("sh", ["-c", BRING, "sh", brought(), ...want.flatMap((p) => [p.id, p.name, p.url, p.zip ? "zip" : "webp"])]);
   return String(r.stderr ?? "").split("\n").map((x) => x.trim()).filter((x) => want.some((p) => p.id === x));
 }
+
+// Your pet, wherever it shows (the dōjō, and kansō help's way into it): which it is, the ones to choose from,
+// and the agents' pets brought the first time you look at them. The choice is kept in the dōjō's own SQLite.
+export class Companion {
+  constructor(store = new Store()) {
+    this.store = store;
+    this.pets = [HACHI]; this.id = HACHI.id;
+    this.bringing = false; this.brought = false; this.error = null; this.frameKey = null;
+  }
+
+  get pet() { return this.pets.find((p) => p.id === this.id) ?? HACHI; }
+
+  load(cx) {
+    cx.spawn(async (cx) => {
+      const [mine, chosen] = await Promise.all([installedPets().catch(() => []), this.store.pet().catch(() => null)]);
+      this.pets = [HACHI, ...mine];
+      // Codex's own pet, when you have it, until you choose another.
+      this.id = chosen ?? (mine.some((p) => p.id === "codex") ? "codex" : HACHI.id);
+      cx.notify();
+    });
+  }
+
+  // Once per window: yours read again (one Codex installed meanwhile shows too), then the agents' you lack.
+  bring(cx) {
+    if (this.bringing || this.brought) return;
+    this.bringing = true; this.error = null;
+    cx.spawn(async (cx) => {
+      try {
+        this.pets = [HACHI, ...await installedPets()];
+        cx.notify();
+        const missed = await bringAgentPets(new Set(this.pets.map((p) => p.id)));
+        this.pets = [HACHI, ...await installedPets()];
+        this.brought = !missed.length;
+        if (missed.length) this.error = `${missed.map((id) => AGENT_PETS.find((p) => p.id === id)?.name ?? id).join(", ")} could not be brought. Open this again to retry.`;
+      } catch (e) { this.error = String(e?.message ?? e); }
+      this.bringing = false;
+      cx.notify();
+    });
+  }
+
+  choose(id) {
+    this.id = id; this.frameKey = null;
+    this.store.setPet(id).catch(() => {});
+  }
+
+  // True when the pet's frame for `state` changed since the last call: the one redraw a timer needs.
+  moved(state) {
+    const p = this.pet;
+    if (!p.sheet) return false;
+    const f = frameOf(p, state), key = `${f.row}:${f.col}`;
+    if (key === this.frameKey) return false;
+    this.frameKey = key;
+    return true;
+  }
+
+  // `mood`: Hachi's face, which has no sheet of reactions.
+  face(t, state, { now = Date.now(), scale = 0.6, mood = "calm", px = 8 } = {}) {
+    const p = this.pet;
+    return p.sheet ? petFrame(p, state, { now, scale }) : hachi(t, { mood, px });
+  }
+
+  // Every pet at rest, a click and it is yours. `onChoose` after the choice.
+  grid(t, c, onChoose = () => {}) {
+    const tile = (p) => {
+      const on = p.id === this.id;
+      return v_flex().id(`pet-${p.id}`).w(104).gap(4).p(8).items_center().rounded(10).cursor_pointer()
+        .border_1().border_color(on ? c.accent : c.text + "00").bg(on ? c.accent + "1c" : c.text + "00")
+        .hover((s) => s.bg(c.text + "0a"))
+        .on_click((_e, cx) => { this.choose(p.id); onChoose(p, cx); cx.notify(); })
+        .child(h_flex().h(84).items_end().justify_center()
+          .child(p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 })))
+        .child(div().w_full().text_center().truncate().text_size(12).font_medium().text_color(on ? c.text : c.muted).child(p.name))
+        .child(div().w_full().text_center().truncate().text_size(10.5).text_color(c.dim).child(p.from ?? (p.sheet ? "yours" : "Kanso")));
+    };
+    const coming = this.bringing ? AGENT_PETS.filter((a) => !this.pets.some((p) => p.id === a.id)).length : 0;
+    const note = this.error ?? (coming ? `Bringing ${coming} more\u2026` : null);
+    return v_flex().gap(G_NOTE)
+      .child(h_flex().flex_wrap().gap(8).children(this.pets.map(tile)))
+      .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(this.error ? c.red ?? c.accent : c.dim).child(note)));
+  }
+}
+const G_NOTE = 12;

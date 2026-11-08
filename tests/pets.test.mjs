@@ -105,7 +105,7 @@ test("the dōjō draws its pet at each reaction, and the chooser with every pet"
   const dojo = new Dojo();
   dojo.init({}, cx);
   const rocky = petOf("rocky", "rocky.png", { displayName: "Rocky" });
-  dojo.pets = [dojo.pets[0], rocky]; dojo.petId = "rocky";
+  dojo.pal.pets = [dojo.pal.pets[0], rocky]; dojo.pal.id = "rocky";
   assert.equal(dojo.petState(), "idle");
   dojo.render();
   assert.ok(images.includes("data/kanso-dojo/pets/rocky.png"), "the pet's own atlas");
@@ -125,7 +125,29 @@ test("the dōjō draws its pet at each reaction, and the chooser with every pet"
   assert.equal(images.filter((p) => p === "data/kanso-dojo/pets/rocky.png").length, 1, "the whole atlas only for the one in the dōjō");
   dojo.key({ key: "escape", modifiers: {} }, cx);
   assert.equal(dojo.choosing, false, "Esc closes the chooser, not the dōjō");
-  dojo.petId = "hachi"; images.length = 0;
+  dojo.pal.id = "hachi"; images.length = 0;
   dojo.render();
   assert.equal(images.length, 0, "Hachi is drawn, no sheet");
+});
+
+test("kansō help's dōjō page shows your pet, and every pet to choose from there", async () => {
+  const { singleUse } = await import("./helpers.mjs");
+  const ui = singleUse(), images = [];
+  const image = (path) => { images.push(path); return ui.div(); };
+  const { petOf } = await pets();
+  const { Help } = await load("kanso-help/main.js", ["Help"], {
+    ...ui, image, exec, appHome: () => "/app", home: () => "/home", keys: () => ({}), run: () => {}, openOverlay: () => {},
+    theme: () => ({ foreground: "#fff", accent: "#f80", dim: "#666", muted: "#888", border: "#333" }),
+    props: () => ({ overlay: "ov", page: "dojo" }), closeOverlay: () => {},
+  });
+  const spawned = [];
+  const cx = { focus_handle: () => ({ focus() {} }), spawn: (f) => spawned.push(f), notify() {}, timer: { every() {}, after() {} } };
+  const help = new Help();
+  help.init({}, cx);
+  assert.equal(spawned.length, 2, "your choice read, and the agents' pets brought: the page opened on the dōjō");
+  help.pal.pets = [help.pal.pets[0], petOf("clawd", "clawd.png", { displayName: "Clawd" })];
+  help.pal.id = "clawd";
+  help.render();
+  assert.ok(images.includes("data/kanso-dojo/pets/clawd.png"), "your pet, drawn");
+  assert.ok(images.includes("data/kanso-dojo/pets/thumbs/clawd.png"), "and in the grid to choose from");
 });
