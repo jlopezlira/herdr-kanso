@@ -541,7 +541,7 @@ export default class TokenSpend extends View {
         cx.notify();
       });
     if (this.openMenu === id && this.menuOptions) {
-      popover.content(v_flex().w(260).max_h(340).overflow_y_scrollbar().p(G.xs).gap(1).rounded(R.card)
+      popover.content(v_flex().id(`${id}-options`).w(260).max_h(340).overflow_y_scrollbar().p(G.xs).gap(1).rounded(R.card)
         .bg(c.popover).border_1().border_color(c.border)
         .children(this.menuOptions.map((option, index) => {
           const selected = option.value === value;

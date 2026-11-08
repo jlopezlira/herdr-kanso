@@ -8,6 +8,12 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.9.3] - 2026-11-08
+
+### Fixed
+
+- Lists that scroll keep their place: the sidebar, kansō settings, kansō help, Open with and Spend's menus no longer jump back to the top a few seconds after you scroll. Each scroll area now has a name of its own, so a redraw finds it where you left it.
+
 ## [3.9.2] - 2026-11-08
 
 ### Fixed

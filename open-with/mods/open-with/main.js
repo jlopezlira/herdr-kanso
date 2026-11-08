@@ -299,6 +299,6 @@ done`;
           .child(div().text_size(11).text_color(t.dim).truncate().child(machine ? `${machine}: ${shown}` : shortPath(shown, machine))))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().h(1).mx(4).mb(4).bg(t.border))
-      .child(v_flex().max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().children(body)));
+      .child(v_flex().id("open-with-list").max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().children(body)));
   }
 }
