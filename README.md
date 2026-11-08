@@ -230,6 +230,18 @@ each row shows the memory it holds, and the panel keeps a history: how many
 ran at once over 24 hours, 7 or 30 days (the ones with no pane marked), what
 opened today, what ended and how, and what stopping them gave back.
 
+### Look at what an agent made
+
+The **Look** panel shows the files the agent in focus printed, without
+leaving kansō: screenshots and other pictures (HEIC and TIFF too), a PDF's
+first page, documents and code (in the preview panel), audio and video (in
+their own app). The newest picture shows by itself unless you picked
+another, and shows again when the agent writes it again. Click on it to drop
+numbered pins, write a note under it and send it with ⌘↩: the agent gets
+"About <file>: <note>" and where each pin sits. Links and HTML pages keep
+opening in the browser. An agent can open a file there itself:
+`herdr-app do 'kanso-tabs.look /path/to/shot.png'`.
+
 ### Docker, simply
 
 The **Containers** panel answers what Docker is doing on this computer. First,
@@ -441,6 +453,10 @@ runs and keep it in `~/.config/herdr-app/data/kanso-arrange.json`. Ports runs
 `lsof`, `ps` and `hc get` on this computer only while the panel is shown,
 reads the guard's `~/.config/herdr-app/data/kanso-guard/ports.json`, and stops
 only what you confirm (through the guard, or with `kill` without it).
+Look, only while it is shown, reads the last 400 lines of the agent in focus
+with `hc read` every 4 s, checks which of the files it printed exist, and
+copies the one you look at into `~/.config/herdr-app/data/kanso-panel/look`
+(gone after a day); it sends with `hc send` only when you press Send.
 
 The sidebar's Threads view, only while it is shown, finds the conversation
 of each agent on this computer: `hc get` names the program in front of its

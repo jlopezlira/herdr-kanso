@@ -11,7 +11,11 @@ export const SHARED = [
   // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
   { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js", "kanso/mods/kanso-help/ui.js", "kanso/mods/kanso-dojo/ui.js", "kanso/mods/kanso-containers/ui.js"] },
   // An agent's state mark, program icon and name, the same in the tabs, headers, status bar, sidebar and Send.
-  { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-tabs/marks.js", "kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js"] },
+  { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-tabs/marks.js", "kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js"] },
+  // Text for an agent, delivered the same from Send and from Look.
+  { source: "kanso/mods/kanso-send/deliver.js", copies: ["kanso/mods/kanso-panel/deliver.js"] },
+  // What a file is by its name: the preview panel's text, Look's pictures, Open with's "Preview in the panel".
+  { source: "kanso/mods/kanso-panel/kinds.js", copies: ["kanso/mods/open-with/kinds.js"] },
   // The layout writers' helpers: what each keeps, and how a write puts it all back.
   // Kanso's own updates: the footer shows the row, the tab bar (always on
   // screen, unlike the sidebar) checks, tells you and installs from the toast.

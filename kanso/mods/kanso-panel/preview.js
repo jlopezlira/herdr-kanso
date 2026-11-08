@@ -6,11 +6,13 @@ import { MarkdownDoc, tildePath } from "./doc.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
+// The panels that send a file here, and get it back.
+const BACK = { files: "Back to Files", look: "Back to Look" };
 
 export class Preview {
   init(cx, p) {
     this.on = p.on ?? null;
-    this.back = p.back === "files" ? "files" : null;
+    this.back = BACK[p.back] ? p.back : null;
     this.handle = cx.focus_handle();
     this.open(p.path ?? "", cx);
   }
@@ -66,7 +68,7 @@ export class Preview {
   }
 
   goBack(cx) {
-    this.leave(cx, () => showPanel("files", { mod: "kanso-panel", props: { panel: "files" } }));
+    this.leave(cx, () => showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }));
   }
 
   render() {
@@ -77,7 +79,7 @@ export class Preview {
     return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .on_key_down((e, cx) => this.doc?.key(e, cx))
       .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
-        .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", "Back to Files", (cx) => this.goBack(cx))))
+        .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx))))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
           .child(div().truncate().font_semibold().text_size(13).child(nameOf(this.path)))
           .child(div().truncate().text_size(11).text_color(t.dim).child(tildePath(folderOf(this.path), this.on))))

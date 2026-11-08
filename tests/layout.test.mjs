@@ -159,23 +159,41 @@ test("kanso-tabs opens and closes a custom panel from kanso.panels through commi
   assert.deepEqual(panelBody().children, []);
 });
 
+test("kanso-tabs.look opens Look on the path its name carries, since Herdr gives a mod command no arguments", async () => {
+  const f = await layoutFixture();
+  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
+  const tabs = new Tabs();
+  const shown = () => f.body().children.find((node) => node.id === "panel-body").children;
+  tabs.command("look /repo/shots/home page.png"); f.flush();
+  const [look] = shown();
+  assert.equal(look.id, "look");
+  assert.equal(look.content.mod, "kanso-panel");
+  assert.deepEqual({ ...look.content.props, at: 0 }, { panel: "look", path: "/repo/shots/home page.png", at: 0 }, "spaces in the path kept");
+  tabs.command("look:~/a.pdf"); f.flush();
+  assert.equal(shown()[0].content.props.path, "~/a.pdf", "the keys.json way, look:<path>, too");
+  tabs.command("look"); f.flush();
+  assert.deepEqual(shown()[0].content.props, { panel: "look" }, "no path: Look on the agent in focus");
+  tabs.command("lookout"); f.flush();
+  assert.deepEqual(shown()[0].content.props, { panel: "look" }, "another command is not Look's");
+});
+
 test("kanso-tabs shows its panels in the order you drag them, without the ones you turned off", async () => {
   const store = {};
   const host = { shared: (k) => store[k], setShared: (k, v) => { store[k] = v; } };
   const { panelList, movePanel, setPanelOn } = await load("kanso-tabs/main.js", ["panelList", "movePanel", "setPanelOn"], host);
   const ids = () => clone(panelList().filter((p) => p.on).map((p) => p.id));
-  assert.deepEqual(ids(), ["files", "insights", "pr", "shipped", "worktrees", "ports", "containers", "memory"], "Spend, Worktrees, Ports, Containers and Memory ship with Kanso; no Specs");
+  assert.deepEqual(ids(), ["files", "insights", "pr", "shipped", "worktrees", "ports", "containers", "memory", "look"], "Spend, Worktrees, Ports, Containers, Memory and Look ship with Kanso; no Specs");
   movePanel("shipped", "files");
-  assert.deepEqual(ids(), ["shipped", "files", "insights", "pr", "worktrees", "ports", "containers", "memory"], "dropped on Files: takes its place");
+  assert.deepEqual(ids(), ["shipped", "files", "insights", "pr", "worktrees", "ports", "containers", "memory", "look"], "dropped on Files: takes its place");
   movePanel("files", "pr");
-  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory"], "dragged right");
+  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory", "look"], "dragged right");
   setPanelOn("pr", false);
-  assert.deepEqual(ids(), ["shipped", "insights", "files", "worktrees", "ports", "containers", "memory"]);
+  assert.deepEqual(ids(), ["shipped", "insights", "files", "worktrees", "ports", "containers", "memory", "look"]);
   assert.equal(panelList().find((p) => p.id === "pr").on, false, "still listed in the popup, off");
   setPanelOn("pr", true);
-  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory"], "back where it was");
+  assert.deepEqual(ids(), ["shipped", "insights", "pr", "files", "worktrees", "ports", "containers", "memory", "look"], "back where it was");
   store["kanso.panels.order"] = ["files", "insights", "pr", "shipped"];
-  assert.deepEqual(clone(ids().slice(-4)), ["worktrees", "ports", "containers", "memory"], "panels added after you placed yours come after them");
+  assert.deepEqual(clone(ids().slice(-5)), ["worktrees", "ports", "containers", "memory", "look"], "panels added after you placed yours come after them");
   store["kanso.panels"] = [{ id: "workflow", label: "Workflow", mod: "herdr-workflow" }];
   assert.equal(ids().at(-1), "workflow", "a custom panel you never placed comes last");
 });
