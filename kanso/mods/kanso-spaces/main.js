@@ -276,7 +276,13 @@ export default class Spaces extends View {
     const known = cached && Date.now() - cached.at < 60_000 ? cached.list : null;
     const go = (list) => {
       const project = registry().find((p) => p.id === place.project) ?? null;
-      startIn(place, agentFor(project, list)?.run ?? null);
+      const agent = agentFor(project, list);
+      startIn(place, agent?.run ?? null);
+      // The first one it starts is remembered, so the + keeps starting it whatever Herdr lists first later.
+      if (project && agent && project.agent !== agent.key) {
+        const kdb = this.leftNavStore().kdb;
+        kdb.setProjectAgent(project.id, agent.key).then(() => publishRegistry(kdb)).catch(() => {});
+      }
     };
     if (known) { go(known); return; }
     knownAgents({ on: key || null }).then((list) => { this.knownBy.set(key, { list, at: Date.now() }); go(list); }).catch(() => startIn(place));
