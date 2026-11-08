@@ -210,20 +210,21 @@ export class Companion {
     return p.sheet ? petFrame(p, state, { now, since, scale }) : hachi(t, { mood, px });
   }
 
-  // The pet for a share card: SVG of `width` that a card places as it is. Hachi in its own squares;
-  // a pet's first frame, cut from its whole atlas embedded in the image (sharp at the card's size; nothing is fetched).
-  async figure(t, width = 200) {
+  // The pet for a share card made in `dir`: SVG of `width` that a card places as it is. Hachi in its own squares;
+  // a pet's first frame, cut from its whole atlas copied beside the card. Embedded, an atlas of a few MiB
+  // passes the 1 MiB a mod may write; beside it, the card stays small and the frame stays sharp.
+  async figure(t, dir, width = 200) {
     const p = this.pet;
     if (!p.sheet) {
       const rows = hachiPixels("glad"), ink = hachiInk(t), px = width / rows[0].length;
       const squares = rows.flatMap((row, y) => row.map((v, x) => (v === "." ? "" : `<rect x="${x * px}" y="${y * px}" width="${px}" height="${px}" fill="${ink[v] ?? t.accent}"/>`)));
       return { width, height: rows.length * px, svg: squares.join("") };
     }
-    const r = await exec("sh", ["-c", 'base64 < "$1" | tr -d "\\n"', "sh", `${appHome()}/${p.sheet}`]);
-    if (r.code !== 0 || !r.stdout) return null;
+    const file = `pet.${p.sheet.split(".").at(-1)}`;
+    const r = await exec("sh", ["-c", 'mkdir -p "$2" && cp -f "$1" "$2/$3"', "sh", `${appHome()}/${p.sheet}`, dir, file]);
+    if (r.code !== 0) return null;
     const { width: cw, height: ch } = p.cell, height = Math.round((width * ch) / cw);
-    const type = p.sheet.endsWith(".webp") ? "webp" : "png";
-    return { width, height, svg: `<svg width="${width}" height="${height}" viewBox="0 0 ${cw} ${ch}"><image href="data:image/${type};base64,${r.stdout.trim()}" width="${cw * p.columns}" height="${ch * p.rows.length}"/></svg>` };
+    return { width, height, svg: `<svg width="${width}" height="${height}" viewBox="0 0 ${cw} ${ch}"><image href="${file}" width="${cw * p.columns}" height="${ch * p.rows.length}"/></svg>` };
   }
 
   // Every pet at rest, a click and it is yours. `onChoose` after the choice.

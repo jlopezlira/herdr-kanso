@@ -165,17 +165,18 @@ test("kansō help's dōjō page shows your pet, and every pet to choose from the
   assert.ok(images.includes("data/kanso-dojo/pets/thumbs/clawd.png"), "and in the grid to choose from");
 });
 
-test("a share card carries your pet: Hachi in its squares, a pet's first frame cut from its own atlas", async (t) => {
+test("a share card carries your pet: Hachi in its squares, a pet's first frame cut from its atlas copied beside the card", async (t) => {
   const dir = await temporary(t);
   const { Companion, petOf, HACHI } = await pets({ appHome: () => dir });
   const pal = new Companion({ pet: async () => null, setPet: async () => {} });
-  const hachi = await pal.figure({ accent: "#e8728a", chrome: "#161615" }, 160);
+  const hachi = await pal.figure({ accent: "#e8728a", chrome: "#161615" }, join(dir, "share"), 160);
   assert.equal(hachi.width, 160);
   assert.ok(hachi.svg.includes('fill="#e8963a"') && !hachi.svg.includes("image"), "Hachi is drawn, square by square");
   await mkdir(join(dir, "data/kanso-dojo/pets"), { recursive: true });
   await writeFile(join(dir, "data/kanso-dojo/pets/rocky.png"), "png");
   pal.pets = [HACHI, petOf("rocky", "rocky.png", {})]; pal.id = "rocky";
-  const rocky = await pal.figure({}, 192);
+  const rocky = await pal.figure({}, join(dir, "share"), 192);
   assert.equal(rocky.height, 208, "a cell's own proportions");
-  assert.match(rocky.svg, /viewBox="0 0 192 208".*href="data:image\/png;base64,cG5n" width="1536" height="1872"/, "the first cell of the whole atlas, embedded");
+  assert.match(rocky.svg, /viewBox="0 0 192 208".*href="pet.png" width="1536" height="1872"/, "the first cell of the whole atlas, beside the card");
+  assert.equal(await readFile(join(dir, "share/pet.png"), "utf8"), "png", "the atlas copied, never read into the card: a few MiB would pass the 1 MiB a mod may write");
 });
