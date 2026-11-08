@@ -7,7 +7,8 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
-import { findThreads } from "./threads.js";
+import { findThreads, pidsOf, pidsListed, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
+import { parseProcesses } from "./procs.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
@@ -53,6 +54,8 @@ function laidOut(items, gap) {
 const base = (path) => path.replace(/\/+$/, "").split("/").at(-1);
 // Changes made outside Herdr (an editor's save, a commit in another app) are found this often, while the window is in front.
 const FALLBACK = 60000;
+// A `ps` answers in milliseconds; one still out after this is taken for hung (psRun).
+const PS_GIVE_UP_MS = 10000;
 const SIDEBAR_W = 256;
 // The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
 const collapsedW = () => (window()?.platform === "macos" ? 76 : 44);
@@ -492,29 +495,44 @@ export default class Spaces extends View {
     cx.notify();
   }
 
+  // One `ps` at a time for checkTasks and checkAlive: `psLook` is the start of the one out. One that has not answered in
+  // PS_GIVE_UP_MS is given up on, so a hung `ps` never stops either; its late answer, if any, is dropped,
+  // whether or not another has started since (behind, the next may be a minute away).
+  psFree(now) {
+    return this.psLook == null || now - this.psLook >= PS_GIVE_UP_MS;
+  }
+  async psRun(now, args, take) {
+    this.psLook = now;
+    try {
+      const r = await exec("ps", args);
+      if (this.psLook === now && Date.now() - now < PS_GIVE_UP_MS) take(r);
+    } catch { /* the last look stands */ }
+    finally { if (this.psLook === now) this.psLook = null; }
+  }
+
   // Each task keeps the start it was first seen with, so a look that finds the same ones changes nothing.
+  // The whole table, read once, also says which conversations still run, so checkAlive needs no `ps` of its own meanwhile.
   checkTasks(cx) {
     const now = Date.now();
-    if (this.psBusy || window().platform === "windows" || this.shownView() === "threads") return;
+    if (!this.psFree(now) || window().platform === "windows" || this.shownView() === "threads") return;
     if (!window().active && now - (this.psAt ?? 0) < 30000) return;
     const mine = terminals().filter((k) => k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
     if (!mine.length) { if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); } return; }
     this.psAt = now;
-    this.psBusy = true;
-    cx.spawn(async (cx) => {
-      try {
-        const r = await exec("ps", ["-axo", "pid=,ppid=,etime=,command="]);
-        if (r.code !== 0) return;
-        const next = Object.fromEntries(mine.flatMap((k) => {
-          const had = this.tasks[k.address] ?? [];
-          const list = tasksOf(r.stdout, k.foreground?.pid ?? k.pid, Boolean(k.foreground?.pid))
-            .map((x) => ({ pid: x.pid, command: x.command, start: had.find((h) => h.pid === x.pid)?.start ?? now - x.ms }));
-          return list.length ? [[k.address, list]] : [];
-        }));
-        const key = (m) => JSON.stringify(Object.entries(m).map(([addr, l]) => [addr, l.map((x) => [x.pid, x.command])]));
-        if (key(next) !== key(this.tasks)) { this.tasks = next; cx.notify(); }
-      } catch {} finally { this.psBusy = false; }
-    });
+    const pids = pidsOf(this.threads);
+    cx.spawn((cx) => this.psRun(now, ["-axo", "pid=,ppid=,etime=,command="], (r) => {
+      if (r.code !== 0) return;
+      const table = parseProcesses(r.stdout);
+      if (pids.length) this.sawAlive(aliveIn(table.byPid, pids), pids.join(","), now, cx);
+      const next = Object.fromEntries(mine.flatMap((k) => {
+        const had = this.tasks[k.address] ?? [];
+        const list = tasksOf(table, k.foreground?.pid ?? k.pid, Boolean(k.foreground?.pid))
+          .map((x) => ({ pid: x.pid, command: x.command, start: had.find((h) => h.pid === x.pid)?.start ?? now - x.ms }));
+        return list.length ? [[k.address, list]] : [];
+      }));
+      const key = (m) => JSON.stringify(Object.entries(m).map(([addr, l]) => [addr, l.map((x) => [x.pid, x.command])]));
+      if (key(next) !== key(this.tasks)) { this.tasks = next; cx.notify(); }
+    }));
   }
 
   applyPrefs() {
@@ -570,7 +588,7 @@ export default class Spaces extends View {
     this.trackAgents(now, sp, cx);
     // Each agent's name is its conversation's title: read every minute, every 15 s while Threads shows in front.
     if (now - (this.threadsAt ?? 0) > (this.view === "threads" && active ? 15000 : 60000)) this.refreshThreads(cx);
-    this.checkAlive(cx);
+    this.checkAlive(cx, now, active);
     this.keepSeen(now);
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     // Git shows on space rows only: the Agents and Threads views don't ask.
@@ -1222,20 +1240,25 @@ export default class Spaces extends View {
     if (view === "threads" && cx) this.refreshThreads(cx);
   }
 
-  checkAlive(cx) {
-    const pids = [...new Set(Object.values(this.threads ?? {}).map((th) => th?.pid).filter((p) => Number.isInteger(p) && p > 0))];
-    if (this.lookingAlive || !pids.length) return;
-    this.lookingAlive = true;
-    cx.spawn(async (cx) => {
-      try {
-        const r = await exec("ps", ["-o", "pid=", "-p", pids.join(",")]);
-        const next = new Set(String(r.stdout ?? "").split(/\s+/).map(Number).filter((p) => p > 0));
-        const changed = !this.alive || next.size !== this.alive.size || [...next].some((p) => !this.alive.has(p));
-        this.alive = next;
-        if (changed) cx.notify();
-      } catch { /* the last look stands */ }
-      finally { this.lookingAlive = false; }
-    });
+  // Its own `ps` only when checkTasks' table has not answered lately (threads.js ALIVE_MS).
+  // A look is stamped when it starts, so one that fails waits its turn instead of trying every half second.
+  checkAlive(cx, now = Date.now(), active = window().active) {
+    const pids = pidsOf(this.threads);
+    if (!this.psFree(now) || !pids.length) return;
+    const sig = pids.join(","), every = active && shared("sidebar.collapsed") !== true ? ALIVE_MS : ALIVE_BEHIND_MS;
+    if (!aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every)) return;
+    this.aliveSig = sig;
+    this.aliveAt = now;
+    // `ps -p` exits 1 when none runs: an empty answer, every one of them gone.
+    cx.spawn((cx) => this.psRun(now, ["-o", "pid=", "-p", sig], (r) => this.sawAlive(aliveIn(pidsListed(r.stdout), pids), sig, now, cx)));
+  }
+
+  sawAlive(next, sig, at, cx) {
+    this.aliveSig = sig;
+    this.aliveAt = at;
+    const changed = !this.alive || next.size !== this.alive.size || [...next].some((p) => !this.alive.has(p));
+    this.alive = next;
+    if (changed) cx.notify();
   }
 
   // A file that hasn't grown isn't read again (threads.js).

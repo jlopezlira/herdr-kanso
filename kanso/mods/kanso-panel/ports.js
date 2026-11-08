@@ -3,6 +3,7 @@ import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
 import { tilde } from "./lib.js";
 import { tryOr } from "./pure.js";
+import { parseProcesses, etimeSecs } from "./procs.js";
 import { G, Armed, tokens, quietLink, quietTabs, iconButton, section } from "./ui.js";
 import { Share } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
@@ -43,20 +44,8 @@ export function parseCwds(text) {
   return new Map(byProcess(text).flatMap(({ pid, fields }) => fields.filter((line) => line[0] === "n").map((line) => [pid, line.slice(1)])));
 }
 
-// `ps -axo pid=,ppid=,etime=,args=`: pid -> { ppid, secs, args }.
-export function parsePs(text) {
-  return new Map(String(text ?? "").split("\n").flatMap((line) => {
-    const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
-    return m ? [[Number(m[1]), { ppid: Number(m[2]), secs: etimeSecs(m[3]), args: m[4] }]] : [];
-  }));
-}
-
-// ps's elapsed time, [[dd-]hh:]mm:ss, in seconds.
-export function etimeSecs(s) {
-  const [days, rest] = String(s).includes("-") ? String(s).split("-") : [0, String(s)];
-  const parts = rest.split(":").map(Number).toReversed();
-  return Number(days) * 86400 + (parts[0] ?? 0) + (parts[1] ?? 0) * 60 + (parts[2] ?? 0) * 3600;
-}
+// `ps -axo pid=,ppid=,etime=,args=`, read as the sidebar reads it (procs.js): pid -> { ppid, secs, args }.
+export const parsePs = (text) => new Map([...parseProcesses(text).byPid].map(([pid, r]) => [pid, { ppid: r.ppid, secs: etimeSecs(r.etime), args: r.command }]));
 
 // The terminal a process runs in: the first ancestor that is a terminal's shell (`shells`: pid -> address), or null; 64 hops at most.
 export function ownerOf(pid, ps, shells) {

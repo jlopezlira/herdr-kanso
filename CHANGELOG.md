@@ -13,6 +13,10 @@ release.
 
 ## [Unreleased]
 
+### Changed
+
+- The sidebar asks whether each conversation's agent still runs every 10 s instead of twice a second (every minute behind other windows or collapsed), at once when one starts, and through the `ps` it already takes for what runs under each agent when it can. That table is read once for every agent, the same way the ports panel reads it, and a `ps` that hangs is given up on after 10 s instead of stopping both checks; its late answer is ignored.
+
 ### Fixed
 
 - Memory recycles a Claude Code agent started with `--add-dir`, `--mcp-config` or allowed and disallowed tools, as Sleep already resumed it: both now rebuild the command the same way, and an arrangement drops the same session options when it starts an agent fresh.

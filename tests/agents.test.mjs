@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
-const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "segmentAt", "etimeMs", "unwrap"];
+const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "segmentAt", "unwrap"];
 const lib = () => load("kanso-spaces/agents.js", NAMES);
 const MIN = 60000;
 
@@ -79,7 +79,8 @@ test("A long step shows its time; stuck past fifteen minutes", async () => {
 });
 
 test("What still runs under an agent: its children, less its helpers", async () => {
-  const { tasksOf, etimeMs, unwrap } = await lib();
+  const { tasksOf, unwrap } = await lib();
+  const { parseProcesses, etimeMs } = await load("kanso-spaces/procs.js", ["parseProcesses", "etimeMs"]);
   const ps = [
     "96083     1    05:03:28 /bin/zsh -l",
     "48343 96083    05:03:21 claude --resume 51fb0c9a",
@@ -96,6 +97,10 @@ test("What still runs under an agent: its children, less its helpers", async () 
   ], "the monitor loop as typed and the app it started; not the MCP server, caffeinate or the loop's own sleep");
   assert.deepEqual(clone(tasksOf(ps, 96083, false).map((x) => x.pid)), [70001, 70003], "from the shell: under its one child");
   assert.deepEqual(clone(tasksOf(ps, 11111, false)), [], "a shell with nothing under it");
+  const table = parseProcesses(ps);
+  assert.deepEqual(clone([tasksOf(table, 48343), tasksOf(table, 96083, false), tasksOf(table, 11111, false)]),
+    clone([tasks, tasksOf(ps, 96083, false), []]), "the table read once gives the same as the text");
+  assert.deepEqual([...table.byParent.get(48343)].map((r) => r.pid), [48384, 67833, 70001, 70003], "children in the table's order");
   assert.equal(etimeMs("01:31"), 91000);
   assert.equal(etimeMs("05:53:18"), (5 * 3600 + 53 * 60 + 18) * 1000);
   assert.equal(etimeMs("01-05:28:18"), (29 * 3600 + 28 * 60 + 18) * 1000);
