@@ -5,7 +5,7 @@ import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { load, clone, temporary, exec } from "./helpers.mjs";
 
-const NAMES = ["petOf", "parsePets", "catalogOf", "frameOf", "installedPets", "install", "ROWS", "FRAMES", "HACHI"];
+const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI"];
 const pets = (host = {}) => load("kanso-dojo/pets.js", NAMES, { div: () => null, image: () => null, exec, appHome: () => "/app", home: () => "/home", ...host });
 const exists = (p) => stat(p).then(() => true, () => false);
 
@@ -26,12 +26,12 @@ test("the list script's lines become pets, a broken pet.json keeps its id, a str
   assert.deepEqual(list.map((p) => [p.id, p.name]), [["bad", "Bad"], ["rocky", "Rocky"]]);
 });
 
-test("codex-pets.net's list: only its own posters and downloads are fetched", async () => {
-  const { catalogOf } = await pets();
-  const site = (id, extra = {}) => ({ id, displayName: id.toUpperCase(), posterUrl: `https://codex-pets.net/assets/pets/v/1/${id}/poster.webp`, downloadUrl: `/api/pets/${id}/download?v=1`, likeCount: 3, ...extra });
-  const list = clone(catalogOf(JSON.stringify({ pets: [site("clawd"), site("evil", { posterUrl: "https://elsewhere.example/p.webp" }), site("bad", { downloadUrl: "https://elsewhere.example/x.zip" }), site("../up")] })));
-  assert.deepEqual(list, [{ id: "clawd", name: "CLAWD", poster: "https://codex-pets.net/assets/pets/v/1/clawd/poster.webp", download: "https://codex-pets.net/api/pets/clawd/download?v=1", likes: 3 }]);
-  assert.deepEqual(clone(catalogOf("<html>")), [], "a page that is not the list gives nothing");
+test("the agents' pets: Codex's eight from OpenAI, Claude's Clawd, Mistral's cat and a shiba, each from its own place", async () => {
+  const { AGENT_PETS } = await pets();
+  const list = clone(AGENT_PETS);
+  assert.deepEqual(list.map((p) => p.id), ["codex", "dewey", "fireball", "rocky", "seedy", "stacky", "bsod", "null-signal", "clawd", "le-chaton-fat", "aka-shiba"]);
+  assert.ok(list.filter((p) => p.from === "Codex").every((p) => p.url.startsWith("https://persistent.oaistatic.com/codex/pets/v1/") && !p.zip));
+  assert.ok(list.filter((p) => p.zip).every((p) => p.url.startsWith("https://codex-pets.net/api/pets/")));
 });
 
 test("each reaction is its own row, played at its own pace", async () => {
@@ -61,25 +61,36 @@ test("your installed pets are read from ~/.codex/pets and their atlas is copied 
   assert.ok(await exists(join(app, "data/kanso-dojo/pets/thumbs/seedy.png")), "and a small one for the chooser");
 });
 
-test("a pet from codex-pets.net goes in ~/.codex/pets/<id> as the site says: only its pet.json and atlas", async (t) => {
+test("the agents' pets are brought into Kanso's folder, never Codex's; one missing is told, one there is not fetched again", async (t) => {
   const dir = await temporary(t);
-  const home = join(dir, "home"), pack = join(dir, "pack");
+  const home = join(dir, "home"), app = join(dir, "app"), pack = join(dir, "pack");
   await mkdir(pack, { recursive: true });
-  await writeFile(join(pack, "pet.json"), JSON.stringify({ id: "clawd", displayName: "Clawd" }));
+  await writeFile(join(pack, "pet.json"), JSON.stringify({ id: "clawd", displayName: "Clawd by someone" }));
   await writeFile(join(pack, "spritesheet.webp"), "webp");
   await writeFile(join(pack, "extra.sh"), "echo nope");
   const zipped = await exec("zip", ["-q", "-j", join(dir, "clawd.zip"), join(pack, "pet.json"), join(pack, "spritesheet.webp"), join(pack, "extra.sh")]);
   assert.equal(zipped.code, 0, zipped.stderr);
-  const { install } = await pets({ home: () => home });
-  await install({ id: "clawd", name: "Clawd", download: `file://${join(dir, "clawd.zip")}` });
-  assert.ok(await exists(join(home, ".codex/pets/clawd/pet.json")));
-  assert.ok(await exists(join(home, ".codex/pets/clawd/spritesheet.webp")));
-  assert.equal(await exists(join(home, ".codex/pets/clawd/extra.sh")), false, "nothing else from the zip");
-  await assert.rejects(install({ id: "../x", name: "x", download: `file://${join(dir, "clawd.zip")}` }), /not a pet id/);
-  await assert.rejects(install({ id: "gone", name: "Gone", download: `file://${join(dir, "missing.zip")}` }), /did not answer/);
+  await writeFile(join(dir, "rocky.webp"), "webp");
+  const { bringAgentPets } = await pets({ home: () => home, appHome: () => app });
+  const list = [
+    { id: "rocky", name: "Rocky", from: "Codex", url: `file://${join(dir, "rocky.webp")}` },
+    { id: "clawd", name: "Clawd", from: "Claude Code", url: `file://${join(dir, "clawd.zip")}`, zip: true },
+    { id: "gone", name: "Gone", from: "Codex", url: `file://${join(dir, "missing.webp")}` },
+    { id: "seedy", name: "Seedy", from: "Codex", url: `file://${join(dir, "missing.webp")}` },
+  ];
+  const missed = clone(await bringAgentPets(new Set(["seedy"]), list));
+  assert.deepEqual(missed, ["gone"], "one that could not be had is told; one you have is not asked for");
+  const at = join(app, "data/kanso-dojo/pets/agents");
+  assert.deepEqual(JSON.parse(await readFile(join(at, "rocky/pet.json"), "utf8")), { id: "rocky", displayName: "Rocky" });
+  assert.ok(await exists(join(at, "clawd/spritesheet.webp")));
+  assert.equal(await exists(join(at, "clawd/extra.sh")), false, "only its pet.json and atlas from the zip");
+  assert.equal(await exists(join(home, ".codex/pets")), false, "Codex's folder is left alone");
+  await writeFile(join(dir, "rocky.webp"), "changed");
+  await bringAgentPets(new Set(), list.slice(0, 1));
+  assert.equal(await readFile(join(at, "rocky/spritesheet.webp"), "utf8"), "webp", "brought once");
 });
 
-test("the dōjō draws its pet at each reaction, and the chooser with yours and the site's", async () => {
+test("the dōjō draws its pet at each reaction, and the chooser with every pet", async () => {
   const { singleUse } = await import("./helpers.mjs");
   const ui = singleUse(), images = [];
   const image = (path) => { images.push(path); return ui.div(); };
@@ -108,12 +119,10 @@ test("the dōjō draws its pet at each reaction, and the chooser with yours and 
   assert.equal(dojo.petState(), "review", "then the result, looked over");
   dojo.render();
   dojo.over = null; dojo.choosing = true;
-  dojo.catalog = [{ id: "clawd", name: "Clawd", poster: "", download: "", likes: 1 }, { id: "rocky", name: "Rocky", poster: "", download: "", likes: 1 }];
   images.length = 0;
   dojo.render();
-  assert.ok(images.includes("data/kanso-dojo/pets/catalog/clawd.png"), "a pet from the site, by its poster");
-  assert.ok(images.includes("data/kanso-dojo/pets/thumbs/rocky.png"), "yours, by the small atlas");
-  assert.equal(images.filter((p) => p.includes("catalog/rocky")).length, 0, "one you have shows once, as yours");
+  assert.ok(images.includes("data/kanso-dojo/pets/thumbs/rocky.png"), "each pet in the chooser by its small atlas");
+  assert.equal(images.filter((p) => p === "data/kanso-dojo/pets/rocky.png").length, 1, "the whole atlas only for the one in the dōjō");
   dojo.key({ key: "escape", modifiers: {} }, cx);
   assert.equal(dojo.choosing, false, "Esc closes the chooser, not the dōjō");
   dojo.petId = "hachi"; images.length = 0;

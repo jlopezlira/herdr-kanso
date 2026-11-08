@@ -1,8 +1,8 @@
 // The dōjō's pets, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Pets in the Codex Pets format (https://codex-pets.net): a pet.json and an atlas of
-// 8 columns by 9 rows of 192 x 208 cells, a row per state. Kanso ships none: it reads
-// the ones installed in ~/.codex/pets, and installs one from codex-pets.net when you pick it,
-// the way the site says to (its zip unpacked in ~/.codex/pets/<id>).
+// 8 columns by 9 rows of 192 x 208 cells, a row per state. Kanso ships none: it reads the ones
+// you have in ~/.codex/pets, and brings the agents' own (from OpenAI and codex-pets.net) into its
+// folder the first time you open the chooser, for you only, never into Codex's.
 import { div, image } from "gpui-kit";
 import { exec, appHome, home } from "herdr";
 import { parseOr } from "./pure.js";
@@ -18,6 +18,18 @@ export const HACHI = { id: "hachi", name: "Hachi" };
 const DIR = "data/kanso-dojo/pets";
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export const petsHome = () => `${home()}/.codex/pets`;
+const OPENAI = "https://persistent.oaistatic.com/codex/pets/v1";
+
+// The agents' pets: Codex's eight from OpenAI, Claude's Clawd, Mistral's cat, and a shiba like Hachi.
+// `from`: who made it; `zip`: a codex-pets.net package, else an OpenAI atlas.
+export const AGENT_PETS = [
+  ...[["codex", "Codex"], ["dewey", "Dewey"], ["fireball", "Fireball"], ["rocky", "Rocky"], ["seedy", "Seedy"],
+    ["stacky", "Stacky"], ["bsod", "BSOD"], ["null-signal", "Null Signal"]]
+    .map(([id, name]) => ({ id, name, from: "Codex", url: `${OPENAI}/${id}-spritesheet-v4.webp` })),
+  { id: "clawd", name: "Clawd", from: "Claude Code", url: `${SITE}/api/pets/clawd/download`, zip: true },
+  { id: "le-chaton-fat", name: "Le Chaton", from: "Mistral", url: `${SITE}/api/pets/le-chaton-fat/download`, zip: true },
+  { id: "aka-shiba", name: "July", from: "a shiba, like Hachi", url: `${SITE}/api/pets/aka-shiba/download`, zip: true },
+];
 
 const count = (n, fallback) => (Number.isInteger(n) && n > 0 && n <= 64 ? n : fallback);
 
@@ -45,17 +57,6 @@ export function parsePets(stdout) {
   }).filter(Boolean).toSorted((a, b) => a.name.localeCompare(b.name));
 }
 
-// codex-pets.net's list, only what is safe to fetch from it.
-export function catalogOf(body) {
-  const d = typeof body === "string" ? parseOr(body, null) : body;
-  return (Array.isArray(d?.pets) ? d.pets : []).map((p) => {
-    const id = String(p?.id ?? ""), poster = String(p?.posterUrl ?? ""), download = String(p?.downloadUrl ?? "");
-    if (!ID.test(id) || !poster.startsWith(`${SITE}/`) || !download.startsWith("/api/pets/")) return null;
-    const name = typeof p.displayName === "string" && p.displayName.trim() ? p.displayName.trim() : id;
-    return { id, name, poster, download: `${SITE}${download}`, likes: Number(p.likeCount) || 0 };
-  }).filter(Boolean);
-}
-
 // The row and column a state shows at `now`; an unknown state shows idle.
 export function frameOf(pet, state, now = Date.now()) {
   const row = Math.max(0, pet.rows.indexOf(pet.rows.includes(state) ? state : "idle"));
@@ -71,15 +72,14 @@ export function petFrame(pet, state, { scale = 0.6, now = Date.now(), still = fa
     .child(image(small ? pet.thumb : pet.sheet).absolute().left(-col * w).top(-row * h).w(w * pet.columns).h(h * pet.rows.length));
 }
 
-// A poster from the site, once fetched: one cell, the pet at rest.
-export const posterImage = (id, size) => image(`${DIR}/catalog/${id}.png`).w(size).h(Math.round(size * CELL.height / CELL.width)).flex_none();
-
 // Each installed pet's atlas, as a PNG in Kanso's folder (a WebP copied as it is where there is no sips).
-const LIST = `out="$1"; src="$2"; mkdir -p "$out" || exit 1
-for d in "$src"/*/; do
+// Yours in ~/.codex/pets first; one Kanso brought with the same id is not listed twice.
+const LIST = `out="$1"; shift; mkdir -p "$out" || exit 1; seen=" "
+for d in "$@"; do [ -d "$d" ] && printf '%s\\n' "$d"/*/; done | while IFS= read -r d; do
   [ -d "$d" ] || continue
   id=$(basename "$d")
   case "$id" in .*|*[!A-Za-z0-9._-]*) continue;; esac
+  case "$seen" in *" $id "*) continue;; esac
   j="$d/pet.json"; [ -f "$j" ] || continue
   s="$d/spritesheet.webp"; [ -f "$s" ] || s="$d/spritesheet.png"; [ -f "$s" ] || continue
   f="$id.png"
@@ -89,47 +89,49 @@ for d in "$src"/*/; do
       mv -f "$out/.$f" "$out/$f"
     else f="$id.\${s##*.}"; cp -f "$s" "$out/$f" || continue; fi
   fi
+  seen="$seen$id "
   printf '%s\\t%s\\t' "$id" "$f"; head -c 4096 "$j" | tr '\\n\\r\\t' '   '; echo
 done`;
 
-// Posters of the site's pets, fetched once each: pairs of id and URL.
-const POSTERS = `out="$1"; shift; mkdir -p "$out" || exit 1
-while [ $# -ge 2 ]; do
-  id="$1"; url="$2"; shift 2
-  case "$id" in .*|*[!A-Za-z0-9._-]*) continue;; esac
-  [ -s "$out/$id.png" ] && continue
-  curl -fsSL --max-time 20 "$url" -o "$out/.$id.webp" && sips -s format png "$out/.$id.webp" --out "$out/.$id.png" >/dev/null 2>&1 && mv -f "$out/.$id.png" "$out/$id.png"
-  rm -f "$out/.$id.webp"
+// The agents' pets not here yet, brought into Kanso's folder: id, name, URL and kind (zip or webp) each.
+// A codex-pets.net zip is unpacked aside and only its pet.json and atlas kept.
+const BRING = `src="$1"; shift; mkdir -p "$src" || exit 1
+tmp=$(mktemp -d) || exit 1; trap 'rm -rf "$tmp"' EXIT
+while [ $# -ge 4 ]; do
+  id="$1"; name="$2"; url="$3"; kind="$4"; shift 4
+  case "$id" in ""|.*|*[!A-Za-z0-9._-]*) continue;; esac
+  [ -f "$src/$id/pet.json" ] && continue
+  rm -rf "$tmp/x" "$tmp/p"; mkdir -p "$tmp/x"
+  if [ "$kind" = zip ]; then
+    curl -fsSL --max-time 90 "$url" -o "$tmp/p" 2>/dev/null && unzip -qq "$tmp/p" -d "$tmp/x" 2>/dev/null || { echo "$id" >&2; continue; }
+    j=$(find "$tmp/x" -maxdepth 2 -type f -name pet.json | head -n 1); [ -n "$j" ] || { echo "$id" >&2; continue; }
+    d=$(dirname "$j"); s="$d/spritesheet.webp"; [ -f "$s" ] || s="$d/spritesheet.png"; [ -f "$s" ] || { echo "$id" >&2; continue; }
+    mkdir -p "$src/$id" && cp -f "$s" "$src/$id/" && cp -f "$j" "$src/$id/pet.json"
+  else
+    curl -fsSL --max-time 90 "$url" -o "$tmp/x/spritesheet.webp" 2>/dev/null || { echo "$id" >&2; continue; }
+    mkdir -p "$src/$id" && mv -f "$tmp/x/spritesheet.webp" "$src/$id/" && printf '{"id":"%s","displayName":"%s"}\\n' "$id" "$name" > "$src/$id/pet.json"
+  fi
 done`;
 
-// The site's zip, unpacked aside and only its pet.json and atlas kept, in ~/.codex/pets/<id>.
-const INSTALL = `src="$1"; id="$2"; url="$3"
-case "$id" in ""|.*|*[!A-Za-z0-9._-]*) echo "not a pet id" >&2; exit 2;; esac
-tmp=$(mktemp -d) || exit 1; trap 'rm -rf "$tmp"' EXIT
-curl -fsSL --max-time 90 "$url" -o "$tmp/pet.zip" 2>/dev/null || { echo "codex-pets.net did not answer" >&2; exit 3; }
-unzip -qq "$tmp/pet.zip" -d "$tmp/x" 2>/dev/null || { echo "not a pet package" >&2; exit 4; }
-j=$(find "$tmp/x" -maxdepth 2 -type f -name pet.json | head -n 1); [ -n "$j" ] || { echo "no pet.json in it" >&2; exit 5; }
-d=$(dirname "$j"); s="$d/spritesheet.webp"; [ -f "$s" ] || s="$d/spritesheet.png"; [ -f "$s" ] || { echo "no spritesheet in it" >&2; exit 5; }
-mkdir -p "$src/$id" && cp -f "$j" "$src/$id/pet.json" && cp -f "$s" "$src/$id/" || exit 6`;
-
 const failed = (r, what) => new Error((r.stderr || what).trim().split("\n")[0]);
+const brought = () => `${appHome()}/${DIR}/agents`;
 
 export async function installedPets() {
-  const r = await exec("sh", ["-c", LIST, "sh", `${appHome()}/${DIR}`, petsHome()]);
+  const r = await exec("sh", ["-c", LIST, "sh", `${appHome()}/${DIR}`, petsHome(), brought()]);
   if (r.code !== 0) throw failed(r, "Your pets could not be read.");
-  return parsePets(r.stdout);
+  // The agents' pets go by their agent's name for them, and say whose they are.
+  // In the agents' order, then yours by name.
+  const at = (p) => { const i = AGENT_PETS.findIndex((x) => x.id === p.id); return i < 0 ? AGENT_PETS.length : i; };
+  return parsePets(r.stdout).map((p) => {
+    const a = AGENT_PETS.find((x) => x.id === p.id);
+    return a ? { ...p, name: a.name, from: a.from } : p;
+  }).toSorted((a, b) => at(a) - at(b));
 }
 
-// The site's popular pets, with their posters fetched.
-export async function catalog(size = 12) {
-  const r = await exec("curl", ["-fsSL", "--max-time", "20", `${SITE}/api/pets?sort=popular&pageSize=${size}`]);
-  if (r.code !== 0) throw failed(r, "codex-pets.net did not answer.");
-  const list = catalogOf(r.stdout);
-  await exec("sh", ["-c", POSTERS, "sh", `${appHome()}/${DIR}/catalog`, ...list.flatMap((p) => [p.id, p.poster])]);
-  return list;
-}
-
-export async function install(pet) {
-  const r = await exec("sh", ["-c", INSTALL, "sh", petsHome(), pet.id, pet.download]);
-  if (r.code !== 0) throw failed(r, `${pet.name} could not be installed.`);
+// Brings the agents' pets you do not have yet; the ids that could not be had, if any.
+export async function bringAgentPets(have = new Set(), list = AGENT_PETS) {
+  const want = list.filter((p) => !have.has(p.id));
+  if (!want.length) return [];
+  const r = await exec("sh", ["-c", BRING, "sh", brought(), ...want.flatMap((p) => [p.id, p.name, p.url, p.zip ? "zip" : "webp"])]);
+  return String(r.stderr ?? "").split("\n").map((x) => x.trim()).filter((x) => want.some((p) => p.id === x));
 }

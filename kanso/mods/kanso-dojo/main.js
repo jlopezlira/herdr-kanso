@@ -4,10 +4,10 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
 import { G, tokens, iconButton } from "./ui.js";
 import { Store } from "./store.js";
-import { Share, openPath } from "./share.js";
+import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
 import { hachi } from "./mascot.js";
-import { HACHI, SITE, TICK_MS, installedPets, catalog, install, petFrame, frameOf, posterImage } from "./pets.js";
+import { HACHI, AGENT_PETS, TICK_MS, installedPets, bringAgentPets, petFrame, frameOf } from "./pets.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
 const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, ARM_MS = 3000, SLEEP_MS = 20000;
@@ -35,7 +35,7 @@ export default class Dojo extends View {
       cx.notify();
     });
     cx.timer.every(500, (cx) => { if (this.round || this.lit || this.armed) cx.notify(); });
-    this.pets = [HACHI]; this.petId = HACHI.id; this.choosing = false; this.catalog = null; this.getting = null;
+    this.pets = [HACHI]; this.petId = HACHI.id; this.choosing = false; this.bringing = false;
     cx.spawn(async (cx) => {
       const [mine, chosen] = await Promise.all([installedPets().catch(() => []), this.store.pet().catch(() => null)]);
       this.pets = [HACHI, ...mine];
@@ -65,15 +65,21 @@ export default class Dojo extends View {
     return "idle";
   }
 
+  // The first time it opens, the agents' pets you do not have are brought: one download, then they are here.
   toggleChooser(cx) {
     this.choosing = !this.choosing; this.petError = null;
-    if (!this.choosing) return;
+    if (!this.choosing || this.bringing) return;
+    this.bringing = true;
     cx.spawn(async (cx) => {
-      // Read again: one Codex installed meanwhile shows too.
-      this.pets = [HACHI, ...await installedPets().catch(() => this.pets.filter((p) => p.sheet))];
-      cx.notify();
-      if (this.catalog?.length) return;
-      try { this.catalog = await catalog(); } catch (e) { this.catalog = []; this.petError = String(e?.message ?? e); }
+      try {
+        // Read again: one Codex installed meanwhile shows too.
+        this.pets = [HACHI, ...await installedPets()];
+        cx.notify();
+        const missed = await bringAgentPets(new Set(this.pets.map((p) => p.id)));
+        this.pets = [HACHI, ...await installedPets()];
+        if (missed.length) this.petError = `${missed.map((id) => AGENT_PETS.find((p) => p.id === id)?.name ?? id).join(", ")} could not be brought. Open this again to retry.`;
+      } catch (e) { this.petError = String(e?.message ?? e); }
+      this.bringing = false;
       cx.notify();
     });
   }
@@ -81,20 +87,6 @@ export default class Dojo extends View {
   choose(id) {
     this.petId = id; this.choosing = false; this.frameKey = null;
     this.store.setPet(id).catch(() => {});
-  }
-
-  get(pet, cx) {
-    if (this.getting) return;
-    this.getting = pet.id; this.petError = null;
-    cx.spawn(async (cx) => {
-      try {
-        await install(pet);
-        this.pets = [HACHI, ...await installedPets()];
-        if (this.pets.some((p) => p.id === pet.id)) this.choose(pet.id);
-      } catch (e) { this.petError = String(e?.message ?? e); }
-      this.getting = null;
-      cx.notify();
-    });
   }
 
   get bests() { return this.totals.bests ?? {}; }
@@ -265,32 +257,25 @@ export default class Dojo extends View {
       .child(div().text_size(11.5).text_color(this.choosing ? c.accent : c.dim).child(p.name));
   }
 
-  // Yours (Hachi first), then the popular ones on codex-pets.net: one click gets it and it is yours.
+  // Hachi, then the agents' pets and yours: each at rest, a click and it is the dōjō's.
   chooser(t, c, button) {
-    const tile = (id, label, face, { on = false, note = null, act }) => v_flex().id(`pet-${id}`).w(96).gap(6).p(8).items_center()
-      .rounded(10).cursor_pointer().border_1().border_color(on ? c.accent : c.text + "00").bg(on ? c.accent + "1c" : c.text + "00")
-      .hover((s) => s.bg(c.text + "0a"))
-      .on_click((_e, cx) => { act(cx); cx.notify(); })
-      .child(h_flex().h(84).items_end().justify_center().child(face))
-      .child(div().w_full().text_center().truncate().text_size(11.5).text_color(on ? c.text : c.muted).child(label))
-      .when(Boolean(note), (el) => el.child(div().text_size(10).text_color(c.accent).child(note)));
-    const heading = (text) => div().text_size(12).font_semibold().text_color(c.text).child(text);
-    const have = new Set(this.pets.map((p) => p.id));
-    const mine = this.pets.map((p) => tile(p.id, p.name,
-      p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 }),
-      { on: p.id === this.petId, act: () => this.choose(p.id) }));
-    const popular = (this.catalog ?? []).filter((p) => !have.has(p.id)).map((p) => tile(`site-${p.id}`, p.name, posterImage(p.id, 77),
-      { note: this.getting === p.id ? "Getting\u2026" : null, act: (cx) => this.get(p, cx) }));
-    const status = this.petError ?? (this.catalog ? (popular.length ? null : "You have every popular one.") : "Looking at codex-pets.net\u2026");
+    const tile = (p) => {
+      const on = p.id === this.petId;
+      return v_flex().id(`pet-${p.id}`).w(104).gap(4).p(8).items_center().rounded(10).cursor_pointer()
+        .border_1().border_color(on ? c.accent : c.text + "00").bg(on ? c.accent + "1c" : c.text + "00")
+        .hover((s) => s.bg(c.text + "0a"))
+        .on_click((_e, cx) => { this.choose(p.id); cx.notify(); })
+        .child(h_flex().h(84).items_end().justify_center()
+          .child(p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 })))
+        .child(div().w_full().text_center().truncate().text_size(12).font_medium().text_color(on ? c.text : c.muted).child(p.name))
+        .child(div().w_full().text_center().truncate().text_size(10.5).text_color(c.dim).child(p.from ?? (p.sheet ? "yours" : "Kanso")));
+    };
+    const coming = this.bringing ? AGENT_PETS.filter((a) => !this.pets.some((p) => p.id === a.id)).length : 0;
+    const note = this.petError ?? (coming ? `Bringing ${coming} more\u2026` : null);
     return v_flex().id("dojo-pets").flex_1().min_w(0).min_h(0).gap(G.lg).overflow_y_scrollbar()
-      .child(heading("Your pets"))
-      .child(h_flex().flex_wrap().gap(G.sm).children(mine))
-      .child(heading("Popular on codex-pets.net"))
-      .when(Boolean(status), (el) => el.child(div().text_size(12).text_color(this.petError ? c.red ?? c.accent : c.dim).child(status)))
-      .child(h_flex().flex_wrap().gap(G.sm).children(popular))
-      .child(h_flex().gap(G.md).pt(G.sm)
-        .child(button("pets-done", "Done  esc", () => { this.choosing = false; }, { strong: true }))
-        .child(button("pets-site", "More on codex-pets.net", () => { openPath(SITE); })));
+      .child(h_flex().flex_wrap().gap(G.sm).children(this.pets.map(tile)))
+      .when(Boolean(note), (el) => el.child(div().text_size(12).text_color(this.petError ? c.red ?? c.accent : c.dim).child(note)))
+      .child(h_flex().pt(G.sm).child(button("pets-done", "Done  esc", () => { this.choosing = false; }, { strong: true })));
   }
 
   render() {
