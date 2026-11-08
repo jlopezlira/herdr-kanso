@@ -2,7 +2,7 @@
 // Kept byte for byte in kanso-panel/ and kanso-spend/ (`npm run sync:share`): edit kanso-panel/share.js.
 import { div } from "gpui-kit";
 import { h_flex, Button } from "gpui-base";
-import { exec, home, readTextFile, writeTextFile, window, notify, theme, appHome } from "herdr";
+import { exec, home, writeTextFile, window, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
 
 export const NETWORKS = {
@@ -183,11 +183,13 @@ const exists = async (path) => (await exec("sh", ["-c", 'test -s "$1"', "sh", pa
 const macos = () => window()?.platform === "macos";
 const pause = (seconds) => exec("sleep", [String(seconds)]).catch(() => null);
 
+// The card's files are made anew each time: removed first, then written as new, so nothing is read back
+// (a card with a picture can pass the 1 MiB readTextFile allows).
 export async function renderPng(card, svgPath, pngPath) {
-  await writeTextFile(svgPath, card.svg, await readTextFile(svgPath));
-  await exec("rm", ["-f", pngPath]).catch(() => {});
   const html = svgPath.replace(/\.svg$/, ".html");
-  await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, await readTextFile(html));
+  await exec("rm", ["-f", svgPath, html, pngPath]).catch(() => {});
+  await writeTextFile(svgPath, card.svg, null);
+  await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, null);
   const tries = [
     ...CHROMIUMS.map((bin) => [bin, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--force-device-scale-factor=2",
       `--window-size=${card.width},${card.height}`, `--screenshot=${pngPath}`, `file://${html}`]]),

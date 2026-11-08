@@ -925,20 +925,21 @@ export default class Spaces extends View {
   }
 
   // One line of a popup: added to menuActs as it draws, so the keyboard walks them in screen order.
+  // One activation for the keyboard and the mouse: the act, then the popup closes unless `keep`.
   menuItem(t, id, text, act, opts = {}) {
     const at = this.menuActs.length;
-    this.menuActs = [...this.menuActs, (cx) => { act(cx); if (!opts.keep) closeOverlay(props().overlay); }];
-    return this.menuRow(t, id, text, at, act, opts);
+    const go = (cx) => { act(cx); if (!opts.keep) closeOverlay(props().overlay); };
+    this.menuActs = [...this.menuActs, go];
+    return this.menuRow(t, id, text, at, go, opts);
   }
 
-  // The row itself, at its place `at` in the keyboard's order.
-  menuRow(t, id, text, at, act, { icon = null, hint = null, ink = t.foreground, keep = false } = {}) {
-    const close = () => closeOverlay(props().overlay);
+  // The row itself, at its place `at` in the keyboard's order; `go` runs on a click (none in a virtual list).
+  menuRow(t, id, text, at, go, { icon = null, hint = null, ink = t.foreground } = {}) {
     return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
       .when(at === this.menuAt, (el) => el.bg(t.selected))
       .hover((s) => s.bg(t.hover))
       // A row of a virtual list takes no handler of its own (registering one there throws): its list's on_item_click acts.
-      .when(Boolean(act), (el) => el.on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); }))
+      .when(Boolean(go), (el) => el.on_click((_e, cx) => { go(cx); cx.notify(); }))
       .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
       .child(div().flex_1().truncate().child(text))
       .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
