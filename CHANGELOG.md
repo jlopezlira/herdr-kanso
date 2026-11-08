@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.16.0] - 2026-11-08
+
+### Added
+
+- Notifications no longer pile up: one already on screen is not shown again, so clicking something many times shows its message once, and at most three stay up, the oldest making room for the newest. Kansō draws its own notifications for this, Herdr's agent notices included.
+
 ## [3.15.2] - 2026-11-08
 
 ### Changed

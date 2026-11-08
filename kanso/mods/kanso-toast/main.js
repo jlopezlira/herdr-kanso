@@ -1,0 +1,53 @@
+// Kanso's notifications, by jlopezlira (https://github.com/jlopezlira/herdr-kanso).
+// Apache-2.0; derived from Herdr's shipped `toast` mod.
+// Herdr stacks every toast it is given, the same one as many times as it is posted: a burst of clicks
+// fills the screen. Here a toast already on screen is not shown again, and the stack keeps the newest few.
+import { View, div, image } from "gpui-kit";
+import { v_flex, h_flex } from "gpui-base";
+import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
+import { onScreen, admit } from "./stack.js";
+
+const KEY = "kanso.toasts";
+const DOT = { error: "blocked", warning: "working", success: "done", info: "accent" };
+
+export default class Toast extends View {
+  init(_props, _cx) {
+    const p = props() ?? {};
+    const { show, close, next } = admit(onScreen(shared(KEY), Date.now()), p, Date.now());
+    close.forEach(closeOverlay);
+    setShared(KEY, next);
+    if (!show) closeOverlay(p.overlay);
+  }
+
+  dismiss() {
+    const p = props() ?? {};
+    setShared(KEY, onScreen(shared(KEY), Date.now()).filter((s) => s.id !== p.overlay));
+    closeOverlay(p.overlay);
+  }
+
+  render(_cx) {
+    const t = theme();
+    const p = props() ?? {};
+    return h_flex()
+      .id("toast")
+      .size_full()
+      .px(18)
+      .gap(12)
+      .items_center()
+      .bg(t.popover)
+      .cursor_pointer()
+      .hover((s) => s.bg(t.hover))
+      .on_click(() => {
+        if (p.action?.name) run(p.action.name, p.action.args ?? {});
+        this.dismiss();
+      })
+      .child(p.icon ? image(p.icon).w(18).h(18).flex_none() : div().size(8).rounded(4).flex_none().bg(t[DOT[p.level] ?? "accent"]))
+      .child(
+        v_flex()
+          .flex_1()
+          .overflow_hidden()
+          .child(div().truncate().font_semibold().text_size(13).text_color(t.foreground).child(p.title ?? ""))
+          .when(Boolean(p.body), (el) => el.child(div().truncate().text_size(12).text_color(t.muted).child(p.body ?? ""))),
+      );
+  }
+}
