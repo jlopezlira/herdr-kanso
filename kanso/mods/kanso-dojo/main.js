@@ -310,7 +310,7 @@ export default class Dojo extends View {
             .child(stat("Best", best ?? "–")))
           .child(v_flex().gap(2).children(LEVELS.map(levelRow))))
         .child(this.choosing ? this.chooser(t, c, button) : v_flex().flex_1().min_w(0).gap(G.lg)
-          .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, async () => ({ ...dojoShare(this.totals, Date.now(), await this.pal.figure(theme()).catch(() => null)), name: "dojo", title: "hjkl dōjō" }),
+          .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, async () => ({ ...dojoShare(this.totals, Date.now(), await this.pal.figure(theme(), this.share.workDir).catch(() => null)), name: "dojo", title: "hjkl dōjō" }),
             "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
           .child(div().text_size(12.8).line_height(1.5).text_color(c.muted).child(lv.tip))
           .when(Boolean(result), (el) => el.child(result))
