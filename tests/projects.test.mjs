@@ -61,16 +61,18 @@ test("projects are kept in the database: added once, removed without coming back
   await db.migrateProjects([{ name: "agile", folder: "/a/agile", machine: "" }, { name: "fury", folder: "/a/fury", machine: "" }], 1);
   await db.migrateProjects([{ name: "late", folder: "/a/late", machine: "" }], 2);
   assert.deepEqual(clone((await db.projects()).map((p) => p.name)), ["agile", "fury"], "once for every window and start");
-  const again = await db.addProject({ name: "agile", folder: "/a/agile" }, 3);
+  const again = await db.addProject({ name: "other", folder: "/a/agile" }, 3);
   assert.equal(again.existed, true);
+  assert.equal(again.row.name, "agile", "one you keep keeps its name");
   assert.equal((await db.projects()).length, 2, "a place added twice is one project");
   const fury = (await db.projects()).find((p) => p.name === "fury");
   assert.equal(await db.removeProject(fury.id, 4), true);
   assert.deepEqual(clone((await db.projects()).map((p) => p.name)), ["agile"]);
   await db.migrateProjects([{ name: "fury", folder: "/a/fury", machine: "" }], 5);
   assert.deepEqual(clone((await db.projects()).map((p) => p.name)), ["agile"], "removed stays removed");
-  const back = await db.addProject({ name: "fury", folder: "/a/fury" }, 6);
+  const back = await db.addProject({ name: "fury app", folder: "/a/fury" }, 6);
   assert.equal(back.existed, false, "added again by you: it comes back");
+  assert.equal(back.row.name, "fury app", "under the name you give it now");
   assert.equal(back.row.id, fury.id, "the same project, with its own id");
   await assert.rejects(db.relocateProject(fury.id, "/a/agile"), /already a project/);
   const gone = await db.addProject({ name: "gone", folder: "/a/gone" }, 7);
@@ -79,7 +81,7 @@ test("projects are kept in the database: added once, removed without coming back
   assert.equal((await db.projects()).find((p) => p.id === fury.id).folder, "/a/gone", "a removed project does not hold its folder");
   await db.relocateProject(fury.id, "/b/fury");
   await db.setProjectAgent(fury.id, "codex");
-  assert.deepEqual(clone((await db.projects()).map((p) => [p.name, p.folder, p.agent])), [["agile", "/a/agile", null], ["fury", "/b/fury", "codex"]]);
+  assert.deepEqual(clone((await db.projects()).map((p) => [p.name, p.folder, p.agent])), [["agile", "/a/agile", null], ["fury app", "/b/fury", "codex"]]);
 });
 
 test("a worktree is made in Kanso's folder, and a branch that has one already is found there", async (t) => {

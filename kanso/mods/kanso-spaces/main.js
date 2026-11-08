@@ -1022,6 +1022,8 @@ export default class Spaces extends View {
     const installed = this.known.filter((a) => a.installed);
     const last = agentFor(project, this.known);
     const pick = (a) => {
+      if (this.starting) return; // a second click while the first is written starts nothing
+      this.starting = true;
       startIn(place, a?.run ?? null);
       this.thenClose(project && a ? this.kdb.setProjectAgent(project.id, a.key) : null);
     };
