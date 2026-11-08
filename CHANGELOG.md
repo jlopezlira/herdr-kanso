@@ -7,6 +7,9 @@ minor version, anything else is a patch. The format follows
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version`
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
+Technical debt (a change that keeps what you see and do) merges without a
+version of its own, listed under `## [Unreleased]`, and goes out with the next
+release.
 
 ## [3.15.0] - 2026-11-08
 

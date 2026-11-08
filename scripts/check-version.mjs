@@ -16,7 +16,10 @@
 //   4. Every vX.Y.Z tag has its section.
 //   5. When what Kanso installs (mods, themes, layouts, keys.json) changed since
 //      the newest tag, version.json is newer than that tag. Merging to main
-//      then releases it (.github/workflows/release.yml).
+//      then releases it (.github/workflows/release.yml). Or the change is
+//      technical debt, listed under "## [Unreleased]" (first, if at all): it
+//      merges as it is and goes out with the next release, which takes those
+//      entries into its own section.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -26,6 +29,8 @@ export const CHANGELOG = "CHANGELOG.md";
 // What the updater installs; a change here is a release.
 export const INSTALLED = ["kanso/mods", "kanso/themes", "kanso/layouts", "kanso/keys.json"];
 export const CATEGORIES = ["Breaking", "Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"];
+// Technical debt merged without a version of its own: it waits here for the next release.
+export const UNRELEASED = "Unreleased";
 
 export const parse = (v) => {
   const m = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(String(v ?? ""));
@@ -60,6 +65,12 @@ export function parseChangelog(text) {
   const lines = text.split("\n");
   lines.forEach((raw, i) => {
     const line = raw.trimEnd(), at = i + 1;
+    if (line === `## [${UNRELEASED}]`) {
+      if (sections.length) errors.push(`${CHANGELOG}:${at}: "## [${UNRELEASED}]" goes first, above every release`);
+      section = { version: UNRELEASED, date: null, categories: {}, body: [], line: at };
+      sections.push(section); category = null;
+      return;
+    }
     if (line.startsWith("## ")) {
       const m = /^## \[([^\]]+)\] - (\d{4}-\d{2}-\d{2})$/.exec(line);
       if (!m) { errors.push(`${CHANGELOG}:${at}: a version heading reads "## [X.Y.Z] - YYYY-MM-DD", not "${line}"`); section = null; return; }
@@ -123,11 +134,14 @@ export function check({ version, changelog, tags, installedChangedSince }) {
     if (!seen.has(tag)) errors.push(`tag v${tag} has no ${CHANGELOG} section`);
   }
   const latest = tags.filter(parse).sort(compare).at(-1);
+  const waiting = sections.some((s) => s.version === UNRELEASED);
   if (latest && parse(version)) {
     if (compare(version, latest) < 0) errors.push(`${VERSION_FILE} says ${version}, older than the released v${latest}`);
-    else if (compare(version, latest) === 0 && installedChangedSince(latest)) {
-      errors.push(`what Kanso installs changed since v${latest}, but ${VERSION_FILE} still says ${version}: bump it and add its ${CHANGELOG} section, or the updater will never offer this change`);
+    else if (compare(version, latest) === 0 && installedChangedSince(latest) && !waiting) {
+      errors.push(`what Kanso installs changed since v${latest}, but ${VERSION_FILE} still says ${version}: bump it and add its ${CHANGELOG} section, or list it under "## [${UNRELEASED}]" if it is technical debt, or the updater will never offer this change`);
     }
+    // A release takes what waited: nothing is left behind under Unreleased.
+    if (compare(version, latest) > 0 && waiting) errors.push(`${version} is a new release: move the "## [${UNRELEASED}]" entries into its ${CHANGELOG} section`);
   }
   return errors;
 }
