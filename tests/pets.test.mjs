@@ -5,7 +5,7 @@ import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { load, clone, temporary, exec } from "./helpers.mjs";
 
-const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI"];
+const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI", "Companion"];
 const pets = (host = {}) => load("kanso-dojo/pets.js", NAMES, { div: () => null, image: () => null, exec, appHome: () => "/app", home: () => "/home", ...host });
 const exists = (p) => stat(p).then(() => true, () => false);
 
@@ -163,4 +163,19 @@ test("kansō help's dōjō page shows your pet, and every pet to choose from the
   help.render();
   assert.ok(images.includes("data/kanso-dojo/pets/clawd.png"), "your pet, drawn");
   assert.ok(images.includes("data/kanso-dojo/pets/thumbs/clawd.png"), "and in the grid to choose from");
+});
+
+test("a share card carries your pet: Hachi in its squares, a pet's first frame cut from its own atlas", async (t) => {
+  const dir = await temporary(t);
+  const { Companion, petOf, HACHI } = await pets({ appHome: () => dir });
+  const pal = new Companion({ pet: async () => null, setPet: async () => {} });
+  const hachi = await pal.figure({ accent: "#e8728a", chrome: "#161615" }, 160);
+  assert.equal(hachi.width, 160);
+  assert.ok(hachi.svg.includes('fill="#e8963a"') && !hachi.svg.includes("image"), "Hachi is drawn, square by square");
+  await mkdir(join(dir, "data/kanso-dojo/pets"), { recursive: true });
+  await writeFile(join(dir, "data/kanso-dojo/pets/rocky.png"), "png");
+  pal.pets = [HACHI, petOf("rocky", "rocky.png", {})]; pal.id = "rocky";
+  const rocky = await pal.figure({}, 192);
+  assert.equal(rocky.height, 208, "a cell's own proportions");
+  assert.match(rocky.svg, /viewBox="0 0 192 208".*href="data:image\/png;base64,cG5n" width="1536" height="1872"/, "the first cell of the whole atlas, embedded");
 });

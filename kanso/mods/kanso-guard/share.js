@@ -2,7 +2,7 @@
 // Kept byte for byte in kanso-panel/ and kanso-spend/ (`npm run sync:share`): edit kanso-panel/share.js.
 import { div } from "gpui-kit";
 import { h_flex, Button } from "gpui-base";
-import { exec, home, readTextFile, writeTextFile, window, notify, theme, appHome } from "herdr";
+import { exec, home, writeTextFile, window, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
 
 export const NETWORKS = {
@@ -51,13 +51,20 @@ const stack = (y, parts) => parts.reduce((acc, part) => {
   return { y: next.y, out: acc.out.concat(next.out) };
 }, drawn(y));
 
+// `subtitle`: what the card is part of, under its title, for whoever has never heard of it.
 const headerPart = (spec, c) => (from) => {
-  const y = from + 30;
-  return drawn(y, [
+  const y = from + 30, sub = spec.subtitle ? y + 36 : y;
+  return drawn(sub, [
     text(PAD, y, 30, c.text, spec.title, 'font-weight="600"'),
+    ...(spec.subtitle ? [text(PAD, sub, 22, c.muted, spec.subtitle)] : []),
     ...(spec.right ? [text(W - PAD, y, 24, c.muted, spec.right, 'text-anchor="end"')] : []),
   ]);
 };
+
+// `figure` ({ svg, width, height }): a picture at the right of the hero, beside its number.
+const figurePart = (figure) => (from) => (figure?.svg
+  ? drawn(from, [`<g transform="translate(${W - PAD - figure.width} ${from + 24})">${figure.svg}</g>`])
+  : drawn(from));
 
 const heroPart = (hero, c) => (from) => {
   const top = from + 150;
@@ -144,6 +151,7 @@ const blockPart = (b, c) =>
 export function cardSvg(spec, c) {
   const body = stack(PAD, [
     headerPart(spec, c),
+    figurePart(spec.figure),
     heroPart(spec.hero ?? {}, c),
     statsPart(spec.stats ?? [], c),
     notePart(spec.note, c),
@@ -157,7 +165,7 @@ export function cardSvg(spec, c) {
     text(W - PAD, y, 20, c.dim, REPO_URL, 'text-anchor="end"'),
   ];
   const height = y + PAD - 20;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="${esc(FONT)}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="${esc(FONT)}">
 <rect width="${W}" height="${height}" ${paint(c.canvas)}/>
 ${out.join("\n")}
 </svg>
@@ -175,11 +183,13 @@ const exists = async (path) => (await exec("sh", ["-c", 'test -s "$1"', "sh", pa
 const macos = () => window()?.platform === "macos";
 const pause = (seconds) => exec("sleep", [String(seconds)]).catch(() => null);
 
+// The card's files are made anew each time: removed first, then written as new, so nothing is read back
+// (a card with a picture can pass the 1 MiB readTextFile allows).
 export async function renderPng(card, svgPath, pngPath) {
-  await writeTextFile(svgPath, card.svg, await readTextFile(svgPath));
-  await exec("rm", ["-f", pngPath]).catch(() => {});
   const html = svgPath.replace(/\.svg$/, ".html");
-  await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, await readTextFile(html));
+  await exec("rm", ["-f", svgPath, html, pngPath]).catch(() => {});
+  await writeTextFile(svgPath, card.svg, null);
+  await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, null);
   const tries = [
     ...CHROMIUMS.map((bin) => [bin, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--force-device-scale-factor=2",
       `--window-size=${card.width},${card.height}`, `--screenshot=${pngPath}`, `file://${html}`]]),
@@ -237,8 +247,9 @@ export async function outputPath(name) {
   return `${dir}/kanso-${slug(name)}-${day}.png`;
 }
 
+// `make` gives the card's spec, text, name and title, or a promise of them.
 export async function shareImage(network, make, workDir) {
-  const { spec, text: words, name, title } = make();
+  const { spec, text: words, name, title } = await make();
   const card = cardSvg(spec, palette());
   const png = await outputPath(name);
   await exec("mkdir", ["-p", workDir]);

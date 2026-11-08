@@ -18,6 +18,8 @@ export function listKey(e, gAt = 0, now = Date.now()) {
 
 export function moveTo(move, at, n) {
   if (n <= 0) return 0;
+  // Nothing chosen yet (-1): down takes the first, up the last.
+  if (at < 0) return move === "up" || move === "last" ? n - 1 : 0;
   const i = Math.min(Math.max(0, at ?? 0), n - 1);
   if (move === "down") return Math.min(n - 1, i + 1);
   if (move === "up") return Math.max(0, i - 1);

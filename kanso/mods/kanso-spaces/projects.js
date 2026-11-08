@@ -50,12 +50,6 @@ export function parseWorktreeList(out) {
     });
 }
 
-// The agent a project's + starts: the one used there last, else the first installed.
-export function agentFor(project, known) {
-  const installed = known.filter((a) => a.installed);
-  return installed.find((a) => a.key === project?.agent) ?? installed[0] ?? null;
-}
-
 // Makes a worktree in Kanso's folder (or finds the one that branch already has) and prints its path.
 // $1 the project's folder, $2 the branch, $3 the base folder (empty: ~/.kanso/worktrees, for another machine).
 export const ADD_WORKTREE = String.raw`

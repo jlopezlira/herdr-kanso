@@ -48,7 +48,7 @@ const shortcut = (action) => (action ? keys().find((b) => b.action === action)?.
 
 export default class KansoMenu extends View {
   init(_props, cx) {
-    this.at = 0;
+    this.at = -1; // nothing chosen for you: j or the down arrow lights the first
     this.handle = cx.focus_handle();
     this.handle.focus();
   }

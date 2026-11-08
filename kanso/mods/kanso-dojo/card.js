@@ -28,7 +28,8 @@ export function calendar(days, now = Date.now(), weeks = 53) {
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-export function dojoShare(totals, now = Date.now()) {
+// `figure`: your pet, drawn beside the best round (from Companion.figure).
+export function dojoShare(totals, now = Date.now(), figure = null) {
   const best = Object.entries(totals.bests ?? {}).reduce((m, [lv, s]) => (s > m.score ? { level: Number(lv), score: s } : m), { level: null, score: 0 });
   const lv = LEVELS.find((L) => L.n === best.level);
   const streak = dayStreak(totals.days ?? [], now);
@@ -36,6 +37,8 @@ export function dojoShare(totals, now = Date.now()) {
   const since = totals.first ? new Date(totals.first) : null;
   const spec = {
     title: "hjkl dōjō",
+    subtitle: "the vim game inside kansō, a layout for the Herdr terminal",
+    figure,
     right: since ? `since ${MONTHS[since.getMonth()]} ${since.getDate()}` : "",
     hero: {
       big: String(best.score), small: "points",

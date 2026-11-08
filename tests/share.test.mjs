@@ -95,8 +95,9 @@ async function machine(t, { typer = true } = {}) {
   const host = {
     window: () => ({ platform: "linux" }), home: () => dir, appHome: () => dir, theme: () => ({}),
     notify: (n) => notes.push(n),
-    readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
-    writeTextFile: async (p, text) => { await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
+    // A card with a picture passes the 1 MiB Herdr reads: its files are written anew, never read back.
+    readTextFile: async () => { throw new Error("a card is never read back"); },
+    writeTextFile: async (p, text, expected) => { assert.equal(expected, null, "written as a new file"); await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
     exec: async (bin, args) => {
       if (["rm", "test", "mkdir", "sleep"].includes(bin)) return ok;
       if (bin === "sh" && args[1].startsWith("test -s")) { try { return { ...ok, code: (await readFile(args[3])).length ? 0 : 1 }; } catch { return { ...ok, code: 1 }; } }
