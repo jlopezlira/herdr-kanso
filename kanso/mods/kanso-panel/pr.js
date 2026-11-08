@@ -6,7 +6,7 @@ import { exec, knownAgents, notify, run, theme } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
-import { checkState, latestChecks, checkSummary } from "./ghchecks.js";
+import { STATES, checkState, onePerJob, checkSummary } from "./ghchecks.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -46,15 +46,26 @@ function checkOf(c) {
   if (c.__typename === "StatusContext") return { name: c.context, url: c.targetUrl, state };
   return { name: c.name, workflow: c.workflowName && c.workflowName !== c.name ? c.workflowName : "", url: c.detailsUrl, state };
 }
-const checksIn = (rollup) => latestChecks(rollup).map(checkOf);
+const checksIn = (rollup) => onePerJob(rollup).map(checkOf);
 const summaryOf = (checks) => checkSummary(checks.map((x) => x.state));
-// Each state in the panel's words: a row's label and color, and the count's verb.
-const CHECK_WORDS = { fail: ["failed", "red", "failing"], pending: ["running", "yellow", "running"], unknown: ["unknown", "yellow", "unknown"], pass: ["passed", "dim"], skipped: ["skipped", "dim"] };
+// Each state in the panel's words: a row's label and color, and the verb its count takes.
+const CHECK_WORDS = {
+  fail: { label: "failed", color: "red", verb: "failing" },
+  pending: { label: "running", color: "yellow", verb: "running" },
+  unknown: { label: "unknown", color: "yellow", verb: "unknown" },
+  skipped: { label: "skipped", color: "dim", verb: "passed" },
+  pass: { label: "passed", color: "dim", verb: "passed" },
+};
 // What the checks hold against a pull request, as one line; null when they all passed.
 function checksLine(sum, c) {
-  const words = CHECK_WORDS[sum.state], n = sum[sum.state];
-  return words?.[2] ? { text: `${n} check${n > 1 ? "s" : ""} ${words[2]}`, color: c[words[1]] } : null;
+  if (!sum.state || sum.state === "pass") return null;
+  const n = sum[sum.state], words = CHECK_WORDS[sum.state];
+  return { text: `${n} check${n > 1 ? "s" : ""} ${words.verb}`, color: c[words.color] };
 }
+// The counts by verb, worst first: "1 failing · 3 passed" (skipped ones count as passed).
+const checksNote = (sum) => [...new Set(STATES.map((s) => CHECK_WORDS[s].verb))]
+  .map((verb) => ({ verb, n: STATES.filter((s) => CHECK_WORDS[s].verb === verb).reduce((k, s) => k + sum[s], 0) }))
+  .filter(({ n }) => n > 0).map(({ verb, n }) => `${n} ${verb}`).join(" · ");
 
 const FILE_HEAD = /^diff -{2}git a\/.* b\/(.*)$/;
 function splitDiff(text) {
@@ -640,11 +651,9 @@ export class PullRequest {
 
   checksList(c) {
     const checks = this.checks();
-    const sum = summaryOf(checks), passed = sum.pass + sum.skipped;
-    const order = { fail: 0, pending: 1, unknown: 2, pass: 3, skipped: 3 };
-    const sorted = checks.toSorted((a, b) => order[a.state] - order[b.state]);
+    const sorted = checks.toSorted((a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state));
     const open = this.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
-    const note = [sum.fail && `${sum.fail} failing`, sum.pending && `${sum.pending} running`, sum.unknown && `${sum.unknown} unknown`, passed && `${passed} passed`].filter(Boolean).join(" · ");
+    const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
       .child(section(c, "Checks", note))
       .children(shown.map((ch, i) => Button.new(`pr-check-${i}`).w_full().py(7).cursor_pointer()
@@ -655,7 +664,7 @@ export class PullRequest {
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().truncate().text_size(13).text_color(c.text).child(ch.name))
             .when(Boolean(ch.workflow), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(ch.workflow))))
-          .child(div().text_size(12).text_color(c[CHECK_WORDS[ch.state][1]]).child(CHECK_WORDS[ch.state][0])))))
+          .child(div().text_size(12).text_color(c[CHECK_WORDS[ch.state].color]).child(CHECK_WORDS[ch.state].label)))))
       .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded = { ...this.expanded, checks: !open }; cx.notify(); }, c))));
   }
 

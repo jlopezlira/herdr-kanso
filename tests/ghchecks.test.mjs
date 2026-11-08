@@ -59,25 +59,33 @@ test("The counts of each state, and what they say together", async () => {
 const job = (workflowName, name, conclusion, startedAt) => ({ ...run("COMPLETED", conclusion, name), workflowName, startedAt });
 
 test("One job is its kind, workflow and name: a namesake never hides a failure", async () => {
-  const { rollupState, latestChecks } = await load("kanso-panel/ghchecks.js", ["rollupState", "latestChecks"]);
+  const { rollupState, onePerJob } = await load("kanso-panel/ghchecks.js", ["rollupState", "onePerJob"]);
   const twoWorkflows = [job("CI", "test", "SUCCESS"), job("Nightly", "test", "FAILURE")];
-  assert.equal(latestChecks(twoWorkflows).length, 2);
+  assert.equal(onePerJob(twoWorkflows).length, 2);
   assert.equal(rollupState(twoWorkflows), "fail", "two workflows, each with a job called test");
   const kinds = [run("COMPLETED", "SUCCESS", "deploy"), commit("FAILURE", "deploy")];
-  assert.equal(latestChecks(kinds).length, 2);
+  assert.equal(onePerJob(kinds).length, 2);
   assert.equal(rollupState(kinds), "fail", "a check run and a commit status with the same name");
   assert.equal(rollupState([job("CI", "lint", "SUCCESS"), job("Other", "lint", "SOMETHING_NEW")]), "unknown", "an unknown is not hidden by a successful namesake");
   const viaSuite = (workflow, conclusion) => ({ ...run("COMPLETED", conclusion, "test"), checkSuite: { workflowRun: { workflow: { name: workflow } } } });
   assert.equal(rollupState([viaSuite("CI", "SUCCESS"), viaSuite("Nightly", "FAILURE")]), "fail", "the workflow from its check suite");
 });
 
-test("A rerun of the same job replaces the run before it", async () => {
-  const { rollupState, latestChecks } = await load("kanso-panel/ghchecks.js", ["rollupState", "latestChecks"]);
-  const rerun = [job("CI", "test", "FAILURE", "2026-11-08T10:00:00Z"), job("CI", "test", "SUCCESS", "2026-11-08T11:00:00Z")];
-  assert.equal(rollupState(rerun), "pass", "the later run counts");
-  assert.equal(rollupState(rerun.toReversed()), "pass", "whatever the order listed");
-  assert.equal(latestChecks([job("CI", "test", "SUCCESS"), job("CI", "test", "FAILURE")]).length, 1, "started together: the first listed");
-  assert.equal(latestChecks([run("COMPLETED", "SUCCESS"), run("COMPLETED", "FAILURE")]).length, 2, "nameless ones are all kept");
+test("Of the same key the worst is kept, whatever the times say", async () => {
+  const { rollupState, onePerJob, checkState } = await load("kanso-panel/ghchecks.js", ["rollupState", "onePerJob", "checkState"]);
+  // Two workflow files both named CI, each with a job called test: one key, two jobs.
+  const sameName = [job("CI", "test", "FAILURE", "2026-11-08T10:00:00Z"), job("CI", "test", "SUCCESS", "2026-11-08T11:00:00Z")];
+  assert.equal(rollupState(sameName), "fail", "a later success never hides an independent failure");
+  assert.equal(rollupState(sameName.toReversed()), "fail", "whatever the order listed");
+  const apps = [job("", "test", "SUCCESS"), job("", "test", "FAILURE")];
+  assert.equal(rollupState(apps), "fail", "two apps both reporting test, no workflow");
+  // gh exports a queued run's missing start as the zero time.
+  const queued = [job("CI", "test", "SUCCESS", "2026-11-08T10:00:00Z"), { ...run("QUEUED", "", "test"), workflowName: "CI", startedAt: "0001-01-01T00:00:00Z" }];
+  assert.equal(rollupState(queued), "pending", "a queued rerun is not hidden by the old success");
+  assert.equal(checkState(onePerJob(queued)[0]), "pending");
+  assert.equal(rollupState([job("CI", "test", "SUCCESS"), job("CI", "test", "SOMETHING_NEW")]), "unknown");
+  assert.equal(onePerJob([job("CI", "test", "SUCCESS"), job("CI", "test", "SUCCESS")]).length, 1, "equals: the first listed");
+  assert.equal(onePerJob([run("COMPLETED", "SUCCESS"), run("COMPLETED", "FAILURE")]).length, 2, "nameless ones are all kept");
 });
 
 test("The header's digest and the PR panel agree on the same checks", async () => {
@@ -103,6 +111,7 @@ test("The header's digest and the PR panel agree on the same checks", async () =
     [run("COMPLETED", "SUCCESS", "deploy"), commit("PENDING", "deploy")],
     [job("CI", "test", "FAILURE", "2026-11-08T10:00:00Z"), job("CI", "test", "SUCCESS", "2026-11-08T11:00:00Z")],
     [run("COMPLETED", "SKIPPED", "a"), run("COMPLETED", "NEUTRAL", "b")],
+    [job("CI", "test", "SUCCESS", "2026-11-08T10:00:00Z"), { ...run("QUEUED", "", "test"), workflowName: "CI", startedAt: "0001-01-01T00:00:00Z" }],
   ];
   for (const rollup of cases) assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
 });

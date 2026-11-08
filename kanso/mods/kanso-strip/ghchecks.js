@@ -24,30 +24,32 @@ export function checkState(c) {
   return conclusion ? valueState(conclusion) : "unknown";
 }
 
-// One job is its kind, workflow and name: two workflows may each have a `test`,
-// and a commit status may share a check run's name; none of them hides another.
+// The states, worst first: what a pull request's checks say together, and the order to list them in.
+export const STATES = ["fail", "pending", "unknown", "skipped", "pass"];
+const rank = (s) => STATES.indexOf(s);
+
+// A job is its kind, workflow and name. Neither that nor gh's times tell a rerun
+// from an independent namesake (two workflow files both called CI, two apps both
+// reporting `test`; a queued rerun has no start time), so of the same key the
+// worst is kept: a duplicate never turns a failure, a rerun or an unknown into a pass.
 const nameOf = (c) => (isStatus(c) ? c.context : c.name) ?? null;
 const workflowOf = (c) => c.workflowName ?? c.checkSuite?.workflowRun?.workflow?.name ?? "";
 const keyOf = (c) => (c && typeof c === "object" && nameOf(c) != null ? JSON.stringify([isStatus(c) ? "status" : "run", workflowOf(c), nameOf(c)]) : null);
-const startOf = (c) => String(c.startedAt ?? c.createdAt ?? "");
 
-// Each job's latest run (the first listed when they started together): a rerun
-// replaces the run before it. Checks without a name are all kept.
-export function latestChecks(rollup) {
+// One check per job, the worst of it (the first listed of equals). Checks without a name are all kept.
+export function onePerJob(rollup) {
   const list = Array.isArray(rollup) ? rollup : [];
-  const keys = list.map(keyOf);
-  const newer = (x, j, c, i) => startOf(x) > startOf(c) || (startOf(x) === startOf(c) && j < i);
-  return list.filter((c, i) => keys[i] === null || !list.some((x, j) => j !== i && keys[j] === keys[i] && newer(x, j, c, i)));
+  const keys = list.map(keyOf), ranks = list.map((c) => rank(checkState(c)));
+  const beats = (j, i) => ranks[j] < ranks[i] || (ranks[j] === ranks[i] && j < i);
+  return list.filter((_c, i) => keys[i] === null || !list.some((_x, j) => j !== i && keys[j] === keys[i] && beats(j, i)));
 }
 
-// The count of each state, and what they say together: null with none; any
-// failure wins, then one still running, then one unknown; "pass" only when every
-// check passed or was skipped.
-const RANK = ["fail", "pending", "unknown"];
+// The count of each state, and what they say together: null with none, else the
+// worst there is; "pass" only when every check passed or was skipped.
 export function checkSummary(states) {
-  const zero = { fail: 0, pending: 0, unknown: 0, pass: 0, skipped: 0 };
-  const n = states.reduce((acc, s) => ({ ...acc, [s]: acc[s] + 1 }), zero);
-  return { ...n, total: states.length, state: states.length ? RANK.find((s) => n[s] > 0) ?? "pass" : null };
+  const n = states.reduce((acc, s) => ({ ...acc, [s]: acc[s] + 1 }), Object.fromEntries(STATES.map((s) => [s, 0])));
+  const worst = STATES.find((s) => n[s] > 0) ?? null;
+  return { ...n, total: states.length, state: worst === "skipped" ? "pass" : worst };
 }
 
-export const rollupState = (rollup) => checkSummary(latestChecks(rollup).map(checkState)).state;
+export const rollupState = (rollup) => checkSummary(onePerJob(rollup).map(checkState)).state;
