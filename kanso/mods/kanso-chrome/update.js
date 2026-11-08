@@ -17,6 +17,9 @@ const EVERY = 4 * 60 * 1000;
 // buttons show: the install lock (HOLD) is what keeps two installs apart, and it never expires.
 const LOOK_MS = 60 * 1000;
 const SHOWN_MS = 15 * 60 * 1000;
+// Preparing (the keys and layout, read before the install starts) takes seconds; a mark still
+// preparing after this lost its copy before it started anything.
+const PREPARE_MS = 2 * 60 * 1000;
 // Under Herdr's home: the lock, and per install its staging folder, pid, log and outcome.
 const UPDATES = ".kanso-updates";
 // The footer is its account chip and a 34px row (and its gap) for each of Update, Settings and
@@ -103,45 +106,85 @@ export const HOLD = `hold() {
 }
 `;
 
-// restore STAGE: undo a swap that started and did not finish, from STAGE's backups: the mods it
-// moved in (listed in STAGE/in) out, every mod it moved aside (STAGE/old/mods) back, and the keys
-// and layout as they were. Backups stay where they are if one cannot be put back.
-const RESTORE = `restore() {
-  back=0
-  if [ -f "$1/in" ]; then
-    while IFS= read -r name; do if [ -n "$name" ]; then chmod -R u+w "$home/mods/$name" 2>/dev/null; rm -rf "$home/mods/$name"; fi; done < "$1/in"
-  fi
-  for kept in "$1/old/mods"/*/; do
-    [ -d "$kept" ] || continue
-    name=$(basename "$kept")
-    rm -rf "$home/mods/$name"
-    mv "$1/old/mods/$name" "$home/mods/$name" || back=1
+// The swap, as a journal that can be replayed from any point. <stage>/slots lists each thing the
+// install replaces, one per line ("<had> <slot>": had 1 when you had one before), kanso-chrome
+// last so its version.json changes only once every other mod is in. A slot is three paths: L where
+// it lives, B the one you had (moved aside), S the release's. Every step looks at the disk, makes
+// one rename or none, and deletes nothing, so each copy is always in exactly one place and running
+// a step twice does nothing more. Forward: every L aside to B, then every S to L, then the
+// `committed` mark. Back, in reverse: L to S where the release's is in place, then B to L.
+// `step` counts renames; KANSO_UPDATE_STOP=<n> kills the process after the n-th (the tests).
+const JOURNAL = `step() { n=$((n + 1)); if [ "$n" = "\${KANSO_UPDATE_STOP:-0}" ]; then kill -9 $$; fi; }
+slot() {
+  case $1 in
+    keys) L="$home/keys.json"; B="$st/old/keys.json"; S="$st/keys.json" ;;
+    layout) L="$home/layouts/kanso.json"; B="$st/old/kanso.json"; S="$st/kanso.json" ;;
+    *) L="$home/mods/$1"; B="$st/old/mods/$1"; S="$st/src/kanso/mods/$1" ;;
+  esac
+}
+aside() { slot "$2"; if [ "$1" = 1 ] && [ -e "$S" ] && [ -e "$L" ] && [ ! -e "$B" ]; then mv "$L" "$B" || return 1; step; fi; }
+bring() { slot "$2"; if [ -e "$S" ] && [ ! -e "$L" ]; then mv "$S" "$L" || { echo "could not put $2 in place" >&2; return 1; }; step; fi; }
+undo() {
+  slot "$2"
+  if [ ! -e "$S" ] && [ -e "$L" ]; then mv "$L" "$S" || return 1; step; fi
+  if [ "$1" = 1 ] && [ -e "$B" ] && [ ! -e "$L" ]; then mv "$B" "$L" || return 1; step; fi
+}
+forward() {
+  while read -r had name; do aside "$had" "$name" || return 1; done < "$st/slots"
+  while read -r had name; do bring "$had" "$name" || return 1; done < "$st/slots"
+}
+backward() {
+  sed '1!G;h;$!d' "$st/slots" > "$st/slots.back" || return 1
+  bad=0
+  while read -r had name; do undo "$had" "$name" || bad=1; done < "$st/slots.back"
+  return "$bad"
+}
+restored() {
+  while read -r had name; do
+    slot "$name"; [ -e "$S" ] || return 1
+    if [ "$had" = 1 ]; then [ -e "$L" ] && [ ! -e "$B" ] || return 1; fi
+  done < "$st/slots"
+}
+# Committed: what is left is copies (themes, the layout you had as kanso.json.old-<time>), then the
+# backups go.
+done_new() {
+  if [ -f "$st/old/kanso.json" ]; then cp "$st/old/kanso.json" "$home/layouts/kanso.json.old-$(cat "$st/stamp")" || return 1; fi
+  cp "$st/src/kanso"/themes/*.json "$home/themes/" && cp "$st/src/kanso/layouts/kanso.png" "$home/layouts/kanso.png" || return 1
+  chmod -R u+w "$st" 2>/dev/null; rm -rf "$st"
+}
+# Ends the stage $st either way: committed, it finishes; otherwise it is undone, and removed only
+# once every slot is back as it was (what it holds then is the release's copies alone).
+settle() {
+  if [ ! -f "$st/slots" ]; then chmod -R u+w "$st" 2>/dev/null; rm -rf "$st"; return 0; fi
+  if [ -f "$st/committed" ]; then done_new; return; fi
+  backward
+  if restored; then chmod -R u+w "$st" 2>/dev/null; rm -rf "$st"; return 0; fi
+  return 1
+}
+# A stage lives only while its install holds the lock, so under the lock any other is a dead one's.
+recover() {
+  for left in "$dir"/*/; do
+    st=\${left%/}
+    [ -d "$st" ] && [ "$st" != "$stage" ] || continue
+    settle || { echo "an update that stopped could not be undone; its files are in $st" >&2; return 1; }
   done
-  if [ -f "$1/old/keys.json" ]; then mv -f "$1/old/keys.json" "$home/keys.json" || back=1; fi
-  if [ -f "$1/old/kanso.json" ]; then mv -f "$1/old/kanso.json" "$home/layouts/kanso.json" || back=1; fi
-  if [ "$back" = 0 ]; then rm -f "$1/swapping"; fi
-  return "$back"
 }
 `;
 
 // The whole install, one detached process (LAUNCH): neither exec's 30 s limit nor a mod reload
-// reaches it, and the lock is its own from before the download to the last mod swapped. Its
-// outcome goes to <id>.status, one write, after the swap has finished or been undone: ok, busy
-// (another install holds the lock), already (one put a newer version in place) or error, then
-// the reason. The swap moves every mod aside before moving any new one in, so a failure, or a
-// kill the trap never sees (undone by the next install), puts back all of them.
+// reaches it, and the lock is its own from before the download to the end of the swap. Its
+// outcome goes to <id>.status, one write, once the swap is committed or undone: ok, busy (another
+// install holds the lock), already (one put a newer version in place) or error, then the reason.
 export const INSTALL_SCRIPT = `set -eu
 ${HOLD}
-${RESTORE}
+${JOURNAL}
 url="$1"; home="$2"; dir="$3"; id="$4"; want="$5"; from="$6"; checker="$7"; stamp="$8"; shift 8
-keys="$1"; layout="$2"; stage="$dir/$id"
+keys="$1"; layout="$2"; stage="$dir/$id"; n=0
 say() { printf '%s\\n%s\\n' "$1" "$2" > "$dir/$id.status.part" && mv -f "$dir/$id.status.part" "$dir/$id.status"; }
 finish() {
   code=$?; set +e; trap - EXIT
   why=$(tail -n 1 "$dir/$id.log" 2>/dev/null)
-  if [ -f "$stage/swapping" ] && ! restore "$stage"; then
-    why="$why; some of the mods you had are still in $stage/old"
-  elif [ -d "$stage" ]; then chmod -R u+w "$stage" 2>/dev/null; rm -rf "$stage"; fi
+  if [ -d "$stage" ]; then st=$stage; settle || why="$why; what you had is in $stage/old"; fi
   case $code in 0) say ok "" ;; 75) say busy "" ;; 4) say already "$why" ;; *) say error "\${why:-the update failed}" ;; esac
 }
 trap finish EXIT
@@ -149,13 +192,7 @@ trap 'exit 1' HUP INT TERM
 taken=0; hold "$dir/lock" || taken=$?
 [ "$taken" = 0 ] || { [ "$taken" = 75 ] || echo "the update lock could not be taken" >&2; exit "$taken"; }
 say running download
-# A staging folder lives only while its install holds the lock: any other is a dead one's, and
-# one that died mid-swap is undone first.
-for left in "$dir"/*/; do
-  left=\${left%/}
-  [ -d "$left" ] && [ "$left" != "$stage" ] || continue
-  if [ ! -f "$left/swapping" ] || restore "$left"; then chmod -R u+w "$left" 2>/dev/null; rm -rf "$left"; fi
-done
+recover
 find "$dir" -maxdepth 1 -type f -mtime +1 ! -name lock ! -name "$id.*" -exec rm -f {} + 2>/dev/null || true
 version() { sed -n 's/.*"version"[^"]*"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null || true; }
 have=$(version "$home/mods/kanso-chrome/version.json")
@@ -175,31 +212,33 @@ done
 if [ -n "$keys" ]; then printf '%s\\n' "$keys" > "$stage/keys.json"; fi
 if [ "$layout" = 1 ]; then cp "$src/layouts/kanso.json" "$stage/kanso.json"; fi
 mkdir -p "$stage/old/mods" "$home/mods" "$home/themes" "$home/layouts"
+printf '%s\\n' "$stamp" > "$stage/stamp"
+had() { if [ -e "$1" ]; then echo 1; else echo 0; fi; }
+{
+  if [ -f "$stage/keys.json" ]; then echo "$(had "$home/keys.json") keys"; fi
+  if [ -f "$stage/kanso.json" ]; then echo "$(had "$home/layouts/kanso.json") layout"; fi
+  for new in "$src/mods"/*/; do name=$(basename "$new"); if [ "$name" != kanso-chrome ]; then echo "$(had "$home/mods/$name") $name"; fi; done
+  if [ -d "$src/mods/kanso-chrome" ]; then echo "$(had "$home/mods/kanso-chrome") kanso-chrome"; fi
+} > "$stage/slots.part"
 say running swap
-: > "$stage/swapping"
-if [ -f "$stage/keys.json" ]; then
-  if [ -f "$home/keys.json" ]; then cp "$home/keys.json" "$stage/old/keys.json"; fi
-  mv "$stage/keys.json" "$home/keys.json"
-fi
-if [ -f "$stage/kanso.json" ]; then
-  if [ -f "$home/layouts/kanso.json" ]; then
-    cp "$home/layouts/kanso.json" "$stage/old/kanso.json"
-    cp "$home/layouts/kanso.json" "$home/layouts/kanso.json.old-$stamp"
-  fi
-  mv "$stage/kanso.json" "$home/layouts/kanso.json"
-fi
-cp "$src"/themes/*.json "$home/themes/"
-cp "$src/layouts/kanso.png" "$home/layouts/kanso.png"
-for new in "$src/mods"/*/; do
-  name=$(basename "$new")
-  if [ -e "$home/mods/$name" ]; then mv "$home/mods/$name" "$stage/old/mods/$name"; fi
-done
-for new in "$src/mods"/*/; do
-  name=$(basename "$new")
-  echo "$name" >> "$stage/in"
-  mv "$src/mods/$name" "$home/mods/$name" || { echo "could not put $name in place" >&2; exit 1; }
-done
-rm -f "$stage/swapping"
+mv "$stage/slots.part" "$stage/slots"
+st=$stage
+forward
+: > "$stage/committed"
+step
+done_new
+`;
+
+// Recovery on its own, for any copy that starts: under the lock (an install that holds it is alive
+// and finishes its own), every stage left by a dead install is finished or undone (JOURNAL).
+export const RECOVER = `set -u
+${HOLD}
+${JOURNAL}
+home="$1"; dir="$2"; n=0; stage=
+ls "$dir"/*/slots >/dev/null 2>&1 || exit 0
+taken=0; hold "$dir/lock" || taken=$?
+[ "$taken" = 0 ] || exit "$taken"
+recover
 `;
 
 // Starts INSTALL_SCRIPT in its own session, its output to <id>.log, and returns at once with
@@ -258,6 +297,8 @@ export class Updater {
   start(cx, { polls = true } = {}) {
     const polling = () => polls && this.autoCheckEnabled();
     cx.spawn(async (cx) => {
+      // Before the version is read: a swap a dead install left half done is finished or undone.
+      await this.recover();
       await this.readInstalled();
       this.finished();
       // The tab bar copy picks up an install a replaced copy started; it reports the outcome.
@@ -336,7 +377,7 @@ export class Updater {
     const id = opId();
     this.working = true;
     this.error = null;
-    this.mark(id, { version: v, notes: "", at: Date.now() });
+    this.mark(id, { version: v, notes: "", at: Date.now(), phase: "preparing" });
     cx.notify();
     const home = appHome(), dir = `${home}/${UPDATES}`;
     const started = await tryOrAsync(async () => {
@@ -347,14 +388,24 @@ export class Updater {
     });
     this.working = false;
     if (started?.code !== 0) {
+      const mark = this.installs()[id];
       this.unmark(id);
-      return this.report(cx, "error", lastLine(started, "the update could not start"));
+      return this.report(cx, "error", lastLine(started, "the update could not start"), mark);
     }
+    this.mark(id, { phase: "started", at: Date.now() });
     return this.follow(cx, id);
   }
 
-  // Reads <id>.status every few seconds until it says how the install ended; an install whose
-  // process is gone without saying (killed outright) ended in error, its swap undone by the next.
+  async recover() {
+    const home = appHome();
+    await tryOrAsync(() => exec("sh", ["-c", RECOVER, "sh", home, `${home}/${UPDATES}`]));
+  }
+
+  // Reads <id>.status every few seconds until it says how the install ended. While the install is
+  // still being prepared (no process yet) it waits; one whose copy went away before starting it is
+  // dropped once its mark has expired. A process gone without saying (killed outright) is settled
+  // by recovery, and the version then in place says how it ended. The follower that claims the
+  // pid file (a rename: one wins) is the one that reports.
   async follow(cx, id) {
     if (this.following[id]) return;
     this.following = { ...this.following, [id]: true };
@@ -363,32 +414,44 @@ export class Updater {
       const [state, why] = String(await readTextFile(`${dir}/${id}.status`) ?? "running").split("\n");
       return { state, why: why ?? "" };
     };
+    const pause = () => tryOrAsync(() => exec("sleep", [String(this.pauseS)]));
     const end = async () => {
       for (;;) {
-        if (!this.installs()[id]) return null;
+        const mark = this.installs()[id];
+        if (!mark) return null;
+        if (mark.phase === "preparing") {
+          if (!fresh(mark, PREPARE_MS)) { this.unmark(id); return null; }
+          await pause();
+          continue;
+        }
         const now = await read();
         if (now.state !== "running") return now;
         const alive = await tryOrAsync(() => exec("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", `${dir}/${id}.pid`]));
         if (alive?.code !== 0) {
           const last = await read(); // it may have said so just before it ended
-          return last.state !== "running" ? last : { state: "error", why: "the update stopped before it finished" };
+          if (last.state !== "running") return last;
+          await this.recover();
+          await this.readInstalled();
+          return this.installed === mark.version ? { state: "ok", why: "" } : { state: "error", why: "the update stopped before it finished; what you had is back" };
         }
-        await tryOrAsync(() => exec("sleep", [String(this.pauseS)]));
+        await pause();
       }
     };
     const outcome = await end();
     this.following = Object.fromEntries(Object.entries(this.following).filter(([k]) => k !== id));
     const mark = this.installs()[id];
-    if (!outcome || !mark) return; // another copy reported it
+    if (!outcome || !mark) return;
+    const claimed = await tryOrAsync(() => exec("mv", [`${dir}/${id}.pid`, `${dir}/${id}.reported`]));
+    if (claimed?.code !== 0) return; // another copy reports it
     this.unmark(id);
-    await tryOrAsync(() => exec("rm", ["-f", `${dir}/${id}.status`, `${dir}/${id}.pid`, `${dir}/${id}.log`]));
+    await tryOrAsync(() => exec("rm", ["-f", `${dir}/${id}.status`, `${dir}/${id}.reported`, `${dir}/${id}.log`]));
     return this.report(cx, outcome.state, outcome.why, mark);
   }
 
   async report(cx, state, why, mark = {}) {
     await this.readInstalled();
     const told = state === "busy" || state === "already" ? this.elsewhere() : undefined;
-    if (state === "ok") notify({ title: `kansō updated to ${mark.version}`, body: mark.notes || undefined, level: "success" });
+    if (state === "ok" && mark.version) notify({ title: `kansō updated to ${mark.version}`, body: mark.notes || undefined, level: "success" });
     if (state === "error") {
       this.error = why || "the update failed";
       notify({ title: "kansō was not updated", body: this.error, level: "error" });

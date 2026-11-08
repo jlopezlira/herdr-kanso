@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { spawn } from "node:child_process";
-import { cp, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { load, context, exec, temporary, clone } from "./helpers.mjs";
 
-const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD"];
+const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER"];
 const repo = new URL("../kanso/", import.meta.url);
 
 async function updater(host) {
@@ -108,7 +108,10 @@ async function fixture(t, { layoutChanged = true } = {}) {
   const window = async () => {
     const store = {}, toasts = [], resizes = [];
     const footer = { id: "sidebar-footer", size: { px: 156 } };
-    const ctl = { abandon: false, stuck: 0, limit: 30000 };
+    // holdCurl: the plan's downloads wait for release(), keeping an install in preparation.
+    const gate = {};
+    gate.promise = new Promise((resolve) => { gate.open = resolve; });
+    const ctl = { abandon: false, stuck: 0, limit: 30000, holdCurl: false, held: 0, release: () => gate.open() };
     const host = {
       layout: () => ({ id: "root", children: [{ id: "sidebar", children: [footer] }] }),
       run: (name, args) => { resizes.push(args.px); footer.size = { px: args.px }; return null; },
@@ -121,6 +124,7 @@ async function fixture(t, { layoutChanged = true } = {}) {
       exec: async (command, args, options) => {
         if (command === "git") return { code: 0, stdout: "x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n", stderr: "" };
         if (ctl.abandon && command === "sleep") { ctl.stuck += 1; return new Promise(() => {}); }
+        if (ctl.holdCurl && command === "curl") { ctl.held += 1; await gate.promise; }
         return exec(command, args, { ...options, limit: ctl.limit });
       },
     };
@@ -388,26 +392,152 @@ test("A swap that fails on its last mod puts back every one before it: the old v
   assert.equal(f.updater.available(), "1.1.0", "and the update is offered again");
 });
 
-test("A swap killed outright, which no trap sees, is undone by the next install before it starts", async (t) => {
+// A small release (three mods, a theme, the layout) and a home with two of them, for running
+// INSTALL_SCRIPT itself many times.
+async function small(t) {
+  const root = await temporary(t);
+  const site = join(root, "site"), base = join(root, "base");
+  const mod = async (dir, name, v) => {
+    await mkdir(join(dir, name, "icons"), { recursive: true });
+    await writeFile(join(dir, name, "version.json"), `{ "version": "${v}" }\n`);
+    await writeFile(join(dir, name, "main.js"), `// ${name} ${v}\n`);
+    await writeFile(join(dir, name, "icons/a.svg"), `<svg>${name} ${v}</svg>\n`);
+  };
+  const top = join(site, "build/herdr-kanso-1.1.0/kanso");
+  for (const name of ["kanso-chrome", "kanso-tabs", "open-with"]) await mod(join(top, "mods"), name, "1.1.0");
+  await mkdir(join(top, "themes"), { recursive: true });
+  await writeFile(join(top, "themes/kanso-day.json"), '{"theme":"1.1.0"}\n');
+  await mkdir(join(top, "layouts"), { recursive: true });
+  await writeFile(join(top, "layouts/kanso.json"), '{"root":{"id":"1.1.0"}}\n');
+  await writeFile(join(top, "layouts/kanso.png"), "png 1.1.0\n");
+  const made = await exec("tar", ["-czf", join(site, "v1.1.0.tar.gz"), "-C", join(site, "build"), "herdr-kanso-1.1.0"]);
+  assert.equal(made.code, 0, made.stderr);
+  for (const name of ["kanso-chrome", "kanso-tabs"]) await mod(join(base, "mods"), name, "1.0.0");
+  await mkdir(join(base, "mods/token-spend"), { recursive: true });
+  await writeFile(join(base, "mods/token-spend/main.js"), "// someone else's\n");
+  await mkdir(join(base, "themes"), { recursive: true });
+  await writeFile(join(base, "themes/kanso-day.json"), '{"theme":"1.0.0"}\n');
+  await mkdir(join(base, "layouts"), { recursive: true });
+  await writeFile(join(base, "layouts/kanso.json"), '{"root":{"id":"yours"}}\n');
+  await writeFile(join(base, "layouts/kanso.png"), "png 1.0.0\n");
+  await writeFile(join(base, "keys.json"), '{"yours":true}\n');
+  const checker = join(root, "check.sh");
+  await writeFile(checker, `if [ -f "${root}/sabotage" ] && [ "$(basename "$2")" = open-with ]; then chmod 555 "$2"; fi\n`, { mode: 0o755 });
+  return { root, base, checker, url: pathToFileURL(join(site, "v1.1.0.tar.gz")).href };
+}
+
+// Every file under a home, by path, with its content; .kanso-updates aside.
+async function tree(dir, at = "") {
+  const entries = await readdir(join(dir, at), { withFileTypes: true }).catch(() => []);
+  const parts = await Promise.all(entries.filter((e) => !(at === "" && e.name === ".kanso-updates")).map(async (e) => {
+    const path = at ? `${at}/${e.name}` : e.name;
+    return e.isDirectory() ? tree(dir, path) : { [path]: await readFile(join(dir, path), "utf8") };
+  }));
+  return Object.assign({}, ...parts);
+}
+
+test("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one; a second recovery changes nothing", async (t) => {
+  const s = await small(t);
+  const { INSTALL_SCRIPT, RECOVER } = await updater();
+  const run = async (home, stop) => {
+    const dir = join(home, ".kanso-updates");
+    await mkdir(dir, { recursive: true }); // as LAUNCH makes it
+    return new Promise((resolve) => execFile("sh", ["-c", INSTALL_SCRIPT, "sh", s.url, home, dir, "op", "1.1.0", "1.0.0", s.checker, "20261108-1200", '{"merged":true}', "1"],
+      { env: { ...process.env, KANSO_UPDATE_STOP: String(stop) } }, (error, _out, err) => resolve(error?.signal === "SIGKILL" ? "killed" : error ? `failed: ${err.trim().split("\n").at(-1)}` : "ok")));
+  };
+  const recover = (home) => exec("sh", ["-c", RECOVER, "sh", home, join(home, ".kanso-updates")]);
+  const fresh = async (name) => { const home = join(s.root, name); await cp(s.base, home, { recursive: true }); return home; };
+  const before = await tree(s.base);
+  const whole = await fresh("whole");
+  assert.equal(await run(whole, 0), "ok");
+  const after = await tree(whole);
+  assert.equal(after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
+  assert.equal(after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
+
+  const sweep = async (sabotage) => {
+    const kills = [];
+    for (const stop of Array.from({ length: 40 }, (_, i) => i + 1)) {
+      const home = await fresh(`${sabotage ? "s" : "k"}${stop}`);
+      if (sabotage) await writeFile(join(s.root, "sabotage"), "");
+      const how = await run(home, stop);
+      await rm(join(s.root, "sabotage"), { force: true });
+      if (how !== "killed") {
+        if (sabotage) assert.match(how, /could not put open-with in place/); else assert.equal(how, "ok");
+        return { kills, last: await tree(home) };
+      }
+      assert.equal((await recover(home)).code, 0, `recovery after step ${stop}`);
+      const once = await tree(home);
+      const end = JSON.stringify(once) === JSON.stringify(before) ? "old" : JSON.stringify(once) === JSON.stringify(after) ? "new" : null;
+      assert.ok(end, `after step ${stop}${sabotage ? " (undoing)" : ""}, recovery left neither install whole`);
+      kills.push(end);
+      assert.equal((await recover(home)).code, 0);
+      assert.deepEqual(await tree(home), once, `a second recovery after step ${stop} changed something`);
+      assert.deepEqual((await readdir(join(home, ".kanso-updates"), { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name), [], "nothing staged left");
+    }
+    assert.fail("more steps than expected");
+  };
+  // Forward: 4 aside (keys, layout, kanso-tabs, kanso-chrome), 5 in, the commit. Killed before the
+  // commit it is undone; after, finished.
+  const forward = await sweep(false);
+  assert.deepEqual(forward.kills, [...Array(9).fill("old"), "new"]);
+  assert.deepEqual(forward.last, after);
+  // open-with cannot go in: 4 aside and 3 in, then the undoing's 7 renames, each a place to die.
+  const back = await sweep(true);
+  assert.deepEqual(back.kills, Array(14).fill("old"));
+  assert.deepEqual(back.last, before, "a failed swap undone in full");
+});
+
+test("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
   f.updater.start(cx); await drain();
-  // What a SIGKILL mid-swap leaves: kanso-chrome aside in its backups, half of the new one in place.
-  const dead = join(updates(f.home), "dead");
-  await mkdir(join(dead, "old/mods"), { recursive: true });
-  await rename(join(f.home, "mods/kanso-chrome"), join(dead, "old/mods/kanso-chrome"));
-  await mkdir(join(f.home, "mods/kanso-chrome"));
-  await writeFile(join(f.home, "mods/kanso-chrome/version.json"), '{ "version": "1.1.0" }\n');
-  await writeFile(join(dead, "in"), "kanso-chrome\n");
-  await writeFile(join(dead, "swapping"), "");
-  await f.updater.install(cx);
-  assert.equal(f.updater.error, null, f.updater.error);
-  assert.equal(told(f.toasts).length, 0, "put back first, so the version it found was the one it started from");
-  assert.equal(await version(f.home), "1.1.0");
-  assert.equal(await readFile(join(f.home, "mods/kanso-chrome/main.js"), "utf8"),
-    await readFile(new URL("mods/kanso-chrome/main.js", repo), "utf8"));
+  // Killed right after the new kanso-chrome went in (its version.json says 1.1.0), before the commit.
+  const mods = (await readdir(new URL("mods/", repo))).length;
+  process.env.KANSO_UPDATE_STOP = String(3 + 2 + mods);
+  t.after(() => { delete process.env.KANSO_UPDATE_STOP; });
+  await f.flag("slow");
+  f.ctl.abandon = true;
+  f.updater.install(cx); // this copy is replaced by the swap
+  await until(async () => f.ctl.stuck > 0);
+  f.ctl.abandon = false;
+  const pid = join(updates(f.home), `${pending(f)[0]}.pid`);
+  await f.flag("go");
+  await until(async () => (await exec("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", pid])).code !== 0);
+  delete process.env.KANSO_UPDATE_STOP;
+  assert.equal(await version(f.home), "1.1.0", "it died with the new kanso-chrome in place");
+  const fresh = new f.Updater(f.source);
+  fresh.start(cx);
+  await until(async () => pending(f).length === 0);
+  await drain();
+  assert.equal(await version(f.home), "1.0.0", "undone, not left half new");
+  assert.equal(await readFile(join(f.home, "mods/kanso-chrome/main.js"), "utf8"), "// 1.0.0\n");
+  assert.equal(fresh.available(), "1.1.0", "so the update is offered again");
+  assert.equal(f.toasts.filter((n) => n.level === "error").length, 1, "and the one that died is told as such");
+  assert.equal(updated(f.toasts).length, 0);
   assert.deepEqual(await staged(f.home), []);
+});
+
+test("A copy started while another prepares its install waits for it, and the outcome is told once, with its version", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+  f.ctl.holdCurl = true; // the keys and layout downloads wait
+  const first = f.updater.install(cx);
+  await until(async () => pending(f).length === 1 && f.ctl.held > 0);
+  const fresh = new f.Updater(f.source);
+  fresh.start(cx);
+  await new Promise((r) => setTimeout(r, 300)); // it looks a few times meanwhile
+  assert.equal(pending(f).length, 1, "a mark still preparing is no dead install");
+  f.ctl.release();
+  await first;
+  await until(async () => pending(f).length === 0);
+  await drain();
+  assert.equal(updated(f.toasts).length, 1, "told once");
+  assert.ok(!f.toasts.some((n) => /undefined/.test(n.title)));
+  assert.equal(f.toasts.filter((n) => n.level === "error").length, 0);
+  assert.equal(await version(f.home), "1.1.0");
 });
 
 test("The copy the swap starts picks up the install's outcome and reports it", async (t) => {
@@ -438,7 +568,7 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; }, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async (command) => { asked++; return command === "git" ? { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" } : { code: 1, stdout: "", stderr: "" }; },
+    exec: async (command) => { if (command === "git") asked++; return command === "git" ? { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" } : { code: 1, stdout: "", stderr: "" }; },
   };
   const { Updater } = await updater(host);
   const tabs = new Updater(), footer = new Updater();
@@ -467,7 +597,7 @@ test("With automatic checks off neither copy polls, and a Check from settings st
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async () => { asked++; return { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" }; },
+    exec: async (command) => { if (command === "git") asked++; return { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" }; },
   };
   const { Updater } = await updater(host);
   const tabs = new Updater(), footer = new Updater();
@@ -492,7 +622,7 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; }, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async (command) => { asked++; return command === "git" && !offline ? { code: 0, stdout: tags, stderr: "" } : { code: 128, stdout: "", stderr: "offline" }; },
+    exec: async (command) => { if (command === "git") asked++; return command === "git" && !offline ? { code: 0, stdout: tags, stderr: "" } : { code: 128, stdout: "", stderr: "offline" }; },
   };
   const { Updater } = await updater(host);
   const u = new Updater();
@@ -525,7 +655,7 @@ test("Automatic update checks can be disabled while manual checks still work", a
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
     layout: () => null, run: () => null,
-    exec: async () => { asked++; return { code: 0, stdout: "x\trefs/tags/v1.3.1\n", stderr: "" }; },
+    exec: async (command) => { if (command === "git") asked++; return { code: 0, stdout: "x\trefs/tags/v1.3.1\n", stderr: "" }; },
   };
   const { Updater } = await updater(host);
   const u = new Updater();
