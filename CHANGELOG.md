@@ -8,6 +8,16 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.9.0] - 2026-11-08
+
+### Added
+
+- Containers does what you would open Docker Desktop for: a project's compose files show with Up, Rebuild and Down, even before anything runs; Pull an image by name and Run one with a name and a port; Shell into a running container; Open a web port in the browser; Details with its ports, mounts, networks, restart policy and environment names (never their values); volumes with who uses them and Remove unused volumes; Clear the build cache. Pulls, compose, shells and logs run in a tab of their own, so you see their progress.
+
+### Changed
+
+- Containers: the memory line reads "Docker uses of this Mac's memory … can grow to …", and the panel has its own icon, a container, instead of one that looked like a dashboard.
+
 ## [3.8.0] - 2026-11-08
 
 ### Added
