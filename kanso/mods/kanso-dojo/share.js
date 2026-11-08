@@ -51,13 +51,20 @@ const stack = (y, parts) => parts.reduce((acc, part) => {
   return { y: next.y, out: acc.out.concat(next.out) };
 }, drawn(y));
 
+// `subtitle`: what the card is part of, under its title, for whoever has never heard of it.
 const headerPart = (spec, c) => (from) => {
-  const y = from + 30;
-  return drawn(y, [
+  const y = from + 30, sub = spec.subtitle ? y + 36 : y;
+  return drawn(sub, [
     text(PAD, y, 30, c.text, spec.title, 'font-weight="600"'),
+    ...(spec.subtitle ? [text(PAD, sub, 22, c.muted, spec.subtitle)] : []),
     ...(spec.right ? [text(W - PAD, y, 24, c.muted, spec.right, 'text-anchor="end"')] : []),
   ]);
 };
+
+// `figure` ({ svg, width, height }): a picture at the right of the hero, beside its number.
+const figurePart = (figure) => (from) => (figure?.svg
+  ? drawn(from, [`<g transform="translate(${W - PAD - figure.width} ${from + 24})">${figure.svg}</g>`])
+  : drawn(from));
 
 const heroPart = (hero, c) => (from) => {
   const top = from + 150;
@@ -144,6 +151,7 @@ const blockPart = (b, c) =>
 export function cardSvg(spec, c) {
   const body = stack(PAD, [
     headerPart(spec, c),
+    figurePart(spec.figure),
     heroPart(spec.hero ?? {}, c),
     statsPart(spec.stats ?? [], c),
     notePart(spec.note, c),
@@ -157,7 +165,7 @@ export function cardSvg(spec, c) {
     text(W - PAD, y, 20, c.dim, REPO_URL, 'text-anchor="end"'),
   ];
   const height = y + PAD - 20;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="${esc(FONT)}">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" font-family="${esc(FONT)}">
 <rect width="${W}" height="${height}" ${paint(c.canvas)}/>
 ${out.join("\n")}
 </svg>
@@ -237,8 +245,9 @@ export async function outputPath(name) {
   return `${dir}/kanso-${slug(name)}-${day}.png`;
 }
 
+// `make` gives the card's spec, text, name and title, or a promise of them.
 export async function shareImage(network, make, workDir) {
-  const { spec, text: words, name, title } = make();
+  const { spec, text: words, name, title } = await make();
   const card = cardSvg(spec, palette());
   const png = await outputPath(name);
   await exec("mkdir", ["-p", workDir]);
