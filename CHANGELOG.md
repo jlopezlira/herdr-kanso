@@ -8,6 +8,13 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.12.0] - 2026-11-08
+
+### Added
+
+- Pets in the dōjō. Click Hachi to choose another: Codex's eight pets, Claude Code's Clawd, Mistral's cat, July (a shiba, like Hachi), and any pet you have in `~/.codex/pets`. The first time you open the chooser, Kanso brings the ones you lack from OpenAI and codex-pets.net into its own folder, for you; it ships none and leaves Codex's folder alone. Each pet reacts with its own moves: it runs as you move, jumps when you reach a target, slumps on a key that is no move, waves when you win a round, looks the result over, and waits when you stop.
+- Codex's own pet is the dōjō's when you have it, until you choose another; Hachi stays for everyone else.
+
 ## [3.11.0] - 2026-11-08
 
 ### Added

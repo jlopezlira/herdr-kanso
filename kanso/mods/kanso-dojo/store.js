@@ -61,4 +61,15 @@ export class Store {
     return r ? Number(r.value) || 1 : 1;
   }
   async setLevel(n) { await this.open(); await this.sql(`INSERT OR REPLACE INTO prefs(key,value) VALUES('level','${int(n)}');`); }
+
+  // The pet you chose (an id), or null.
+  async pet() {
+    await this.open();
+    const [r] = await this.sql("SELECT value FROM prefs WHERE key='pet';", true);
+    return r?.value ?? null;
+  }
+  async setPet(id) {
+    if (!/^[A-Za-z0-9._-]+$/.test(id ?? "")) return;
+    await this.open(); await this.sql(`INSERT OR REPLACE INTO prefs(key,value) VALUES('pet','${id}');`);
+  }
 }
