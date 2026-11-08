@@ -427,13 +427,14 @@ async function small(t) {
   const url = pathToFileURL(join(site, "v1.1.0.tar.gz")).href;
   const { INSTALL_SCRIPT, RECOVER } = await updater();
   // An install of 1.1.0 over `from`, killed after its `stop`-th step (0: never). By default it
-  // brings merged keys and a new layout; a reinstall over 1.1.0 brings neither.
-  const run = async (home, stop, { from = "1.0.0", sabotage = false } = {}) => {
+  // brings keys merged from yours and a new layout; a reinstall over 1.1.0 brings neither.
+  const run = async (home, stop, { from = "1.0.0", sabotage = false, base } = {}) => {
     const dir = join(home, ".kanso-updates");
     await mkdir(dir, { recursive: true }); // as LAUNCH makes it
     if (sabotage) await writeFile(join(root, "sabotage"), "");
-    const [keys, layout] = from === "1.0.0" ? ['{"merged":true}', "1"] : ["", ""];
-    const how = await new Promise((resolve) => execFile("sh", ["-c", INSTALL_SCRIPT, "sh", url, home, dir, "op", "1.1.0", from, checker, "20261108-1200", keys, layout],
+    const plan = from === "1.0.0" ? ['{"merged":true}', "1", '{"yours":true}\n'] : ["", "", ""];
+    const [keys, layout] = plan;
+    const how = await new Promise((resolve) => execFile("sh", ["-c", INSTALL_SCRIPT, "sh", url, home, dir, "op", "1.1.0", from, checker, "20261108-1200", keys, layout, base ?? plan[2]],
       { env: { ...process.env, KANSO_UPDATE_STOP: String(stop) } }, (error, _out, err) => resolve(error?.signal === "SIGKILL" ? "killed" : error ? `failed: ${err.trim().split("\n").at(-1)}` : "ok")));
     await rm(join(root, "sabotage"), { force: true });
     return how;
@@ -533,27 +534,89 @@ test("A finished install killed as its stage was being removed is not done again
   assert.equal(await recovered(s, home, "a removal cut short"), "new");
 });
 
-test("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
-  const f = await fixture(t);
+test("Keys merged from another keys.json than the one in place are not installed: nothing changes", async (t) => {
+  const s = await small(t);
+  const home = await s.fresh("stale");
+  assert.equal(await s.run(home, 0, { base: '{"half":true}\n' }), "failed: your keys.json changed while the update was prepared; try again");
+  assert.deepEqual(await tree(home), s.before);
+  assert.deepEqual(await stages(home), []);
+});
+
+// The first window's install, killed after its `stop`-th step and never heard from again: its
+// copy is replaced by the swap, so nothing in that window recovers it.
+async function killed(t, f, stop) {
   const { cx, drain } = context();
   cx.timer = { every() {} };
   f.updater.start(cx); await drain();
-  // Killed right after the new kanso-chrome went in (its version.json says 1.1.0), before the commit:
-  // keys and layout aside and in (4), the picture, each theme and every mod but kanso-chrome in
-  // (none of them here before), then kanso-chrome aside and in (2).
-  const mods = (await readdir(new URL("mods/", repo))).length;
-  const themes = (await readdir(new URL("themes/", repo))).length;
-  process.env.KANSO_UPDATE_STOP = String(4 + 1 + themes + (mods - 1) + 2);
+  process.env.KANSO_UPDATE_STOP = String(stop);
   t.after(() => { delete process.env.KANSO_UPDATE_STOP; });
   await f.flag("slow");
   f.ctl.abandon = true;
-  f.updater.install(cx); // this copy is replaced by the swap
+  f.updater.install(cx);
   await until(async () => f.ctl.stuck > 0);
   f.ctl.abandon = false;
   const pid = join(updates(f.home), `${pending(f)[0]}.pid`);
   await f.flag("go");
   await until(async () => (await exec("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", pid])).code !== 0);
   delete process.env.KANSO_UPDATE_STOP;
+  return { cx, drain };
+}
+// The step right after the new kanso-chrome goes in (its version.json says 1.1.0), before the
+// commit: keys and layout aside and in (4), the picture, each theme and every mod but kanso-chrome
+// in (none of them here before), then kanso-chrome aside and in (2).
+const chromeIn = async () => {
+  const mods = (await readdir(new URL("mods/", repo))).length;
+  const themes = (await readdir(new URL("themes/", repo))).length;
+  return 4 + 1 + themes + (mods - 1) + 2;
+};
+
+test("An install that died with the new keys in place, retried from another window, ends with the new keys", async (t) => {
+  const f = await fixture(t);
+  await killed(t, f, 2); // keys aside, then the merged ones in
+  const now = JSON.parse(await readFile(new URL("keys.json", repo), "utf8"))["layout:kanso"];
+  const live = async () => JSON.parse(await readFile(join(f.home, "keys.json"), "utf8"))["layout:kanso"];
+  assert.equal((await live())["cmd-d"], now["cmd-d"], "it died with the release's keys in place");
+  assert.equal(await version(f.home), "1.0.0");
+
+  const other = await f.window();
+  other.store["kanso.update"] = { latest: "1.1.0" };
+  await other.updater.readInstalled();
+  const { cx } = context();
+  await other.updater.install(cx);
+  assert.equal(other.updater.error, null, other.updater.error);
+  assert.equal(await version(f.home), "1.1.0");
+  const keys = await live();
+  assert.equal(keys["cmd-d"], now["cmd-d"], "a shipped key follows the release");
+  assert.equal(keys["cmd-shift-w"], now["cmd-shift-w"], "a new key arrives");
+  assert.equal(keys["cmd-shift-o"], "mine.open", "your own key stays");
+  assert.equal(updated(other.toasts).length, 1);
+  assert.deepEqual(await stages(f.home), [], "the dead install's stage settled (its outcome stays for its own window to report)");
+});
+
+test("A follower whose recovery finds the lock taken waits for it, then reports once what recovery left", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = await killed(t, f, await chromeIn());
+  assert.equal(await version(f.home), "1.1.0", "it died half new");
+  // Another window recovering, or what the dead install started still holding its lock.
+  const other = await holder(t, f);
+  assert.ok(other.got);
+  const fresh = new f.Updater(f.source);
+  fresh.start(cx);
+  await new Promise((r) => setTimeout(r, 400)); // it tries a few times meanwhile
+  assert.deepEqual(pending(f).length, 1, "still followed");
+  assert.equal(f.toasts.filter((n) => n.level === "error" || n.level === "success").length, 0, "nothing told before recovery ran");
+  await other.kill();
+  await until(async () => pending(f).length === 0);
+  await drain();
+  assert.equal(await version(f.home), "1.0.0", "undone");
+  assert.equal(f.toasts.filter((n) => n.level === "error").length, 1, "told once, as stopped");
+  assert.equal(updated(f.toasts).length, 0, "never as updated");
+  assert.deepEqual(await staged(f.home), []);
+});
+
+test("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died with the new kanso-chrome in place");
   const fresh = new f.Updater(f.source);
   fresh.start(cx);

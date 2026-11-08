@@ -20,6 +20,12 @@ const SHOWN_MS = 15 * 60 * 1000;
 // Preparing (the keys and layout, read before the install starts) takes seconds; a mark still
 // preparing after this lost its copy before it started anything.
 const PREPARE_MS = 2 * 60 * 1000;
+// Recovery is busy while another copy recovers, or while what a killed install started (its
+// download, up to 120 s) still holds its lock. A follower waits this long for its turn, then
+// leaves the install marked for the next start to recover and report.
+const RECOVER_MS = 5 * 60 * 1000;
+// HOLD's answer when another holds the lock, and so INSTALL_SCRIPT's and RECOVER's.
+const BUSY = 75;
 // Under Herdr's home: the lock, and per install its staging folder, pid, log and outcome.
 const UPDATES = ".kanso-updates";
 // The footer is its account chip and a 34px row (and its gap) for each of Update, Settings and
@@ -175,7 +181,7 @@ export const INSTALL_SCRIPT = `set -eu
 ${HOLD}
 ${JOURNAL}
 url="$1"; home="$2"; dir="$3"; id="$4"; want="$5"; from="$6"; checker="$7"; stamp="$8"; shift 8
-keys="$1"; layout="$2"; stage="$dir/$id"; n=0
+keys="$1"; layout="$2"; base="$3"; stage="$dir/$id"; n=0
 say() { printf '%s\\n%s\\n' "$1" "$2" > "$dir/$id.status.part" && mv -f "$dir/$id.status.part" "$dir/$id.status"; }
 finish() {
   code=$?; set +e; trap - EXIT
@@ -193,6 +199,9 @@ find "$dir" -maxdepth 1 -type f -mtime +1 ! -name lock ! -name "$id.*" -exec rm 
 version() { sed -n 's/.*"version"[^"]*"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null || true; }
 have=$(version "$home/mods/kanso-chrome/version.json")
 [ "$have" = "$from" ] || { echo "kansō is already at \${have:-another version}" >&2; exit 4; }
+# $keys was merged from $base, the keys.json the plan read. Under the lock and after recovery it
+# must still be the one in place: one a dead install half swapped would leave the release's keys out.
+[ -z "$base" ] || [ "$(cat "$home/keys.json" 2>/dev/null)" = "$(printf '%s' "$base")" ] || { echo "your keys.json changed while the update was prepared; try again" >&2; exit 1; }
 mkdir -p "$stage/src"
 curl -fsSL --max-time 120 -o "$stage/release.tar.gz" "$url" || { echo "the download failed" >&2; exit 1; }
 tar -xzf "$stage/release.tar.gz" -C "$stage/src" --strip-components=1 || { echo "the download could not be opened" >&2; exit 1; }
@@ -377,31 +386,49 @@ export class Updater {
     cx.notify();
     const home = appHome(), dir = `${home}/${UPDATES}`;
     const started = await tryOrAsync(async () => {
+      // Planned on what recovery leaves, never on a swap a dead install left half done (its keys.json
+      // would read as yours). Busy, another install holds the lock: this one would be told so too.
+      if (await this.recover() === BUSY) return { code: BUSY };
       const plan = await this.plan(v, home);
       this.mark(id, { notes: plan.notes });
       return exec("sh", ["-c", LAUNCH, "sh", dir, id, INSTALL_SCRIPT, this.source.tarball(v), home, dir, id,
-        v, this.installed, this.source.checker ?? SOURCE.checker, stamp(), plan.keys, plan.layout ? "1" : ""]);
+        v, this.installed, this.source.checker ?? SOURCE.checker, stamp(), plan.keys, plan.layout ? "1" : "", plan.base]);
     });
     this.working = false;
     if (started?.code !== 0) {
       const mark = this.installs()[id];
       this.unmark(id);
-      return this.report(cx, "error", lastLine(started, "the update could not start"), mark);
+      return this.report(cx, started?.code === BUSY ? "busy" : "error", lastLine(started, "the update could not start"), mark);
     }
     this.mark(id, { phase: "started", at: Date.now() });
     return this.follow(cx, id);
   }
 
+  pause() { return tryOrAsync(() => exec("sleep", [String(this.pauseS)])); }
+
+  // RECOVER's exit code: 0 once every dead install's stage is settled (or there was none), BUSY
+  // while the lock is another's, anything else when one could not be undone.
   async recover() {
     const home = appHome();
-    await tryOrAsync(() => exec("sh", ["-c", RECOVER, "sh", home, `${home}/${UPDATES}`]));
+    return (await tryOrAsync(() => exec("sh", ["-c", RECOVER, "sh", home, `${home}/${UPDATES}`])))?.code;
+  }
+
+  // Recovery that waits its turn: true once it ran, false while the lock stayed another's past RECOVER_MS.
+  async recovered() {
+    const deadline = Date.now() + RECOVER_MS;
+    for (;;) {
+      if (await this.recover() !== BUSY) return true;
+      if (Date.now() > deadline) return false;
+      await this.pause();
+    }
   }
 
   // Reads <id>.status every few seconds until it says how the install ended. While the install is
   // still being prepared (no process yet) it waits; one whose copy went away before starting it is
   // dropped once its mark has expired. A process gone without saying (killed outright) is settled
-  // by recovery, and the version then in place says how it ended. The follower that claims the
-  // pid file (a rename: one wins) is the one that reports.
+  // by recovery, and the version then in place says how it ended; recovery that never got the lock
+  // reports nothing and leaves the mark to the next start. The follower that claims the pid file
+  // (a rename: one wins) is the one that reports.
   async follow(cx, id) {
     if (this.following[id]) return;
     this.following = { ...this.following, [id]: true };
@@ -410,14 +437,13 @@ export class Updater {
       const [state, why] = String(await readTextFile(`${dir}/${id}.status`) ?? "running").split("\n");
       return { state, why: why ?? "" };
     };
-    const pause = () => tryOrAsync(() => exec("sleep", [String(this.pauseS)]));
     const end = async () => {
       for (;;) {
         const mark = this.installs()[id];
         if (!mark) return null;
         if (mark.phase === "preparing") {
           if (!fresh(mark, PREPARE_MS)) { this.unmark(id); return null; }
-          await pause();
+          await this.pause();
           continue;
         }
         const now = await read();
@@ -426,11 +452,12 @@ export class Updater {
         if (alive?.code !== 0) {
           const last = await read(); // it may have said so just before it ended
           if (last.state !== "running") return last;
-          await this.recover();
+          // Until recovery has run, the version on disk may be a half swap's: it says nothing yet.
+          if (!(await this.recovered())) return null;
           await this.readInstalled();
           return this.installed === mark.version ? { state: "ok", why: "" } : { state: "error", why: "the update stopped before it finished; what you had is back" };
         }
-        await pause();
+        await this.pause();
       }
     };
     const outcome = await end();
@@ -463,7 +490,8 @@ export class Updater {
   }
 
   // From the two tags' raw files: what you have against what the release ships. keys is the
-  // merged keys.json to write ("" leaves yours), layout whether the release changed the layout.
+  // merged keys.json to write ("" leaves yours), base the keys.json it was merged from ("" when the
+  // release kept its keys), layout whether the release changed the layout.
   async plan(v, home) {
     const shipped = async (version, path) => {
       try {
@@ -484,6 +512,7 @@ export class Updater {
       : [];
     return {
       keys: merged && merged !== "unread" && merged.changed ? JSON.stringify(merged.keys, null, 2) : "",
+      base: differ ? userKeys : "",
       layout,
       notes: [...(layout ? ["New layout; the one you had is in layouts/kanso.json.old-*."] : []), ...keyNotes].join(" "),
     };
