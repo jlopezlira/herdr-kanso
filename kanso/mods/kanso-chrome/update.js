@@ -1,20 +1,22 @@
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { exec, readTextFile, writeTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
+import { exec, readTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
 
 export const SOURCE = {
   remote: "https://github.com/jlopezlira/herdr-kanso.git",
   tarball: (v) => `https://github.com/jlopezlira/herdr-kanso/archive/refs/tags/v${v}.tar.gz`,
   file: (v, path) => `https://raw.githubusercontent.com/jlopezlira/herdr-kanso/v${v}/${path}`,
+  checker: "herdr-app",
 };
 
 const STATE = "kanso.update";
 // ls-remote costs no GitHub API quota; EVERY keeps copies from asking twice.
 const TICK = 5 * 60 * 1000;
 const EVERY = 4 * 60 * 1000;
-// A look or an install whose copy was replaced mid-way stops counting after these.
+// A look or an install whose copy was replaced mid-way stops showing after these. Only what the
+// buttons show: the install lock (HOLD) is what keeps two installs apart, and it never expires.
 const LOOK_MS = 60 * 1000;
-const HOLD_MIN = 10;
+const SHOWN_MS = 15 * 60 * 1000;
 // The footer is its account chip and a 34px row (and its gap) for each of Update, Settings and
 // Add machine that shows; a row a switch hides gives its place back.
 const FOOTER = "sidebar-footer";
@@ -86,72 +88,65 @@ const sameJson = (a, b) => {
   try { return JSON.stringify(JSON.parse(a)) === JSON.stringify(JSON.parse(b)); } catch { return a === b; }
 };
 
-export const STAGE_SCRIPT = `set -eu
-rm -rf "$2"; mkdir -p "$2/src"
-curl -fsSL --max-time 25 -o "$2/release.tar.gz" "$1"
-tar -xzf "$2/release.tar.gz" -C "$2/src" --strip-components=1
-rm -f "$2/release.tar.gz"
-got=$(sed -n 's/.*"version"[^"]*"\\([^"]*\\)".*/\\1/p' "$2/src/kanso/mods/kanso-chrome/version.json" 2>/dev/null || true)
-[ "$got" = "$3" ] || { echo "the v$3 release says it is \${got:-no version}" >&2; exit 3; }
-for dir in "$2/src/kanso/mods"/*/; do basename "$dir"; done
+// hold FILE: an exclusive lock on FILE through fd 9, held by this shell (and whatever it execs)
+// until it ends, however it ends: the kernel lets go, so a lock is never left by a dead install
+// and never needs taking back. 75 when another holds it. flock on Linux, lockf's fd form on
+// macOS, perl where that lockf takes only a file.
+export const HOLD = `hold() {
+  exec 9>>"$1" || return 1
+  if command -v flock >/dev/null 2>&1; then flock -n 9 && return 0; return 75; fi
+  lockf -s -t 0 9 2>/dev/null; got=$?
+  case $got in 0|75) return $got ;; esac
+  perl -MFcntl=:flock -e 'open(my $f, ">&=9") or exit 1; flock($f, LOCK_EX | LOCK_NB) or exit 75'
+}
 `;
 
-export const SWAP_SCRIPT = `set -eu
-src="$1/src/kanso"
-mkdir -p "$1/old" "$2/mods" "$2/themes" "$2/layouts"
-if [ -f "$1/keys.json" ]; then mv "$1/keys.json" "$2/keys.json"; fi
-if [ -f "$1/kanso.json" ]; then
-  if [ -f "$2/layouts/kanso.json" ]; then cp "$2/layouts/kanso.json" "$2/layouts/kanso.json.old-$3"; fi
-  mv "$1/kanso.json" "$2/layouts/kanso.json"
-fi
-cp "$src"/themes/*.json "$2/themes/"
-cp "$src/layouts/kanso.png" "$2/layouts/kanso.png"
+// The whole install, one process: the lock is its own, from before the download to the last
+// mod swapped, and its EXIT trap removes its staging on every way out, even once the swap has
+// replaced the mod that started it. 75: another install holds the lock; 4: one already put a
+// newer version in place; 3: the tag's files say another version.
+export const INSTALL_SCRIPT = `set -eu
+${HOLD}
+url="$1"; home="$2"; stage="$3"; want="$4"; from="$5"; checker="$6"; stamp="$7"; keys="$8"; layout="$9"
+taken=0; hold "$home/.kanso-update.lock" || taken=$?
+[ "$taken" = 0 ] || { [ "$taken" = 75 ] || echo "the update lock could not be taken" >&2; exit "$taken"; }
+trap 'chmod -R u+w "$stage" 2>/dev/null; rm -rf "$stage"' EXIT
+trap 'exit 1' HUP INT TERM
+version() { sed -n 's/.*"version"[^"]*"\\([^"]*\\)".*/\\1/p' "$1" 2>/dev/null || true; }
+have=$(version "$home/mods/kanso-chrome/version.json")
+[ "$have" = "$from" ] || { echo "kansō is already at \${have:-another version}" >&2; exit 4; }
+# A staging folder lives only while its install holds the lock: any other here is a dead one's.
+for left in "$home"/.kanso-update-*; do if [ -d "$left" ] && [ "$left" != "$stage" ]; then chmod -R u+w "$left" 2>/dev/null; rm -rf "$left"; fi; done
+mkdir -p "$stage/src"
+curl -fsSL --max-time 25 -o "$stage/release.tar.gz" "$url" || { echo "the download failed" >&2; exit 1; }
+tar -xzf "$stage/release.tar.gz" -C "$stage/src" --strip-components=1 || { echo "the download could not be opened" >&2; exit 1; }
+rm -f "$stage/release.tar.gz"
+src="$stage/src/kanso"
+got=$(version "$src/mods/kanso-chrome/version.json")
+[ "$got" = "$want" ] || { echo "the v$want release says it is \${got:-no version}" >&2; exit 3; }
 for dir in "$src/mods"/*/; do
   name=$(basename "$dir")
-  if [ -e "$2/mods/$name" ]; then rm -rf "$1/old/$name"; mv "$2/mods/$name" "$1/old/$name"; fi
-  if ! mv "$src/mods/$name" "$2/mods/$name"; then
-    if [ -e "$1/old/$name" ]; then mv "$1/old/$name" "$2/mods/$name"; fi
+  out=$("$checker" check "$src/mods/$name" 2>&1 9>&-) || { echo "$name does not load on this Herdr: $(printf '%s\\n' "$out" | tail -n 1)" >&2; exit 1; }
+done
+if [ -n "$keys" ]; then printf '%s\\n' "$keys" > "$stage/keys.json"; fi
+if [ "$layout" = 1 ]; then cp "$src/layouts/kanso.json" "$stage/kanso.json"; fi
+mkdir -p "$stage/old" "$home/mods" "$home/themes" "$home/layouts"
+if [ -f "$stage/keys.json" ]; then mv "$stage/keys.json" "$home/keys.json"; fi
+if [ -f "$stage/kanso.json" ]; then
+  if [ -f "$home/layouts/kanso.json" ]; then cp "$home/layouts/kanso.json" "$home/layouts/kanso.json.old-$stamp"; fi
+  mv "$stage/kanso.json" "$home/layouts/kanso.json"
+fi
+cp "$src"/themes/*.json "$home/themes/"
+cp "$src/layouts/kanso.png" "$home/layouts/kanso.png"
+for dir in "$src/mods"/*/; do
+  name=$(basename "$dir")
+  if [ -e "$home/mods/$name" ]; then rm -rf "$stage/old/$name"; mv "$home/mods/$name" "$stage/old/$name"; fi
+  if ! mv "$src/mods/$name" "$home/mods/$name"; then
+    if [ -e "$stage/old/$name" ]; then mv "$stage/old/$name" "$home/mods/$name"; fi
     echo "could not put $name in place" >&2; exit 1
   fi
 done
-rm -rf "$1"
-if [ "$(cut -d' ' -f1 "$4/owner" 2>/dev/null)" = "$5" ]; then rm -rf "$4"; fi
 `;
-
-// One install at a time across windows: mkdir is atomic, and the lock names its
-// owner (id, Herdr's pid, when) so a crashed or replaced owner's lock is taken
-// back, with its staging, after HOLD_MIN or once that Herdr is gone. Taking it
-// back happens under a second mkdir, so two windows never both do it.
-export const LOCK_SCRIPT = `set -u
-lock="$1"; id="$2"; mins="$3"; stages="$4"
-now=$(date +%s); pid=$PPID
-herdr() { case $(LC_ALL=C ps -p "$1" -o comm= 2>/dev/null) in *[Hh]erdr*) return 0 ;; esac; return 1; }
-herdr "$pid" || pid=-
-claim() { mkdir "$lock" 2>/dev/null && printf '%s %s %s\\n' "$id" "$pid" "$now" > "$lock/owner"; }
-gone() {
-  if read -r who held at 2>/dev/null < "$lock/owner"; then
-    case "$at" in ''|*[!0-9]*) return 0 ;; esac
-    [ $((now - at)) -gt $((mins * 60)) ] && return 0
-    [ "$held" = - ] && return 1
-    herdr "$held" && return 1
-    return 0
-  fi
-  [ -n "$(find "$lock" -maxdepth 0 -mmin +"$mins" 2>/dev/null)" ]
-}
-if claim; then echo ok; exit 0; fi
-[ -n "$(find "$lock.break" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir "$lock.break" 2>/dev/null
-mkdir "$lock.break" 2>/dev/null || { echo busy; exit 0; }
-if gone; then
-  who=$(cut -d' ' -f1 "$lock/owner" 2>/dev/null)
-  case "$who" in ''|*[!A-Za-z0-9]*) ;; *) rm -rf "$stages$who" ;; esac
-  rm -rf "$lock"
-fi
-if claim; then echo ok; else echo busy; fi
-rmdir "$lock.break"
-`;
-
-// Only the owner lets go: a lock taken back from it belongs to someone else now.
-export const RELEASE_SCRIPT = `if [ "$(cut -d' ' -f1 "$1/owner" 2>/dev/null)" = "$2" ]; then rm -rf "$1"; fi`;
 
 const lastLine = (r, fallback) => (r?.stderr || r?.stdout || "").trim().split("\n").at(-1) || fallback;
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 13);
@@ -167,7 +162,7 @@ export class Updater {
   }
 
   // The tab bar and the footer each hold an Updater: an install either started shows on both.
-  get busy() { return this.working || fresh(this.state().installing, HOLD_MIN * 60 * 1000); }
+  get busy() { return this.working || fresh(this.state().installing, SHOWN_MS); }
 
   state() { return shared(STATE) ?? {}; }
   setState(patch) { setShared(STATE, { ...this.state(), ...patch }); }
@@ -259,7 +254,7 @@ export class Updater {
     }
   }
 
-  // Exclusive across copies and windows (LOCK_SCRIPT); each install stages in its own folder.
+  // The keys and layout are decided here; the rest is INSTALL_SCRIPT, one process under the lock.
   async install(cx) {
     const v = this.available();
     if (!v || this.working) return;
@@ -269,38 +264,24 @@ export class Updater {
     this.error = null;
     this.setState({ installing: { id, at: Date.now() } });
     cx.notify();
-    const home = appHome(), lock = `${home}/.kanso-update.lock`, stage = `${home}/.kanso-update-${id}`, src = `${stage}/src/kanso`;
-    const held = await tryOrAsync(() => exec("sh", ["-c", LOCK_SCRIPT, "sh", lock, id, String(HOLD_MIN), `${home}/.kanso-update-`]));
-    if (held?.code !== 0 || held.stdout.trim() !== "ok") {
-      this.settle(cx, id);
-      if (held?.code === 0) return this.elsewhere();
-      this.error = lastLine(held, "the update could not start");
-      notify({ title: "kansō was not updated", body: this.error, level: "error" });
-      return;
-    }
+    const home = appHome();
     try {
-      const staged = await exec("sh", ["-c", STAGE_SCRIPT, "sh", this.source.tarball(v), stage, v]);
-      if (staged.code !== 0) throw new Error(lastLine(staged, "the download failed"));
-      for (const name of staged.stdout.split("\n").map((s) => s.trim()).filter(Boolean)) {
-        const c = await exec("herdr-app", ["check", `${src}/mods/${name}`]);
-        if (c.code !== 0) throw new Error(`${name} does not load on this Herdr: ${lastLine(c, "check failed")}`);
-      }
-      const notes = await this.stageKeysAndLayout(v, home, stage, src);
-      this.setState({ done: { version: v, notes } });
+      const plan = await this.plan(v, home);
       // Swapping kanso-chrome restarts this mod; the fresh copy reports.
-      const swapped = await exec("sh", ["-c", SWAP_SCRIPT, "sh", stage, home, stamp(), lock, id]);
-      if (swapped.code !== 0) {
-        this.setState({ done: null });
-        throw new Error(lastLine(swapped, "the files could not be put in place"));
-      }
+      this.setState({ done: { version: v, notes: plan.notes, id } });
+      const r = await exec("sh", ["-c", INSTALL_SCRIPT, "sh", this.source.tarball(v), home, `${home}/.kanso-update-${id}`,
+        v, this.installed, this.source.checker ?? SOURCE.checker, stamp(), plan.keys, plan.layout ? "1" : ""]);
+      // 75: another install of this version runs, and its swap reloads this window too, so the
+      // note stays for the fresh copy to report.
+      if (r.code === 75) return this.elsewhere();
+      if (this.state().done?.id === id && r.code !== 0) this.setState({ done: null });
+      if (r.code === 4) return this.elsewhere();
+      if (r.code !== 0) throw new Error(lastLine(r, "the files could not be put in place"));
       this.installed = v;
       this.finished();
     } catch (e) {
       this.error = String(e?.message ?? e);
       notify({ title: "kansō was not updated", body: this.error, level: "error" });
-      // Only this install's own folder and lock: another may hold the lock by now.
-      await tryOrAsync(() => exec("rm", ["-rf", stage]));
-      await tryOrAsync(() => exec("sh", ["-c", RELEASE_SCRIPT, "sh", lock, id]));
     } finally {
       this.settle(cx, id);
     }
@@ -318,33 +299,30 @@ export class Updater {
     return "busy";
   }
 
-  async stageKeysAndLayout(v, home, stage, src) {
-    const shipped = async (path) => {
+  // From the two tags' raw files: what you have against what the release ships. keys is the
+  // merged keys.json to write ("" leaves yours), layout whether the release changed the layout.
+  async plan(v, home) {
+    const shipped = async (version, path) => {
       try {
-        const r = await exec("curl", ["-fsSL", "--max-time", "15", this.source.file(this.installed, path)]);
+        const r = await exec("curl", ["-fsSL", "--max-time", "15", this.source.file(version, path)]);
         return r.code === 0 ? r.stdout : null;
       } catch { return null; }
     };
-    const [oldKeys, oldLayout] = await Promise.all([shipped("kanso/keys.json"), shipped("kanso/layouts/kanso.json")]);
-    const newKeys = await readTextFile(`${src}/keys.json`), newLayout = await readTextFile(`${src}/layouts/kanso.json`);
-    // The layout first, then the keys (read only after it is staged).
-    const layoutNotes = async () => {
-      if (oldLayout === null || newLayout === null || sameJson(oldLayout, newLayout)) return [];
-      await writeTextFile(`${stage}/kanso.json`, newLayout, null);
-      return ["New layout; the one you had is in layouts/kanso.json.old-*."];
+    const [oldKeys, oldLayout, newKeys, newLayout] = await Promise.all([
+      shipped(this.installed, "kanso/keys.json"), shipped(this.installed, "kanso/layouts/kanso.json"),
+      shipped(v, "kanso/keys.json"), shipped(v, "kanso/layouts/kanso.json"),
+    ]);
+    const layout = oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout);
+    const userKeys = await readTextFile(`${home}/keys.json`);
+    const differ = oldKeys !== null && newKeys !== null && userKeys !== null && !sameJson(oldKeys, newKeys);
+    const merged = differ ? tryOr(() => mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys)), "unread") : null;
+    const keyNotes = merged === "unread" ? ["Your keys.json could not be read, so kansō's keys were left as they are."]
+      : merged ? [...(merged.changed ? ["kansō's keys updated."] : []), ...(merged.kept.length ? [`Kept your own ${merged.kept.join(", ")}.`] : [])]
+      : [];
+    return {
+      keys: merged && merged !== "unread" && merged.changed ? JSON.stringify(merged.keys, null, 2) : "",
+      layout,
+      notes: [...(layout ? ["New layout; the one you had is in layouts/kanso.json.old-*."] : []), ...keyNotes].join(" "),
     };
-    const keyNotes = async () => {
-      const userKeys = await readTextFile(`${home}/keys.json`);
-      if (oldKeys === null || newKeys === null || userKeys === null || sameJson(oldKeys, newKeys)) return [];
-      try {
-        const merged = mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys));
-        if (merged.changed) await writeTextFile(`${stage}/keys.json`, `${JSON.stringify(merged.keys, null, 2)}\n`, null);
-        return [...(merged.changed ? ["kansō's keys updated."] : []), ...(merged.kept.length ? [`Kept your own ${merged.kept.join(", ")}.`] : [])];
-      } catch {
-        return ["Your keys.json could not be read, so kansō's keys were left as they are."];
-      }
-    };
-    const notes = [...(await layoutNotes()), ...(await keyNotes())];
-    return notes.join(" ");
   }
 }

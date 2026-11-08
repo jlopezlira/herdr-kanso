@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { load, context, exec, temporary, clone } from "./helpers.mjs";
 
-const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx"];
+const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD"];
 const repo = new URL("../kanso/", import.meta.url);
 
 async function updater(host) {
@@ -64,6 +65,21 @@ async function fixture(t, { layoutChanged = true } = {}) {
   await writeFile(join(top, "README.md"), "not installed\n");
   const made = await exec("tar", ["-czf", join(site, "v1.1.0.tar.gz"), "-C", join(site, "build"), "herdr-kanso-1.1.0"]);
   assert.equal(made.code, 0, made.stderr);
+  // And its raw files, which decide the keys and the layout before the download.
+  await mkdir(join(site, "v1.1.0/kanso/layouts"), { recursive: true });
+  await writeFile(join(site, "v1.1.0/kanso/keys.json"), await readFile(new URL("keys.json", repo), "utf8"));
+  await writeFile(join(site, "v1.1.0/kanso/layouts/kanso.json"), shippedLayout);
+
+  // Herdr's `herdr-app check`, faked: it notes each mod, and on a file's say holds the last
+  // one (slow) or makes it impossible to move into place (sabotage).
+  const checker = join(root, "check.sh");
+  await writeFile(checker, [
+    "name=$(basename \"$2\")",
+    `echo "$name" >> "${root}/checks"`,
+    `if [ -f "${root}/slow" ] && [ "$name" = open-with ]; then while [ ! -f "${root}/go" ]; do sleep 0.05; done; fi`,
+    `if [ -f "${root}/sabotage" ] && [ "$name" = open-with ]; then chmod 555 "$2"; fi`,
+    "",
+  ].join("\n"), { mode: 0o755 });
 
   // The person's home: Kanso 1.0.0, a custom key, a live layout, another mod.
   await mkdir(join(home, "mods/kanso-chrome"), { recursive: true });
@@ -81,12 +97,16 @@ async function fixture(t, { layoutChanged = true } = {}) {
     remote: "unused",
     tarball: (v) => url(`v${v}.tar.gz`),
     file: (v, path) => url(`v${v}/${path}`),
+    checker,
   };
-  const checks = [];
+  const checks = async () => (await readFile(join(root, "checks"), "utf8").catch(() => "")).split("\n").filter(Boolean);
+  const flag = (name) => writeFile(join(root, name), "");
   // A window: its own shared state and toasts, the same Herdr home as every other.
+  // `abandon` plays the mod replaced mid-install: the install runs on, its result reaches no one.
   const window = async () => {
-    const store = {}, toasts = [], resizes = [];
+    const store = {}, toasts = [], resizes = [], left = [];
     const footer = { id: "sidebar-footer", size: { px: 156 } };
+    const ctl = { abandon: false, left };
     const host = {
       layout: () => ({ id: "root", children: [{ id: "sidebar", children: [footer] }] }),
       run: (name, args) => { resizes.push(args.px); footer.size = { px: args.px }; return null; },
@@ -97,24 +117,31 @@ async function fixture(t, { layoutChanged = true } = {}) {
       readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
       writeTextFile: async (p, text) => { await writeFile(p, text); return null; },
       exec: async (command, args, options) => {
-        if (command === "herdr-app") { checks.push(args[1].split("/").pop()); return { code: 0, stdout: "check passed", stderr: "" }; }
         if (command === "git") return { code: 0, stdout: "x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n", stderr: "" };
+        if (ctl.abandon && command === "sh" && String(args[1]).includes("hold()")) {
+          left.push(exec(command, args, options));
+          return new Promise(() => {});
+        }
         return exec(command, args, options);
       },
     };
-    const { Updater } = await updater(host);
-    return { store, toasts, resizes, footer, Updater, updater: new Updater(source) };
+    const { Updater, HOLD } = await updater(host);
+    return { store, toasts, resizes, footer, ctl, HOLD, Updater, updater: new Updater(source) };
   };
-  return { home, checks, source, window, userKeys, ...(await window()) };
+  return { root, home, checks, flag, source, window, userKeys, ...(await window()) };
 }
 
-// What a stage left in the home: staging folders and locks are dot folders.
-const staged = (home) => readdir(home).then((n) => n.filter((x) => x.startsWith(".")));
-const lockOf = (home) => join(home, ".kanso-update.lock");
-async function holdLock(home, id, { pid = "-", at = Math.floor(Date.now() / 1000) } = {}) {
-  await mkdir(join(home, `.kanso-update-${id}/src`), { recursive: true });
-  await mkdir(lockOf(home));
-  await writeFile(join(lockOf(home), "owner"), `${id} ${pid} ${at}\n`);
+// What installs left in the home: staging folders are dot folders; the lock file stays, empty.
+const staged = (home) => readdir(home).then((n) => n.filter((x) => x.startsWith(".") && x !== ".kanso-update.lock"));
+const until = async (ok) => { while (!(await ok())) await new Promise((r) => setTimeout(r, 20)); };
+// Another install holding the lock: a real process, asleep, whose life is the lock's.
+async function holder(t, f) {
+  const child = spawn("sh", ["-c", `${f.HOLD}\nhold "$1" || exit $?\necho held\nexec sleep 60`, "sh", join(f.home, ".kanso-update.lock")],
+    { detached: true, stdio: ["ignore", "pipe", "ignore"] });
+  const ended = new Promise((resolve) => child.once("exit", resolve));
+  t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
+  const got = await Promise.race([new Promise((resolve) => child.stdout.once("data", () => resolve(true))), ended.then(() => false)]);
+  return { got, pid: child.pid, kill: async () => { process.kill(-child.pid, "SIGKILL"); await ended; } };
 }
 const version = async (home) => JSON.parse(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8")).version;
 const told = (toasts) => toasts.filter((n) => n.title === "kansō is already being updated");
@@ -140,7 +167,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   await f.updater.install(cx);
   assert.equal(f.updater.error, null, f.updater.error);
   const shipped = (await readdir(new URL("mods/", repo))).sort();
-  assert.deepEqual([...f.checks].sort(), shipped, "every mod checked before the swap");
+  assert.deepEqual((await f.checks()).toSorted(), shipped, "every mod checked before the swap");
 
   const mods = await readdir(join(f.home, "mods"));
   for (const name of shipped) assert.ok(mods.includes(name), name);
@@ -164,7 +191,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.equal(keys["layout:kanso"]["cmd-shift-w"], now["cmd-shift-w"], "a new key arrives");
   assert.equal(keys["layout:kanso"]["cmd-shift-o"], "mine.open", "your own key stays");
 
-  assert.deepEqual(await readdir(f.home).then((n) => n.filter((x) => x.startsWith("."))), [], "nothing staged left");
+  assert.deepEqual(await staged(f.home), [], "nothing staged left");
   assert.equal(f.updater.available(), null);
   const done = f.toasts.at(-1);
   assert.equal(done.title, "kansō updated to 1.1.0");
@@ -261,38 +288,91 @@ test("Two windows installing at once share no state, and the lock lets one throu
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("A lock whose owner is alive is left alone; one gone or held too long is taken back, with its staging", async (t) => {
+test("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
   f.updater.start(cx); await drain();
 
-  await holdLock(f.home, "live1");
+  const a = await holder(t, f);
+  assert.ok(a.got, "the holder takes a free lock");
+  await mkdir(join(f.home, ".kanso-update-a/src"), { recursive: true }); // its staging
   assert.equal(await f.updater.install(cx), "busy");
   assert.equal(f.updater.error, null);
   assert.equal(await version(f.home), "1.0.0", "nothing replaced");
-  assert.deepEqual((await staged(f.home)).toSorted(), [".kanso-update-live1", ".kanso-update.lock"], "the owner's lock and staging stay");
+  assert.deepEqual(await staged(f.home), [".kanso-update-a"], "the live owner's staging stays");
   assert.equal(f.updater.busy, false, "told, not waiting");
 
-  // The same owner, an hour later: its window went away without letting go.
-  await writeFile(join(lockOf(f.home), "owner"), `live1 - ${Math.floor(Date.now() / 1000) - 3600}\n`);
+  // Killed, as a crash would: no timeout to wait out, nothing to take back.
+  await a.kill();
   await f.updater.install(cx);
   assert.equal(f.updater.error, null, f.updater.error);
   assert.equal(await version(f.home), "1.1.0");
-  assert.deepEqual(await staged(f.home), [], "the abandoned staging went with it");
+  assert.deepEqual(await staged(f.home), [], "the dead install's staging, swept under the lock (no live one can have any)");
 });
 
-test("An install whose Herdr died is taken back at once", async (t) => {
+test("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
   f.updater.start(cx); await drain();
-  const gone = await exec("sh", ["-c", "echo $$"]); // a pid that has just exited
-  await holdLock(f.home, "dead1", { pid: gone.stdout.trim() });
+  const a = await holder(t, f);
+  assert.equal(await f.updater.install(cx), "busy");
+  // A finishes; C takes the lock straight away. Nothing judged A gone, so nothing can undo C.
+  await a.kill();
+  const c = await holder(t, f);
+  assert.ok(c.got);
+  await mkdir(join(f.home, ".kanso-update-c/src"), { recursive: true });
+  assert.equal(await f.updater.install(cx), "busy");
+  assert.deepEqual(await staged(f.home), [".kanso-update-c"]);
+  assert.equal((await holder(t, f)).got, false, "C still holds it");
+  await c.kill();
   await f.updater.install(cx);
   assert.equal(f.updater.error, null, f.updater.error);
   assert.equal(await version(f.home), "1.1.0");
+});
+
+test("A slow install keeps the lock as long as it runs: no clock takes it away", async (t) => {
+  const f = await fixture(t);
+  const other = await f.window();
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+  await f.flag("slow");
+  const first = f.updater.install(cx);
+  await until(async () => (await f.checks()).includes("open-with"));
+  // An hour on, as far as the buttons can tell: this window's mark has gone stale.
+  f.store["kanso.update"] = { ...f.store["kanso.update"], installing: { id: "old", at: Date.now() - 3600 * 1000 } };
+  const tabs = new f.Updater(f.source);
+  await tabs.readInstalled();
+  assert.equal(await tabs.install(cx), "busy", "the lock still says no");
+  other.store["kanso.update"] = { latest: "1.1.0" };
+  await other.updater.readInstalled();
+  assert.equal(await other.updater.install(cx), "busy", "and so it does to another window");
+  assert.equal(await version(f.home), "1.0.0");
+  await f.flag("go");
+  assert.equal(await first, undefined);
+  assert.equal(f.updater.error, null, f.updater.error);
+  assert.equal(await version(f.home), "1.1.0");
   assert.deepEqual(await staged(f.home), []);
+});
+
+test("A swap that fails after it replaced the mod that started it still cleans up and lets go", async (t) => {
+  const f = await fixture(t);
+  const { cx, drain } = context();
+  cx.timer = { every() {} };
+  f.updater.start(cx); await drain();
+  await f.flag("sabotage"); // open-with, the last mod, cannot be moved into place
+  f.ctl.abandon = true;
+  f.updater.install(cx); // never returns: its copy was replaced mid-swap
+  await until(async () => f.ctl.left.length > 0);
+  const r = await f.ctl.left[0];
+  assert.notEqual(r.code, 0);
+  assert.match(r.stderr, /could not put open-with in place/);
+  assert.equal(await version(f.home), "1.1.0", "kanso-chrome itself had been swapped");
+  assert.deepEqual(await staged(f.home), [], "the script removed its own staging");
+  assert.ok((await holder(t, f)).got, "and the lock went with its process");
+  assert.equal(f.toasts.filter((n) => n.level === "error").length, 0, "no JavaScript was left to do any of it");
 });
 
 test("The tab bar looks for releases; the footer reads what it found", async () => {
