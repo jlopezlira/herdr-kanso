@@ -21,11 +21,14 @@ export const keep = (all, mark, list, now) => Object.fromEntries([
   ...(list.length > 0 ? [[mark, list]] : []),
 ]);
 
-// A new toast `n` against what is on screen: shown unless the same one is up; when shown, the oldest
-// beyond MOST close. `next` is the list to keep.
-export function admit(showing, n, now) {
-  if (showing.some((s) => s.key === keyOf(n))) return { show: false, close: [], next: showing };
+// A new toast `n` against this window's list: shown unless the same one is up; when shown, the oldest
+// beyond MOST close. One past its clock is closed here too: Herdr takes toasts down on a poll, so it can
+// still be on screen a moment after. `next` is the list to keep.
+export function admit(list, n, now) {
+  const showing = onScreen(list, now);
+  const late = (Array.isArray(list) ? list : []).filter((s) => !showing.includes(s)).map((s) => s.id);
+  if (showing.some((s) => s.key === keyOf(n))) return { show: false, close: late, next: showing };
   const all = [...showing, { id: n.overlay, key: keyOf(n), until: now + lasts(n) }];
   const over = Math.max(0, all.length - MOST);
-  return { show: true, close: all.slice(0, over).map((s) => s.id), next: all.slice(over) };
+  return { show: true, close: [...late, ...all.slice(0, over).map((s) => s.id)], next: all.slice(over) };
 }

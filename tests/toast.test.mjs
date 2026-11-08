@@ -48,8 +48,10 @@ test("A toast gone, by its clock or a click, can be shown again", async () => {
   assert.equal(lasts({}), 5000, "the rest 5 s");
   assert.equal(lasts({ timeout: 1200 }), 1200, "or the toast's own");
   const shown = admit([], { overlay: "x", title: "Saved" }, 0).next;
-  assert.equal(admit(onScreen(shown, 4999), { overlay: "y", title: "Saved" }, 4999).show, false, "still up");
-  assert.equal(admit(onScreen(shown, 5000), { overlay: "y", title: "Saved" }, 5000).show, true, "gone by its clock");
+  assert.equal(admit(shown, { overlay: "y", title: "Saved" }, 4999).show, false, "still up");
+  const late = admit(shown, { overlay: "y", title: "Saved" }, 5100);
+  assert.equal(late.show, true, "gone by its clock");
+  assert.deepEqual(clone(late.close), ["x"], "and closed here, in case Herdr's poll has not taken it down yet");
   assert.equal(onScreen("junk", 0).length, 0, "a list from elsewhere is nothing on screen");
   assert.notEqual(keyOf({ title: "a", body: "b" }), keyOf({ title: "a b" }), "title and body kept apart");
 

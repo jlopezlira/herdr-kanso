@@ -15,17 +15,17 @@ const DOT = { error: "blocked", warning: "working", success: "done", info: "acce
 export default class Toast extends View {
   init(_props, _cx) {
     const p = props() ?? {}, now = Date.now();
-    const { show, close, next } = admit(this.showing(now), p, now);
+    const { show, close, next } = admit(this.mine(), p, now);
     close.forEach(closeOverlay);
     setShared(KEY, keep(shared(KEY), MARK, next, now));
     if (!show) closeOverlay(p.overlay);
   }
 
-  showing(now) { return onScreen(marked(shared(KEY))[MARK], now); }
+  mine() { return marked(shared(KEY))[MARK]; }
 
   dismiss() {
     const p = props() ?? {}, now = Date.now();
-    setShared(KEY, keep(shared(KEY), MARK, this.showing(now).filter((s) => s.id !== p.overlay), now));
+    setShared(KEY, keep(shared(KEY), MARK, onScreen(this.mine(), now).filter((s) => s.id !== p.overlay), now));
     closeOverlay(p.overlay);
   }
 
