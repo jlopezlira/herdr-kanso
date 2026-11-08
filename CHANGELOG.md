@@ -8,6 +8,17 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.9.2] - 2026-11-08
+
+### Fixed
+
+- A mod that did not load because Herdr's mod runtime ran out of memory ("kanso-menu did not load: Null "null"", seen after a day of updates) now brings the same notice as any out-of-memory error, with a click to restart the window; your terminals and agents stay.
+
+### Changed
+
+- kansō help has its own icon at the top right, beside kansō settings' gear and drawn the same, instead of rows in the sidebar's footer; the footer is as it was before 3.9.1.
+- kansō help and kansō settings open as the same window (one size, one header with its icon and Esc), and each has a link to the other, so you can always go back. Help's Configure page is gone: its notes are in the Guide, and Settings does the rest.
+
 ## [3.9.1] - 2026-11-08
 
 ### Fixed

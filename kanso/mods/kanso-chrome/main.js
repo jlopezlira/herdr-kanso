@@ -9,8 +9,12 @@ import { Updater } from "./update.js";
 import { tryOrAsync } from "./pure.js";
 
 const basename = (path) => path.replace(/\/+$/, "").split("/").at(-1);
-const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
+const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+
+// The runtime out of memory says so, or, with no room left for the error itself, throws null:
+// a mod then "did not load: Null "null"".
+export const exhausted = (e) => /out of memory|\bNull\b\s*["'“]?null/i.test(String(e));
 
 export default class WorkspaceChrome extends View {
   // Only the footer copy looks for Kanso releases (update.js); the top bar's never does.
@@ -47,7 +51,7 @@ export default class WorkspaceChrome extends View {
     });
   }
 
-  // Hot reloads leak mod-runtime memory until the window restarts; terminals live in herdr-core and survive it.
+  // Hot reloads (each update is some) leak mod-runtime memory until the window restarts; terminals live in herdr-core and survive it.
   watch(cx) {
     if (this.watching) return;
     this.watching = true;
@@ -59,7 +63,7 @@ export default class WorkspaceChrome extends View {
       this.watching = false;
       if (!status) return;
       const { errors } = status;
-      if (!errors.some((e) => /out of memory/i.test(String(e)))) { this.warned = false; return; }
+      if (!errors.some(exhausted)) { this.warned = false; return; }
       if (this.warned) return;
       this.warned = true;
       notify({ title: "Herdr's mod runtime is out of memory", level: "error", action: { name: "kanso-chrome.restart" },
@@ -107,9 +111,6 @@ export default class WorkspaceChrome extends View {
         .child(row("settings", "mods/kanso-chrome/icons/settings.svg", ready ? "Settings · update ready" : "Settings", () => run("app.settings"))
           .when(ready && !collapsed, el => el.child(dot()))
           .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
-        // Help and the dōjō where Settings is: one place to find them, not one inside another.
-        .when(!hidden().has("footer.help"), el => el.child(row("help", "mods/kanso-chrome/icons/help.svg", "Help and keys", () => run("mod.open", { name: "kanso-help" }))))
-        .when(!hidden().has("footer.dojo"), el => el.child(row("dojo", "mods/kanso-chrome/icons/enso.svg", "hjkl dōjō", () => run("mod.open", { name: "kanso-dojo" }))))
         // A server, not a second "+": the rail already has one for New space.
         .when(!hidden().has("footer.machine"), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add machine", () => run("mod.open", { name: "machine-add" }))))
         .child(div().h(8).flex_none())

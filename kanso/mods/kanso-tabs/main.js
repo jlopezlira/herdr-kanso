@@ -37,7 +37,7 @@ function customPanels() {
 // Both shared, so the Panels popup and every bar agree.
 const ORDER = "kanso.panels.order", OFF = "kanso.panels.off";
 const ICON = "mods/kanso-chrome/icons/";
-const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 720, height: 620, props: { page } });
+const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const BUILTIN = [
   { id: "files", label: "Files", icon: `${ICON}file.svg` },
   { id: "insights", label: "Spend", icon: `${ICON}chart.svg` },
@@ -316,11 +316,14 @@ export default class Tabs extends View {
         .when(!hidden.has("tabs.arrange"), (el) => el.child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
           .tooltip(window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements"))))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
-        // Not one of the panels: never dragged nor turned off; the dot means a release waits.
+        // Help and settings, alike and side by side: not panels, never dragged nor turned off.
+        .child(button("kanso-help", svg("mods/kanso-chrome/icons/help.svg").size(15), () => run("mod.open", { name: "kanso-help" }))
+          .ml(4).tooltip(window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/"))
+        // The dot means a release waits.
         .child(button("kanso-settings", div().relative().child(svg("mods/kanso-chrome/icons/settings.svg").size(15))
             .when(Boolean(update), (el) => el.child(div().absolute().top(-2).right(-3).size(6).rounded_full().bg(t.accent))),
           () => openSettings(update ? "news" : "keys"))
-          .ml(4).tooltip(update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,")))
+          .tooltip(update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,")))
       .when(window()?.buttons, el => el.child(button("minimize", "−", () => run("window.minimize")))
         .child(button("maximize", "□", () => run("window.maximize")))
         .child(button("close-window", svg("mods/kanso-chrome/icons/close.svg").size(13), () => run("window.close"))));
