@@ -253,19 +253,12 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   clicks["machine-add-local"]({}, cx);
   clicks["machine-new-local"]({}, cx);
   clicks["machine-add-odin"]({}, cx);
-  clicks["space-new"]({}, cx);
 
-  activeMachine = null;
-  view.shown.add("sp-local");
-  view.render();
-  clicks["space-new"]({}, cx);
-
+  // The top + is no longer a bare space: it adds a project (tests/projects.test.mjs).
   assert.deepEqual(calls, [
     ["space.new", { machine: "" }],
     ["space.new", { machine: "" }],
     ["space.new", { machine: "odin" }],
-    ["space.new", { machine: "odin" }],
-    ["space.new", { machine: "" }],
   ]);
 
   // ⌃1-9 goes through Kanso: a space that isn't there is nothing, not an error.

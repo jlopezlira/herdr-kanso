@@ -137,7 +137,7 @@ test("worktree lists are read from git's porcelain", async () => {
   ]);
 });
 
-test("Projects: Add project at the top, a closed project keeps its row, and its + starts the agent used there last", async () => {
+test("the top + adds a project in Projects and starts a conversation in Threads; a closed project keeps its row, and its + starts the agent used there last", async () => {
   const handlers = {};
   const node = () => {
     let id = null;
@@ -151,7 +151,7 @@ test("Projects: Add project at the top, a closed project keeps its row, and its 
     });
     return proxy;
   };
-  const calls = [];
+  const calls = [], overlays = [];
   const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", agent: "codex", missing: false }];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
@@ -164,12 +164,20 @@ test("Projects: Add project at the top, a closed project keeps its row, and its 
     spaces: () => [{ id: "sp-agile", name: "agile", folder: "/Users/me/agile", machine: null, active: true, tabs: [] }],
     panes: () => [], agents: () => [], machines: () => [{ name: null, layout: "ready" }],
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), home: () => "/Users/me",
+    openOverlay: (o) => overlays.push(clone({ kind: o.kind, props: o.props })),
     knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }, { key: "codex", name: "Codex", installed: true, run: ["codex"] }],
   });
   const view = new Spaces();
-  Object.assign(view, { git: {}, shown: new Set(["sp-agile"]), born: {}, custom: {}, order: "updated", machines: [], folded: new Set(), agentsFolded: new Set(), orderPicker: node });
+  Object.assign(view, { view: "spaces", git: {}, shown: new Set(["sp-agile"]), born: {}, custom: {}, order: "updated", machines: [], folded: new Set(), agentsFolded: new Set(), orderPicker: node });
   view.render();
-  assert.ok(handlers["on_click:add-project"], "Add project is there");
+  handlers["on_click:space-new"]({}, { stop_propagation() {}, notify() {} });
+  assert.deepEqual(overlays.at(-1), { kind: "dialog", props: { newProject: { start: false } } }, "in Projects, the top + asks a new project's name and folder");
+  view.view = "threads";
+  view.render();
+  handlers["on_click:space-new"]({}, { stop_propagation() {}, notify() {} });
+  assert.deepEqual(overlays.at(-1), { kind: "popup", props: { newConversation: true } }, "in Threads, it asks which project the conversation is in");
+  view.view = "spaces";
+  view.render();
   const plus = handlers[`on_mouse_up:closed-plus-:/Users/me/fury`];
   assert.ok(plus, "fury has no space open: it keeps its row, with its +");
   plus({}, { stop_propagation() {} });
@@ -183,4 +191,48 @@ test("a local folder that is gone marks only this computer's project, never anot
   });
   const list = [{ id: "here", name: "api", folder: "/srv/api", machine: "" }, { id: "odin", name: "api", folder: "/srv/api", machine: "odin" }];
   assert.deepEqual(clone((await publishRegistry({ projects: async () => list })).map((p) => [p.id, p.missing])), [["here", true], ["odin", false]]);
+});
+
+test("New project with a conversation: the name you give it, its folder, and the agent starts there in a space of that name", async (t) => {
+  const dir = await temporary(t);
+  const calls = [], closed = [], shared = new Map();
+  const { Spaces, Kdb } = await load("kanso-spaces/main.js", ["Spaces", "Kdb"], {
+    exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
+    props: () => ({ newProject: { start: true }, overlay: "ov1" }), closeOverlay: (id) => closed.push(id),
+    shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v), notify: () => {},
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }],
+  });
+  const view = new Spaces();
+  Object.assign(view, { kdb: new Kdb(join(dir, "kanso")), projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
+  const { cx, drain } = (await import("./helpers.mjs")).context();
+  view.createProject(cx);
+  await drain();
+  assert.deepEqual(calls, [["space.new", { folder: "/Users/me/Apps/fury-api", name: "Fury", machine: "", argv: ["claude"] }]]);
+  assert.deepEqual(closed, ["ov1"]);
+  assert.deepEqual(clone(shared.get("kanso.registry").map((p) => [p.name, p.folder])), [["Fury", "/Users/me/Apps/fury-api"]]);
+
+  const noFolder = new Spaces();
+  Object.assign(noFolder, { kdb: view.kdb, projectFolder: null, projectName: { value: () => "x" } });
+  noFolder.createProject(cx);
+  assert.equal(noFolder.projectError, "Choose its folder.");
+});
+
+test("Remove project takes it out for good, closes its open space, and only then closes the menu", async (t) => {
+  const dir = await temporary(t);
+  const calls = [], shared = new Map();
+  const { Spaces, Kdb } = await load("kanso-spaces/main.js", ["Spaces", "Kdb"], {
+    exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
+    props: () => ({ overlay: "ov1" }), closeOverlay: (id) => calls.push(["close", id]),
+    shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v),
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+  });
+  const kdb = new Kdb(join(dir, "kanso"));
+  const { row } = await kdb.addProject({ name: "fury", folder: "/Users/me/fury" });
+  const view = Object.assign(new Spaces(), { kdb });
+  view.removeProject(row, { id: "sp-fury" });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(calls, [["space.close", { id: "sp-fury" }], ["close", "ov1"]], "the space goes, then the menu");
+  assert.deepEqual(clone(await kdb.projects()), []);
+  assert.deepEqual(clone(shared.get("kanso.registry") ?? []), [], "every view draws it gone");
 });

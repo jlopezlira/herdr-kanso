@@ -8,6 +8,22 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.11.0] - 2026-11-08
+
+### Added
+
+- The + at the top of the sidebar does what the view you are in needs. In Projects it asks a new project's name and folder (the name starts as the folder's; change it if you like). In Status and Threads it asks which project the new conversation is in, or makes a new project and starts the conversation there; a folder can also be opened without making it a project.
+- Threads go by project, each with a + to start a new conversation in it. Grouping can still be turned off from the sort menu.
+- Remove project for every project you see: one you added goes for good, and if it is open its space closes too (the second click says how many tabs).
+
+### Changed
+
+- The Add project row at the top of Projects is gone: the + does it.
+
+### Fixed
+
+- Remove from projects, Keep as a project, Locate folder and the agent a project remembers now always take: a menu waits for its change to be written before it closes. The sidebar redraws as soon as the projects change.
+
 ## [3.10.0] - 2026-11-08
 
 ### Added
