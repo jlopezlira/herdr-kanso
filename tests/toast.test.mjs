@@ -20,8 +20,8 @@ async function screen() {
     t.init({}, {});
     return t;
   };
-  const up = () => (store["kanso.toasts"] ?? []).map((s) => s.id).filter((id) => !closed.includes(id));
-  return { post, up, closed };
+  const up = () => Object.values(store["kanso.toasts"] ?? {}).flat().map((s) => s.id).filter((id) => !closed.includes(id));
+  return { post, up, closed, store };
 }
 
 test("A burst of the same toast shows it once", async () => {
@@ -59,4 +59,26 @@ test("A toast gone, by its clock or a click, can be shown again", async () => {
   assert.deepEqual(up(), [], "clicked away");
   post("t2", { title: "Saved" });
   assert.deepEqual(up(), ["t2"], "and shown again");
+});
+
+test("Two agents of one name finishing are two toasts, each going to its own", async () => {
+  const { post, up } = await screen();
+  const done = (terminal) => ({ title: "api finished", level: "success", action: { name: "agent.focus", args: { terminal } } });
+  post("t1", done("w1"));
+  post("t2", done("w2"));
+  post("t3", done("w2"));
+  assert.deepEqual(up(), ["t1", "t2"]);
+});
+
+test("Toasts from before a restart, or from another window, are never read or closed: Herdr numbers overlays afresh", async () => {
+  const { post, up, closed, store } = await screen();
+  store["kanso.toasts"] = { "old-start": [{ id: "o1", key: JSON.stringify(["", "Saved", "", null]), until: Date.now() + 60000 }] };
+  post("o1", { title: "Saved" });
+  assert.deepEqual(closed, [], "the same words and the same id, but another start's: shown, nothing closed");
+  ["o2", "o3", "o4"].forEach((id) => post(id, { title: id }));
+  assert.deepEqual(closed, ["o1"], "only this window's own oldest makes room");
+  assert.deepEqual(store["kanso.toasts"]["old-start"].map((s) => s.id), ["o1"], "the other start's list kept while it is up, never touched");
+  assert.deepEqual(up().filter((id) => id !== "o1"), ["o2", "o3", "o4"]);
+  const { keep } = await load("kanso-toast/stack.js", ["keep"]);
+  assert.deepEqual(Object.keys(keep({ gone: [{ id: "x", until: 1 }], here: [{ id: "y", until: 9 }] }, "now", [], 5)), ["here"], "a start with nothing up is dropped");
 });

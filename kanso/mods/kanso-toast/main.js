@@ -5,23 +5,27 @@
 import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
-import { onScreen, admit } from "./stack.js";
+import { onScreen, admit, marked, keep } from "./stack.js";
 
 const KEY = "kanso.toasts";
+// This window's mods, as they run now: the top of the file runs once for all their copies.
+const MARK = `${Date.now()}-${Math.random()}`;
 const DOT = { error: "blocked", warning: "working", success: "done", info: "accent" };
 
 export default class Toast extends View {
   init(_props, _cx) {
-    const p = props() ?? {};
-    const { show, close, next } = admit(onScreen(shared(KEY), Date.now()), p, Date.now());
+    const p = props() ?? {}, now = Date.now();
+    const { show, close, next } = admit(this.showing(now), p, now);
     close.forEach(closeOverlay);
-    setShared(KEY, next);
+    setShared(KEY, keep(shared(KEY), MARK, next, now));
     if (!show) closeOverlay(p.overlay);
   }
 
+  showing(now) { return onScreen(marked(shared(KEY))[MARK], now); }
+
   dismiss() {
-    const p = props() ?? {};
-    setShared(KEY, onScreen(shared(KEY), Date.now()).filter((s) => s.id !== p.overlay));
+    const p = props() ?? {}, now = Date.now();
+    setShared(KEY, keep(shared(KEY), MARK, this.showing(now).filter((s) => s.id !== p.overlay), now));
     closeOverlay(p.overlay);
   }
 
