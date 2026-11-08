@@ -8,6 +8,13 @@ minor version, anything else is a patch. The format follows
 checks all of this, and merging to main releases the version in
 `kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
 
+## [3.14.2] - 2026-11-08
+
+### Changed
+
+- Every + asks which agent to start: the top one in Status and Threads after the project, each project's own, New project with a conversation, and a new worktree. Only the agents installed are offered (with Terminal), and the one used last in the project says so; none is started for you.
+- A menu opens with no row lit: j or the down arrow lights the first, k the last.
+
 ## [3.14.1] - 2026-11-08
 
 ### Fixed

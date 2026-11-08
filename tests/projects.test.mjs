@@ -5,7 +5,7 @@ import { mkdir, writeFile, stat, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { load, clone, temporary, exec } from "./helpers.mjs";
 
-const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "agentFor", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
+const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
 const database = async (t) => {
   const dir = await temporary(t);
@@ -45,15 +45,6 @@ test("a project with no space open is closed; same names show their parent folde
   const sp = [{ folder: "/Users/me/acme/web/", machine: null }, { folder: "/srv/api", machine: "odin" }, { folder: "", machine: null }];
   assert.deepEqual(clone(closedProjects(list, sp, "/Users/me").map((p) => p.id)), ["b", "c"]);
   assert.deepEqual(clone([...shownNames(list)]), [["a", "acme/web"], ["b", "fluenty/web"], ["c", "fury"], ["d", "api"]]);
-});
-
-test("the + starts the agent used last in the project, else the first installed", async () => {
-  const { agentFor } = await projects();
-  const known = [{ key: "pi", installed: false }, { key: "claude", installed: true }, { key: "codex", installed: true }];
-  assert.equal(agentFor({ agent: "codex" }, known).key, "codex");
-  assert.equal(agentFor({ agent: "pi" }, known).key, "claude", "not installed: the first that is");
-  assert.equal(agentFor(null, known).key, "claude");
-  assert.equal(agentFor(null, []), null);
 });
 
 test("projects are kept in the database: added once, removed without coming back, migrated once", async (t) => {
@@ -139,7 +130,7 @@ test("worktree lists are read from git's porcelain", async () => {
   ]);
 });
 
-test("the top + adds a project in Projects and starts a conversation in Threads; a closed project keeps its row, and its + starts the agent used there last", async () => {
+test("the top + adds a project in Projects and starts a conversation in Threads; a closed project keeps its row, and its + asks which agent", async () => {
   const handlers = {};
   const node = () => {
     let id = null;
@@ -184,7 +175,8 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
   assert.ok(plus, "fury has no space open: it keeps its row, with its +");
   plus({}, { stop_propagation() {} });
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(calls, [["space.new", { folder: "/Users/me/fury", machine: "", argv: ["codex"] }]], "its own folder, with the agent used there last");
+  assert.deepEqual(calls, [], "nothing starts on its own");
+  assert.equal(overlays.at(-1).props.newAgent.folder, "/Users/me/fury", "it asks which agent, in fury's folder");
 });
 
 test("a local folder that is gone marks only this computer's project, never another machine's at the same path", async () => {
@@ -195,24 +187,24 @@ test("a local folder that is gone marks only this computer's project, never anot
   assert.deepEqual(clone((await publishRegistry({ projects: async () => list })).map((p) => [p.id, p.missing])), [["here", true], ["odin", false]]);
 });
 
-test("New project with a conversation: the name you give it, its folder, and the agent starts there in a space of that name", async (t) => {
+test("New project with a conversation: the name you give it, its folder, then which agent, asked", async (t) => {
   const dir = await temporary(t);
-  const calls = [], closed = [], shared = new Map();
+  const calls = [], closed = [], shared = new Map(), overlays = [];
   const { Spaces, Kdb } = await load("kanso-spaces/main.js", ["Spaces", "Kdb"], {
     exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
     props: () => ({ newProject: { start: true }, overlay: "ov1" }), closeOverlay: (id) => closed.push(id),
     shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v), notify: () => {},
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-    knownAgents: async () => [{ key: "claude", name: "Claude Code", installed: true, run: ["claude"] }],
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
   });
   const view = new Spaces();
   Object.assign(view, { kdb: new Kdb(join(dir, "kanso")), projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
   const { cx, drain } = (await import("./helpers.mjs")).context();
   view.createProject(cx);
   await drain();
-  assert.deepEqual(calls, [["space.new", { folder: "/Users/me/Apps/fury-api", name: "Fury", machine: "", argv: ["claude"] }]]);
+  assert.deepEqual(calls, [], "no agent is assumed");
   assert.deepEqual(closed, ["ov1"]);
-  assert.deepEqual(clone(shared.get("kanso.registry").map((p) => [p.name, p.folder, p.agent])), [["Fury", "/Users/me/Apps/fury-api", "claude"]], "the agent it started is the one its + starts later");
+  assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/Users/me/Apps/fury-api", "Fury"], "it asks which agent, for the project just made");
+  assert.deepEqual(clone(shared.get("kanso.registry").map((p) => [p.name, p.folder])), [["Fury", "/Users/me/Apps/fury-api"]]);
 
   const noFolder = new Spaces();
   Object.assign(noFolder, { kdb: view.kdb, projectFolder: null, projectName: { value: () => "x" } });
@@ -239,8 +231,8 @@ test("Remove project takes it out for good, closes its open space, and only then
   assert.deepEqual(clone(shared.get("kanso.registry") ?? []), [], "every view draws it gone");
 });
 
-test("New conversation in a closed project: one space however often it is clicked, under the project's own name", async () => {
-  const calls = [];
+test("New conversation: nothing lit until the keyboard moves; a project chosen asks which agent, under the project's own name", async () => {
+  const calls = [], overlays = [];
   const registry = [
     { id: "p-a", name: "api", folder: "/work/client-a/api", machine: "", agent: "codex", missing: false },
     { id: "p-b", name: "api", folder: "/work/client-b/api", machine: "", agent: "codex", missing: false },
@@ -264,19 +256,52 @@ test("New conversation in a closed project: one space however often it is clicke
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
     shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
     spaces: () => [], home: () => "/Users/me", appHome: () => "/tmp/kanso-none", exec: async () => ({ code: 1, stdout: "", stderr: "" }), props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
-    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-    knownAgents: async () => [{ key: "codex", installed: true, run: ["codex"] }],
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
   });
   const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
   view.init({}, { focus_handle: () => ({ focus() {} }), spawn: () => {}, notify() {} });
   rendering = true;
   view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
   rendering = false;
+  assert.equal(view.menuAt, -1, "no row is chosen for you");
   keys.at(-1)({ key: "down", modifiers: {} }, { stop_propagation() {}, notify() {} });
-  assert.deepEqual(scrolled, [1], "the list follows the keyboard's selection");
+  assert.deepEqual(scrolled, [0], "the first j lights the first row, and the list follows");
   items.on_item_click("conv-p-a", { notify() {} });
-  items.on_item_click("conv-p-a", { notify() {} });
+  assert.deepEqual(calls, [], "nothing starts on its own");
+  assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a row (the list's, by its key) asks which agent, under the project's own name, not the label that tells the two apart");
+});
+
+test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {
+  const calls = [], made = [];
+  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
+  const place = { space: null, folder: "/work/api", machine: "", project: null, name: "api" };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
+    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
+    shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place }), closeOverlay: () => {},
+    run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+  });
+  const view = Object.assign(new Spaces(), { kdb: { setProjectAgent: async () => {} }, menuAt: -1 });
+  view.known = [
+    { key: "claude", name: "Claude Code", installed: false, run: ["claude"] },
+    { key: "codex", name: "Codex", installed: true, run: ["codex"] },
+    { key: "pi", name: "pi", installed: true, run: ["pi"] },
+  ];
+  const real = view.menuItem.bind(view);
+  view.menuItem = (t, id, text, act, opts) => { made.push(text); return real(t, id, text, act, opts); };
+  view.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
+  assert.deepEqual(made.slice(0, 3), ["Codex", "pi", "Terminal"], "Claude Code is not installed here: not offered");
   view.menuActs[0]({});
-  await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(calls, [["space.new", { folder: "/work/client-a/api", machine: "", argv: ["codex"] }]], "a click on a row (the list's, by its key) starts one space, named by its folder like the project, not by the label that tells the two apart");
+  assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "", argv: ["codex"] }]]);
+
+  // A worktree just made: the agent chosen starts in its own tab there, named by its branch.
+  calls.length = 0; made.length = 0;
+  place.tree = { folder: "/kanso/worktrees/api/feat-x", branch: "feat-x" };
+  const tree = Object.assign(new Spaces(), { kdb: view.kdb, menuAt: -1, known: view.known });
+  const treeItem = tree.menuItem.bind(tree);
+  tree.menuItem = (t, id, text, act, opts) => { made.push(text); return treeItem(t, id, text, act, opts); };
+  tree.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
+  assert.ok(!made.includes("In a new worktree\u2026"), "no worktree in a worktree");
+  tree.menuActs[1]({});
+  assert.deepEqual(calls, [["space.new", { folder: "/work/api", machine: "" }], ["tab.new", { folder: "/kanso/worktrees/api/feat-x", name: "feat-x", argv: ["pi"] }]]);
 });

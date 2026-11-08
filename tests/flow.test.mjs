@@ -273,6 +273,7 @@ test("Every list answers vim's keys: j/k, gg/G, Enter, Esc; with cmd, ctrl or al
   assert.equal(listKey(key("k", { control: true })).move, null);
   assert.equal(listKey(key("x")).move, null);
   assert.deepEqual([moveTo("down", 4, 5), moveTo("up", 0, 5), moveTo("first", 3, 5), moveTo("last", 0, 5), moveTo("down", 0, 0)], [4, 0, 0, 4, 0], "j and k stop at the ends");
+  assert.deepEqual([moveTo("down", -1, 5), moveTo("up", -1, 5)], [0, 4], "nothing chosen yet: j takes the first, k the last");
 });
 
 test("Help draws the keyboard from your keys: a chord as key and modifiers, the layout's key over the global one", async () => {

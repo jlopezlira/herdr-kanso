@@ -11,7 +11,7 @@ import { findThreads } from "./threads.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
-import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, agentFor, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
+import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
 import { sleepingNow, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
@@ -149,7 +149,8 @@ export default class Spaces extends View {
   init(_props, cx) {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
     if (props()?.menu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) {
-      this.confirmClose = false; this.menuAt = 0; this.handle = cx.focus_handle();
+      // Nothing is chosen for you: no row lit until the keyboard moves.
+      this.confirmClose = false; this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
       if (props()?.newConversation) this.convScroll = VirtualListScrollHandle.new();
       this.openPopup(cx); return;
@@ -243,10 +244,6 @@ export default class Spaces extends View {
       return;
     }
     this.handle.focus();
-    // The agents are read before anything is chosen, so a pick starts at once (a popup is gone after the click).
-    if (p.newConversation) {
-      knownAgents({ on: null }).then((list) => { this.knownBy = new Map([["", { list, at: Date.now() }]]); cx.notify(); }).catch(() => {});
-    }
     if (p.newAgent) {
       knownAgents({ on: p.newAgent.machine || null }).then((list) => { this.known = list; cx.notify(); }).catch(() => { this.known = []; cx.notify(); });
     }
@@ -308,15 +305,10 @@ export default class Spaces extends View {
         await publishRegistry(this.kdb);
         const open = spaces().find((w) => keyOfSpace(w, home()) === keyOfProject(row));
         if (existed) notify({ title: `${row.name} is already one of your projects`, level: "info", timeout: 4000 });
-        if (start) {
-          const place = open ? placeOfSpace(open) : placeOfKey(keyOfProject(row), row);
-          const list = await knownAgents({ on: null }).catch(() => []);
-          const agent = agentFor(row, list);
-          startIn(place, agent?.run ?? null);
-          // Remembered like the +'s first start, so the project keeps starting it whatever Herdr lists first later.
-          if (agent && row.agent !== agent.key) await this.kdb.setProjectAgent(row.id, agent.key).then(() => publishRegistry(this.kdb)).catch(() => {});
-        } else if (open) run("space.select", { id: open.id });
         closeOverlay(props().overlay);
+        // Then which agent: the ones you have installed, none chosen for you.
+        if (start) this.newAgentMenu(open ? placeOfSpace(open) : placeOfKey(keyOfProject(row), row));
+        else if (open) run("space.select", { id: open.id });
       } catch (e) { this.projectError = String(e?.message ?? e); }
       finally { this.creating = false; cx.notify(); }
     });
@@ -349,40 +341,19 @@ export default class Spaces extends View {
   }
 
 
-  // The project's + : the agent used there last (or the first installed), at once.
-  // Resolves once what it remembers is written (a popup waits for that before closing).
-  quickStart(place) {
-    const key = place.machine ?? "";
-    // Read again after a minute, so an agent installed meanwhile counts.
-    const cached = (this.knownBy ??= new Map()).get(key);
-    const known = cached && Date.now() - cached.at < 60_000 ? cached.list : null;
-    const go = (list) => {
-      const project = registry().find((p) => p.id === place.project) ?? null;
-      const agent = agentFor(project, list);
-      startIn(place, agent?.run ?? null);
-      // The first one it starts is remembered, so the + keeps starting it whatever Herdr lists first later.
-      if (!project || !agent || project.agent === agent.key) return null;
-      const kdb = this.db();
-      return kdb.setProjectAgent(project.id, agent.key).then(() => publishRegistry(kdb)).catch(() => {});
-    };
-    if (known) return Promise.resolve(go(known));
-    return knownAgents({ on: key || null }).then((list) => { this.knownBy.set(key, { list, at: Date.now() }); return go(list); }).catch(() => startIn(place));
-  }
-
   newConversationMenu() {
     openOverlay({ mod: "kanso-spaces", kind: "popup", width: 280, height: 460, at: "pointer", props: { newConversation: true } });
   }
 
   // Every project: the open ones (each space), then the ones you added that have none open.
-  // A click starts the agent used there last; a right click chooses.
+  // A project chosen asks which agent.
   newConversationView(t) {
     const sp = spaces();
-    this.menuActs = [];
-    const item = (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
+    const item = this.items(t);
     const closed = closedProjects(registry(), sp, home()).filter((p) => !p.missing);
     const names = shownNames(registry());
-    // One conversation per popup: a second click or Enter while the first is written starts nothing.
-    const start = (place) => { if (this.starting) return; this.starting = true; this.thenClose(this.quickStart(place)); };
+    // A project chosen, then which agent, in its own menu: nothing is started for you.
+    const start = (place) => { closeOverlay(props().overlay); this.newAgentMenu(place); };
     const entries = [
       ...sp.map((w) => ({ id: `conv-${w.id}`, place: placeOfSpace(w), hint: w.machine ?? null })),
       // The shown name tells two alike apart; the space keeps the project's own.
@@ -401,11 +372,7 @@ export default class Spaces extends View {
           (range) => entries.slice(range.start, range.end).map((e, k) => row(e, range.start + k)))
           .when(Boolean(this.convScroll), (el) => el.track_scroll(this.convScroll))
           .on_item_click((key, cx) => { const e = byKey(key); if (e) start(e.place); cx.notify(); })
-          .on_item_secondary_click((key, _ev, cx) => {
-            const e = byKey(key);
-            if (!e) return;
-            cx.stop_propagation(); closeOverlay(props().overlay); this.newAgentMenu(e.place);
-          }))
+          .on_item_secondary_click((key, _ev, cx) => { const e = byKey(key); if (e) { cx.stop_propagation(); start(e.place); } }))
         .child(Scrollbar.vertical("conv-list").absolute().inset_0()))
       .child(div().mx(8).my(4).h(1).bg(t.border))
       .child(item("conv-add-project", "New project with a conversation\u2026", () => this.addProject(true), { icon: "folder-plus" }))
@@ -416,13 +383,13 @@ export default class Spaces extends View {
     openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 300, at: "pointer", props: { newAgent: place } });
   }
 
-  // Left click: the agent used there last; right click: choose.
+  // A project's + : asks which agent, of the ones installed.
   plus(id, t, place) {
     return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.dim)
-      .tooltip("New agent (right-click to choose)")
+      .tooltip("New conversation")
       .hover((s) => s.bg(t.input).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.quickStart(place); })
+      .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .child(svg("mods/kanso-chrome/icons/plus.svg").size(13));
   }
@@ -951,6 +918,12 @@ export default class Spaces extends View {
       });
   }
 
+  // A popup's rows from the start: the keyboard's list emptied, and the row maker for this theme.
+  items(t) {
+    this.menuActs = [];
+    return (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
+  }
+
   // One line of a popup: added to menuActs as it draws, so the keyboard walks them in screen order.
   menuItem(t, id, text, act, opts = {}) {
     const at = this.menuActs.length;
@@ -1006,8 +979,7 @@ export default class Spaces extends View {
     const project = place?.project ? registry().find((p) => p.id === place.project) ?? null : null;
     const asleep = (shared("kanso.asleep") ?? []).filter((a) => inPlace(a, { from: key, space: w?.id ?? null }, spaces(), home()));
     if (!w && !asleep.length && !project) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Nothing here sleeps any more.");
-    this.menuActs = [];
-    const item = (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
+    const item = this.items(t);
     const active = w?.tabs?.find((x) => x.active);
     const tabs = w?.tabs?.length ?? 0;
     const trees = this.trees ?? [];
@@ -1043,27 +1015,26 @@ export default class Spaces extends View {
         : item("remove-project", "Remove project", () => { this.confirmClose = true; }, { icon: "close", ink: t.muted, keep: true })));
   }
 
-  // Right click on a project's + : which agent, or a shell, or in a new worktree.
+  // Every + ends here: which agent of the ones installed (or a shell), none chosen for you; the one used last
+  // in the project says so. `place.tree`: a worktree just made, where the agent starts in its own tab.
   newAgentView(t) {
     const place = props().newAgent;
     const project = registry().find((p) => p.id === place.project) ?? null;
     if (!this.known) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Looking for your agents\u2026");
-    this.menuActs = [];
-    const item = (id, text, act, opts) => this.menuItem(t, id, text, act, opts);
-    const installed = this.known.filter((a) => a.installed);
-    const last = agentFor(project, this.known);
+    const item = this.items(t);
     const pick = (a) => {
       if (this.starting) return; // a second click while the first is written starts nothing
       this.starting = true;
-      startIn(place, a?.run ?? null);
+      if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
+      else startIn(place, a?.run ?? null);
       this.thenClose(project && a ? this.kdb.setProjectAgent(project.id, a.key) : null);
     };
     return this.menuFrame(t)
-      .child(this.menuTitle(t, `New in ${place.name ?? "this project"}`))
-      .children(installed.map((a) => item(`agent-${a.key}`, a.name, () => pick(a), { hint: a.key === last?.key ? "last" : null, keep: true })))
+      .child(this.menuTitle(t, `New in ${place.tree?.branch ?? place.name ?? "this project"}`))
+      .children(this.known.filter((a) => a.installed).map((a) => item(`agent-${a.key}`, a.name, () => pick(a), { hint: a.key === project?.agent ? "last" : null, keep: true })))
       .child(item("agent-shell", "Terminal", () => pick(null), { keep: true }))
-      .child(div().mx(8).my(4).h(1).bg(t.border))
-      .child(item("agent-worktree", "In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" }));
+      .when(!place.tree, (el) => el.child(div().mx(8).my(4).h(1).bg(t.border))
+        .child(item("agent-worktree", "In a new worktree\u2026", () => this.worktreeDialog(place), { icon: "worktree" })));
   }
 
   makeWorktree(cx) {
@@ -1076,11 +1047,10 @@ export default class Spaces extends View {
       try {
         const r = await addWorktree({ folder: place.folder, machine: place.machine || null, branch, base: kansoWorktrees(place.machine) });
         if (r.error) { this.wtError = r.error; return; }
-        const project = registry().find((p) => p.id === place.project) ?? null;
-        const agent = agentFor(project, await knownAgents({ on: place.machine || null }).catch(() => []));
-        openAt(place, r.path, agent?.run ?? null, branch);
         if (!r.made) notify({ title: `${branch} already had a worktree`, body: r.path, level: "info", timeout: 5000 });
         closeOverlay(props().overlay);
+        // Then which agent starts in it, asked like every other start.
+        this.newAgentMenu({ ...place, tree: { folder: r.path, branch } });
       } finally { this.making = false; cx.notify(); }
     });
   }
@@ -1703,7 +1673,7 @@ export default class Spaces extends View {
   // Thread states are kept as labels on the terminal in herdr-core, so every window and a restart agree.
   menuView(t) {
     const m = props().menu, close = () => closeOverlay(props().overlay);
-    if (m.asleep) return this.zzMenuView(t, m, close);
+    if (m.asleep) return this.zzMenuView(t, m);
     const k = terminals().find((x) => x.address === m.address);
     const p = panes().find((x) => x.terminal === m.address);
     const a = agents().find((x) => x.address === m.address);
@@ -1712,18 +1682,7 @@ export default class Spaces extends View {
     const pinned = l[PIN_LABEL] != null && l[PIN_LABEL] !== "";
     const settled = Boolean(settledOf(l)), snoozed = snoozedUntil(l) > now;
     const free = a?.status !== "working" && a?.status !== "blocked";
-    this.menuActs = [];
-    const item = (id, text, act, { icon = null, hint = null, ink = t.foreground, keep = false } = {}) => {
-      const at = this.menuActs.length;
-      this.menuActs = [...this.menuActs, (cx) => { act(cx); if (!keep) close(); }];
-      return h_flex().id(`menu-${id}`).h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
-        .when(at === this.menuAt, (el) => el.bg(t.selected))
-        .hover((s) => s.bg(t.hover))
-        .on_click((_e, cx) => { act(cx); if (!keep) close(); cx.notify(); })
-        .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
-        .child(div().flex_1().truncate().child(text))
-        .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
-    };
+    const item = this.items(t);
     const rule = () => div().mx(8).my(4).h(1).bg(t.border);
     const copy = (text) => (cx) => cx.write_to_clipboard?.(text);
     const session = m.session ? m.session.split("/").at(-1).replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
@@ -1763,20 +1722,9 @@ export default class Spaces extends View {
         : item("close", a ? "Close agent" : "Close terminal", (cx) => { this.confirmClose = true; }, { icon: "close", ink: t.blocked, keep: true }));
   }
 
-  zzMenuView(t, m, close) {
+  zzMenuView(t, m) {
     const z = m.asleep;
-    this.menuActs = [];
-    const item = (id, text, act, { icon = null, hint = null } = {}) => {
-      const at = this.menuActs.length;
-      this.menuActs = [...this.menuActs, (cx) => { act(cx); close(); }];
-      return h_flex().id(`menu-${id}`).h(30).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(t.foreground)
-        .when(at === this.menuAt, (el) => el.bg(t.selected))
-        .hover((s) => s.bg(t.hover))
-        .on_click((_e, cx) => { act(cx); close(); cx.notify(); })
-        .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
-        .child(div().flex_1().truncate().child(text))
-        .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
-    };
+    const item = this.items(t);
     return this.menuFrame(t)
       .child(div().h(26).px(8).flex().items_center().text_size(11.5).text_color(t.dim).truncate().child(`${m.name}, asleep since ${since(z.saved)}`))
       .when(!z.busy, (el) => el.child(item("wake", z.n > 1 ? `Wake it and ${z.n - 1} more of ${z.tab}` : "Wake", () => wakeRow(z.id), { icon: "sun" })))
