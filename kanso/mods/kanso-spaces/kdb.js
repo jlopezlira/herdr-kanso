@@ -31,6 +31,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS sleeps_name ON sleeps(project, name);
 CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, name TEXT, title TEXT, said INTEGER, program TEXT, cwd TEXT, space_id TEXT, tab_id TEXT, pos INTEGER,
   terminal TEXT, status TEXT NOT NULL DEFAULT 'unknown', since INTEGER, seen INTEGER NOT NULL, sleep_id TEXT, restore TEXT, project TEXT, project_at INTEGER);
 CREATE INDEX IF NOT EXISTS agents_space ON agents(space_id, status);
+CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL, machine TEXT NOT NULL DEFAULT '', added INTEGER NOT NULL, removed INTEGER, agent TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
 export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents
@@ -252,6 +254,31 @@ export class Kdb {
     const [rows, agents] = [await this.sql("SELECT * FROM sleeps;"), await this.sql("SELECT * FROM agents WHERE sleep_id IS NOT NULL;")];
     return rows.map((r) => ({ ...r, agents: agents.filter((a) => a.sleep_id === r.id) }));
   }
+
+  // Projects you added stay when their last agent closes; removed ones are kept as removed, so no window brings them back.
+  projects() { return this.read("SELECT * FROM projects WHERE removed IS NULL ORDER BY added, name;"); }
+  // Once for every window: the spaces open when this came in (and the places that sleep) are your projects; home is not one.
+  migrateProjects(places, now = Date.now()) {
+    const todo = "NOT EXISTS(SELECT 1 FROM meta WHERE key='projects')";
+    const rows = places.filter((p) => p.folder).map((p) => `INSERT OR IGNORE INTO projects(id,name,folder,machine,added) SELECT ${q(newId())},${q(p.name)},${q(p.folder)},${q(p.machine ?? "")},${n(now)} WHERE ${todo};`);
+    return this.run(["BEGIN IMMEDIATE;", ...rows, `INSERT OR IGNORE INTO meta(key,value) VALUES('projects','${n(now)}');`, "COMMIT;"]);
+  }
+  // A place added again comes back (with its name) instead of standing twice; `existed`: it was there already.
+  async addProject({ name, folder, machine = "" }, now = Date.now()) {
+    const was = (await this.read(`SELECT * FROM projects WHERE machine=${q(machine)} AND folder=${q(folder)};`))[0] ?? null;
+    const [row] = await this.run(`INSERT INTO projects(id,name,folder,machine,added) VALUES(${q(newId())},${q(name)},${q(folder)},${q(machine)},${n(now)})
+      ON CONFLICT(machine,folder) DO UPDATE SET removed=NULL RETURNING *;`);
+    return { row, existed: Boolean(was && was.removed == null) };
+  }
+  removeProject(id, now = Date.now()) { return this.held(`UPDATE projects SET removed=${n(now)} WHERE id=${q(id)} AND removed IS NULL RETURNING id;`); }
+  // Throws when another project is already there.
+  relocateProject(id, folder) {
+    // A project you removed from there does not hold the place.
+    return this.run(`BEGIN;DELETE FROM projects WHERE removed IS NOT NULL AND folder=${q(folder)} AND machine=(SELECT machine FROM projects WHERE id=${q(id)});
+      UPDATE projects SET folder=${q(folder)} WHERE id=${q(id)};COMMIT;`)
+      .catch((e) => { throw new Error(/UNIQUE/.test(e.message) ? "That folder is already a project." : e.message); });
+  }
+  setProjectAgent(id, agent) { return this.run(`UPDATE projects SET agent=${q(agent)} WHERE id=${q(id)};`); }
 
   prefs() { return this.read("SELECT key, value FROM prefs;"); }
   setPref(key, value) { return this.run(`INSERT INTO prefs(key,value) VALUES(${q(key)},${q(value)}) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`); }
