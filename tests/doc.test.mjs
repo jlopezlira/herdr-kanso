@@ -182,3 +182,18 @@ test("the standalone panel looks in the focused pane's machine and folder", asyn
   assert.deepEqual(clone(placeOf({ space: "s1", cwd: null }, list, "/Users/me")), { on: null, folder: "/here" });
   assert.deepEqual(clone(placeOf(null, list, "/Users/me")), { on: null, folder: "/Users/me" });
 });
+
+test("the standalone panel lists the files the focused terminal mentioned, each once, at most 15", async () => {
+  const { recentIn } = await load("../../markdown-panel/mods/markdown-panel/main.js", ["recentIn"]);
+  const many = Array.from({ length: 20 }, (_, i) => `/p/${i}.md`).join("\n");
+  assert.deepEqual(clone(recentIn("/a/plan.md\nrelative.md\n/a/x.ts\n/a/plan.md\n /b/notes.markdown \n")), ["/a/plan.md", "/b/notes.markdown"]);
+  assert.equal(recentIn(many).length, 15);
+  assert.deepEqual(clone(recentIn("")), []);
+});
+
+test("reviews still waiting are read one per md-review process, by its pid", async () => {
+  const { reviewsIn } = await load("../../markdown-panel/mods/markdown-panel/main.js", ["reviewsIn"]);
+  assert.deepEqual(clone(reviewsIn("101\t/a/plan.md\u0000102\t/a/plan.md\u0000x\t/b.md\u0000103\trelative.md\u0000")),
+    [{ id: "101", path: "/a/plan.md" }, { id: "102", path: "/a/plan.md" }]);
+  assert.deepEqual(clone(reviewsIn("")), []);
+});

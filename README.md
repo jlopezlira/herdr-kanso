@@ -501,7 +501,11 @@ and the minimalistic layout; [NOTICE](NOTICE) and each file's header say who
 changed what.
 
 Contributors: Iván Campaña ([icampana](https://github.com/icampana)), who found
-and fixed the layout writers saving another layout's tree into kanso.json.
+and fixed the layout writers saving another layout's tree into kanso.json;
+Johannes Hund ([h0ru5](https://github.com/h0ru5)), whose remix
+[herdr-md-review](https://github.com/h0ru5/herdr-md-review) brought the
+markdown panel reviews with `md-review` and Done, Escape, and the files the
+focused terminal mentioned.
 
 ## License
 
