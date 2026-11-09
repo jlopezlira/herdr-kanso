@@ -66,6 +66,7 @@ const collapsedW = () => (window()?.platform === "macos" ? 76 : 44);
 const ONE_LINE_W = 240;
 const SNAP_W = 160;
 const OPEN_MIN = 120; // open, the edge drags this far, past SNAP_W, so a drag can fold it
+const HELD_MS = 400;
 
 function setRail(open, width) {
   const min = open ? OPEN_MIN : collapsedW();
@@ -161,7 +162,7 @@ export default class Spaces extends View {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.confirmClose = false; this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
-      if (props()?.newConversation) this.convScroll = VirtualListScrollHandle.new();
+      if (props()?.newConversation || props()?.railMenu) this.convScroll = VirtualListScrollHandle.new();
       this.openPopup(cx); return;
     }
     this.asleepReads = 0;
@@ -582,8 +583,10 @@ export default class Spaces extends View {
   }
 
   openRail() {
+    const width = shared("sidebar.width") ?? SIDEBAR_W;
+    this.lastWide = width;
     setShared("sidebar.collapsed", false);
-    setRail(true, shared("sidebar.width") ?? SIDEBAR_W);
+    setRail(true, width);
   }
 
   // Remembers how wide you left it open (`width`, when known), to open it the same width.
@@ -594,15 +597,17 @@ export default class Spaces extends View {
   }
 
   // Herdr sizes the sidebar as its edge is dragged. Only a drag reaches OPEN_MIN to SNAP_W (a stale tree jumps to the
-  // rail's width), and only once it was seen wide since it opened: there it folds, to open again at its last wide width.
-  sized(w, cx) {
+  // rail's width), and only once it was seen wide since it opened: there it folds, to open again at the width you had.
+  // The width you had is the last one held a moment (HELD_MS): a drag's sizes come a frame apart.
+  sized(w, cx, now = Date.now()) {
     const was = this.width ?? SIDEBAR_W;
+    const open = shared("sidebar.collapsed") !== true;
+    if (open && this.width != null && was >= SNAP_W && now - (this.sizedAt ?? 0) >= HELD_MS) this.lastWide = Math.round(was);
     this.width = w;
-    if (shared("sidebar.collapsed") === true) { this.seenWide = false; return; }
-    if (w >= SNAP_W) {
-      this.seenWide = true;
-      if (w >= ONE_LINE_W) this.lastWide = Math.round(w);
-    } else if (this.seenWide && w >= OPEN_MIN - 1) {
+    this.sizedAt = now;
+    if (!open) { this.seenWide = false; return; }
+    if (w >= SNAP_W) this.seenWide = true;
+    else if (this.seenWide && w >= OPEN_MIN - 1) {
       this.seenWide = false;
       this.foldRail(this.lastWide ?? null);
     }
@@ -986,7 +991,7 @@ export default class Spaces extends View {
 
   // The row itself, at its place `at` in the keyboard's order; `go` runs on a click (none in a virtual list).
   // `lead`: an element in the icon's place (a rail list's state marks).
-  menuRow(t, id, text, at, go, { icon = null, lead = null, hint = null, ink = t.foreground } = {}) {
+  menuRow(t, id, text, at, go, { icon = null, lead = null, hint = null, ink = t.foreground, badge = null } = {}) {
     return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
       .when(at === this.menuAt, (el) => el.bg(t.selected))
       .hover((s) => s.bg(t.hover))
@@ -994,6 +999,8 @@ export default class Spaces extends View {
       .when(Boolean(go), (el) => el.on_click((_e, cx) => { go(cx); cx.notify(); }))
       .child(h_flex().w(14).flex_none().justify_center().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))).when(Boolean(lead), (el) => el.child(lead)))
       .child(div().flex_1().truncate().child(text))
+      .when(Boolean(badge), (el) => el.child(div().flex_none().px(6).h(18).rounded_full().bg(t.accent + "26")
+        .flex().items_center().text_size(11).font_semibold().text_color(t.accent).child(badge)))
       .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
   }
 
@@ -1535,7 +1542,7 @@ export default class Spaces extends View {
 
   // Projects, collapsed: one mark per project; a click lists its agents, or goes to it when it has none.
   compact({ w }, t, ctx) {
-    const rows = (ctx.rowsBy.get(w.id) ?? []).map((a) => this.railRow(a));
+    const rows = (ctx.rowsBy.get(w.id) ?? []).map((a) => this.railRow(a, null, ctx.now));
     return this.railMark(t, `space-${w.id}`, { lead: this.railInitial(w.name, this.avatarColor(w, t)), rows, tip: w.name, on: w.active, space: w.id, menu: () => this.menu(w) });
   }
 
@@ -1644,10 +1651,12 @@ export default class Spaces extends View {
     const top = urgent ? mostUrgent(rows.map((r) => ({ status: r.status }))) : null;
     const shown = top === "working" || top === "blocked" || top === "done" ? top : null;
     const list = () => (rows.length ? this.railMenu(tip, rows, space) : space ? run("space.select", { id: space }) : null);
+    const strong = rows.some((r) => r.strong);
     return h_flex().w_full().h(RAIL_MARK).flex_none().justify_center().items_center().child(
       v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)
         .when(on, (el) => el.bg(t.foreground + "14"))
         .when(!on, (el) => el.hover((s) => s.bg(t.foreground + "0c")))
+        .when(strong, (el) => el.border_1().border_color(t.accent + "80"))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click(list)
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); (menu ?? list)(); })
@@ -1667,9 +1676,12 @@ export default class Spaces extends View {
   }
 
   // What the popup needs of a row: it draws in its own view, from its props.
-  railRow(a, hint = null) {
+  // Unread and woke carry over: the group's mark gets the ring the open view's strong rows have, the row its badge.
+  railRow(a, hint = null, now = Date.now()) {
     const zz = a.status === "asleep" || Boolean(a.dozing) || Boolean(a.asleep);
-    return { address: a.address, pane: a.pane ?? null, name: a.asleep ? a.name : this.nameOf(a), status: zz ? "asleep" : a.status ?? null, hint, asleep: a.asleep ?? null };
+    const up = woke(a, now), unread = isUnread(a.labels);
+    return { address: a.address, pane: a.pane ?? null, name: a.asleep ? a.name : this.nameOf(a), status: zz ? "asleep" : a.status ?? null, hint, asleep: a.asleep ?? null,
+      strong: up || unread, badge: up ? "Woke" : unread ? "Unread" : null };
   }
 
   railMenu(title, rows, space = null) {
@@ -1682,12 +1694,21 @@ export default class Spaces extends View {
     const m = props().railMenu;
     const item = this.items(t);
     const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 170, at: "pointer", props: { menu: { address: r.address, asleep: r.asleep, name: r.name } } }); }
-      : r.pane ? () => run("pane.focus", { pane: r.pane }) : () => run("terminal.peek", { terminal: r.address }));
-    const lead = (r) => (r.status ? stateMark(t, r.status, 13, { idle: true }) : null);
+      : () => { closeOverlay(props().overlay); r.pane ? run("pane.focus", { pane: r.pane }) : run("terminal.peek", { terminal: r.address }); });
+    // As the conversation picker's: every row's act for the keyboard, the list drawing what shows and scrolled to the selection.
+    this.menuActs = m.rows.map(to);
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length } : null;
+    const key = (r) => `rail-${r.address}`;
+    const byKey = (k) => m.rows.find((r) => key(r) === k) ?? null;
+    const row = (r, at) => this.menuRow(t, key(r), r.name, at, null, { lead: r.status ? stateMark(t, r.status, 13, { idle: true }) : null, hint: r.hint, badge: r.badge, ink: r.status === "asleep" ? t.muted : t.foreground });
     return this.menuFrame(t)
       .child(this.menuTitle(t, m.title))
-      .child(v_flex().id("rail-menu-list").flex_none().h(Math.min(m.rows.length, RAIL_MENU_ROWS) * MENU_ROW).overflow_y_scrollbar()
-        .children(m.rows.map((r) => item(`rail-${r.address}`, r.name, to(r), { lead: lead(r), hint: r.hint, ink: r.status === "asleep" ? t.muted : t.foreground, keep: Boolean(r.asleep) }).flex_none())))
+      .child(v_flex().relative().flex_none().h(Math.min(m.rows.length, RAIL_MENU_ROWS) * MENU_ROW)
+        .child(v_virtual_list("rail-menu-list", m.rows.length, MENU_ROW, (i) => key(m.rows[i]),
+          (range) => m.rows.slice(range.start, range.end).map((r, k) => row(r, range.start + k)))
+          .when(Boolean(this.convScroll), (el) => el.track_scroll(this.convScroll))
+          .on_item_click((k, cx) => { const r = byKey(k); if (r) to(r)(); cx.notify(); }))
+        .child(Scrollbar.vertical("rail-menu-list").absolute().inset_0()))
       .when(Boolean(m.space), (el) => el.child(div().mx(8).my(4).h(1).bg(t.border))
         .child(item("rail-go", "Go to project", () => run("space.select", { id: m.space }), { icon: "chevron-right" })));
   }
@@ -1700,7 +1721,7 @@ export default class Spaces extends View {
     const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
     const sections = bySection(entries, since, this.held?.done ? this.held.address : null, this.statusOrder);
     return sections.map((s) => {
-      const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null));
+      const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
       const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(16).items_center().child(statusMark(t, s.id));
       return item(this.railMark(t, `rail-section-${s.id}`, { lead, rows, tip: s.label, ink: s.id === "blocked" ? t.blocked : t.dim, urgent: false }), RAIL_MARK);
     });
@@ -1718,7 +1739,7 @@ export default class Spaces extends View {
     return sections.map((s) => {
       const p = s.project ? ctx.project(s.project) : null;
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
-      const list = s.rows.map(({ a }) => this.railRow(a, p ? null : ctx.project(a.space)?.name ?? null));
+      const list = s.rows.map(({ a }) => this.railRow(a, p ? null : ctx.project(a.space)?.name ?? null, ctx.now));
       const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message");
       return item(this.railMark(t, `rail-thread-${s.id}`, { lead, rows: list, tip: p?.name ?? s.label ?? "Conversations", on: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), RAIL_MARK);
     });
