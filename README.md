@@ -109,6 +109,7 @@ checks it, and merging to main releases it. How every part is built:
 ## Credits and license
 
 Grown out of the mods shipped with Herdr; [NOTICE](NOTICE) says who changed
-what. Contributors: Iván Campaña ([icampana](https://github.com/icampana)) and
-Johannes Hund ([h0ru5](https://github.com/h0ru5), markdown reviews). Apache
-License 2.0: [LICENSE](LICENSE).
+what. Contributors: Iván Campaña ([icampana](https://github.com/icampana)),
+Leangseu Kim ([leangseu](https://github.com/leangseu), pull request prompts)
+and Johannes Hund ([h0ru5](https://github.com/h0ru5), markdown reviews).
+Apache License 2.0: [LICENSE](LICENSE).

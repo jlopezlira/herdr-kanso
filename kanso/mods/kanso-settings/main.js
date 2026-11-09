@@ -18,6 +18,8 @@ const PLACES = [
 const PEOPLE = [
   { login: "jlopezlira", name: "Juan José López Lira" },
   { login: "icampana", name: "Iván Campaña" },
+  { login: "leangseu", name: "Leangseu Kim" },
+  { login: "h0ru5", name: "Johannes Hund" },
 ];
 export const HIDDEN = "kanso.hidden";
 // The pieces of Kanso a switch can hide; each mod reads `kanso.hidden`.

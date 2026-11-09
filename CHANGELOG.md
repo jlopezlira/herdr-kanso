@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.18.4] - 2026-11-09
+
+### Changed
+
+- Credits lists Leangseu Kim (@leangseu), who contributed the editable pull request prompts, and Johannes Hund (@h0ru5), with GitHub avatars shipped with Kanso.
+
 ## [3.18.2] - 2026-11-09
 
 ### Changed
