@@ -43,6 +43,11 @@ export function sleepBlocker(recs) {
   return r ? `${r.labels?.["kanso.name"] || r.title || r.address} is ${r.status.state === "working" ? "working" : "waiting on you"}` : null;
 }
 
+// true, false, or null when the check itself failed (a failed exec is no sighting of anything).
+const alive = async (pid) => { const r = await exec("kill", ["-0", String(pid)]).catch(() => null); return r ? r.code === 0 : null; };
+// A database write, three tries; null when it could not be made at all (never read as "no", which would act on it).
+const dbTry = (fn, cx) => retry(3, async (k) => { if (k) await cx.sleep(400); try { return { v: await fn() }; } catch { return null; } }, { done: Boolean }).then((r) => (r ? r.v : null));
+
 const shapeOf = (list) => JSON.stringify(list.map((r) => [r.tab.id, r.capture.cols.flatMap((c) => c.panes).map((p) => [p.terminal ?? null, p.pid ?? null, p.resume ?? null, p.argv])]));
 export const sameTabs = (a, b) => shapeOf(a) === shapeOf(b);
 
@@ -213,6 +218,10 @@ export default class Sleep extends View {
     });
   }
 
+  // The sleep's hold on its row: true, false when another window took it, null when the database could not say
+  // (taken as still held: a hiccup must never pass for another window and leave running agents marked asleep).
+  async hold(id, cx) { return dbTry(() => this.store.holdSleep(id), cx); }
+
   // Read again at the press (the view may be old); if one agent won't leave, the ones that left come back.
   sleep(cx) {
     const shown = this.sleepers;
@@ -248,7 +257,7 @@ export default class Sleep extends View {
         const shown = await step(written, async (st) => { await this.refresh(); return st; }); // the sidebar shows it falling asleep, in its place
         const out = await reduceSeries(agents, (prev, p, i) => step(prev, async (st) => {
           // Still this sleep's (renewed): else another window has it now, and nothing more leaves.
-          if (!(await this.store.holdSleep(st.id))) throw new Error("another window took it meanwhile");
+          if ((await this.hold(st.id, cx)) === false) throw new Error("another window took it meanwhile");
           this.busy = `${p.name} is leaving, ${i + 1} of ${agents.length} in ${r.name}`; cx.notify();
           const end = await telling((tell) => this.leave(p, cx, tell));
           const sent = end.told ? [...st.sent, p] : st.sent;
@@ -258,7 +267,7 @@ export default class Sleep extends View {
         if (out.failed) {
           const e = out.error;
           // Undo only what this sleep wrote, and only while it still holds its row: another window may be waking them.
-          if (id && !(await this.store.holdSleep(id).catch(() => false))) {
+          if (id && (await this.hold(id, cx)) === false) {
             await this.refresh();
             this.busy = null; this.view = "list";
             this.error = `Stopped: ${String(e?.message ?? e)}. Another window has ${r.name} now; it is left as that window has it.`;
@@ -267,23 +276,34 @@ export default class Sleep extends View {
           }
           this.busy = "Bringing the agents back"; cx.notify();
           const slow = out.sent.filter((p) => !out.left.includes(p));
-          const wentLate = await mapSeries(slow, (p) => this.gone(p.pid, cx, 30));
+          // The hold is renewed before each wait, so a long rollback is never taken for an abandoned sleep.
+          // Only one seen still running stays out of the undo: one that can't be checked is brought back (or kept asleep) like one gone.
+          const wentLate = await mapSeries(slow, async (p) => { if (id) await this.hold(id, cx); return (await this.gone(p.pid, cx, 30)) || (await alive(p.pid)) !== true; });
           const left = [...out.left, ...slow.filter((_, k) => wentLate[k])];
-          // Each comes back only while this sleep still holds its row; backPid is the pid it told.
+          // Each comes back only while this sleep still holds its row; backPid is the pid it told. A database that
+          // can't answer is not another window: the agent is brought back all the same.
           const came = await mapSeries(left, async (p) => {
-            if (id && !(await this.store.holdSleep(id).catch(() => false))) return { p, theirs: true };
+            if (id && (await this.hold(id, cx)) === false) return { p, theirs: true };
             const end = await telling((tell) => this.comeBack(p, cx, tell));
             if (!end.ok) throw end.error;
-            return { p, how: end.value, backPid: end.told?.[0] };
+            return end.value === "here" ? { p, how: "back", backPid: p.pid } : { p, how: end.value, backPid: end.told?.[0] };
           });
           const theirs = came.filter((c) => c.theirs).map((c) => c.p);
           const lost = came.filter((c) => !c.theirs && c.how === "out").map((c) => c.p);
           const unsure = came.filter((c) => !c.theirs && c.how === "unsure").map((c) => c.p);
           const back = came.filter((c) => !c.theirs && c.how !== "out" && c.how !== "unsure");
           const missing = [...lost.map(kept), ...unsure.map((p) => ({ ...kept(p), check: p.terminal }))];
+          // null: the database could not be written; the row is left for the sidebar to reconcile, and nothing is ended for it.
           const undone = id && !theirs.length
-            ? await (missing.length ? this.store.narrow(id, colsOf(missing)) : this.store.drop(id)).catch(() => false)
+            ? await dbTry(() => (missing.length ? this.store.narrow(id, colsOf(missing)) : this.store.drop(id)), cx)
             : true;
+          if (undone === null) {
+            await this.refresh();
+            this.busy = null; this.view = "list";
+            this.error = `Stopped: ${String(e?.message ?? e)}. The database could not be updated; ${r.name}'s agents are back, and the sidebar sets the record straight within a minute.`;
+            cx.notify();
+            return { halt: true };
+          }
           if (theirs.length || !undone) {
             // The row still has them asleep: end what came back here, so only a wake ever starts them.
             const stopped = await mapSeries(back, (c) => this.stopIn(c.p.terminal, cx, c.backPid));
@@ -349,22 +369,30 @@ export default class Sleep extends View {
     const now = await hc(["get", p.terminal, "--json"]).catch(() => null);
     const fg = tryOr(() => JSON.parse(now.stdout).foreground?.pid); // null: unread, below
     if (fg !== p.pid) throw new Error(`${p.name}'s terminal changed`);
-    const clear = await hc(["keys", p.terminal, "ctrl+c"]).catch(() => null);
-    await cx.sleep(400);
-    const screen = clear?.code === 0 ? await hc(["read", p.terminal]).catch(() => null) : null;
-    if (screen?.code !== 0 || !promptEmpty(screen.stdout)) throw new Error(`${p.name}'s prompt could not be cleared`);
+    // Right before the interrupt, not at the read: an agent that started a turn meanwhile is not cut off.
+    const state = tryOr(() => JSON.parse(now.stdout).status?.state);
+    if (state === "working" || state === "blocked") throw new Error(`${p.name} is ${state === "working" ? "working" : "waiting on you"} now`);
+    if ((await hc(["keys", p.terminal, "ctrl+c"]).catch(() => null))?.code !== 0) throw new Error(`${p.name}'s prompt could not be cleared`);
+    // The screen redraws in its own time: up to 3 s for an empty prompt.
+    const empty = await retry(6, async () => {
+      await cx.sleep(500);
+      const screen = await hc(["read", p.terminal]).catch(() => null);
+      return screen?.code === 0 && promptEmpty(screen.stdout);
+    });
+    if (!empty) throw new Error(`${p.name}'s prompt could not be cleared`);
     const s = await hc(["send", p.terminal, "/exit"]).catch(() => null);
     onSent();
     if (s?.code !== 0) throw new Error(`${p.name} did not take /exit`);
-    // Claude asks before leaving work behind: a few seconds for it to go, or to ask; asked, it is told to stop everything.
-    const asked = await retry(8, async () => {
+    // Up to 45 s for it to go. Claude asks before leaving work behind, whenever it gets to it: asked, it is told to stop
+    // everything (Enter: Exit and stop tasks is the choice offered). A check that fails tells nothing, so it waits on.
+    const end = await retry(90, async () => {
       await cx.sleep(500);
-      if ((await exec("kill", ["-0", String(p.pid)]).catch(() => null))?.code !== 0) return "gone";
-      const now = await hc(["read", p.terminal]).catch(() => null);
-      return now?.code === 0 && asksToExit(now.stdout) ? "asked" : null;
+      if ((await alive(p.pid)) === false) return "gone";
+      const screen = await hc(["read", p.terminal]).catch(() => null);
+      if (screen?.code === 0 && asksToExit(screen.stdout)) await hc(["keys", p.terminal, "enter"]).catch(() => null);
+      return null;
     });
-    if (asked === "asked") await hc(["keys", p.terminal, "enter"]).catch(() => null);
-    if (asked !== "gone" && !(await this.gone(p.pid, cx, 20))) throw new Error(`${p.name} did not exit`);
+    if (end !== "gone") throw new Error(`${p.name} did not exit`);
   }
 
   // Its front pid, 0 at its prompt, null when it can't be read.
@@ -373,15 +401,17 @@ export default class Sleep extends View {
     try { const x = JSON.parse(g.stdout); return atPrompt(x) ? 0 : x.foreground.pid; } catch { return null; }
   }
 
+  // True once the process is seen gone; a check that fails is no sighting, and the wait goes on.
   async gone(pid, cx, secs) {
     if (secs * 2 <= 0) return false;
     return retry(secs * 2, async () => {
       await cx.sleep(500);
-      return (await exec("kill", ["-0", String(pid)]).catch(() => null))?.code !== 0;
+      return (await alive(pid)) === false;
     });
   }
 
-  // "back" when it is again on its conversation, "out" when nothing of it runs, "unsure" when something it started could not be stopped.
+  // "back" when it is again on its conversation, "here" when the one that was to leave never did (so it is on it still),
+  // "out" when nothing of it runs, "unsure" when something it started could not be stopped.
   // The terminal must be at its prompt right before the line goes, and only what that line started is ever stopped.
   async comeBack(p, cx, onBack = () => {}) {
     const line = `cd ${shq(p.cwd || home())} && ${p.wake.map(shq).join(" ")}`;
@@ -394,12 +424,15 @@ export default class Sleep extends View {
       if (!look?.idle) await cx.sleep(500);
       return look;
     }, { done: (look) => Boolean(look?.idle) });
-    if (!f?.idle) return "out";
+    // Not at its prompt: the Claude that was to leave is still there (it never took /exit, or sits on its question), or
+    // something else runs; only the first is "here", on its conversation as before.
+    if (!f?.idle) return f?.x?.foreground?.pid === p.pid ? "here" : "out";
     await cx.sleep(800);
     // Started elsewhere meanwhile: never a second one here; what can't be checked is not started either.
     try { if ((await runningOn(p.resume)) || (await runningIn(p.resume))) return "out"; } catch { return "unsure"; }
     // The last look, right before the line goes.
-    if (!(await front())?.idle) return "out";
+    const last = await front();
+    if (!last?.idle) return last?.x?.foreground?.pid === p.pid ? "here" : "out";
     const sentAt = Date.now();
     if ((await hc(["send", p.terminal, line]).catch(() => null))?.code !== 0) return "out";
     // mine: the first process seen there since, on this resume and started after the line went; only that one is ever stopped.
@@ -435,19 +468,21 @@ export default class Sleep extends View {
     return (await reduceSeries(["-TERM", "-KILL"], async (got, sig) => (got === null ? signal(sig) : got), null)) === true;
   }
 
-  // { pid } once a Claude is back on `session` and has stayed a moment (up to 30 seconds);
+  // { pid } once a Claude is back on `session` and has stayed a moment: up to 30 s while nothing of it runs yet, and
+  // up to 90 s while a Claude on it is starting (a long conversation, many MCP servers take their time).
   // saw(fg, mine) sees each front process meanwhile and answers the next `mine`.
   async resumed(terminal, session, cx, saw = async (_fg, mine) => mine) {
-    const look = async ({ mine }) => {
+    const look = async ({ mine }, k) => {
       await cx.sleep(1000);
       const g = await hc(["get", terminal, "--json"]).catch(() => null);
       const fg = tryOr(() => JSON.parse(g.stdout).foreground ?? null); // null: not yet
       const seen = await saw(fg, mine);
-      if (!fg?.pid || SHELLS.has(base(fg.argv?.[0]))) return { pid: null, mine: seen };
+      const starting = Boolean(fg?.pid) && !SHELLS.has(base(fg.argv?.[0])) && (fg.argv ?? []).map(String).includes(session);
+      if (!fg?.pid || SHELLS.has(base(fg.argv?.[0]))) return { pid: null, mine: seen, stop: k >= 29 };
       const record = await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))); // null: none
-      return { pid: isResumed(fg, record, session) ? fg.pid : null, mine: seen };
+      return { pid: isResumed(fg, record, session) ? fg.pid : null, mine: seen, stop: k >= 29 && !starting };
     };
-    return reduceSeries(range(30), (st) => (st.pid ? st : look(st)), { pid: null, mine: null });
+    return reduceSeries(range(90), (st, k) => (st.pid || st.stop ? st : look(st, k)), { pid: null, mine: null, stop: false });
   }
 
   // Only checked agents stop being asleep; what did not prove it back is ended, so nothing runs twice.

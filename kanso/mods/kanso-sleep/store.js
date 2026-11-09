@@ -104,6 +104,7 @@ export class Store {
   }
   // False once another window took the row: then this one changes nothing more.
   async holdSleep(id) { await this.open(); return this.holds.has(id) && this.kdb.holdSleep(id, this.holds.get(id)); }
+  // The hold goes once the row answered (either way); a write that failed keeps it, so it can be tried again.
   async settle(id) { await this.open(); const ok = await this.kdb.settle(id, this.holds.get(id)); this.holds.delete(id); return ok; }
   async drop(id) { await this.open(); const ok = await this.kdb.drop(id, this.holds.get(id)); this.holds.delete(id); return ok; }
   // A sleep's own narrow lets its hold go; a wake's keeps it.

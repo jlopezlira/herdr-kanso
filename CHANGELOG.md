@@ -11,13 +11,20 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.17.6] - 2026-11-09
+## [3.17.7] - 2026-11-09
 
 ### Changed
 
 - Project names head their groups on their own, without the colored square with the initial: in Projects, in Threads grouped by project, and on Status rows, which now lead with the agent's icon (the project's name keeps its color on the second line). In Threads, a project's conversations sit indented under its name, without the project repeated on each row, and the next project starts after a wider gap.
 - The collapsed sidebar shows one mark per group instead of a tile per agent: a project's initial in its color, a status, or Pinned, Snoozed and Settled as small icons, each with its most urgent state (the spinner while one works, red when one needs you) and how many. A click lists that group's agents in a menu, with their states, that you can walk with the keyboard; a click on one goes to it, an asleep one opens its wake menu. Right click on a project still opens the project's menu.
 - The sidebar's edge drags narrower than before: under 240 px the rows keep one line, and under 160 px it folds to the rail, as Hide sidebar does, opening again at the width you had.
+
+## [3.17.6] - 2026-11-09
+
+### Fixed
+
+- Sleep reads what it sees more carefully. The agent's state is checked right before its prompt is interrupted, not only when the dialog opened; the empty prompt is waited for up to 3 s instead of read once; Claude's question before leaving is watched for, and answered, through the whole 45 s wait for it to go; a check of the process that fails is no longer taken for "it exited"; and when the sleep is undone, a Claude that never left counts as back on its conversation, instead of being left marked asleep while it runs. An agent whose exit could not be checked during the undo is looked at and kept asleep if it is gone, instead of being dropped from the list.
+- A database that cannot answer for a moment no longer passes for another window taking the sleep, nor ends agents that had just come back: the write is tried three times and, failing, the agents are left running and the sidebar sets the record straight. The sleep renews its hold through a long undo, so it is never taken for abandoned meanwhile. Wake waits up to 90 s for a Claude that is visibly starting on the conversation before giving up on it.
 
 ## [3.17.5] - 2026-11-09
 

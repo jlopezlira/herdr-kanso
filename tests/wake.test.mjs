@@ -687,3 +687,26 @@ test("a wake that can't tell whether its conversation runs does not wake", async
   await chmod(join(home, ".claude", "sessions"), 0o755);
   assert.equal(await mod.runningOn(C1), null, "readable and none there: none runs");
 });
+
+test("a sleep's undo keeps an agent whose exit could not be checked: it is brought back, never dropped from the list", async (t) => {
+  const dir = await temporary(t);
+  const world = herdr(dir);
+  // Every process check fails: kill -0 can't run, so no agent is ever seen gone or seen running.
+  const host = { ...world.host, exec: (cmd, args, o) => (cmd === "kill" ? Promise.reject(new Error("exec failed")) : world.host.exec(cmd, args, o)) };
+  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store"], host);
+  const store = new mod.Store(undefined, join(dir, "none"));
+  const view = new mod.Sleep();
+  const pane = (terminal, resume, pid) => ({ argv: ["claude"], cwd: "/w", resume, name: terminal, terminal, pid, wake: ["claude", "--resume", resume] });
+  const r = { tab: { id: "tb-herdr-kanso", named: true, name: "1" }, name: "1", capture: { per: null, cols: [{ w: 1, panes: [pane("t1", C1, 11)] }] } };
+  const came = [];
+  Object.assign(view, { store, busy: null, error: null, view: "sleep", space: world.spaces[2], sleepers: [r], sleepTabs: [r.tab], readTabs: async () => [r],
+    // /exit went; whether Claude ended can't be told.
+    leave: async (_p, _cx, sent) => { sent(); throw new Error("Alice did not exit"); },
+    gone: async () => false,
+    comeBack: async (p) => { came.push(p.terminal); return "out"; } });
+  const { c, drain } = cx();
+  view.sleep(c);
+  await drain();
+  assert.deepEqual(came, ["t1"], "an exit that can't be checked is looked at, not taken for still running");
+  assert.equal((await store.asleep(true)).length, 1, "not back: it stays asleep, to wake from the list");
+});
