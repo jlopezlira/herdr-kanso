@@ -17,7 +17,7 @@ const layout = (...resumes) => ({ per: null, cols: [{ w: 1, panes: resumes.map((
 
 async function database(t, dir = null) {
   dir ??= await temporary(t);
-  const mod = await load("kanso-spaces/kdb.js", ["Kdb", "spaceFor", "inPlace", "conversationOf", "STALE_MS", "GONE_MS"], { exec, appHome: () => dir });
+  const mod = await load("kanso-spaces/kdb.js", ["Kdb", "spaceFor", "inPlace", "conversationOf", "STALE_MS", "ABANDON_MS", "GONE_MS"], { exec, appHome: () => dir });
   return { ...mod, db: new mod.Kdb(join(dir, "kanso")), dir };
 }
 const sh = (file, sql) => exec("sqlite3", ["-bail", file, sql]);
@@ -375,23 +375,40 @@ test("a database made before agents had a project gets the column, and keeps its
 });
 
 test("a sleep that stopped half way lets go of the agent it never ended, once no window holds its row", async (t) => {
-  const { db, STALE_MS } = await database(t);
+  const { db, STALE_MS, ABANDON_MS } = await database(t);
+  assert.ok(ABANDON_MS < STALE_MS, "a sleep is given up on sooner than a wake: it renews its hold before each agent leaves");
   const live = (c, terminal, pid) => ({ ...seen(c, null, "sp-kanso", 0, "idle", terminal), program: "{\"kind\":\"claude-code\"}", pid });
   const panes = { per: null, cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "c1", pid: 11 }, { argv: ["claude"], resume: "c2", pid: 12 }] }] };
   const saved = 1000;
   // The window closed while c1 was leaving: its row stays pending, c1 and c2 keep running as they were.
   const { id } = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, now: saved, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
   const still = [live("c1", "t1", 11), live("c2", "t2", 12)];
-  assert.deepEqual(clone(await db.awake(still, saved + STALE_MS - 1)), [], "while the sleep may still be going, nothing moves");
+  assert.deepEqual(clone(await db.awake(still, saved + ABANDON_MS - 1)), [], "while the sleep may still be going, nothing moves");
   const other = await db.sleepTab({ name: "done", space: spaces[2], project, layout: { per: null, cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "c3", pid: 13 }] }] }, saved, now: saved, agents: [{ conversation: "c3" }] });
   await db.settle(other.id, other.token);
   assert.deepEqual(clone(await db.awake([live("c3", "t3", 13)], saved + STALE_MS + 1)), [], "a settled sleep is never abandoned: a late sighting of its old pid leaves it");
-  await assert.rejects(db.sleepTab({ name: "again", space: spaces[2], project, layout: panes, agents: [{ conversation: "c1" }] }), /already asleep/, "until then the tab can't sleep again");
+  await assert.rejects(db.sleepTab({ name: "again", space: spaces[2], project, layout: panes, agents: [{ conversation: "c1" }], now: saved + ABANDON_MS - 1 }), /already asleep/, "until then the tab can't sleep again");
   assert.deepEqual(clone(await db.awake(still, saved + STALE_MS + 1)), [id], "abandoned: the agents it never ended are awake, and the sleep is over");
   assert.deepEqual(clone((await db.sleeps()).map((s) => s.id)), [other.id]);
   assert.deepEqual(clone(await db.read("SELECT id, status, sleep_id FROM agents WHERE id IN ('c1','c2') ORDER BY id")), [{ id: "c1", status: "unknown", sleep_id: null }, { id: "c2", status: "unknown", sleep_id: null }]);
   const next = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
   assert.ok(next.id, "and the tab sleeps again under its own name");
+});
+
+test("sleeping a tab again lets go of what a sleep that stopped half way still holds, right there", async (t) => {
+  const { db, ABANDON_MS } = await database(t);
+  const panes = { per: null, cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "c1", pid: 11 }, { argv: ["claude"], resume: "c2", pid: 12 }] }] };
+  const saved = 1000;
+  // The first try wrote its row and marked both, then its window closed. The person tries again, minutes later.
+  const first = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, now: saved, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
+  const again = await db.sleepTab({ name: "tab 2", space: spaces[2], project, layout: panes, saved: saved + ABANDON_MS + 1, now: saved + ABANDON_MS + 1, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
+  assert.deepEqual(clone((await db.sleeps()).map((s) => [s.id, s.agents.map((a) => a.id).toSorted()])), [[again.id, ["c1", "c2"]]], "the abandoned sleep is gone with nothing left in it; the new one has both");
+  assert.equal(await db.holdSleep(first.id, first.token), false, "its window, back late, holds nothing");
+  // One of them only: the abandoned sleep keeps the other under a token its window never had.
+  const third = await db.sleepTab({ name: "c3", space: spaces[2], project, layout: panes, saved, now: saved, agents: [{ conversation: "c3" }, { conversation: "c4" }] });
+  await db.sleepTab({ name: "just c3", space: spaces[2], project, layout: panes, saved: saved + ABANDON_MS + 1, now: saved + ABANDON_MS + 1, agents: [{ conversation: "c3" }] });
+  const [left] = (await db.sleeps()).filter((s) => s.id === third.id);
+  assert.deepEqual([clone(left.agents.map((a) => a.id)), left.pending === third.token], [["c4"], false]);
 });
 
 test("an abandoned sleep that another window resumes and settles between the read and the write is kept", async (t) => {

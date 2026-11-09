@@ -48,7 +48,7 @@ const BUILTIN = [
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
   { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
   { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
-  { id: "look", label: "Look", icon: `${ICON}eye.svg` },
+  { id: "look", label: "Gallery", icon: `${ICON}eye.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
@@ -124,8 +124,8 @@ export default class Tabs extends View {
   command(name) {
     const tab = /^tab-(\d)$/.exec(name), panel = /^panel-(\d)$/.exec(name);
     // Herdr passes a mod command no arguments, so the path rides in its name: `herdr-app do 'kanso-tabs.look <path>'`.
-    // `at` makes each one new props, so an open Look starts over on it.
-    const look = /^look(?:[\s:]+([\s\S]+))?$/.exec(name);
+    // `at` makes each one new props, so an open Look starts over on it. (`gallery` too).
+    const look = /^(?:look|gallery)(?:[\s:]+([\s\S]+))?$/.exec(name);
     if (look) this.show("look", look[1]?.trim() ? { panel: "look", path: look[1].trim(), at: Date.now() } : { panel: "look" });
     else if (tab) {
       const tabs = spaces().find((s) => s.active)?.tabs ?? [];

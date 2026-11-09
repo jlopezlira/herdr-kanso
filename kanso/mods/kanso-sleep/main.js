@@ -8,7 +8,7 @@ import { Store, idle, shownOf } from "./store.js";
 import { spaceFor, inPlace } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, shq, SHELLS, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
-import { resumeArgv, promptEmpty, isClaude } from "./resume.js";
+import { resumeArgv, promptEmpty, isClaude, asksToExit } from "./resume.js";
 import { etimeMs } from "./procs.js";
 import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries } from "./pure.js";
 
@@ -356,7 +356,15 @@ export default class Sleep extends View {
     const s = await hc(["send", p.terminal, "/exit"]).catch(() => null);
     onSent();
     if (s?.code !== 0) throw new Error(`${p.name} did not take /exit`);
-    if (!(await this.gone(p.pid, cx, 20))) throw new Error(`${p.name} did not exit`);
+    // Claude asks before leaving work behind: a few seconds for it to go, or to ask; asked, it is told to stop everything.
+    const asked = await retry(8, async () => {
+      await cx.sleep(500);
+      if ((await exec("kill", ["-0", String(p.pid)]).catch(() => null))?.code !== 0) return "gone";
+      const now = await hc(["read", p.terminal]).catch(() => null);
+      return now?.code === 0 && asksToExit(now.stdout) ? "asked" : null;
+    });
+    if (asked === "asked") await hc(["keys", p.terminal, "enter"]).catch(() => null);
+    if (asked !== "gone" && !(await this.gone(p.pid, cx, 20))) throw new Error(`${p.name} did not exit`);
   }
 
   // Its front pid, 0 at its prompt, null when it can't be read.

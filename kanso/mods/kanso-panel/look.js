@@ -1,24 +1,25 @@
-// Look: the files an agent made (pictures, PDFs, documents), shown beside it, and a note back to it about one.
-// Herdr tells no mod about a click on a terminal's link, so Look reads what the agent printed instead: its
+// Gallery (the panel is "look" inside): the pictures an agent made, shown beside it, and a note back to it about
+// one. Herdr tells no mod about a click on a terminal's link, so the gallery reads what the agent printed: its
 // screen, and for a Claude agent its conversation on disk, where every path is whole and stays.
 import { div, image } from "gpui-kit";
-import { v_flex, h_flex, Button, TextareaState, Textarea } from "gpui-base";
-import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder } from "herdr";
-import { tilde, showPanel } from "./lib.js";
+import { v_flex, h_flex, Button } from "gpui-base";
+import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay } from "herdr";
+import { tilde } from "./lib.js";
 import { G, R, tokens, quietLink, iconButton } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
-import { openPath, toPng, firstPage } from "./share.js";
-import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, keyOf } from "./look-model.js";
+import { openPath, toPng } from "./share.js";
+import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf } from "./look-model.js";
 import { transcriptPaths, MOST } from "./transcript.js";
 
 const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
 const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
-const KEPT = "kanso.look"; // { follow, pinned }: who Look is about, kept while it is closed
-const ROWS = 5;
-const MISSING = { image: "This picture can't be read", convert: "Nothing here turns this into a picture", pdf: "Nothing here draws a PDF" };
+const KEPT = "kanso.look"; // { follow, pinned }: who the gallery is about, kept while it is closed
+const NOTE = "kanso.look.note"; // the dialog's answer for the pin being asked about: { text, at }
+const THUMBS = 12; // the newest pictures drawn small under the big one
+const MISSING = { image: "This picture can't be read", convert: "Nothing here turns this into a picture" };
 // $1 the copies' folder, $2 one file's key: its older copies go, and any left from yesterday.
 const FRESH = 'mkdir -p "$1" && rm -f "$1/$2"-* && find "$1" -type f -mtime +1 -exec rm -f {} + 2>/dev/null; true';
 const EXISTING = 'for f; do [ -f "$f" ] && printf "%s\\n" "$f"; done; true';
@@ -38,10 +39,11 @@ export class Look {
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
+    this.asking = null; // { id, token }: the pin whose note a dialog asks for, and which dialog
+    this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
     this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
-    this.box = TextareaState.new({ placeholder: "A note for the agent", rows: 3 });
-    this.box.on("change", (_e, cx) => { this.note = null; cx.notify(); });
+    this.thumbs = new Map(); this.thumbing = new Set(); // per file: the copy drawn small in the gallery, and the ones being made
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
     this.tick(cx);
@@ -99,7 +101,8 @@ export class Look {
         const fresh = arrived(found, this.items);
         this.items = found;
         // A pin or a note started counts as looking at it.
-        if (fresh && !this.picked && !this.pins.length && !this.box.value().trim()) this.select(fresh, cx, false);
+        if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
+        this.list().slice(0, THUMBS).forEach((i) => this.thumbnail(i, cx));
       } catch { /* the next tick reads again */ }
       finally { this.reading = false; this.readAt = Date.now(); cx.notify(); }
     });
@@ -109,7 +112,7 @@ export class Look {
   ask(raw, cx) {
     const path = resolvePath(String(raw).trim().replace(/^file:\/\//, ""), null, home());
     const item = path ? itemOf(path) : null;
-    if (!item?.kind) { this.note = { error: true, text: `Look shows files: ${raw}` }; return; }
+    if (!item?.kind) { this.note = { error: true, text: `The gallery shows pictures: ${raw}` }; return; }
     this.asked = [item, ...this.asked.filter((i) => i.path !== path)];
     this.select(item, cx, true);
   }
@@ -145,9 +148,24 @@ export class Look {
       const made = await done;
       const last = this.chains.get(path) === done;
       if (last) this.chains.delete(path);
-      if (!last || this.selected?.path !== path) return;
+      // The copy is the file's newest (the older ones went with it): the tile shows it whether or not the file is still shown.
+      if (made) this.thumbs.set(path, made.image);
+      if (!last || this.selected?.path !== path) { cx.notify(); return; }
       this.shown = made ? { path, ...made } : { path, error: MISSING[item.kind] };
       cx.notify();
+    });
+  }
+
+  // The small copy in the gallery: made once per file. A draw of the file in flight serves it (its copy lands in
+  // the tile too), so a thumbnail never takes a draw's place in the file's chain; the draw's own copy replaces it later.
+  thumbnail(item, cx) {
+    const path = item.path;
+    if (this.thumbs.has(path) || this.chains.has(path) || this.thumbing.has(path)) return;
+    this.thumbing.add(path);
+    cx.spawn(async (cx) => {
+      const made = await this.copy(item).catch(() => null);
+      this.thumbing.delete(path);
+      if (made && !this.thumbs.has(path)) { this.thumbs.set(path, made.image); cx.notify(); }
     });
   }
 
@@ -156,9 +174,7 @@ export class Look {
     const key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
     const name = `${key}-${Date.now()}.${item.kind === "image" ? item.path.split(".").at(-1).toLowerCase() : "png"}`, out = `${dir}/${name}`;
     await exec("sh", ["-c", FRESH, "sh", dir, key]);
-    const made = item.kind === "image" ? (await exec("cp", ["-f", item.path, out])).code === 0
-      : item.kind === "convert" ? await toPng(item.path, out)
-        : await firstPage(item.path, Math.round(this.width * 3), out);
+    const made = item.kind === "image" ? (await exec("cp", ["-f", item.path, out])).code === 0 : await toPng(item.path, out);
     return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
   }
 
@@ -179,10 +195,39 @@ export class Look {
     });
   }
 
+  // A click drops a pin and asks what about that spot, in a dialog; the answer comes back through shared state.
   pin(e, cx) {
     const at = pinFrom(e.local_position, e.bounds);
     if (!at) return;
-    this.pins = [...this.pins, at];
+    this.pinId += 1;
+    this.pins = [...this.pins, { ...at, note: null, id: this.pinId }];
+    this.askNote(this.pins.length - 1, cx);
+  }
+
+  askNote(index, cx) {
+    const p = this.pins[index];
+    if (!p) return;
+    // Each dialog its own token: another window's answer, or an earlier one, is never taken for this pin's.
+    const token = `${Date.now()}-${Math.random()}`;
+    this.asking = { id: p.id, token }; this.note = null;
+    openOverlay({ mod: "kanso-prompt", kind: "dialog", width: 420, props: {
+      title: `Pin ${index + 1}`, field: "What about this spot?", value: p.note ?? "", button: p.note ? "Save" : "Add", shared: NOTE, token } });
+    cx.notify();
+  }
+
+  // The dialog's answer, read when the shared value changes: the note goes on its pin; cancelled, a new pin goes.
+  answer() {
+    const a = shared(NOTE);
+    if (!a || !this.asking || a.token !== this.asking.token) return;
+    const id = this.asking.id; this.asking = null;
+    if (a.text) this.pins = this.pins.map((p) => (p.id === id ? { ...p, note: a.text } : p));
+    else this.pins = this.pins.filter((p) => p.id !== id || p.note);
+  }
+
+  drop(index, cx) {
+    const p = this.pins[index];
+    this.pins = this.pins.filter((_, k) => k !== index);
+    if (p && this.asking?.id === p.id) this.asking = null;
     cx.notify();
   }
 
@@ -193,40 +238,50 @@ export class Look {
   }
 
   send(cx) {
-    const text = this.box.value().trim(), item = this.selected, address = this.agent();
-    if (!text || !item || this.sending) return;
+    const item = this.selected, address = this.agent();
+    if (!noted(this.pins).length || !item || this.sending) return;
     if (!address) { this.note = { error: true, text: "No agent to send to" }; cx.notify(); return; }
     const { name, status } = this.who(address);
     if (status === "blocked") { this.note = { error: true, text: waitingNote([name]) }; cx.notify(); return; }
     const picture = this.shown?.path === item.path ? this.shown.picture : undefined;
     this.sending = true; cx.notify();
     cx.spawn(async (cx) => {
-      const r = await deliver(address, aboutMessage(item, text, this.pins, picture), "you");
+      const r = await deliver(address, aboutMessage(item, this.pins, picture), "you");
       this.sending = false;
-      if (r.code === 0) { this.box.set_value(""); this.pins = []; this.note = { text: `Sent to ${name}.` }; }
+      if (r.code === 0) { this.pins = []; this.note = { text: `Sent to ${name}.` }; }
       else this.note = { error: true, text: `Not sent: ${(r.stderr || r.stdout || "hc send failed").trim()}` };
       cx.notify();
     });
   }
 
-  preview(item) {
-    showPanel("preview", { mod: "kanso-panel", props: { panel: "preview", path: item.path, on: null, back: "look" } });
+  // One pin's row: its number, its note (or that it has none yet), a click to write it again, an x to drop it.
+  noteRow(p, i, c) {
+    return h_flex().id(`look-note-${i}`).flex_none().min_h(26).px(G.sm).gap(G.sm).items_center().rounded(R.control).cursor_pointer()
+      .hover((s) => s.bg(c.subtle)).on_click((_e, cx) => this.askNote(i, cx))
+      .child(div().flex_none().size(18).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(10).font_bold().text_color(c.canvas).child(String(i + 1)))
+      .child(div().flex_1().min_w(0).text_size(12.5).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
+      .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(14).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
+        .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }).child("×"));
   }
 
-  row(item, c) {
-    const on = this.selected?.path === item.path;
-    return h_flex().id(`look-${keyOf(item.path)}`).flex_none().h(28).px(G.sm).gap(G.sm).items_center().rounded(R.control).cursor_pointer()
-      .when(on, (el) => el.bg(c.selected)).when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-      .on_click((_e, cx) => this.select(item, cx, true))
-      .child(div().flex_none().max_w(200).truncate().text_size(12.5).text_color(c.text).when(on, (el) => el.font_medium()).child(item.name))
-      .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(c.dim).child(tilde(item.path.replace(/\/[^/]+$/, "")) || "/"));
+  // One picture in the gallery: the copy, cropped to a tile, the one shown marked.
+  thumb(item, c) {
+    const on = this.selected?.path === item.path, src = this.thumbs.get(item.path);
+    const tile = div().id(`look-${keyOf(item.path)}`).flex_none().w(this.tile()).h(Math.round(this.tile() * 0.7)).rounded(R.control).overflow_hidden()
+      .bg(c.raised).border_1().border_color(on ? c.accent : c.border).cursor_pointer()
+      .when(!on, (el) => el.hover((s) => s.border_color(c.muted)))
+      .on_click((_e, cx) => this.select(item, cx, true));
+    return src ? tile.child(image(src).w_full()) : tile.child(div().size_full().flex().items_center().justify_center().text_size(10).text_color(c.dim).child(item.name));
   }
+
+  // Three tiles a row, in the width the panel has.
+  tile() { return Math.max(72, Math.floor((this.width - G.md * 2 - G.sm * 2) / 3)); }
 
   picture(c) {
     const s = this.shown;
     if (!s || s.busy) return div().p(G.md).text_size(12).text_color(c.dim).child("Drawing it");
     if (s.error) return div().p(G.md).text_size(12).text_color(c.dim).child(s.error);
-    const mark = (p, i) => div().absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-9).mt(-9).size(18).rounded_full().bg(c.accent)
+    const mark = (p, i) => div().absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-9).mt(-9).size(18).rounded_full().bg(p.note ? c.accent : c.muted)
       .flex().items_center().justify_center().text_size(10).font_bold().text_color(c.canvas).child(String(i + 1));
     return div().id("look-picture").relative().w_full().cursor_crosshair()
       .on_mouse_down("left", (e, cx) => this.pin(e, cx))
@@ -236,22 +291,20 @@ export class Look {
 
   view(c) {
     const item = this.selected;
-    if (!item) return div().p(G.md).text_size(12).text_color(c.dim).child(this.agent() ? "Nothing to look at yet" : "No agent in focus");
-    if (shows(item)) return this.picture(c);
-    return v_flex().p(G.md).gap(G.xs)
-      .child(div().text_size(13).text_color(c.text).child(item.name))
-      .child(div().text_size(11.5).text_color(c.dim).child(tilde(item.path)));
+    if (!item) return div().p(G.md).text_size(12).text_color(c.dim).child(this.agent() ? "No pictures yet" : "No agent in focus");
+    return this.picture(c);
   }
 
   render() {
     const c = tokens(theme()), item = this.selected, address = this.agent();
     const who = address ? this.who(address) : null;
     const list = this.list();
-    const ready = Boolean(item && address && this.box.value().trim()) && !this.sending;
+    this.answer();
+    const ready = Boolean(item && address && noted(this.pins).length) && !this.sending;
     const actions = item ? [
-      ...(item.kind === "text" ? [quietLink("look-preview", "Preview", () => this.preview(item), c, { color: c.text })] : []),
-      quietLink("look-open", "Open", () => openPath(item.path), c, { color: item.kind === "media" ? c.text : c.muted }),
-      ...(this.pins.length ? [quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; cx.notify(); }, c)] : []),
+      div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(tilde(item.path)),
+      quietLink("look-open", "Open", () => openPath(item.path), c),
+      ...(this.pins.length ? [quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.asking = null; cx.notify(); }, c)] : []),
     ] : [];
     return v_flex().id("kanso-look").track_focus(this.handle).size_full().min_h(0).bg(c.canvas).text_color(c.text).text_size(13)
       .on_size_change((size, cx) => { if (Math.abs(this.width - size.width) >= 1) { this.width = size.width; cx.notify(); } })
@@ -259,22 +312,23 @@ export class Look {
       .child(h_flex().h(42).flex_none().px(10).gap(G.sm).items_center().border_b(1).border_color(c.border)
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
-          .child(div().truncate().font_semibold().text_size(13).child(who?.name ?? "Look"))
+          .child(div().truncate().font_semibold().text_size(13).child(who?.name ?? "Gallery"))
           .child(div().truncate().text_size(11).text_color(c.dim).child(who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "")))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
         .child(iconButton("look-refresh", "refresh", "Read again", (cx) => { this.read(cx); if (item && shows(item)) this.draw(item, cx); }, c, { spin: this.reading })))
-      .when(list.length > 0, (el) => el.child(v_flex().id("look-list").flex_none().h(Math.min(list.length, ROWS) * 28 + G.sm).px(6).pt(G.xs).overflow_y_scrollbar()
-        .children(list.map((i) => this.row(i, c)))))
-      .child(v_flex().id("look-view").flex_1().min_h(0).overflow_y_scrollbar().border_t(list.length ? 1 : 0).border_color(c.border).child(this.view(c)))
-      .when(actions.length > 0, (el) => el.child(h_flex().flex_none().px(G.md).gap(G.lg).items_center().border_t(1).border_color(c.border).children(actions)))
+      .child(v_flex().id("look-view").flex_1().min_h(0).overflow_y_scrollbar().child(this.view(c)))
+      .when(actions.length > 0, (el) => el.child(h_flex().flex_none().h(30).px(G.md).gap(G.lg).items_center().border_t(1).border_color(c.border).children(actions)))
+      .when(list.length > 1, (el) => el.child(h_flex().id("look-gallery").flex_none().max_h(Math.round(this.tile() * 0.7) * 2 + G.sm * 3).px(G.md).py(G.sm).gap(G.sm).flex_wrap().overflow_y_scrollbar().border_t(1).border_color(c.border)
+        .children(list.slice(0, THUMBS).map((i) => this.thumb(i, c)))))
       .when(Boolean(item), (el) => el.child(v_flex().flex_none().p(G.md).gap(G.sm).border_t(1).border_color(c.border)
-        .child(Textarea.new(this.box).px(10).py(8).rounded(R.control).border_1().border_color(c.input).bg(c.raised).text_size(12.5).text_color(c.text))
+        .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").max_h(26 * 5 + G.xs * 4).gap(G.xs).overflow_y_scrollbar().children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
         .child(h_flex().gap(G.md).items_center()
-          .child(div().flex_1().min_w(0).text_size(11.5).text_color(this.note?.error ? c.red : c.dim).child(this.note?.text ?? ""))
+          .child(div().flex_1().min_w(0).text_size(11.5).text_color(this.note?.error ? c.red : c.dim)
+            .child(this.note?.text ?? (this.pins.length ? "" : "Click the picture to pin a spot and say what about it")))
           .child(Button.new("look-send").h(28).px(12).flex_none().items_center().rounded(R.control).bg(c.primary)
             .when(!ready, (b) => b.opacity(0.45))
             .when(ready, (b) => b.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.send(cx)))
-            .child(div().text_size(12).font_medium().text_color(c.primaryText).child(this.sending ? "Sending…" : "Send  ⌘↩"))))));
+            .child(div().text_size(12).font_medium().text_color(c.primaryText).child(this.sending ? "Sending…" : noted(this.pins).length > 1 ? `Send ${noted(this.pins).length}  ⌘↩` : "Send  ⌘↩"))))));
   }
 }

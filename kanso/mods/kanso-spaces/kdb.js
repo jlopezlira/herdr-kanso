@@ -6,7 +6,8 @@ import { mapSeries, parseOr } from "./pure.js";
 
 export const DIR = "data/kanso";
 export const VERSION = 1;
-export const STALE_MS = 10 * 60_000; // a hold not renewed this long stopped half way
+export const STALE_MS = 10 * 60_000; // a wake's hold not renewed this long stopped half way
+export const ABANDON_MS = 3 * 60_000; // a sleep's: it renews its hold before each agent leaves, and one leaves in under a minute
 export const GONE_MS = 60_000; // an agent not seen this long, and not asleep, is gone
 
 export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}'`);
@@ -70,7 +71,7 @@ const restoreSql = (restores, mine) => restores.map(([c, name]) => `UPDATE agent
 
 const free = (col, now) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - STALE_MS)})`;
 // The same, read: a token renewed within STALE_MS holds the row.
-export const isHeld = (token, at, now) => token != null && at != null && at >= now - STALE_MS;
+export const isHeld = (token, at, now, within = STALE_MS) => token != null && at != null && at >= now - within;
 
 // A sleep's layout without the panes of these conversations; a column left empty goes, the rest share its width.
 export function layoutWithout(layout, ids) {
@@ -183,15 +184,22 @@ export class Kdb {
   // Throws when a tab of that name sleeps there already, or an agent of it sleeps in another sleep.
   async sleepTab({ name, space, project, layout, into = null, agents, saved = Date.now(), now = Date.now() }) {
     const id = newId(), token = newId();
+    // An agent still held by a sleep that stopped half way (pending, not renewed for ABANDON_MS, no wake on it) is
+    // let go first, so the tab can sleep now; that sleep keeps the rest under a token its window never had, or goes.
+    const ids = agents.filter((a) => a.conversation).map((a) => q(a.conversation)).join(",") || "NULL";
+    const gone = `pending IS NOT NULL AND pending_at < ${n(now - ABANDON_MS)} AND ${free("waking", now)}`;
+    const letGo = `UPDATE sleeps SET pending=${q(newId())} WHERE ${gone} AND id IN (SELECT sleep_id FROM agents WHERE id IN (${ids}));
+      UPDATE agents SET status='unknown',sleep_id=NULL WHERE id IN (${ids}) AND sleep_id IN (SELECT id FROM sleeps WHERE ${gone});
+      DELETE FROM sleeps WHERE ${gone} AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=sleeps.id);`;
     const marks = agents.filter((a) => a.conversation).map((a) => `INSERT INTO agents(id,name,cwd,space_id,tab_id,pos,status,seen,sleep_id)
       VALUES(${q(a.conversation)},${q(a.given)},${q(a.cwd)},${q(space?.id)},${q(a.tab)},${n(a.pos)},'asleep',${n(saved)},${q(id)})
       ON CONFLICT(id) DO UPDATE SET status='asleep',sleep_id=excluded.sleep_id,terminal=NULL,seen=excluded.seen,space_id=excluded.space_id,name=excluded.name,
         tab_id=COALESCE(excluded.tab_id,tab_id),pos=COALESCE(excluded.pos,pos),cwd=COALESCE(excluded.cwd,cwd);`);
-    await this.run(`BEGIN IMMEDIATE;INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at)
+    await this.run(`BEGIN IMMEDIATE;${letGo}INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at)
       VALUES(${q(id)},${q(name)},${q(space?.id)},${q(space?.name)},${q(project)},${q(JSON.stringify(layout))},${q(into && JSON.stringify(into))},${n(saved)},${q(token)},${n(now)});${marks.join("")}COMMIT;`)
       .catch((e) => {
         throw new Error(/UNIQUE/.test(e.message) ? `a tab named ${name} is already asleep in this project`
-          : /already asleep/.test(e.message) ? "an agent of it is already asleep in an earlier sleep; one that stopped half way lets go within 10 minutes" : e.message);
+          : /already asleep/.test(e.message) ? "an agent of it is already asleep in an earlier sleep; one that stopped half way lets go within 3 minutes" : e.message);
       });
     return { id, token };
   }
@@ -244,7 +252,7 @@ export class Kdb {
     const running = new Map(live.filter((a) => a.conversation && a.terminal && a.program && a.pid != null).map((a) => [a.conversation, a.pid]));
     if (!running.size) return [];
     const slept = (s) => new Map(parseOr(s.layout, { cols: [] }).cols?.flatMap((c) => c.panes ?? []).map((p) => [p.resume, p.pid]) ?? []);
-    const held = (s) => isHeld(s.pending, s.pending_at, now) || isHeld(s.waking, s.waking_at, now);
+    const held = (s) => isHeld(s.pending, s.pending_at, now, ABANDON_MS) || isHeld(s.waking, s.waking_at, now);
     const abandoned = (s) => s.pending != null && !held(s);
     const awakeIn = (s) => { const pids = slept(s); return s.agents.filter((a) => running.has(a.id) && (abandoned(s) || running.get(a.id) !== pids.get(a.id))).map((a) => a.id); };
     const ours = (await this.sleeps()).filter((s) => s.saved < now && !held(s) && awakeIn(s).length);

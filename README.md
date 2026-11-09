@@ -44,8 +44,9 @@ it. `ctrl-shift-l` goes back to your previous layout.
   your conversations as threads.
 - **Sleep and wake.** An agent, a tab or a project goes to sleep: it exits with
   its conversation kept, and wakes on it where it was.
-- **Look.** The screenshots, pictures and PDFs the agent in focus made, beside
-  it. Drop pins, write a note, ⌘↩ sends both to the agent.
+- **Gallery.** The screenshots and pictures the agent in focus made, beside
+  it, the newest big. Click a spot to pin it and say what about it; ⌘↩ sends
+  every note to the agent.
 - **Review without leaving.** Pull requests with diff, checks and threads, and
   one click to hand the feedback to an agent. Markdown files open to read and
   edit in place; `md-review plan.md` from an agent asks for your comments.
@@ -91,8 +92,8 @@ Everything runs on your machine, and reads only the folders you work in:
 Herdr's `hc`. Two things reach the network, only while their panel is shown:
 PR and Shipped through `gh` (Shipped keeps a private gist of your own
 statistics), and Spend's daily fetch of OpenRouter's price list. Threads and
-Look read the agents' conversation files for titles and the paths they
-printed; Spend reads the session files your AI tools write, for tokens and
+the gallery read the agents' conversation files for titles and the pictures
+they printed; Spend reads the session files your AI tools write, for tokens and
 prices. State lives under `~/.config/herdr-app/data/`. Nothing is sent to an
 agent unless you press Send, and share images carry totals only.
 [kanso/RECIPE.md](kanso/RECIPE.md) says what every part runs.

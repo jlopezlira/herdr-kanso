@@ -749,7 +749,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-prompt`: Herdr's prompt dialog, copied, for what Herdr has no
     command for. Props `{title, value, hint}` and either `command: {name,
     args}` (runs it with `name`, as Herdr's prompt) or `label: {terminal,
-    key}` (`hc label <terminal> <key>=<text>`; empty removes the label).
+    key}` (`hc label <terminal> <key>=<text>`; empty removes the label) or
+    `shared: key` (sets `{text, at}`, text null on Cancel); `field`, `button`.
     Opened as a dialog 420 wide.
   - `kanso-help` (⌘?): keys() as a keyboard. `kanso-dojo`: vim game window.
   - `kanso-menu`: the terminal right-click menu (root `terminal_menu`):
@@ -819,18 +820,19 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
     home (not `~/Library`) with none is "No pane runs it". Read every 10 s
     while shown; Stop: SIGTERM on a second press, then SIGKILL.
-    `look.js` (Look, `eye.svg`): no mod hears a click on a terminal's
-    link, so Look reads the terminal in focus (`hc read --lines 400`, every
-    4 s while shown and on a focus change; the pin keeps one) for paths to
-    files that exist, newest first; links and HTML stay the browser's.
-    Pictures show as copies in `data/kanso-panel/look` (`image()` reads only
-    the app's folder): HEIC and TIFF via `sips`/`magick`, a PDF's first page
-    via QuickLook or `pdftoppm`. Text opens in `preview.js` (`back:
-    "look"`), media outside. The newest new picture shows unless you picked
-    one. Clicks drop numbered pins; ⌘↩ sends "About <path>: <note>" with
-    each pin as % of the picture (`deliver.js`, kanso-send's). `herdr-app
-    do 'kanso-tabs.look <path>'` opens a file: mod commands get no
-    arguments and reach shown copies only.
+    `look.js` (Gallery, panel id `look`, `eye.svg`): no mod hears a click on
+    a terminal's link, so it reads the terminal in focus (`hc read --lines
+    400`, every 4 s while shown; pinnable) and, for a Claude agent,
+    its transcript (`transcript.js`: `~/.claude/sessions/<pid>.json` names
+    it; a `grep` pipeline over what was appended, in bytes) for pictures that
+    exist, newest first. Copies in `data/kanso-panel/look` draw them
+    (`image()` reads only the app's folder; HEIC/TIFF via `sips`/`magick`):
+    the newest big unless you picked one, twelve as tiles. A click drops a numbered pin and
+    opens `kanso-prompt` with `shared: "kanso.look.note"` (its answer,
+    `{text, at}`, read on render; Cancel drops a new pin); the notes list
+    under the picture. ⌘↩ sends "About <path>:" and a line per noted pin, its
+    % across and down (`deliver.js`, kanso-send's). `herdr-app do
+    'kanso-tabs.look <path>'` opens one.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
   - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
     and minimalistic forks, and all use `"place": "none"`.

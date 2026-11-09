@@ -74,3 +74,7 @@ export function promptEmpty(screen) {
   const box = [lines[i].replace(/^\s*[❯>]/, ""), ...lines.slice(i + 1, end < 0 ? lines.length : end)];
   return box.every((l) => !l.trim());
 }
+
+// Claude Code asks before leaving with work in the background ("Background work is running… 1. Exit and stop
+// tasks"); sleeping an agent is stopping everything of it, so Sleep answers that question itself.
+export const asksToExit = (screen) => /Background work is running|Exit and stop tasks|will stop when you exit/.test(String(screen ?? ""));
