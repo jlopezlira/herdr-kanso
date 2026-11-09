@@ -11,6 +11,14 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.17.6] - 2026-11-09
+
+### Changed
+
+- Project names head their groups on their own, without the colored square with the initial: in Projects, in Threads grouped by project, and on Status rows, which now lead with the agent's icon (the project's name keeps its color on the second line). In Threads, a project's conversations sit indented under its name, without the project repeated on each row, and the next project starts after a wider gap.
+- The collapsed sidebar shows one mark per group instead of a tile per agent: a project's initial in its color, a status, or Pinned, Snoozed and Settled as small icons, each with its most urgent state (the spinner while one works, red when one needs you) and how many. A click lists that group's agents in a menu, with their states, that you can walk with the keyboard; a click on one goes to it, an asleep one opens its wake menu. Right click on a project still opens the project's menu.
+- The sidebar's edge drags narrower than before: under 240 px the rows keep one line, and under 160 px it folds to the rail, as Hide sidebar does, opening again at the width you had.
+
 ## [3.17.5] - 2026-11-09
 
 ### Changed

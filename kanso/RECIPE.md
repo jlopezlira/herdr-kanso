@@ -28,11 +28,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       Search and Hide sidebar at the right. Each is a 32 square with a 17 icon
       in `muted` that turns `foreground` on hover over a `foreground`+`12`
       wash.
-    - Space rows are 32 tall with radius 6. Each starts with a 22 avatar
-      (radius 6): the name's first letter, semibold 12, in the space's color
-      over that color at alpha `26`. Then come the name (13, medium when
-      active) and, right-aligned, the repo, branch and ahead/behind counts in
-      11.5.
+    - Space rows are 32 tall with radius 6, no avatar: the name, then,
+      right-aligned, the repo, branch and ahead/behind counts in 11.5.
     - The active space has a `foreground`+`14` wash; hover shows
       `foreground`+`0c`.
     - Worktree spaces nest under their repo on 1px `input` guide lines.
@@ -40,10 +37,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       title 12.5, status mark at the right. The focused agent is in full ink
       over a `foreground`+`0c` wash; the others are `muted`, and idle ones
       `dim`.
-    - Collapsed (76 wide): only the + and Hide buttons, stacked, then one
-      centred 32 square per space holding its avatar. A 7 dot sits at its
-      top-right corner when the space is blocked or done. The name shows in
-      a tooltip.
+    - Collapsed (76 wide): the + and Hide buttons, stacked, then one mark
+      per group (project, status, shelf): a project's initial in its color,
+      no square (else an icon), under it the most urgent state and count.
+      A click lists the group in a popup (click goes; asleep: wake menu).
   - **Footer** (`kanso-chrome`, `footer: true`), 156 tall, bottom-aligned:
     - Settings (gear) and Add machine (server icon), 34 tall, icon 17.
     - An 8 space.
@@ -455,12 +452,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     (`.spin(900)`). No other spinner for an agent's state.
   - Blocked: a solid `blocked` disc with a bold `chrome` "!". The pane
     header adds the text "Needs you", the status bar says "N agent(s) need
-    you", and a collapsed space shows its corner dot.
+    you", and a project in the collapsed rail shows it.
   - Done: the circle closed, in `done`.
   - Idle: a thin even ring in `idle` at 70%, on sidebar rows (and in the
     status bar when nothing works); nothing on the tab or header.
-  - The 7px corner dots on avatars (the collapsed rail, the strip's edge
-    tabs) stay dots: a badge, too small for a mark.
+  - The 7px corner dots on the strip's edge tabs stay dots: a badge, too
+    small for a mark.
 - **Motion**, native, and never stopped behind other windows (a still ring
   there reads as a stalled agent; what the window saves behind others is
   work: Git, machines, processes less often). The view switch's
@@ -562,10 +559,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `blocked` dot on Status while a space needs you and another view
     shows; kanso.db `spaces.view`: `spaces`, `agents`, `threads`). No
     caption: each view says how it is arranged by its shape.
-  - Status and Threads mix projects, so each of their rows leads with the
-    project's square (20px, radius 6, its avatar color at 18%, the initial
-    in that color) and opens its second line with the project's name in
-    that color, medium.
+  - Status and Threads mix projects, so a row's second line opens with
+    its project's name in that color, medium.
   - Status lists every agent in every space in sections: Needs you,
     Working, Done, Idle, Terminals (no status). A section's header (13px
     semibold; 44 tall with 12px above it, the first 32): the ensō of its
@@ -575,8 +570,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     would; the done agent you are looking at stays in Done until you leave
     it. Within a section, by the sort button: latest change first (the
     default), longest in its state first, or by project (localStorage
-    `spaces.statusOrder`). Empty: "No agents yet". The collapsed rail
-    always shows spaces.
+    `spaces.statusOrder`). Empty: "No agents yet". Collapsed: a mark per
+    section.
   - Threads (kanso-spaces/threads.js) lists the conversation of each agent
     on this computer, two lines a row: its title, the time since your last
     message and its state; under it, its space and your last message in
@@ -599,7 +594,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     button: your last message (else the last record; the default) or when
     the conversation started (kanso.db `spaces.threadOrder`); "Grouped
     by project" (`spaces.threadGroup`) makes one section per project
-    instead, headed by its square and name. Then Snoozed (a clock; by when
+    instead, headed by its name alone, its rows nested. Then Snoozed (a clock; by when
     they wake, showing that time) and Settled (a check; latest first),
     both folded until opened (`spaces.shelvesOpen`). Looking at one or its
     agent finishing moves nothing. The thread's state lives as labels on
@@ -638,8 +633,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Sidebar**:
   - Hide sidebar collapses it to a fixed 76 rail whose edge cannot be
     dragged.
-  - Open, the edge drags between 200 and 480. The width you leave is
-    remembered and used the next time you open it.
+  - Open, the edge drags to 480; under 240 rows keep one line, under 160
+    it folds to the rail. The width you leave opens it next time.
 - **Tabs**:
   - Click selects a tab, drag reorders, double-click renames, and
     right-click opens the shipped tab menu.
