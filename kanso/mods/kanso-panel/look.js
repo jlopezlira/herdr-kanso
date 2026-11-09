@@ -39,7 +39,8 @@ export class Look {
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
-    this.asking = null; this.answered = shared(NOTE)?.at ?? 0; // the pin whose note the dialog asks for; the last answer taken
+    this.asking = null; this.answered = shared(NOTE)?.at ?? 0; // the pin (by id) whose note the dialog asks for; the last answer taken
+    this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
     this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
     this.thumbs = new Map(); // per file: the copy drawn small in the gallery
@@ -198,14 +199,17 @@ export class Look {
   pin(e, cx) {
     const at = pinFrom(e.local_position, e.bounds);
     if (!at) return;
-    this.pins = [...this.pins, { ...at, note: null }];
+    this.pinId += 1;
+    this.pins = [...this.pins, { ...at, note: null, id: this.pinId }];
     this.askNote(this.pins.length - 1, cx);
   }
 
   askNote(index, cx) {
-    this.asking = index; this.note = null;
+    const p = this.pins[index];
+    if (!p) return;
+    this.asking = p.id; this.note = null;
     openOverlay({ mod: "kanso-prompt", kind: "dialog", width: 420, props: {
-      title: `Pin ${index + 1}`, field: "What about this spot?", value: this.pins[index]?.note ?? "", button: this.pins[index]?.note ? "Save" : "Add", shared: NOTE } });
+      title: `Pin ${index + 1}`, field: "What about this spot?", value: p.note ?? "", button: p.note ? "Save" : "Add", shared: NOTE } });
     cx.notify();
   }
 
@@ -214,14 +218,15 @@ export class Look {
     const a = shared(NOTE);
     if (!a || a.at === this.answered || this.asking == null) return;
     this.answered = a.at;
-    const i = this.asking; this.asking = null;
-    if (a.text) this.pins = this.pins.map((p, k) => (k === i ? { ...p, note: a.text } : p));
-    else if (!this.pins[i]?.note) this.pins = this.pins.filter((_, k) => k !== i);
+    const id = this.asking; this.asking = null;
+    if (a.text) this.pins = this.pins.map((p) => (p.id === id ? { ...p, note: a.text } : p));
+    else this.pins = this.pins.filter((p) => p.id !== id || p.note);
   }
 
   drop(index, cx) {
+    const p = this.pins[index];
     this.pins = this.pins.filter((_, k) => k !== index);
-    if (this.asking === index) this.asking = null;
+    if (p && this.asking === p.id) this.asking = null;
     cx.notify();
   }
 
@@ -254,7 +259,8 @@ export class Look {
       .hover((s) => s.bg(c.subtle)).on_click((_e, cx) => this.askNote(i, cx))
       .child(div().flex_none().size(18).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(10).font_bold().text_color(c.canvas).child(String(i + 1)))
       .child(div().flex_1().min_w(0).text_size(12.5).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
-      .child(quietLink(`look-drop-${i}`, "×", (cx) => this.drop(i, cx), c));
+      .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(14).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
+        .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }));
   }
 
   // One picture in the gallery: the copy, cropped to a tile, the one shown marked.

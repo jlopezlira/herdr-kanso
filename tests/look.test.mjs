@@ -196,6 +196,12 @@ test("What you picked stays while the agent makes more, and a note goes to it wi
   say("crop the top");
   assert.ok(look.render(cx), "the picture, its pin and its note draw");
   assert.deepEqual(clone(look.pins.map((p) => p.note)), ["crop the top"], "the answer went on its pin");
+  // Two more pins; the dialog is open for the third when the second is dropped: the answer still lands on the third.
+  look.pin({ local_position: { x: 60, y: 10 }, bounds: { width: 300, height: 200 } }, cx); say("b"); look.render(cx);
+  look.pin({ local_position: { x: 90, y: 10 }, bounds: { width: 300, height: 200 } }, cx);
+  look.drop(1, cx); say("c"); look.render(cx);
+  assert.deepEqual(clone(look.pins.map((p) => [Math.round(p.x * 100), p.note])), [[10, "crop the top"], [30, "c"]], "dropping a pin never moves the dialog's answer onto another");
+  look.drop(1, cx);
   look.pin({ local_position: { x: 150, y: 100 }, bounds: { width: 300, height: 200 } }, cx);
   say(null); look.render(cx);
   assert.equal(look.pins.length, 1, "Cancel on a new pin drops it");
