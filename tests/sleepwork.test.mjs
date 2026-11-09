@@ -115,9 +115,12 @@ test("each step is decided from the row and what was seen, and leaving goes requ
   assert.deepEqual(at("saving", { front: null }), { write: null, act: null }, "a terminal not read is waited for");
   assert.equal(at("saving", { front: null }, 1000 + SAVE_MS + 1).write.why, "Alice's terminal could not be read", "for a while");
   assert.deepEqual(at("clearing", { screen: DRAFT }), { write: null, act: null }, "a draft would go out with /exit: not yet");
-  assert.equal(at("clearing", { screen: DRAFT }, 1000 + CLEAR_MS + 1).write.why, "Alice's prompt could not be cleared");
+  assert.deepEqual(clone(leaveStep({ ...a, step: "clearing", sent_at: null }, { ...seen, screen: DRAFT }, 1000 + CLEAR_MS + 1)),
+    { write: { step: "clearing", step_at: 1000 + CLEAR_MS + 1, sent_at: 1000 + CLEAR_MS + 1 }, act: "interrupt" }, "a ctrl+c that never went goes once more");
+  assert.equal(at("clearing", { screen: DRAFT }, 1000 + CLEAR_MS + 1).write.why, "Alice's prompt could not be cleared", "then stuck");
   assert.deepEqual(at("clearing"), { write: { step: "exiting", step_at: 1500, sent_at: 1500 }, act: "exit" }, "written before /exit goes");
   assert.deepEqual(at("exiting", { screen: ASK }), { write: null, act: "enter" }, "Claude's question: Exit and stop tasks");
+  assert.deepEqual(at("exiting", { screen: ASK, front: 101 }), { write: null, act: null }, "the question left on screen over a shell: no Enter");
   assert.deepEqual(at("exiting", { screen: "bye" }), { write: null, act: null });
   assert.deepEqual(at("exiting", {}, 1000 + RESEND_MS + 1), { write: { step: "exiting", step_at: 1000 + RESEND_MS + 1 }, act: "exit" }, "a /exit a restart lost goes again");
   assert.equal(at("exiting", { screen: "bye" }, 1000 + EXIT_MS + 1).write.why, "Alice did not exit", "a process that refuses to exit is stuck, not taken for gone");
@@ -131,14 +134,17 @@ test("an undo brings back what left, lets go of what never did, and waits for on
   const { mod } = await setup(t);
   const { undoStep, EXIT_MS } = mod;
   const a = { name: "Alice", pid: 11, step_at: 1000, sent_at: 1000 };
-  const at = (step, alive, now = 1500) => clone(undoStep({ ...a, step }, { alive }, now));
+  const at = (step, alive, now = 1500, more = {}) => clone(undoStep({ ...a, step, ...more }, { alive, front: 11, screen: "Claude is finishing a turn", ...more.seen }, now));
   assert.deepEqual(at("left", false), { write: { step: "returning", step_at: 1500 }, act: "return" });
   assert.deepEqual(at("returning", true), { write: { step: "returning", step_at: 1500 }, act: "again" }, "cut short by a restart: looked at before anything is sent again");
-  assert.deepEqual(at("stuck", true), { write: null, act: "free" }, "it never left: awake as it runs");
-  assert.deepEqual(at("saving", null), { write: null, act: "free" }, "unknown is not gone");
+  assert.deepEqual(at("stuck", true, 1500, { sent_at: null }), { write: null, act: "free" }, "it never got /exit: awake as it runs");
+  assert.deepEqual(at("stuck", true), { write: { step: "unsure" }, act: null }, "stuck after its /exit, still busy: kept, never let go to die unrecorded");
+  assert.deepEqual(at("stuck", false), { write: { step: "returning", step_at: 1500 }, act: "return" }, "and once it went, brought back");
+  assert.deepEqual(at("saving", null, 1500, { sent_at: null }), { write: null, act: "free" }, "unknown is not gone");
   assert.deepEqual(at("exiting", true), { write: null, act: null }, "told to go: it may still");
   assert.deepEqual(at("exiting", false), { write: { step: "returning", step_at: 1500 }, act: "return" });
-  assert.deepEqual(at("exiting", true, 1000 + EXIT_MS + 1), { write: null, act: "free" });
+  assert.deepEqual(at("exiting", true, 1000 + EXIT_MS + 1, { seen: { screen: EMPTY } }), { write: null, act: "free" }, "past the wait, at its empty prompt: no /exit waits there");
+  assert.deepEqual(at("exiting", true, 1000 + EXIT_MS + 1), { write: { step: "unsure" }, act: null }, "past the wait, busy: it may still leave, so it stays asleep");
   assert.deepEqual(at("exiting", null, 1000 + EXIT_MS + 1), { write: { step: "returning", step_at: 1000 + EXIT_MS + 1 }, act: "return" }, "an exit that can't be checked is looked at, never dropped");
   assert.deepEqual(at("out", false), { write: null, act: null });
 });
@@ -201,6 +207,7 @@ test("an agent that refuses to exit is stuck, shown with why; its tab stays; und
   assert.deepEqual(changes.at(-1), { state: "stuck", why: "Bob did not exit" }, "told, so the sidebar shows it");
   assert.deepEqual(world.ran, [], "the tab stays open");
   assert.equal(await w.tick(cx), false, "stuck waits for you: nothing is held");
+  world.terms.t2.screen = EMPTY; // Bob gave up on his /exit: at his prompt, nothing waits
   assert.equal(await kdb.undo(id), true);
   await drive(w);
   assert.equal(await row(), null, "undone: the row goes");
@@ -294,4 +301,61 @@ test("a sleep on its way or stuck is the sidebar's: no wake claims it, no sighti
   await w.tick(cx);
   assert.equal(await kdb.stepAgent(id, "w-a", "undoing", C1, "saving", { step: "clearing" }), false, "a step read in another state is not written");
   assert.equal(await kdb.stepAgent(id, "w-b", "sleeping", C1, "saving", { step: "clearing" }), false, "nor by a window that does not hold the row");
+});
+
+test("a ctrl+c that never went (a restart between its step and the key, or a key that failed) goes again before the agent is stuck", async (t) => {
+  const { world, kdb, worker, row, steps } = await setup(t);
+  const hc = world.host.hc;
+  let lost = 1;
+  world.host.hc = async (args) => (args[0] === "keys" && args[2] === "ctrl+c" && lost-- > 0 ? { code: 1, stdout: "" } : hc(args));
+  const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], world.host);
+  const w = new SleepWork(kdb, () => {}, "w-a");
+  await drive(w, 40, async () => (await steps()).Alice === "clearing");
+  await w.tick(cx);
+  assert.equal((await steps()).Alice, "clearing", "her draft is still there: waited for");
+  await kdb.run(`UPDATE agents SET step_at=step_at-5000 WHERE id='${C1}';`); // past CLEAR_MS
+  await drive(w);
+  assert.equal((await row()).state, "asleep", "not stuck: the second ctrl+c cleared it");
+  assert.equal(world.sent("send", "/exit")[0], "t1");
+});
+
+test("an Enter decided by a window that lost the row meanwhile is never sent", async (t) => {
+  const { world, kdb, id, worker, steps } = await setup(t, { t1: "asks" });
+  const a = worker("w-a");
+  await drive(a, 40, async () => (await steps()).Alice === "exiting");
+  const stale = clone((await kdb.sleeps()).find((r) => r.id === id));
+  // b took it over while a was looking (a's heartbeat stopped for a while), and answered the question itself.
+  await kdb.run(`UPDATE sleeps SET pending='w-b', pending_at=${Date.now()} WHERE id='${id}';`);
+  await a.advance(stale, cx);
+  assert.deepEqual(world.sent("keys", "enter"), [], "a sends nothing on what it read before");
+});
+
+test("an undo pressed while the tab is about to close keeps the tab, and brings the agents back", async (t) => {
+  const { world, kdb, id, worker, row, steps } = await setup(t);
+  const w = worker("w-a");
+  await drive(w, 40, async () => { const st = await steps(); return st.Alice === "left" && st.Bob === "left"; });
+  const stale = clone((await kdb.sleeps()).find((r) => r.id === id));
+  assert.equal(await kdb.undo(id), true, "pressed while close() reads the terminals");
+  await w.close(stale);
+  assert.deepEqual(world.ran, [], "nothing closed under the undo");
+  await drive(w);
+  assert.equal(await row(), null, "undone");
+  assert.deepEqual(clone([world.terms.t1.fg.argv, world.terms.t2.fg.argv]), [["claude", "--resume", C1], ["claude", "--resume", C2]], "both back in their terminals");
+});
+
+test("an undo of an agent stuck after its /exit, still busy, keeps it asleep: if it leaves later, a wake still has it", async (t) => {
+  const { world, kdb, id, worker, row, steps } = await setup(t, { t2: "never" });
+  const w = worker("w-a");
+  await drive(w, 40, async () => (await steps()).Bob === "exiting");
+  await kdb.run(`UPDATE agents SET sent_at=sent_at-60000 WHERE id='${C2}';`);
+  await drive(w);
+  assert.equal((await row()).state, "stuck");
+  assert.equal(await kdb.undo(id), true);
+  await drive(w);
+  const r = await row();
+  assert.equal(r.state, "asleep", "the row stays, for Bob");
+  assert.deepEqual(clone(JSON.parse(r.layout).cols[0].panes.map((p) => [p.resume, p.check])), [[C2, "t2"]], "Bob alone, his terminal looked at before a wake");
+  assert.deepEqual(clone(await kdb.read(`SELECT id, sleep_id FROM agents ORDER BY id`)), [{ id: C1, sleep_id: null }, { id: C2, sleep_id: id }], "Alice back and awake, Bob still recorded");
+  world.leave("t2"); // his /exit lands late
+  assert.ok(await kdb.claim(id), "and a wake can bring him back");
 });
