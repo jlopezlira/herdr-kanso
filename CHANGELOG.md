@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.18.0] - 2026-11-09
+
+### Added
+
+- Explain, Feedback and Conflicts in the pull request panel each have an edit button that opens the task prompt in a multiline editor before starting the agent in a new tab.
+
 ## [3.17.6] - 2026-11-09
 
 ### Fixed
