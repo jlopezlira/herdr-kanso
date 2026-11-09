@@ -2,7 +2,7 @@
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
-import { exec, knownAgents, notify, run, theme } from "herdr";
+import { exec, knownAgents, notify, openOverlay, run, theme } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
@@ -37,7 +37,7 @@ function ago(iso) {
 }
 const clock = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); return /^[0-9a-fA-F]{6}$/.test(h) ? `#${h}` : null; };
-const openUrl = (url) => exec("open", [url]).catch(() => exec("xdg-open", [url])).catch(() => {});
+const openUrl = (url) => exec("open", [url]).catch(() => exec("xdg-open", [url])).catch(() => { });
 
 // One check to show, as either kind GitHub reports: a check run or a commit status.
 // Its state, counts and what they say together come from ghchecks.js, which the pane strip reads too.
@@ -233,7 +233,7 @@ export class PullRequest {
           const when = (p) => Date.parse(p.mergedAt || p.closedAt || p.updatedAt) || 0;
           this.closedPrs = JSON.parse(r.stdout).toSorted((a, b) => when(b) - when(a));
         }
-      } catch {}
+      } catch { }
       finally { this.closedLoading = false; cx.notify(); }
     });
   }
@@ -302,12 +302,35 @@ export class PullRequest {
     cx.notify();
   }
 
-  agentTask(task) {
+  agentTask(task, useEditor) {
     const pr = this.pr, root = this.root, on = this.on, space = location().space;
     knownAgents({ on }).then((list) => {
       const agent = list.find((a) => a.installed);
       if (!agent) throw new Error("no agent is installed");
-      run("tab.new", { name: `#${pr.number} ${TASK_NAMES[task]}`, space, folder: root ?? this.cwd, argv: agent.run, task: PROMPTS[task](pr) });
+      if (useEditor) {
+        openOverlay({
+          mod: "kanso-prompt-editor", kind: "dialog", width: 680, height: 500, props: {
+            title: `${TASK_NAMES[task]} prompt for #${pr.number}`,
+            name: `#${pr.number} ${TASK_NAMES[task]}`,
+            value: PROMPTS[task](pr),
+            multiline: true,
+            submit_button_title: "Run in new tab",
+            command: {
+              name: "tab.new",
+              args: {
+                name: `#${pr.number} ${TASK_NAMES[task]}`,
+                space,
+                folder: root ?? this.cwd,
+                argv: agent.run,
+              },
+              key: "task"
+            }
+          }
+        });
+      }
+      else {
+        run("tab.new", { name: `#${pr.number} ${TASK_NAMES[task]}`, space, folder: root ?? this.cwd, argv: agent.run, task: PROMPTS[task](pr) });
+      }
     }).catch((e) => notify({ title: "Could not start the agent", body: String(e?.message ?? e), level: "error" }));
   }
 
@@ -695,10 +718,16 @@ export class PullRequest {
     const here = this.local(pr.url);
     return v_flex().w_full()
       .child(section(c, "Ask your agent", here ? "in a new tab" : "another repository: explain only"))
-      .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.xs)
-        .child(quietLink("pr-explain", "Explain it", () => this.agentTask("explain"), c, { size: 13, color: c.text }))
-        .child(quietLink("pr-feedback", "Address feedback", () => this.agentTask("feedback"), c, { size: 13, color: c.text, disabled: !open || !here }))
-        .child(quietLink("pr-conflicts", "Resolve conflicts", () => this.agentTask("conflicts"), c, { size: 13, color: c.text, disabled: !(open && conflicting && here) })));
+      .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm)
+        .child(h_flex().items_center().gap(G.sm)
+          .child(quietLink("pr-explain", "Explain it", () => this.agentTask("explain"), c, { size: 13, color: c.text }))
+          .child(iconButton("pr-explain-edit", "edit", "Edit Explain prompt", () => this.agentTask("explain", true), c)))
+        .child(h_flex().items_center().gap(G.sm)
+          .child(quietLink("pr-feedback", "Address feedback", () => this.agentTask("feedback"), c, { size: 13, color: c.text, disabled: !open || !here }))
+          .child(iconButton("pr-feedback-edit", "edit", "Edit Feedback prompt", () => this.agentTask("feedback", true), c, { disabled: !open || !here })))
+        .child(h_flex().items_center().gap(G.sm)
+          .child(quietLink("pr-conflicts", "Resolve conflicts", () => this.agentTask("conflicts"), c, { size: 13, color: c.text, disabled: !(open && conflicting && here) }))
+          .child(iconButton("pr-conflicts-edit", "edit", "Edit Conflicts prompt", () => this.agentTask("conflicts", true), c, { disabled: !(open && conflicting && here) }))));
   }
 
   diffView(c, path) {
