@@ -383,10 +383,13 @@ test("a sleep that stopped half way lets go of the agent it never ended, once no
   const { id } = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, now: saved, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
   const still = [live("c1", "t1", 11), live("c2", "t2", 12)];
   assert.deepEqual(clone(await db.awake(still, saved + STALE_MS - 1)), [], "while the sleep may still be going, nothing moves");
+  const other = await db.sleepTab({ name: "done", space: spaces[2], project, layout: { per: null, cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "c3", pid: 13 }] }] }, saved, now: saved, agents: [{ conversation: "c3" }] });
+  await db.settle(other.id, other.token);
+  assert.deepEqual(clone(await db.awake([live("c3", "t3", 13)], saved + STALE_MS + 1)), [], "a settled sleep is never abandoned: a late sighting of its old pid leaves it");
   await assert.rejects(db.sleepTab({ name: "again", space: spaces[2], project, layout: panes, agents: [{ conversation: "c1" }] }), /already asleep/, "until then the tab can't sleep again");
   assert.deepEqual(clone(await db.awake(still, saved + STALE_MS + 1)), [id], "abandoned: the agents it never ended are awake, and the sleep is over");
-  assert.deepEqual(clone(await db.sleeps()), []);
-  assert.deepEqual(clone(await db.read("SELECT id, status, sleep_id FROM agents ORDER BY id")), [{ id: "c1", status: "unknown", sleep_id: null }, { id: "c2", status: "unknown", sleep_id: null }]);
+  assert.deepEqual(clone((await db.sleeps()).map((s) => s.id)), [other.id]);
+  assert.deepEqual(clone(await db.read("SELECT id, status, sleep_id FROM agents WHERE id IN ('c1','c2') ORDER BY id")), [{ id: "c1", status: "unknown", sleep_id: null }, { id: "c2", status: "unknown", sleep_id: null }]);
   const next = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
   assert.ok(next.id, "and the tab sleeps again under its own name");
 });
@@ -401,6 +404,7 @@ test("an agent of a sleep seen running again is awake: the sleep lets it go, and
   assert.deepEqual(clone(await db.awake([live("c1", "t7", 21)], saved + 1)), [], "a sleep still going is left alone");
   await db.settle(id, token);
   assert.deepEqual(clone(await db.awake([live("c1", "t7", 21)], saved - 1)), [], "a sighting from before the sleep wakes no one");
+  assert.deepEqual(clone(await db.awake([live("c1", "t1", 11)], saved + 1)), [], "settled: every agent left, so the old pid seen after is a late sighting, not a new process");
   assert.deepEqual(clone(await db.awake([{ ...live("c1", "t7", 21), program: null }], saved + 1)), [], "a terminal with no agent in front wakes no one");
   assert.deepEqual(clone(await db.awake([live("c1", "t7", 21)], saved + 1)), [id]);
   const [row] = await db.sleeps();
