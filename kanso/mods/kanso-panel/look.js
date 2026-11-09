@@ -1,5 +1,6 @@
 // Look: the files an agent made (pictures, PDFs, documents), shown beside it, and a note back to it about one.
-// Herdr tells no mod about a click on a terminal's link, so Look reads what the agent printed instead.
+// Herdr tells no mod about a click on a terminal's link, so Look reads what the agent printed instead: its
+// screen, and for a Claude agent its conversation on disk, where every path is whole and stays.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button, TextareaState, Textarea } from "gpui-base";
 import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder } from "herdr";
@@ -9,6 +10,7 @@ import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng, firstPage } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, keyOf } from "./look-model.js";
+import { transcriptPaths, MOST } from "./transcript.js";
 
 const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
@@ -36,6 +38,7 @@ export class Look {
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
+    this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
     this.box = TextareaState.new({ placeholder: "A note for the agent", rows: 3 });
     this.box.on("change", (_e, cx) => { this.note = null; cx.notify(); });
@@ -73,8 +76,23 @@ export class Look {
     cx.spawn(async (cx) => {
       try {
         const r = await hc(["read", address, "--lines", String(LINES)]);
+        // The conversation first, the screen after: the newest mention wins, and the screen has the latest.
+        const before = this.transcript?.address === address ? this.transcript : null;
+        const written = await transcriptPaths(address, home(), before);
+        if (address !== this.agent()) return;
+        // Another program or conversation in the same terminal (a new Claude, or Codex after Claude): what the
+        // last one made is not this one's.
+        const other = (before?.front && written.front && before.front.pid !== written.front.pid) || (before?.file && written.file && before.file !== written.file);
+        if (other && !this.asked.some((i) => i.path === this.selected?.path)) {
+          this.items = []; this.picked = false; this.selected = null; this.shown = null; this.pins = [];
+        }
+        // A read that tells nothing (the terminal unread, a Claude still starting) keeps the last identity, so
+        // the next program or conversation is still told apart from it.
+        this.transcript = written.front || !before ? { address, ...written, file: written.file ?? (other ? null : before?.file ?? null), paths: written.paths } : before;
+        const text = `${written.paths.join("\n")}\n${r.code === 0 ? r.stdout : ""}`;
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
-        const paths = [...new Set(mentions(r.code === 0 ? r.stdout : "").map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
+        // Every mention, then only the files that exist: a picture is not lost behind the files deleted since.
+        const paths = [...new Set(mentions(text, MOST).map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
         const there = paths.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...paths])).stdout.split("\n")) : new Set();
         const found = paths.filter((path) => there.has(path)).map(itemOf);
         if (address !== this.agent()) return;
