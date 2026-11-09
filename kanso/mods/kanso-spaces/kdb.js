@@ -69,6 +69,8 @@ export function inPlace(a, place, spaces, home = "") {
 const restoreSql = (restores, mine) => restores.map(([c, name]) => `UPDATE agents SET restore=${q(name)} WHERE id=${q(c)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`).join("");
 
 const free = (col, now) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - STALE_MS)})`;
+// The same, read: a token renewed within STALE_MS holds the row.
+export const isHeld = (token, at, now) => token != null && at != null && at >= now - STALE_MS;
 
 // A sleep's layout without the panes of these conversations; a column left empty goes, the rest share its width.
 export function layoutWithout(layout, ids) {
@@ -187,7 +189,10 @@ export class Kdb {
         tab_id=COALESCE(excluded.tab_id,tab_id),pos=COALESCE(excluded.pos,pos),cwd=COALESCE(excluded.cwd,cwd);`);
     await this.run(`BEGIN IMMEDIATE;INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at)
       VALUES(${q(id)},${q(name)},${q(space?.id)},${q(space?.name)},${q(project)},${q(JSON.stringify(layout))},${q(into && JSON.stringify(into))},${n(saved)},${q(token)},${n(now)});${marks.join("")}COMMIT;`)
-      .catch((e) => { throw new Error(/UNIQUE/.test(e.message) ? `a tab named ${name} is already asleep in this project` : e.message); });
+      .catch((e) => {
+        throw new Error(/UNIQUE/.test(e.message) ? `a tab named ${name} is already asleep in this project`
+          : /already asleep/.test(e.message) ? "an agent of it is already asleep in an earlier sleep; one that stopped half way lets go within 10 minutes" : e.message);
+      });
     return { id, token };
   }
   // False once the sleep no longer holds the row: then it changes nothing more, its agents included.
@@ -229,14 +234,18 @@ export class Kdb {
   }
 
   // An agent of a sleep seen running again (resumed by hand, or before this Kanso) is awake:
-  // the sleep lets it go, and ends once no agent of it is left asleep. Only a process other than
-  // the one put to sleep, seen after the sleep was saved, counts; a sleep or wake in progress is left alone.
+  // the sleep lets it go, and ends once no agent of it is left asleep. A sleep or wake in progress
+  // is left alone: its agents still run while it ends them. Once no one holds the sleep, any run
+  // seen after it was saved counts, the very process it meant to end too: a sleep that stopped half
+  // way (its window closed, say) left that one running and its row pending, and would otherwise
+  // keep the agent "asleep" for good, so no tab with it could sleep again.
   async awake(live, now = Date.now()) {
     const running = new Map(live.filter((a) => a.conversation && a.terminal && a.program && a.pid != null).map((a) => [a.conversation, a.pid]));
     if (!running.size) return [];
     const slept = (s) => new Map(parseOr(s.layout, { cols: [] }).cols?.flatMap((c) => c.panes ?? []).map((p) => [p.resume, p.pid]) ?? []);
-    const awakeIn = (s) => { const pids = slept(s); return s.agents.filter((a) => running.has(a.id) && running.get(a.id) !== pids.get(a.id)).map((a) => a.id); };
-    const ours = (await this.sleeps()).filter((s) => s.saved < now && awakeIn(s).length);
+    const held = (s) => isHeld(s.pending, s.pending_at, now) || isHeld(s.waking, s.waking_at, now);
+    const awakeIn = (s) => { const pids = slept(s); return s.agents.filter((a) => running.has(a.id) && (!held(s) || running.get(a.id) !== pids.get(a.id))).map((a) => a.id); };
+    const ours = (await this.sleeps()).filter((s) => s.saved < now && !held(s) && awakeIn(s).length);
     return mapSeries(ours, async (s) => {
       const gone = awakeIn(s);
       const layout = layoutWithout(parseOr(s.layout, { cols: [] }), gone);
