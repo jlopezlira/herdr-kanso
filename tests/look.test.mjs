@@ -73,6 +73,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   const world = {
     terminals: [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
     panes: [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
+    session,
   };
   const host = {
     ...singleUse(), image: singleUse().div, TextareaState: { new: () => box },
@@ -83,13 +84,13 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     hc: async (args) => {
       calls.push(["hc", ...args]);
       if (args[0] === "read") return { code: 0, stdout: screen };
-      if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: session ? { pid: session.pid, argv: session.argv ?? ["claude"] } : null }) };
+      if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: world.session ? { pid: world.session.pid, argv: world.session.argv ?? ["claude"] } : null }) };
       return { code: 0, stdout: "" };
     },
-    readTextFile: async (path) => (session && path === `/home/me/.claude/sessions/${session.pid}.json` ? JSON.stringify(session) : null),
+    readTextFile: async (path) => (world.session && path === `/home/me/.claude/sessions/${world.session.pid}.json` ? JSON.stringify(world.session) : null),
     exec: async (cmd, args) => {
       calls.push([cmd, ...args]);
-      if (cmd === "ps") return { code: 0, stdout: session?.etime ?? "00:05" };
+      if (cmd === "ps") return { code: 0, stdout: world.session?.etime ?? "00:05" };
       if (cmd === "sh" && args[1].startsWith('f="$1"')) return args[4] === String(transcript.length) ? { code: 3, stdout: "" } : { code: 0, stdout: `${transcript.length}\n${args[4]}\n${transcript}` };
       if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => files.includes(p)).map((p) => `${p}\n`).join("") };
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
@@ -125,6 +126,9 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   const long = `/Users/jj/${"a".repeat(220)}/x`;
   assert.match(projectDir(long), /^-Users-jj-a{190}-[0-9a-z]+$/, "over 200 characters: cut there, with Claude Code's hash of the whole folder");
   assert.equal(projectDir(long).length > 200 && projectDir(long).slice(0, 200), long.replace(/[^A-Za-z0-9]/g, "-").slice(0, 200));
+  const emoji = `/repo/${"nested/".repeat(32)}art-\u{1f680}`;
+  const claude = (cwd) => { const slug = cwd.replace(/[^a-zA-Z0-9]/g, "-"); let h = 0; for (let i = 0; i < cwd.length; i++) h = (h << 5) - h + cwd.charCodeAt(i) | 0; return slug.length > 200 ? `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}` : slug; };
+  assert.equal(projectDir(emoji), claude(emoji), "hashed over UTF-16 units, as Claude Code does");
   assert.equal(transcriptPath({ sessionId: "s1", cwd: "/repo" }, "/home/me"), "/home/me/.claude/projects/-repo/s1.jsonl");
   assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null, "a record without a conversation: nothing to read");
   const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
@@ -157,6 +161,15 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   next.transcript = { ...next.transcript, file: "/home/me/.claude/projects/-repo/older.jsonl" };
   next.readAt = 0; next.read(cx2); await drain2();
   assert.deepEqual([next.selected.path, next.picked], ["/repo/shots/u-desk-tasks.png", false], "your pick is let go; the new conversation's newest shows, as at a start");
+  // A read in between with no record (the new Claude still starting) does not make Look forget which conversation it read.
+  const gap = await panel({ screen: "", files, session, transcript });
+  gap.look.select(gap.look.list()[1], gap.cx, true); await gap.drain();
+  gap.world.session = null;
+  gap.look.readAt = 0; gap.look.read(gap.cx); await gap.drain();
+  assert.deepEqual([gap.look.selected.path, gap.look.picked, gap.look.transcript.file], ["/repo/shots/u-desk-ideas.png", true, "/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl"], "no record for a moment: your pick stays, and the conversation read is remembered");
+  gap.world.session = { ...session, sessionId: "11111111-2222-4333-8444-555555555555" };
+  gap.look.readAt = 0; gap.look.read(gap.cx); await gap.drain();
+  assert.equal(gap.look.picked, false, "the conversation changed: the pick is let go");
   assert.deepEqual(clone(next.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "and the list is the new conversation's");
 });
 

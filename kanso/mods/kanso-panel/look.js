@@ -84,7 +84,9 @@ export class Look {
         if (before?.file && written.file && before.file !== written.file && !this.asked.some((i) => i.path === this.selected?.path)) {
           this.items = []; this.picked = false; this.selected = null; this.shown = null; this.pins = [];
         }
-        this.transcript = { address, ...written };
+        // A read with no record (a Claude still starting, ps failing) keeps the last conversation's identity, so
+        // the next one is still told apart from it.
+        this.transcript = written.file || !before ? { address, ...written } : before;
         const text = `${written.paths.join("\n")}\n${r.code === 0 ? r.stdout : ""}`;
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
         // Every mention, then only the files that exist: a picture is not lost behind the files deleted since.

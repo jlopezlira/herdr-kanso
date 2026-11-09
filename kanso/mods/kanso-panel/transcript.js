@@ -33,7 +33,7 @@ export function projectDir(cwd) {
   const path = String(cwd ?? "");
   const slug = path.replace(/[^A-Za-z0-9]/g, "-");
   if (slug.length <= 200) return slug;
-  const h = [...path].reduce((n, ch) => ((n << 5) - n + ch.charCodeAt(0)) | 0, 0);
+  const h = Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).reduce((n, c) => ((n << 5) - n + c) | 0, 0);
   return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
 }
 export const transcriptPath = (session, homeDir) =>
