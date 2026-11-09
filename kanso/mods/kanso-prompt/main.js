@@ -4,7 +4,7 @@
 // label on the terminal in herdr-core.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { run, hc, props, closeOverlay, theme, setShared } from "herdr";
+import { run, hc, props, closeOverlay, theme, shared, setShared } from "herdr";
 
 export default class Prompt extends View {
   init(_props, cx) {
@@ -27,14 +27,20 @@ export default class Prompt extends View {
     const name = this.text.trim();
     if (p.label) hc(["label", p.label.terminal, `${p.label.key}=${name}`]).catch(() => {});
     else if (p.command) run(p.command.name, { ...(p.command.args ?? {}), name });
-    // A mod with no command for it reads the answer from shared state (`shared`: the key); `text` null when cancelled.
-    else if (p.shared) setShared(p.shared, { text: name, at: Date.now(), token: p.token ?? null });
+    // A mod with no command for it reads the answer from shared state: under `shared`, by this dialog's `token`, so two
+    // dialogs answered in a row both keep theirs until read; `text` null when cancelled.
+    else if (p.shared) this.answer(p, name);
+  }
+
+  answer(p, text) {
+    const box = shared(p.shared);
+    setShared(p.shared, { ...(box && typeof box === "object" && !Array.isArray(box) ? box : {}), [p.token ?? "answer"]: { text, at: Date.now() } });
   }
 
   cancel() {
     const p = props();
     closeOverlay(p.overlay);
-    if (p.shared) setShared(p.shared, { text: null, at: Date.now(), token: p.token ?? null });
+    if (p.shared) this.answer(p, null);
   }
 
   key(e, cx) {
