@@ -1,4 +1,4 @@
-// Look's reading of a terminal: the files an agent printed, and what you tell it about one.
+// The gallery's reading of a terminal: the pictures an agent printed, and what you tell it about one.
 import { KINDS, kindOf } from "./kinds.js";
 
 const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
@@ -9,8 +9,8 @@ const QUOTED = new RegExp(`(["'\`])(?:file://)?([^\\s"'\`][^"'\`\\n]* [^"'\`\\n]
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 // Links open in the browser: a URL's path is never one of these.
 const LINK = /\b(?!file:)[a-z][\w+.-]*:\/\/\S*/gi;
-// Look shows these itself; the rest it opens elsewhere.
-const SHOWN = ["image", "convert", "pdf"];
+// Every kind the gallery lists is one it draws.
+const SHOWN = Object.keys(KINDS);
 
 // The paths in a terminal's text, newest (lowest) first, each once. A quoted one with a folder in it is
 // one path, not the bare name after its last space; without a folder ("'see shot.png'") it may be a
@@ -55,12 +55,15 @@ export function pinFrom(local, bounds) {
 
 const pct = (n) => `${Math.round(n * 100)}%`;
 
-// "About <path>: <text>", and where each pin sits on the picture you saw (`picture`: its file).
-export function aboutMessage(item, text, pins = [], picture = item.path) {
-  const head = `About ${item.path}: ${String(text).trim()}`;
-  if (!pins.length) return head;
-  const at = pins.map((p, i) => `${i + 1} at ${pct(p.x)} across, ${pct(p.y)} down`).join("; ");
-  return `${head}\nPins on ${picture}, from its top left corner: ${at}.`;
+// The pins with a note, numbered as drawn (a pin without one is skipped, its number kept).
+export const noted = (pins) => pins.map((p, i) => ({ ...p, n: i + 1 })).filter((p) => String(p.note ?? "").trim());
+
+// "About <path>:" and one line per noted pin, where it sits on the picture you saw (`picture`: its file) and what
+// you said there.
+export function aboutMessage(item, pins, picture = item.path) {
+  const lines = noted(pins).map((p) => `${p.n} (${pct(p.x)} across, ${pct(p.y)} down): ${String(p.note).trim()}`);
+  const where = picture === item.path ? "" : ` (the pins are on ${picture})`;
+  return `About ${item.path}${where}:\n${lines.join("\n")}`;
 }
 
 // One name per file in Look's copies, so a fresh copy replaces the last one.

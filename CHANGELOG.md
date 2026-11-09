@@ -11,6 +11,13 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.17.4] - 2026-11-09
+
+### Changed
+
+- Look is now Gallery, and shows pictures only: the newest big and the newest twelve as tiles under it, a click on a tile to look at that one. PDFs, documents, code, audio and video are no longer listed; the apps that open them do that. The panel's id and `herdr-app do 'kanso-tabs.look <path>'` are unchanged, and `kanso-tabs.gallery` works too.
+- A pin asks for its note in a dialog as you drop it, and the notes line up under the picture, each with its number (a click edits one, × drops it); Send sends them all at once, one line per pin with where it sits and what you said. The note box under the picture is gone.
+
 ## [3.17.3] - 2026-11-09
 
 ### Fixed

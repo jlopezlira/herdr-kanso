@@ -15,12 +15,12 @@ const OUTPUT = `⏺ Write(tests/shot.png)
 test("Look finds the files an agent printed, newest first and once each, never a link or a page", async () => {
   const { mentions } = await model();
   assert.deepEqual(clone(mentions(OUTPUT)), [
-    "tests/shot.png", "demo.mov", "images/hero.jpg", "bold/img.webp", "src/app.tsx", "/Users/me/report.pdf", "./docs/plan.md", "/tmp/out/a.PNG",
-  ], "backticks, parentheses, Markdown links, file:// and colors read; URLs and HTML left to the browser; the last mention counts");
-  assert.deepEqual(clone(mentions("see out.png. and x.png, y.pdf;")), ["y.pdf", "x.png", "out.png"], "a sentence's punctuation is not the name");
+    "tests/shot.png", "images/hero.jpg", "bold/img.webp", "/tmp/out/a.PNG",
+  ], "backticks, parentheses, Markdown links, file:// and colors read; URLs, HTML and every file that is not a picture left alone; the last mention counts");
+  assert.deepEqual(clone(mentions("see out.png. and x.png, y.jpg;")), ["y.jpg", "x.png", "out.png"], "a sentence's punctuation is not the name");
   assert.deepEqual(clone(mentions("")), []);
-  assert.deepEqual(clone(mentions(`Saved "/tmp/home page.png" and \`~/Shots/a b.pdf\`, then 'out/x y.webp'.`)),
-    ["out/x y.webp", "~/Shots/a b.pdf", "/tmp/home page.png"], "a quoted path with spaces is one path, not the name after its last space");
+  assert.deepEqual(clone(mentions(`Saved "/tmp/home page.png" and \`~/Shots/a b.heic\`, then 'out/x y.webp'.`)),
+    ["out/x y.webp", "~/Shots/a b.heic", "/tmp/home page.png"], "a quoted path with spaces is one path, not the name after its last space");
   assert.deepEqual(clone(mentions(`Then 'see shot.png' and "home page.png"`)), ["home page.png", "page.png", "see shot.png", "shot.png"],
     "quoted without a folder may be a sentence: both, and only the files that exist stay");
   assert.deepEqual(clone(mentions(`it's in shot.png, not 'x.png`)), ["x.png", "shot.png"], "a lone quote leaves bare names alone");
@@ -35,9 +35,9 @@ test("Look resolves a printed path from the terminal's folder and home, and know
   assert.equal(resolvePath("a.png", null, "/home/me"), null, "relative with no folder: nothing to look at");
   assert.equal(resolvePath("~bob/a.png", "/repo", "/home/me"), null, "another user's home");
   const kinds = ["a.png", "b.SVG", "c.heic", "d.pdf", "e.mp4", "f.md", "g.ts", "h.html", "i.zip"].map((n) => itemOf(`/r/${n}`).kind);
-  assert.deepEqual(clone(kinds), ["image", "image", "convert", "pdf", "media", "text", "text", null, null]);
+  assert.deepEqual(clone(kinds), ["image", "image", "convert", null, null, null, null, null, null], "pictures only: PDFs, media, documents and code are other apps' to open");
   assert.deepEqual(clone(itemOf("/r/a.png")), { path: "/r/a.png", name: "a.png", kind: "image" });
-  assert.deepEqual(clone(kinds.map((kind) => shows({ kind }))), [true, true, true, true, false, false, false, false, false], "pictures and PDFs show in Look");
+  assert.deepEqual(clone(kinds.map((kind) => shows({ kind }))), [true, true, true, false, false, false, false, false, false], "every picture listed is drawn");
 });
 
 test("Look moves to the newest new picture, not to a document or what it already had", async () => {
@@ -52,10 +52,9 @@ test("Look moves to the newest new picture, not to a document or what it already
 test("A note to the agent names the file and where each pin sits on the picture", async () => {
   const { aboutMessage, pinFrom, keyOf } = await model();
   const item = { path: "/repo/shots/home.png" };
-  assert.equal(aboutMessage(item, "  the header covers the logo \n"), "About /repo/shots/home.png: the header covers the logo");
-  assert.equal(aboutMessage(item, "too dark", [{ x: 0.421, y: 0.18 }, { x: 1, y: 0 }]),
-    "About /repo/shots/home.png: too dark\nPins on /repo/shots/home.png, from its top left corner: 1 at 42% across, 18% down; 2 at 100% across, 0% down.");
-  assert.match(aboutMessage({ path: "/r/spec.pdf" }, "x", [{ x: 0.5, y: 0.5 }], "/app/look/k-1.png"), /Pins on \/app\/look\/k-1\.png/, "a PDF's pins are on the page Look drew");
+  assert.equal(aboutMessage(item, [{ x: 0.421, y: 0.18, note: " too dark \n" }, { x: 1, y: 0, note: null }, { x: 0.5, y: 0.5, note: "the logo" }]),
+    "About /repo/shots/home.png:\n1 (42% across, 18% down): too dark\n3 (50% across, 50% down): the logo", "one line per pin with a note, numbered as drawn");
+  assert.match(aboutMessage({ path: "/r/a.heic" }, [{ x: 0.5, y: 0.5, note: "x" }], "/app/look/k-1.png"), /^About \/r\/a\.heic \(the pins are on \/app\/look\/k-1\.png\):/, "a converted picture says what the pins are on");
   assert.deepEqual(clone(pinFrom({ x: 50, y: 300 }, { width: 200, height: 200 })), { x: 0.25, y: 1 }, "clamped to the picture");
   assert.equal(pinFrom(undefined, { width: 1, height: 1 }), null, "not painted yet: no pin");
   assert.equal(keyOf("/r/a.png"), keyOf("/r/a.png"));
@@ -68,7 +67,8 @@ test("A note to the agent names the file and where each pin sits on the picture"
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
   copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "" } = {}) {
   const calls = [], store = {};
-  const box = { text: "", value() { return this.text; }, set_value(v) { this.text = v; }, on() {}, focus() {} };
+  // A pin's note, as the prompt dialog answers it: `say(text)` is what you typed, null is Cancel.
+  const say = (text, token = calls.findLast((c) => c[0] === "openOverlay")?.[1].props.token) => { store["kanso.look.note"] = { text, at: (store["kanso.look.note"]?.at ?? 0) + 1, token }; };
   // What Herdr reports, changed by a test as the agent ends.
   const world = {
     terminals: [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
@@ -76,7 +76,8 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     session,
   };
   const host = {
-    ...singleUse(), image: singleUse().div, TextareaState: { new: () => box },
+    ...singleUse(), image: singleUse().div,
+    openOverlay: (spec) => { calls.push(["openOverlay", spec]); return "o1"; },
     focused: () => ({ terminal: focus }), theme: () => ({}), home: () => "/home/me", appHome: () => "/app",
     terminals: () => world.terminals, panes: () => world.panes,
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
@@ -101,7 +102,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   const look = new Look();
   look.init({ ...cx, timer: { every() {}, after() {} }, focus_handle: () => ({}) }, {});
   await drain();
-  return { look, cx, drain, calls, box, store, world };
+  return { look, cx, drain, calls, say, store, world };
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
@@ -109,7 +110,7 @@ const settle = () => new Promise((r) => setImmediate(r));
 test("The Look panel reads the agent in focus and shows its newest picture, copied where Herdr can draw it", async () => {
   const { look, calls } = await panel();
   assert.deepEqual(clone(calls[0]), ["hc", "read", "t1", "--lines", "400"]);
-  assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], "only files that exist, from the agent's folder");
+  assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/tests/shot.png", "/repo/images/hero.jpg"], "only pictures that exist, from the agent's folder");
   assert.equal(look.selected.path, "/repo/tests/shot.png");
   assert.equal(look.picked, false);
   assert.match(look.shown.image, /^data\/kanso-panel\/look\/[0-9a-z]+-\d+\.png$/);
@@ -180,7 +181,7 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
 });
 
 test("What you picked stays while the agent makes more, and a note goes to it with the pins", async () => {
-  const { look, cx, drain, calls, box } = await panel();
+  const { look, cx, drain, calls, say } = await panel();
   look.select(look.list()[1], cx, true);
   await drain();
   look.readAt = 0;
@@ -188,21 +189,36 @@ test("What you picked stays while the agent makes more, and a note goes to it wi
   await drain();
   assert.equal(look.selected.path, "/repo/images/hero.jpg", "a read does not take you off what you picked");
   look.pin({ local_position: { x: 30, y: 10 }, bounds: { width: 300, height: 200 } }, cx);
-  box.text = "crop the top";
-  assert.ok(look.render(cx), "the picture, its pin and the box draw");
+  const dialog = calls.find((c) => c[0] === "openOverlay")?.[1];
+  assert.deepEqual([dialog?.mod, dialog?.props.title, dialog?.props.shared, typeof dialog?.props.token], ["kanso-prompt", "Pin 1", "kanso.look.note", "string"], "a pin asks what about that spot, in a dialog of its own");
+  say("someone else's answer", "another-window"); look.render(cx);
+  assert.deepEqual(clone(look.pins.map((p) => p.note)), [null], "an answer to another dialog is not this pin's");
+  look.send(cx); await drain();
+  assert.ok(!calls.some((c) => c[0] === "hc" && c[1] === "send"), "nothing to send while no pin has a note");
+  say("crop the top");
+  assert.ok(look.render(cx), "the picture, its pin and its note draw");
+  assert.deepEqual(clone(look.pins.map((p) => p.note)), ["crop the top"], "the answer went on its pin");
+  // Two more pins; the dialog is open for the third when the second is dropped: the answer still lands on the third.
+  look.pin({ local_position: { x: 60, y: 10 }, bounds: { width: 300, height: 200 } }, cx); say("b"); look.render(cx);
+  look.pin({ local_position: { x: 90, y: 10 }, bounds: { width: 300, height: 200 } }, cx);
+  look.drop(1, cx); say("c"); look.render(cx);
+  assert.deepEqual(clone(look.pins.map((p) => [Math.round(p.x * 100), p.note])), [[10, "crop the top"], [30, "c"]], "dropping a pin never moves the dialog's answer onto another");
+  look.drop(1, cx);
+  look.pin({ local_position: { x: 150, y: 100 }, bounds: { width: 300, height: 200 } }, cx);
+  say(null); look.render(cx);
+  assert.equal(look.pins.length, 1, "Cancel on a new pin drops it");
   look.send(cx);
   await drain();
   const sent = calls.find((c) => c[0] === "hc" && c[1] === "send");
-  assert.deepEqual(clone(sent), ["hc", "send", "t1", "About /repo/images/hero.jpg: crop the top\nPins on /repo/images/hero.jpg, from its top left corner: 1 at 10% across, 5% down."]);
+  assert.deepEqual(clone(sent), ["hc", "send", "t1", "About /repo/images/hero.jpg:\n1 (10% across, 5% down): crop the top"]);
   assert.ok(calls.some((c) => c[0] === "hc" && c[1] === "label" && c[2] === "t1"), "marked unread, as Send does");
-  assert.equal(box.text, "", "the box empties");
-  assert.equal(look.pins.length, 0);
+  assert.equal(look.pins.length, 0, "sent: the pins go");
   assert.equal(look.note.text, "Sent to web agent.");
 });
 
 test("Look sends nothing to an agent waiting on its own question", async () => {
-  const { look, cx, drain, calls, box } = await panel({ status: "blocked" });
-  box.text = "looks good";
+  const { look, cx, drain, calls, say } = await panel({ status: "blocked" });
+  look.pin({ local_position: { x: 30, y: 10 }, bounds: { width: 300, height: 200 } }, cx); say("looks good"); look.render(cx);
   look.send(cx);
   await drain();
   assert.equal(calls.some((c) => c[1] === "send"), false);
@@ -210,12 +226,12 @@ test("Look sends nothing to an agent waiting on its own question", async () => {
 });
 
 test("Look never takes a shell as the one to send to: it would run the note", async () => {
-  const { look, cx, drain, calls, box } = await panel({ focus: "t2" });
+  const { look, cx, drain, calls, say } = await panel({ focus: "t2" });
   assert.equal(look.agent(), null, "a shell in focus is no recipient");
   assert.equal(calls.some((c) => c[1] === "read"), false, "and its screen is not read");
   look.ask("/repo/tests/shot.png", cx);
   await drain();
-  box.text = "crop it";
+  look.pin({ local_position: { x: 30, y: 10 }, bounds: { width: 300, height: 200 } }, cx); say("crop it"); look.render(cx);
   look.send(cx);
   await drain();
   assert.equal(calls.some((c) => c[1] === "send"), false, "nothing pasted into the shell");
@@ -225,11 +241,11 @@ test("Look never takes a shell as the one to send to: it would run the note", as
 });
 
 test("An agent that ends leaves a shell: Look sends it nothing and lets go of its pin", async () => {
-  const { look, cx, drain, calls, box, world } = await panel();
+  const { look, cx, drain, calls, say, world } = await panel();
   look.pinned = "t1";
+  look.pin({ local_position: { x: 30, y: 10 }, bounds: { width: 300, height: 200 } }, cx); say("crop it"); look.render(cx);
   world.terminals = [{ address: "t1", cwd: "/repo", status: null, labels: {} }];
   world.panes = [{ pane: "p1", terminal: "t1", program: { name: "zsh", shell: true } }];
-  box.text = "crop it";
   look.send(cx);
   await drain();
   assert.equal(calls.some((c) => c[1] === "send"), false, "the note never reaches the shell");
@@ -296,7 +312,7 @@ test("Look opens what kanso-tabs.look names, as if you picked it, and refuses wh
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/home/me/Desktop/mock.heic"]);
   assert.equal(look.picked, true);
   look.ask("http://localhost:3000", cx);
-  assert.match(look.note.text, /^Look shows files/);
+  assert.match(look.note.text, /^The gallery shows pictures/);
   const r = look.render(cx);
   assert.ok(r, "it draws");
 });

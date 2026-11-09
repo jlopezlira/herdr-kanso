@@ -4,7 +4,7 @@
 // label on the terminal in herdr-core.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { run, hc, props, closeOverlay, theme } from "herdr";
+import { run, hc, props, closeOverlay, theme, setShared } from "herdr";
 
 export default class Prompt extends View {
   init(_props, cx) {
@@ -27,10 +27,18 @@ export default class Prompt extends View {
     const name = this.text.trim();
     if (p.label) hc(["label", p.label.terminal, `${p.label.key}=${name}`]).catch(() => {});
     else if (p.command) run(p.command.name, { ...(p.command.args ?? {}), name });
+    // A mod with no command for it reads the answer from shared state (`shared`: the key); `text` null when cancelled.
+    else if (p.shared) setShared(p.shared, { text: name, at: Date.now(), token: p.token ?? null });
+  }
+
+  cancel() {
+    const p = props();
+    closeOverlay(p.overlay);
+    if (p.shared) setShared(p.shared, { text: null, at: Date.now(), token: p.token ?? null });
   }
 
   key(e, cx) {
-    if (e.key === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); }
+    if (e.key === "escape") { this.cancel(); cx.stop_propagation(); }
   }
 
   render() {
@@ -45,11 +53,11 @@ export default class Prompt extends View {
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child((p.title ?? "").replace(/^./, (c) => c.toUpperCase())))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(label("Name"))
+      .child(label(p.field ?? "Name"))
       .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(this.inputFocused ? t.accent : t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
       .when(Boolean(p.hint), el => el.child(div().pt(6).text_size(11.5).text_color(t.dim).child(p.hint)))
       .child(h_flex().pt(20).gap(8).justify_end()
-        .child(button("pm-cancel", "Cancel", false, () => closeOverlay(p.overlay)))
-        .child(button("pm-save", "Save", true, () => this.submit())));
+        .child(button("pm-cancel", "Cancel", false, () => this.cancel()))
+        .child(button("pm-save", p.button ?? "Save", true, () => this.submit())));
   }
 }
