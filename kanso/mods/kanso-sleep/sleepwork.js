@@ -52,8 +52,8 @@ export function leaveStep(a, seen, now) {
     if (promptEmpty(seen.screen)) return { write: { step: "exiting", step_at: now, sent_at: now }, act: "exit" };
     if (since <= CLEAR_MS) return wait;
     // Its ctrl+c may never have gone (a restart between the write and the key, or a key that failed): once more,
-    // marked by sent_at, then stuck.
-    return a.sent_at == null && seen.front === a.pid ? { write: { step: "clearing", step_at: now, sent_at: now }, act: "interrupt" } : stuck(`${a.name}'s prompt could not be cleared`);
+    // marked by nudged_at, then stuck.
+    return a.nudged_at == null && seen.front === a.pid ? { write: { step: "clearing", step_at: now, nudged_at: now }, act: "interrupt" } : stuck(`${a.name}'s prompt could not be cleared`);
   }
   if (a.step === "exiting") {
     // Claude asks before leaving work in the background: sleeping it is stopping all of it.
@@ -74,10 +74,10 @@ export function undoStep(a, seen, now) {
   if (a.step === "left") return back;
   if (a.step === "returning") return { write: { step: "returning", step_at: now }, act: "again" };
   if (seen.alive === false) return back;
-  // /exit went (exiting, or stuck after it): it may still go, so it is waited for. Past the wait, one that can't be
-  // checked is looked at like one gone (comeBack finds it in front, or keeps it asleep). One running is let go only at
-  // its empty prompt, where no /exit waits; else it may still leave, so it stays asleep, its terminal looked at first.
-  if (a.sent_at != null && (a.step === "exiting" || a.step === "stuck")) {
+  // An /exit went (sent_at stays through stuck and retry until the agent leaves): it may still go, so it is waited for.
+  // Past the wait, one that can't be checked is looked at like one gone (comeBack: still in front, it stays asleep). One
+  // running is let go only at its empty prompt, where no /exit waits; else it stays asleep, its terminal looked at first.
+  if (a.sent_at != null) {
     if (a.step === "exiting" && now - (Number(a.sent_at) || now) <= EXIT_MS) return wait;
     if (seen.alive !== true) return back;
     return seen.front === a.pid && promptEmpty(seen.screen) ? { write: null, act: "free" } : { write: { step: "unsure" }, act: null };
@@ -291,7 +291,7 @@ async function see(a) {
   const x = tryOr(() => (g?.code === 0 ? JSON.parse(g.stdout) : null));
   const fg = x?.foreground ?? null;
   const front = x ? (fg?.pid ?? 0) : null;
-  const reads = ["clearing", "exiting"].includes(a.step) || (a.step === "stuck" && a.sent_at != null);
+  const reads = ["clearing", "exiting"].includes(a.step) || a.sent_at != null;
   const shot = x && reads ? await hc(["read", a.terminal]).catch(() => null) : null;
   const record = x && a.step === "saving" && fg?.pid ? await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))) : null;
   return { alive: await alive(a.pid), front, state: x?.status?.state ?? null, screen: shot?.code === 0 ? shot.stdout : null, record, title: x?.title ?? null, cwd: fg?.cwd ?? null };
@@ -385,8 +385,10 @@ export class SleepWork {
     if (next.act === "return" || next.act === "again") {
       const p = { ...a.pane, terminal: a.terminal, resume: a.conversation, pid: a.pid };
       const how = !p.wake ? "out" : await (next.act === "again" ? returnAgain(p, cx) : comeBack(p, cx)).catch(() => "unsure");
-      if (how === "back" || how === "here") await this.kdb.freeAgent(row.id, this.me, a.conversation);
-      else await this.kdb.stepAgent(row.id, this.me, row.state, a.conversation, "returning", { step: how });
+      // "here" is the process that was told to exit, still in front: it may yet leave, so one with an /exit sent stays asleep.
+      const kept = how === "here" && a.sent_at != null ? "unsure" : how;
+      if (kept === "back" || kept === "here") await this.kdb.freeAgent(row.id, this.me, a.conversation);
+      else await this.kdb.stepAgent(row.id, this.me, row.state, a.conversation, "returning", { step: kept });
       return;
     }
     if (next.act) await ACTS[next.act](a).catch(() => null);
