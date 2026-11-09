@@ -15,7 +15,8 @@ release.
 
 ### Changed
 
-- Credits lists Leangseu Kim (@leangseu), who contributed the editable pull request prompts, and Johannes Hund (@h0ru5), with GitHub avatars shipped with Kanso.
+- Credits lists Leangseu Kim (@leangseu), who contributed the editable pull request prompts, and Johannes Hund (@h0ru5), and names the maintainer JJ.
+- Avatars on the Credits page, in settings and on the site, come from GitHub instead of being kept in Kanso. Settings shows an initial until each one arrives, and the one it last downloaded when GitHub can't be reached.
 
 ## [3.18.2] - 2026-11-09
 
