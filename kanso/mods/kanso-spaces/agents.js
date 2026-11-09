@@ -21,8 +21,10 @@ export function pill(id, y, h, color, inset = 8) {
 }
 
 // Must equal the height agentRow draws: lists sum these to place the pill.
+// `more.oneLine`: a narrow sidebar keeps the first line only.
+const twoLines = (more) => !more.oneLine && (Boolean(more.activity) || Boolean(more.project) || Boolean(more.steady));
 export function agentRowH(a, more = {}) {
-  const two = Boolean(more.activity) || Boolean(more.project) || Boolean(more.steady);
+  const two = twoLines(more);
   return two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
 }
 
@@ -32,6 +34,8 @@ export function segmentAt(width, i, n, pad = 3, gap = 2) {
 }
 // A row flush with the list's 10px inset (the Status and Threads views).
 export const FLUSH = 10 - AGENT_PAD;
+// A row nested under its project's name: the Threads view's conversations, indented as a Projects view's agents are.
+export const NESTED = FLUSH + 28;
 // Asleep is one more status: its own section, after the awake ones.
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1, asleep: 0.5 };
 
@@ -378,22 +382,20 @@ function shimmer(text, t, address) {
 const ROW = 32, TWO = 50, ROOMY = 64;
 export function agentRow(a, indent, t, row, more = {}) {
   const project = more.project ?? null;
-  const pic = project ? null : programIcon(a.program, a.sub ? 13 : 15, t.foreground);
+  const pic = programIcon(a.program, a.sub ? 13 : 15, t.foreground);
   const zz = a.status === "asleep" || Boolean(a.dozing);
   const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
   const ink = zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
   const pinned = a.pin != null, drag = row?.drag;
   const lines = more.lines ?? [];
-  const two = Boolean(more.activity) || Boolean(project) || Boolean(more.steady);
+  const two = twoLines(more);
   const tasks = a.status === "working" ? [] : more.tasks ?? [];
   const h = agentRowH(a, more);
   const showPin = Boolean(row?.pin) && (pinned || row.hovered);
   const actions = row?.hovered ? row.actions ?? [] : [];
-  const lead = project
-    ? h_flex().size(20).flex_none().rounded(6).bg(project.fill + "2e").items_center().justify_center()
-      .text_size(11).font_semibold().text_color(project.fill).child(project.name[0]?.toUpperCase() ?? "?")
-    : pic?.opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75);
+  // The program's icon leads; with a project line and no icon, a blank of its width keeps the names in a column.
+  const lead = pic?.opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75) ?? (project ? div().size(15).flex_none() : null);
   const top = h_flex().h(two ? 22 : h).gap(10).items_center()
     // One weight always: a changed weight would reflow the name and make the row jump.
     .child(a.status === "working" && !zz
@@ -445,6 +447,6 @@ export function agentRow(a, indent, t, row, more = {}) {
     .when(drag?.target === "before", (el) => el.border_t(2).border_color(t.accent))
     .when(drag?.target === "after", (el) => el.border_b(2).border_color(t.accent))
     .children(lines.map((l) => guide(l, h, t)))
-    .when(Boolean(lead), (el) => el.child(two ? v_flex().h(h).pt(Math.round((h - 45) / 2) + (project ? 1 : 3)).flex_none().child(lead) : lead))
+    .when(Boolean(lead), (el) => el.child(two ? v_flex().h(h).pt(Math.round((h - 45) / 2) + 3).flex_none().child(lead) : lead))
     .child(body);
 }

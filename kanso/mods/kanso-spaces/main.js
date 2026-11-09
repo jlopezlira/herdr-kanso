@@ -6,14 +6,14 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
-import { agentRow, agentFold, agentLabel, FLUSH, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt } from "./agents.js";
+import { agentRow, agentFold, agentLabel, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
 import { findThreads, pidsOf, pidsListed, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { parseProcesses } from "./procs.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
-import { programIcon } from "./marks.js";
+import { stateMark } from "./marks.js";
 import { sleepingNow, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
@@ -34,8 +34,10 @@ function placesOf(sp, ps) {
 }
 const TREE_ROW = 32;
 const MENU_ROW = 30; // a popup row: the conversation picker's virtual list places rows by it
+const RAIL_MARK = 46; // one group in the collapsed rail
+const RAIL_MENU_ROWS = 10; // a rail popup shows this many rows; the rest scroll
 const PLAIN_ROW = 36;
-const GUIDE_X = 19; // under the parent's avatar centre: 8px row padding + half its 22px width
+const GUIDE_X = 13; // under the parent's name, just in from its first letter: 8px row padding + 5
 const ELBOW_W = 11;
 const GUIDE_OVERLAP = 4; // the line reaches up into the row above, so it never breaks
 const CHILD_PAD = GUIDE_X + ELBOW_W + 6 - 8; // icon starts 6px after the elbow, inside the 8px row padding
@@ -60,7 +62,11 @@ const PS_GIVE_UP_MS = 10000;
 const SIDEBAR_W = 256;
 // The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
 const collapsedW = () => (window()?.platform === "macos" ? 76 : 44);
-const OPEN_MIN = 200; // dragged open, the sidebar never gets narrower than this
+// Dragged narrower, rows keep one line under ONE_LINE_W, and under SNAP_W the sidebar folds to the rail as Hide sidebar does.
+const ONE_LINE_W = 240;
+const SNAP_W = 160;
+const OPEN_MIN = 120; // open, the edge drags this far, past SNAP_W, so a drag can fold it
+const HELD_MS = 400;
 
 function setRail(open, width) {
   const min = open ? OPEN_MIN : collapsedW();
@@ -152,11 +158,11 @@ export function tone(t, status) {
 export default class Spaces extends View {
   init(_props, cx) {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) {
+    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.confirmClose = false; this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
-      if (props()?.newConversation) this.convScroll = VirtualListScrollHandle.new();
+      if (props()?.newConversation || props()?.railMenu) this.convScroll = VirtualListScrollHandle.new();
       this.openPopup(cx); return;
     }
     this.asleepReads = 0;
@@ -576,6 +582,38 @@ export default class Spaces extends View {
     else setRail(true, shared("sidebar.width") ?? SIDEBAR_W);
   }
 
+  openRail() {
+    const width = shared("sidebar.width") ?? SIDEBAR_W;
+    this.lastWide = width;
+    setShared("sidebar.collapsed", false);
+    setRail(true, width);
+  }
+
+  // Remembers how wide you left it open (`width`, when known), to open it the same width.
+  foldRail(width) {
+    if (width != null) setShared("sidebar.width", Math.round(width));
+    setShared("sidebar.collapsed", true);
+    setRail(false, collapsedW());
+  }
+
+  // Herdr sizes the sidebar as its edge is dragged. Only a drag reaches OPEN_MIN to SNAP_W (a stale tree jumps to the
+  // rail's width), and only once it was seen wide since it opened: there it folds, to open again at the width you had.
+  // The width you had is the last one held a moment (HELD_MS): a drag's sizes come a frame apart.
+  sized(w, cx, now = Date.now()) {
+    const was = this.width ?? SIDEBAR_W;
+    const open = shared("sidebar.collapsed") !== true;
+    if (open && this.width != null && was >= SNAP_W && now - (this.sizedAt ?? 0) >= HELD_MS) this.lastWide = Math.round(was);
+    this.width = w;
+    this.sizedAt = now;
+    if (!open) { this.seenWide = false; return; }
+    if (w >= SNAP_W) this.seenWide = true;
+    else if (this.seenWide && w >= OPEN_MIN - 1) {
+      this.seenWide = false;
+      this.foldRail(this.lastWide ?? null);
+    }
+    if ((was < ONE_LINE_W) !== (w < ONE_LINE_W)) cx?.notify();
+  }
+
   checkNew(cx) {
     const now = Date.now();
     const active = window().active;
@@ -878,7 +916,6 @@ export default class Spaces extends View {
       .when(this.navMark(`asleep-project:${key}`, () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, props: { spaceMenu: { key } } })), (el) => el.border_1().border_color(t.accent))
       .on_click(open)
       .on_mouse_down("right", open)
-      .child(h_flex().size(22).flex_none().rounded(6).bg(t.foreground + "12").items_center().justify_center().text_size(12).font_semibold().text_color(t.muted).child(name[0]?.toUpperCase() ?? "?"))
       .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_semibold().text_color(missing ? t.dim : t.muted).child(name))
       .when(missing, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Folder not found")))
       .when(this.hoverSpace === key, (el) => el.child(this.dots(`asleep-dots-${key}`, t, open)))
@@ -953,14 +990,17 @@ export default class Spaces extends View {
   }
 
   // The row itself, at its place `at` in the keyboard's order; `go` runs on a click (none in a virtual list).
-  menuRow(t, id, text, at, go, { icon = null, hint = null, ink = t.foreground } = {}) {
+  // `lead`: an element in the icon's place (a rail list's state marks).
+  menuRow(t, id, text, at, go, { icon = null, lead = null, hint = null, ink = t.foreground, badge = null } = {}) {
     return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
       .when(at === this.menuAt, (el) => el.bg(t.selected))
       .hover((s) => s.bg(t.hover))
       // A row of a virtual list takes no handler of its own (registering one there throws): its list's on_item_click acts.
       .when(Boolean(go), (el) => el.on_click((_e, cx) => { go(cx); cx.notify(); }))
-      .child(div().w(14).flex_none().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))))
+      .child(h_flex().w(14).flex_none().justify_center().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))).when(Boolean(lead), (el) => el.child(lead)))
       .child(div().flex_1().truncate().child(text))
+      .when(Boolean(badge), (el) => el.child(div().flex_none().px(6).h(18).rounded_full().bg(t.accent + "26")
+        .flex().items_center().text_size(11).font_semibold().text_color(t.accent).child(badge)))
       .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
   }
 
@@ -1141,7 +1181,7 @@ export default class Spaces extends View {
 
   more(e, ctx, project = null) {
     const a = e.a, show = this.showActivity !== false && !a.sub;
-    if (a.asleep) return { lines: e.lines, label: a.name, time: a.asleep.busy ? "\u2026" : since(a.asleep.saved), project, steady: show };
+    if (a.asleep) return { lines: e.lines, label: a.name, time: a.asleep.busy ? "\u2026" : since(a.asleep.saved), project, steady: show, oneLine: this.narrow };
     return {
       label: this.nameOf(a),
       lines: e.lines,
@@ -1152,6 +1192,7 @@ export default class Spaces extends View {
       steady: show && Boolean(a.status),
       ...this.extras(a, ctx, show),
       project,
+      oneLine: this.narrow,
     };
   }
 
@@ -1307,7 +1348,7 @@ export default class Spaces extends View {
     const rows = this.ordered(sp, ctx.places);
     const live = machines();
     const draw = (r) => {
-      if (collapsed) return item(this.compact(r, t));
+      if (collapsed) return item(this.compact(r, t, ctx), RAIL_MARK);
       const mine = ctx.rowsBy.get(r.w.id) ?? [];
       const entries = nest(mine, ctx.terms);
       const open = !this.agentsFolded.has(r.w.id);
@@ -1451,7 +1492,6 @@ export default class Spaces extends View {
 
   row({ w, i, g, tree }, t, mine = []) {
     const on = w.active;
-    const fill = this.avatarColor(w, t);
     // A wash of the text color, never a theme accent; under the space you are in it is the list's pill.
     const washHover = t.foreground + "0c";
     const ring = this.navMark(`space:${w.id}`, (cx) => {
@@ -1493,7 +1533,6 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
-          .when(!tree, el => el.child(h_flex().size(22).flex_none().rounded(6).bg(fill + "26").items_center().justify_center().text_size(12).font_semibold().text_color(fill).child(w.name[0]?.toUpperCase() ?? "?")))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .when(this.hoverSpace === w.id, (el) => el.child(this.plus(`space-plus-${w.id}`, t, placeOfSpace(w))).child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
@@ -1501,30 +1540,10 @@ export default class Spaces extends View {
       );
   }
 
-  compact({ w }, t) {
-    const fill = this.avatarColor(w, t);
-    const speaks = w.status === "blocked" || w.status === "done";
-    return h_flex().w_full().h(36).flex_none().justify_center().items_center().child(
-      div()
-        .id(`space-${w.id}`)
-        .relative()
-        .size(32)
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(6)
-        .cursor_pointer()
-        .tooltip(w.name)
-        .when(w.active, (el) => el.bg(t.foreground + "14"))
-        .when(!w.active, (el) => el.hover((s) => s.bg(t.foreground + "0c")))
-        .on_click(() => run("space.select", { id: w.id }))
-        .on_mouse_down("right", () => this.menu(w))
-        .child(h_flex().size(22).flex_none().rounded(6).bg(fill + "26").items_center().justify_center()
-          .text_size(12).font_semibold().text_color(fill).child(w.name[0]?.toUpperCase() ?? "?"))
-        .when(speaks, (el) => el.child(div().absolute().top(4).right(4).size(7).rounded_full()
-          .border(1).border_color(t.chrome).bg(tone(t, w.status)))),
-    );
+  // Projects, collapsed: one mark per project; a click lists its agents, or goes to it when it has none.
+  compact({ w }, t, ctx) {
+    const rows = (ctx.rowsBy.get(w.id) ?? []).map((a) => this.railRow(a, null, ctx.now));
+    return this.railMark(t, `space-${w.id}`, { lead: this.railInitial(w.name, this.avatarColor(w, t)), rows, tip: w.name, on: w.active, space: w.id, menu: () => this.menu(w) });
   }
 
   agentsView(t, sp, ps, ctx) {
@@ -1558,8 +1577,9 @@ export default class Spaces extends View {
     });
   }
 
-  sectionHead(t, id, i, open, toggle, mark, name, count, ink, extra = null) {
-    return h_flex().id(id).h(i ? 44 : 32).pt(i ? 12 : 0).px(12).flex_none().gap(10).items_center()
+  // `lift`: the space above the header (12 under an earlier section).
+  sectionHead(t, id, i, open, toggle, mark, name, count, ink, extra = null, lift = i ? 12 : 0) {
+    return h_flex().id(id).h(32 + lift).pt(lift).px(12).flex_none().gap(10).items_center()
       .cursor_pointer().text_size(13).font_semibold().text_color(ink)
       .on_click((_e, cx) => { toggle(cx); cx.notify(); })
       .when(Boolean(mark), (el) => el.child(mark))
@@ -1623,52 +1643,91 @@ export default class Spaces extends View {
     }));
   }
 
-  // One agent as a tile in the collapsed rail: its program's icon (its project's letter when it has none), its
-  // status as a dot, its name and project on hover; a click goes to it, a right click opens its menu.
-  tile(a, t, ctx, { strong = false } = {}) {
-    const zz = a.status === "asleep" || Boolean(a.dozing);
-    const project = ctx.project(a.space);
-    const pic = programIcon(a.program, 15, t.foreground)
-      ?? div().size(18).rounded(5).bg((project?.fill ?? t.muted) + "2e").flex().items_center().justify_center().text_size(10.5).font_semibold().text_color(project?.fill ?? t.muted).child(project?.name[0]?.toUpperCase() ?? "?");
-    const go = () => (a.asleep ? this.openMenu(a) : a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address }));
-    const dot = zz ? t.dim : tone(t, a.status);
-    return h_flex().w_full().h(36).flex_none().justify_center().items_center().child(
-      div().id(`tile-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
-        .tooltip([this.nameOf(a), project?.name].filter(Boolean).join(" · "))
-        .when(Boolean(a.focused), (el) => el.bg(t.foreground + "14"))
-        .when(!a.focused, (el) => el.hover((s) => s.bg(t.foreground + "0c")))
+  // One group in the collapsed rail (a project, a status, a shelf): its lead (a project's initial in its color, or an icon), the most
+  // urgent state as the list's own mark, how many. A click lists the group in a popup; a right click opens `menu` (else the same list).
+  // `space`: a project's, so its list also offers to go to it; with no rows a click goes there at once.
+  // `urgent: false`: a status section's lead already is its state.
+  railMark(t, id, { lead, rows, tip, on = false, space = null, menu = null, ink = t.dim, urgent = true }) {
+    const top = urgent ? mostUrgent(rows.map((r) => ({ status: r.status }))) : null;
+    const shown = top === "working" || top === "blocked" || top === "done" ? top : null;
+    const list = () => (rows.length ? this.railMenu(tip, rows, space) : space ? run("space.select", { id: space }) : null);
+    const strong = rows.some((r) => r.strong);
+    return h_flex().w_full().h(RAIL_MARK).flex_none().justify_center().items_center().child(
+      v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)
+        .when(on, (el) => el.bg(t.foreground + "14"))
+        .when(!on, (el) => el.hover((s) => s.bg(t.foreground + "0c")))
         .when(strong, (el) => el.border_1().border_color(t.accent + "80"))
-        .on_click(go)
-        .on_mouse_down("right", () => this.openMenu(a))
-        .child(pic.opacity(zz ? 0.45 : a.focused || a.status === "working" || a.status === "blocked" || strong ? 1 : 0.75))
-        .child(div().absolute().top(4).right(4).size(7).rounded_full().border(1).border_color(t.chrome).bg(dot)));
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click(list)
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); (menu ?? list)(); })
+        .child(lead)
+        .when(rows.length > 0, (el) => el.child(h_flex().h(12).gap(3).items_center().text_size(10.5).text_color(top === "blocked" ? t.blocked : ink)
+          .when(Boolean(shown), (el2) => el2.child(stateMark(t, shown, 11)))
+          .child(div().child(String(rows.length))))));
   }
 
-  // A section in the collapsed rail: its mark and how many, a click folds it as in the open view.
-  railHead(t, id, i, open, toggle, mark, count, ink) {
-    return h_flex().id(id).h(i ? 30 : 22).pt(i ? 8 : 0).w_full().flex_none().gap(4).items_center().justify_center().cursor_pointer()
-      .text_size(10.5).font_semibold().text_color(ink).tooltip(open ? "Fold" : "Unfold")
-      .on_click((_e, cx) => { toggle(cx); cx.notify(); })
-      .when(Boolean(mark), (el) => el.child(mark))
-      .child(div().child(String(count)));
+  // A project's initial, no square: its color says which.
+  railInitial(name, fill) {
+    return div().h(16).flex().items_center().text_size(14).font_semibold().text_color(fill).child(name?.[0]?.toUpperCase() ?? "?");
   }
 
+  railIcon(t, icon) {
+    return h_flex().h(16).items_center().child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).flex_none().text_color(t.muted));
+  }
+
+  // What the popup needs of a row: it draws in its own view, from its props.
+  // Unread and woke carry over: the group's mark gets the ring the open view's strong rows have, the row its badge.
+  railRow(a, hint = null, now = Date.now()) {
+    const zz = a.status === "asleep" || Boolean(a.dozing) || Boolean(a.asleep);
+    const up = woke(a, now), unread = isUnread(a.labels);
+    return { address: a.address, pane: a.pane ?? null, name: a.asleep ? a.name : this.nameOf(a), status: zz ? "asleep" : a.status ?? null, hint, asleep: a.asleep ?? null,
+      strong: up || unread, badge: up ? "Woke" : unread ? "Unread" : null };
+  }
+
+  railMenu(title, rows, space = null) {
+    const height = 18 + 26 + Math.min(rows.length, RAIL_MENU_ROWS) * (MENU_ROW + 1) + (space ? MENU_ROW + 9 : 0);
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 260, height, at: "pointer", props: { railMenu: { title, rows, space } } });
+  }
+
+  // The rail's list of one group: each row with its state, a click goes to it; an asleep one opens its wake menu.
+  railMenuView(t) {
+    const m = props().railMenu;
+    const item = this.items(t);
+    const to = (r) => (r.asleep ? () => { closeOverlay(props().overlay); openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 170, at: "pointer", props: { menu: { address: r.address, asleep: r.asleep, name: r.name } } }); }
+      : () => { closeOverlay(props().overlay); r.pane ? run("pane.focus", { pane: r.pane }) : run("terminal.peek", { terminal: r.address }); });
+    // As the conversation picker's: every row's act for the keyboard, the list drawing what shows and scrolled to the selection.
+    this.menuActs = m.rows.map(to);
+    this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length } : null;
+    const key = (r) => `rail-${r.address}`;
+    const byKey = (k) => m.rows.find((r) => key(r) === k) ?? null;
+    const row = (r, at) => this.menuRow(t, key(r), r.name, at, null, { lead: r.status ? stateMark(t, r.status, 13, { idle: true }) : null, hint: r.hint, badge: r.badge, ink: r.status === "asleep" ? t.muted : t.foreground });
+    return this.menuFrame(t)
+      .child(this.menuTitle(t, m.title))
+      .child(v_flex().relative().flex_none().h(Math.min(m.rows.length, RAIL_MENU_ROWS) * MENU_ROW)
+        .child(v_virtual_list("rail-menu-list", m.rows.length, MENU_ROW, (i) => key(m.rows[i]),
+          (range) => m.rows.slice(range.start, range.end).map((r, k) => row(r, range.start + k)))
+          .when(Boolean(this.convScroll), (el) => el.track_scroll(this.convScroll))
+          .on_item_click((k, cx) => { const r = byKey(k); if (r) to(r)(); cx.notify(); }))
+        .child(Scrollbar.vertical("rail-menu-list").absolute().inset_0()))
+      .when(Boolean(m.space), (el) => el.child(div().mx(8).my(4).h(1).bg(t.border))
+        .child(item("rail-go", "Go to project", () => run("space.select", { id: m.space }), { icon: "chevron-right" })));
+  }
+
+  // Status, collapsed: one mark per section.
   agentsRail(t, sp, ctx) {
     const names = new Map(sp.map((w) => [w.id, w.name]));
     const zz = ctx.asleep.rows.map((a) => ({ a: { ...a, space_name: names.get(a.space) ?? a.asleep.spaceName ?? "" }, lines: [] }));
     const entries = [...nest(this.inStripOrder(ctx.all, ctx.strip), ctx.terms), ...zz];
     const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
     const sections = bySection(entries, since, this.held?.done ? this.held.address : null, this.statusOrder);
-    return sections.flatMap((s, i) => {
-      const open = !this.sectionsFolded.has(s.id);
-      const head = this.railHead(t, `rail-section-${s.id}`, i, open, () => {
-        open ? this.sectionsFolded.add(s.id) : this.sectionsFolded.delete(s.id);
-        this.panel.set("spaces.sections", [...this.sectionsFolded]);
-      }, s.id === "other" ? null : statusMark(t, s.id), s.entries.filter((e) => !e.lines.length).length, s.id === "blocked" ? t.blocked : t.muted);
-      return [item(head, i ? 30 : 22), ...(open ? s.entries.filter((e) => !e.lines.length).map((e) => item(this.tile(e.a, t, ctx), 36)) : [])];
+    return sections.map((s) => {
+      const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
+      const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(16).items_center().child(statusMark(t, s.id));
+      return item(this.railMark(t, `rail-section-${s.id}`, { lead, rows, tip: s.label, ink: s.id === "blocked" ? t.blocked : t.dim, urgent: false }), RAIL_MARK);
     });
   }
 
+  // Threads, collapsed: one mark per project (or per shelf: Pinned, Snoozed, Settled).
   threadsRail(t, sp, ctx) {
     if (!this.threads) return [];
     const rows = ctx.all
@@ -1676,20 +1735,13 @@ export default class Spaces extends View {
       .map((a) => ({ a, th: shownThread(this.threads[a.address], this.termBy?.get(a.address), this.alive) }))
       .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
-    return sections.flatMap((s, i) => {
-      const folds = Boolean(s.folds);
-      const open = folds ? this.shelvesOpen.has(s.id) : !this.sectionsFolded.has(`thread-${s.id}`);
-      const toggle = () => {
-        if (folds) { open ? this.shelvesOpen.delete(s.id) : this.shelvesOpen.add(s.id); this.panel.set("spaces.shelvesOpen", [...this.shelvesOpen]); }
-        else { open ? this.sectionsFolded.add(`thread-${s.id}`) : this.sectionsFolded.delete(`thread-${s.id}`); this.panel.set("spaces.sections", [...this.sectionsFolded]); }
-      };
+    const icons = { pinned: "pin", snoozed: "clock", settled: "check" };
+    return sections.map((s) => {
       const p = s.project ? ctx.project(s.project) : null;
-      const mark = p ? h_flex().size(14).flex_none().rounded(4).bg(p.fill + "2e").items_center().justify_center().text_size(9).font_semibold().text_color(p.fill).child(p.name[0]?.toUpperCase() ?? "?")
-        : s.id === "pinned" ? svg("mods/kanso-chrome/icons/pin.svg").size(11).flex_none().text_color(t.muted)
-        : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(12).flex_none().text_color(t.muted)
-        : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(12).flex_none().text_color(t.muted) : null;
-      const head = (i || mark) ? [item(this.railHead(t, `rail-thread-${s.id}`, i, open, toggle, mark, s.rows.length, t.muted), i ? 30 : 22)] : [];
-      return [...head, ...(open || !mark ? s.rows.map(({ a }) => item(this.tile(a, t, ctx, { strong: isUnread(a.labels) || woke(a, ctx.now) }), 36)) : [])];
+      const w = s.project ? sp.find((x) => x.id === s.project) : null;
+      const list = s.rows.map(({ a }) => this.railRow(a, p ? null : ctx.project(a.space)?.name ?? null, ctx.now));
+      const lead = p ? this.railInitial(p.name, p.fill) : this.railIcon(t, icons[s.id] ?? "message");
+      return item(this.railMark(t, `rail-thread-${s.id}`, { lead, rows: list, tip: p?.name ?? s.label ?? "Conversations", on: Boolean(w?.active), space: w?.id ?? null, menu: w ? () => this.menu(w) : null }), RAIL_MARK);
     });
   }
 
@@ -1726,7 +1778,8 @@ export default class Spaces extends View {
       .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
     if (!rows.length) return [item(this.empty(t, "No conversations open", "Start Claude Code or Codex in a tab; each conversation shows here, named on its own."))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
-    const row = ({ a, th }) => {
+    // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
+    const row = ({ a, th }, nested = false) => {
       const when = (this.threadOrder === "started" ? th?.began : th?.said ?? th?.at) ?? this.since?.[a.address]?.at;
       const unread = isUnread(a.labels), up = woke(a, ctx.now), settled = Boolean(settledOf(a.labels)) && !backFromSettled(a);
       const snoozed = snoozedUntil(a.labels) > ctx.now;
@@ -1736,18 +1789,22 @@ export default class Spaces extends View {
           : free && a.pin == null ? { id: "settle", icon: "check", tip: "Settle", act: () => label(a.address, SETTLED_LABEL, `${Date.now()}:${a.turn ?? 0}`) } : null,
         { id: "pin", icon: "pin", tip: a.pin != null ? "Unpin" : "Pin to the top", act: () => this.pinThread(a) },
       ].filter(Boolean);
-      return agentRow(a, FLUSH, t, this.navRow(a, this.rowFor(a, actions, { title: th?.title ?? null, session: th?.file ?? null })), {
+      const more = {
         label: this.nameOf(a),
         time: snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : when ? duration(Math.max(0, ctx.now - when)) : null,
         badge: up ? "Woke" : null,
         strong: unread || up,
-        project: project(a.space),
+        project: nested ? null : project(a.space),
         // What the agent says it is on, or said last; else the last thing you wrote.
         activity: a.asleep ? (a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`) : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         roomy: true,
+        oneLine: this.narrow,
         ...this.extras(a, ctx),
-      });
+      };
+      return { rh: agentRowH(a, more), el: agentRow(a, nested ? NESTED : FLUSH, t, this.navRow(a, this.rowFor(a, actions, { title: th?.title ?? null, session: th?.file ?? null })), more) };
     };
+    // Rows of varying height: where each one starts, for the pill.
+    const stack = (laid, gap) => laid.reduce((acc, r, k) => ({ h: acc.h + r.rh + (k ? gap : 0), tops: [...acc.tops, acc.h + (k ? gap : 0)] }), { h: 0, tops: [] });
     return sections.flatMap((s, i) => {
       const folds = Boolean(s.folds);
       const open = folds ? this.shelvesOpen.has(s.id) : !this.sectionsFolded.has(`thread-${s.id}`);
@@ -1757,23 +1814,26 @@ export default class Spaces extends View {
         this.toggleFold(`thread-${s.id}`, !open, cx);
       };
       const p = s.project ? project(s.project) : null;
-      const mark = p ? h_flex().size(18).flex_none().rounded(5).bg(p.fill + "2e").items_center().justify_center().text_size(10.5).font_semibold().text_color(p.fill).child(p.name[0]?.toUpperCase() ?? "?")
+      // A project's name alone heads its conversations: the structure tells the group.
+      const mark = p ? null
         : s.id === "pinned" ? svg("mods/kanso-chrome/icons/pin.svg").size(13).flex_none().text_color(t.muted)
         : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(14).flex_none().text_color(t.muted)
         : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(14).flex_none().text_color(t.muted) : null;
-      const rowH = agentRowH({}, { roomy: true, project: true });
       // Alone, the active list is the inbox itself: no header.
       if (s.id === "active" && sections.length === 1) {
-        return s.rows.map((r) => item(row(r), rowH, r.a.focused ? agentMark(0, rowH) : null));
+        return s.rows.map((r) => { const { rh, el } = row(r); return item(el, rh, r.a.focused ? agentMark(0, rh) : null); });
       }
       // A project's conversations: its + starts a new one there.
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
       const extra = w ? this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w)) : null;
-      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, p ? p.name : s.label ?? "Active", s.rows.length, folds ? t.muted : t.foreground, extra), i ? 44 : 32)];
-      const rows = this.unfolded(`thread-${s.id}`, open, ctx.now) ? s.rows.map(row) : [];
-      const k = s.rows.findIndex((r) => r.a.focused);
-      const box = this.foldBox(`thread-${s.id}`, open, rows, ctx.now, 6)
-        .map((el) => item(el, open ? (this.foldH[`thread-${s.id}`] ?? s.rows.length * (rowH + 6) - 6) : 0, open && k >= 0 ? agentMark(k * (rowH + 6), rowH) : null));
+      // A project starts after a wider breath than the gap inside it, so each reads as one group.
+      const lift = i ? (p ? 18 : 12) : 0;
+      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, p ? p.name : s.label ?? "Active", s.rows.length, folds ? t.muted : t.foreground, extra, lift), 32 + lift)];
+      const laid = this.unfolded(`thread-${s.id}`, open, ctx.now) ? s.rows.map((r) => row(r, Boolean(s.project))) : [];
+      const { h: stackH, tops } = stack(laid, 6);
+      const k = laid.findIndex((_r, j) => s.rows[j].a.focused);
+      const box = this.foldBox(`thread-${s.id}`, open, laid.map((r) => r.el), ctx.now, 6)
+        .map((el) => item(el, open ? (this.foldH[`thread-${s.id}`] ?? stackH) : 0, open && k >= 0 ? agentMark(tops[k], laid[k].rh) : null));
       return [...head, ...box];
     });
   }
@@ -1866,12 +1926,14 @@ export default class Spaces extends View {
   render() {
     const t = theme();
     if (props()?.menu) return this.menuView(t);
+    if (props()?.railMenu) return this.railMenuView(t);
     if (props()?.spaceMenu) return this.spaceMenuView(t);
     if (props()?.newAgent) return this.newAgentView(t);
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
     const collapsed = shared("sidebar.collapsed") === true;
+    this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && (collapsed || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
@@ -1884,12 +1946,7 @@ export default class Spaces extends View {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click(action)
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(17));
-    const toggle = () => {
-      // Remember how wide you left it open, to open it the same width.
-      if (!collapsed && this.width > OPEN_MIN - 1) setShared("sidebar.width", Math.round(this.width));
-      setShared("sidebar.collapsed", !collapsed);
-      setRail(collapsed, collapsed ? (shared("sidebar.width") ?? SIDEBAR_W) : collapsedW());
-    };
+    const toggle = () => (collapsed ? this.openRail() : this.foldRail(this.width >= SNAP_W ? this.width : null));
     const active = sp.find((p) => p.active);
     // Read once per draw: each read copies every record.
     const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
@@ -1926,7 +1983,7 @@ export default class Spaces extends View {
         .child(hide);
     const root = v_flex().id("spaces-root").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(13)
       .on_key_down((e, cx) => this.listKeyDown(e, cx))
-      .on_size_change((size) => { this.width = size.width; })
+      .on_size_change((size, cx) => this.sized(size.width, cx))
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
