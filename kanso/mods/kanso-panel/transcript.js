@@ -6,20 +6,22 @@ import { KINDS } from "./kinds.js";
 export const MOST = 2000; // the latest distinct paths kept from a conversation: a long one names a thousand after a picture
 const LONGEST = 100000; // a line longer than this is a pasted picture in base64, never a message: skipped unread
 // What was appended since the last look (`$2`, the size then; the whole file when it shrank), in bytes, through
-// grep: a transcript runs to tens of MB and a regular expression in here must never touch it. Prints the size
+// grep, JSON's escaped line breaks and quotes made spaces first: a transcript runs to tens of MB and a regular
+// expression in here must never touch it. Prints the size
 // now, where it read from, then the last `$4` distinct matches, each where it was last said; exit 3 when nothing
 // was appended.
 const SCAN = `f="$1"; from="$2"; [ -f "$f" ] || exit 2; s=$(wc -c < "$f" | tr -d " ")
 [ "$s" = "$from" ] && exit 3
 [ "$s" -lt "$from" ] && from=0
 echo "$s"; echo "$from"
-LC_ALL=C tail -c "+$((from + 1))" "$f" | LC_ALL=C awk 'length($0) < ${LONGEST}' | LC_ALL=C grep -oE "$3" \\
-  | LC_ALL=C sed -E 's/^(\\\\[nrt])+//; s/^[^A-Za-z0-9@+._~\\/-]//; s/[^A-Za-z0-9]$//' \\
+LC_ALL=C tail -c "+$((from + 1))" "$f" | LC_ALL=C awk 'length($0) < ${LONGEST}' | LC_ALL=C sed -E 's/\\\\[ntr"]/ /g; s/ /  /g' | LC_ALL=C grep -oE "$3" \\
+  | LC_ALL=C sed -E 's/^[^A-Za-z0-9@+._~\\/-]//; s/[^A-Za-z0-9]$//' \\
   | LC_ALL=C awk '{ at[$0] = NR } END { for (m in at) print at[m], m }' | sort -n | tail -n "$4" | cut -d " " -f 2-; exit 0`;
 const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
-// A path up to one of Look's extensions, whole (not "linkedin.c" out of a URL), after something that is not
-// part of one. grep prints that something and the character after (a byte each, maybe half of a "…"): sed
-// takes them off there, with the "\n" a JSON string starts it with; `pathOf` does the same here, in case.
+// A path up to one of Look's extensions, whole (not "linkedin.c" out of a URL), after something that is not part
+// of one. grep prints that something and the character after (a byte each, maybe half of a "…"): sed takes them
+// off, and `pathOf` does the same here, in case. Before grep, JSON's "\\n" and "\\"" became spaces and every
+// space two, so paths on escaped lines, or a space apart, are each their own (the one grep takes leaves one).
 export const PATTERN = `(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(${EXT})([^A-Za-z0-9]|$)`;
 
 // Claude Code keeps each conversation under a folder named after its working folder.
@@ -40,7 +42,9 @@ const parsed = (text) => { try { return JSON.parse(text); } catch { return null;
 // this terminal; null for another program, a shell, or a record of an earlier process with that pid.
 export async function sessionOf(address, homeDir) {
   const got = await hc(["get", address, "--json"]).catch(() => null);
-  const pid = got?.code === 0 ? parsed(got.stdout)?.foreground?.pid : null;
+  const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
+  // The record is Claude Code's: another program with a pid Claude had must not read Claude's conversation.
+  const pid = front?.pid && /(^|\/)claude$/.test(String(front.argv?.[0] ?? "")) ? front.pid : null;
   if (!pid) return null;
   const record = parsed(await readTextFile(`${homeDir}/.claude/sessions/${pid}.json`).catch(() => null));
   return record?.pid === pid && record.sessionId ? record : null;

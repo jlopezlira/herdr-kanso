@@ -83,7 +83,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     hc: async (args) => {
       calls.push(["hc", ...args]);
       if (args[0] === "read") return { code: 0, stdout: screen };
-      if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: session ? { pid: session.pid } : null }) };
+      if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: session ? { pid: session.pid, argv: session.argv ?? ["claude"] } : null }) };
       return { code: 0, stdout: "" };
     },
     readTextFile: async (path) => (session && path === `/home/me/.claude/sessions/${session.pid}.json` ? JSON.stringify(session) : null),
@@ -117,7 +117,7 @@ test("The Look panel reads the agent in focus and shows its newest picture, copi
 
 test("A Claude agent's conversation on disk gives Look the whole paths its screen abbreviates or no longer shows", async () => {
   const { projectDir, transcriptPath, PATTERN, pathOf } = await load("kanso-panel/transcript.js", ["projectDir", "transcriptPath", "PATTERN", "pathOf"]);
-  assert.ok(PATTERN.startsWith("(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(") && PATTERN.endsWith(")([^A-Za-z0-9]|$)"), "grep's pattern: a whole path up to one of Look's extensions, with what came before and after");
+  assert.ok(PATTERN.startsWith("(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\.(") && PATTERN.endsWith(")([^A-Za-z0-9]|$)"), "grep's pattern: a whole path up to one of Look's extensions, with what came before and after");
   assert.deepEqual(['"/repo/shots/a.png"', "[../docs/DEC-102.md]", " methodology/rules.md\\", "\\n./docs/a.md ", "://static.linear.app/icon.svg", "/\\/json-schema.org"].map(pathOf),
     ["/repo/shots/a.png", "../docs/DEC-102.md", "methodology/rules.md", "./docs/a.md", null, "/\\/json-schema.org"], "quotes, brackets and JSON's line breaks off; a URL's tail is no path, and a stray one is a file that does not exist");
   assert.equal(projectDir("/Users/jj/Apps/prjct"), "-Users-jj-Apps-prjct");
@@ -142,6 +142,8 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "and the list stays");
   const shell = await panel({ screen, files, session: null, transcript });
   assert.ok(!shell.calls.some((c) => c[0] === "sh" && c[2].startsWith('f="$1"')), "no Claude process in front: the screen alone");
+  const codex = await panel({ screen, files, session: { ...session, argv: ["codex"] }, transcript });
+  assert.ok(!codex.calls.some((c) => c[0] === "sh" && c[2].startsWith('f="$1"')), "another program with a pid Claude once had: Claude's record is not its conversation");
 });
 
 test("What you picked stays while the agent makes more, and a note goes to it with the pins", async () => {

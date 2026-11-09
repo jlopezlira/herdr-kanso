@@ -10,7 +10,7 @@ import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng, firstPage } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, keyOf } from "./look-model.js";
-import { transcriptPaths } from "./transcript.js";
+import { transcriptPaths, MOST } from "./transcript.js";
 
 const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
@@ -81,7 +81,8 @@ export class Look {
         this.transcript = { address, ...written };
         const text = `${written.paths.join("\n")}\n${r.code === 0 ? r.stdout : ""}`;
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
-        const paths = [...new Set(mentions(text).map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
+        // Every mention, then only the files that exist: a picture is not lost behind the files deleted since.
+        const paths = [...new Set(mentions(text, MOST).map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
         const there = paths.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...paths])).stdout.split("\n")) : new Set();
         const found = paths.filter((path) => there.has(path)).map(itemOf);
         if (address !== this.agent()) return;
