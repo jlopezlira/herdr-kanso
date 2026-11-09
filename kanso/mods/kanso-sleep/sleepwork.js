@@ -71,8 +71,9 @@ export function undoStep(a, seen, now) {
   if (a.step === "left") return back;
   if (a.step === "returning") return { write: { step: "returning", step_at: now }, act: "again" };
   if (seen.alive === false) return back;
-  // /exit went: it may still go, so it is waited for; past the wait it is still there.
-  if (a.step === "exiting") return now - (Number(a.sent_at) || now) > EXIT_MS ? { write: null, act: "free" } : wait;
+  // /exit went: it may still go, so it is waited for. Past the wait, one seen running is still there; one that can't
+  // be checked is looked at like one gone (comeBack finds it in front, or keeps it asleep), never dropped from the list.
+  if (a.step === "exiting") return now - (Number(a.sent_at) || now) <= EXIT_MS ? wait : seen.alive === true ? { write: null, act: "free" } : back;
   return { write: null, act: "free" };
 }
 

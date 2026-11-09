@@ -139,6 +139,7 @@ test("an undo brings back what left, lets go of what never did, and waits for on
   assert.deepEqual(at("exiting", true), { write: null, act: null }, "told to go: it may still");
   assert.deepEqual(at("exiting", false), { write: { step: "returning", step_at: 1500 }, act: "return" });
   assert.deepEqual(at("exiting", true, 1000 + EXIT_MS + 1), { write: null, act: "free" });
+  assert.deepEqual(at("exiting", null, 1000 + EXIT_MS + 1), { write: { step: "returning", step_at: 1000 + EXIT_MS + 1 }, act: "return" }, "an exit that can't be checked is looked at, never dropped");
   assert.deepEqual(at("out", false), { write: null, act: null });
 });
 

@@ -15,7 +15,7 @@ release.
 
 ### Fixed
 
-- Sleep reads what it sees more carefully. The agent's state is checked right before its prompt is interrupted, not only when the dialog opened; the empty prompt is waited for up to 3 s instead of read once; Claude's question before leaving is watched for, and answered, through the whole 45 s wait for it to go; a check of the process that fails is no longer taken for "it exited"; and when the sleep is undone, a Claude that never left counts as back on its conversation, instead of being left marked asleep while it runs.
+- Sleep reads what it sees more carefully. The agent's state is checked right before its prompt is interrupted, not only when the dialog opened; the empty prompt is waited for up to 3 s instead of read once; Claude's question before leaving is watched for, and answered, through the whole 45 s wait for it to go; a check of the process that fails is no longer taken for "it exited"; and when the sleep is undone, a Claude that never left counts as back on its conversation, instead of being left marked asleep while it runs. An agent whose exit could not be checked during the undo is looked at and kept asleep if it is gone, instead of being dropped from the list.
 - A database that cannot answer for a moment no longer passes for another window taking the sleep, nor ends agents that had just come back: the write is tried three times and, failing, the agents are left running and the sidebar sets the record straight. The sleep renews its hold through a long undo, so it is never taken for abandoned meanwhile. Wake waits up to 90 s for a Claude that is visibly starting on the conversation before giving up on it.
 
 ## [3.17.5] - 2026-11-09
