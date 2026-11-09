@@ -50,11 +50,14 @@ export function leaveStep(a, seen, now) {
     if (seen.front != null && seen.front !== a.pid) return stuck(`${a.name}'s terminal changed`);
     // A draft would go out with /exit.
     if (promptEmpty(seen.screen)) return { write: { step: "exiting", step_at: now, sent_at: now }, act: "exit" };
-    return since > CLEAR_MS ? stuck(`${a.name}'s prompt could not be cleared`) : wait;
+    if (since <= CLEAR_MS) return wait;
+    // Its ctrl+c may never have gone (a restart between the write and the key, or a key that failed): once more,
+    // marked by sent_at, then stuck.
+    return a.sent_at == null && seen.front === a.pid ? { write: { step: "clearing", step_at: now, sent_at: now }, act: "interrupt" } : stuck(`${a.name}'s prompt could not be cleared`);
   }
   if (a.step === "exiting") {
     // Claude asks before leaving work in the background: sleeping it is stopping all of it.
-    if (asksToExit(seen.screen)) return { write: null, act: "enter" };
+    if (asksToExit(seen.screen) && seen.front === a.pid) return { write: null, act: "enter" };
     if (now - (Number(a.sent_at) || now) > EXIT_MS) return stuck(`${a.name} did not exit`);
     // Its /exit never arrived (a restart between the write and the send): sent again.
     if (seen.front === a.pid && promptEmpty(seen.screen) && since > RESEND_MS) return { write: { step: "exiting", step_at: now }, act: "exit" };
@@ -71,9 +74,14 @@ export function undoStep(a, seen, now) {
   if (a.step === "left") return back;
   if (a.step === "returning") return { write: { step: "returning", step_at: now }, act: "again" };
   if (seen.alive === false) return back;
-  // /exit went: it may still go, so it is waited for. Past the wait, one seen running is still there; one that can't
-  // be checked is looked at like one gone (comeBack finds it in front, or keeps it asleep), never dropped from the list.
-  if (a.step === "exiting") return now - (Number(a.sent_at) || now) <= EXIT_MS ? wait : seen.alive === true ? { write: null, act: "free" } : back;
+  // /exit went (exiting, or stuck after it): it may still go, so it is waited for. Past the wait, one that can't be
+  // checked is looked at like one gone (comeBack finds it in front, or keeps it asleep). One running is let go only at
+  // its empty prompt, where no /exit waits; else it may still leave, so it stays asleep, its terminal looked at first.
+  if (a.sent_at != null && (a.step === "exiting" || a.step === "stuck")) {
+    if (a.step === "exiting" && now - (Number(a.sent_at) || now) <= EXIT_MS) return wait;
+    if (seen.alive !== true) return back;
+    return seen.front === a.pid && promptEmpty(seen.screen) ? { write: null, act: "free" } : { write: { step: "unsure" }, act: null };
+  }
   return { write: null, act: "free" };
 }
 
@@ -283,7 +291,8 @@ async function see(a) {
   const x = tryOr(() => (g?.code === 0 ? JSON.parse(g.stdout) : null));
   const fg = x?.foreground ?? null;
   const front = x ? (fg?.pid ?? 0) : null;
-  const shot = x && ["clearing", "exiting"].includes(a.step) ? await hc(["read", a.terminal]).catch(() => null) : null;
+  const reads = ["clearing", "exiting"].includes(a.step) || (a.step === "stuck" && a.sent_at != null);
+  const shot = x && reads ? await hc(["read", a.terminal]).catch(() => null) : null;
   const record = x && a.step === "saving" && fg?.pid ? await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))) : null;
   return { alive: await alive(a.pid), front, state: x?.status?.state ?? null, screen: shot?.code === 0 ? shot.stdout : null, record, title: x?.title ?? null, cwd: fg?.cwd ?? null };
 }
@@ -370,6 +379,8 @@ export class SleepWork {
     const next = plan.undo ? undoStep(a, seen, now) : leaveStep(a, seen, now);
     // Written before it acts, and only while this window holds the row in the state it was read in: else nothing is done.
     if (next.write && !(await this.kdb.stepAgent(row.id, this.me, row.state, a.conversation, a.step, next.write))) return;
+    // An act with nothing to write (Enter on Claude's question) goes only while this window holds the row in the state it read.
+    if (next.act && !next.write && !(await this.kdb.stillMine(row.id, this.me, row.state))) return;
     if (next.act === "free") { await this.kdb.freeAgent(row.id, this.me, a.conversation); return; }
     if (next.act === "return" || next.act === "again") {
       const p = { ...a.pane, terminal: a.terminal, resume: a.conversation, pid: a.pid };
@@ -393,8 +404,8 @@ export class SleepWork {
     const tab = layout.tab ?? null;
     const fresh = !tab || panes().some((p) => p.tab === tab && p.terminal && !known.includes(p.terminal));
     const plan = closePlan(looked, fresh);
-    // Held still, right before anything closes.
-    if (!(await this.kdb.holdWork(row.id, this.me, Date.now()))) return;
+    // Held still, and still sleeping (an undo meanwhile keeps the tab), right before anything closes.
+    if (!(await this.kdb.stillMine(row.id, this.me, "sleeping"))) return;
     if (plan.closeTab) run("tab.close", { id: tab, confirmed: true });
     else plan.kill.forEach((t) => run("terminal.kill", { terminal: t }));
     const why = plan.busy.length ? `${plan.busy.join(", ")} ${plan.busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${plan.busy.length === 1 ? "stays" : "stay"} open.` : null;

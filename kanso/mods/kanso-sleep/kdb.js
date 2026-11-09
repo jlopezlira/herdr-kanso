@@ -290,6 +290,10 @@ export class Kdb {
     return this.held(`UPDATE sleeps SET pending=${q(me)},pending_at=${n(now)} WHERE id=${q(id)} AND state IN ('sleeping','undoing') AND waking IS NULL
       AND (pending IS NULL OR pending=${q(me)} OR pending_at IS NULL OR pending_at < ${n(now - LEASE_MS)}) RETURNING id;`);
   }
+  // True while `me` owns the row in `state`: checked right before an act that writes nothing first.
+  stillMine(id, me, state, now = Date.now()) {
+    return this.held(`UPDATE sleeps SET pending_at=${n(now)} WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)} AND waking IS NULL RETURNING id;`);
+  }
   // `from`: the agent's step as read; another window that moved it meanwhile wins.
   stepAgent(id, me, state, conversation, from, fields) {
     const set = Object.entries(fields).filter(([k]) => STEP_FIELDS.includes(k)).map(([k, v]) => `${k}=${typeof v === "number" ? n(v) : q(v)}`).join(",");
