@@ -49,12 +49,17 @@ export function pathOf(match) {
 const parsed = (text) => { try { return JSON.parse(text); } catch { return null; } };
 
 // The record Claude Code writes per process (~/.claude/sessions/<pid>.json), for the program in front of
-// this terminal; null for another program, a shell, or a record of an earlier process with that pid.
-export async function sessionOf(address, homeDir) {
+// this terminal (`front`); null for another program, a shell, or a record of an earlier process with that pid.
+// The program in front of a terminal: its pid and name, or null when the terminal can't be read.
+export async function frontOf(address) {
   const got = await hc(["get", address, "--json"]).catch(() => null);
   const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
+  return front?.pid ? { pid: front.pid, program: String(front.argv?.[0] ?? "").split("/").at(-1) } : null;
+}
+
+export async function sessionOf(address, homeDir, front = null) {
   // The record is Claude Code's: another program with a pid Claude had must not read Claude's conversation.
-  const pid = front?.pid && /(^|\/)claude$/.test(String(front.argv?.[0] ?? "")) ? front.pid : null;
+  const pid = front?.program === "claude" ? front.pid : null;
   if (!pid) return null;
   const record = parsed(await readTextFile(`${homeDir}/.claude/sessions/${pid}.json`).catch(() => null));
   if (record?.pid !== pid || !record.sessionId) return null;
@@ -64,18 +69,19 @@ export async function sessionOf(address, homeDir) {
   return Math.abs(started - Number(record.startedAt)) <= START_SLACK ? record : null;
 }
 
-// The paths a conversation mentions, oldest first, with the file and size they were read up to. `before` (the
+// The paths a conversation mentions, oldest first, with the program in front, the file and the size read up to. `before` (the
 // last answer) is read on from and comes back as it was while the file has not grown; none without a conversation.
 export async function transcriptPaths(address, homeDir, before = null) {
-  const file = transcriptPath(await sessionOf(address, homeDir), homeDir);
-  if (!file) return { file: null, size: null, paths: [] };
+  const front = await frontOf(address);
+  const file = transcriptPath(await sessionOf(address, homeDir, front), homeDir);
+  if (!file) return { front, file: null, size: null, paths: [] };
   const known = before?.file === file ? before : { paths: [], size: "0" };
   const r = await exec("sh", ["-c", SCAN, "sh", file, String(known.size ?? "0"), PATTERN, String(MOST)], { timeout: 60000 }).catch(() => null);
-  if (r?.code === 3) return { file, size: known.size, paths: known.paths };
-  if (r?.code !== 0) return { file, size: null, paths: [] };
+  if (r?.code === 3) return { front, file, size: known.size, paths: known.paths };
+  if (r?.code !== 0) return { front, file, size: null, paths: [] };
   const [size, from, ...lines] = r.stdout.split("\n");
   const fresh = lines.map(pathOf).filter(Boolean);
   // Appended to what was read before (none when the file was read whole again); each once, where it was last said.
   const all = [...(from === "0" ? [] : known.paths), ...fresh];
-  return { file, size, paths: [...new Set(all.toReversed())].toReversed().slice(-MOST) };
+  return { front, file, size, paths: [...new Set(all.toReversed())].toReversed().slice(-MOST) };
 }

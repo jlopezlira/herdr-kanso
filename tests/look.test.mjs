@@ -170,6 +170,12 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   gap.world.session = { ...session, sessionId: "11111111-2222-4333-8444-555555555555" };
   gap.look.readAt = 0; gap.look.read(gap.cx); await gap.drain();
   assert.equal(gap.look.picked, false, "the conversation changed: the pick is let go");
+  // Codex takes the terminal after Claude: it has no conversation to read, but it is another program, so the same.
+  const swap = await panel({ screen: "", files, session, transcript });
+  swap.look.select(swap.look.list()[1], swap.cx, true); await swap.drain();
+  swap.world.session = { pid: 9, argv: ["codex"] };
+  swap.look.readAt = 0; swap.look.read(swap.cx); await swap.drain();
+  assert.deepEqual([swap.look.selected, swap.look.picked, clone(swap.look.list())], [null, false, []], "Claude's picture is not Codex's: nothing selected, nothing to send about");
   assert.deepEqual(clone(next.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "and the list is the new conversation's");
 });
 

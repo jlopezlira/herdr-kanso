@@ -80,13 +80,15 @@ export class Look {
         const before = this.transcript?.address === address ? this.transcript : null;
         const written = await transcriptPaths(address, home(), before);
         if (address !== this.agent()) return;
-        // Another conversation in the same terminal (a new Claude there): what the last one made is not this one's.
-        if (before?.file && written.file && before.file !== written.file && !this.asked.some((i) => i.path === this.selected?.path)) {
+        // Another program or conversation in the same terminal (a new Claude, or Codex after Claude): what the
+        // last one made is not this one's.
+        const other = (before?.front && written.front && before.front.pid !== written.front.pid) || (before?.file && written.file && before.file !== written.file);
+        if (other && !this.asked.some((i) => i.path === this.selected?.path)) {
           this.items = []; this.picked = false; this.selected = null; this.shown = null; this.pins = [];
         }
-        // A read with no record (a Claude still starting, ps failing) keeps the last conversation's identity, so
-        // the next one is still told apart from it.
-        this.transcript = written.file || !before ? { address, ...written } : before;
+        // A read that tells nothing (the terminal unread, a Claude still starting) keeps the last identity, so
+        // the next program or conversation is still told apart from it.
+        this.transcript = written.front || !before ? { address, ...written, file: written.file ?? (other ? null : before?.file ?? null), paths: written.paths } : before;
         const text = `${written.paths.join("\n")}\n${r.code === 0 ? r.stdout : ""}`;
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
         // Every mention, then only the files that exist: a picture is not lost behind the files deleted since.
