@@ -20,9 +20,7 @@ const PEOPLE = [
   { login: "leangseu", name: "Leangseu Kim" },
   { login: "h0ru5", name: "Johannes Hund" },
 ];
-// image() draws only from the app's folder, so the people's GitHub avatars (96 px) are downloaded there when
-// Credits is first shown, all at once; one kept from before shows if GitHub can't be reached, and an initial
-// stands in until then. $1 the folder, then the logins; prints those that have a picture.
+// image() reads only the app's folder: GitHub avatars are downloaded there; prints the logins that have one.
 const AVATARS_DIR = "data/kanso-settings/avatars";
 const AVATARS = 'mkdir -p "$1" && cd "$1" || exit 0; shift; for l; do (curl -fsL --max-time 10 -o "$l.part" "https://github.com/$l.png?size=96" && mv -f "$l.part" "$l.jpg"; rm -f "$l.part") & done; wait; for l; do [ -s "$l.jpg" ] && printf "%s\\n" "$l"; done; true';
 export const HIDDEN = "kanso.hidden";
@@ -50,7 +48,7 @@ export default class Settings extends View {
     this.message = null;
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
-    this.avatars = null; // the logins whose picture is in AVATARS_DIR, once read
+    this.avatars = null;
     if (this.page === "credits") this.readAvatars(cx);
     cx.spawn(async (cx) => {
       try { this.installed = JSON.parse(await readTextFile(`${appHome()}/mods/kanso-chrome/version.json`) ?? "{}").version ?? null; } catch {}
