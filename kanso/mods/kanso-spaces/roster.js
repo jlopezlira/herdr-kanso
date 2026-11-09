@@ -47,7 +47,7 @@ export function sleepingNow(sp, terms, asleep, home = () => "") {
     const program = p.program ? parseOr(p.program) : null; // not JSON: no icon
     return { address: `zz:${p.resume ?? `${s.id}:${i}`}`, pane: null, tab: null, space, status: "asleep", labels: {}, pin: null, seq: 0, turn: 0,
       name: p.name, title: p.title ?? null, program,
-      asleep: { id: s.id, from: s.from, tab: s.name, n: (s.agents ?? []).length, saved: s.saved, busy: Boolean(s.busy), spaceName: s.space ?? null,
+      asleep: { id: s.id, from: s.from, tab: s.name, n: (s.agents ?? []).length, saved: s.saved, busy: Boolean(s.busy), stuck: s.stuck ?? null, spaceName: s.space ?? null,
         at: p.at ?? null, said: p.said ?? null, resume: p.resume ?? null } };
   });
   return { rows, dozing };

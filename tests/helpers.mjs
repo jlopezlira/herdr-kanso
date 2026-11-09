@@ -1,5 +1,5 @@
 // Shared by the tests: load a mod's real source into a fake Herdr host.
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +29,11 @@ export async function load(file, names, host = {}) {
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
   return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, ...host });
 }
+
+// Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
+export const psMissing = (() => {
+  try { execFileSync("ps", ["-p", String(process.pid), "-o", "comm="], { stdio: "pipe" }); return false; } catch { return "ps can't see processes here"; }
+})();
 
 export async function temporary(t) {
   const dir = await mkdtemp(join(tmpdir(), "kanso-test-"));
