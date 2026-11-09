@@ -11,11 +11,17 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.17.1] - 2026-11-08
+## [3.17.2] - 2026-11-08
 
 ### Fixed
 
 - Look found nothing from a Claude agent: it read the agent's screen, where Claude Code abbreviates long paths ("…/shot.png") and soon redraws over them. For a Claude agent Look now also reads the end of its conversation on disk, where every path is whole and stays, so the pictures it made show even when its screen has moved on.
+
+## [3.17.1] - 2026-11-08
+
+### Fixed
+
+- A sleep that stopped half way (its window closed, Herdr restarted) left its agents marked asleep while they kept running, so the tab could never sleep again ("that agent is already asleep"). Once nothing holds such a sleep for 10 minutes, seeing its agents still running frees them and ends the sleep; trying before then says so, and when.
 
 ## [3.17.0] - 2026-11-08
 
