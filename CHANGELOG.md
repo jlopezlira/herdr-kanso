@@ -11,12 +11,20 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.18.3] - 2026-11-09
+## [3.18.4] - 2026-11-09
 
 ### Changed
 
 - Credits lists Leangseu Kim (@leangseu), who contributed the editable pull request prompts, and Johannes Hund (@h0ru5), and names the maintainer JJ.
 - Avatars on the Credits page, in settings and on the site, come from GitHub instead of being kept in Kanso. Settings shows an initial until each one arrives, and the one it last downloaded when GitHub can't be reached.
+
+## [3.18.3] - 2026-11-09
+
+### Fixed
+
+- A sleep no longer stops half way when its dialog closes. The dialog only writes what is to sleep; the sidebar, which lives as long as the window, puts each agent to sleep one step at a time (its conversation saved, its prompt cleared, /exit, gone) and writes each step before it acts, so a restart or another window goes on from where it was. Once every agent has left, the tab closes and the tab is asleep.
+- An agent that will not leave no longer leaves a half state behind: the sleep shows as stuck, with why, in the sidebar, in Asleep and in a notification, and waits for Retry or Undo (Undo brings back the agents that had left, on their conversations, in their terminals; one that was told to exit and may still go stays asleep, its terminal looked at before it wakes). One you end yourself lets the sleep go on.
+- Two windows never work the same sleep: one holds it, by a heartbeat; another takes it over only after 20 s without one.
 
 ## [3.18.2] - 2026-11-09
 

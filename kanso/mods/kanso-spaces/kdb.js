@@ -9,6 +9,7 @@ export const VERSION = 1;
 export const STALE_MS = 10 * 60_000; // a wake's hold not renewed this long stopped half way
 export const ABANDON_MS = 3 * 60_000; // a sleep's: it renews its hold before each agent leaves, and one leaves in under a minute
 export const GONE_MS = 60_000; // an agent not seen this long, and not asleep, is gone
+export const LEASE_MS = 20_000; // a sleep's owner (sleepwork.js) not heard from this long is gone: another window takes the row
 
 export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}'`);
 const n = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
@@ -19,18 +20,22 @@ export const projectKey = (w, home = "") => `${w?.machine ?? ""}:${w?.folder || 
 // A conversation's id from its file (Claude's <id>.jsonl, Codex's rollout-…-<id>.jsonl).
 export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/)?.[1] ?? null;
 
-// Columns added to agents after its first release: [name, type].
-const ADDED = [["project", "TEXT"], ["project_at", "INTEGER"]];
+// Columns added after a table's first release: [table, name, type].
+const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["agents", "step", "TEXT"], ["agents", "step_at", "INTEGER"],
+  ["agents", "sent_at", "INTEGER"], ["agents", "nudged_at", "INTEGER"], ["agents", "why", "TEXT"], ["sleeps", "state", "TEXT"], ["sleeps", "why", "TEXT"]];
+// A sleep the sidebar works on: sleeping or undoing (held by its owner), stuck (waiting on you). NULL or asleep: done.
+const DONE = "(state IS NULL OR state='asleep')";
 
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS prefs(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS spaces(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT, machine TEXT, seen INTEGER NOT NULL, gone INTEGER);
 CREATE TABLE IF NOT EXISTS sleeps(id TEXT PRIMARY KEY, name TEXT NOT NULL, space_id TEXT, space_name TEXT, project TEXT NOT NULL, layout TEXT NOT NULL,
-  into_tab TEXT, saved INTEGER NOT NULL, pending TEXT, pending_at INTEGER, waking TEXT, waking_at INTEGER);
+  into_tab TEXT, saved INTEGER NOT NULL, pending TEXT, pending_at INTEGER, waking TEXT, waking_at INTEGER, state TEXT, why TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS sleeps_name ON sleeps(project, name);
 CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, name TEXT, title TEXT, said INTEGER, program TEXT, cwd TEXT, space_id TEXT, tab_id TEXT, pos INTEGER,
-  terminal TEXT, status TEXT NOT NULL DEFAULT 'unknown', since INTEGER, seen INTEGER NOT NULL, sleep_id TEXT, restore TEXT, project TEXT, project_at INTEGER);
+  terminal TEXT, status TEXT NOT NULL DEFAULT 'unknown', since INTEGER, seen INTEGER NOT NULL, sleep_id TEXT, restore TEXT, project TEXT, project_at INTEGER,
+  step TEXT, step_at INTEGER, sent_at INTEGER, nudged_at INTEGER, why TEXT);
 CREATE INDEX IF NOT EXISTS agents_space ON agents(space_id, status);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL, machine TEXT NOT NULL DEFAULT '', added INTEGER NOT NULL, removed INTEGER, agent TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
@@ -67,6 +72,8 @@ export function inPlace(a, place, spaces, home = "") {
   return place.space ? w?.id === place.space : !w && a.from === place.from;
 }
 
+const STEP_FIELDS = ["step", "step_at", "sent_at", "nudged_at", "why", "title", "cwd", "program"];
+const CLEAR_STEP = "step=NULL,step_at=NULL,sent_at=NULL,nudged_at=NULL,why=NULL";
 const restoreSql = (restores, mine) => restores.map(([c, name]) => `UPDATE agents SET restore=${q(name)} WHERE id=${q(c)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`).join("");
 
 const free = (col, now) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - STALE_MS)})`;
@@ -103,9 +110,9 @@ export class Kdb {
       await exec("mkdir", ["-p", this.dir]);
       await this.sql([...statements(SCHEMA), ONE_SLEEP]);
       // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
-      const cols = (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name);
-      const missing = ADDED.filter(([name]) => !cols.includes(name));
-      if (missing.length) await this.sql(missing.map(([name, type]) => `ALTER TABLE agents ADD COLUMN ${name} ${type};`).join(""));
+      const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name) };
+      const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
+      if (missing.length) await this.sql(missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`).join(""));
     })().catch((e) => { this.ready = null; throw e; }));
   }
 
@@ -182,24 +189,26 @@ export class Kdb {
   }
 
   // Throws when a tab of that name sleeps there already, or an agent of it sleeps in another sleep.
-  async sleepTab({ name, space, project, layout, into = null, agents, saved = Date.now(), now = Date.now() }) {
+  // `requested`: the sidebar does the work (sleepwork.js), and any window may take it; else the caller holds `token`.
+  async sleepTab({ name, space, project, layout, into = null, agents, saved = Date.now(), now = Date.now(), requested = false }) {
     const id = newId(), token = newId();
     // An agent still held by a sleep that stopped half way (pending, not renewed for ABANDON_MS, no wake on it) is
     // let go first, so the tab can sleep now; that sleep keeps the rest under a token its window never had, or goes.
     const ids = agents.filter((a) => a.conversation).map((a) => q(a.conversation)).join(",") || "NULL";
-    const gone = `pending IS NOT NULL AND pending_at < ${n(now - ABANDON_MS)} AND ${free("waking", now)}`;
+    const gone = `state IS NULL AND pending IS NOT NULL AND pending_at < ${n(now - ABANDON_MS)} AND ${free("waking", now)}`;
     const letGo = `UPDATE sleeps SET pending=${q(newId())} WHERE ${gone} AND id IN (SELECT sleep_id FROM agents WHERE id IN (${ids}));
       UPDATE agents SET status='unknown',sleep_id=NULL WHERE id IN (${ids}) AND sleep_id IN (SELECT id FROM sleeps WHERE ${gone});
       DELETE FROM sleeps WHERE ${gone} AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=sleeps.id);`;
-    const marks = agents.filter((a) => a.conversation).map((a) => `INSERT INTO agents(id,name,cwd,space_id,tab_id,pos,status,seen,sleep_id)
-      VALUES(${q(a.conversation)},${q(a.given)},${q(a.cwd)},${q(space?.id)},${q(a.tab)},${n(a.pos)},'asleep',${n(saved)},${q(id)})
+    const step = requested ? `'requested',${n(now)}` : "NULL,NULL";
+    const marks = agents.filter((a) => a.conversation).map((a) => `INSERT INTO agents(id,name,cwd,space_id,tab_id,pos,status,seen,sleep_id,step,step_at)
+      VALUES(${q(a.conversation)},${q(a.given)},${q(a.cwd)},${q(space?.id)},${q(a.tab)},${n(a.pos)},'asleep',${n(saved)},${q(id)},${step})
       ON CONFLICT(id) DO UPDATE SET status='asleep',sleep_id=excluded.sleep_id,terminal=NULL,seen=excluded.seen,space_id=excluded.space_id,name=excluded.name,
-        tab_id=COALESCE(excluded.tab_id,tab_id),pos=COALESCE(excluded.pos,pos),cwd=COALESCE(excluded.cwd,cwd);`);
-    await this.run(`BEGIN IMMEDIATE;${letGo}INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at)
-      VALUES(${q(id)},${q(name)},${q(space?.id)},${q(space?.name)},${q(project)},${q(JSON.stringify(layout))},${q(into && JSON.stringify(into))},${n(saved)},${q(token)},${n(now)});${marks.join("")}COMMIT;`)
+        tab_id=COALESCE(excluded.tab_id,tab_id),pos=COALESCE(excluded.pos,pos),cwd=COALESCE(excluded.cwd,cwd),step=excluded.step,step_at=excluded.step_at,sent_at=NULL,nudged_at=NULL,why=NULL;`);
+    await this.run(`BEGIN IMMEDIATE;${letGo}INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at,state)
+      VALUES(${q(id)},${q(name)},${q(space?.id)},${q(space?.name)},${q(project)},${q(JSON.stringify(layout))},${q(into && JSON.stringify(into))},${n(saved)},${requested ? "NULL" : q(token)},${n(now)},${requested ? "'sleeping'" : "NULL"});${marks.join("")}COMMIT;`)
       .catch((e) => {
         throw new Error(/UNIQUE/.test(e.message) ? `a tab named ${name} is already asleep in this project`
-          : /already asleep/.test(e.message) ? "an agent of it is already asleep in an earlier sleep; one that stopped half way lets go within 3 minutes" : e.message);
+          : /already asleep/.test(e.message) ? "an agent of it is already asleep in another sleep; if that one is stuck, retry or undo it from Asleep" : e.message);
       });
     return { id, token };
   }
@@ -215,7 +224,7 @@ export class Kdb {
   // A sleep that stopped half way loses its token here for good; its `pending_at` stays, so the wake looks for agents of it still running.
   async claim(id, now = Date.now()) {
     const token = newId();
-    const [row] = await this.run(`UPDATE sleeps SET waking=${q(token)},waking_at=${n(now)},pending=NULL WHERE id=${q(id)} AND ${free("pending", now)} AND ${free("waking", now)} RETURNING *;`);
+    const [row] = await this.run(`UPDATE sleeps SET waking=${q(token)},waking_at=${n(now)},pending=NULL WHERE id=${q(id)} AND ${DONE} AND ${free("pending", now)} AND ${free("waking", now)} RETURNING *;`);
     return row ? { ...row, token } : null;
   }
   renew(id, token, now = Date.now()) { return this.held(`UPDATE sleeps SET waking_at=${n(now)} WHERE id=${q(id)} AND waking=${q(token)} RETURNING id;`); }
@@ -236,7 +245,7 @@ export class Kdb {
   }
   // Unless a wake holds it: its agents are then left alone.
   forget(id, now = Date.now()) {
-    const mine = `id=${q(id)} AND ${free("waking", now)}`;
+    const mine = `id=${q(id)} AND (${DONE.slice(1, -1)} OR state='stuck') AND ${free("waking", now)}`;
     return this.held(`BEGIN;UPDATE agents SET status='gone',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
   }
@@ -255,7 +264,8 @@ export class Kdb {
     const held = (s) => isHeld(s.pending, s.pending_at, now, ABANDON_MS) || isHeld(s.waking, s.waking_at, now);
     const abandoned = (s) => s.pending != null && !held(s);
     const awakeIn = (s) => { const pids = slept(s); return s.agents.filter((a) => running.has(a.id) && (abandoned(s) || running.get(a.id) !== pids.get(a.id))).map((a) => a.id); };
-    const ours = (await this.sleeps()).filter((s) => s.saved < now && !held(s) && awakeIn(s).length);
+    // A sleep the sidebar is working on (or stuck) is its own: its agents still run while they leave.
+    const ours = (await this.sleeps()).filter((s) => (s.state == null || s.state === "asleep") && s.saved < now && !held(s) && awakeIn(s).length);
     return mapSeries(ours, async (s) => {
       const gone = awakeIn(s);
       const layout = layoutWithout(parseOr(s.layout, { cols: [] }), gone);
@@ -263,7 +273,7 @@ export class Kdb {
       // Freeing by the slept pid holds only while the row is the abandoned one read: a window that resumed
       // and settled the sleep meanwhile (pending NULL, every agent gone) keeps it, and the next sighting looks again.
       const same = abandoned(s) ? ` AND pending=${q(s.pending)} AND pending_at=${n(s.pending_at)}` : "";
-      const mine = `id=${q(s.id)} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now)}${same}`;
+      const mine = `id=${q(s.id)} AND ${DONE} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now)}${same}`;
       // An abandoned sleep let go of in part gets a token its window never had: back after all, it must not
       // end and settle what is no longer in the sleep. The time stays, so the sleep stays abandoned for the rest.
       const after = gone.length < s.agents.length && layout.cols.length
@@ -273,6 +283,64 @@ export class Kdb {
         ${after}COMMIT;`);
       return freed ? s.id : null;
     }).then((ids) => ids.filter(Boolean));
+  }
+
+  // The sidebar's sleep work (sleepwork.js). Every write holds only while `me` owns the row in the state it was read in.
+  holdWork(id, me, now = Date.now()) {
+    return this.held(`UPDATE sleeps SET pending=${q(me)},pending_at=${n(now)} WHERE id=${q(id)} AND state IN ('sleeping','undoing') AND waking IS NULL
+      AND (pending IS NULL OR pending=${q(me)} OR pending_at IS NULL OR pending_at < ${n(now - LEASE_MS)}) RETURNING id;`);
+  }
+  // True while `me` owns the row in `state`: checked right before an act that writes nothing first.
+  stillMine(id, me, state, now = Date.now()) {
+    return this.held(`UPDATE sleeps SET pending_at=${n(now)} WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)} AND waking IS NULL RETURNING id;`);
+  }
+  // `from`: the agent's step as read; another window that moved it meanwhile wins.
+  stepAgent(id, me, state, conversation, from, fields) {
+    const set = Object.entries(fields).filter(([k]) => STEP_FIELDS.includes(k)).map(([k, v]) => `${k}=${typeof v === "number" ? n(v) : q(v)}`).join(",");
+    return this.held(`UPDATE agents SET ${set} WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step IS ${q(from)}
+      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)}) RETURNING id;`);
+  }
+  // Stuck lets go of the row: nothing moves until you retry or undo it (or the agent goes on its own).
+  setWorkState(id, me, from, to, why = null, now = Date.now()) {
+    const owner = to === "stuck" ? "pending=NULL,pending_at=NULL" : `pending_at=${n(now)}`;
+    return this.held(`UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;`);
+  }
+  // A stuck agent seen gone has left; once none is stuck the sleep goes on. True when it does.
+  unstick(id, conversation = null, now = Date.now()) {
+    const left = conversation ? `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step='stuck'
+      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');` : "";
+    return this.held(`BEGIN;${left}UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck'
+      AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step='stuck') RETURNING id;COMMIT;`);
+  }
+  // sent_at stays: an /exit that went may still land, and an undo needs to know it went.
+  retry(id, now = Date.now()) {
+    return this.held(`BEGIN;UPDATE agents SET step='saving',step_at=${n(now)},nudged_at=NULL,why=NULL WHERE sleep_id=${q(id)} AND step='stuck'
+      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');
+      UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' RETURNING id;COMMIT;`);
+  }
+  // From sleeping too: an owner mid-step then finds the state changed and does nothing more of the sleep.
+  undo(id, now = Date.now()) {
+    return this.held(`UPDATE sleeps SET state='undoing',why=NULL,pending_at=CASE WHEN pending IS NULL THEN ${n(now)} ELSE pending_at END
+      WHERE id=${q(id)} AND state IN ('sleeping','stuck') AND waking IS NULL RETURNING id;`);
+  }
+  finishSleep(id, me, why = null) {
+    const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
+    return this.held(`BEGIN;UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+      UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;COMMIT;`);
+  }
+  // An undo's agent that is back (or never left) is awake.
+  freeAgent(id, me, conversation) {
+    return this.held(`UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE id=${q(conversation)} AND sleep_id=${q(id)}
+      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state='undoing') RETURNING id;`);
+  }
+  // `layout`: what did not come back, asleep; null: all did, and the row goes.
+  endUndo(id, me, layout) {
+    const mine = `id=${q(id)} AND pending=${q(me)} AND state='undoing'`;
+    const end = layout ? `UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+      UPDATE sleeps SET layout=${q(JSON.stringify(layout))},state='asleep',why=NULL,pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;`
+      : `UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+      DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
+    return this.held(`BEGIN;${end}COMMIT;`);
   }
 
   async sleeps() {

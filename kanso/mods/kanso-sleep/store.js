@@ -16,15 +16,19 @@ export function rowsOf(rows) {
     const l = json(r.layout, null);
     if (!Array.isArray(l?.cols)) return [];
     return [{ id: r.id, from: r.project, name: r.name, per: l.per ?? null, cols: l.cols, saved: Number(r.saved) || 0, space: r.space_name ?? null, spaceId: r.space_id ?? null,
-      into: json(r.into_tab, null), agents: r.agents ?? [], ...(r.pending || r.pending_at ? { pending: Number(r.pending_at) || 0 } : {}), ...(r.waking ? { waking: Number(r.waking_at) || 0 } : {}) }];
+      into: json(r.into_tab, null), agents: r.agents ?? [], state: r.state ?? null, why: r.why ?? null,
+      ...(r.pending || r.pending_at ? { pending: Number(r.pending_at) || 0 } : {}), ...(r.waking ? { waking: Number(r.waking_at) || 0 } : {}) }];
   }).toSorted((a, b) => b.saved - a.saved);
 }
-// One that stopped half way shows again once its hold goes stale, to be woken.
-export const idle = (a, now = Date.now()) => !busyAt(a.pending, now) && !busyAt(a.waking, now);
+// Asleep and held by no one. One the sidebar is putting to sleep, or that is stuck, is not yet; one from an older
+// Kanso that stopped half way shows again once its hold goes stale, to be woken.
+export const done = (a) => !a.state || a.state === "asleep";
+export const idle = (a, now = Date.now()) => done(a) && !busyAt(a.pending, now) && !busyAt(a.waking, now);
 
 export function shownOf(a, now = Date.now()) {
   const kept = new Map((a.agents ?? []).map((g) => [g.id, g]));
-  return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, spaceId: a.spaceId ?? null, into: a.into ?? null, busy: !idle(a, now), pending: busyAt(a.pending, now),
+  return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, spaceId: a.spaceId ?? null, into: a.into ?? null, busy: !idle(a, now), pending: busyAt(a.pending, now) || !done(a),
+    stuck: a.state === "stuck" ? a.why || "stuck" : null,
     agents: a.cols.flatMap((c) => c.panes).map((p) => {
       const g = p.resume ? kept.get(p.resume) : null;
       return { name: g?.name || p.name || programOf(p.argv), terminal: p.terminal ?? null, resume: p.resume ?? null,
@@ -76,7 +80,6 @@ export class Store {
     this.kdb = kdb;
     this.legacy = legacy;
     this.ready = null;
-    this.holds = new Map(); // sleep id -> this window's sleep token
   }
 
   open() {
@@ -94,27 +97,23 @@ export class Store {
     const now = Date.now();
     return rowsOf(await this.kdb.sleeps()).filter((a) => all || idle(a, now));
   }
+  // What is to sleep, and nothing more: the sidebar does the rest (sleepwork.js). `a.tab`: the tab that closes once all left.
   async sleep(project, a) {
     await this.open();
     const convs = (a.cols ?? []).flatMap((c) => c.panes).map((p) => p.resume).filter(Boolean);
     if (new Set(convs).size !== convs.length) throw new Error("two panes of it are on the same conversation; close one first");
-    const { id, token } = await this.kdb.sleepTab({ name: a.name, space: a.space, project, layout: { per: a.per ?? null, cols: a.cols ?? [] }, into: a.into ?? null, agents: agentsOf(a.cols ?? []), saved: a.saved ?? Date.now() });
-    this.holds.set(id, token);
+    const { id } = await this.kdb.sleepTab({ name: a.name, space: a.space, project, layout: { per: a.per ?? null, cols: a.cols ?? [], tab: a.tab ?? null }, into: a.into ?? null,
+      agents: agentsOf(a.cols ?? []), saved: a.saved ?? Date.now(), requested: true });
     return id;
   }
-  // False once another window took the row: then this one changes nothing more.
-  async holdSleep(id) { await this.open(); return this.holds.has(id) && this.kdb.holdSleep(id, this.holds.get(id)); }
-  // The hold goes once the row answered (either way); a write that failed keeps it, so it can be tried again.
-  async settle(id) { await this.open(); const ok = await this.kdb.settle(id, this.holds.get(id)); this.holds.delete(id); return ok; }
-  async drop(id) { await this.open(); const ok = await this.kdb.drop(id, this.holds.get(id)); this.holds.delete(id); return ok; }
-  // A sleep's own narrow lets its hold go; a wake's keeps it.
-  async narrow(id, cols, token = null, { space = null, wait = false, restores = [] } = {}) {
+  async retry(id) { await this.open(); return this.kdb.retry(id); }
+  async undo(id) { await this.open(); return this.kdb.undo(id); }
+  // A wake's narrow keeps its hold.
+  async narrow(id, cols, token, { space = null, wait = false, restores = [] } = {}) {
     await this.open();
     const [row] = await this.kdb.read(`SELECT layout FROM sleeps WHERE id='${String(id).replace(/'/g, "''")}';`);
     const layout = { ...json(row?.layout, {}), cols };
-    const ok = await this.kdb.narrow(id, layout, keptOf(cols), token ? { wake: token } : { sleep: this.holds.get(id) }, { space, wait, restores });
-    if (!token) this.holds.delete(id);
-    return ok;
+    return this.kdb.narrow(id, layout, keptOf(cols), { wake: token }, { space, wait, restores });
   }
   // Null when another wake holds it or it is gone.
   async claim(id) {

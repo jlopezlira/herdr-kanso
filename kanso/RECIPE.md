@@ -766,9 +766,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     strip's columns; opening (tabkit.js, shared with kanso-sleep) runs
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
-  - `kanso-sleep`: a dialog (520 wide), asks nothing. Asleep is a status
-    in the left nav's `kanso.db` (kanso-spaces' kdb.js): session, space
-    id; /exit; Wake: `claude --resume <id>` there. `kanso.asleep`: a copy.
+  - `kanso-sleep`: a dialog (520 wide); asleep is a status in `kanso.db`.
+    It writes only the intent; the sidebar runs it (sleepwork.js), each
+    step written before its act: requested, saving, clearing, exiting,
+    left, or stuck with why (retry, undo); then the tab closes. A 20 s
+    heartbeat keeps one owner per row. Wake: `claude --resume`.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With
@@ -798,13 +800,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     else a conflict you resolve; "Source" edits the whole file; links to
     other Markdown files open here). `blocks.js` splits and joins the
     blocks. kanso-tabs watches `data/kanso-open` and shows the newest path
-    left there (`markdown-handler.sh install`, macOS: a small app that
-    becomes the handler for `.md` files, only when you run it). The
-    markdown-panel mod is the same editor in a window; `doc.js`, `blocks.js`
-    and the handler are its copies, kept by `npm run sync:share`); `lib.js`
-    holds what they share (where the focused pane is, diff rows, folders
-    from home, the two
-    file renderers: `codeState` is a read-only `EditorState` in the
+    left there (`markdown-handler.sh install`, macOS: makes a small app
+    the `.md` handler). The markdown-panel mod is its copy in a window, by
+    sync:share); `lib.js` holds what they share (where the focused pane is,
+    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState` in the
     terminal's font with the theme's ANSI hues, `markdownView` is the
     SDK's `TextView.markdown`, selectable, in a scrolling column with 16 px
     sides; and `showPanel`, which mounts a block in `panel-body`). A panel
