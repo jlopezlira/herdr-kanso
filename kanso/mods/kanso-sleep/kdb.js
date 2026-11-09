@@ -22,7 +22,7 @@ export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[
 
 // Columns added after a table's first release: [table, name, type].
 const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["agents", "step", "TEXT"], ["agents", "step_at", "INTEGER"],
-  ["agents", "sent_at", "INTEGER"], ["agents", "why", "TEXT"], ["sleeps", "state", "TEXT"], ["sleeps", "why", "TEXT"]];
+  ["agents", "sent_at", "INTEGER"], ["agents", "nudged_at", "INTEGER"], ["agents", "why", "TEXT"], ["sleeps", "state", "TEXT"], ["sleeps", "why", "TEXT"]];
 // A sleep the sidebar works on: sleeping or undoing (held by its owner), stuck (waiting on you). NULL or asleep: done.
 const DONE = "(state IS NULL OR state='asleep')";
 
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS sleeps(id TEXT PRIMARY KEY, name TEXT NOT NULL, space
 CREATE UNIQUE INDEX IF NOT EXISTS sleeps_name ON sleeps(project, name);
 CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, name TEXT, title TEXT, said INTEGER, program TEXT, cwd TEXT, space_id TEXT, tab_id TEXT, pos INTEGER,
   terminal TEXT, status TEXT NOT NULL DEFAULT 'unknown', since INTEGER, seen INTEGER NOT NULL, sleep_id TEXT, restore TEXT, project TEXT, project_at INTEGER,
-  step TEXT, step_at INTEGER, sent_at INTEGER, why TEXT);
+  step TEXT, step_at INTEGER, sent_at INTEGER, nudged_at INTEGER, why TEXT);
 CREATE INDEX IF NOT EXISTS agents_space ON agents(space_id, status);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL, machine TEXT NOT NULL DEFAULT '', added INTEGER NOT NULL, removed INTEGER, agent TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
@@ -72,8 +72,8 @@ export function inPlace(a, place, spaces, home = "") {
   return place.space ? w?.id === place.space : !w && a.from === place.from;
 }
 
-const STEP_FIELDS = ["step", "step_at", "sent_at", "why", "title", "cwd", "program"];
-const CLEAR_STEP = "step=NULL,step_at=NULL,sent_at=NULL,why=NULL";
+const STEP_FIELDS = ["step", "step_at", "sent_at", "nudged_at", "why", "title", "cwd", "program"];
+const CLEAR_STEP = "step=NULL,step_at=NULL,sent_at=NULL,nudged_at=NULL,why=NULL";
 const restoreSql = (restores, mine) => restores.map(([c, name]) => `UPDATE agents SET restore=${q(name)} WHERE id=${q(c)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`).join("");
 
 const free = (col, now) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - STALE_MS)})`;
@@ -203,7 +203,7 @@ export class Kdb {
     const marks = agents.filter((a) => a.conversation).map((a) => `INSERT INTO agents(id,name,cwd,space_id,tab_id,pos,status,seen,sleep_id,step,step_at)
       VALUES(${q(a.conversation)},${q(a.given)},${q(a.cwd)},${q(space?.id)},${q(a.tab)},${n(a.pos)},'asleep',${n(saved)},${q(id)},${step})
       ON CONFLICT(id) DO UPDATE SET status='asleep',sleep_id=excluded.sleep_id,terminal=NULL,seen=excluded.seen,space_id=excluded.space_id,name=excluded.name,
-        tab_id=COALESCE(excluded.tab_id,tab_id),pos=COALESCE(excluded.pos,pos),cwd=COALESCE(excluded.cwd,cwd),step=excluded.step,step_at=excluded.step_at,sent_at=NULL,why=NULL;`);
+        tab_id=COALESCE(excluded.tab_id,tab_id),pos=COALESCE(excluded.pos,pos),cwd=COALESCE(excluded.cwd,cwd),step=excluded.step,step_at=excluded.step_at,sent_at=NULL,nudged_at=NULL,why=NULL;`);
     await this.run(`BEGIN IMMEDIATE;${letGo}INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at,state)
       VALUES(${q(id)},${q(name)},${q(space?.id)},${q(space?.name)},${q(project)},${q(JSON.stringify(layout))},${q(into && JSON.stringify(into))},${n(saved)},${requested ? "NULL" : q(token)},${n(now)},${requested ? "'sleeping'" : "NULL"});${marks.join("")}COMMIT;`)
       .catch((e) => {
@@ -312,8 +312,9 @@ export class Kdb {
     return this.held(`BEGIN;${left}UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck'
       AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step='stuck') RETURNING id;COMMIT;`);
   }
+  // sent_at stays: an /exit that went may still land, and an undo needs to know it went.
   retry(id, now = Date.now()) {
-    return this.held(`BEGIN;UPDATE agents SET step='saving',step_at=${n(now)},sent_at=NULL,why=NULL WHERE sleep_id=${q(id)} AND step='stuck'
+    return this.held(`BEGIN;UPDATE agents SET step='saving',step_at=${n(now)},nudged_at=NULL,why=NULL WHERE sleep_id=${q(id)} AND step='stuck'
       AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');
       UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' RETURNING id;COMMIT;`);
   }
