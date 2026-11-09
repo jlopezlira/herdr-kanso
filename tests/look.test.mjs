@@ -66,7 +66,7 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }) } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "" } = {}) {
   const calls = [], store = {};
   const box = { text: "", value() { return this.text; }, set_value(v) { this.text = v; }, on() {}, focus() {} };
   // What Herdr reports, changed by a test as the agent ends.
@@ -80,9 +80,16 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     terminals: () => world.terminals, panes: () => world.panes,
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
     watchFolder: async () => { throw new Error("no watch in a test"); },
-    hc: async (args) => { calls.push(["hc", ...args]); return args[0] === "read" ? { code: 0, stdout: screen } : { code: 0, stdout: "" }; },
+    hc: async (args) => {
+      calls.push(["hc", ...args]);
+      if (args[0] === "read") return { code: 0, stdout: screen };
+      if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: session ? { pid: session.pid } : null }) };
+      return { code: 0, stdout: "" };
+    },
+    readTextFile: async (path) => (session && path === `/home/me/.claude/sessions/${session.pid}.json` ? JSON.stringify(session) : null),
     exec: async (cmd, args) => {
       calls.push([cmd, ...args]);
+      if (cmd === "tail") return { code: 0, stdout: transcript };
       if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => files.includes(p)).map((p) => `${p}\n`).join("") };
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
@@ -106,6 +113,28 @@ test("The Look panel reads the agent in focus and shows its newest picture, copi
   assert.match(look.shown.image, /^data\/kanso-panel\/look\/[0-9a-z]+-\d+\.png$/);
   assert.equal(look.shown.picture, "/repo/tests/shot.png", "a picture's pins point at the file itself");
   assert.ok(calls.some((c) => c[0] === "cp" && c[2] === "/repo/tests/shot.png" && c[3] === `/app/${look.shown.image}`));
+});
+
+test("A Claude agent's conversation on disk gives Look the whole paths its screen abbreviates or no longer shows", async () => {
+  const { projectDir, transcriptPath, spoken } = await load("kanso-panel/transcript.js", ["projectDir", "transcriptPath", "spoken"]);
+  assert.equal(spoken('ut"}\n{"a":{"b":"one","c":["two",3,null]}}\n{"x":"three"}\n{"cut'), "one\ntwo\nthree", "the first line is cut, the last may be too: every string of the rest, one per line");
+  assert.equal(projectDir("/Users/jj/Apps/prjct"), "-Users-jj-Apps-prjct");
+  assert.equal(transcriptPath({ sessionId: "s1", cwd: "/repo" }, "/home/me"), "/home/me/.claude/projects/-repo/s1.jsonl");
+  assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null, "a record without a conversation: nothing to read");
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo" };
+  const transcript = [
+    JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Saved the desk to /repo/shots/u-desk-ideas.png and /repo/shots/old.png" }] } }),
+    JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "wrote /repo/shots/u-desk-tasks.png" }] } }),
+  ].join("\n");
+  const screen = "› [image] …/u-desk-tasks.png (112KB)\n› [image] …/u-desk-ideas.png (98KB)\n";
+  const files = ["/repo/shots/u-desk-ideas.png", "/repo/shots/u-desk-tasks.png"];
+  const { look, calls } = await panel({ screen, files, session, transcript });
+  assert.deepEqual(clone(calls.filter((c) => c[0] === "hc" && c[1] === "get").map((c) => c[2])), ["t1"], "the agent's process, for its session record");
+  assert.deepEqual(clone(calls.find((c) => c[0] === "tail")), ["tail", "-c", String(256 * 1024), "/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl"]);
+  assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "whole, newest first, only those that exist; the screen's stubs resolve to nothing");
+  assert.equal(look.selected.path, "/repo/shots/u-desk-tasks.png");
+  const shell = await panel({ screen, files, session: null, transcript });
+  assert.ok(!shell.calls.some((c) => c[0] === "tail"), "no Claude process in front: the screen alone");
 });
 
 test("What you picked stays while the agent makes more, and a note goes to it with the pins", async () => {

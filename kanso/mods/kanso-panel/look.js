@@ -1,5 +1,6 @@
 // Look: the files an agent made (pictures, PDFs, documents), shown beside it, and a note back to it about one.
-// Herdr tells no mod about a click on a terminal's link, so Look reads what the agent printed instead.
+// Herdr tells no mod about a click on a terminal's link, so Look reads what the agent printed instead: its
+// screen, and for a Claude agent its conversation on disk, where every path is whole and stays.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button, TextareaState, Textarea } from "gpui-base";
 import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder } from "herdr";
@@ -9,6 +10,7 @@ import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng, firstPage } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, keyOf } from "./look-model.js";
+import { transcriptTail } from "./transcript.js";
 
 const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
@@ -73,8 +75,10 @@ export class Look {
     cx.spawn(async (cx) => {
       try {
         const r = await hc(["read", address, "--lines", String(LINES)]);
+        // The conversation first, the screen after: the newest mention wins, and the screen has the latest.
+        const text = `${await transcriptTail(address, home())}\n${r.code === 0 ? r.stdout : ""}`;
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
-        const paths = [...new Set(mentions(r.code === 0 ? r.stdout : "").map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
+        const paths = [...new Set(mentions(text).map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
         const there = paths.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...paths])).stdout.split("\n")) : new Set();
         const found = paths.filter((path) => there.has(path)).map(itemOf);
         if (address !== this.agent()) return;
