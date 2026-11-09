@@ -11,7 +11,7 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.17.6] - 2026-11-09
+## [3.17.7] - 2026-11-09
 
 ### Changed
 
@@ -22,6 +22,13 @@ release.
 
 - A picture's small copy and its big one no longer race: they are made one after another per file, so making one never deletes the other while Preview shows it.
 - Two pin dialogs answered in a row both keep their note: each dialog's answer waits under its own token until its pin takes it, instead of the second overwriting the first.
+
+## [3.17.6] - 2026-11-09
+
+### Fixed
+
+- Sleep reads what it sees more carefully. The agent's state is checked right before its prompt is interrupted, not only when the dialog opened; the empty prompt is waited for up to 3 s instead of read once; Claude's question before leaving is watched for, and answered, through the whole 45 s wait for it to go; a check of the process that fails is no longer taken for "it exited"; and when the sleep is undone, a Claude that never left counts as back on its conversation, instead of being left marked asleep while it runs. An agent whose exit could not be checked during the undo is looked at and kept asleep if it is gone, instead of being dropped from the list.
+- A database that cannot answer for a moment no longer passes for another window taking the sleep, nor ends agents that had just come back: the write is tried three times and, failing, the agents are left running and the sidebar sets the record straight. The sleep renews its hold through a long undo, so it is never taken for abandoned meanwhile. Wake waits up to 90 s for a Claude that is visibly starting on the conversation before giving up on it.
 
 ## [3.17.5] - 2026-11-09
 
