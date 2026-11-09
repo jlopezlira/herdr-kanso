@@ -13,6 +13,7 @@ import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
+import { programIcon } from "./marks.js";
 import { sleepingNow, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
@@ -555,9 +556,9 @@ export default class Spaces extends View {
     this.since = p.json("spaces.since", {});
   }
 
-  // Collapsed, or without the switch, the rail shows spaces whatever was chosen; work runs for this view only.
+  // Without the switch the rail shows spaces whatever was chosen; work runs for this view only.
   shownView() {
-    return shared("sidebar.collapsed") === true || this.showSwitch === false ? "spaces" : this.view;
+    return this.showSwitch === false ? "spaces" : this.view;
   }
 
   // One-time fixes from older versions, out of render: drawing never changes state.
@@ -1605,6 +1606,93 @@ export default class Spaces extends View {
   }
 
   // The thumb needs the switch's width (measured); until the first measure the chosen segment is raised on its own.
+  // The three views as icons, stacked, for the collapsed rail: the one shown has the wash the open switch gives it.
+  railSwitch(t, sp) {
+    const asks = sp.some((s) => s.status === "blocked");
+    const icons = { spaces: "folder", agents: "pulse", threads: "message" };
+    return v_flex().mt(4).p(3).gap(2).rounded(8).bg(t.foreground + "0a").children(Object.keys(VIEWS).map((view) => {
+      const on = this.view === view;
+      return div().id(`rail-view-${view}`).relative().size(26).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
+        .tooltip(VIEWS[view].label).text_color(on ? t.foreground : t.muted)
+        .when(on, (el) => el.bg(t.raised ?? t.selected).border_1().border_color(t.border))
+        .when(!on, (el) => el.hover((s) => s.text_color(t.foreground)))
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => { this.setView(view, cx); cx.notify(); })
+        .child(svg(`mods/kanso-chrome/icons/${icons[view]}.svg`).size(14))
+        .when(view === "agents" && asks && !on, (el) => el.child(div().absolute().top(3).right(3).size(5).rounded_full().bg(t.blocked)));
+    }));
+  }
+
+  // One agent as a tile in the collapsed rail: its program's icon (its project's letter when it has none), its
+  // status as a dot, its name and project on hover; a click goes to it, a right click opens its menu.
+  tile(a, t, ctx, { strong = false } = {}) {
+    const zz = a.status === "asleep" || Boolean(a.dozing);
+    const project = ctx.project(a.space);
+    const pic = programIcon(a.program, 15, t.foreground)
+      ?? div().size(18).rounded(5).bg((project?.fill ?? t.muted) + "2e").flex().items_center().justify_center().text_size(10.5).font_semibold().text_color(project?.fill ?? t.muted).child(project?.name[0]?.toUpperCase() ?? "?");
+    const go = () => (a.asleep ? this.openMenu(a) : a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address }));
+    const dot = zz ? t.dim : tone(t, a.status);
+    return h_flex().w_full().h(36).flex_none().justify_center().items_center().child(
+      div().id(`tile-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
+        .tooltip([this.nameOf(a), project?.name].filter(Boolean).join(" · "))
+        .when(Boolean(a.focused), (el) => el.bg(t.foreground + "14"))
+        .when(!a.focused, (el) => el.hover((s) => s.bg(t.foreground + "0c")))
+        .when(strong, (el) => el.border_1().border_color(t.accent + "80"))
+        .on_click(go)
+        .on_mouse_down("right", () => this.openMenu(a))
+        .child(pic.opacity(zz ? 0.45 : a.focused || a.status === "working" || a.status === "blocked" || strong ? 1 : 0.75))
+        .child(div().absolute().top(4).right(4).size(7).rounded_full().border(1).border_color(t.chrome).bg(dot)));
+  }
+
+  // A section in the collapsed rail: its mark and how many, a click folds it as in the open view.
+  railHead(t, id, i, open, toggle, mark, count, ink) {
+    return h_flex().id(id).h(i ? 30 : 22).pt(i ? 8 : 0).w_full().flex_none().gap(4).items_center().justify_center().cursor_pointer()
+      .text_size(10.5).font_semibold().text_color(ink).tooltip(open ? "Fold" : "Unfold")
+      .on_click((_e, cx) => { toggle(cx); cx.notify(); })
+      .when(Boolean(mark), (el) => el.child(mark))
+      .child(div().child(String(count)));
+  }
+
+  agentsRail(t, sp, ctx) {
+    const names = new Map(sp.map((w) => [w.id, w.name]));
+    const zz = ctx.asleep.rows.map((a) => ({ a: { ...a, space_name: names.get(a.space) ?? a.asleep.spaceName ?? "" }, lines: [] }));
+    const entries = [...nest(this.inStripOrder(ctx.all, ctx.strip), ctx.terms), ...zz];
+    const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
+    const sections = bySection(entries, since, this.held?.done ? this.held.address : null, this.statusOrder);
+    return sections.flatMap((s, i) => {
+      const open = !this.sectionsFolded.has(s.id);
+      const head = this.railHead(t, `rail-section-${s.id}`, i, open, () => {
+        open ? this.sectionsFolded.add(s.id) : this.sectionsFolded.delete(s.id);
+        this.panel.set("spaces.sections", [...this.sectionsFolded]);
+      }, s.id === "other" ? null : statusMark(t, s.id), s.entries.filter((e) => !e.lines.length).length, s.id === "blocked" ? t.blocked : t.muted);
+      return [item(head, i ? 30 : 22), ...(open ? s.entries.filter((e) => !e.lines.length).map((e) => item(this.tile(e.a, t, ctx), 36)) : [])];
+    });
+  }
+
+  threadsRail(t, sp, ctx) {
+    if (!this.threads) return [];
+    const rows = ctx.all
+      .filter((a) => !a.address.includes("/") && (this.threads[a.address] || a.program?.agent || a.status))
+      .map((a) => ({ a, th: shownThread(this.threads[a.address], this.termBy?.get(a.address), this.alive) }))
+      .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
+    const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
+    return sections.flatMap((s, i) => {
+      const folds = Boolean(s.folds);
+      const open = folds ? this.shelvesOpen.has(s.id) : !this.sectionsFolded.has(`thread-${s.id}`);
+      const toggle = () => {
+        if (folds) { open ? this.shelvesOpen.delete(s.id) : this.shelvesOpen.add(s.id); this.panel.set("spaces.shelvesOpen", [...this.shelvesOpen]); }
+        else { open ? this.sectionsFolded.add(`thread-${s.id}`) : this.sectionsFolded.delete(`thread-${s.id}`); this.panel.set("spaces.sections", [...this.sectionsFolded]); }
+      };
+      const p = s.project ? ctx.project(s.project) : null;
+      const mark = p ? h_flex().size(14).flex_none().rounded(4).bg(p.fill + "2e").items_center().justify_center().text_size(9).font_semibold().text_color(p.fill).child(p.name[0]?.toUpperCase() ?? "?")
+        : s.id === "pinned" ? svg("mods/kanso-chrome/icons/pin.svg").size(11).flex_none().text_color(t.muted)
+        : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(12).flex_none().text_color(t.muted)
+        : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(12).flex_none().text_color(t.muted) : null;
+      const head = (i || mark) ? [item(this.railHead(t, `rail-thread-${s.id}`, i, open, toggle, mark, s.rows.length, t.muted), i ? 30 : 22)] : [];
+      return [...head, ...(open || !mark ? s.rows.map(({ a }) => item(this.tile(a, t, ctx, { strong: isUnread(a.labels) || woke(a, ctx.now) }), 36)) : [])];
+    });
+  }
+
   viewSwitch(t, sp) {
     const asks = sp.some((s) => s.status === "blocked");
     const views = Object.keys(VIEWS);
@@ -1808,7 +1896,8 @@ export default class Spaces extends View {
     this.showSwitch = !hidden.has("sidebar.switch");
     this.showActivity = !hidden.has("sidebar.activity");
     const switchShown = this.showSwitch !== false;
-    const view = !collapsed && switchShown ? this.view : "spaces";
+    // Collapsed, the rail keeps the view you chose: projects as avatars, agents and threads as tiles.
+    const view = switchShown ? this.view : "spaces";
     const read = { terms: terminals(), alive: this.alive, digests: shared("kanso.digest") ?? {}, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
     // Each terminal now: a conversation read from another process in it is not this one's.
     this.termBy = new Map(read.terms.map((k) => [k.address, k]));
@@ -1828,7 +1917,7 @@ export default class Spaces extends View {
     const brand = image("frame/welcome/herdr.png").size(20).rounded(6).flex_none();
     // Collapsed, stacked so two buttons never sit on top of each other.
     const add = collapsed
-      ? v_flex().w_full().pt(8).gap(6).items_center().child(brand).child(plus).child(hide)
+      ? v_flex().w_full().pt(8).gap(6).items_center().child(brand).child(plus).child(hide).when(switchShown, (el) => el.child(this.railSwitch(t, sp)))
       : h_flex().h(40).px(10).gap(4).items_center()
         .child(plus)
         .child(div().flex_1())
@@ -1843,7 +1932,8 @@ export default class Spaces extends View {
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
       .child(this.list(t, collapsed, view,
-        view === "agents" ? this.agentsView(t, sp, ps, ctx) : view === "threads" ? this.threadsView(t, sp, ps, ctx) : this.grouped(t, collapsed, sp, ps, ctx)));
+        view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
+          : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx)));
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;
