@@ -11,6 +11,18 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.17.6] - 2026-11-09
+
+### Changed
+
+- Gallery is now Preview: the tab, the panel and the docs say so. `herdr-app do 'kanso-tabs.look <path>'` is unchanged, and `kanso-tabs.gallery` still works.
+- Preview keeps the newest picture big and puts the agent's other recent pictures in one small row under it, scrolled sideways, to switch the picture; the grid of tiles is gone.
+
+### Fixed
+
+- A picture's small copy and its big one no longer race: they are made one after another per file, so making one never deletes the other while Preview shows it.
+- Two pin dialogs answered in a row both keep their note: each dialog's answer waits under its own token until its pin takes it, instead of the second overwriting the first.
+
 ## [3.17.5] - 2026-11-09
 
 ### Changed

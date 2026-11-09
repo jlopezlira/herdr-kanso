@@ -1,6 +1,7 @@
-// Gallery (the panel is "look" inside): the pictures an agent made, shown beside it, and a note back to it about
-// one. Herdr tells no mod about a click on a terminal's link, so the gallery reads what the agent printed: its
-// screen, and for a Claude agent its conversation on disk, where every path is whole and stays.
+// Preview (the panel is "look" inside): what an agent made for you to look at, shown beside it instead of in the
+// system's Preview, and your notes back to it, pinned to the spots they are about. Herdr tells no mod about a click
+// on a terminal's link, so it reads what the agent printed: its screen, and for a Claude agent its conversation on
+// disk, where every path is whole and stays.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay } from "herdr";
@@ -16,9 +17,10 @@ const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
 const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
-const KEPT = "kanso.look"; // { follow, pinned }: who the gallery is about, kept while it is closed
-const NOTE = "kanso.look.note"; // the dialog's answer for the pin being asked about: { text, at }
-const THUMBS = 12; // the newest pictures drawn small under the big one
+const KEPT = "kanso.look"; // { follow, pinned }: whose previews these are, kept while the panel is closed
+const NOTE = "kanso.look.note"; // the dialogs' answers, by token: { [token]: { text, at } }, each taken once by the pin that asked
+const THUMBS = 12; // the agent's other recent pictures, in one row under the one shown, to switch to another
+const STRIP = { w: 56, h: 40 }; // one picture in that row
 const MISSING = { image: "This picture can't be read", convert: "Nothing here turns this into a picture" };
 // $1 the copies' folder, $2 one file's key: its older copies go, and any left from yesterday.
 const FRESH = 'mkdir -p "$1" && rm -f "$1/$2"-* && find "$1" -type f -mtime +1 -exec rm -f {} + 2>/dev/null; true';
@@ -38,12 +40,12 @@ export class Look {
     this.follow = this.focusedTerminal() ?? live(kept.follow);
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
-    this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
+    this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.watching = null;
     this.asking = null; // { id, token }: the pin whose note a dialog asks for, and which dialog
     this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
     this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
-    this.thumbs = new Map(); this.thumbing = new Set(); // per file: the copy drawn small in the gallery, and the ones being made
+    this.thumbs = new Map(); this.draws = new Map(); // per file: the copy drawn small, and its latest big draw (its copy is published only if still the latest)
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
     this.tick(cx);
@@ -112,7 +114,7 @@ export class Look {
   ask(raw, cx) {
     const path = resolvePath(String(raw).trim().replace(/^file:\/\//, ""), null, home());
     const item = path ? itemOf(path) : null;
-    if (!item?.kind) { this.note = { error: true, text: `The gallery shows pictures: ${raw}` }; return; }
+    if (!item?.kind) { this.note = { error: true, text: `Preview shows pictures: ${raw}` }; return; }
     this.asked = [item, ...this.asked.filter((i) => i.path !== path)];
     this.select(item, cx, true);
   }
@@ -143,12 +145,14 @@ export class Look {
     const done = (this.chains.get(path) ?? Promise.resolve())
       .then(() => { this.waiting.delete(path); return this.selected?.path === path ? this.copy(item) : null; })
       .catch(() => null);
-    this.chains.set(path, done);
+    this.chains.set(path, done); this.draws.set(path, done);
     cx.spawn(async (cx) => {
       const made = await done;
-      const last = this.chains.get(path) === done;
-      if (last) this.chains.delete(path);
-      // The copy is the file's newest (the older ones went with it): the tile shows it whether or not the file is still shown.
+      if (this.chains.get(path) === done) this.chains.delete(path);
+      // The latest draw of the file publishes; a thumbnail queued after it does not take that from it.
+      const last = this.draws.get(path) === done;
+      if (last) this.draws.delete(path);
+      // The copy is the file's newest (the older ones went with it): the strip shows it whether or not the file is still shown.
       if (made) this.thumbs.set(path, made.image);
       if (!last || this.selected?.path !== path) { cx.notify(); return; }
       this.shown = made ? { path, ...made } : { path, error: MISSING[item.kind] };
@@ -156,15 +160,16 @@ export class Look {
     });
   }
 
-  // The small copy in the gallery: made once per file. A draw of the file in flight serves it (its copy lands in
-  // the tile too), so a thumbnail never takes a draw's place in the file's chain; the draw's own copy replaces it later.
+  // The small copy: made once per file, in the file's one queue with its draws (each copy clears the file's older
+  // ones, so two at once could delete the one shown); a draw in flight serves it, and a draw's copy replaces it later.
   thumbnail(item, cx) {
     const path = item.path;
-    if (this.thumbs.has(path) || this.chains.has(path) || this.thumbing.has(path)) return;
-    this.thumbing.add(path);
+    if (this.thumbs.has(path) || this.chains.has(path)) return;
+    const done = Promise.resolve().then(() => (this.thumbs.has(path) ? null : this.copy(item))).catch(() => null);
+    this.chains.set(path, done);
     cx.spawn(async (cx) => {
-      const made = await this.copy(item).catch(() => null);
-      this.thumbing.delete(path);
+      const made = await done;
+      if (this.chains.get(path) === done) this.chains.delete(path);
       if (made && !this.thumbs.has(path)) { this.thumbs.set(path, made.image); cx.notify(); }
     });
   }
@@ -217,9 +222,11 @@ export class Look {
 
   // The dialog's answer, read when the shared value changes: the note goes on its pin; cancelled, a new pin goes.
   answer() {
-    const a = shared(NOTE);
-    if (!a || !this.asking || a.token !== this.asking.token) return;
+    const box = shared(NOTE), token = this.asking?.token, a = token ? box?.[token] : null;
+    if (!a) return;
     const id = this.asking.id; this.asking = null;
+    // Taken: out of the box, with whatever was left there over an hour ago (a dialog nobody read, another window's).
+    setShared(NOTE, Object.fromEntries(Object.entries(box).filter(([k, v]) => k !== token && (v?.at ?? 0) > Date.now() - 3600000)));
     if (a.text) this.pins = this.pins.map((p) => (p.id === id ? { ...p, note: a.text } : p));
     else this.pins = this.pins.filter((p) => p.id !== id || p.note);
   }
@@ -264,18 +271,21 @@ export class Look {
         .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }).child("×"));
   }
 
-  // One picture in the gallery: the copy, cropped to a tile, the one shown marked.
+  // One of the agent's other pictures in the strip: its copy, small and cropped, the one shown marked.
   thumb(item, c) {
     const on = this.selected?.path === item.path, src = this.thumbs.get(item.path);
-    const tile = div().id(`look-${keyOf(item.path)}`).flex_none().w(this.tile()).h(Math.round(this.tile() * 0.7)).rounded(R.control).overflow_hidden()
+    const box = div().id(`look-${keyOf(item.path)}`).flex_none().w(STRIP.w).h(STRIP.h).rounded(R.control).overflow_hidden()
       .bg(c.raised).border_1().border_color(on ? c.accent : c.border).cursor_pointer()
       .when(!on, (el) => el.hover((s) => s.border_color(c.muted)))
       .on_click((_e, cx) => this.select(item, cx, true));
-    return src ? tile.child(image(src).w_full()) : tile.child(div().size_full().flex().items_center().justify_center().text_size(10).text_color(c.dim).child(item.name));
+    return src ? box.child(image(src).w_full()) : box.child(div().size_full().flex().items_center().justify_center().text_size(9).text_color(c.dim).truncate().child(item.name));
   }
 
-  // Three tiles a row, in the width the panel has.
-  tile() { return Math.max(72, Math.floor((this.width - G.md * 2 - G.sm * 2) / 3)); }
+  // The strip: one row, scrolled sideways when the panel is narrower than it. The picture stays the big thing.
+  strip(list, c) {
+    return h_flex().id("look-strip").flex_none().h(STRIP.h + G.sm * 2).px(G.md).gap(G.xs).items_center().overflow_x_scrollbar()
+      .border_t(1).border_color(c.border).children(list.slice(0, THUMBS).map((i) => this.thumb(i, c)));
+  }
 
   picture(c) {
     const s = this.shown;
@@ -307,25 +317,23 @@ export class Look {
       ...(this.pins.length ? [quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.asking = null; cx.notify(); }, c)] : []),
     ] : [];
     return v_flex().id("kanso-look").track_focus(this.handle).size_full().min_h(0).bg(c.canvas).text_color(c.text).text_size(13)
-      .on_size_change((size, cx) => { if (Math.abs(this.width - size.width) >= 1) { this.width = size.width; cx.notify(); } })
       .on_key_down((e, cx) => { if (sendKey(e)) { this.send(cx); cx.stop_propagation(); } })
       .child(h_flex().h(42).flex_none().px(10).gap(G.sm).items_center().border_b(1).border_color(c.border)
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
-          .child(div().truncate().font_semibold().text_size(13).child(who?.name ?? "Gallery"))
+          .child(div().truncate().font_semibold().text_size(13).child(who?.name ?? "Preview"))
           .child(div().truncate().text_size(11).text_color(c.dim).child(who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "")))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
         .child(iconButton("look-refresh", "refresh", "Read again", (cx) => { this.read(cx); if (item && shows(item)) this.draw(item, cx); }, c, { spin: this.reading })))
       .child(v_flex().id("look-view").flex_1().min_h(0).overflow_y_scrollbar().child(this.view(c)))
       .when(actions.length > 0, (el) => el.child(h_flex().flex_none().h(30).px(G.md).gap(G.lg).items_center().border_t(1).border_color(c.border).children(actions)))
-      .when(list.length > 1, (el) => el.child(h_flex().id("look-gallery").flex_none().max_h(Math.round(this.tile() * 0.7) * 2 + G.sm * 3).px(G.md).py(G.sm).gap(G.sm).flex_wrap().overflow_y_scrollbar().border_t(1).border_color(c.border)
-        .children(list.slice(0, THUMBS).map((i) => this.thumb(i, c)))))
+      .when(list.length > 1, (el) => el.child(this.strip(list, c)))
       .when(Boolean(item), (el) => el.child(v_flex().flex_none().p(G.md).gap(G.sm).border_t(1).border_color(c.border)
         .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").max_h(26 * 5 + G.xs * 4).gap(G.xs).overflow_y_scrollbar().children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
         .child(h_flex().gap(G.md).items_center()
           .child(div().flex_1().min_w(0).text_size(11.5).text_color(this.note?.error ? c.red : c.dim)
-            .child(this.note?.text ?? (this.pins.length ? "" : "Click the picture to pin a spot and say what about it")))
+            .child(this.note?.text ?? (this.pins.length ? "" : "Click a spot to pin it and say what about it")))
           .child(Button.new("look-send").h(28).px(12).flex_none().items_center().rounded(R.control).bg(c.primary)
             .when(!ready, (b) => b.opacity(0.45))
             .when(ready, (b) => b.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.send(cx)))

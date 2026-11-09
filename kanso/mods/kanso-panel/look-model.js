@@ -1,4 +1,4 @@
-// The gallery's reading of a terminal: the pictures an agent printed, and what you tell it about one.
+// Preview's reading of a terminal: the pictures an agent printed, and what you tell it about one.
 import { KINDS, kindOf } from "./kinds.js";
 
 const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
@@ -9,7 +9,7 @@ const QUOTED = new RegExp(`(["'\`])(?:file://)?([^\\s"'\`][^"'\`\\n]* [^"'\`\\n]
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 // Links open in the browser: a URL's path is never one of these.
 const LINK = /\b(?!file:)[a-z][\w+.-]*:\/\/\S*/gi;
-// Every kind the gallery lists is one it draws.
+// Every kind Preview lists is one it draws.
 const SHOWN = Object.keys(KINDS);
 
 // The paths in a terminal's text, newest (lowest) first, each once. A quoted one with a folder in it is
@@ -40,7 +40,7 @@ export const itemOf = (path) => ({ path, name: path.split("/").at(-1), kind: kin
 
 export const shows = (item) => SHOWN.includes(item?.kind);
 
-// The newest one Look shows that the last read did not have.
+// The newest one Preview shows that the last read did not have.
 export function arrived(found, before) {
   const old = new Set((before ?? []).map((i) => i.path));
   return found.find((i) => shows(i) && !old.has(i.path)) ?? null;
@@ -66,5 +66,5 @@ export function aboutMessage(item, pins, picture = item.path) {
   return `About ${item.path}${where}:\n${lines.join("\n")}`;
 }
 
-// One name per file in Look's copies, so a fresh copy replaces the last one.
+// One name per file in Preview's copies, so a fresh copy replaces the last one.
 export const keyOf = (path) => (([...String(path)].reduce((h, ch) => (Math.imul(h, 31) + ch.charCodeAt(0)) | 0, 7)) >>> 0).toString(36);

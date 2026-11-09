@@ -820,19 +820,19 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
     home (not `~/Library`) with none is "No pane runs it". Read every 10 s
     while shown; Stop: SIGTERM on a second press, then SIGKILL.
-    `look.js` (Gallery, panel id `look`, `eye.svg`): no mod hears a click on
+    `look.js` (Preview, panel id `look`, `eye.svg`): no mod hears a click on
     a terminal's link, so it reads the terminal in focus (`hc read --lines
     400`, every 4 s while shown; pinnable) and, for a Claude agent,
     its transcript (`transcript.js`: `~/.claude/sessions/<pid>.json` names
     it; a `grep` pipeline over what was appended, in bytes) for pictures that
     exist, newest first. Copies in `data/kanso-panel/look` draw them
     (`image()` reads only the app's folder; HEIC/TIFF via `sips`/`magick`):
-    the newest big unless you picked one, twelve as tiles. A click drops a numbered pin and
-    opens `kanso-prompt` with `shared: "kanso.look.note"` (its answer,
-    `{text, at}`, read on render; Cancel drops a new pin); the notes list
-    under the picture. ⌘↩ sends "About <path>:" and a line per noted pin, its
-    % across and down (`deliver.js`, kanso-send's). `herdr-app do
-    'kanso-tabs.look <path>'` opens one.
+    the newest big unless you picked one, twelve in a strip. A click drops a
+    numbered pin and opens `kanso-prompt` with `shared: "kanso.look.note"`
+    (`{[token]: {text, at}}`, read on render; Cancel drops a new pin); the
+    notes list under the picture. ⌘↩ sends "About <path>:"
+    and a line per noted pin, its % across and down (`deliver.js`).
+    `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
   - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
     and minimalistic forks, and all use `"place": "none"`.
