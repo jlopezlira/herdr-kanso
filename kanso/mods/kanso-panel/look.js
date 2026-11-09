@@ -10,7 +10,7 @@ import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng, firstPage } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, keyOf } from "./look-model.js";
-import { transcriptTail } from "./transcript.js";
+import { transcriptPaths } from "./transcript.js";
 
 const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
@@ -38,6 +38,7 @@ export class Look {
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
+    this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
     this.box = TextareaState.new({ placeholder: "A note for the agent", rows: 3 });
     this.box.on("change", (_e, cx) => { this.note = null; cx.notify(); });
@@ -76,7 +77,9 @@ export class Look {
       try {
         const r = await hc(["read", address, "--lines", String(LINES)]);
         // The conversation first, the screen after: the newest mention wins, and the screen has the latest.
-        const text = `${await transcriptTail(address, home())}\n${r.code === 0 ? r.stdout : ""}`;
+        const written = await transcriptPaths(address, home(), this.transcript?.address === address ? this.transcript : null);
+        this.transcript = { address, ...written };
+        const text = `${written.paths.join("\n")}\n${r.code === 0 ? r.stdout : ""}`;
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
         const paths = [...new Set(mentions(text).map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
         const there = paths.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...paths])).stdout.split("\n")) : new Set();

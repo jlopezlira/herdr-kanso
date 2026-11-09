@@ -89,7 +89,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     readTextFile: async (path) => (session && path === `/home/me/.claude/sessions/${session.pid}.json` ? JSON.stringify(session) : null),
     exec: async (cmd, args) => {
       calls.push([cmd, ...args]);
-      if (cmd === "tail") return { code: 0, stdout: transcript };
+      if (cmd === "sh" && args[1].startsWith('f="$1"')) return args[4] === String(transcript.length) ? { code: 3, stdout: "" } : { code: 0, stdout: `${transcript.length}\n${args[4]}\n${transcript}` };
       if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => files.includes(p)).map((p) => `${p}\n`).join("") };
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
@@ -116,25 +116,32 @@ test("The Look panel reads the agent in focus and shows its newest picture, copi
 });
 
 test("A Claude agent's conversation on disk gives Look the whole paths its screen abbreviates or no longer shows", async () => {
-  const { projectDir, transcriptPath, spoken } = await load("kanso-panel/transcript.js", ["projectDir", "transcriptPath", "spoken"]);
-  assert.equal(spoken('ut"}\n{"a":{"b":"one","c":["two",3,null]}}\n{"x":"three"}\n{"cut'), "one\ntwo\nthree", "the first line is cut, the last may be too: every string of the rest, one per line");
+  const { projectDir, transcriptPath, PATTERN, pathOf } = await load("kanso-panel/transcript.js", ["projectDir", "transcriptPath", "PATTERN", "pathOf"]);
+  assert.ok(PATTERN.startsWith("(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(") && PATTERN.endsWith(")([^A-Za-z0-9]|$)"), "grep's pattern: a whole path up to one of Look's extensions, with what came before and after");
+  assert.deepEqual(['"/repo/shots/a.png"', "[../docs/DEC-102.md]", " methodology/rules.md\\", "\\n./docs/a.md ", "://static.linear.app/icon.svg", "/\\/json-schema.org"].map(pathOf),
+    ["/repo/shots/a.png", "../docs/DEC-102.md", "methodology/rules.md", "./docs/a.md", null, "/\\/json-schema.org"], "quotes, brackets and JSON's line breaks off; a URL's tail is no path, and a stray one is a file that does not exist");
   assert.equal(projectDir("/Users/jj/Apps/prjct"), "-Users-jj-Apps-prjct");
   assert.equal(transcriptPath({ sessionId: "s1", cwd: "/repo" }, "/home/me"), "/home/me/.claude/projects/-repo/s1.jsonl");
   assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null, "a record without a conversation: nothing to read");
   const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo" };
-  const transcript = [
-    JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "Saved the desk to /repo/shots/u-desk-ideas.png and /repo/shots/old.png" }] } }),
-    JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "wrote /repo/shots/u-desk-tasks.png" }] } }),
-  ].join("\n");
+  // What grep hands back: the paths in the file, oldest first.
+  const transcript = ['"/repo/shots/u-desk-ideas.png"', ' /repo/shots/old.png ', '\\n/repo/shots/u-desk-tasks.png"'].join("\n");
   const screen = "› [image] …/u-desk-tasks.png (112KB)\n› [image] …/u-desk-ideas.png (98KB)\n";
   const files = ["/repo/shots/u-desk-ideas.png", "/repo/shots/u-desk-tasks.png"];
-  const { look, calls } = await panel({ screen, files, session, transcript });
+  const { look, cx, drain, calls } = await panel({ screen, files, session, transcript });
   assert.deepEqual(clone(calls.filter((c) => c[0] === "hc" && c[1] === "get").map((c) => c[2])), ["t1"], "the agent's process, for its session record");
-  assert.deepEqual(clone(calls.find((c) => c[0] === "tail")), ["tail", "-c", String(256 * 1024), "/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl"]);
+  const scan = calls.find((c) => c[0] === "sh" && c[2].startsWith('f="$1"'));
+  assert.deepEqual(clone(scan.slice(4)), ["/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl", "0", PATTERN, "2000"], "the whole file, first time");
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "whole, newest first, only those that exist; the screen's stubs resolve to nothing");
   assert.equal(look.selected.path, "/repo/shots/u-desk-tasks.png");
+  assert.equal(look.transcript.size, String(transcript.length));
+  assert.deepEqual(clone(look.transcript.paths), ["/repo/shots/u-desk-ideas.png", "/repo/shots/old.png", "/repo/shots/u-desk-tasks.png"], "as said, oldest first, whether the file has them or not");
+  look.readAt = 0; look.read(cx); await drain();
+  const again = calls.filter((c) => c[0] === "sh" && c[2].startsWith('f="$1"')).at(-1);
+  assert.equal(again[5], String(transcript.length), "the next read says what size it saw: grep is skipped while the file has not grown");
+  assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "and the list stays");
   const shell = await panel({ screen, files, session: null, transcript });
-  assert.ok(!shell.calls.some((c) => c[0] === "tail"), "no Claude process in front: the screen alone");
+  assert.ok(!shell.calls.some((c) => c[0] === "sh" && c[2].startsWith('f="$1"')), "no Claude process in front: the screen alone");
 });
 
 test("What you picked stays while the agent makes more, and a note goes to it with the pins", async () => {
