@@ -10,15 +10,19 @@ import { parseChangelog, plain, compare } from "./changelog.js";
 import { tryOrAsync } from "./pure.js";
 
 const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
-// The people's avatars ship in avatars/ (96 px), so the credits page needs no network.
 const PLACES = [
   { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
   { id: "kanso", name: "kansō", note: "Source, releases and issues", url: "https://github.com/jlopezlira/herdr-kanso" },
 ];
 const PEOPLE = [
-  { login: "jlopezlira", name: "Juan José López Lira" },
+  { login: "jlopezlira", name: "JJ" },
   { login: "icampana", name: "Iván Campaña" },
+  { login: "leangseu", name: "Leangseu Kim" },
+  { login: "h0ru5", name: "Johannes Hund" },
 ];
+// image() reads only the app's folder: GitHub avatars are downloaded there; prints the logins that have one.
+const AVATARS_DIR = "data/kanso-settings/avatars";
+const AVATARS = 'mkdir -p "$1" && cd "$1" || exit 0; shift; for l; do (curl -fsL --max-time 10 -o "$l.part" "https://github.com/$l.png?size=96" && mv -f "$l.part" "$l.jpg"; rm -f "$l.part") & done; wait; for l; do [ -s "$l.jpg" ] && printf "%s\\n" "$l"; done; true';
 export const HIDDEN = "kanso.hidden";
 // The pieces of Kanso a switch can hide; each mod reads `kanso.hidden`.
 export const PIECES = [
@@ -44,6 +48,8 @@ export default class Settings extends View {
     this.message = null;
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
+    this.avatars = null;
+    if (this.page === "credits") this.readAvatars(cx);
     cx.spawn(async (cx) => {
       try { this.installed = JSON.parse(await readTextFile(`${appHome()}/mods/kanso-chrome/version.json`) ?? "{}").version ?? null; } catch {}
       cx.notify();
@@ -220,6 +226,16 @@ export default class Settings extends View {
     cx.notify();
   }
 
+  readAvatars(cx) {
+    if (this.avatars) return;
+    this.avatars = new Set();
+    cx.spawn(async (cx) => {
+      const r = await tryOrAsync(() => exec("sh", ["-c", AVATARS, "sh", `${appHome()}/${AVATARS_DIR}`, ...PEOPLE.map((p) => p.login)]));
+      this.avatars = new Set((r?.stdout ?? "").split("\n").filter(Boolean));
+      cx.notify();
+    });
+  }
+
   newsPage(t, c) {
     const { entries, error, from } = this.news;
     const have = this.installed;
@@ -284,7 +300,10 @@ export default class Settings extends View {
         : div().size(28).flex_none().rounded(7).bg(c.subtle).flex().items_center().justify_center().child(svg("mods/kanso-chrome/icons/enso.svg").size(16).text_color(c.text)),
         p.name, p.note, p.url)))
       .child(heading("Made by"))
-      .children(PEOPLE.map((p) => link(p.login, image(`mods/kanso-settings/avatars/${p.login}.jpg`).size(28).flex_none().rounded_full(), p.name, `@${p.login} on GitHub`, `https://github.com/${p.login}`)));
+      .children(PEOPLE.map((p) => link(p.login, this.avatars?.has(p.login)
+        ? image(`${AVATARS_DIR}/${p.login}.jpg`).size(28).flex_none().rounded_full()
+        : div().size(28).flex_none().rounded_full().bg(c.subtle).flex().items_center().justify_center().text_size(12).font_medium().text_color(c.muted).child(p.name[0]),
+        p.name, `@${p.login} on GitHub`, `https://github.com/${p.login}`)));
   }
 
   render() {
@@ -299,7 +318,7 @@ export default class Settings extends View {
         .when(Boolean(this.installed), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.installed ?? "")))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
+      .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
       .child(v_flex().id(`settings-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }
