@@ -405,3 +405,20 @@ test("retry keeps that an /exit went: an undo after it still keeps the agent whi
   await drive(ctx.w);
   await keptForBob(ctx);
 });
+
+test("an undo cut short by a restart, with the agent told to exit still in front on its conversation, keeps it asleep", async (t) => {
+  let blind = false;
+  const ctx = await stuckAfterExit(t, (world) => {
+    // Bob was itself started on his conversation: his argv and record both name it.
+    world.terms.t2.fg = { ...world.terms.t2.fg, argv: ["claude", "--resume", C2] };
+    const exec0 = world.host.exec;
+    world.host.exec = (c, a, o) => (blind && c === "kill" && a[1] === "12" ? Promise.reject(new Error("exec failed")) : exec0(c, a, o));
+  });
+  blind = true;
+  assert.equal(await ctx.kdb.undo(ctx.id), true);
+  // The step the return wrote before the restart; the return itself never went.
+  await ctx.kdb.run(`UPDATE agents SET step='returning' WHERE id='${C2}';`);
+  await drive(ctx.w);
+  await keptForBob(ctx);
+  assert.deepEqual(clone(ctx.world.sent("send").filter((t) => t === "t2")), ["t2"], "nothing typed over Bob: only his first /exit");
+});

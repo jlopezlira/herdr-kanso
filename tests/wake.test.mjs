@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { load, clone, temporary, exec, psMissing } from "./helpers.mjs";
 
 const HOME = "/nonexistent-home";
 const C1 = "00000000-0000-4000-8000-000000000001";
@@ -264,7 +264,7 @@ test("a pane asked for that never showed is pending, and one you opened in the t
   assert.deepEqual(made.filter(([cmd]) => cmd === "terminal.kill"), [], "yours (t9) is never ended on a guess");
 });
 
-test("an agent brought back: only the process its own line started is ever stopped, never a claude you started there after", async (t) => {
+test("an agent brought back: only the process its own line started is ever stopped, never a claude you started there after", { skip: psMissing }, async (t) => {
   const dir = await temporary(t);
   const world = herdr(dir);
   const { symlink } = await import("node:fs/promises");
@@ -347,7 +347,7 @@ test("a tab woken whole takes each agent's own pane, never one you opened there 
   assert.deepEqual(clone(ids), [["pA"], ["pB"]], "vim is not taken for the second agent");
 });
 
-test("an agent brought back after a stopped sleep is not started again when its conversation already runs elsewhere", async (t) => {
+test("an agent brought back after a stopped sleep is not started again when its conversation already runs elsewhere", { skip: psMissing }, async (t) => {
   const dir = await temporary(t);
   const world = herdr(dir);
   const { mkdir, writeFile, symlink } = await import("node:fs/promises");
@@ -506,7 +506,7 @@ test("a wake whose name can't be put back keeps it, for the sidebar to put back"
   assert.equal((await store.kdb.read(`SELECT restore FROM agents WHERE id='${C1}'`))[0].restore, "Hashiko");
 });
 
-test("a wake never starts a conversation that already runs", async (t) => {
+test("a wake never starts a conversation that already runs", { skip: psMissing }, async (t) => {
   const { world, view, store } = await asleepInKanso(t);
   const { mkdir, writeFile } = await import("node:fs/promises");
   const home = await temporary(t);
@@ -545,7 +545,7 @@ test("a wake never starts a conversation that already runs", async (t) => {
   void view;
 });
 
-test("a sleep that stopped half way: its old pid, now another claude, does not keep it asleep", async (t) => {
+test("a sleep that stopped half way: its old pid, now another claude, does not keep it asleep", { skip: psMissing }, async (t) => {
   const dir = await temporary(t);
   const world = herdr(dir);
   const { symlink } = await import("node:fs/promises");

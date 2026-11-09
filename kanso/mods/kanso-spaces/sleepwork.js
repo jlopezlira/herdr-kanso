@@ -275,11 +275,14 @@ export async function comeBack(p, cx, onBack = () => {}) {
 }
 
 // A return a restart cut short: a claude already on the conversation in its terminal is waited for, nothing is sent again.
+// The one that was to leave is "here", never "back", though its argv and record name the conversation too.
 export async function returnAgain(p, cx) {
   const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
   const fg = tryOr(() => JSON.parse(g.stdout).foreground ?? null);
+  if (p.pid && fg?.pid === p.pid) return "here";
   if (!(fg?.argv ?? []).map(String).includes(p.resume)) return comeBack(p, cx);
-  return (await resumed(p.terminal, p.resume, cx)).pid ? "back" : "unsure";
+  const { pid } = await resumed(p.terminal, p.resume, cx);
+  return !pid ? "unsure" : pid === p.pid ? "here" : "back";
 }
 
 // --- The worker: one per sidebar. ---
