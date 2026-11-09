@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.17.5] - 2026-11-09
+
+### Changed
+
+- The collapsed sidebar keeps the view you chose instead of always showing projects: a small switch under its buttons picks Projects, Status or Threads, and Status and Threads show their agents as tiles (the program's icon with its status dot; hover for the name and project, click to go, right click for the menu), grouped under the same sections as the open view, each with its mark and count, folding as there.
+
 ## [3.17.4] - 2026-11-09
 
 ### Changed
