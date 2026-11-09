@@ -117,7 +117,7 @@ test("The Look panel reads the agent in focus and shows its newest picture, copi
 
 test("A Claude agent's conversation on disk gives Look the whole paths its screen abbreviates or no longer shows", async () => {
   const { projectDir, transcriptPath, PATTERN, pathOf } = await load("kanso-panel/transcript.js", ["projectDir", "transcriptPath", "PATTERN", "pathOf"]);
-  assert.ok(PATTERN.startsWith("(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\.(") && PATTERN.endsWith(")([^A-Za-z0-9]|$)"), "grep's pattern: a whole path up to one of Look's extensions, with what came before and after");
+  assert.ok(PATTERN.startsWith("(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(") && PATTERN.endsWith(")([^A-Za-z0-9]|$)"), "grep's pattern: a whole path up to one of Look's extensions, with what came before and after");
   assert.deepEqual(['"/repo/shots/a.png"', "[../docs/DEC-102.md]", " methodology/rules.md\\", "\\n./docs/a.md ", "://static.linear.app/icon.svg", "/\\/json-schema.org"].map(pathOf),
     ["/repo/shots/a.png", "../docs/DEC-102.md", "methodology/rules.md", "./docs/a.md", null, "/\\/json-schema.org"], "quotes, brackets and JSON's line breaks off; a URL's tail is no path, and a stray one is a file that does not exist");
   assert.equal(projectDir("/Users/jj/Apps/prjct"), "-Users-jj-Apps-prjct");
