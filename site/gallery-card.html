@@ -1,0 +1,41 @@
+<!doctype html>
+<!--
+  Source of kanso/preview.png, the 1800x1200 card herdr.dev shows in its gallery. Regenerate from site/ with:
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+      --virtual-time-budget=5000 --window-size=1800,1200 --screenshot=../kanso/preview.png "file://$PWD/gallery-card.html"
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1800px; height: 1200px; overflow: hidden; background: #161615; }
+  body { position: relative; font-family: "Geist", -apple-system, sans-serif; color: #ece8de; }
+  body::before {
+    content: ""; position: absolute; left: 50%; top: 120px; width: 1500px; height: 900px; transform: translateX(-50%);
+    background:
+      radial-gradient(closest-side at 50% 60%, rgba(218,98,125,.20), transparent 72%),
+      radial-gradient(closest-side at 20% 30%, rgba(196,176,126,.10), transparent 70%);
+  }
+  .head { position: absolute; left: 90px; right: 90px; top: 78px; display: flex; align-items: flex-end; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 26px; }
+  .brand img { width: 118px; height: 118px; }
+  .brand .name { font-size: 150px; line-height: .9; font-weight: 700; letter-spacing: -.05em; margin-top: -8px; }
+  .pitch { text-align: right; }
+  .pitch h1 { margin: 0; font-size: 60px; line-height: 1.05; font-weight: 700; letter-spacing: -.035em; }
+  .pitch h1 span { display: block; }
+  .sub { position: absolute; left: 90px; right: 90px; top: 246px; display: flex; justify-content: space-between; font-size: 27px; font-weight: 600; color: #b5b1a7; letter-spacing: -.01em; }
+  .shot { position: absolute; left: 90px; top: 330px; width: 1620px; border-radius: 16px; overflow: hidden;
+    border: 1px solid #3b3a36; box-shadow: 0 40px 120px -20px rgba(218,98,125,.30), 0 30px 80px rgba(0,0,0,.6); }
+  .shot img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="brand"><img src="assets/enso.svg" alt=""><div class="name">kansō</div></div>
+    <div class="pitch"><h1><span>More agents.</span><span>Less babysitting.</span></h1></div>
+  </div>
+  <div class="sub"><div>jlopezlira.github.io/herdr-kanso</div><div>A layout for Herdr</div></div>
+  <div class="shot"><img src="shots/hero.png" alt=""></div>
+</body>
+</html>
