@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.17.1] - 2026-11-08
+
+### Fixed
+
+- A sleep that stopped half way (its window closed, Herdr restarted) left its agents marked asleep while they kept running, so the tab could never sleep again ("that agent is already asleep"). Once nothing holds such a sleep for 10 minutes, seeing its agents still running frees them and ends the sleep; trying before then says so, and when.
+
 ## [3.17.0] - 2026-11-08
 
 ### Added
