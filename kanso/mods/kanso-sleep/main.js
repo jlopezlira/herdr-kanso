@@ -277,7 +277,8 @@ export default class Sleep extends View {
           this.busy = "Bringing the agents back"; cx.notify();
           const slow = out.sent.filter((p) => !out.left.includes(p));
           // The hold is renewed before each wait, so a long rollback is never taken for an abandoned sleep.
-          const wentLate = await mapSeries(slow, async (p) => { if (id) await this.hold(id, cx); return this.gone(p.pid, cx, 30); });
+          // Only one seen still running stays out of the undo: one that can't be checked is brought back (or kept asleep) like one gone.
+          const wentLate = await mapSeries(slow, async (p) => { if (id) await this.hold(id, cx); return (await this.gone(p.pid, cx, 30)) || (await alive(p.pid)) !== true; });
           const left = [...out.left, ...slow.filter((_, k) => wentLate[k])];
           // Each comes back only while this sleep still holds its row; backPid is the pid it told. A database that
           // can't answer is not another window: the agent is brought back all the same.
