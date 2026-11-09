@@ -198,7 +198,7 @@ test("resume: Sleep and the guard rebuild the same command, from the same file",
   const source = await copy("kanso-sleep");
   for (const mod of ["kanso-guard", "kanso-arrange", "kanso-spaces"]) assert.equal(await copy(mod), source, `${mod}'s copy`);
   const g = await import("../kanso/mods/kanso-guard/guard.mjs");
-  const sleep = await load("kanso-sleep/main.js", ["resumeArgv", "promptEmpty"], { home: () => "/Users/me" });
+  const sleep = await load("kanso-sleep/resume.js", ["resumeArgv", "promptEmpty"], { home: () => "/Users/me" });
   const cases = [
     ["claude", "--add-dir", "/tmp/project"],
     ["claude", "--allowedTools", "Edit", "Bash", "--model", "x", "fix it"],

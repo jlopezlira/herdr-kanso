@@ -44,6 +44,8 @@ function herdr(dir) {
   };
   return { host, spaces, panes, killed, ran, labels, set failLabels(v) { state.failLabels = v; } };
 }
+// What the sidebar does once every agent of a sleep has left (sleepwork.js): the row is asleep.
+const settle = async (store, id) => (await store.kdb.holdWork(id, "w-test")) && store.kdb.finishSleep(id, "w-test");
 const cx = () => {
   const tasks = [];
   const c = { notify() {}, sleep: async () => {}, spawn(fn) { const t = fn(c); tasks.push(t); return t; }, timer: { after() {}, every() {} } };
@@ -60,7 +62,7 @@ async function asleepInKanso(t, tweak = () => {}) {
   await store.kdb.observe([{ conversation: C1, given: "Hashiko", space: kanso.id, pos: 2, status: "idle", terminal: "t3q" }]);
   const id = await store.sleep(":/f", { name: "Hashiko", space: { id: kanso.id, name: kanso.name }, per: null, saved: 1,
     cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w/kanso", resume: C1, name: "Hashiko", given: "Hashiko", terminal: "t3q", tab: "tb-herdr-kanso" }] }] });
-  await store.settle(id);
+  await settle(store, id);
   const view = new mod.Sleep();
   Object.assign(view, { store, busy: null, error: null, view: "list" });
   return { world, view, store, id };
@@ -164,7 +166,7 @@ test("an agent whose space is gone wakes in a space made for it, never in anothe
   const { world, view, store } = await asleepInKanso(t);
   // A second sleep from herdr-kanso, then herdr-kanso closes; a space of the same name and folder stood beside it.
   await store.sleep(":/f", { name: "Ines", space: { id: "sp-herdr-kanso", name: "herdr-kanso" }, per: null, saved: 2,
-    cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w/kanso", resume: "00000000-0000-4000-8000-000000000002", name: "Ines", terminal: "t3r", tab: "tb-herdr-kanso" }] }] }).then((id) => store.settle(id));
+    cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w/kanso", resume: "00000000-0000-4000-8000-000000000002", name: "Ines", terminal: "t3r", tab: "tb-herdr-kanso" }] }] }).then((id) => settle(store, id));
   world.spaces.splice(2, 1, { id: "sp-twin", name: "herdr-kanso", folder: "/f", tabs: [{ id: "tb-twin", name: "1" }] });
   const shown = (await store.asleep()).find((x) => x.name === "Hashiko");
   const { c, drain } = cx();
@@ -234,15 +236,14 @@ test("an agent brought back after a stopped sleep: nothing is typed into, or sto
     return { code: 0, stdout: "" };
   };
   world.host.exec = async (c, a, o) => (c === "kill" ? (kills.push(a), { code: 0, stdout: "" }) : exec(c, a, o));
-  const mod = await load("kanso-sleep/main.js", ["Sleep"], world.host);
-  const view = new mod.Sleep();
+  const mod = await load("kanso-sleep/sleepwork.js", ["comeBack", "stopIn"], world.host);
   const c = { sleep: async () => {} };
   const p = { terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" };
-  assert.equal(await view.comeBack(p, c), "out", "vim runs there: Alice is not started over it, and stays asleep");
+  assert.equal(await mod.comeBack(p, c), "out", "vim runs there: Alice is not started over it, and stays asleep");
   assert.deepEqual([sent, kills], [[], []]);
   // At its prompt when the line goes, but what runs after is not what the line started (not claude).
   fg = { pid: 0 };
-  assert.equal(await view.comeBack(p, c), "unsure", "not this one's to stop: a wake looks at that terminal first");
+  assert.equal(await mod.comeBack(p, c), "unsure", "not this one's to stop: a wake looks at that terminal first");
   assert.equal(sent.length, 1);
   assert.deepEqual(kills, [], "vim is never sent TERM or KILL");
 });
@@ -281,19 +282,18 @@ test("an agent brought back: only the process its own line started is ever stopp
     return { code: 0, stdout: "" };
   };
   world.host.exec = async (c, a, o) => (c === "kill" && a[0] !== "-0" ? (kills.push(a), { code: 0, stdout: "" }) : exec(c, a, o));
-  const mod = await load("kanso-sleep/main.js", ["Sleep"], world.host);
-  const view = new mod.Sleep();
+  const mod = await load("kanso-sleep/sleepwork.js", ["comeBack", "stopIn"], world.host);
   const c = { sleep: async () => {} };
   const p = { terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" };
   // Its line's claude exits at once; you start another conversation there right after.
   then = async () => { const f = start(); await new Promise((r) => setTimeout(r, 200)); return { pid: f.pid, argv: ["claude"] }; };
-  assert.equal(await view.comeBack(p, c), "unsure");
+  assert.equal(await mod.comeBack(p, c), "unsure");
   assert.deepEqual(kills, [], "yours is not its to stop, new as it is");
   // Its line's own claude, on its conversation, never proven back: that one alone is stopped.
   fg = { pid: 0 };
   let mine = null;
   then = async () => { mine = start(); await new Promise((r) => setTimeout(r, 200)); return { pid: mine.pid, argv: ["claude", "--resume", C1] }; };
-  await view.comeBack(p, c);
+  await mod.comeBack(p, c);
   assert.deepEqual(kills.map((k) => k[1]), [String(mine.pid), String(mine.pid)], "TERM, then KILL, to it only");
 });
 
@@ -363,33 +363,9 @@ test("an agent brought back after a stopped sleep is not started again when its 
   const sent = [];
   world.host.home = () => home;
   world.host.hc = async (args) => (args[0] === "send" ? (sent.push(args), { code: 0, stdout: "" }) : args[0] === "get" ? { code: 0, stdout: JSON.stringify({ pid: 1, foreground: null }) } : { code: 0, stdout: "" });
-  const mod = await load("kanso-sleep/main.js", ["Sleep"], world.host);
-  const view = new mod.Sleep();
-  assert.equal(await view.comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
+  const mod = await load("kanso-sleep/sleepwork.js", ["comeBack", "stopIn"], world.host);
+  assert.equal(await mod.comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
   assert.deepEqual(sent, [], "you resumed it elsewhere: never a second one here");
-});
-
-test("a sleep that went through leaves a terminal you started something in, and its tab", async (t) => {
-  const dir = await temporary(t);
-  const world = herdr(dir);
-  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store"], world.host);
-  const store = new mod.Store(undefined, join(dir, "none"));
-  const view = new mod.Sleep();
-  const kanso = world.spaces[2];
-  // Both agents left; then you started a script (bash, a shell of its own) in t1's shell. t3's dev server is the one that slept.
-  world.panes.push({ pane: "p1", terminal: "t1", tab: "tb-herdr-kanso", fg: { pid: 90, argv: ["bash", "long-job.sh"] } }, { pane: "p2", terminal: "t2", tab: "tb-herdr-kanso", fg: { pid: 1, argv: ["/bin/zsh", "-l"] } },
-    { pane: "p3", terminal: "t3", tab: "tb-herdr-kanso", fg: { pid: 55, argv: ["npm", "run", "dev"] } });
-  const pane = (terminal, resume, pid) => ({ argv: ["claude"], cwd: "/w", resume, name: terminal, terminal, pid, wake: ["claude", "--resume", resume] });
-  const r = { tab: { id: "tb-herdr-kanso", named: true, name: "1" }, name: "1", fronts: new Map([["t1", 11], ["t2", 12], ["t3", 55]]),
-    capture: { per: null, cols: [{ w: 1, panes: [pane("t1", C1, 11), pane("t2", "c2", 12), { argv: ["npm", "run", "dev"], cwd: "/w", terminal: "t3" }] }] } };
-  Object.assign(view, { store, busy: null, error: null, view: "sleep", space: kanso, sleepers: [r], sleepTabs: [r.tab], readTabs: async () => [r], leave: async (_p, _cx, sent) => { sent(); } });
-  const { c, drain } = cx();
-  view.sleep(c);
-  await drain();
-  assert.deepEqual(world.ran.filter(([cmd]) => cmd === "tab.close"), [], "its tab stays");
-  assert.deepEqual(world.killed, ["t2", "t3"], "the shell the agent left behind goes, and the dev server that slept (it starts again on wake); your script stays");
-  assert.match(String(view.error), /t1 runs something started there meanwhile/);
-  assert.equal((await store.asleep(true)).length, 1, "and the tab is asleep");
 });
 
 test("a wake that could not prove an agent back never ends what you started in its terminal since", async (t) => {
@@ -412,8 +388,8 @@ test("an agent brought back never has its line typed into a script running in it
   const sent = [];
   world.host.hc = async (args) => (args[0] === "send" ? (sent.push(args), { code: 0, stdout: "" })
     : args[0] === "get" ? { code: 0, stdout: JSON.stringify({ pid: 1, foreground: { pid: 90, argv: ["bash", "long-job.sh"] } }) } : { code: 0, stdout: "" });
-  const mod = await load("kanso-sleep/main.js", ["Sleep"], world.host);
-  assert.equal(await new mod.Sleep().comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
+  const mod = await load("kanso-sleep/sleepwork.js", ["comeBack", "stopIn"], world.host);
+  assert.equal(await mod.comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
   assert.deepEqual(sent, [], "bash in front is a program running, not the terminal's prompt");
 });
 
@@ -445,8 +421,8 @@ test("an agent brought back gets nothing typed into a program you start while it
   world.host.hc = async (args) => (args[0] === "send" ? (sent.push(args), { code: 0, stdout: "" })
     : args[0] === "get" ? { code: 0, stdout: JSON.stringify({ pid: 1, foreground: fg }) } : { code: 0, stdout: "" });
   world.host.exec = async (c, a, o) => { if (c === "sh") fg = { pid: 4242, argv: ["vim"] }; return exec(c, a, o); };
-  const mod = await load("kanso-sleep/main.js", ["Sleep"], world.host);
-  assert.equal(await new mod.Sleep().comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
+  const mod = await load("kanso-sleep/sleepwork.js", ["comeBack", "stopIn"], world.host);
+  assert.equal(await mod.comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
   assert.deepEqual(sent, []);
 });
 
@@ -516,52 +492,6 @@ test("a wake never starts a conversation another terminal is starting, even befo
   await drain();
   assert.match(String(view.error), /is starting on its conversation in t-old/);
   assert.equal(world.ran.filter(([cmd]) => cmd === "tab.new").length, 0);
-});
-
-test("a sleep that another window took meanwhile brings nobody back: those agents are that window's now", async (t) => {
-  const dir = await temporary(t);
-  const world = herdr(dir);
-  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store"], world.host);
-  const store = new mod.Store(undefined, join(dir, "none"));
-  const view = new mod.Sleep();
-  const kanso = world.spaces[2];
-  const pane = (terminal, resume, pid) => ({ argv: ["claude"], cwd: "/w", resume, name: terminal, terminal, pid, wake: ["claude", "--resume", resume] });
-  const r = { tab: { id: "tb-herdr-kanso", named: true, name: "1" }, name: "1", capture: { per: null, cols: [{ w: 1, panes: [pane("t1", C1, 11), pane("t2", "c2", 12)] }] } };
-  const came = [];
-  Object.assign(view, { store, busy: null, error: null, view: "sleep", space: kanso, sleepers: [r], sleepTabs: [r.tab],
-    readTabs: async () => [r],
-    // The first agent leaves; then this window loses the row (another wakes it) and the second fails.
-    leave: async (p, _cx, sent) => { sent(); if (p.terminal === "t2") { await store.kdb.run("UPDATE sleeps SET pending=NULL, waking='other', waking_at=" + Date.now() + ";"); throw new Error("t2 did not take /exit"); } },
-    gone: async () => true, comeBack: async (p) => { came.push(p.terminal); return "back"; } });
-  const { c, drain } = cx();
-  view.sleep(c);
-  await drain();
-  assert.deepEqual(came, [], "nobody brought back here");
-  assert.match(String(view.error), /Another window has 1 now/);
-  assert.equal((await store.asleep(true)).length, 1, "the row is the other window's, untouched");
-});
-
-test("a sleep's undo that loses its row half way brings back nobody after that", async (t) => {
-  const dir = await temporary(t);
-  const world = herdr(dir);
-  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store"], world.host);
-  const store = new mod.Store(undefined, join(dir, "none"));
-  const view = new mod.Sleep();
-  const pane = (terminal, resume, pid) => ({ argv: ["claude"], cwd: "/w", resume, name: terminal, terminal, pid, wake: ["claude", "--resume", resume] });
-  const r = { tab: { id: "tb-herdr-kanso", named: true, name: "1" }, name: "1", capture: { per: null, cols: [{ w: 1, panes: [pane("t1", C1, 11), pane("t2", "c2", 12), pane("t3", "c3", 13)] }] } };
-  const came = [], stopped = [];
-  Object.assign(view, { store, busy: null, error: null, view: "sleep", space: world.spaces[2], sleepers: [r], sleepTabs: [r.tab], readTabs: async () => [r],
-    leave: async (p, _cx, sent) => { sent(); if (p.terminal === "t3") throw new Error("t3 did not take /exit"); },
-    gone: async () => true,
-    // The first comes back; meanwhile another window takes the row.
-    comeBack: async (p) => { came.push(p.terminal); await store.kdb.run("UPDATE sleeps SET pending=NULL, waking='other', waking_at=" + Date.now() + ";"); return "back"; },
-    stopIn: async (term) => { stopped.push(term); return true; } });
-  const { c, drain } = cx();
-  view.sleep(c);
-  await drain();
-  assert.deepEqual(came, ["t1"], "t2 and t3 are the other window's now");
-  assert.deepEqual(stopped, ["t1"], "t1, brought back before the row was lost, ends again: only that window's wake starts it");
-  assert.match(String(view.error), /Another window has 1 now; t2, t3 are left as that window has them; t1 came back here and ended again/);
 });
 
 test("a wake whose name can't be put back keeps it, for the sidebar to put back", async (t) => {
@@ -635,7 +565,8 @@ test("a sleep that stopped half way: its old pid, now another claude, does not k
   // One from an older sleep (no conversation kept) and one with its conversation, both on that pid.
   await store.sleep(":/f", { name: "Alice", space: { id: kanso.id, name: kanso.name }, per: null, saved: Date.now() - 3_600_000,
     cols: [{ w: 1, panes: [pane, { ...pane, name: "Bob", terminal: "t3r", resume: C1, wake: ["claude", "--resume", C1] }] }] });
-  await store.kdb.run(`UPDATE sleeps SET pending_at=${Date.now() - 3_600_000};`); // the window closed under it long ago
+  // A sleep from an older Kanso, which ran in its dialog: the window closed under it long ago.
+  await store.kdb.run(`UPDATE sleeps SET state=NULL, pending='legacy', pending_at=${Date.now() - 3_600_000};`);
   const view = new mod.Sleep();
   Object.assign(view, { store, busy: null, error: null, view: "list" });
   const [shown] = await store.asleep();
@@ -651,10 +582,9 @@ test("ending an agent brought back stops that process only, never what you start
   const world = herdr(dir);
   const kills = [];
   world.host.exec = async (c, a, o) => (c === "kill" ? (kills.push(a), { code: 0, stdout: "" }) : exec(c, a, o));
-  const mod = await load("kanso-sleep/main.js", ["Sleep"], world.host);
+  const mod = await load("kanso-sleep/sleepwork.js", ["comeBack", "stopIn"], world.host);
   world.panes.push({ pane: "p9", terminal: "t9", tab: "tb-x", argv: ["vim"] }); // its foreground is pid 77 now
-  const view = new mod.Sleep();
-  assert.equal(await view.stopIn("t9", { sleep: async () => {} }, 111), true, "111 is gone: nothing of it to stop");
+  assert.equal(await mod.stopIn("t9", { sleep: async () => {} }, 111), true, "111 is gone: nothing of it to stop");
   assert.deepEqual(kills, [], "vim (77) is left alone");
 });
 
@@ -686,27 +616,4 @@ test("a wake that can't tell whether its conversation runs does not wake", async
   assert.equal(world.ran.filter(([cmd]) => cmd === "tab.new").length, 0, "nothing opened");
   await chmod(join(home, ".claude", "sessions"), 0o755);
   assert.equal(await mod.runningOn(C1), null, "readable and none there: none runs");
-});
-
-test("a sleep's undo keeps an agent whose exit could not be checked: it is brought back, never dropped from the list", async (t) => {
-  const dir = await temporary(t);
-  const world = herdr(dir);
-  // Every process check fails: kill -0 can't run, so no agent is ever seen gone or seen running.
-  const host = { ...world.host, exec: (cmd, args, o) => (cmd === "kill" ? Promise.reject(new Error("exec failed")) : world.host.exec(cmd, args, o)) };
-  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store"], host);
-  const store = new mod.Store(undefined, join(dir, "none"));
-  const view = new mod.Sleep();
-  const pane = (terminal, resume, pid) => ({ argv: ["claude"], cwd: "/w", resume, name: terminal, terminal, pid, wake: ["claude", "--resume", resume] });
-  const r = { tab: { id: "tb-herdr-kanso", named: true, name: "1" }, name: "1", capture: { per: null, cols: [{ w: 1, panes: [pane("t1", C1, 11)] }] } };
-  const came = [];
-  Object.assign(view, { store, busy: null, error: null, view: "sleep", space: world.spaces[2], sleepers: [r], sleepTabs: [r.tab], readTabs: async () => [r],
-    // /exit went; whether Claude ended can't be told.
-    leave: async (_p, _cx, sent) => { sent(); throw new Error("Alice did not exit"); },
-    gone: async () => false,
-    comeBack: async (p) => { came.push(p.terminal); return "out"; } });
-  const { c, drain } = cx();
-  view.sleep(c);
-  await drain();
-  assert.deepEqual(came, ["t1"], "an exit that can't be checked is looked at, not taken for still running");
-  assert.equal((await store.asleep(true)).length, 1, "not back: it stays asleep, to wake from the list");
 });

@@ -11,6 +11,14 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.18.3] - 2026-11-09
+
+### Fixed
+
+- A sleep no longer stops half way when its dialog closes. The dialog only writes what is to sleep; the sidebar, which lives as long as the window, puts each agent to sleep one step at a time (its conversation saved, its prompt cleared, /exit, gone) and writes each step before it acts, so a restart or another window goes on from where it was. Once every agent has left, the tab closes and the tab is asleep.
+- An agent that will not leave no longer leaves a half state behind: the sleep shows as stuck, with why, in the sidebar, in Asleep and in a notification, and waits for Retry or Undo (Undo brings back the agents that had left, on their conversations, in their terminals). One you end yourself lets the sleep go on.
+- Two windows never work the same sleep: one holds it, by a heartbeat; another takes it over only after 20 s without one.
+
 ## [3.18.2] - 2026-11-09
 
 ### Changed

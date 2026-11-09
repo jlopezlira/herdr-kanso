@@ -145,7 +145,8 @@ test("Arrangements are kept in SQLite: saving under a name overwrites it, and th
 });
 
 test("Sleep keeps each Claude agent's conversation, and Wake starts it on that conversation", async (t) => {
-  const { wakeArgv, wakeable, sleepers, sleepBlocker, isResumed } = await load("kanso-sleep/main.js", ["wakeArgv", "wakeable", "sleepers", "sleepBlocker", "isResumed"], { home: () => HOME });
+  const { wakeArgv, wakeable, sleepers, sleepBlocker } = await load("kanso-sleep/main.js", ["wakeArgv", "wakeable", "sleepers", "sleepBlocker"], { home: () => HOME });
+  const { isResumed } = await load("kanso-sleep/sleepwork.js", ["isResumed"], { home: () => HOME });
   const { captureTab } = await load("kanso-arrange/tabkit.js", ["captureTab"], { home: () => HOME });
   assert.deepEqual(clone(wakeArgv({ argv: ["claude", "--model", "opus", "--resume", "old"], resume: "s1" })), ["claude", "--model", "opus", "--resume", "s1"], "the conversation it had when it slept, not the one it was started with");
   assert.deepEqual(clone(wakeArgv({ argv: ["npm", "run", "dev"], resume: null })), ["npm", "run", "dev"]);
@@ -163,13 +164,15 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   const { readFile } = await import("node:fs/promises");
   const { Store } = await load("kanso-sleep/store.js", ["Store"], { exec, appHome: () => dir });
   const store = new Store();
+  // What the sidebar does once every agent has left (sleepwork.js).
+  const settle = async (id) => (await store.kdb.holdWork(id, "w-test")) && store.kdb.finishSleep(id, "w-test");
   const id = await store.sleep(":/w", { ...a, saved: 7 });
   const now = async () => clone(await store.asleep());
   assert.deepEqual(await now(), [], "going to sleep: hidden until its agents have left");
   await assert.rejects(store.sleep(":/w", { ...a, saved: 8 }), /already asleep/, "never over another sleeping tab of that name");
-  assert.equal(await store.settle(id), true);
+  assert.equal(await settle(id), true);
   assert.deepEqual((await now()).map((x) => [x.id, x.from, x.name, x.cols[0].panes[0].resume]), [[id, ":/w", "shield", "s1"]]);
-  assert.equal(await store.drop(id), false, "a settled tab is not dropped by a sleep's undo");
+  assert.equal(await store.undo(id), false, "a settled tab is not undone");
   assert.equal((await now()).length, 1);
   const got = await store.claim(id);
   assert.equal(got.name, "shield", "the claim hands back the row as it is now");
@@ -190,14 +193,14 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   assert.deepEqual(await now(), []);
   // A row taken over by a newer tab of the same name is not the old one.
   const old = await store.sleep(":/w", { ...a, saved: 9 });
-  await store.settle(old);
+  await settle(old);
   const t1 = await store.claim(old);
   await store.woke(old, t1.token);
   const fresh = await store.sleep(":/w", { ...a, saved: 10 });
-  await store.settle(fresh);
+  await settle(fresh);
   assert.equal(await store.claim(old), null, "an old list can't claim the new tab of that name");
   const failed = await store.sleep(":/w", { ...a, name: "other", cols: [a.cols[1]], saved: 11 });
-  assert.equal(await store.drop(failed), true);
+  assert.equal(await store.undo(failed), true, "one on its way can be undone");
   assert.equal((await now()).length, 1, "a sleep that stopped drops only its own row");
   const src = async (f) => readFile(new URL(`../kanso/mods/${f}`, import.meta.url), "utf8");
   assert.match(await src("kanso-spaces/main.js"), /from "\.\/store\.js"/, "the sidebar reads what sleeps through the left nav's store, the one Sleep writes through");
@@ -205,7 +208,9 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   const t2 = await store.claim(fresh);
   await store.woke(fresh, t2.token);
   const held = await store.sleep(":/w", { ...a, name: "held", saved: 12 });
-  assert.equal(await store.narrow(held, [{ w: 1, panes: [a.cols[0].panes[0]] }], null, { wait: true }), true);
+  await settle(held);
+  const waking = await store.claim(held);
+  assert.equal(await store.narrow(held, [{ w: 1, panes: [a.cols[0].panes[0]] }], waking.token, { wait: true }), true);
   assert.deepEqual(await now(), [], "held: not offered yet");
   assert.equal(await store.claim(held), null, "nor claimed");
   const { resumeArgv, freeName, sameTabs, coversTab } = await load("kanso-sleep/main.js", ["resumeArgv", "freeName", "sameTabs", "coversTab"], { home: () => HOME });
@@ -223,7 +228,7 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   assert.deepEqual(clone(resumeArgv(["claude", "--add-dir", "../api", "../web", "--allowedTools", "Edit", "Bash", "--model", "x"], "s9")),
     ["claude", "--add-dir", "../api", "../web", "--allowedTools", "Edit", "Bash", "--model", "x", "--resume", "s9"], "every value of an option that takes several");
   assert.equal(resumeArgv(["claude", "--add-dir"], "s9"), null);
-  const { promptEmpty } = await load("kanso-sleep/main.js", ["promptEmpty"], { home: () => HOME });
+  const { promptEmpty } = await load("kanso-sleep/resume.js", ["promptEmpty"], { home: () => HOME });
   const guard = await import("../kanso/mods/kanso-guard/guard.mjs");
   const rule = "─".repeat(40);
   const box = (...lines) => ["output", "", rule, ...lines, rule, "  sleepy │ Haiku"].join("\n");
