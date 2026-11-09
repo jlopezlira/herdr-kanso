@@ -394,6 +394,19 @@ test("a sleep that stopped half way lets go of the agent it never ended, once no
   assert.ok(next.id, "and the tab sleeps again under its own name");
 });
 
+test("an abandoned sleep that another window resumes and settles between the read and the write is kept", async (t) => {
+  const { db, STALE_MS } = await database(t);
+  const live = (c, terminal, pid) => ({ ...seen(c, null, "sp-kanso", 0, "idle", terminal), program: "{\"kind\":\"claude-code\"}", pid });
+  const panes = { per: null, cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "c1", pid: 11 }] }] };
+  const saved = 1000;
+  const { id, token } = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, now: saved, agents: [{ conversation: "c1" }] });
+  const reading = db.sleeps.bind(db);
+  // Its window comes back right after the read: it ends the agent and settles the sleep.
+  const racing = Object.assign(Object.create(db), { sleeps: async () => { const rows = await reading(); await db.settle(id, token); return rows; } });
+  assert.deepEqual(clone(await racing.awake([live("c1", "t1", 11)], saved + STALE_MS + 1)), [], "the write finds the row settled and leaves it");
+  assert.deepEqual(clone((await db.sleeps()).map((s) => [s.id, s.agents.map((a) => a.id)])), [[id, ["c1"]]], "the sleep and its agent stay, to wake from the list");
+});
+
 test("an agent of a sleep seen running again is awake: the sleep lets it go, and ends when none is left asleep", async (t) => {
   const { db } = await database(t);
   const live = (c, terminal, pid) => ({ ...seen(c, null, "sp-kanso", 0, "idle", terminal), program: "{\"kind\":\"claude-code\"}", pid });

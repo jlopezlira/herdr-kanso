@@ -252,7 +252,10 @@ export class Kdb {
       const gone = awakeIn(s);
       const layout = layoutWithout(parseOr(s.layout, { cols: [] }), gone);
       // Only the layout read here is changed: another window that changed it first wins, and the next sighting looks again.
-      const mine = `id=${q(s.id)} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now)}`;
+      // Freeing by the slept pid holds only while the row is the abandoned one read: a window that resumed
+      // and settled the sleep meanwhile (pending NULL, every agent gone) keeps it, and the next sighting looks again.
+      const same = abandoned(s) ? ` AND pending=${q(s.pending)} AND pending_at=${n(s.pending_at)}` : "";
+      const mine = `id=${q(s.id)} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now)}${same}`;
       const after = gone.length < s.agents.length && layout.cols.length ? `UPDATE sleeps SET layout=${q(JSON.stringify(layout))} WHERE ${mine} RETURNING id;` : `DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
       const freed = await this.held(`BEGIN;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(s.id)} AND id IN (${gone.map(q).join(",")}) AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
         ${after}COMMIT;`);
