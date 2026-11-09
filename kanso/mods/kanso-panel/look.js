@@ -77,7 +77,13 @@ export class Look {
       try {
         const r = await hc(["read", address, "--lines", String(LINES)]);
         // The conversation first, the screen after: the newest mention wins, and the screen has the latest.
-        const written = await transcriptPaths(address, home(), this.transcript?.address === address ? this.transcript : null);
+        const before = this.transcript?.address === address ? this.transcript : null;
+        const written = await transcriptPaths(address, home(), before);
+        if (address !== this.agent()) return;
+        // Another conversation in the same terminal (a new Claude there): what the last one made is not this one's.
+        if (before?.file && written.file && before.file !== written.file && !this.asked.some((i) => i.path === this.selected?.path)) {
+          this.items = []; this.picked = false; this.selected = null; this.shown = null; this.pins = [];
+        }
         this.transcript = { address, ...written };
         const text = `${written.paths.join("\n")}\n${r.code === 0 ? r.stdout : ""}`;
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
