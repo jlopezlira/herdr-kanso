@@ -12,6 +12,7 @@ import { parseProcesses } from "./procs.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
+import { SleepWork } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
 import { programIcon } from "./marks.js";
 import { sleepingNow, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
@@ -181,6 +182,15 @@ export default class Spaces extends View {
     // The first frame uses localStorage's copy; the database's answer replaces it when it comes.
     this.panel = new Panel(PREFS, this.leftNavStore());
     this.panelReady = false;
+    // Sleeps are this sidebar's work (sleepwork.js): taken up now (what a restart cut short goes on), on the dialog's
+    // kick and with the 30 s look; the heartbeat keeps a long step's row this window's.
+    this.sleepWork = new SleepWork(this.leftNavStore().kdb, (row) => {
+      if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
+      this.loadAsleep().catch(() => {});
+    });
+    this.sleepWork.start(cx);
+    cx.timer.every(1000, (cx) => { if ((shared("kanso.sleep.kick") ?? 0) > this.sleepWork.kicked) this.sleepWork.start(cx); });
+    cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
     cx.spawn(async (cx) => {
       this.panelTried = Date.now();
@@ -215,7 +225,7 @@ export default class Spaces extends View {
     // One `ps` every 5 s in front, 30 s behind.
     cx.timer.every(5000, (cx) => this.checkTasks(cx));
     // A sleep or wake that stopped half way shows again once old; another window's changes arrive.
-    cx.timer.every(30000, (cx) => { this.loadAsleep().catch(() => {}); cx.notify(); });
+    cx.timer.every(30000, (cx) => { this.loadAsleep().catch(() => {}); this.sleepWork.start(cx); cx.notify(); });
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -1743,7 +1753,7 @@ export default class Spaces extends View {
         strong: unread || up,
         project: project(a.space),
         // What the agent says it is on, or said last; else the last thing you wrote.
-        activity: a.asleep ? (a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`) : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
+        activity: a.asleep ? (a.asleep.stuck ? `Stuck: ${a.asleep.stuck}` : a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`) : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         roomy: true,
         ...this.extras(a, ctx),
       });
