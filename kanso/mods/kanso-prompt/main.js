@@ -28,13 +28,13 @@ export default class Prompt extends View {
     if (p.label) hc(["label", p.label.terminal, `${p.label.key}=${name}`]).catch(() => {});
     else if (p.command) run(p.command.name, { ...(p.command.args ?? {}), name });
     // A mod with no command for it reads the answer from shared state (`shared`: the key); `text` null when cancelled.
-    else if (p.shared) setShared(p.shared, { text: name, at: Date.now() });
+    else if (p.shared) setShared(p.shared, { text: name, at: Date.now(), token: p.token ?? null });
   }
 
   cancel() {
     const p = props();
     closeOverlay(p.overlay);
-    if (p.shared) setShared(p.shared, { text: null, at: Date.now() });
+    if (p.shared) setShared(p.shared, { text: null, at: Date.now(), token: p.token ?? null });
   }
 
   key(e, cx) {

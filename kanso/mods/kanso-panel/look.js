@@ -39,11 +39,11 @@ export class Look {
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.width = 368; this.watching = null;
-    this.asking = null; this.answered = shared(NOTE)?.at ?? 0; // the pin (by id) whose note the dialog asks for; the last answer taken
+    this.asking = null; // { id, token }: the pin whose note a dialog asks for, and which dialog
     this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
     this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
-    this.thumbs = new Map(); // per file: the copy drawn small in the gallery
+    this.thumbs = new Map(); this.thumbing = new Set(); // per file: the copy drawn small in the gallery, and the ones being made
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
     this.tick(cx);
@@ -148,23 +148,23 @@ export class Look {
       const made = await done;
       const last = this.chains.get(path) === done;
       if (last) this.chains.delete(path);
-      if (!last || this.selected?.path !== path) return;
-      this.shown = made ? { path, ...made } : { path, error: MISSING[item.kind] };
+      // The copy is the file's newest (the older ones went with it): the tile shows it whether or not the file is still shown.
       if (made) this.thumbs.set(path, made.image);
+      if (!last || this.selected?.path !== path) { cx.notify(); return; }
+      this.shown = made ? { path, ...made } : { path, error: MISSING[item.kind] };
       cx.notify();
     });
   }
 
-  // The small copy in the gallery: made once per file, after any draw of it in flight (each draw clears the
-  // file's older copies), and replaced by the draw's own copy when the file is drawn big.
+  // The small copy in the gallery: made once per file. A draw of the file in flight serves it (its copy lands in
+  // the tile too), so a thumbnail never takes a draw's place in the file's chain; the draw's own copy replaces it later.
   thumbnail(item, cx) {
     const path = item.path;
-    if (this.thumbs.has(path) || this.waiting.has(path)) return;
-    const done = (this.chains.get(path) ?? Promise.resolve()).then(() => (this.thumbs.has(path) ? null : this.copy(item))).catch(() => null);
-    this.chains.set(path, done);
+    if (this.thumbs.has(path) || this.chains.has(path) || this.thumbing.has(path)) return;
+    this.thumbing.add(path);
     cx.spawn(async (cx) => {
-      const made = await done;
-      if (this.chains.get(path) === done) this.chains.delete(path);
+      const made = await this.copy(item).catch(() => null);
+      this.thumbing.delete(path);
       if (made && !this.thumbs.has(path)) { this.thumbs.set(path, made.image); cx.notify(); }
     });
   }
@@ -207,18 +207,19 @@ export class Look {
   askNote(index, cx) {
     const p = this.pins[index];
     if (!p) return;
-    this.asking = p.id; this.note = null;
+    // Each dialog its own token: another window's answer, or an earlier one, is never taken for this pin's.
+    const token = `${Date.now()}-${Math.random()}`;
+    this.asking = { id: p.id, token }; this.note = null;
     openOverlay({ mod: "kanso-prompt", kind: "dialog", width: 420, props: {
-      title: `Pin ${index + 1}`, field: "What about this spot?", value: p.note ?? "", button: p.note ? "Save" : "Add", shared: NOTE } });
+      title: `Pin ${index + 1}`, field: "What about this spot?", value: p.note ?? "", button: p.note ? "Save" : "Add", shared: NOTE, token } });
     cx.notify();
   }
 
   // The dialog's answer, read when the shared value changes: the note goes on its pin; cancelled, a new pin goes.
   answer() {
     const a = shared(NOTE);
-    if (!a || a.at === this.answered || this.asking == null) return;
-    this.answered = a.at;
-    const id = this.asking; this.asking = null;
+    if (!a || !this.asking || a.token !== this.asking.token) return;
+    const id = this.asking.id; this.asking = null;
     if (a.text) this.pins = this.pins.map((p) => (p.id === id ? { ...p, note: a.text } : p));
     else this.pins = this.pins.filter((p) => p.id !== id || p.note);
   }
@@ -226,7 +227,7 @@ export class Look {
   drop(index, cx) {
     const p = this.pins[index];
     this.pins = this.pins.filter((_, k) => k !== index);
-    if (p && this.asking === p.id) this.asking = null;
+    if (p && this.asking?.id === p.id) this.asking = null;
     cx.notify();
   }
 
@@ -260,7 +261,7 @@ export class Look {
       .child(div().flex_none().size(18).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(10).font_bold().text_color(c.canvas).child(String(i + 1)))
       .child(div().flex_1().min_w(0).text_size(12.5).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
       .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(14).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
-        .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }));
+        .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }).child("×"));
   }
 
   // One picture in the gallery: the copy, cropped to a tile, the one shown marked.

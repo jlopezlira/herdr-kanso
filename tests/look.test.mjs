@@ -68,7 +68,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "" } = {}) {
   const calls = [], store = {};
   // A pin's note, as the prompt dialog answers it: `say(text)` is what you typed, null is Cancel.
-  const say = (text) => { store["kanso.look.note"] = { text, at: (store["kanso.look.note"]?.at ?? 0) + 1 }; };
+  const say = (text, token = calls.findLast((c) => c[0] === "openOverlay")?.[1].props.token) => { store["kanso.look.note"] = { text, at: (store["kanso.look.note"]?.at ?? 0) + 1, token }; };
   // What Herdr reports, changed by a test as the agent ends.
   const world = {
     terminals: [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
@@ -190,7 +190,9 @@ test("What you picked stays while the agent makes more, and a note goes to it wi
   assert.equal(look.selected.path, "/repo/images/hero.jpg", "a read does not take you off what you picked");
   look.pin({ local_position: { x: 30, y: 10 }, bounds: { width: 300, height: 200 } }, cx);
   const dialog = calls.find((c) => c[0] === "openOverlay")?.[1];
-  assert.deepEqual([dialog?.mod, dialog?.props.title, dialog?.props.shared], ["kanso-prompt", "Pin 1", "kanso.look.note"], "a pin asks what about that spot, in a dialog");
+  assert.deepEqual([dialog?.mod, dialog?.props.title, dialog?.props.shared, typeof dialog?.props.token], ["kanso-prompt", "Pin 1", "kanso.look.note", "string"], "a pin asks what about that spot, in a dialog of its own");
+  say("someone else's answer", "another-window"); look.render(cx);
+  assert.deepEqual(clone(look.pins.map((p) => p.note)), [null], "an answer to another dialog is not this pin's");
   look.send(cx); await drain();
   assert.ok(!calls.some((c) => c[0] === "hc" && c[1] === "send"), "nothing to send while no pin has a note");
   say("crop the top");
