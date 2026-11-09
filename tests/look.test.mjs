@@ -68,7 +68,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "" } = {}) {
   const calls = [], store = {};
   // A pin's note, as the prompt dialog answers it: `say(text)` is what you typed, null is Cancel.
-  const say = (text, token = calls.findLast((c) => c[0] === "openOverlay")?.[1].props.token) => { store["kanso.look.note"] = { text, at: (store["kanso.look.note"]?.at ?? 0) + 1, token }; };
+  const say = (text, token = calls.findLast((c) => c[0] === "openOverlay")?.[1].props.token) => { store["kanso.look.note"] = { ...(store["kanso.look.note"] ?? {}), [token]: { text, at: Date.now() } }; };
   // What Herdr reports, changed by a test as the agent ends.
   const world = {
     terminals: [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
@@ -181,7 +181,7 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
 });
 
 test("What you picked stays while the agent makes more, and a note goes to it with the pins", async () => {
-  const { look, cx, drain, calls, say } = await panel();
+  const { look, cx, drain, calls, say, store } = await panel();
   look.select(look.list()[1], cx, true);
   await drain();
   look.readAt = 0;
@@ -192,7 +192,8 @@ test("What you picked stays while the agent makes more, and a note goes to it wi
   const dialog = calls.find((c) => c[0] === "openOverlay")?.[1];
   assert.deepEqual([dialog?.mod, dialog?.props.title, dialog?.props.shared, typeof dialog?.props.token], ["kanso-prompt", "Pin 1", "kanso.look.note", "string"], "a pin asks what about that spot, in a dialog of its own");
   say("someone else's answer", "another-window"); look.render(cx);
-  assert.deepEqual(clone(look.pins.map((p) => p.note)), [null], "an answer to another dialog is not this pin's");
+  assert.deepEqual(clone(look.pins.map((p) => p.note)), [null], "an answer to another dialog is not this pin's, and stays in the box for whoever asked");
+  assert.ok(store["kanso.look.note"]["another-window"], "left for its asker");
   look.send(cx); await drain();
   assert.ok(!calls.some((c) => c[0] === "hc" && c[1] === "send"), "nothing to send while no pin has a note");
   say("crop the top");
@@ -312,7 +313,7 @@ test("Look opens what kanso-tabs.look names, as if you picked it, and refuses wh
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/home/me/Desktop/mock.heic"]);
   assert.equal(look.picked, true);
   look.ask("http://localhost:3000", cx);
-  assert.match(look.note.text, /^The gallery shows pictures/);
+  assert.match(look.note.text, /^Preview shows pictures/);
   const r = look.render(cx);
   assert.ok(r, "it draws");
 });
@@ -347,4 +348,17 @@ test("Look draws a HEIC with sips or ImageMagick and a PDF's first page with Qui
   assert.equal(await onMac.firstPage("/r/spec.pdf", 736, "/app/k.png"), true, "QuickLook failed: Poppler did it");
   assert.deepEqual(clone(mac.calls.filter((c) => c[0] !== "sh").map((c) => c[0])), ["sips", "qlmanage", "pdftoppm"]);
   assert.deepEqual(clone(mac.calls.at(-2)), ["pdftoppm", "-png", "-singlefile", "-f", "1", "-scale-to", "736", "/r/spec.pdf", "/app/k"]);
+});
+
+test("Preview keeps the picture big and the others in one row under it, never a grid of tiles", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("../kanso/mods/kanso-panel/look.js", import.meta.url), "utf8");
+  const strip = src.slice(src.indexOf("strip(list, c) {"), src.indexOf("picture(c) {"));
+  assert.match(strip, /h_flex\(\)\.id\("look-strip"\)/, "a row");
+  assert.match(strip, /overflow_x_scrollbar\(\)/, "scrolled sideways when it does not fit");
+  assert.doesNotMatch(src, /flex_wrap\(\)/, "nothing wraps into a grid");
+  const { look, cx, drain } = await panel();
+  await drain();
+  assert.equal(look.list().length, 2);
+  assert.ok(look.render(cx), "the picture and the strip draw");
 });

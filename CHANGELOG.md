@@ -11,13 +11,31 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.17.7] - 2026-11-09
+## [3.18.2] - 2026-11-09
 
 ### Changed
 
 - Project names head their groups on their own, without the colored square with the initial: in Projects, in Threads grouped by project, and on Status rows, which now lead with the agent's icon (the project's name keeps its color on the second line). In Threads, a project's conversations sit indented under its name, without the project repeated on each row, and the next project starts after a wider gap.
 - The collapsed sidebar shows one mark per group instead of a tile per agent: a project's initial in its color, a status, or Pinned, Snoozed and Settled as small icons, each with its most urgent state (the spinner while one works, red when one needs you) and how many, ringed when it holds an unread or woken conversation. A click lists that group's agents in a menu, with their states, (Unread and Woke marked) that you can walk with the keyboard, scrolling to the row you pick; a click on one goes to it, an asleep one opens its wake menu. Right click on a project still opens the project's menu.
 - The sidebar's edge drags narrower than before: under 240 px the rows keep one line, and under 160 px it folds to the rail, as Hide sidebar does, opening again at the width you had.
+
+## [3.18.1] - 2026-11-09
+
+### Changed
+
+- Gallery is now Preview: the tab, the panel and the docs say so. `herdr-app do 'kanso-tabs.look <path>'` is unchanged, and `kanso-tabs.gallery` still works.
+- Preview keeps the newest picture big and puts the agent's other recent pictures in one small row under it, scrolled sideways, to switch the picture; the grid of tiles is gone.
+
+### Fixed
+
+- A picture's small copy and its big one no longer race: they are made one after another per file, so making one never deletes the other while Preview shows it.
+- Two pin dialogs answered in a row both keep their note: each dialog's answer waits under its own token until its pin takes it, instead of the second overwriting the first.
+
+## [3.18.0] - 2026-11-09
+
+### Added
+
+- Explain, Feedback and Conflicts in the pull request panel each have an edit button that opens the task prompt in a multiline editor before starting the agent in a new tab.
 
 ## [3.17.6] - 2026-11-09
 
