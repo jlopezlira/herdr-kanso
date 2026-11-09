@@ -415,9 +415,10 @@ test("an abandoned sleep let go of in part loses its token: its window, back lat
   const { id, token } = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, now: saved, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
   assert.deepEqual(clone(await db.awake([live("c2", "t2", 12)], saved + STALE_MS + 1)), [id], "c2, still running, is let go; c1 (gone) stays asleep");
   const [row] = await db.sleeps();
-  assert.deepEqual(clone([row.agents.map((a) => a.id), JSON.parse(row.layout).cols[0].panes.map((p) => p.resume), row.pending]), [["c1"], ["c1"], null]);
+  assert.deepEqual(clone([row.agents.map((a) => a.id), JSON.parse(row.layout).cols[0].panes.map((p) => p.resume), row.pending === token, row.pending_at]), [["c1"], ["c1"], false, saved]);
   assert.equal(await db.holdSleep(id, token, saved + STALE_MS + 2), false, "the window that started it holds nothing now");
   assert.equal(await db.settle(id, token), false);
+  assert.deepEqual(clone(await db.awake([live("c1", "t1", 11)], saved + STALE_MS + 3)), [id], "still abandoned: c1 seen running later is let go too, and the sleep ends");
 });
 
 test("an agent of a sleep seen running again is awake: the sleep lets it go, and ends when none is left asleep", async (t) => {
