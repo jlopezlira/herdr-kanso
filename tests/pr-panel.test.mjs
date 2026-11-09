@@ -2,6 +2,70 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { load, context } from "./helpers.mjs";
 
+test("PR agent edit actions open the prompt editor with the right task and checkout", async () => {
+  const overlays = [];
+  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+    knownAgents: async () => [{ installed: true, run: ["agent", "--flag"] }],
+    openOverlay: (overlay) => overlays.push(overlay),
+    location: () => ({ space: "space-1" }),
+  });
+  const panel = new PullRequest();
+  panel.pr = {
+    number: 42, url: "https://github.com/o/r/pull/42",
+    headRefName: "feature", baseRefName: "main",
+  };
+  panel.root = "/repo";
+  panel.cwd = "/repo";
+  panel.on = "machine-1";
+
+  for (const [task, title, promptStart] of [
+    ["explain", "Explain", "Explain pull request #42"],
+    ["feedback", "Feedback", "Address the actionable feedback"],
+    ["conflicts", "Conflicts", "Resolve the conflicts of pull request #42"],
+  ]) {
+    panel.agentTask(task, true);
+    await Promise.resolve();
+    const overlay = overlays.at(-1);
+    assert.equal(overlay.mod, "kanso-prompt-editor");
+    assert.equal(overlay.kind, "dialog");
+    assert.equal(overlay.props.title, `${title} prompt for #42`);
+    assert.equal(overlay.props.name, `#42 ${title}`);
+    assert.equal(overlay.props.value.startsWith(promptStart), true);
+    assert.equal(overlay.props.multiline, true);
+    assert.equal(overlay.props.submit_button_title, "Run in new tab");
+    assert.deepEqual(JSON.parse(JSON.stringify(overlay.props.command)), {
+      name: "tab.new",
+      args: { name: `#42 ${title}`, space: "space-1", folder: "/repo", argv: ["agent", "--flag"] },
+      key: "task",
+    });
+  }
+});
+
+test("PR agent quick action still starts a tab without opening the editor", async () => {
+  const runs = [];
+  const overlays = [];
+  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+    knownAgents: async () => [{ installed: true, run: ["agent"] }],
+    openOverlay: (overlay) => overlays.push(overlay),
+    run: (...args) => runs.push(args),
+    location: () => ({ space: "space-1" }),
+  });
+  const panel = new PullRequest();
+  panel.pr = { number: 9, url: "https://github.com/o/r/pull/9", headRefName: "feature", baseRefName: "main" };
+  panel.root = "/repo";
+  panel.cwd = "/repo";
+  panel.on = null;
+  panel.agentTask("explain");
+  await Promise.resolve();
+
+  assert.equal(overlays.length, 0);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0][0], "tab.new");
+  assert.equal(runs[0][1].name, "#9 Explain");
+  assert.match(runs[0][1].task, /^Explain pull request #9/);
+  assert.equal(runs[0][1].folder, "/repo");
+});
+
 test("Pull request panel lists the repository's open ones, by anyone, and shows the one you pick", async () => {
   const url = (n) => `https://github.com/o/here/pull/${n}`;
   const prs = {

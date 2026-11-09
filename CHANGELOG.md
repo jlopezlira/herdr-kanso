@@ -11,7 +11,7 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.17.7] - 2026-11-09
+## [3.18.1] - 2026-11-09
 
 ### Changed
 
@@ -22,6 +22,12 @@ release.
 
 - A picture's small copy and its big one no longer race: they are made one after another per file, so making one never deletes the other while Preview shows it.
 - Two pin dialogs answered in a row both keep their note: each dialog's answer waits under its own token until its pin takes it, instead of the second overwriting the first.
+
+## [3.18.0] - 2026-11-09
+
+### Added
+
+- Explain, Feedback and Conflicts in the pull request panel each have an edit button that opens the task prompt in a multiline editor before starting the agent in a new tab.
 
 ## [3.17.6] - 2026-11-09
 
