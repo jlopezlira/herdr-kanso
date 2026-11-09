@@ -11,6 +11,13 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.17.3] - 2026-11-09
+
+### Fixed
+
+- Sleep answers Claude Code's question before it leaves ("Background work is running… 1. Exit and stop tasks"): sleeping an agent is stopping everything of it, so the agent exits and the tab sleeps instead of stopping half way with the question on screen.
+- A sleep that stopped half way lets go of its agents after 3 minutes instead of 10 (a sleep renews its hold before each agent leaves), and sleeping the tab again after that frees them on the spot, so "that agent is already asleep" no longer stands in the way.
+
 ## [3.17.2] - 2026-11-08
 
 ### Fixed

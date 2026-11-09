@@ -173,7 +173,9 @@ test("guard: resume command keeps safe options and refuses what it can't rebuild
 });
 
 test("resume: one rebuild of a Claude Code command, the options it keeps and the ones it refuses", async () => {
-  const { resumeArgv, sessionWords } = await import("../kanso/mods/kanso-sleep/resume.js");
+  const { resumeArgv, sessionWords, asksToExit } = await import("../kanso/mods/kanso-sleep/resume.js");
+  assert.equal(asksToExit("Background work is running\nThe following will stop when you exit:\n❯ 1. Exit and stop tasks\n  2. Move to background and exit\n  3. Stay"), true, "Claude's question before leaving work behind");
+  assert.equal(asksToExit("❯ \n────\n  ? for shortcuts"), false);
   assert.deepEqual(resumeArgv(["claude", "--add-dir", "../api", "../web", "--mcp-config", "a.json", "b.json", "--disallowed-tools", "Bash"], "S"),
     ["claude", "--add-dir", "../api", "../web", "--mcp-config", "a.json", "b.json", "--disallowed-tools", "Bash", "--resume", "S"], "every value of an option that takes several");
   assert.deepEqual(resumeArgv(["claude", "--model=opus", "--add-dir=/tmp/p", "--resume=old", "--session-id=x"], "S"), ["claude", "--model=opus", "--add-dir=/tmp/p", "--resume", "S"], "inline values");
