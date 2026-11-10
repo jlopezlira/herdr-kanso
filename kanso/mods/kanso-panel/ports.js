@@ -8,6 +8,7 @@ import { G, Armed, tokens, quietLink, quietTabs, iconButton, section } from "./u
 import { Share } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
+import { portsMemory } from "./panel-state.js";
 
 // The guard's files: change the name here if it is installed under another.
 const GUARD = "kanso-guard";
@@ -82,11 +83,20 @@ export class Ports {
     return { spec: portsSpec(data), text: portsText(data), name: "ports", title: "Ports" };
   }
 
+  saveState() { return portsMemory({ range: this.range, tab: this.tab, showAll: this.showAll }); }
+
+  restoreState(state) {
+    const next = portsMemory(state);
+    if (!next) return false;
+    this.keptPorts = next;
+    return true;
+  }
+
   init(cx) {
     this.list = null; this.note = null; this.stopping = new Set(); this.forced = new Set(); this.width = 368;
     this.hist = null; // parsePorts(): { state, data }
     this.digest = null; // what the history draws, worked out once per read
-    this.histAt = 0; this.range = "day"; this.tab = null; this.showAll = false; this.busy = {};
+    this.histAt = 0; this.range = this.keptPorts?.range ?? "day"; this.tab = this.keptPorts?.tab ?? null; this.showAll = this.keptPorts?.showAll ?? false; this.busy = {};
     this.refresh(cx);
     cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }

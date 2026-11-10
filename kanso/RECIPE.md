@@ -156,7 +156,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
       told `files`, `pr`, `shipped` or `worktrees` (`props.panel`), `kanso-spend`
-      (Spend), `kanso-guard` (Memory). A panel Kanso no longer has (Specs, before 2.0) closes.
+      (Spend), `kanso-guard` (Memory).
       The Worktrees panel (`kanso-panel` with `worktrees`, `worktree.svg`) is
       drawn like PR and Spend. It searches the top folders of your spaces
       under your home and the temp folders (or exactly shared
@@ -686,8 +686,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     panel's block and shows it. Clicking it again, or closing the panel any
     other way, empties the stack. Herdr then ends that mod, and its timers,
     file watches and processes stop.
-  - The open panel is remembered per space and restored when you switch
-    spaces.
+  - Each project keeps its open panel and what it shows (file, folder,
+    pull request, picture), on return and after a restart. Nothing open
+    stays shut. A missing file or a closed pull request leaves it empty.
   - Files and PR are idle whenever they aren't the shown panel.
     PR rereads every minute while shown, every 20 s while a check runs.
 - **Background**:
