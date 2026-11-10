@@ -10,6 +10,7 @@ import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
+import { lookMemory } from "./panel-state.js";
 import { transcriptPaths, MOST } from "./transcript.js";
 import { Kdb } from "./kdb.js";
 
@@ -64,8 +65,21 @@ export class Look {
     this.db = new Kdb();
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
+    else if (this.keptPath) { const path = this.keptPath; this.keptPath = null; this.ask(path, cx); }
     this.tick(cx);
     cx.timer.every(TICK_MS, (cx) => this.tick(cx));
+  }
+
+  saveState() { return this.selected?.path ? { path: this.selected.path } : null; }
+
+  async restoreState(state) {
+    const path = typeof state?.path === "string" ? state.path : "";
+    if (!path) return false;
+    const there = await exec("sh", ["-c", EXISTING, "sh", path]).catch(() => null);
+    const ok = there?.code === 0 && String(there.stdout ?? "").split("\n").includes(path);
+    if (!lookMemory(state, () => ok) || !shows(itemOf(path))) return false;
+    this.keptPath = path;
+    return true;
   }
 
   focusedTerminal() { return live(focused()?.terminal); }

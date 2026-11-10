@@ -5,11 +5,13 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand } from "herdr";
+import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home } from "herdr";
 import { stateMark, programIcon } from "./marks.js";
 import { walkLayout, commitLayout } from "./layout.js";
 import { Updater } from "./update.js";
 import { tryOr, tryOrAsync } from "./pure.js";
+import { Kdb, projectKey } from "./kdb.js";
+import { projectOpen, OPEN } from "./panel-state.js";
 
 function storedObject(key) {
   try {
@@ -74,6 +76,7 @@ function setPanelOn(id, on) {
 const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
 
 function panelContent(id) {
+  if (id === "preview") return { mod: "kanso-panel", props: { panel: "preview" } };
   if (PANELS[id]) return { ...PANELS[id] };
   const custom = customPanels().find((p) => p.id === id);
   if (!custom) return null;
@@ -100,7 +103,11 @@ export default class Tabs extends View {
     const given = tryOr(() => props()); // null on a host without props
     this.arrange = Boolean(given?.arrange);
     this.panels = storedObject("panels");
+    this.db = null;
+    this.holding = false;
+    this.openRow = undefined;
     if (!this.arrange && cx) {
+      this.db = new Kdb();
       this.watchOpens(cx);
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
@@ -169,13 +176,15 @@ export default class Tabs extends View {
     return !box || box.hidden || !child || child.hidden ? null : child.id;
   }
 
-  mount(id) {
+  mount(id, extra) {
     const content = id ? panelContent(id) : null;
     if (id && !content) return;
     if (!walkLayout(layout(), "panel-body")) return;
+    const props = content?.props ? { ...content.props, ...(extra ?? {}) } : content?.props;
+    const block = content ? { ...content, ...(props ? { props } : {}) } : null;
     this.want = id;
     this.mountedAt = Date.now();
-    commitLayout({ panel: id ? { id, type: "block", content } : null });
+    commitLayout({ panel: id ? { id, type: "block", content: block } : null });
   }
 
   // A change just sent hasn't landed yet: don't read the old state as a choice.
@@ -189,7 +198,7 @@ export default class Tabs extends View {
     const child = body.children?.[0];
     const hidden = (panel ?? body).hidden || Boolean(child?.hidden), mounted = (body.children ?? []).length > 0;
     if (hidden && mounted) this.mount(null);
-    else if (!hidden && !mounted) this.mount(this.panels[space?.id] ?? null);
+    else if (!hidden && !mounted && this.openRow) this.mount(this.openRow);
     // A panel kept from an older Kanso whose mod was renamed (Spend was token-spend): remount with this version's.
     else if (mounted && child?.id) {
       const want = panelContent(child.id);
@@ -200,18 +209,42 @@ export default class Tabs extends View {
   }
 
   syncPanel(space, now, enabled) {
-    if (!space || this.inFlight(now)) return;
-    if (space.id !== this.space) {
-      const first = this.space === undefined;
-      this.space = space.id;
-      if (!(first && !(space.id in this.panels))) {
-        const stored = this.panels[space.id] ?? null, want = enabled.includes(stored) ? stored : null;
-        if (want !== now) { this.mount(want); return; }
-      }
+    if (this.arrange || !this.db || !space || this.inFlight(now)) return;
+    const project = tryOr(() => projectKey(space, home()));
+    if (!project) return;
+    if (project !== this.project) {
+      const first = this.project === undefined;
+      this.project = project;
+      this.holding = true;
+      this.restoreOpen(project, space, now, enabled, first);
+      return;
     }
-    if (this.panels[space.id] === now) return;
-    this.panels[space.id] = now;
-    localStorage.setItem("panels", JSON.stringify(this.panels));
+    if (this.holding) {
+      if ((now ?? null) === (this.openRow ?? null)) this.holding = false;
+      else return;
+    }
+    const next = now ?? null;
+    if (this.openRow === next) return;
+    this.openRow = next;
+    this.db.savePanelState(project, OPEN, { id: next }).catch(() => {});
+  }
+
+  restoreOpen(project, space, now, enabled, first) {
+    const legacy = this.panels?.[space.id];
+    this.db.panelState(project, OPEN).then((record) => {
+      if (this.project !== project) return;
+      const decision = projectOpen({ record, legacy: typeof legacy === "string" ? legacy : undefined, enabled, now, first });
+      this.openRow = decision.save ?? null;
+      if (decision.adopt) {
+        this.holding = false;
+        this.db.savePanelState(project, OPEN, { id: this.openRow }).catch(() => {});
+        return;
+      }
+      // A new `at` makes Herdr build the panel again, so it reads this project's state even when the same one was open.
+      this.mount(decision.mount, decision.mount ? { at: Date.now() } : undefined);
+      if ((decision.mount ?? null) === (now ?? null)) this.holding = false;
+      if (record === undefined) this.db.savePanelState(project, OPEN, { id: this.openRow }).catch(() => {});
+    }).catch(() => { if (this.project === project) this.holding = false; });
   }
 
   // A trackpad sends dozens of small events per swipe: add them up so one swipe moves one tab.
@@ -271,6 +304,10 @@ export default class Tabs extends View {
     };
     const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");
     const now = this.openPanel(panel, body);
+    if (this.db && space) {
+      const project = tryOr(() => projectKey(space, home()));
+      if (project && project !== this.project) this.openRow = undefined;
+    }
     const allPanels = panelList();
     const shownPanels = allPanels.filter((p) => p.on);
     const enabled = shownPanels.map((p) => p.id);

@@ -8,6 +8,7 @@ import { WorktreeStore } from "./worktrees-store.js";
 import { tilde, pool } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
 import { range, reduceSeries } from "./pure.js";
+import { worktreesMemory } from "./panel-state.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
 
@@ -332,9 +333,19 @@ const idleMinutes = () => {
 export class Worktrees {
   constructor() { this.armed = new Armed(); } // removals ask for a second press
 
+  saveState() { return worktreesMemory({ picked: this.picked, more: [...this.more], allRepos: this.allRepos }); }
+
+  restoreState(state) {
+    const next = worktreesMemory(state);
+    if (!next) return false;
+    this.keptTrees = next;
+    return true;
+  }
+
   init(cx) {
-    this.groups = []; this.orphans = []; this.scan = 0; this.more = new Set(); this.allRepos = false;
-    this.picked = null; this.working = null; this.batch = null; this.phase = null; this.note = null; this.notice = null;
+    this.groups = []; this.orphans = []; this.scan = 0; this.more = new Set(this.keptTrees?.more ?? []); this.allRepos = this.keptTrees?.allRepos ?? false;
+    this.picked = null; this.heldPick = this.keptTrees ? this.keptTrees.picked : undefined;
+    this.working = null; this.batch = null; this.phase = null; this.note = null; this.notice = null;
     this.width = 368; this.done = false;
     this.share = new Share("kanso-panel");
     this.store = new WorktreeStore(); this.stored = false; this.known = new Map(); this.hist = null;
@@ -416,7 +427,7 @@ export class Worktrees {
   refresh(cx) {
     const id = this.scan + 1, { roots, search } = this.roots();
     this.scan = id;
-    this.phase = "Finding repositories"; this.note = null; this.picked = null; this.armed.clear(); this.done = false;
+    this.phase = "Finding repositories"; this.note = null; this.picked = this.heldPick === undefined ? null : this.heldPick; this.heldPick = undefined; this.armed.clear(); this.done = false;
     cx.spawn(async (cx) => {
       try {
         const found = await exec("bash", ["-c", DISCOVER, "worktrees", ...search]);

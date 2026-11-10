@@ -10,6 +10,7 @@ import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./g
 import { Kdb } from "./kdb.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql } from "./pr-inbox.js";
+import { prMemory } from "./panel-state.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -137,6 +138,21 @@ export class PullRequest {
     return this.checked.list;
   }
 
+  saveState() { return this.selected ? { url: this.selected } : null; }
+
+  restoreState(state) {
+    const kept = prMemory(state, () => "open");
+    if (!kept) return false;
+    this.keptUrl = kept.url;
+    return true;
+  }
+
+  // A remembered pull request that has closed, or cannot be read, is dropped for the usual empty panel.
+  dropRemembered() {
+    this.remembered = false;
+    this.selected = null; this.pr = null; this.error = null; this.none = false; this.missing = null;
+  }
+
   gh(args) { return exec("gh", args, { cwd: this.root ?? this.cwd, on: this.on }); }
   repo() { const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(this.pr?.url ?? ""); return m ? { o: m[1], r: m[2] } : null; }
   local(url) {
@@ -151,7 +167,8 @@ export class PullRequest {
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
-      this.openPrs = []; this.selected = null; this.home = null; this.branchUrl = null; this.outside = false;
+      this.openPrs = []; this.selected = this.keptUrl ?? null; this.remembered = Boolean(this.keptUrl);
+      this.home = null; this.branchUrl = null; this.outside = false;
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
       this.inboxOn = false; this.inbox = null; this.inboxOpen = null; this.inboxTab = "needs"; this.inboxForce = false;
@@ -159,6 +176,7 @@ export class PullRequest {
     }
     if (this.listing && this.tab === "closed") this.loadClosed(cx);
     if (!cwd) return;
+    this.keptUrl = null;
     this.cwd = cwd; this.on = on;
     this.loading = true;
     const want = this.selected;
@@ -189,7 +207,7 @@ export class PullRequest {
         // Awaited in the finally so the read never outlives this refresh.
         const list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
         try { await this.readShown(context, want, list); }
-        catch (e) { failed(e); }
+        catch (e) { if (this.remembered) this.dropRemembered(); else failed(e); }
         finally { await list; }
       } catch (e) { failed(e); }
       finally {
@@ -266,11 +284,17 @@ export class PullRequest {
 
   async readShown(context, want, list) {
     const asked = await tryOrAsync(async () => ({ view: await this.gh(["pr", "view", ...(want ? [want] : []), "--json", FIELDS]) }));
-    if (!asked) { this.missing = null; this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return; }
+    if (!asked) {
+      if (this.remembered) { this.dropRemembered(); return; }
+      this.missing = null; this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return;
+    }
     // A click picked another one while this read was out: drop it, the finally reads again.
     if (key() !== context || this.selected !== want) return;
     const missing = ghMissing(asked.view);
-    if (missing) { this.missing = missing; this.pr = null; this.none = false; this.error = null; this.openPrs = []; this.branchUrl = null; return; }
+    if (missing) {
+      if (this.remembered) { this.dropRemembered(); return; }
+      this.missing = missing; this.pr = null; this.none = false; this.error = null; this.openPrs = []; this.branchUrl = null; return;
+    }
     this.missing = null;
     const open = await list;
     if (open?.code === 0 && key() === context) {
@@ -291,12 +315,15 @@ export class PullRequest {
       : asked.view;
     if (branchHasNone && (key() !== context || this.selected !== want)) return;
     if (view.code !== 0) {
+      if (this.remembered) { this.dropRemembered(); return; }
       const why = (view.stderr || view.stdout).trim();
       if (NO_PR.test(why)) { this.none = true; this.pr = null; this.error = null; }
       else { this.error = { title: "GitHub could not be read.", detail: why.split("\n")[0] }; this.pr = null; }
       return;
     }
     const pr = JSON.parse(view.stdout);
+    if (this.remembered && !prMemory({ url: pr.url }, () => (pr.state === "OPEN" ? "open" : "closed"))) { this.dropRemembered(); return; }
+    this.remembered = false;
     if (this.pr?.url !== pr.url) { this.diffs = null; this.openFile = null; this.expanded = { ...this.expanded, body: false }; }
     this.pr = pr; this.none = false; this.error = null; this.fallback = fallback;
     if (!want) this.branchUrl = fallback ? null : pr.url;

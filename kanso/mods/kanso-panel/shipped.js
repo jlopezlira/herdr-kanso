@@ -9,6 +9,7 @@ import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share } from "./share.js";
 import { G, tokens, iconButton, section } from "./ui.js";
 import { range, tryOrAsync, mapSeries } from "./pure.js";
+import { shippedMemory } from "./panel-state.js";
 
 const DAY = 86400000;
 const RECORDS = "kanso.shipped.bests";
@@ -211,8 +212,17 @@ async function gql(query, vars = {}) {
 }
 
 export class Shipped {
+  saveState() { return shippedMemory({ kind: this.kind, offset: this.offset }); }
+
+  restoreState(state) {
+    const next = shippedMemory(state);
+    if (!next) return false;
+    this.keptKind = next.kind; this.keptOffset = next.offset;
+    return true;
+  }
+
   init(cx) {
-    this.kind = "week"; this.offset = 0;
+    this.kind = this.keptKind ?? "week"; this.offset = this.keptOffset ?? 0;
     this.github = {}; // by period key: the period query's data, or { error }
     this.stats = null; this.syncing = false; this.syncError = null; this.phase = null; this.rhythm = {};
     this.store = new Store();

@@ -1,7 +1,7 @@
 // Kanso's side panels, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Herdr lets a mod import its own files, not another's, so the panels live in one mod.
 import { View, div } from "gpui-kit";
-import { props } from "herdr";
+import { props, spaces, home } from "herdr";
 import { Files } from "./files.js";
 import { PullRequest } from "./pr.js";
 import { Preview } from "./preview.js";
@@ -9,21 +9,56 @@ import { Shipped } from "./shipped.js";
 import { Worktrees } from "./worktrees.js";
 import { Ports } from "./ports.js";
 import { Look } from "./look.js";
+import { Kdb, projectKey } from "./kdb.js";
+import { takeState, giveState } from "./panel-state.js";
 
 const PANELS = { files: Files, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees, ports: Ports, look: Look };
+
+const projectNow = () => { try { return projectKey(spaces().find((s) => s.active), home()); } catch { return null; } };
 
 export default class Panel extends View {
   init(_props, cx) {
     const p = props() ?? {};
-    const Impl = PANELS[p.panel] ?? Files;
+    const id = typeof p.panel === "string" ? p.panel : "files";
+    const Impl = PANELS[id] ?? Files;
+    this.id = id;
     this.panel = new Impl();
-    this.panel.init(cx, p);
-    // The opacity must change between frames for GPUI to ease the fade.
+    this.db = new Kdb();
+    this.project = projectNow();
+    this.ready = false;
+    this.saved = undefined;
+    const fresh = p.path != null && p.path !== "";
+    // Read this project's state before the panel starts, then write it when it changes.
+    cx.spawn(async (cx) => {
+      if (!fresh && this.project && typeof this.panel.restoreState === "function") {
+        try {
+          const state = await this.db.panelState(this.project, this.id);
+          if (state && !(await giveState(this.panel, state, cx))) this.db.clearPanelState(this.project, this.id).catch(() => {});
+        } catch { /* opens empty */ }
+      }
+      this.panel.init(cx, p);
+      this.ready = true;
+      this.saved = JSON.stringify(takeState(this.panel));
+      cx.notify();
+    });
     this.shown = false;
     cx.timer.after(16, (cx) => { this.shown = true; cx.notify(); });
   }
 
+  keep() {
+    if (!this.ready || !this.project || typeof this.panel.saveState !== "function") return;
+    const state = takeState(this.panel);
+    if (state === undefined) return;
+    const json = JSON.stringify(state);
+    if (json === this.saved) return;
+    this.saved = json;
+    const write = state == null ? this.db.clearPanelState(this.project, this.id) : this.db.savePanelState(this.project, this.id, state);
+    write.catch(() => {});
+  }
+
   render(cx) {
-    return div().size_full().opacity(this.shown ? 1 : 0).transition("opacity", { duration: 180, easing: "ease-out" }).child(this.panel.render(cx));
+    this.keep();
+    const body = this.ready ? this.panel.render(cx) : div().size_full();
+    return div().size_full().opacity(this.shown ? 1 : 0).transition("opacity", { duration: 180, easing: "ease-out" }).child(body);
   }
 }

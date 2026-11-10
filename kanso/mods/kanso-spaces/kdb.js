@@ -49,6 +49,7 @@ CREATE INDEX IF NOT EXISTS pr_repos_project ON pr_repos(project_id);
 CREATE TABLE IF NOT EXISTS pr_items(url TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, number INTEGER NOT NULL, title TEXT NOT NULL, state TEXT, draft INTEGER NOT NULL DEFAULT 0, author TEXT, role TEXT NOT NULL, head TEXT, base TEXT, review_decision TEXT, additions INTEGER, deletions INTEGER, updated_at TEXT, fetched_at INTEGER NOT NULL, seen_at INTEGER);
 CREATE INDEX IF NOT EXISTS pr_items_repo ON pr_items(provider, host, owner, name);
 CREATE TABLE IF NOT EXISTS pr_fetches(key TEXT PRIMARY KEY, fetched_at INTEGER, retry_at INTEGER, error TEXT);
+CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
 export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents
@@ -401,5 +402,20 @@ export class Kdb {
   }
   setPictureColor(file, path, color) {
     return this.run(`UPDATE pictures SET color=${q(color)} WHERE file=${q(file)} AND path=${q(path)};`);
+  }
+
+  // One row per project and panel. No row reads as undefined; a closed panel is `{ id: null }`.
+  async panelState(project, panel) {
+    const rows = await this.read(`SELECT state_json FROM panel_state WHERE project=${q(project)} AND panel=${q(panel)};`);
+    if (!rows.length) return undefined;
+    const parsed = parseOr(rows[0].state_json, null);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  }
+  savePanelState(project, panel, state, now = Date.now()) {
+    return this.run(`INSERT INTO panel_state(project,panel,state_json,updated_at) VALUES(${q(project)},${q(panel)},${q(JSON.stringify(state))},${n(now)})
+      ON CONFLICT(project,panel) DO UPDATE SET state_json=excluded.state_json,updated_at=excluded.updated_at;`);
+  }
+  clearPanelState(project, panel) {
+    return this.run(`DELETE FROM panel_state WHERE project=${q(project)} AND panel=${q(panel)};`);
   }
 }
