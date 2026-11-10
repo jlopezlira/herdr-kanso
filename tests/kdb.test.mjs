@@ -484,3 +484,35 @@ test("a sleep's layout without some conversations keeps the rest, widths shared"
   assert.deepEqual(clone(layoutWithout(two, ["a"])), { per: 4, cols: [{ w: 1, panes: [{ resume: "b" }, { resume: null }] }] });
   assert.deepEqual(clone(layoutWithout(two, ["b"])).cols.map((c) => c.panes.length), [1, 1]);
 });
+
+test("a transcript's pictures stay, a color already stored is kept, and one left out of a save is gone", async (t) => {
+  const { db } = await database(t);
+  const file = "/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl";
+  await db.savePictures(file, 10, [{ path: "/a.png", ord: 1, color: "#c45a3a" }, { path: "/b.png", ord: 2, color: null }], "111");
+  const got = await db.pictures(file);
+  assert.equal(got.size, "10");
+  assert.equal(got.mark, "111");
+  assert.equal(got.rows[0].color, "#c45a3a");
+  await db.savePictures(file, 18, [{ path: "/a.png", ord: 1, color: null }, { path: "/c.png", ord: 3, color: null }], "222");
+  const next = await db.pictures(file);
+  assert.deepEqual(clone(next.rows.map((r) => r.path)), ["/a.png", "/c.png"]);
+  assert.equal(next.rows[0].color, "#c45a3a");
+  assert.equal(next.size, "18");
+  assert.equal(next.mark, "222");
+  await db.savePictures(file, 18, [], "333");
+  const none = await db.pictures(file);
+  assert.equal(clone(none.rows).length, 0, "a save that names nothing drops the rows");
+  assert.equal(none.mark, "333");
+});
+
+test("an older picture index gains the prefix mark", async (t) => {
+  const { db, dir } = await database(t);
+  const file = join(dir, "kanso", "kanso.db");
+  await exec("mkdir", ["-p", join(dir, "kanso")]);
+  await exec("sqlite3", [file, "CREATE TABLE picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL); INSERT INTO picture_scans(file,size) VALUES('/t.jsonl', 4);"]);
+  const got = await db.pictures("/t.jsonl");
+  assert.equal(got.size, "4");
+  assert.equal(got.mark, "");
+  await db.savePictures("/t.jsonl", 4, [], "9");
+  assert.equal((await db.pictures("/t.jsonl")).mark, "9");
+});
