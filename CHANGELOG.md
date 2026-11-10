@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.18.7] - 2026-11-09
+
+### Changed
+
+- The pull request panel lists what is waiting on your review and what you have open, across projects on this machine, when the GitHub CLI is signed in. A provider that is not installed or not signed in is left out.
+
 ## [3.18.6] - 2026-11-09
 
 ### Fixed
