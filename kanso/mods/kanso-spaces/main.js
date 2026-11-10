@@ -14,10 +14,10 @@ import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
-import { SleepWork } from "./sleepwork.js";
+import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
 import { stateMark } from "./marks.js";
-import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
+import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
@@ -48,6 +48,7 @@ const CHILD_PAD = GUIDE_X + ELBOW_W + 6 - 8; // icon starts 6px after the elbow,
 const rowHeight = ({ tree }) => (tree ? TREE_ROW : PLAIN_ROW);
 // Every height is known before anything is drawn, so a scan (`laidOut`) finds where each pill goes.
 const item = (el, h = null, mark = null) => ({ el, h, mark });
+const goingOf = (group) => Boolean(group?.going?.length) && !group?.stuck?.length;
 const spaceMark = (h) => ({ kind: "space", at: 0, h });
 const agentMark = (at, h) => ({ kind: "agent", at, h });
 function laidOut(items, gap) {
@@ -432,12 +433,30 @@ export default class Spaces extends View {
       if (found.length) await st.kdb.adoptSpaces(found).catch(() => {});
       await this.loadProjects(st.kdb, rows).catch(() => {});
     }
+    if (rows) this.settleHidden(rows);
     if (!rows || seq < this.asleepApplied || (shared("kanso.asleep.at") ?? 0) > started) return;
     this.asleepApplied = seq;
     const list = rows.map((a) => shownOf(a, started));
     if (JSON.stringify(list) === JSON.stringify(shared("kanso.asleep") ?? [])) return;
     setShared("kanso.asleep.at", started);
     setShared("kanso.asleep", list);
+  }
+
+  // A hide from before this load: still sleeping stays hidden, an undo or a missed write comes back, a tab left open is shown once.
+  settleHidden(rows) {
+    const hidden = shared("kanso.sleep.hidden") ?? [];
+    if (!hidden.length) { this.hidOnce = true; return; }
+    const plan = settleOnLoad(hidden, rows);
+    const live = new Set(spaces().flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
+    const back = [...plan.reveal, ...plan.restore.filter((h) => live.has(h.tab))];
+    runCmds(back.flatMap((h) => commandsOf(h, { back: true })));
+    if (!this.hidOnce) {
+      this.hidOnce = true;
+      runCmds(plan.keep.flatMap((h) => commandsOf(h)));
+    }
+    if (plan.keep.length !== hidden.length || plan.keep.some((h, i) => h !== hidden[i])) setShared("kanso.sleep.hidden", plan.keep);
+    const tabs = new Set([...plan.reveal, ...plan.restore].map((h) => h.tab));
+    if (tabs.size) setShared("kanso.sleep.away", awayLeft(shared("kanso.sleep.away"), tabs));
   }
 
   // A space that isn't there is nothing to do, not an error.
@@ -977,7 +996,7 @@ export default class Spaces extends View {
     const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, at: "pointer", props: { spaceMenu: { key } } });
     const missing = Boolean(project?.missing);
     const go = (cx) => { if (group) this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx); else open(); };
-    return h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
+    const row = h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
       .hover((s) => s.bg(t.foreground + "0c"))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
       .when(this.navMark(`asleep-project:${key}`, go), (el) => el.border_1().border_color(t.accent))
@@ -985,10 +1004,11 @@ export default class Spaces extends View {
       .on_mouse_down("right", open)
       .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_semibold().text_color(missing ? t.dim : t.muted).child(name))
       .when(missing, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Folder not found")))
-      .when(list.length > 0, (el) => el.child(svg("mods/kanso-chrome/icons/moon.svg").size(13).flex_none().text_color(t.dim)))
-      .when(Boolean(group), (el) => el.child(div().id(`asleep-n-${group.id}`).flex_none().text_size(11).text_color(t.dim).child(String(group.rows.length))).children(this.sleepButtons(t, group.stuck)))
+      .when(list.length > 0 && !group, (el) => el.child(svg("mods/kanso-chrome/icons/moon.svg").size(13).flex_none().text_color(t.dim)))
+      .when(Boolean(group), (el) => el.children(this.asleepTail(t, group)))
       .when(this.hoverSpace === key, (el) => el.child(this.dots(`asleep-dots-${key}`, t, open)))
       .when(!missing, (el) => el.child(this.plus(`closed-plus-${key}`, t, placeOfKey(key, project))));
+    return row;
   }
 
   closedRail(t, c, names, ctx) {
@@ -1012,6 +1032,8 @@ export default class Spaces extends View {
   sleepAct(id, how, cx) {
     const go = async (cx) => {
       try {
+        if (how === "undo") releaseHide(id, shared, setShared);
+        if (isAway(id)) { await this.loadAsleep(); return; }
         const ok = await this.leftNavStore()[how](id);
         if (ok) { setShared("kanso.sleep.kick", Date.now()); this.sleepWork?.start(cx); }
         await this.loadAsleep();
@@ -1020,7 +1042,7 @@ export default class Spaces extends View {
     if (cx?.spawn) cx.spawn(go); else go(cx);
   }
 
-  sleepButtons(t, ids) {
+  sleepButtons(t, ids, { retry = true } = {}) {
     const btn = (id, how, icon, tip) => div().id(`asleep-${how}-${id}`).size(22).flex_none().rounded(6)
       .flex().items_center().justify_center().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.input).text_color(t.foreground))
@@ -1028,20 +1050,37 @@ export default class Spaces extends View {
       .on_mouse_up("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.sleepAct(id, how, cx); })
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(13));
-    return (ids ?? []).flatMap((id) => [btn(id, "undo", "undo", "Undo"), btn(id, "retry", "refresh", "Retry")]);
+    return (ids ?? []).flatMap((id) => [btn(id, "undo", "undo", "Undo"), ...(retry ? [btn(id, "retry", "refresh", "Retry")] : [])]);
+  }
+
+  asleepMark(t, group) {
+    const moon = stateMark(t, "asleep");
+    if (!moon || !group) return moon;
+    return goingOf(group) ? breathe(moon.id(`asleep-going-${group.id}`)) : moon;
+  }
+
+  asleepTail(t, group, { mark = true, count = true } = {}) {
+    if (!group) return [];
+    const why = group.why ? div().id(`asleep-why-${group.id}`).max_w(140).flex_none().truncate().text_size(11).text_color(t.dim).child(group.why) : null;
+    return [
+      ...(mark ? [this.asleepMark(t, group)] : []),
+      ...(count ? [div().id(`asleep-n-${group.id}`).flex_none().text_size(11).text_color(t.dim).child(String(group.rows.length))] : []),
+      why,
+      ...this.sleepButtons(t, group.stuck),
+      ...(goingOf(group) ? this.sleepButtons(t, group.going, { retry: false }) : []),
+    ].filter(Boolean);
   }
 
   asleepHead(t, group, { name = null, pad = AGENT_PAD } = {}) {
     const open = this.asleepOpenOf(group.id);
     const label = name || group.name || "Asleep";
-    return h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().pl(pad).pr(12).gap(9).items_center().rounded(8).cursor_pointer()
+    const row = h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().pl(pad).pr(12).gap(9).items_center().rounded(8).cursor_pointer()
       .hover((s) => s.bg(t.foreground + "0c"))
       .when(this.navMark(`asleep:${group.id}`, (cx) => this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx)), (el) => el.border_1().border_color(t.accent))
       .on_click((_e, cx) => { this.toggleAsleep(group.id, open, cx); cx.notify(); })
       .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(t.muted).child(label))
-      .child(stateMark(t, "asleep"))
-      .child(div().id(`asleep-n-${group.id}`).flex_none().text_size(11).text_color(t.dim).child(String(group.rows.length)))
-      .children(this.sleepButtons(t, group.stuck));
+      .children(this.asleepTail(t, group));
+    return row;
   }
 
   asleepAgents(group, t, ctx, indent = 0) {
@@ -1074,7 +1113,7 @@ export default class Spaces extends View {
     return { name: a.asleep.spaceName || key.slice(key.indexOf(":") + 1).split("/").at(-1) || "~", fill: t.muted };
   }
 
-  sleepingNow(sp, terms) { return sleepingNow(sp, terms, shared("kanso.asleep") ?? [], () => home()); }
+  sleepingNow(sp, terms) { return sleepingNow(sp, terms, withAway(shared("kanso.asleep") ?? [], shared("kanso.sleep.away")), () => home()); }
 
   // Each sleeping row goes back at the place it had, so it stays where it was.
   spaceRows(id, ctx) {
@@ -1183,7 +1222,7 @@ export default class Spaces extends View {
     const key = w ? projectKey(w) : m.key;
     const place = this.menuPlace(m);
     const project = place?.project ? registry().find((p) => p.id === place.project) ?? null : null;
-    const asleep = (shared("kanso.asleep") ?? []).filter((a) => inPlace(a, { from: key, space: w?.id ?? null }, spaces(), home()));
+    const asleep = (shared("kanso.asleep") ?? []).filter((a) => (a.state == null || a.state === "asleep") && inPlace(a, { from: key, space: w?.id ?? null }, spaces(), home()));
     if (!w && !asleep.length && !project) return v_flex().id("spaces-menu").p(10).bg(t.popover).text_size(12.5).text_color(t.dim).child("Nothing here sleeps any more.");
     const item = this.items(t);
     const active = w?.tabs?.find((x) => x.active);
@@ -1665,7 +1704,7 @@ export default class Spaces extends View {
       else if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false, cx);
       if (!on) run("space.select", { id: w.id });
     }, on && !mine.some((a) => a.focused));
-    return v_flex()
+    const row = v_flex()
       .relative()
       .id(`space-${w.id}`)
       .when(ring, (el) => el.border_1().border_color(t.accent))
@@ -1703,10 +1742,11 @@ export default class Spaces extends View {
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
           .child(g && !asleep ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(asleep, (el) => el.child(stateMark(t, "asleep")).child(div().id(`asleep-n-${group.id}`).flex_none().text_size(11).text_color(t.dim).child(String(group.rows.length))).children(this.sleepButtons(t, group.stuck)))
+          .when(asleep, (el) => el.children(this.asleepTail(t, group)))
           .when(this.hoverSpace === w.id, (el) => el.child(this.plus(`space-plus-${w.id}`, t, placeOfSpace(w))).child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
           .when(!asleep && mine.length > 0, (el) => el.child(this.fold(w, mine, t))),
       );
+    return row;
   }
 
   // Projects, collapsed: one mark per project; a click lists its agents, or goes to it when it has none.
@@ -2004,7 +2044,7 @@ export default class Spaces extends View {
       };
       const p = s.project ? project(s.project) : null;
       // A project's name alone heads its conversations: the structure tells the group.
-      const mark = whole ? stateMark(t, "asleep") : p ? null
+      const mark = whole ? this.asleepMark(t, whole) : p ? null
         : s.id === "pinned" ? svg("mods/kanso-chrome/icons/pin.svg").size(13).flex_none().text_color(t.muted)
         : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(14).flex_none().text_color(t.muted)
         : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(14).flex_none().text_color(t.muted) : null;
@@ -2018,9 +2058,9 @@ export default class Spaces extends View {
       }
       // A project's conversations: its + starts a new one there.
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
-      const buttons = whole?.stuck?.length ? this.sleepButtons(t, whole.stuck) : [];
-      const extra = buttons.length
-        ? h_flex().flex_none().gap(8).items_center().children([...buttons, ...(w ? [this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w))] : [])])
+      const tail = whole ? this.asleepTail(t, whole, { mark: false, count: false }) : [];
+      const extra = tail.length
+        ? h_flex().flex_none().gap(8).items_center().children([...tail, ...(w ? [this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w))] : [])])
         : w ? this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w)) : null;
       // A project starts after a wider breath than the gap inside it, so each reads as one group.
       const lift = i ? (p ? 18 : 12) : 0;
@@ -2161,7 +2201,7 @@ export default class Spaces extends View {
     this.termBy = new Map(read.terms.map((k) => [k.address, k]));
     // Every row built once per draw, for every view.
     const asleep = this.sleepingNow(sp, read.terms);
-    const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).map((a) => (asleep.dozing.has(a.address) ? { ...a, dozing: true } : a)) };
+    const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer

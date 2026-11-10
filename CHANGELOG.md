@@ -17,6 +17,12 @@ release.
 
 - Returning to a project after five minutes shows up to three quiet lines of local changes: agents waiting, errors, pull request updates, finished turns and sleeps. Click or press Enter to jump, expand +N for the rest, or dismiss; seen changes stay dismissed.
 
+## [3.19.2] - 2026-11-10
+
+### Fixed
+
+- Sending an agent or a tab to sleep hides it at once and closes the dialog. A whole project asks first, then closes. The row in Asleep shows it while it finishes, and a sleep that fails keeps Retry and Undo there. Undo while it is still going brings it back.
+
 ## [3.19.1] - 2026-11-10
 
 ### Fixed

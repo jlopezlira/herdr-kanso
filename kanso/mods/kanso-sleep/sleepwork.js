@@ -1,12 +1,13 @@
 import { sleepEvent } from "./since-left-model.js";
 // Sleep as work the sidebar does, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // This is the source copy; `npm run sync:share` copies it into kanso-sleep, and a test fails when a copy differs.
-// The dialog only writes what is to sleep. The sidebar (kanso-spaces, alive as long as its window) takes each row
-// and moves it one step at a time, writing each step before it acts, so a closed dialog, a restart or another
-// window picks it up where it was. Per agent: requested, saving, clearing and exiting (leaving), left; any step can
-// end stuck, with why. Per row: sleeping; once every agent left, its tab closes and it is asleep. Stuck waits for
-// retry or undo; undoing brings back what left. An owner token and its heartbeat (sleeps.pending, pending_at)
-// keep two windows off one row.
+// The dialog only writes what is to sleep. The tab or pane leaves when sleep is ordered; this worker does the slow
+// leave afterwards. The sidebar (kanso-spaces, alive as long as its window) takes each row and moves it one step
+// at a time, writing each step before it acts, so a closed dialog, a restart or another window picks it up where
+// it was. Per agent: requested, saving, clearing and exiting (leaving), left; any step can end stuck, with why.
+// Per row: sleeping; once every agent left, its tab closes and it is asleep. Stuck waits for retry or undo;
+// undoing brings back what left. An owner token and its heartbeat (sleeps.pending, pending_at) keep two windows
+// off one row.
 import { exec, hc, run, panes, terminals, readTextFile, home } from "herdr";
 import { promptEmpty, asksToExit, base } from "./resume.js";
 import { SHELLS, shq } from "./tabkit.js";
@@ -22,6 +23,131 @@ export const EXIT_MS = 45_000; // for the process to go once /exit went
 export const TICK_MS = 600;
 export const WORKING = ["sleeping", "undoing"];
 const KEPT = ["out", "unsure"]; // an undo's agents that stay asleep
+const OWNER_KEY = "kanso.sleep.owner";
+
+const ownerId = () => `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+// The same id after a reload, so this window resumes a sleep it still owns instead of waiting out the lease.
+export function keptOwner(storage = globalThis.localStorage) {
+  try {
+    const kept = storage?.getItem(OWNER_KEY);
+    if (kept) return kept;
+    const id = ownerId();
+    storage?.setItem(OWNER_KEY, id);
+    return id;
+  } catch { return ownerId(); }
+}
+
+const AWAY = "away:";
+export const isAway = (id) => String(id ?? "").startsWith(AWAY);
+export const tabOfAway = (id) => (isAway(id) ? String(id).slice(AWAY.length) : null);
+
+// A lone pane's tab settles too, so an empty tab does not stay. Nothing here ends a terminal.
+export function hidePlan(order, panes, tabs = []) {
+  if (order.scope === "agent") {
+    const p = (panes ?? []).find((x) => x.pane === order.pane);
+    if (!p) return { settle: [], park: [], tabs: [] };
+    const others = (panes ?? []).some((x) => x.tab === p.tab && x.pane !== p.pane);
+    return { park: p.terminal ? [p.terminal] : [], settle: others || !p.tab ? [] : [p.tab], tabs: p.tab ? [p.tab] : [] };
+  }
+  const ids = order.scope === "project" ? (tabs ?? []).map((t) => t.id) : [order.tab].filter(Boolean);
+  return { park: [], settle: ids, tabs: ids };
+}
+
+export function hideEntries(plan) {
+  const settled = new Set(plan.settle ?? []);
+  const tabs = plan.tabs?.length ? plan.tabs : [...settled];
+  return tabs.map((tab) => ({
+    id: `away:${tab}`, tab,
+    settle: settled.has(tab) ? [tab] : [],
+    park: tabs.length === 1 ? (plan.park ?? []) : [],
+  }));
+}
+
+export function commandsOf(hide, { back = false, active = null, next = null } = {}) {
+  const settle = hide?.settle ?? [], park = hide?.park ?? [];
+  if (back) return [...settle.map((id) => ["tab.unsettle", { id }]), ...park.map((terminal) => ["terminal.keep", { terminal }])];
+  const select = next && active && settle.includes(active) ? [["tab.select", { id: next }]] : [];
+  return [...park.map((terminal) => ["terminal.park", { terminal }]), ...settle.map((id) => ["tab.settle", { id }]), ...select];
+}
+
+export const runCmds = (cmds) => { for (const [cmd, args] of cmds) run(cmd, args); };
+
+export function rememberHide(list, entries) {
+  const tabs = new Set(entries.map((e) => e.tab));
+  return [...(list ?? []).filter((h) => !tabs.has(h.tab)), ...entries];
+}
+export function claimHide(list, tab, sleepId) {
+  return (list ?? []).map((h) => (h.tab === tab && isAway(h.id) ? { ...h, id: sleepId } : h));
+}
+
+export function awayOf({ scope, tab, pane }, space, panes, project) {
+  const tabs = scope === "project" ? (space?.tabs ?? []) : (space?.tabs ?? []).filter((t) => t.id === tab);
+  const mine = (panes ?? []).filter((p) => tabs.some((t) => t.id === p.tab) && (scope !== "agent" || p.pane === pane));
+  return {
+    rows: tabs.map((t, i) => ({
+      id: `away:${t.id}`, from: project,
+      name: scope === "agent" ? (mine[0]?.name || "Agent") : (t.named ? t.name : `Tab ${i + 1}`),
+      saved: Date.now(), space: space?.name ?? null, spaceId: space?.id ?? null,
+      pending: true, state: "sleeping", going: true, stuck: null,
+      agents: mine.filter((p) => p.tab === t.id).map((p, n) => ({
+        name: p.name || "Agent", terminal: p.terminal ?? null, resume: null, spaceId: space?.id ?? null, at: n,
+      })),
+    })),
+  };
+}
+
+export function awayLeft(away, tabs) {
+  if (!tabs?.size) return away ?? null;
+  const rows = (away?.rows ?? []).filter((r) => !tabs.has(tabOfAway(r.id)));
+  return rows.length ? { rows } : null;
+}
+
+export function undoHide(hidden, away, id) {
+  const hit = (hidden ?? []).filter((h) => h.id === id || h.tab === id);
+  const tabs = new Set(hit.map((h) => h.tab));
+  return { hit, hidden: (hidden ?? []).filter((h) => h.id !== id && !tabs.has(h.tab)), away: awayLeft(away, tabs) };
+}
+
+export function releaseHide(id, read, write) {
+  const plan = undoHide(read("kanso.sleep.hidden"), read("kanso.sleep.away"), id);
+  if (!plan.hit.length) return false;
+  runCmds(plan.hit.flatMap((h) => commandsOf(h, { back: true })));
+  write("kanso.sleep.hidden", plan.hidden);
+  write("kanso.sleep.away", plan.away);
+  return true;
+}
+
+export function wakeMidFlight(state) {
+  if (state === "sleeping" || state === "stuck") return "cancel";
+  if (state === "undoing") return "wait";
+  return "wake";
+}
+
+// What a reload does with a row still in flight. A lease this window cannot see, not yet abandoned, is stuck.
+export function onLoad(row, me, now, sees) {
+  if (row.waking != null || !WORKING.includes(row.state)) return "leave";
+  if (mayTake(row, me, now, sees)) return "resume";
+  const quiet = now - (Number(row.pending_at) || 0);
+  if (row.pending != null && quiet >= LEASE_MS && !sees && quiet < LONG_MS) return "stuck";
+  return "leave";
+}
+
+const placeOf = (h, open, byTab) => {
+  if (isAway(h.id)) {
+    const row = byTab.get(h.tab);
+    return row?.state === "sleeping" || row?.state === "stuck" ? "keep" : "reveal";
+  }
+  const row = open.get(h.id);
+  return !row ? "restore" : row.state === "undoing" ? "reveal" : "keep";
+};
+
+export function settleOnLoad(hidden, rows) {
+  const open = new Map((rows ?? []).filter((r) => r.state === "sleeping" || r.state === "undoing" || r.state === "stuck").map((r) => [r.id, r]));
+  const byTab = new Map((rows ?? []).map((r) => [r.tab ?? r.into?.tabId ?? null, r]));
+  const tagged = (hidden ?? []).map((h) => ({ h, place: placeOf(h, open, byTab) }));
+  const of = (place) => tagged.filter((t) => t.place === place).map((t) => t.h);
+  return { keep: of("keep"), reveal: of("reveal"), restore: of("restore") };
+}
 
 // --- Transitions: pure, a row and what was seen in, the next step out. ---
 
@@ -309,10 +435,10 @@ const ACTS = {
 
 export class SleepWork {
   // kdb: the sidebar's database; changed(row): a row changed state (`row` as it is now when this window moved it), for the sidebar to read again.
-  constructor(kdb, changed = () => {}, me = `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`) {
+  constructor(kdb, changed = () => {}, me = null) {
     this.kdb = kdb;
     this.changed = changed;
-    this.me = me;
+    this.me = me || keptOwner();
     this.held = new Set();
     this.running = false;
     this.kicked = 0;
@@ -350,10 +476,19 @@ export class SleepWork {
     const moved = (await mapSeries(watching, (r) => this.watch(r))).some(Boolean);
     const rows = moved ? await this.kdb.sleeps() : first;
     const live = new Set(terminals().map((t) => t.address));
-    const open = rows.filter((r) => mayTake(r, this.me, now, terminalsOf(r).some((t) => live.has(t))));
+    const seesOf = (r) => terminalsOf(r).some((t) => live.has(t));
+    const stranded = rows.filter((r) => onLoad(r, this.me, now, seesOf(r)) === "stuck");
+    if (stranded.length) {
+      await Promise.all(stranded.map(async (r) => {
+        const why = r.why || "The sleep stopped";
+        if ((await this.kdb.holdWork(r.id, this.me, now)) && (await this.kdb.setWorkState(r.id, this.me, r.state, "stuck", why, now, sleepEvent(r.id, "stuck")))) this.changed({ ...r, state: "stuck", why });
+      }));
+    }
+    const skip = new Set(stranded.map((r) => r.id));
+    const open = rows.filter((r) => !skip.has(r.id) && mayTake(r, this.me, now, seesOf(r)));
     const held = (await mapSeries(open, async (r) => ((await this.kdb.holdWork(r.id, this.me, now)) ? r : null))).filter(Boolean);
     this.held = new Set(held.map((r) => r.id));
-    await mapSeries(held, (r) => this.advance(r, cx).catch(() => null));
+    await Promise.all(held.map((r) => this.advance(r, cx).catch(() => null)));
     return held.length > 0;
   }
 
@@ -412,8 +547,9 @@ export class SleepWork {
     const plan = closePlan(looked, fresh);
     // Held still, and still sleeping (an undo meanwhile keeps the tab), right before anything closes.
     if (!(await this.kdb.stillMine(row.id, this.me, "sleeping"))) return;
+    const open = new Set(panes().map((p) => p.terminal));
     if (plan.closeTab) run("tab.close", { id: tab, confirmed: true });
-    else plan.kill.forEach((t) => run("terminal.kill", { terminal: t }));
+    for (const t of plan.kill) if (!plan.closeTab || !open.has(t)) run("terminal.kill", { terminal: t });
     const why = plan.busy.length ? `${plan.busy.join(", ")} ${plan.busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${plan.busy.length === 1 ? "stays" : "stay"} open.` : null;
     if (await this.kdb.finishSleep(row.id, this.me, why, Date.now(), sleepEvent(row.id, "asleep"))) this.changed();
   }
