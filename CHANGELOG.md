@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.18.8] - 2026-11-10
+
+### Fixed
+
+- The pull request panel offers Merge only when GitHub would allow it. It says why not, in a few words (a review still required, changes requested, checks failing, behind the base, a draft, or blocked by branch rules), and hides Merge whenever GitHub would refuse it. While GitHub is still judging, the panel says it is still computing. Someone without permission to push is not offered the merge.
+
 ## [3.18.7] - 2026-11-09
 
 ### Changed

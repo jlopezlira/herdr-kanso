@@ -9,6 +9,15 @@ const COLS = ["provider", "host", "owner", "name", "number", "title", "state", "
 
 export { fetchDue, isNew, limitLine };
 
+// A row's words from reviewDecision. It cannot say ready: this cache does not know whether GitHub would merge.
+export function inboxLabel(item) {
+  if (item?.draft) return "Draft";
+  if (item?.reviewDecision === "CHANGES_REQUESTED") return "Changes requested";
+  if (item?.reviewDecision === "REVIEW_REQUIRED") return "Review required";
+  if (item?.reviewDecision === "APPROVED") return "Approved";
+  return "Open";
+}
+
 function valuesOf(item) {
   return {
     provider: q(item.provider), host: q(item.host), owner: q(item.owner), name: q(item.name), number: num(item.number),
