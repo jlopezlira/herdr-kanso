@@ -16,7 +16,7 @@ export default class WorkspaceStatus extends View {
     const left = side !== "right", right = side !== "left";
     const space = left ? spaces().find(s => s.active) : null;
     const list = right ? agents() : [];
-    const needs = list.filter(a => a.status === "blocked").length;
+    const needs = (shared("kanso.needs-you")?.rows ?? []).length;
     const working = list.filter(a => a.status === "working").length;
     const label = (icon, text) => h_flex().gap(6).items_center().min_w(0)
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(13).flex_none()).child(div().truncate().child(text));
@@ -30,7 +30,7 @@ export default class WorkspaceStatus extends View {
         .when(Boolean(space?.branch), el => el.child(label("branch", space.branch))))
       .when(left && right, el => el.child(div().flex_1()))
       .when(right && needs > 0, el => el.child(h_flex().id("needs-you").gap(6).items_center().text_color(t.blocked)
-        .cursor_pointer().tooltip(mac ? "Go to it  ⌘J" : "Go to it  Ctrl+J").on_click(() => run("kanso-strip.next-needs-you"))
+        .cursor_pointer().tooltip(mac ? "Go to it  ⌘J" : "Go to it  Ctrl+J").on_click(() => run("kanso-spaces.needs-you.next"))
         .child(stateMark(t, "blocked", 12))
         .child(needs === 1 ? "1 agent needs you" : `${needs} agents need you`)))
       .when(right && !hidden.has("status.agents"), el => el.child(h_flex().gap(6).items_center()
