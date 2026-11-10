@@ -53,6 +53,23 @@ export function sleepingNow(sp, terms, asleep, home = () => "") {
   return { rows, dozing };
 }
 
+// One project with nothing awake is one group; a sleeping tab beside live agents is its own.
+export function asleepGroups(rows, { asleepOf = (row) => row.asleep ?? null, key = null } = {}) {
+  const tagged = rows.map((row) => ({ row, z: asleepOf(row) }));
+  const asleep = tagged.filter((x) => x.z);
+  if (!asleep.length) return { live: rows, groups: [] };
+  const live = tagged.filter((x) => !x.z).map((x) => x.row);
+  const pack = (id, name, whole, list) => ({
+    id, name, whole, rows: list.map((x) => x.row),
+    stuck: [...new Set(list.filter((x) => x.z.stuck).map((x) => x.z.id))],
+  });
+  if (!live.length) {
+    const z = asleep[0].z;
+    return { live: [], groups: [pack(`project:${key ?? z.from ?? "asleep"}`, null, true, asleep)] };
+  }
+  return { live, groups: [...Map.groupBy(asleep, (x) => x.z.id)].map(([id, list]) => pack(`sleep:${id}`, list[0].z.tab, false, list)) };
+}
+
 // The shown name goes onto the terminal as a label, so `hc ls --label kanso.shown=<name>` gives its address: the one way any agent finds another.
 export const SHOWN_LABEL = "kanso.shown";
 export const PROJECT_LABEL = "kanso.project";

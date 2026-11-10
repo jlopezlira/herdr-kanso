@@ -765,10 +765,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
   - `kanso-sleep`: a dialog (520 wide); asleep is a status in `kanso.db`.
-    It writes only the intent; the sidebar runs it (sleepwork.js), each
-    step written before its act: requested, saving, clearing, exiting,
-    left, or stuck with why (retry, undo); then the tab closes. A 20 s
-    heartbeat keeps one owner per row. Wake: `claude --resume`.
+    The sidebar runs it (sleepwork.js): requested, saving, clearing,
+    exiting, left, or stuck (retry, undo); then the tab closes. One owner
+    per row (20 s). A sleeping project or tab is one row until clicked;
+    stuck keeps Retry and Undo. Wake: `claude --resume`.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With
