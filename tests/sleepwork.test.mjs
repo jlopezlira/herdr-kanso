@@ -422,3 +422,89 @@ test("an undo cut short by a restart, with the agent told to exit still in front
   await keptForBob(ctx);
   assert.deepEqual(clone(ctx.world.sent("send").filter((t) => t === "t2")), ["t2"], "nothing typed over Bob: only his first /exit");
 });
+
+test("what leaves the screen is decided before any slow work, and a reload knows what to resume", async () => {
+  const names = ["hidePlan", "commandsOf", "hideEntries", "claimHide", "rememberHide", "wakeMidFlight", "onLoad", "settleOnLoad", "keptOwner", "LEASE_MS", "LONG_MS"];
+  const m = await load("kanso-spaces/sleepwork.js", names, {});
+  const panes = [{ pane: "p1", tab: "tb1", terminal: "t1" }, { pane: "p2", tab: "tb1", terminal: "t2" }];
+  const alone = m.hidePlan({ scope: "agent", pane: "p1" }, [panes[0]], [{ id: "tb1" }]);
+  assert.deepEqual(clone(alone), { park: ["t1"], settle: ["tb1"], tabs: ["tb1"] }, "the only pane: the tab goes too");
+  const beside = m.hidePlan({ scope: "agent", pane: "p1" }, panes, [{ id: "tb1" }]);
+  assert.deepEqual(clone(beside), { park: ["t1"], settle: [], tabs: ["tb1"] }, "a pane beside others: only that pane parks");
+  const tab = m.hidePlan({ scope: "tab", tab: "tb1" }, panes, [{ id: "tb1" }, { id: "tb2" }]);
+  assert.deepEqual(clone(m.commandsOf(tab, { active: "tb1", next: "tb2" })), [["tab.settle", { id: "tb1" }], ["tab.select", { id: "tb2" }]]);
+  assert.deepEqual(clone(m.commandsOf(alone, { back: true })), [["tab.unsettle", { id: "tb1" }], ["terminal.keep", { terminal: "t1" }]]);
+  const hidden = m.rememberHide([], m.hideEntries(tab));
+  assert.equal(hidden[0].id, "away:tb1");
+  assert.equal(m.claimHide(hidden, "tb1", "sl1")[0].id, "sl1");
+  assert.equal(m.wakeMidFlight("sleeping"), "cancel");
+  assert.equal(m.wakeMidFlight("stuck"), "cancel");
+  assert.equal(m.wakeMidFlight("undoing"), "wait");
+  assert.equal(m.wakeMidFlight("asleep"), "wake");
+  const row = { state: "sleeping", waking: null, pending: "w-a", pending_at: 1000 };
+  assert.equal(m.onLoad(row, "w-a", 2000, true), "resume", "this window still owns it");
+  assert.equal(m.onLoad(row, "w-b", 2000, true), "leave", "another window's lease is still fresh");
+  assert.equal(m.onLoad(row, "w-b", 1000 + m.LEASE_MS + 1, false), "stuck", "the lease ran out and this window cannot see it");
+  assert.equal(m.onLoad(row, "w-b", 1000 + m.LONG_MS + 1, false), "resume", "left long enough, it is taken anyway");
+  const open = [{ id: "sl1", state: "sleeping", tab: "tb1" }];
+  const plan = m.settleOnLoad([{ id: "sl1", tab: "tb1", settle: ["tb1"] }, { id: "away:tb2", tab: "tb2", settle: ["tb2"] }], open);
+  assert.deepEqual(clone(plan.reapply.map((h) => h.id)), ["sl1"]);
+  assert.deepEqual(clone(plan.reveal.map((h) => h.id)), ["away:tb2"], "a hide whose row never landed comes back");
+  assert.deepEqual(clone(m.settleOnLoad([{ id: "sl1", tab: "tb1", settle: ["tb1"] }], [{ id: "sl1", state: "asleep", tab: "tb1" }]).restore.map((h) => h.id)), ["sl1"]);
+  const box = new Map();
+  const storage = { getItem: (k) => box.get(k) ?? null, setItem: (k, v) => box.set(k, v) };
+  assert.equal(m.keptOwner(storage), m.keptOwner(storage));
+});
+
+test("an undo while an agent is still saving brings it back and never closes the tab", async (t) => {
+  const { world, kdb, id, worker, row, steps } = await setup(t);
+  const w = worker("w-a");
+  await drive(w, 40, async () => (await steps()).Alice === "saving");
+  assert.equal(await kdb.undo(id), true);
+  await drive(w);
+  assert.equal(await row(), null, "undone");
+  assert.deepEqual(world.ran, [], "the tab was never closed");
+});
+
+test("two sleeps move at once: one terminal's slow read does not hold the other", async (t) => {
+  const { world, kdb } = await setup(t);
+  const C3 = "00000000-0000-4000-8000-000000000003";
+  world.terms.t4 = { shell: 104, fg: { pid: 14, argv: ["claude"], cwd: "/w" }, screen: EMPTY };
+  world.alive.add(14);
+  await kdb.sleepTab({ name: "2", space: { id: "sp1", name: "kanso" }, project: ":/w", requested: true,
+    layout: { per: null, tab: "tb2", cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w", resume: C3, wake: ["claude", "--resume", C3], name: "Cara", terminal: "t4", tab: "tb2", front: 14, pid: 14 }] }] },
+    agents: [{ conversation: C3, tab: "tb2", pos: 0 }] });
+  const hc = world.host.hc;
+  const started = [];
+  let first = null;
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  world.host.hc = async (args) => {
+    if (args[0] === "get") {
+      started.push(args[1]);
+      if (!first) first = args[1];
+      if (args[1] === first) await gate;
+    }
+    return hc(args);
+  };
+  const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], world.host);
+  const w = new SleepWork(kdb, () => {}, "w-a");
+  const tickP = w.tick(cx);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.ok(started.filter((term) => term !== first).length > 0, "the other sleep is read while the first read waits");
+  release();
+  await tickP;
+});
+
+test("a reload that cannot see the terminals, once the owner's lease has run out, marks the sleep stuck", async (t) => {
+  const { world, mod, id, worker, row } = await setup(t);
+  const a = worker("w-a");
+  await a.tick(cx);
+  for (const term of Object.keys(world.terms)) delete world.terms[term];
+  const b = worker("w-b");
+  await b.tick(cx, Date.now() + mod.LEASE_MS + 1000);
+  const r = await row();
+  assert.equal(r.state, "stuck");
+  assert.equal(r.why, "The sleep stopped");
+  assert.equal(r.id, id);
+});

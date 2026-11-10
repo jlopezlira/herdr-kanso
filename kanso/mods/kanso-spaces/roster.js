@@ -34,23 +34,33 @@ export function seenNow(sp, ctx, threads, kept, nameFor, since = {}) {
   })));
 }
 
-// `dozing`: terminals still open on their way to sleep, only while the sleep is under way; an address given to another agent later is that agent's.
+// `dozing`: a terminal a sleep still holds, so its awake row is gone. An address given to another agent later is that agent's.
+// One coming back (undoing) with its terminal still live is not dozing: it returns to where it was.
 export function sleepingNow(sp, terms, asleep, home = () => "") {
   const live = new Set(terms.map((k) => k.address)), ids = new Set(sp.map((w) => w.id));
   const tabSpace = new Map(sp.flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, w.id])));
-  const each = asleep.flatMap((s) => (s.agents ?? []).map((p, i) => ({ s, p, i })));
-  const onItsWay = ({ s, p }) => s.pending && p.terminal && live.has(p.terminal);
-  const dozing = new Set(each.filter(onItsWay).map(({ p }) => p.terminal));
-  const rows = each.filter((x) => !onItsWay(x)).map(({ s, p, i }) => {
+  const each = (asleep ?? []).flatMap((s) => (s.agents ?? []).map((p, i) => ({ s, p, i })));
+  const going = (s) => s.going === true || s.state === "sleeping" || (s.state == null && Boolean(s.pending) && !s.stuck);
+  const back = (s, p) => s.state === "undoing" && Boolean(p.terminal) && live.has(p.terminal);
+  const held = (s) => s.state !== "undoing" && (going(s) || Boolean(s.stuck));
+  const dozing = new Set(each.filter(({ s, p }) => held(s) && p.terminal && live.has(p.terminal)).map(({ p }) => p.terminal));
+  const rows = each.filter((x) => !back(x.s, x.p)).map(({ s, p, i }) => {
     const space = (p.spaceId && ids.has(p.spaceId) ? p.spaceId : null) || (s.into?.tabId && tabSpace.get(s.into.tabId))
       || spaceFor({ spaceId: s.spaceId, spaceName: s.space, project: s.from }, sp, home())?.id || null;
     const program = p.program ? parseOr(p.program) : null; // not JSON: no icon
     return { address: `zz:${p.resume ?? `${s.id}:${i}`}`, pane: null, tab: null, space, status: "asleep", labels: {}, pin: null, seq: 0, turn: 0,
       name: p.name, title: p.title ?? null, program,
-      asleep: { id: s.id, from: s.from, tab: s.name, n: (s.agents ?? []).length, saved: s.saved, busy: Boolean(s.busy), stuck: s.stuck ?? null, spaceName: s.space ?? null,
+      asleep: { id: s.id, from: s.from, tab: s.name, n: (s.agents ?? []).length, saved: s.saved, busy: Boolean(s.busy), going: going(s) && !s.stuck, stuck: s.stuck ?? null, spaceName: s.space ?? null,
         at: p.at ?? null, said: p.said ?? null, resume: p.resume ?? null } };
   });
   return { rows, dozing };
+}
+
+// Optimistic rows until the database has the same terminals. A row already there wins, so the list does not double.
+export function withAway(db, away) {
+  const covered = new Set((db ?? []).flatMap((s) => (s.agents ?? []).map((a) => a.terminal).filter(Boolean)));
+  const extra = (away?.rows ?? []).filter((s) => !(s.agents ?? []).some((a) => a.terminal && covered.has(a.terminal)));
+  return [...(db ?? []), ...extra];
 }
 
 // One project with nothing awake is one group; a sleeping tab beside live agents is its own.
@@ -62,6 +72,8 @@ export function asleepGroups(rows, { asleepOf = (row) => row.asleep ?? null, key
   const pack = (id, name, whole, list) => ({
     id, name, whole, rows: list.map((x) => x.row),
     stuck: [...new Set(list.filter((x) => x.z.stuck).map((x) => x.z.id))],
+    going: [...new Set(list.filter((x) => x.z.going && !x.z.stuck).map((x) => x.z.id))],
+    why: list.map((x) => x.z.stuck).find((s) => typeof s === "string") ?? null,
   });
   if (!live.length) {
     const z = asleep[0].z;

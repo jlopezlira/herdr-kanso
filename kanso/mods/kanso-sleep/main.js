@@ -9,7 +9,7 @@ import { spaceFor, inPlace } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
-import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, agentsOf } from "./sleepwork.js";
+import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, agentsOf, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight } from "./sleepwork.js";
 import { retry, tryOr, tryOrAsync, mapSeries, reduceSeries } from "./pure.js";
 import { skeleton, breathe } from "./ui.js";
 
@@ -82,8 +82,9 @@ export default class Sleep extends View {
     cx.spawn(async (cx) => {
       try { await this.refresh(true); }
       catch (e) { this.asleep = []; this.error = String(e?.message ?? e); cx.notify(); return; }
-      const waking = ask.wakeAll ? this.asleep.filter((a) => inPlace(a, ask.wakeAll, spaces(), home()))
-        : ask.wake ? this.asleep.filter((a) => (ask.wake.id ? a.id === ask.wake.id : a.from === ask.wake.from && a.name === ask.wake.name)) : [];
+      const pool = [...(this.asleep ?? []), ...(this.work ?? [])];
+      const waking = ask.wakeAll ? pool.filter((a) => inPlace(a, ask.wakeAll, spaces(), home()))
+        : ask.wake ? pool.filter((a) => (ask.wake.id ? a.id === ask.wake.id : a.from === ask.wake.from && a.name === ask.wake.name)) : [];
       if (waking.length) this.wake(waking[0], cx, waking.slice(1));
       else if (ask.wake || ask.wakeAll) this.error = "That tab is no longer asleep.";
       cx.notify();
@@ -152,15 +153,64 @@ export default class Sleep extends View {
       .filter((r) => r.capture.cols.length);
   }
 
+  // The tab or pane leaves in this turn. The read and the write happen after, and a failure puts it back.
+  conceal(scope, tabId, paneId) {
+    if (this.hidden) return;
+    const space = this.space;
+    const mine = panes().filter((p) => (space?.tabs ?? []).some((t) => t.id === p.tab));
+    const order = { scope, tab: tabId ?? null, pane: paneId ?? null };
+    const plan = hidePlan(order, mine, space?.tabs ?? []);
+    if (!plan.settle.length && !plan.park.length) return;
+    this.hidden = plan;
+    const tabs = space?.tabs ?? [];
+    const active = tabs.find((t) => t.active)?.id ?? null;
+    const next = tabs.find((t) => !plan.settle.includes(t.id))?.id ?? null;
+    runCmds(commandsOf(plan, { active, next }));
+    setShared("kanso.sleep.hidden", rememberHide(shared("kanso.sleep.hidden"), hideEntries(plan)));
+    setShared("kanso.sleep.away", awayOf(order, space, mine, projectOf(space)));
+  }
+
+  clearAway(tabs, hidden) {
+    setShared("kanso.sleep.hidden", hidden);
+    setShared("kanso.sleep.away", awayLeft(shared("kanso.sleep.away"), tabs));
+  }
+
+  reveal() {
+    if (!this.hidden) return;
+    runCmds(commandsOf(this.hidden, { back: true }));
+    const tabs = new Set(this.hidden.tabs ?? []);
+    this.clearAway(tabs, (shared("kanso.sleep.hidden") ?? []).filter((h) => !tabs.has(h.tab)));
+    this.hidden = null;
+  }
+
+  // Writes that landed stay hidden. Only the tabs still waiting on a row come back.
+  revealLeft() {
+    const hidden = shared("kanso.sleep.hidden") ?? [];
+    const left = hidden.filter((h) => String(h.id).startsWith("away:"));
+    if (left.length) {
+      runCmds(left.flatMap((h) => commandsOf(h, { back: true })));
+      const tabs = new Set(left.map((h) => h.tab));
+      this.clearAway(tabs, hidden.filter((h) => !tabs.has(h.tab)));
+    }
+    this.hidden = null;
+  }
+
   startSleep(cx, whole = false, tabId = null, pane = null) {
     const all = this.space?.tabs ?? [];
     const tabs = whole ? all : all.filter((t) => (tabId ? t.id === tabId : t.active));
-    this.view = "sleep"; this.whole = whole; this.onlyPane = pane; this.sleepers = null; this.error = null; this.sleepTabs = tabs;
+    this.view = "sleep"; this.whole = whole; this.onlyPane = pane; this.sleepers = null; this.error = null; this.sleepTabs = tabs; this.watching = null;
+    if (!whole) this.conceal(pane ? "agent" : "tab", tabs[0]?.id ?? tabId, pane);
     cx.notify();
     cx.spawn(async (cx) => {
-      this.sleepers = await this.readTabs(tabs);
-      if (!whole && this.sleepers.length && !this.sleepers.some((r) => r.blocker || r.error)) this.sleep(cx);
-      cx.notify();
+      try {
+        this.sleepers = await this.readTabs(tabs);
+        const blocked = !this.sleepers.length || this.sleepers.some((r) => r.blocker || r.error);
+        if (!whole && blocked) this.reveal();
+        else if (!whole) this.sleep(cx);
+      } catch (e) {
+        this.reveal();
+        this.error = String(e?.message ?? e);
+      } finally { cx.notify(); }
     });
   }
 
@@ -169,36 +219,48 @@ export default class Sleep extends View {
   sleep(cx) {
     const shown = this.sleepers;
     if (this.view !== "sleep" || this.busy || !shown?.length || shown.some((r) => r.blocker || r.error)) return;
+    if (this.whole) this.conceal("project");
     const project = projectOf(this.space);
-    this.busy = "Reading the tabs again"; this.error = null; cx.notify();
+    this.ordering = true; this.view = "progress"; this.busy = null; this.error = null; this.watching = null; this.progress = null;
+    cx.notify();
     cx.spawn(async (cx) => {
-      const list = await this.readTabs(this.sleepTabs ?? []);
-      const stop = list.find((r) => r.blocker || r.error);
-      if (stop || !sameTabs(shown, list)) {
-        this.sleepers = list; this.busy = null;
-        this.error = stop ? `It can't sleep now: ${stop.blocker || stop.error}.` : "The tabs changed since this opened; here they are as they are now.";
-        cx.notify();
-        return;
-      }
-      const was = await settled(async () => new Set((await this.store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)));
-      if (!was.ok) { this.busy = null; this.error = String(was.error?.message ?? was.error); cx.notify(); return; }
-      // Each tab under a name no other tab asleep in the project has (nor one before it here).
-      const named = list.reduce(({ out, taken }, r) => {
-        const name = freeName(r.name, taken);
-        return { out: [...out, { ...r, name }], taken: new Set([...taken, name]) };
-      }, { out: [], taken: was.value }).out;
-      // A tab that can't be written stops the ones after it; those written go on.
-      const out = await reduceSeries(named, async (acc, r) => {
-        if (acc.error) return acc;
-        const w = await settled(() => this.store.sleep(project, this.intentOf(r)));
-        return w.ok ? { ...acc, ids: [...acc.ids, w.value] } : { ...acc, error: w.error };
-      }, { ids: [], error: null });
-      if (out.ids.length) setShared("kanso.sleep.kick", Date.now());
-      await this.refresh();
-      this.busy = null;
-      this.error = out.error ? `${out.ids.length ? "The rest" : "It"} can't sleep: ${String(out.error?.message ?? out.error)}.` : null;
-      if (out.ids.length) { this.watching = out.ids; this.progress = null; this.view = "progress"; this.poll(cx); }
-      cx.notify();
+      try {
+        const list = await this.readTabs(this.sleepTabs ?? []);
+        const stop = list.find((r) => r.blocker || r.error);
+        if (stop || !sameTabs(shown, list)) {
+          this.reveal();
+          this.sleepers = list; this.view = "sleep";
+          this.error = stop ? `It can't sleep now: ${stop.blocker || stop.error}.` : "The tabs changed since this opened; here they are as they are now.";
+          return;
+        }
+        const was = await settled(async () => new Set((await this.store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)));
+        if (!was.ok) { this.reveal(); this.view = "sleep"; this.error = String(was.error?.message ?? was.error); return; }
+        // Each tab under a name no other tab asleep in the project has (nor one before it here).
+        const named = list.reduce(({ out, taken }, r) => {
+          const name = freeName(r.name, taken);
+          return { out: [...out, { ...r, name }], taken: new Set([...taken, name]) };
+        }, { out: [], taken: was.value }).out;
+        // A tab that can't be written stops the ones after it; those written go on.
+        const out = await reduceSeries(named, async (acc, r) => {
+          if (acc.error) return acc;
+          const w = await settled(() => this.store.sleep(project, this.intentOf(r)));
+          if (!w.ok) return { ...acc, error: w.error };
+          setShared("kanso.sleep.hidden", claimHide(shared("kanso.sleep.hidden"), r.tab.id, w.value));
+          return { ...acc, ids: [...acc.ids, w.value] };
+        }, { ids: [], error: null });
+        if (out.error && out.ids.length) this.revealLeft();
+        else if (out.error) this.reveal();
+        if (out.ids.length) setShared("kanso.sleep.kick", Date.now());
+        await this.refresh();
+        this.error = out.error ? `${out.ids.length ? "The rest" : "It"} can't sleep: ${String(out.error?.message ?? out.error)}.` : null;
+        if (out.ids.length) { this.watching = out.ids; this.view = "progress"; }
+        else this.view = "sleep";
+      } catch (e) {
+        this.reveal();
+        this.view = "sleep";
+        this.error = String(e?.message ?? e);
+      } finally { this.ordering = false; cx.notify(); }
+      if ((this.watching ?? []).length && this.view === "progress") this.poll(cx);
     });
   }
 
@@ -215,7 +277,7 @@ export default class Sleep extends View {
 
   // The rows this dialog wrote, as the sidebar moves them. Done once each is asleep, or undone (gone).
   poll(cx) {
-    if (this.polling || this.view !== "progress") return;
+    if (this.polling || this.view !== "progress" || this.ordering) return;
     this.polling = true;
     cx.spawn(async (cx) => {
       const read = await settled(() => this.store.kdb.sleeps());
@@ -236,6 +298,10 @@ export default class Sleep extends View {
 
   // Retry or undo a sleep the sidebar holds as stuck (undo also stops one on its way).
   act(cx, id, how) {
+    if (how === "undo" && releaseHide(id, shared, setShared)) {
+      const left = new Set((shared("kanso.sleep.hidden") ?? []).map((h) => h.tab));
+      if (this.hidden && (this.hidden.tabs ?? []).every((t) => !left.has(t))) this.hidden = null;
+    }
     cx.spawn(async (cx) => {
       const r = await settled(() => (how === "retry" ? this.store.retry(id) : this.store.undo(id)));
       this.error = !r.ok ? String(r.error?.message ?? r.error) : !r.value ? "It moved on meanwhile; here it is as it is now." : null;
@@ -248,6 +314,9 @@ export default class Sleep extends View {
   // Only checked agents stop being asleep; what did not prove it back is ended, so nothing runs twice.
   // `claim` hands back the row as it is now: an old list never opens what another window changed. `rest`: more to wake after it.
   wake(shown, cx, rest = []) {
+    const how = wakeMidFlight(shown?.state);
+    if (how === "cancel") { this.act(cx, shown.id, "undo"); return; }
+    if (how === "wait") return;
     if (this.busy) return;
     this.busy = `Waking ${shown.name}`; this.error = null; cx.notify();
     cx.spawn(async (cx) => {

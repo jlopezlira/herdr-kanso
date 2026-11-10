@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.19.2] - 2026-11-10
+
+### Fixed
+
+- Sending an agent, a tab or a project to sleep hides it at once. It shows in Asleep while it finishes, and a sleep that fails keeps Retry and Undo there. Undo while it is still going brings it back.
+
 ## [3.19.1] - 2026-11-10
 
 ### Fixed
