@@ -42,6 +42,37 @@ test("Keys follow the release only where you left them as shipped", async () => 
   assert.equal(mergeKeys(clone(user), before, before).changed, false, "a release that kept them changes nothing");
 });
 
+test("An update adds Find where an edited keys file has not set Cmd+F", async () => {
+  const { mergeKeys } = await updater();
+  const before = { "layout:kanso": { "cmd-d": "kanso-strip.new-right" } };
+  const after = { "layout:kanso": { "cmd-d": "kanso-strip.new-right" }, terminal: { "cmd-f": "terminal.search" } };
+  const edited = {
+    global: { "cmd-q": "app.quit" },
+    "layout:kanso": { "cmd-d": "mine.right" },
+    terminal: { "cmd-c": "terminal.copy", "cmd-v": "terminal.paste" },
+  };
+  const gained = clone(mergeKeys(clone(edited), before, after));
+  assert.equal(gained.changed, true);
+  assert.deepEqual(gained.keys.terminal, { "cmd-c": "terminal.copy", "cmd-v": "terminal.paste", "cmd-f": "terminal.search" });
+  assert.equal(gained.keys["layout:kanso"]["cmd-d"], "mine.right", "a key you changed stays");
+  assert.deepEqual(gained.kept, []);
+
+  const custom = clone(edited);
+  custom.terminal["cmd-f"] = "mine.search";
+  const kept = clone(mergeKeys(custom, before, after));
+  assert.equal(kept.keys.terminal["cmd-f"], "mine.search");
+  assert.equal(kept.keys.terminal["cmd-c"], "terminal.copy");
+  assert.deepEqual(kept.kept, ["cmd-f"]);
+
+  const bare = { global: { "cmd-q": "app.quit" }, "layout:kanso": { "cmd-d": "kanso-strip.new-right" } };
+  assert.deepEqual(clone(mergeKeys(clone(bare), before, after)).keys.terminal, { "cmd-f": "terminal.search" });
+
+  const removed = { terminal: { "cmd-c": "terminal.copy" } };
+  const stays = clone(mergeKeys(clone(removed), after, after));
+  assert.equal(stays.changed, false);
+  assert.equal(stays.keys.terminal["cmd-f"], undefined, "a later release leaves a Cmd+F you took out");
+});
+
 // A Herdr home with Kanso 1.0.0 installed and used, and two releases served
 // from file:// URLs: what v1.0.0 shipped and the v1.1.0 tarball.
 async function fixture(t, { layoutChanged = true } = {}) {

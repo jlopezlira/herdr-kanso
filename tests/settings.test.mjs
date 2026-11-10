@@ -94,6 +94,7 @@ const SAME_AS_HERDR = {
   "space.select": /^kanso-spaces\.space-\d$/,
   "app.settings": /^kanso-spend\.settings$/,
   "app.help": /^mod\.open:kanso-help$/,
+  "terminal.search": /^terminal\.search$/,
 };
 const MACOS = ["cmd-alt-d", "cmd-alt-h", "cmd-h", "cmd-m", "cmd-q", "cmd-tab", "cmd-space", "cmd-alt-escape", "cmd-shift-3", "cmd-shift-4", "cmd-shift-5", "ctrl-up", "ctrl-down", "ctrl-left", "ctrl-right", "cmd-`"];
 
