@@ -53,3 +53,46 @@ export function checkSummary(states) {
 }
 
 export const rollupState = (rollup) => checkSummary(onePerJob(rollup).map(checkState)).state;
+
+const CAN_MERGE = new Set(["CLEAN", "HAS_HOOKS", "UNSTABLE"]);
+const WRITERS = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+
+const checkLine = (checks) => {
+  if (!checks?.state || checks.state === "pass") return null;
+  const verb = { fail: "failing", pending: "running", unknown: "unknown" }[checks.state];
+  if (!verb) return null;
+  const n = checks[checks.state] || 1;
+  return `${n} check${n > 1 ? "s" : ""} ${verb}`;
+};
+
+// Whether GitHub would merge this, and the few words for why not. UNKNOWN is still computing.
+export function mergeReadiness(pr, { permission = null, checks = null } = {}) {
+  const status = String(pr?.mergeStateStatus ?? "").toUpperCase();
+  const review = pr?.reviewDecision || null;
+  const state = String(pr?.state ?? "OPEN").toUpperCase();
+  const base = pr?.baseRefName || "base";
+  const blocked = () => {
+    if (review === "CHANGES_REQUESTED") return { offer: false, text: "Changes requested", tone: "red" };
+    if (review === "REVIEW_REQUIRED") return { offer: false, text: "Review required", tone: "yellow" };
+    const line = checkLine(checks);
+    if (line) return { offer: false, text: line, tone: checks.state === "fail" ? "red" : "yellow" };
+    return { offer: false, text: "Blocked by branch rules", tone: "yellow" };
+  };
+  if (state === "MERGED") return { offer: false, text: "Merged", tone: "violet" };
+  if (state === "CLOSED") return { offer: false, text: "Closed without merging", tone: "red" };
+  if (pr?.isDraft || status === "DRAFT") return { offer: false, text: "Draft", tone: "dim" };
+  if (pr?.mergeable === "CONFLICTING" || status === "DIRTY") return { offer: false, text: `Conflicts with ${base}`, tone: "red" };
+  if (!status || status === "UNKNOWN") return { offer: false, text: "Checking whether it can merge…", tone: "dim" };
+  if (status === "BEHIND") return { offer: false, text: `Behind ${base}`, tone: "yellow" };
+  if (status === "BLOCKED" || !CAN_MERGE.has(status)) return blocked();
+  if (!WRITERS.has(String(permission ?? "").toUpperCase())) {
+    return permission
+      ? { offer: false, text: "No permission to merge", tone: "dim" }
+      : { offer: false, text: "Checking whether it can merge…", tone: "dim", awaitingPermission: true };
+  }
+  if (status === "UNSTABLE") {
+    const line = checkLine(checks);
+    return { offer: true, text: line || "Checks failing", tone: line && checks.state === "fail" ? "red" : "yellow" };
+  }
+  return { offer: true, text: "Ready to merge", tone: "green" };
+}

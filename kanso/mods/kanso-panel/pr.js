@@ -6,10 +6,10 @@ import { exec, knownAgents, notify, openOverlay, run, theme } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
-import { STATES, checkState, onePerJob, checkSummary } from "./ghchecks.js";
+import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./ghchecks.js";
 import { Kdb } from "./kdb.js";
 import { readyProviders } from "./pr-providers.js";
-import { groupInbox, isNew, limitLine, mergeInbox, refreshInbox, seenSql } from "./pr-inbox.js";
+import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql } from "./pr-inbox.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -17,7 +17,7 @@ const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$
 // assignableUsers is GitHub's own picker list and, unlike `collaborators`, needs no push access to read.
 const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
 const LABELS = "query($o:String!,$r:String!){repository(owner:$o,name:$r){labels(first:100,orderBy:{field:NAME,direction:ASC}){pageInfo{hasNextPage} nodes{name color description}}}}";
-const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,statusCheckRollup,additions,deletions";
+const OPEN = "number,title,url,isDraft,updatedAt,author,headRefName,baseRefName,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,additions,deletions";
 const DONE = "number,title,url,state,updatedAt,mergedAt,closedAt,author,headRefName,baseRefName,additions,deletions";
 const DONE_LIMIT = 30;
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
@@ -75,8 +75,7 @@ function checksLine(sum, c) {
   const n = sum[sum.state], words = CHECK_WORDS[sum.state];
   return { text: `${n} check${n > 1 ? "s" : ""} ${words.verb}`, color: c[words.color] };
 }
-// What holds a pull request back, the same in its row and its verdict: failing checks, then changes
-// asked for, then checks still running or unknown. Null when nothing does.
+// Failing checks, then changes asked for, then checks still running or unknown. Null when nothing does.
 function holdUp(sum, review, c) {
   const line = checksLine(sum, c);
   if (sum.state === "fail") return line;
@@ -156,6 +155,7 @@ export class PullRequest {
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
       this.inboxOn = false; this.inbox = null; this.inboxOpen = null; this.inboxTab = "needs"; this.inboxForce = false;
+      this.permission = null; this.permissionRepo = null;
     }
     if (this.listing && this.tab === "closed") this.loadClosed(cx);
     if (!cwd) return;
@@ -316,6 +316,13 @@ export class PullRequest {
     if (!this.viewer) {
       const me = await this.gh(["api", "user", "--jq", ".login"]).catch(() => null);
       if (me?.code === 0) this.viewer = me.stdout.trim();
+    }
+    const place = this.repo();
+    const repoKey = place ? `${place.o}/${place.r}` : null;
+    if (repoKey !== this.permissionRepo) { this.permission = null; this.permissionRepo = repoKey; }
+    if (place && pr.state === "OPEN") {
+      const perm = await this.gh(["repo", "view", repoKey, "--json", "viewerPermission", "--jq", ".viewerPermission"]).catch(() => null);
+      if (perm?.code === 0 && key() === context && this.pr?.url === pr.url) this.permission = perm.stdout.trim() || null;
     }
   }
 
@@ -541,12 +548,22 @@ export class PullRequest {
     return (this.openPrs ?? []).toSorted((a, b) => Number(b.author?.login === me) - Number(a.author?.login === me));
   }
 
+  rowPermission(p) {
+    const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(p?.url ?? "");
+    return m && this.permissionRepo === `${m[1]}/${m[2]}` ? this.permission : null;
+  }
+
   rowState(p, c) {
-    const sum = summaryOf(checksIn(p.statusCheckRollup)), held = holdUp(sum, p.reviewDecision, c);
+    const sum = summaryOf(checksIn(p.statusCheckRollup));
+    const gate = p.mergeStateStatus || p.mergeable === "CONFLICTING" || p.isDraft
+      ? mergeReadiness(p, { permission: this.rowPermission(p), checks: sum }) : null;
+    // Permission for this repo is still unread: keep the check words, never "ready".
+    if (gate && !gate.awaitingPermission) return { text: gate.text, color: c[gate.tone] };
+    const held = holdUp(sum, p.reviewDecision, c);
     if (p.isDraft) return { text: "Draft", color: c.dim };
     if (held) return held;
     if (p.reviewDecision === "APPROVED") return { text: "Approved", color: c.green };
-    if (p.reviewDecision === "REVIEW_REQUIRED") return { text: "Waiting for a review", color: c.yellow };
+    if (p.reviewDecision === "REVIEW_REQUIRED") return { text: "Review required", color: c.yellow };
     if (sum.state === "pass") return { text: "Checks passed", color: c.green };
     return { text: "Open", color: c.dim };
   }
@@ -697,23 +714,17 @@ export class PullRequest {
   }
 
   verdict(c) {
-    const pr = this.pr, held = holdUp(summaryOf(this.checks()), pr.reviewDecision, c);
-    const conflicting = pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "DIRTY", ms = pr.mergeStateStatus;
-    if (pr.state === "MERGED") return { text: "Merged", color: c.violet };
-    if (pr.state === "CLOSED") return { text: "Closed without merging", color: c.red };
-    if (pr.isDraft) return { text: "Draft, not ready for review", color: c.dim };
-    if (conflicting) return { text: `Conflicts with ${pr.baseRefName}`, color: c.red };
-    if (held) return held;
-    if (ms === "BLOCKED") return { text: pr.reviewDecision === "REVIEW_REQUIRED" ? "Waiting for a review" : "Blocked by branch rules", color: c.yellow };
-    if (ms === "BEHIND") return { text: `Behind ${pr.baseRefName}`, color: c.yellow };
-    if (ms === "CLEAN" || ms === "HAS_HOOKS" || ms === "UNSTABLE") return { text: "Ready to merge", color: c.green };
-    return { text: "Checking whether it can merge…", color: c.dim };
+    const gate = mergeReadiness(this.pr, { permission: this.permission, checks: summaryOf(this.checks()) });
+    return { text: gate.text, color: c[gate.tone] };
+  }
+
+  canMerge() {
+    return Boolean(this.pr) && mergeReadiness(this.pr, { permission: this.permission, checks: summaryOf(this.checks()) }).offer;
   }
 
   hero(c, narrow) {
     const pr = this.pr, v = this.verdict(c), open = pr.state === "OPEN";
-    const conflicting = pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "DIRTY", ms = pr.mergeStateStatus;
-    const canMerge = open && !pr.isDraft && !conflicting && ms !== "BLOCKED" && ms !== "DRAFT";
+    const canMerge = this.canMerge();
     const arming = this.armed.is("merge");
     const checks = this.checks();
     const stats = [
@@ -723,7 +734,8 @@ export class PullRequest {
       { value: String(this.threads.length), unit: this.threads.length === 1 ? "thread" : "threads" },
       { value: String(checks.length), unit: checks.length === 1 ? "check" : "checks" },
     ];
-    const primary = Button.new("pr-merge").h(30).px(14).flex_none().items_center().rounded(6)
+    const showMerge = canMerge || this.busy === "Merge";
+    const primary = () => Button.new("pr-merge").h(30).px(14).flex_none().items_center().rounded(6)
       .disabled(!canMerge || Boolean(this.busy))
       .bg(canMerge ? (arming ? c.red : c.primary) : c.subtle)
       .when(canMerge && !this.busy, (el) => el.cursor_pointer().hover((s) => s.opacity(0.85)))
@@ -743,7 +755,7 @@ export class PullRequest {
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
           .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
       .when(open, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center()
-        .child(primary)
+        .when(showMerge, (row) => row.child(primary()))
         .child(pr.isDraft
           ? quietLink("pr-ready", this.busy === "Ready" ? "Marking ready…" : "Ready for review", (cx) => this.act("Ready", ["pr", "ready", pr.url], cx), c, { disabled: Boolean(this.busy) })
           : quietLink("pr-draft", "Back to draft", (cx) => this.act("Draft", ["pr", "ready", pr.url, "--undo"], cx), c, { disabled: Boolean(this.busy) }))
@@ -905,10 +917,9 @@ export class PullRequest {
   }
 
   inboxState(item, c) {
-    if (item.draft) return { text: "Draft", color: c.dim };
-    if (item.reviewDecision === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
-    if (item.reviewDecision === "APPROVED") return { text: "Approved", color: c.green };
-    return { text: "Open", color: c.dim };
+    const text = inboxLabel(item);
+    const color = { Draft: c.dim, "Changes requested": c.red, "Review required": c.yellow, Approved: c.green }[text] ?? c.dim;
+    return { text, color };
   }
 
   openInboxItem(item, cx) {

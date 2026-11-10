@@ -35,6 +35,34 @@ test("The digest reads changed files, lines, commits and checks", async () => {
   assert.equal(digestTip({ files: 0, ahead: 0, pr: null }), "");
   assert.equal(digestTip({ files: 2, add: 5, del: 1, ahead: 1, pushed: true, pr: { number: 41, state: "OPEN", checks: "failing" } }),
     "In its folder now: 2 changed files (+5 −1); 1 commit not pushed; pull request #41, checks failing.");
+  assert.equal(digestTip({ files: 0, ahead: 0, pr: { number: 575, state: "OPEN", checks: "passing", hold: "Review required" } }),
+    "In its folder now: pull request #575, review required.");
+  assert.equal(/ready/i.test(digestTip({ files: 0, ahead: 0, pr: { number: 575, checks: "passing", hold: "Review required" } })), false);
+});
+
+test("The header digest names why a blocked pull request cannot merge", async () => {
+  const { readDigest } = await load("kanso-strip/main.js", ["readDigest"]);
+  const run = async (cmd, args) => {
+    if (cmd === "gh") {
+      assert.ok(args.join(" ").includes("mergeStateStatus"));
+      assert.ok(args.join(" ").includes("reviewDecision"));
+      return JSON.stringify({
+        number: 575, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "BLOCKED",
+        reviewDecision: "REVIEW_REQUIRED", baseRefName: "main",
+        statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS", name: "ci" }],
+      });
+    }
+    const line = args.join(" ");
+    if (line.includes("is-inside-work-tree")) return "true\n";
+    if (line.includes("porcelain") || line.includes("shortstat")) return "";
+    if (line.includes("rev-list")) return "0\n";
+    if (line.includes("symbolic-ref")) return "feat\n";
+    return null;
+  };
+  const d = await readDigest("/repo", run);
+  assert.equal(d.pr.hold, "Review required");
+  assert.equal(d.pr.checks, "passing");
+  assert.equal(/ready/i.test(JSON.stringify(d.pr)), false);
 });
 
 test("The digest of a real repository: uncommitted files, lines and commits on the branch", async (t) => {

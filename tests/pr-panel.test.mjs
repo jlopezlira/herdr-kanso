@@ -364,3 +364,118 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   r = await show(github, { code: 1, stdout: "", stderr: 'no pull requests found for branch "main"' }, [other]);
   assert.equal(r.listLink, false, "nor in the list");
 });
+
+const TONE = { dim: "dim", red: "red", yellow: "yellow", green: "green", violet: "violet" };
+const passed = [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS", name: "ci" }];
+const failed = [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE", name: "ci" }];
+
+async function shownMerge(pr, permission = "WRITE") {
+  const ids = [];
+  const ui = singleUse();
+  const exec = async (command, args) => {
+    if (command === "git") {
+      const out = { "rev-parse": "/repo\n", branch: "feat\n", remote: "git@github.com:o/here.git\n" }[args[0]];
+      return { code: 0, stdout: out ?? "", stderr: "" };
+    }
+    if (args[0] === "pr" && args[1] === "list") return { code: 0, stdout: JSON.stringify([pr]), stderr: "" };
+    if (args[0] === "pr" && args[1] === "view") return { code: 0, stdout: JSON.stringify(pr), stderr: "" };
+    if (args[0] === "repo" && args.includes("viewerPermission")) return { code: 0, stdout: `${permission}\n`, stderr: "" };
+    if (args[0] === "api" && args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
+    return { code: 1, stdout: "", stderr: "offline" };
+  };
+  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+    ...ui, Button: { new: (id) => { ids.push(id); return ui.Button.new(); } },
+    exec, key: () => "repo", location: () => ({ cwd: "/repo", on: null }),
+  });
+  const panel = new PullRequest();
+  Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
+  const { cx, drain } = context();
+  panel.refresh(cx); await drain();
+  panel.hero(TONE, true);
+  return { panel, merge: ids.includes("pr-merge") };
+}
+
+const pull = (over) => ({
+  number: 575, title: "Ship it", url: "https://github.com/o/here/pull/575", state: "OPEN", isDraft: false,
+  author: { login: "me" }, headRefName: "feat", baseRefName: "main", updatedAt: "2026-11-10T00:00:00Z",
+  mergeable: "MERGEABLE", statusCheckRollup: passed, additions: 1, deletions: 0, changedFiles: 1, ...over,
+});
+
+function assertHeld(view, text) {
+  assert.equal(view.panel.verdict(TONE).text, text);
+  assert.equal(view.panel.canMerge(), false);
+  assert.equal(view.merge, false);
+  assert.equal(/ready/i.test(view.panel.verdict(TONE).text), false);
+  assert.equal(view.panel.rowState(view.panel.openPrs[0], TONE).text, text);
+  assert.equal(/ready/i.test(view.panel.rowState(view.panel.openPrs[0], TONE).text), false);
+}
+
+test("A clean pull request is ready to merge only for someone who can push", async () => {
+  const yes = await shownMerge(pull({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }));
+  assert.equal(yes.panel.verdict(TONE).text, "Ready to merge");
+  assert.equal(yes.panel.canMerge(), true);
+  assert.equal(yes.merge, true);
+  assert.equal(yes.panel.rowState(yes.panel.openPrs[0], TONE).text, "Ready to merge");
+  const no = await shownMerge(pull({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "READ");
+  assertHeld(no, "No permission to merge");
+  const unread = await shownMerge(pull({ mergeStateStatus: "CLEAN" }), "");
+  assert.equal(unread.panel.canMerge(), false);
+  assert.equal(unread.merge, false);
+  assert.equal(/ready/i.test(unread.panel.verdict(TONE).text), false);
+});
+
+test("A pull request with hooks still offers merge when GitHub would", async () => {
+  const view = await shownMerge(pull({ mergeStateStatus: "HAS_HOOKS", reviewDecision: "APPROVED" }));
+  assert.equal(view.panel.verdict(TONE).text, "Ready to merge");
+  assert.equal(view.panel.canMerge(), true);
+  assert.equal(view.merge, true);
+});
+
+test("An unstable pull request can merge and does not say it is ready", async () => {
+  const view = await shownMerge(pull({ mergeStateStatus: "UNSTABLE", statusCheckRollup: failed }));
+  assert.equal(view.panel.verdict(TONE).text, "1 check failing");
+  assert.equal(view.panel.canMerge(), true);
+  assert.equal(view.merge, true);
+  assert.equal(/ready/i.test(view.panel.verdict(TONE).text), false);
+  assert.equal(view.panel.rowState(view.panel.openPrs[0], TONE).text, "1 check failing");
+});
+
+test("A pull request behind its base is not offered for merge", async () => {
+  assertHeld(await shownMerge(pull({ mergeStateStatus: "BEHIND" })), "Behind main");
+});
+
+test("A blocked pull request says why and hides merge", async () => {
+  assertHeld(await shownMerge(pull({ mergeStateStatus: "BLOCKED", reviewDecision: "APPROVED" })), "Blocked by branch rules");
+  const failing = await shownMerge(pull({ mergeStateStatus: "BLOCKED", statusCheckRollup: failed }));
+  assertHeld(failing, "1 check failing");
+  assert.equal(/ready/i.test(failing.panel.inboxState({ reviewDecision: "APPROVED" }, TONE).text), false);
+});
+
+test("A dirty pull request is conflicts, not a merge", async () => {
+  assertHeld(await shownMerge(pull({ mergeStateStatus: "DIRTY", mergeable: "CONFLICTING" })), "Conflicts with main");
+});
+
+test("A draft pull request is not offered for merge", async () => {
+  assertHeld(await shownMerge(pull({ mergeStateStatus: "DRAFT", isDraft: true })), "Draft");
+  assertHeld(await shownMerge(pull({ mergeStateStatus: "CLEAN", isDraft: true })), "Draft");
+});
+
+test("An unknown merge state is still computing, never ready", async () => {
+  const view = await shownMerge(pull({ mergeStateStatus: "UNKNOWN", mergeable: "UNKNOWN" }));
+  assertHeld(view, "Checking whether it can merge…");
+  assert.equal(view.panel.verdict(TONE).text.includes("Ready"), false);
+});
+
+test("A pull request that still needs a review is not ready to merge", async () => {
+  const view = await shownMerge(pull({ mergeStateStatus: "BLOCKED", mergeable: "MERGEABLE", reviewDecision: "REVIEW_REQUIRED" }));
+  assertHeld(view, "Review required");
+  assert.equal(view.panel.inboxState({ draft: false, reviewDecision: "REVIEW_REQUIRED" }, TONE).text, "Review required");
+  assert.equal(/ready/i.test(view.panel.inboxState({ draft: false, reviewDecision: "REVIEW_REQUIRED" }, TONE).text), false);
+});
+
+test("A pull request with changes requested is not ready to merge", async () => {
+  const view = await shownMerge(pull({ mergeStateStatus: "BLOCKED", reviewDecision: "CHANGES_REQUESTED", statusCheckRollup: failed }));
+  assertHeld(view, "Changes requested");
+  assert.equal(view.panel.inboxState({ draft: false, reviewDecision: "CHANGES_REQUESTED" }, TONE).text, "Changes requested");
+  assert.equal(/ready/i.test(view.panel.inboxState({ draft: false, reviewDecision: "APPROVED" }, TONE).text), false);
+});
