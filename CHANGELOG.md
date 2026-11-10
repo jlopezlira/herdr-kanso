@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.19.2] - 2026-11-10
+
+### Fixed
+
+- Find opens as a bar and lists nothing until you type. It then shows only the matching turns, newest first, a few lines each, and leaves out a tool's delivery note. Enter or a click opens that turn at the match; Enter and Shift+Enter move, and Escape closes Find.
+
 ## [3.19.1] - 2026-11-10
 
 ### Fixed

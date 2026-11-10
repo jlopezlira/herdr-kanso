@@ -8,6 +8,7 @@ import {
   fold, foldSpan, searchTurns, matchSpan, partsOf, placeOf, countLabel, enterMatch, retarget, extendIndex,
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
   resolveFind, locateConversation, kindOf, sessionLive,
+  blankQuery, blocksOf, layOut, chooseMatch, indexTurns, readable,
 } from "../kanso/mods/kanso-panel/find.js";
 
 const line = (row) => JSON.stringify(row);
@@ -68,6 +69,83 @@ test("A phrase matches as typed, newest first, and Enter moves without skipping 
   assert.equal(held.hits.length, 3);
 });
 
+test("An empty query lays out nothing, and a query lays out only its matches", () => {
+  const turns = [{ text: "alpha one" }, { text: "beta alone" }, { text: "alpha two" }];
+  assert.equal(blankQuery(""), true);
+  assert.equal(blankQuery("   "), true);
+  assert.equal(layOut(searchTurns(turns, ""), 0, false).items.length, 0);
+  assert.equal(layOut(searchTurns(turns, "   "), 0, false).items.length, 0);
+  const hits = searchTurns(turns, "alpha");
+  const laid = layOut(hits, 0, false);
+  assert.equal(laid.items.length, 2);
+  assert.deepEqual(laid.items.map((item) => item.hit.turn), [2, 0]);
+  assert.ok(laid.items.every((item) => item.kind === "hit"));
+  assert.equal(searchTurns(turns, "beta").length, 1);
+});
+
+test("Find lays out the matches nearest the selection, then more as it moves", () => {
+  const turns = Array.from({ length: 80 }, (_, i) => ({ text: `hit ${i} ${"pad ".repeat(40)}` }));
+  const hits = searchTurns(turns, "hit");
+  assert.equal(hits.length, 80);
+  const top = layOut(hits, 0, false);
+  assert.equal(top.items.length, 50);
+  assert.equal(top.end - top.start, 50);
+  assert.equal(top.start, 0);
+  const mid = layOut(hits, 60, false);
+  assert.equal(mid.items.length, 50);
+  assert.ok(mid.start <= 60 && 60 < mid.end);
+  assert.ok(mid.start > top.start);
+  const opened = layOut(hits, 60, true, (hit) => turns[hit.turn].text);
+  assert.equal(opened.end - opened.start, 50);
+  assert.equal(opened.items[opened.focus].kind, "open");
+  assert.equal(opened.items[opened.focus].piece.mark, true);
+  assert.ok(opened.items.filter((item) => item.kind === "hit").length < 50);
+});
+
+test("Enter and a click open that match, and the next Enter moves", () => {
+  const turns = [{ text: "one alpha" }, { text: "two alpha here" }, { text: "three alpha" }];
+  const index = indexTurns(turns);
+  let box = chooseMatch({ pending: "alpha", query: "", hits: [], at: 0, open: false }, index, { key: "type" });
+  assert.equal(box.open, false);
+  assert.equal(box.hits.length, 3);
+  assert.equal(box.at, 0);
+  box = { ...box, pending: "alpha" };
+  const opened = chooseMatch(box, index, { key: "enter" });
+  assert.equal(opened.open, true);
+  assert.equal(opened.at, 0, "the first Enter stays on the newest and opens it");
+  const laid = layOut(opened.hits, opened.at, opened.open, (hit) => turns[hit.turn].text);
+  assert.equal(laid.items[laid.focus].kind, "open");
+  assert.equal(laid.items[laid.focus].piece.text.slice(laid.items[laid.focus].piece.from, laid.items[laid.focus].piece.to), "alpha");
+  const moved = chooseMatch({ ...opened, pending: "alpha" }, index, { key: "enter" });
+  assert.equal(moved.open, true);
+  assert.equal(moved.at, 1);
+  const back = chooseMatch({ ...moved, pending: "alpha" }, index, { key: "shift" });
+  assert.equal(back.at, 0);
+  assert.equal(back.open, true);
+  const clicked = chooseMatch(back, index, { key: "click", at: 2 });
+  assert.equal(clicked.at, 2);
+  assert.equal(clicked.open, true);
+  const closed = chooseMatch({ ...clicked, pending: "nope" }, index, { key: "type" });
+  assert.equal(closed.open, false);
+  assert.equal(closed.hits.length, 0);
+});
+
+test("An excerpt stops at a word, and the open turn keeps the match whole", () => {
+  const text = "hi wonderful day";
+  const hit = searchTurns([{ text }], "wonderful")[0];
+  const { pieces } = blocksOf(text, hit, 4);
+  assert.equal(pieces.map((p) => p.text).join(""), text);
+  const marked = pieces.find((p) => p.mark);
+  assert.equal(marked.text.slice(marked.from, marked.to), "wonderful");
+  assert.ok(pieces.every((p) => !p.text.includes("wonder") || p.text.includes("wonderful")));
+  const phrase = "one two three four five six";
+  const across = searchTurns([{ text: phrase }], "two three")[0];
+  const packed = blocksOf(phrase, across, 4);
+  assert.equal(packed.pieces.map((p) => p.text).join(""), phrase);
+  const bit = packed.pieces[packed.at];
+  assert.equal(bit.text.slice(bit.from, bit.to), "two three");
+});
+
 test("The part around a match keeps the word itself and who said it", () => {
   const text = `${"word ".repeat(40)}código${" word".repeat(40)}`;
   const hit = searchTurns([{ text }], "codigo")[0];
@@ -97,6 +175,24 @@ test("Claude's transcript yields what was said and the tool's reply, not its thi
   assert.equal(searchTurns(turns, "codigo").length, 1);
   assert.equal(searchTurns(turns, "secret").length, 0);
   assert.equal(searchTurns(turns, "ignore").length, 0);
+});
+
+test("A tool's delivery note and an empty output are left out", () => {
+  const noise = readTurns([
+    line({ type: "user", message: { content: "ship it" }, timestamp: at }),
+    line({ type: "assistant", message: { content: [{ type: "text", text: "On its way" }, { type: "tool_use", id: "s", name: "SendUserMessage" }, { type: "tool_use", id: "g", name: "git status" }] }, timestamp: at }),
+    line({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "s", content: "Message delivered to user." }, { type: "tool_result", tool_use_id: "g", content: "clean" }, { type: "tool_result", tool_use_id: "e", content: "  \n" }] }, timestamp: at }),
+  ].join("\n"));
+  assert.equal(readable({ role: "tool", text: "Message delivered to user." }), false);
+  assert.equal(readable({ role: "tool", text: "   " }), false);
+  assert.equal(readable({ role: "user", text: "ship it" }), true);
+  assert.deepEqual(noise.map((t) => [t.role, t.text]), [
+    ["user", "ship it"],
+    ["assistant", "On its way"],
+    ["tool", "clean"],
+  ]);
+  assert.equal(searchTurns(noise, "delivered").length, 0);
+  assert.equal(searchTurns(noise, "clean").length, 1);
 });
 
 test("A Codex conversation prefers the completed items and does not count the copy twice", () => {

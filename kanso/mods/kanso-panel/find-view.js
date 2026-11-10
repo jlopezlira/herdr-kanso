@@ -1,29 +1,21 @@
-// Cmd+F on an agent: the conversation, scrolled to the match. No conversation falls back to the terminal's Find.
-import { div } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+// Cmd+F on an agent: a bar until you type, then only the matching turns.
+import { div, list } from "gpui-kit";
+import { v_flex, h_flex, InputState, Input, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents } from "herdr";
-import { tokens, skeleton, controlInput } from "./ui.js";
+import { tokens, skeleton, controlInput, G, H, T } from "./ui.js";
 import {
   locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
-  enterMatch, retarget, partsOf, whoOf, whenLabel, countLabel,
+  chooseMatch, layOut, partsOf, whoOf, whenLabel, countLabel, blankQuery, retarget, EXCERPT,
 } from "./find.js";
 
-const ROW = 104;
 const WAIT = 120;
-const RADIUS = 80;
+const MAX = 300; // the list stops here so Find does not cover the terminal
 
 function hintOf(address) {
   try {
     const agent = agents().find((a) => a.address === address);
     return [agent?.app, agent?.program?.key].filter(Boolean).join(" ");
   } catch { return ""; }
-}
-
-function words(text, mark, t) {
-  return String(text ?? "").split(/\s+/).filter(Boolean).map((w) => {
-    const el = div().max_w_full().child(w);
-    return mark ? el.rounded(2).px(1).bg(t.accent).text_color(t.accent_foreground ?? t.background) : el;
-  });
 }
 
 export class Find {
@@ -34,14 +26,16 @@ export class Find {
     this.pending = "";
     this.hits = [];
     this.at = 0;
+    this.open = false;
     this.index = [];
     this.state = freshRead();
-    this.loading = true;
+    this.loading = false;
     this.gone = false;
     this.missing = false;
-    this.caughtUp = false;
-    this.shown = -1;
-    this.cached = null;
+    this.asked = false;
+    this.begun = false;
+    this.file = null;
+    this.pendingScroll = false;
     this.gen = 0;
     this.enterAt = 0;
     this.scroll = VirtualListScrollHandle.new();
@@ -50,76 +44,80 @@ export class Find {
     this.input.on("submit", (e, cx) => this.enter(Boolean(e?.shift), cx));
     this.input.focus();
     cx.timer.after(600, () => { if (!this.gone) this.input.focus(); });
-    cx.spawn(async (cx) => { await this.open(cx); });
+    cx.spawn(async (cx) => { await this.locate(cx); });
+  }
+
+  snap() {
+    return { pending: this.input.value(), query: this.query, hits: this.hits, at: this.at, open: this.open };
+  }
+
+  apply(next) {
+    const scroll = next.at !== this.at || next.open !== this.open || next.query !== this.query || (!this.hits.length && next.hits.length);
+    this.query = next.query;
+    this.hits = next.hits;
+    this.at = next.at;
+    this.open = Boolean(next.open);
+    if (scroll) this.pendingScroll = true;
   }
 
   note(cx) {
     this.pending = this.input.value();
     this.gen = this.gen + 1;
     const gen = this.gen;
+    if (!blankQuery(this.pending)) this.arm(cx);
+    if (blankQuery(this.pending)) {
+      this.query = "";
+      this.hits = [];
+      this.at = 0;
+      this.open = false;
+      cx.notify();
+      return;
+    }
     cx.timer.after(WAIT, (cx) => {
       if (this.gone || gen !== this.gen || this.pending === this.query) return;
-      this.query = this.pending;
-      this.hits = searchIndex(this.index, this.query);
-      this.at = 0;
-      this.shown = -1;
-      this.remember();
-      this.reveal();
+      this.apply(chooseMatch(this.snap(), this.index, { key: "type" }));
       cx.notify();
     });
+  }
+
+  arm(cx) {
+    this.asked = true;
+    if (this.file) this.begin(cx);
+    else if (!this.begun) { this.loading = true; cx.notify(); }
   }
 
   enter(shift, cx) {
     const now = Date.now();
     if (now - this.enterAt < 40) return;
     this.enterAt = now;
-    this.gen = this.gen + 1;
+    this.gen += 1;
     this.pending = this.input.value();
-    const next = enterMatch(this, this.index, shift);
-    this.query = next.query;
-    this.hits = next.hits;
-    this.at = next.at;
-    this.remember();
-    this.reveal();
+    if (!blankQuery(this.pending)) this.arm(cx);
+    this.apply(chooseMatch(this.snap(), this.index, { key: shift ? "shift" : "enter" }));
     cx.notify();
   }
 
-  remember() {
-    const hit = this.hits[this.at];
-    if (!hit) { this.cached = null; return; }
-    this.cached = { turn: hit.turn, at: hit.at, len: hit.len, parts: partsOf(this.state.turns[hit.turn]?.text ?? "", hit, RADIUS) };
-  }
-
-  reveal() {
-    const turn = this.hits[this.at]?.turn;
-    if (turn == null || turn === this.shown) return;
-    this.shown = turn;
-    this.pendingScroll = turn;
+  pick(key, cx) {
+    const index = Number(String(key).split(":")[0]);
+    if (!Number.isInteger(index) || index < 0 || index >= this.hits.length) return;
+    this.apply(chooseMatch(this.snap(), this.index, { key: "click", at: index }));
+    this.input.focus();
+    cx.notify();
   }
 
   sync(applied, keep) {
     this.state = applied.state;
     this.index = extendIndex(this.index, this.state.turns, applied.from, applied.reindex);
-    if (!this.query) {
+    this.loading = false;
+    if (blankQuery(this.query)) {
       this.hits = [];
       this.at = 0;
-      this.cached = null;
-      if (!keep) this.revealEnd();
+      this.open = false;
       return;
     }
-    const prev = this.hits[this.at];
-    const next = keep && prev ? retarget(this.index, this.query, prev) : { hits: searchIndex(this.index, this.query), at: 0 };
-    this.hits = next.hits;
-    this.at = next.at;
-    this.remember();
-    this.reveal();
-  }
-
-  revealEnd() {
-    const last = this.state.turns.length - 1;
-    if (last < 0 || this.shown === last) return;
-    this.shown = last;
-    this.pendingScroll = last;
+    const prev = keep ? this.hits[this.at] : null;
+    const found = prev ? retarget(this.index, this.query, prev) : { hits: searchIndex(this.index, this.query), at: 0 };
+    this.apply({ query: this.query, hits: found.hits, at: found.at, open: Boolean(keep && this.open && found.hits.length) });
   }
 
   restart() {
@@ -127,18 +125,26 @@ export class Find {
     this.index = [];
     this.hits = [];
     this.at = 0;
-    this.cached = null;
-    this.shown = -1;
+    this.open = false;
   }
 
-  async open(cx) {
+  async locate(cx) {
     const where = await locateConversation({ exec, hc, readTextFile, home }, this.terminal, hintOf(this.terminal)).catch(() => ({ file: null }));
     if (this.gone) return;
     if (resolveFind(where).action !== "find") { this.giveBack(); return; }
     this.file = where.file;
-    await this.catchUp(cx);
-    if (this.gone || this.missing) return;
-    cx.timer.every(2000, (cx) => { if (!this.gone) this.grow(cx); });
+    if (this.asked) this.begin(cx);
+  }
+
+  begin(cx) {
+    if (this.begun || !this.file) return;
+    this.begun = true;
+    this.loading = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      await this.catchUp(cx);
+      if (!this.gone) cx.timer.every(2000, (cx) => { if (!this.gone) this.grow(cx); });
+    });
   }
 
   async catchUp(cx) {
@@ -147,13 +153,12 @@ export class Find {
       const parsed = await readSlice(exec, this.file, prev);
       if (this.gone) return;
       if (!parsed) { this.missing = prev === 0 && !this.state.turns.length; break; }
-      if (parsed.end === prev) { this.loading = false; this.caughtUp = true; break; }
+      if (parsed.end === prev) break;
       const applied = applySlice(this.state, parsed);
       if (applied.reset) { this.restart(); continue; }
-      this.loading = false;
-      this.sync(applied, false);
+      this.sync(applied, this.open || this.at > 0);
       cx.notify();
-      if (parsed.end >= parsed.size) { this.caughtUp = true; return; }
+      if (parsed.end >= parsed.size) return;
     }
     this.loading = false;
     cx.notify();
@@ -174,64 +179,93 @@ export class Find {
     } finally { this.reading = false; }
   }
 
-  close() {
-    if (this.gone) return;
-    this.gone = true;
-    closeOverlay(props()?.overlay);
-    if (this.terminal) run("pane.focus", { terminal: this.terminal });
-  }
-
-  giveBack() {
+  shut(search) {
     if (this.gone) return;
     this.gone = true;
     const term = this.terminal;
     closeOverlay(props()?.overlay);
     if (term) run("pane.focus", { terminal: term });
-    run("terminal.search");
+    if (search) run("terminal.search");
+  }
+
+  close() { this.shut(false); }
+
+  giveBack() { this.shut(true); }
+
+  bar(c, count, field) {
+    return h_flex().w_full().flex_none().px(G.md).py(G.sm).gap(G.sm).items_center()
+      .child(div().flex_none().font_semibold().text_size(T.card).child("Find"))
+      .child(field ? controlInput(field, c).flex_1() : div().flex_1().h(H.control))
+      .child(div().flex_none().text_size(T.value).text_color(c.dim).whitespace_nowrap().child(count ?? ""))
+      .child(div().flex_none().text_size(T.small).text_color(c.dim).child("Esc"));
   }
 
   bones(c) {
-    const { header, row } = skeleton(c);
-    return v_flex().size_full().bg(c.canvas).text_color(c.text)
-      .child(h_flex().h(48).flex_none().px(14).items_center().border_b(1).border_color(c.border).child(header(48, 13)))
-      .child(v_flex().flex_1().p(8).gap(8).children([0, 1, 2, 3, 4].map((i) => row(i, 28))));
+    return v_flex().w_full().bg(c.canvas).text_color(c.text).child(this.bar(c));
   }
 
-  turnRow(i, t) {
-    const turn = this.state.turns[i];
-    const hit = this.hits[this.at];
-    const on = hit?.turn === i;
-    const parts = on && this.cached?.turn === i && this.cached.at === hit.at ? this.cached.parts : partsOf(turn?.text ?? "", null, RADIUS);
-    const line = parts.flatMap((part) => words(part.text, part.mark, t));
-    return v_flex().h(ROW).w_full().px(12).py(8).gap(4).overflow_hidden().rounded(6)
-      .when(on, (el) => el.bg(t.selected ?? t.hover))
-      .child(h_flex().gap(8).items_center()
-        .child(div().text_size(11).text_color(t.muted).child(whoOf(turn)))
-        .child(div().text_size(11).text_color(t.dim).child(whenLabel(turn?.at))))
-      .child(h_flex().flex_wrap().gap_x(4).gap_y(2).max_w_full().min_w(0).text_size(13).children(line));
+  block(parts, t) {
+    const stepped = parts.reduce((acc, part) => String(part.text ?? "").split("\n").reduce((state, bit, i) => {
+      const words = bit.split(/\s+/).filter(Boolean).map((w) => ({ w, mark: part.mark }));
+      return i ? { lines: state.lines.concat([state.cur]), cur: words } : { lines: state.lines, cur: state.cur.concat(words) };
+    }, acc), { lines: [], cur: [] });
+    const lines = stepped.cur.length || !stepped.lines.length ? stepped.lines.concat([stepped.cur]) : stepped.lines;
+    const word = ({ w, mark }) => {
+      const el = div().text_size(T.card).text_color(t.foreground).child(w);
+      return mark ? el.rounded(2).px(1).bg(t.accent).text_color(t.accent_foreground ?? t.background) : el;
+    };
+    return v_flex().w_full().children(lines.map((line) => (
+      line.length
+        ? h_flex().w_full().flex_wrap().gap_x(G.xs).children(line.map(word))
+        : div().text_size(T.card).child(" ")
+    )));
+  }
+
+  partsFor(item) {
+    if (item.kind === "hit") return partsOf(this.state.turns[item.hit.turn]?.text ?? "", item.hit, EXCERPT);
+    const piece = item.piece ?? { text: "", from: 0, to: 0, mark: false };
+    if (!piece.mark) return [{ text: piece.text, mark: false }];
+    return [
+      piece.from > 0 ? { text: piece.text.slice(0, piece.from), mark: false } : null,
+      piece.to > piece.from ? { text: piece.text.slice(piece.from, piece.to), mark: true } : null,
+      piece.to < piece.text.length ? { text: piece.text.slice(piece.to), mark: false } : null,
+    ].filter(Boolean);
+  }
+
+  keyOf(item) {
+    return `${item.index}:${item.k ?? -1}:${item.hit.turn}:${item.hit.at}`;
+  }
+
+  cell(item, t, c) {
+    const turn = this.state.turns[item.hit.turn];
+    return v_flex().w_full().px(G.md).when(item.head, (el) => el.pt(G.sm)).pb(G.xs).gap(G.xs)
+      .when(item.index === this.at, (el) => el.bg(c.selected))
+      .when(item.head, (el) => el.child(h_flex().gap(G.sm).items_center()
+        .child(div().text_size(T.small).text_color(c.muted).child(whoOf(turn)))
+        .child(div().text_size(T.small).text_color(c.dim).child(whenLabel(turn?.at)))))
+      .child(this.block(this.partsFor(item), t));
   }
 
   render(cx) {
     const t = theme();
     const c = tokens(t);
-    const n = this.state.turns.length;
-    const key = (e, cx) => { if (e.key !== "escape") return; this.close(); cx.stop_propagation(); };
-    const root = v_flex().id("find").size_full().min_h(0).bg(t.background).text_color(t.foreground).track_focus(this.handle).on_key_down(key)
-      .child(h_flex().h(48).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-        .child(div().font_semibold().child("Find"))
-        .child(controlInput(Input.new(this.input), c).flex_1())
-        .child(div().text_size(12).text_color(t.dim).whitespace_nowrap().child(countLabel(this.query, this.at, this.hits.length)))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .when(this.loading, (el) => el.child(v_flex().flex_1().p(8).gap(8).children([0, 1, 2, 3, 4].map((i) => skeleton({ border: t.border }).row(i, 28)))))
-      .when(this.missing, (el) => el.child(div().p(12).text_size(12).text_color(t.dim).child("This conversation is no longer there.")))
-      .when(!this.loading && !this.missing && n > 0, (el) => el.child(v_flex().flex_1().min_h(0).relative()
-        .child(v_virtual_list("kanso-find-list", n, ROW, (i) => String(i), (range) => (
-          Array.from({ length: range.end - range.start }, (_, k) => this.turnRow(range.start + k, t))
-        )).track_scroll(this.scroll).size_full())
-        .child(Scrollbar.vertical("kanso-find-list").absolute().inset_0())));
-    if (this.pendingScroll != null && !this.loading && !this.missing && n > 0) {
-      const to = this.pendingScroll;
-      this.pendingScroll = null;
+    const onKey = (e, cx) => { if (e.key !== "escape") return; this.close(); cx.stop_propagation(); };
+    const showSkel = this.loading && !blankQuery(this.pending) && !this.hits.length;
+    const laid = !blankQuery(this.query) && this.hits.length
+      ? layOut(this.hits, this.at, this.open, (hit) => this.state.turns[hit.turn]?.text ?? "")
+      : { items: [], focus: 0 };
+    const root = v_flex().id("find").w_full().bg(t.background).text_color(t.foreground).track_focus(this.handle).on_key_down(onKey)
+      .child(this.bar(c, countLabel(this.query, this.at, this.hits.length), Input.new(this.input)))
+      .when(showSkel, (el) => el.child(v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1, 2].map((i) => skeleton(c).row(i)))))
+      .when(this.missing && !blankQuery(this.pending) && !this.loading, (el) => el.child(
+        div().px(G.md).py(G.sm).text_size(T.small).text_color(c.dim).child("This conversation is no longer there.")))
+      .when(laid.items.length > 0, (el) => el.child(v_flex().relative().w_full().max_h(MAX).min_h(0)
+        .child(list("kanso-find", laid.items.length, (i) => this.keyOf(laid.items[i]), (i) => this.cell(laid.items[i], t, c))
+          .w_full().max_h(MAX).track_scroll(this.scroll).on_item_click((key, cx) => this.pick(key, cx)))
+        .child(Scrollbar.vertical("kanso-find").absolute().inset_0())));
+    if (this.pendingScroll && laid.items.length) {
+      const to = laid.focus;
+      this.pendingScroll = false;
       this.scroll.scroll_to_item(to, "center");
     }
     return root;

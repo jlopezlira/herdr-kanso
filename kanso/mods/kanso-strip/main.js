@@ -672,7 +672,7 @@ export default class Strip extends View {
   openFind() {
     const term = focused()?.terminal;
     if (!term || String(term).includes("/")) { run("terminal.search"); return; }
-    openOverlay({ mod: "kanso-panel", kind: "dialog", modal: true, width: 760, height: 640, props: { panel: "find", terminal: term } });
+    openOverlay({ mod: "kanso-panel", kind: "dialog", modal: true, width: 760, props: { panel: "find", terminal: term } });
   }
 
   focusedPane() {
