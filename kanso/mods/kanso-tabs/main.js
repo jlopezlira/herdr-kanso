@@ -37,12 +37,13 @@ function customPanels() {
   return Array.isArray(list) ? list.filter((p) => p && typeof p.id === "string" && typeof p.mod === "string" && !(p.id in PANELS)) : [];
 }
 
-// Both shared, so the Panels popup and every bar agree.
-// A tab put to sleep leaves the bar in the same turn: settled, or listed in kanso.sleep.hidden until the row lands.
+// A tab put to sleep leaves the bar in the same turn.
 export function shownTabs(tabs, hidden) {
   const away = new Set((hidden ?? []).flatMap((h) => h.settle ?? []));
   return (tabs ?? []).filter((c) => !c.settled && !away.has(c.id));
 }
+
+// Both shared, so the Panels popup and every bar agree.
 const ORDER = "kanso.panels.order", OFF = "kanso.panels.off";
 const ICON = "mods/kanso-chrome/icons/";
 const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });

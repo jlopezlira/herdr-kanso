@@ -24,16 +24,21 @@ export const WORKING = ["sleeping", "undoing"];
 const KEPT = ["out", "unsure"]; // an undo's agents that stay asleep
 const OWNER_KEY = "kanso.sleep.owner";
 
+const ownerId = () => `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 // The same id after a reload, so this window resumes a sleep it still owns instead of waiting out the lease.
 export function keptOwner(storage = globalThis.localStorage) {
   try {
     const kept = storage?.getItem(OWNER_KEY);
     if (kept) return kept;
-    const id = `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const id = ownerId();
     storage?.setItem(OWNER_KEY, id);
     return id;
-  } catch { return `w${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`; }
+  } catch { return ownerId(); }
 }
+
+const AWAY = "away:";
+export const isAway = (id) => String(id ?? "").startsWith(AWAY);
+export const tabOfAway = (id) => (isAway(id) ? String(id).slice(AWAY.length) : null);
 
 // A lone pane's tab settles too, so an empty tab does not stay. Nothing here ends a terminal.
 export function hidePlan(order, panes, tabs = []) {
@@ -71,7 +76,7 @@ export function rememberHide(list, entries) {
   return [...(list ?? []).filter((h) => !tabs.has(h.tab)), ...entries];
 }
 export function claimHide(list, tab, sleepId) {
-  return (list ?? []).map((h) => (h.tab === tab && String(h.id).startsWith("away:") ? { ...h, id: sleepId } : h));
+  return (list ?? []).map((h) => (h.tab === tab && isAway(h.id) ? { ...h, id: sleepId } : h));
 }
 
 export function awayOf({ scope, tab, pane }, space, panes, project) {
@@ -92,7 +97,7 @@ export function awayOf({ scope, tab, pane }, space, panes, project) {
 
 export function awayLeft(away, tabs) {
   if (!tabs?.size) return away ?? null;
-  const rows = (away?.rows ?? []).filter((r) => !tabs.has(String(r.id).slice(5)));
+  const rows = (away?.rows ?? []).filter((r) => !tabs.has(tabOfAway(r.id)));
   return rows.length ? { rows } : null;
 }
 
@@ -127,12 +132,12 @@ export function onLoad(row, me, now, sees) {
 }
 
 const placeOf = (h, open, byTab) => {
-  if (String(h.id).startsWith("away:")) {
+  if (isAway(h.id)) {
     const row = byTab.get(h.tab);
-    return row?.state === "sleeping" || row?.state === "stuck" ? "reapply" : "reveal";
+    return row?.state === "sleeping" || row?.state === "stuck" ? "keep" : "reveal";
   }
   const row = open.get(h.id);
-  return !row ? "restore" : row.state === "undoing" ? "reveal" : "reapply";
+  return !row ? "restore" : row.state === "undoing" ? "reveal" : "keep";
 };
 
 export function settleOnLoad(hidden, rows) {
@@ -140,8 +145,7 @@ export function settleOnLoad(hidden, rows) {
   const byTab = new Map((rows ?? []).map((r) => [r.tab ?? r.into?.tabId ?? null, r]));
   const tagged = (hidden ?? []).map((h) => ({ h, place: placeOf(h, open, byTab) }));
   const of = (place) => tagged.filter((t) => t.place === place).map((t) => t.h);
-  const staying = of("reapply");
-  return { keep: staying, reveal: of("reveal"), reapply: staying, restore: of("restore") };
+  return { keep: of("keep"), reveal: of("reveal"), restore: of("restore") };
 }
 
 // --- Transitions: pure, a row and what was seen in, the next step out. ---

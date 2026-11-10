@@ -34,8 +34,7 @@ export function seenNow(sp, ctx, threads, kept, nameFor, since = {}) {
   })));
 }
 
-// `dozing`: a terminal a sleep still holds, so its awake row is gone. An address given to another agent later is that agent's.
-// One coming back (undoing) with its terminal still live is not dozing: it returns to where it was.
+// A terminal a sleep still holds leaves the awake list. One undoing, still live, returns to where it was.
 export function sleepingNow(sp, terms, asleep, home = () => "") {
   const live = new Set(terms.map((k) => k.address)), ids = new Set(sp.map((w) => w.id));
   const tabSpace = new Map(sp.flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, w.id])));

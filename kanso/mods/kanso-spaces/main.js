@@ -12,7 +12,7 @@ import { parseProcesses } from "./procs.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
-import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft } from "./sleepwork.js";
+import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
 import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
@@ -46,7 +46,6 @@ const CHILD_PAD = GUIDE_X + ELBOW_W + 6 - 8; // icon starts 6px after the elbow,
 const rowHeight = ({ tree }) => (tree ? TREE_ROW : PLAIN_ROW);
 // Every height is known before anything is drawn, so a scan (`laidOut`) finds where each pill goes.
 const item = (el, h = null, mark = null) => ({ el, h, mark });
-const glide = (el, on) => (on ? el.transition("opacity", { duration: 180, easing: "ease-out" }) : el);
 const goingOf = (group) => Boolean(group?.going?.length) && !group?.stuck?.length;
 const spaceMark = (h) => ({ kind: "space", at: 0, h });
 const agentMark = (at, h) => ({ kind: "agent", at, h });
@@ -445,13 +444,12 @@ export default class Spaces extends View {
     if (!hidden.length) { this.hidOnce = true; return; }
     const plan = settleOnLoad(hidden, rows);
     const live = new Set(spaces().flatMap((s) => (s.tabs ?? []).map((t) => t.id)));
-    const back = (list) => runCmds(list.flatMap((h) => commandsOf(h, { back: true })));
+    const back = [...plan.reveal, ...plan.restore.filter((h) => live.has(h.tab))];
+    runCmds(back.flatMap((h) => commandsOf(h, { back: true })));
     if (!this.hidOnce) {
       this.hidOnce = true;
-      back(plan.reveal);
-      back(plan.restore.filter((h) => live.has(h.tab)));
-      runCmds(plan.reapply.flatMap((h) => commandsOf(h)));
-    } else back([...plan.reveal, ...plan.restore.filter((h) => live.has(h.tab))]);
+      runCmds(plan.keep.flatMap((h) => commandsOf(h)));
+    }
     if (plan.keep.length !== hidden.length || plan.keep.some((h, i) => h !== hidden[i])) setShared("kanso.sleep.hidden", plan.keep);
     const tabs = new Set([...plan.reveal, ...plan.restore].map((h) => h.tab));
     if (tabs.size) setShared("kanso.sleep.away", awayLeft(shared("kanso.sleep.away"), tabs));
@@ -959,7 +957,7 @@ export default class Spaces extends View {
       .when(Boolean(group), (el) => el.children(this.asleepTail(t, group)))
       .when(this.hoverSpace === key, (el) => el.child(this.dots(`asleep-dots-${key}`, t, open)))
       .when(!missing, (el) => el.child(this.plus(`closed-plus-${key}`, t, placeOfKey(key, project))));
-    return glide(row, goingOf(group));
+    return row;
   }
 
   closedRail(t, c, names, ctx) {
@@ -984,7 +982,7 @@ export default class Spaces extends View {
     const go = async (cx) => {
       try {
         if (how === "undo") releaseHide(id, shared, setShared);
-        if (String(id).startsWith("away:")) { await this.loadAsleep(); return; }
+        if (isAway(id)) { await this.loadAsleep(); return; }
         const ok = await this.leftNavStore()[how](id);
         if (ok) { setShared("kanso.sleep.kick", Date.now()); this.sleepWork?.start(cx); }
         await this.loadAsleep();
@@ -1031,7 +1029,7 @@ export default class Spaces extends View {
       .on_click((_e, cx) => { this.toggleAsleep(group.id, open, cx); cx.notify(); })
       .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(t.muted).child(label))
       .children(this.asleepTail(t, group));
-    return glide(row, goingOf(group));
+    return row;
   }
 
   asleepAgents(group, t, ctx, indent = 0) {
@@ -1696,7 +1694,7 @@ export default class Spaces extends View {
           .when(this.hoverSpace === w.id, (el) => el.child(this.plus(`space-plus-${w.id}`, t, placeOfSpace(w))).child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
           .when(!asleep && mine.length > 0, (el) => el.child(this.fold(w, mine, t))),
       );
-    return glide(row, goingOf(group));
+    return row;
   }
 
   // Projects, collapsed: one mark per project; a click lists its agents, or goes to it when it has none.
@@ -2015,7 +2013,7 @@ export default class Spaces extends View {
       // A project starts after a wider breath than the gap inside it, so each reads as one group.
       const lift = i ? (p ? 18 : 12) : 0;
       const headName = p ? p.name : whole ? this.zzProject(whole.rows[0].a, t).name : (s.label ?? "Active");
-      const head = [item(glide(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, s.rows.length, folds ? t.muted : t.foreground, extra, lift), goingOf(whole)), 32 + lift)];
+      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, s.rows.length, folds ? t.muted : t.foreground, extra, lift), 32 + lift)];
       const body = whole ? s.rows : split.live;
       const show = this.unfolded(foldId, open, ctx.now);
       const laid = show ? body.map((r) => row(r, Boolean(s.project))) : [];

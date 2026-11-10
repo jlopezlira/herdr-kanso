@@ -424,7 +424,7 @@ test("an undo cut short by a restart, with the agent told to exit still in front
 });
 
 test("what leaves the screen is decided before any slow work, and a reload knows what to resume", async () => {
-  const names = ["hidePlan", "commandsOf", "hideEntries", "claimHide", "rememberHide", "wakeMidFlight", "onLoad", "settleOnLoad", "keptOwner", "LEASE_MS", "LONG_MS"];
+  const names = ["hidePlan", "commandsOf", "hideEntries", "claimHide", "rememberHide", "wakeMidFlight", "onLoad", "settleOnLoad", "keptOwner", "isAway", "tabOfAway", "LEASE_MS", "LONG_MS"];
   const m = await load("kanso-spaces/sleepwork.js", names, {});
   const panes = [{ pane: "p1", tab: "tb1", terminal: "t1" }, { pane: "p2", tab: "tb1", terminal: "t2" }];
   const alone = m.hidePlan({ scope: "agent", pane: "p1" }, [panes[0]], [{ id: "tb1" }]);
@@ -448,7 +448,12 @@ test("what leaves the screen is decided before any slow work, and a reload knows
   assert.equal(m.onLoad(row, "w-b", 1000 + m.LONG_MS + 1, false), "resume", "left long enough, it is taken anyway");
   const open = [{ id: "sl1", state: "sleeping", tab: "tb1" }];
   const plan = m.settleOnLoad([{ id: "sl1", tab: "tb1", settle: ["tb1"] }, { id: "away:tb2", tab: "tb2", settle: ["tb2"] }], open);
-  assert.deepEqual(clone(plan.reapply.map((h) => h.id)), ["sl1"]);
+  assert.equal(plan.reapply, undefined);
+  assert.deepEqual(clone(plan.keep.map((h) => h.id)), ["sl1"]);
+  assert.equal(m.isAway("away:tb1"), true);
+  assert.equal(m.isAway("sl1"), false);
+  assert.equal(m.tabOfAway("away:tb1"), "tb1");
+  assert.equal(m.tabOfAway("sl1"), null);
   assert.deepEqual(clone(plan.reveal.map((h) => h.id)), ["away:tb2"], "a hide whose row never landed comes back");
   assert.deepEqual(clone(m.settleOnLoad([{ id: "sl1", tab: "tb1", settle: ["tb1"] }], [{ id: "sl1", state: "asleep", tab: "tb1" }]).restore.map((h) => h.id)), ["sl1"]);
   const box = new Map();

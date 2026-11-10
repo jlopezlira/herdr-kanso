@@ -1,11 +1,11 @@
 // Ordering sleep hides the tab or parks the pane before the slow read, and a wake mid-flight cancels it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load } from "./helpers.mjs";
+import { load, context } from "./helpers.mjs";
 
 const space = { id: "sp", name: "kanso", folder: "/w", active: true, tabs: [{ id: "tb1", active: true, name: "Main" }] };
 
-function host(order) {
+function host(order, closed = null) {
   return {
     spaces: () => [space],
     panes: () => [{ pane: "p1", tab: "tb1", terminal: "t1", cwd: "/w" }],
@@ -18,7 +18,7 @@ function host(order) {
     readTextFile: async () => { throw new Error("no"); },
     props: () => ({}),
     theme: () => ({}),
-    closeOverlay: () => {},
+    closeOverlay: () => { if (closed) closed.push("close"); },
     exec: async () => ({ code: 1, stdout: "" }),
   };
 }
@@ -70,6 +70,77 @@ test("waking a sleep that is still going cancels it and does not claim it", asyn
   s.wake({ id: "s2", state: "asleep", name: "Bea" }, cx);
   assert.ok(calls.includes("claim"), "an asleep row is claimed");
   assert.equal(calls.filter((c) => Array.isArray(c)).length, 1, "the one still going was cancelled, not claimed");
+});
+
+async function ordered(pane) {
+  const closed = [];
+  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host([], closed));
+  const s = new Sleep();
+  s.space = space;
+  s.readTabs = async () => shown;
+  s.refresh = async () => {};
+  s.store = { asleep: async () => [], sleep: async () => "id1" };
+  const { cx, drain } = context();
+  s.startSleep(cx, false, "tb1", pane);
+  await drain();
+  return { s, closed };
+}
+
+test("a tab or an agent ordered to sleep closes the dialog and never sits on its progress", async () => {
+  for (const pane of [null, "p1"]) {
+    const { s, closed } = await ordered(pane);
+    assert.deepEqual(closed, ["close"]);
+    assert.notEqual(s.view, "progress");
+  }
+});
+
+test("a project stays open until it is confirmed, then the dialog closes", async () => {
+  const closed = [];
+  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host([], closed));
+  const s = new Sleep();
+  s.space = space;
+  s.readTabs = async () => shown;
+  s.refresh = async () => {};
+  s.store = { asleep: async () => [], sleep: async () => "id1" };
+  const { cx, drain } = context();
+  s.startSleep(cx, true, null, null);
+  await drain();
+  assert.deepEqual(closed, []);
+  assert.equal(s.view, "sleep");
+  s.sleep(cx);
+  await drain();
+  assert.deepEqual(closed, ["close"]);
+  assert.notEqual(s.view, "progress");
+});
+
+test("a blocker keeps the dialog open", async () => {
+  const closed = [];
+  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host([], closed));
+  const s = new Sleep();
+  s.space = space;
+  s.readTabs = async () => [{ ...shown[0], blocker: "Ada is working" }];
+  const { cx, drain } = context();
+  s.startSleep(cx, false, "tb1", null);
+  await drain();
+  assert.deepEqual(closed, []);
+  assert.equal(s.view, "sleep");
+  assert.equal(s.sleepers[0].blocker, "Ada is working");
+});
+
+test("a failed write keeps the dialog open", async () => {
+  const closed = [];
+  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host([], closed));
+  const s = new Sleep();
+  s.space = space;
+  s.readTabs = async () => shown;
+  s.refresh = async () => {};
+  s.store = { asleep: async () => [], sleep: async () => { throw new Error("full"); } };
+  const { cx, drain } = context();
+  s.startSleep(cx, false, "tb1", null);
+  await drain();
+  assert.deepEqual(closed, []);
+  assert.equal(s.view, "sleep");
+  assert.match(s.error, /can't sleep/);
 });
 
 test("a settled tab and a tab sent to sleep leave the bar", async () => {

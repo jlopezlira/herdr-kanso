@@ -15,7 +15,7 @@ release.
 
 ### Fixed
 
-- Sending an agent, a tab or a project to sleep hides it at once. It shows in Asleep while it finishes, and a sleep that fails keeps Retry and Undo there. Undo while it is still going brings it back.
+- Sending an agent or a tab to sleep hides it at once and closes the dialog. A whole project asks first, then closes. The row in Asleep shows it while it finishes, and a sleep that fails keeps Retry and Undo there. Undo while it is still going brings it back.
 
 ## [3.19.1] - 2026-11-10
 
