@@ -24,7 +24,8 @@ export async function probe(run = exec) {
   const text = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
   if (result.code !== 0 && /not found|No such file|ENOENT/i.test(text)) return { status: "no_cli", login: null, hosts: [] };
   const hosts = parseAuth(text);
-  if (result.code === 0 && hosts.length) {
+  // gh exits 1 when any host fails. A host that did log in still counts.
+  if (hosts.length) {
     const active = hosts.find((h) => h.active) ?? hosts[0];
     return { status: "ok", login: active.login, hosts };
   }
@@ -85,34 +86,41 @@ export function combineInbox({ reviews = [], authored = [], listed = [], login }
 
 const json = (result) => result?.code === 0 ? parseOr(result.stdout, null) : null;
 
-export async function inbox(run, { repos = [], login, now = Date.now() } = {}) {
-  const reviews = await run("gh", searchArgs("reviews"));
+// gh search has no hostname flag. GH_HOST selects the account that is signed in there.
+const ask = (run, host, args) => run("env", [`GH_HOST=${host}`, "gh", ...args]);
+
+const empty = (extra) => ({ items: [], rate: null, complete: false, error: null, queried: [], searchOk: false, ...extra });
+
+export async function inbox(run, { repos = [], login, host = "github.com", now = Date.now() } = {}) {
+  const reviews = await ask(run, host, searchArgs("reviews"));
   const limited = rateFrom(reviews, now);
-  if (limited) return { items: [], rate: limited, complete: false, error: null };
-  if (reviews?.code !== 0) return { items: [], rate: null, complete: false, error: firstLine(reviews) };
-  const authored = await run("gh", searchArgs("authored"));
+  if (limited) return empty({ rate: limited });
+  if (reviews?.code !== 0) return empty({ error: firstLine(reviews) });
+  const authored = await ask(run, host, searchArgs("authored"));
   const limitedAuthor = rateFrom(authored, now);
   const reviewRows = json(reviews) ?? [];
-  if (limitedAuthor) return { items: combineInbox({ reviews: reviewRows, login }), rate: limitedAuthor, complete: false, error: null };
-  if (authored?.code !== 0) return { items: combineInbox({ reviews: reviewRows, login }), rate: null, complete: false, error: firstLine(authored) };
+  if (limitedAuthor) return empty({ items: combineInbox({ reviews: reviewRows, login }), rate: limitedAuthor });
+  if (authored?.code !== 0) return empty({ items: combineInbox({ reviews: reviewRows, login }), error: firstLine(authored) });
   const authoredRows = json(authored) ?? [];
   const capped = repos.slice(0, LIST_CAP);
   const walked = await capped.reduce(async (prev, repo) => {
     const soFar = await prev;
     if (soFar.rate) return soFar;
-    const result = await run("gh", listArgs(repo));
+    const result = await ask(run, host, listArgs(repo));
     const hit = rateFrom(result, now);
-    if (hit) return { rows: soFar.rows, failed: soFar.failed, rate: hit };
+    if (hit) return { ...soFar, rate: hit };
     const rows = json(result);
-    if (!rows) return { rows: soFar.rows, failed: true, rate: null };
+    if (!rows) return { ...soFar, failed: true };
     const extra = rows.map((row) => ({ ...row, owner: repo.owner, name: repo.name, host: repo.host }));
-    return { rows: [...soFar.rows, ...extra], failed: soFar.failed, rate: null };
-  }, Promise.resolve({ rows: [], failed: false, rate: null }));
+    return { rows: [...soFar.rows, ...extra], failed: soFar.failed, rate: null, queried: [...soFar.queried, repo] };
+  }, Promise.resolve({ rows: [], failed: false, rate: null, queried: [] }));
   return {
     items: combineInbox({ reviews: reviewRows, authored: authoredRows, listed: walked.rows, login }),
     rate: walked.rate,
     complete: !walked.failed && !walked.rate && repos.length <= LIST_CAP,
     error: null,
+    queried: walked.queried,
+    searchOk: !walked.rate,
   };
 }
 

@@ -5,6 +5,7 @@ import { load, context, exec as realExec, temporary } from "./helpers.mjs";
 
 const AUTH = "github.com\n  Logged in to github.com account jj (keyring)\n  - Active account: true\n  - Token: gho_secret\n";
 const plain = (value) => JSON.parse(JSON.stringify(value));
+const ghArgs = (command, args) => (command === "env" && args?.[1] === "gh" ? args.slice(2) : args);
 
 test("remotes parse as SSH or HTTPS, and a token in the URL is not kept", async () => {
   const { parseRemote, publicUrl, parseRemotes, parseAuth } = await load("kanso-panel/pr-remote.js", ["parseRemote", "publicUrl", "parseRemotes", "parseAuth"], {});
@@ -63,13 +64,16 @@ test("GitHub matches only a host gh is signed into, and the inbox keeps reviews,
 
   let inflight = 0, max = 0, listed = 0;
   const now = 1_700_000_000_000;
-  const run = async (_command, args) => {
+  const run = async (command, args) => {
+    assert.equal(command, "env");
+    assert.equal(args[0], "GH_HOST=github.com");
+    const asked = ghArgs(command, args);
     inflight += 1; max = Math.max(max, inflight);
     inflight -= 1;
-    if (args[0] === "search" && args.includes("--review-requested=@me")) return { code: 0, stdout: "[]", stderr: "" };
-    if (args[0] === "search") return { code: 0, stdout: "[]", stderr: "" };
+    if (asked[0] === "search" && asked.includes("--review-requested=@me")) return { code: 0, stdout: "[]", stderr: "" };
+    if (asked[0] === "search") return { code: 0, stdout: "[]", stderr: "" };
     listed += 1;
-    if (args.includes("acme/repo-a")) return { code: 1, stdout: "", stderr: "HTTP 403: Resource not accessible" };
+    if (asked.includes("acme/repo-a")) return { code: 1, stdout: "", stderr: "HTTP 403: Resource not accessible" };
     return { code: 0, stdout: JSON.stringify([{ number: 2, title: "Mine", url: "https://github.com/acme/repo-b/pull/2", author: { login: "jj" }, updatedAt: "2026-11-01T00:00:00Z", additions: 1, deletions: 0 }]), stderr: "" };
   };
   const got = await inbox(run, { repos: [{ host: "github.com", owner: "acme", name: "repo-a" }, { host: "github.com", owner: "acme", name: "repo-b" }], login: "jj", now });
@@ -79,9 +83,9 @@ test("GitHub matches only a host gh is signed into, and the inbox keeps reviews,
   assert.equal(got.items[0].title, "Mine");
 
   let steps = 0;
-  const limited = await inbox(async (_command, args) => {
+  const limited = await inbox(async (command, args) => {
     steps += 1;
-    assert.equal(args.includes("--author=@me"), false, "a rate limit stops before the second search");
+    assert.equal(ghArgs(command, args).includes("--author=@me"), false, "a rate limit stops before the second search");
     return { code: 1, stdout: "", stderr: "HTTP 429\nX-RateLimit-Reset: 1700000000" };
   }, { repos: [{ host: "github.com", owner: "acme", name: "app" }], login: "jj", now });
   assert.equal(steps, 1);
@@ -155,10 +159,12 @@ async function panelFor(t, { gh, git, dir }) {
   const ui = recorder();
   const calls = [];
   const exec = async (command, args, options) => {
-    calls.push([command, ...(args ?? [])].join(" "));
+    const hosted = command === "env" && args?.[1] === "gh";
+    const forwarded = hosted ? args.slice(2) : args;
+    calls.push(hosted ? ["gh", ...forwarded, args[0]].join(" ") : [command, ...(args ?? [])].join(" "));
     if (command === "sqlite3" || command === "mkdir") return realExec(command, args, options);
     if (command === "git") return git(args, options);
-    if (command === "gh") return gh(args);
+    if (command === "gh" || hosted) return gh(forwarded, hosted ? args[0] : "");
     return { code: 1, stdout: "", stderr: "" };
   };
   const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], { ...ui, exec, appHome: () => dir, key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }) });
@@ -173,7 +179,9 @@ function gitAt(remotes) {
   return (args) => {
     if (args[0] === "-C" && args[2] === "remote") {
       const slug = remotes[args[1]];
-      return { code: slug ? 0 : 1, stdout: slug ? `origin\tgit@github.com:${slug}.git (fetch)\n` : "", stderr: slug ? "" : "no" };
+      if (!slug) return { code: 1, stdout: "", stderr: "no" };
+      const remote = slug.includes("@") || slug.includes("://") ? slug : `git@github.com:${slug}.git`;
+      return { code: 0, stdout: `origin\t${remote} (fetch)\n`, stderr: "" };
     }
     if (args[0] === "rev-parse" && args[1] === "--show-toplevel") return { code: 0, stdout: "/work/herdr-kanso\n", stderr: "" };
     if (args[0] === "branch") return { code: 0, stdout: "feat\n", stderr: "" };
@@ -412,4 +420,218 @@ test("nothing waiting is a note, and two projects of one name show the parent", 
     { provider: "github", host: "github.com", owner: "acme", name: "two", title: "Second", updatedAt: "2026-11-08T00:00:00Z" },
   ];
   assert.deepEqual(plain(groupInbox(items, { repos, projects }).map((group) => group.title)), ["one/app", "two/app"]);
+});
+
+test("a host that fails to sign in leaves the hosts that did", async () => {
+  const { probe } = await load("kanso-panel/pr-github.js", ["probe"], {});
+  const text = [
+    "github.com",
+    "  Logged in to github.com account jj (keyring)",
+    "  - Active account: true",
+    "  - Token: gho_secret",
+    "ghe.example.com",
+    "  X Failed to log in to ghe.example.com account ent (keyring)",
+  ].join("\n");
+  const got = await probe(async () => ({ code: 1, stdout: text, stderr: "" }));
+  assert.equal(got.status, "ok");
+  assert.equal(got.login, "jj");
+  assert.deepEqual(plain(got.hosts), [{ host: "github.com", login: "jj", active: true }]);
+  assert.equal(JSON.stringify(got).includes("gho_secret"), false);
+});
+
+test("each signed-in host is read as its own account", async (t) => {
+  const { dir, db } = await database(t);
+  await db.addProject({ name: "app", folder: "/work/app" });
+  await db.addProject({ name: "ent", folder: "/work/ent" });
+  const auth = [
+    "github.com",
+    "  Logged in to github.com account jj (keyring)",
+    "  - Active account: true",
+    "ghe.example.com",
+    "  Logged in to ghe.example.com account ent (keyring)",
+    "  - Active account: false",
+  ].join("\n");
+  const { panel, calls, ui } = await panelFor(t, {
+    dir,
+    git: gitAt({ "/work/app": "acme/app", "/work/ent": "git@ghe.example.com:acme/ent.git" }),
+    gh: async (args, hostEnv = "") => {
+      if (args[0] === "auth") return { code: 0, stdout: auth, stderr: "" };
+      if (args[1] === "list" && args.includes("ghe.example.com/acme/ent")) {
+        return { code: 0, stdout: JSON.stringify([
+          { number: 1, title: "For ent", url: "https://ghe.example.com/acme/ent/pull/1", author: { login: "ada" }, reviewRequests: [{ login: "ent" }], updatedAt: "2026-11-09T00:00:00Z" },
+          { number: 2, title: "For jj", url: "https://ghe.example.com/acme/ent/pull/2", author: { login: "ada" }, reviewRequests: [{ login: "jj" }], updatedAt: "2026-11-09T00:00:00Z" },
+        ]), stderr: "" };
+      }
+      if (args[0] === "search" && hostEnv === "GH_HOST=github.com" && args.includes("--author=@me")) {
+        return { code: 0, stdout: JSON.stringify([{ number: 3, title: "Mine on github", url: "https://github.com/acme/app/pull/3", author: { login: "jj" }, repository: { nameWithOwner: "acme/app" }, updatedAt: "2026-11-08T00:00:00Z" }]), stderr: "" };
+      }
+      if (args[1] === "view") return { code: 0, stdout: JSON.stringify(focused), stderr: "" };
+      return { code: 0, stdout: "[]", stderr: "" };
+    },
+  });
+  const { cx, drain } = context();
+  panel.refresh(cx); await drain();
+  assert.equal(calls.some((call) => call.startsWith("gh search") && call.endsWith("GH_HOST=github.com")), true);
+  assert.equal(calls.some((call) => call.startsWith("gh search") && call.endsWith("GH_HOST=ghe.example.com")), true);
+  assert.equal(calls.some((call) => call.includes(" -R ghe.example.com/acme/ent ") && call.endsWith("GH_HOST=ghe.example.com")), true);
+  assert.equal(panel.inbox.needs.some((item) => item.title === "For ent"), true);
+  assert.equal(panel.inbox.needs.some((item) => item.title === "For jj"), false);
+  assert.equal(panel.inbox.yours.some((item) => item.title === "Mine on github"), true);
+  assert.deepEqual(plain(panel.inbox.logins).toSorted(), ["ent", "jj"]);
+  panel.inboxTab = "yours";
+  panel.inboxPage(tone);
+  assert.ok(ui.texts.some((text) => text.includes(" · you")));
+});
+
+test("past 20 repositories, a listed one drops its stale review and an unlisted one keeps it", async (t) => {
+  const { dir, db, file } = await database(t);
+  const folders = {};
+  for (let n = 1; n <= 21; n++) {
+    const name = `repo-${String(n).padStart(2, "0")}`;
+    const folder = `/work/${name}`;
+    await db.addProject({ name, folder });
+    folders[folder] = `acme/${name}`;
+  }
+  await db.run(`INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at) VALUES
+    ('https://github.com/acme/repo-01/pull/1','github','github.com','acme','repo-01',1,'Stale one','OPEN',0,'ada','reviewer','2026-11-01T00:00:00Z',1),
+    ('https://github.com/acme/repo-21/pull/21','github','github.com','acme','repo-21',21,'Stale last','OPEN',0,'ada','reviewer','2026-11-01T00:00:00Z',1);`);
+  let searches = 0;
+  const { panel } = await panelFor(t, {
+    dir,
+    git: gitAt(folders),
+    gh: async (args) => {
+      if (args[0] === "auth") return { code: 0, stdout: AUTH, stderr: "" };
+      if (args[0] === "search") { searches += 1; return { code: 0, stdout: "[]", stderr: "" }; }
+      if (args[1] === "view") return { code: 0, stdout: JSON.stringify(focused), stderr: "" };
+      return { code: 0, stdout: "[]", stderr: "" };
+    },
+  });
+  const { cx, drain } = context();
+  panel.refresh(cx); await drain();
+  const left = JSON.parse((await realExec("sqlite3", ["-json", file, "SELECT name FROM pr_items ORDER BY name;"])).stdout);
+  assert.deepEqual(left.map((row) => row.name), ["repo-21"]);
+  assert.equal(panel.inbox.needs.some((item) => item.title === "Stale one"), false);
+  assert.equal(panel.inbox.needs.some((item) => item.title === "Stale last"), true);
+  const fetch = JSON.parse((await realExec("sqlite3", ["-json", file, "SELECT fetched_at FROM pr_fetches WHERE key='inbox:github:github.com';"])).stdout);
+  assert.ok(fetch[0].fetched_at);
+  assert.equal(searches, 2);
+  panel.loading = false;
+  panel.refresh(cx); await drain();
+  assert.equal(searches, 2, "an empty list still counts as fresh");
+});
+
+test("cached reviews show while GitHub is still being asked, and a failed ask keeps them", async (t) => {
+  const { dir, db } = await database(t);
+  await db.addProject({ name: "eres-admin-app", folder: "/work/eres-admin-app" });
+  await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at) VALUES('https://github.com/amtelser/eres-admin-app/pull/149','github','github.com','amtelser','eres-admin-app',149,'Cached','OPEN',0,'ada','reviewer','2026-11-09T00:00:00Z',1);");
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let hit;
+  const opened = new Promise((resolve) => { hit = resolve; });
+  const { panel } = await panelFor(t, {
+    dir,
+    git: gitAt({ "/work/eres-admin-app": "amtelser/eres-admin-app" }),
+    gh: async (args) => {
+      if (args[0] === "auth") return { code: 0, stdout: AUTH, stderr: "" };
+      if (args[0] === "search" && args.includes("--review-requested=@me")) { hit(); await gate; return { code: 0, stdout: "[]", stderr: "" }; }
+      if (args[1] === "view") return { code: 0, stdout: JSON.stringify(focused), stderr: "" };
+      return { code: 0, stdout: "[]", stderr: "" };
+    },
+  });
+  const { cx, drain } = context();
+  panel.refresh(cx);
+  await opened;
+  assert.equal(panel.inboxOn, true);
+  assert.equal(panel.inbox.needs[0].title, "Cached");
+  release();
+  await drain();
+
+  await db.run("DELETE FROM pr_fetches;");
+  await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at) VALUES('https://github.com/amtelser/eres-admin-app/pull/149','github','github.com','amtelser','eres-admin-app',149,'Cached','OPEN',0,'ada','reviewer','2026-11-09T00:00:00Z',1);");
+  const failed = await panelFor(t, {
+    dir,
+    git: gitAt({ "/work/eres-admin-app": "amtelser/eres-admin-app" }),
+    gh: async (args) => {
+      if (args[0] === "auth") return { code: 0, stdout: AUTH, stderr: "" };
+      if (args[0] === "search") throw new Error("gh died");
+      if (args[1] === "view") return { code: 0, stdout: JSON.stringify(focused), stderr: "" };
+      return { code: 0, stdout: "[]", stderr: "" };
+    },
+  });
+  failed.panel.refresh(cx); await drain();
+  assert.equal(failed.panel.inbox.needs[0].title, "Cached");
+  assert.match(failed.panel.note, /gh died/);
+});
+
+test("a removed project no longer takes a repository slot", async (t) => {
+  const { dir, db, file } = await database(t);
+  const folders = {};
+  let removed;
+  for (let n = 1; n <= 21; n++) {
+    const name = `repo-${String(n).padStart(2, "0")}`;
+    const folder = `/work/${name}`;
+    const added = await db.addProject({ name, folder });
+    folders[folder] = `acme/${name}`;
+    if (n === 1) removed = added.row.id;
+  }
+  await db.removeProject(removed);
+  await db.run(`INSERT INTO pr_repos(id,provider,host,owner,name,project_id,folder,machine,remote,seen_at) SELECT 'github|github.com|acme|repo-01','github','github.com','acme','repo-01',id,'/work/repo-01','','git@github.com:acme/repo-01.git',1 FROM projects WHERE folder='/work/repo-01';`);
+  const listed = [];
+  const { panel } = await panelFor(t, {
+    dir,
+    git: gitAt(folders),
+    gh: async (args) => {
+      if (args[0] === "auth") return { code: 0, stdout: AUTH, stderr: "" };
+      if (args[1] === "list" && args.includes("-R")) listed.push(args[args.indexOf("-R") + 1]);
+      if (args[1] === "view") return { code: 0, stdout: JSON.stringify(focused), stderr: "" };
+      return { code: 0, stdout: "[]", stderr: "" };
+    },
+  });
+  const { cx, drain } = context();
+  panel.refresh(cx); await drain();
+  assert.equal(listed.includes("acme/repo-01"), false);
+  assert.equal(listed.includes("acme/repo-21"), true);
+  assert.equal(listed.length, 20);
+  const repos = JSON.parse((await realExec("sqlite3", ["-json", file, "SELECT name FROM pr_repos ORDER BY name;"])).stdout);
+  assert.equal(repos.some((row) => row.name === "repo-01"), false);
+  assert.equal(repos.some((row) => row.name === "repo-21"), true);
+  assert.equal(panel.inboxOn, true);
+});
+
+test("signing out brings back copy, open, and the repository list", async (t) => {
+  const { dir, db } = await database(t);
+  await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at) VALUES('https://github.com/amtelser/eres-admin-app/pull/149','github','github.com','amtelser','eres-admin-app',149,'Review me','OPEN',0,'ada','reviewer','2026-11-09T00:00:00Z',1);");
+  await db.run(`INSERT INTO pr_fetches(key,fetched_at) VALUES('inbox:github:github.com',${Date.now()});`);
+  let signed = true;
+  const { panel, ui } = await panelFor(t, {
+    dir,
+    git: gitAt({}),
+    gh: async (args) => {
+      if (args[0] === "auth") return signed
+        ? { code: 0, stdout: AUTH, stderr: "" }
+        : { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
+      if (args[1] === "view") return { code: 0, stdout: JSON.stringify(focused), stderr: "" };
+      return { code: 0, stdout: "[]", stderr: "" };
+    },
+  });
+  const { cx, drain } = context();
+  panel.refresh(cx); await drain();
+  assert.equal(panel.inboxOpen, true);
+  ui.ids.length = 0;
+  panel.header(tone, false);
+  assert.equal(ui.ids.includes("pr-reviews"), true);
+  assert.equal(ui.ids.includes("pr-copy"), false);
+  assert.equal(ui.ids.includes("pr-web"), false);
+  assert.equal(ui.ids.includes("pr-switch"), false);
+  signed = false;
+  ui.ids.length = 0;
+  panel.loading = false;
+  panel.refresh(cx); await drain();
+  panel.header(tone, false);
+  assert.equal(panel.inboxOn, false);
+  assert.equal(panel.inboxOpen, null);
+  assert.equal(ui.ids.includes("pr-reviews"), false);
+  assert.equal(ui.ids.includes("pr-copy"), true);
+  assert.equal(ui.ids.includes("pr-web"), true);
+  assert.equal(ui.ids.includes("pr-switch"), true);
 });

@@ -65,8 +65,8 @@ export function groupInbox(items, { repos = [], projects = [] } = {}) {
 }
 
 export async function readInbox(db, { provider, host, login }) {
-  const items = (await db.read(`SELECT * FROM pr_items WHERE provider=${q(provider)};`)).map(itemOf);
-  const repos = await db.read(`SELECT * FROM pr_repos WHERE provider=${q(provider)};`);
+  const items = (await db.read(`SELECT * FROM pr_items WHERE provider=${q(provider)} AND host=${q(host)};`)).map(itemOf);
+  const repos = await db.read(`SELECT * FROM pr_repos WHERE provider=${q(provider)} AND host=${q(host)};`);
   const projects = await db.read("SELECT id, name, folder, machine FROM projects WHERE removed IS NULL;");
   const fetch = (await db.read(`SELECT * FROM pr_fetches WHERE key=${q(`inbox:${provider}:${host}`)};`))[0] ?? null;
   const needs = items.filter((item) => item.role === "reviewer" || item.role === "both");
@@ -118,41 +118,59 @@ async function scanRepos(db, run, { sessions, now }) {
   const drop = folders.length
     ? `DELETE FROM pr_repos WHERE IFNULL(machine,'')='' AND folder IN (${folders.map(q).join(",")}) AND id NOT IN (${keep.length ? keep.map(q).join(",") : "''"});`
     : "";
+  const alive = projects.map((project) => q(project.id)).join(",") || "''";
+  const dropGone = `DELETE FROM pr_repos WHERE IFNULL(machine,'')='' AND IFNULL(project_id,'') NOT IN (${alive});`;
   const mark = `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(SCAN)},${num(now)},NULL,${q(sig)}) ON CONFLICT(key) DO UPDATE SET fetched_at=excluded.fetched_at,error=excluded.error;`;
-  await db.run(`BEGIN;${rows.join("")}${drop}${mark}COMMIT;`);
+  await db.run(`BEGIN;${rows.join("")}${drop}${dropGone}${mark}COMMIT;`);
 }
 
-async function storeInbox(db, { provider, host, items, complete, rate, error, now }) {
+async function storeInbox(db, { provider, host, items, skipped = [], rate, error, searchOk = false, now }) {
   const key = `inbox:${provider}:${host}`;
   const upserts = items.map((item) => itemSql(item, now)).join("");
   const urls = items.map((item) => item.url);
-  const drop = complete
-    ? `DELETE FROM pr_items WHERE provider=${q(provider)} AND ${urls.length ? `url NOT IN (${urls.map(q).join(",")})` : "1"};`
+  const skip = skipped.filter((repo) => repo.owner && repo.name).map((repo) => `(lower(owner)=lower(${q(repo.owner)}) AND lower(name)=lower(${q(repo.name)}))`).join(" OR ");
+  const drop = !rate && searchOk
+    ? `DELETE FROM pr_items WHERE provider=${q(provider)} AND host=${q(host)}${skip ? ` AND NOT (${skip})` : ""} AND ${urls.length ? `url NOT IN (${urls.map(q).join(",")})` : "1"};`
     : "";
   const fetch = rate
     ? `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(key)},NULL,${num(rate.retryAt)},${q(rate.error)}) ON CONFLICT(key) DO UPDATE SET retry_at=excluded.retry_at,error=excluded.error;`
-    : (complete || items.length)
+    : searchOk || items.length
       ? `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(key)},${num(now)},NULL,${q(error)}) ON CONFLICT(key) DO UPDATE SET fetched_at=excluded.fetched_at,retry_at=NULL,error=excluded.error;`
       : `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(key)},NULL,NULL,${q(error)}) ON CONFLICT(key) DO UPDATE SET error=excluded.error;`;
   await db.run(`BEGIN;${upserts}${drop}${fetch}COMMIT;`);
 }
 
-export async function refreshInbox({ db, run, provider, session, force = false, shown = true, now = Date.now() }) {
-  const host = session.hosts.find((row) => row.active)?.host ?? session.hosts[0].host;
-  const who = { provider: provider.id, host, login: session.login };
-  if (!shown) return readInbox(db, who);
+export async function refreshInbox({ db, run, provider, session, force = false, shown = true, now = Date.now(), onCache } = {}) {
+  const readHost = (hostRow) => readInbox(db, { provider: provider.id, host: hostRow.host, login: hostRow.login });
+  if (!shown) {
+    const parts = await session.hosts.reduce(async (prev, hostRow) => [...await prev, await readHost(hostRow)], Promise.resolve([]));
+    return mergeInbox(parts);
+  }
   await saveSession(db, provider.id, session, now);
   await scanRepos(db, run, { sessions: { [provider.id]: session.hosts.map((row) => row.host) }, now });
-  const before = await readInbox(db, who);
-  if (!fetchDue(before.fetch, now, { force, shown })) return before;
-  const repos = before.repos.filter((repo) => repo.project_id).toSorted((a, b) => `${a.owner}/${a.name}`.localeCompare(`${b.owner}/${b.name}`));
-  const result = await provider.inbox(run, { repos, login: session.login, now });
-  try {
-    await storeInbox(db, { provider: provider.id, host, items: result.items, complete: result.complete, rate: result.rate, error: result.error, now });
-  } catch (e) {
-    return { ...before, writeError: String(e?.message ?? e).split("\n")[0] };
-  }
-  return readInbox(db, who);
+  const cachedParts = await session.hosts.reduce(async (prev, hostRow) => {
+    const soFar = await prev;
+    const before = await readHost(hostRow);
+    return [...soFar, { hostRow, before, due: fetchDue(before.fetch, now, { force, shown }) }];
+  }, Promise.resolve([]));
+  const cached = mergeInbox(cachedParts.map((part) => part.before));
+  if (onCache) onCache(cached, cachedParts.some((part) => part.due));
+  const parts = await cachedParts.reduce(async (prev, part) => {
+    const soFar = await prev;
+    if (!part.due) return [...soFar, part.before];
+    const repos = part.before.repos.filter((repo) => repo.project_id).toSorted((a, b) => `${a.owner}/${a.name}`.localeCompare(`${b.owner}/${b.name}`));
+    const result = await provider.inbox(run, { repos, login: part.hostRow.login, host: part.hostRow.host, now }).catch((e) => ({ failed: true, error: String(e?.message ?? e).split("\n")[0] }));
+    if (result.failed) return [...soFar, { ...part.before, writeError: result.error }];
+    const queried = new Set((result.queried ?? []).map((repo) => `${repo.owner}\n${repo.name}`.toLowerCase()));
+    const skipped = repos.filter((repo) => !queried.has(`${repo.owner}\n${repo.name}`.toLowerCase()));
+    try {
+      await storeInbox(db, { provider: provider.id, host: part.hostRow.host, items: result.items ?? [], skipped, rate: result.rate, error: result.error, searchOk: Boolean(result.searchOk), now });
+    } catch (e) {
+      return [...soFar, { ...part.before, writeError: String(e?.message ?? e).split("\n")[0] }];
+    }
+    return [...soFar, await readHost(part.hostRow)];
+  }, Promise.resolve([]));
+  return mergeInbox(parts);
 }
 
 export function mergeInbox(parts) {
@@ -168,6 +186,7 @@ export function mergeInbox(parts) {
     limitedUntil: limited[0] ?? null,
     lag: all.some((part) => part.lag),
     login: all.find((part) => part.login)?.login ?? null,
+    logins: [...new Set(all.flatMap((part) => part.logins ?? [part.login]).filter(Boolean))],
     writeError: all.map((part) => part.writeError).find(Boolean) ?? null,
   };
 }

@@ -204,12 +204,12 @@ export class PullRequest {
   async syncInbox(context) {
     const ready = await readyProviders(exec).catch(() => []);
     if (key() !== context) return;
-    if (!ready.length) { this.inboxOn = false; this.inbox = null; return; }
+    if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
     if (!this.inboxDb) {
       try { this.inboxDb = new Kdb(); await this.inboxDb.open(); }
       catch (e) {
         this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`;
-        this.inboxOn = false;
+        this.inboxOn = false; this.inboxOpen = null;
         return;
       }
     }
@@ -217,7 +217,10 @@ export class PullRequest {
     this.inboxForce = false;
     const model = await ready.reduce(async (prev, { provider, session }) => {
       const soFar = await prev;
-      return [...soFar, await refreshInbox({ db: this.inboxDb, run: exec, provider, session, force, shown: true })];
+      return [...soFar, await refreshInbox({
+        db: this.inboxDb, run: exec, provider, session, force, shown: true,
+        onCache: (cached, pending) => { if (key() === context) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
+      })];
     }, Promise.resolve([])).then(mergeInbox).catch((e) => e);
     if (model instanceof Error) {
       const e = model;
@@ -226,14 +229,18 @@ export class PullRequest {
       return;
     }
     if (key() !== context) return;
-    if (model.writeError) this.note = `Could not keep pull requests: ${model.writeError}`;
+    this.paintInbox(model, true);
+    if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
+  }
+
+  paintInbox(model, decide) {
     this.inbox = model;
     this.inboxOn = true;
-    if (this.inboxOpen == null) {
+    if (decide && this.inboxOpen == null) {
       this.inboxOpen = model.unseen > 0;
       if (this.inboxOpen) this.inboxTab = "needs";
     }
-    if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
+    if (model.writeError) this.note = `Could not keep pull requests: ${model.writeError}`;
   }
 
   async noteSeen(url) {
@@ -636,8 +643,8 @@ export class PullRequest {
   reviewCount() { return this.inbox?.needs?.length ?? 0; }
 
   reviewPill(c) {
-    const back = this.inboxOpen && this.pr;
-    const label = this.inboxOpen ? (back ? `Back to #${this.pr.number}` : "This pane") : `${this.reviewCount()} to review`;
+    const back = this.inboxOn && this.inboxOpen && this.pr;
+    const label = this.inboxOn && this.inboxOpen ? (back ? `Back to #${this.pr.number}` : "This pane") : `${this.reviewCount()} to review`;
     return Button.new("pr-reviews").h(26).px(10).flex_none().items_center().rounded(6).cursor_pointer()
       .border_1().border_color(this.inboxOpen ? c.muted : c.border)
       .accessibility_label(label)
@@ -653,7 +660,7 @@ export class PullRequest {
   }
 
   header(c, narrow) {
-    const pr = this.pr, pill = (this.listing || this.canSwitch()) && !this.inboxOpen;
+    const pr = this.pr, here = this.inboxOn && this.inboxOpen, pill = (this.listing || this.canSwitch()) && !here;
     const limited = this.inbox?.limitedUntil;
     const refreshed = limited ? `limited until ${limitLine(limited).match(/\d{2}:\d{2}/)?.[0]}` : this.loadedAt ? `updated ${clock(this.loadedAt)}` : null;
     return h_flex().w_full().items_center().justify_between().gap(G.md)
@@ -662,8 +669,8 @@ export class PullRequest {
         .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
         .child(iconButton("pr-refresh", "refresh", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => { this.loadedAt = 0; this.inboxForce = true; this.refresh(cx); }, c, { spin: this.loading }))
-        .when(Boolean(pr?.url) && !this.listing && !this.inboxOpen, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
-        .when(Boolean(pr?.url) && !this.inboxOpen, (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
+        .when(Boolean(pr?.url) && !this.listing && !here, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
+        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
   }
 
   copyUrl(url, cx) {
@@ -913,11 +920,11 @@ export class PullRequest {
     const tab = this.inboxTab || "needs";
     const rows = tab === "yours" ? (this.inbox?.yours ?? []) : (this.inbox?.needs ?? []);
     const groups = groupInbox(rows, { repos: this.inbox?.repos ?? [], projects: this.inbox?.projects ?? [] });
-    const login = this.inbox?.login;
+    const mine = new Set((this.inbox?.logins ?? [this.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, group) => n + group.rows.length, 0));
     const row = (item, i) => {
       const state = this.inboxState(item, c);
-      const meta = [`#${item.number}`, item.author && item.author === login ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
+      const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
       return Button.new(`pr-in-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
         .hover((s) => s.bg(c.subtle))
         .accessibility_label(`#${item.number} ${item.title}`)
