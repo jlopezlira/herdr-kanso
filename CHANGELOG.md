@@ -21,6 +21,9 @@ release.
 ### Fixed
 
 - A pin and its note stay on that picture when you move to another, until you send them.
+- A pin and its note stay with the agent they were pinned on when another agent is in focus, and they are not sent to that agent.
+- A picture named on a line that was still being written, or in a conversation replaced in place, is still indexed.
+- A picture that cannot be opened leaves the row.
 
 ## [3.18.4] - 2026-11-09
 

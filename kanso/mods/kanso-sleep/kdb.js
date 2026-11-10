@@ -22,7 +22,8 @@ export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[
 
 // Columns added after a table's first release: [table, name, type].
 const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["agents", "step", "TEXT"], ["agents", "step_at", "INTEGER"],
-  ["agents", "sent_at", "INTEGER"], ["agents", "nudged_at", "INTEGER"], ["agents", "why", "TEXT"], ["sleeps", "state", "TEXT"], ["sleeps", "why", "TEXT"]];
+  ["agents", "sent_at", "INTEGER"], ["agents", "nudged_at", "INTEGER"], ["agents", "why", "TEXT"], ["sleeps", "state", "TEXT"], ["sleeps", "why", "TEXT"],
+  ["picture_scans", "mark", "TEXT"]];
 // A sleep the sidebar works on: sleeping or undoing (held by its owner), stuck (waiting on you). NULL or asleep: done.
 const DONE = "(state IS NULL OR state='asleep')";
 
@@ -39,7 +40,7 @@ CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, name TEXT, title TEXT, sa
 CREATE INDEX IF NOT EXISTS agents_space ON agents(space_id, status);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL, machine TEXT NOT NULL DEFAULT '', added INTEGER NOT NULL, removed INTEGER, agent TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
-CREATE TABLE IF NOT EXISTS picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL, mark TEXT);
 CREATE TABLE IF NOT EXISTS pictures(file TEXT NOT NULL, path TEXT NOT NULL, ord INTEGER NOT NULL, color TEXT, there INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(file, path));
 CREATE INDEX IF NOT EXISTS pictures_ord ON pictures(file, ord);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
@@ -113,7 +114,7 @@ export class Kdb {
       await exec("mkdir", ["-p", this.dir]);
       await this.sql([...statements(SCHEMA), ONE_SLEEP]);
       // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
-      const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name) };
+      const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name), picture_scans: (await this.sql("PRAGMA table_info(picture_scans);")).map((c) => c.name) };
       const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
       if (missing.length) await this.sql(missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`).join(""));
     })().catch((e) => { this.ready = null; throw e; }));
@@ -380,17 +381,17 @@ export class Kdb {
   prefs() { return this.read("SELECT key, value FROM prefs;"); }
   setPref(key, value) { return this.run(`INSERT INTO prefs(key,value) VALUES(${q(key)},${q(value)}) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`); }
 
-  // Images keeps what a transcript already said, so the next read starts at `size`.
+  // Images keeps what a transcript already said, so the next read starts at `size`. `mark` is the cksum of those bytes.
   async pictures(file) {
-    const scan = (await this.read(`SELECT size FROM picture_scans WHERE file=${q(file)};`))[0];
+    const scan = (await this.read(`SELECT size, mark FROM picture_scans WHERE file=${q(file)};`))[0];
     const rows = await this.read(`SELECT path, ord, color, there FROM pictures WHERE file=${q(file)} ORDER BY ord;`);
-    return { size: scan ? String(scan.size) : "0", rows };
+    return { size: scan ? String(scan.size) : "0", mark: scan?.mark ?? "", rows };
   }
-  savePictures(file, size, rows) {
+  savePictures(file, size, rows, mark = null) {
     const keep = rows.length ? rows.map((r) => q(r.path)).join(",") : "NULL";
     const writes = rows.map((r) => `INSERT INTO pictures(file,path,ord,color,there) VALUES(${q(file)},${q(r.path)},${n(r.ord)},${q(r.color)},1)
       ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord,there=1,color=COALESCE(pictures.color,excluded.color);`).join("");
-    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND path NOT IN (${keep});${writes}INSERT INTO picture_scans(file,size) VALUES(${q(file)},${n(size)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size;COMMIT;`);
+    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND path NOT IN (${keep});${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
   }
   setPictureColor(file, path, color) {
     return this.run(`UPDATE pictures SET color=${q(color)} WHERE file=${q(file)} AND path=${q(path)};`);

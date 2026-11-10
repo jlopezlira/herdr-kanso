@@ -818,12 +818,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     a terminal's link, so it reads the terminal in focus (`hc read --lines
     400`, every 4 s while shown; pinnable) and a session's transcript
     (`transcript.js`). Pictures already found are rows in `kanso.db`
-    (path, first-seen order, color, there) with the byte offset read; the
-    next read greps only what was appended, and a shorter file is read once
-    and replaces its rows. A missing file is dropped; none yet is one line.
+    (path, first-seen order, color, there) with the offset of the last whole
+    line; the next read greps only new whole lines, and a rewritten file is
+    read once and replaces its rows. A missing file, or one that will not
+    open, is dropped; none yet is one line.
     Copies in `data/kanso-panel/look` draw the newest big (`image()` reads
     the app folder; HEIC/TIFF via `sips`/`magick`); each picture is a circle,
-    the active one filled with its color. A click drops a numbered pin, kept on that picture until Send, and
+    the active one filled with its color. A click drops a numbered pin, kept for that agent and picture until Send, and
     opens `kanso-prompt` with `shared: "kanso.look.note"` (`{[token]: {text,
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).

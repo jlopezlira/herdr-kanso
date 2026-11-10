@@ -52,9 +52,10 @@ export class Look {
     this.follow = this.focusedTerminal() ?? live(kept.follow);
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
-    this.kept = new Map(); // unsent pins, by picture, until Send
+    this.kept = new Map(); // unsent pins, by agent and picture, until Send
+    this.blind = new Set(); // this session: a file that will not open stays out of the row
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.watching = null;
-    this.asking = null; // { id, token }: the pin whose note a dialog asks for, and which dialog
+    this.asking = null; // { id, token, path, who }: the pin a dialog asks about, and which dialog
     this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
     this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
@@ -85,6 +86,7 @@ export class Look {
       this.hold();
       this.follow = now; this.items = []; this.picked = false; this.readAt = 0;
       if (!this.asked.some((i) => i.path === this.selected?.path)) { this.selected = null; this.shown = null; this.pins = []; }
+      else if (this.selected) this.pins = (this.kept.get(this.pinKey(this.selected.path)) ?? []).map((p) => ({ ...p }));
       this.keep();
       cx.notify();
     }
@@ -94,7 +96,7 @@ export class Look {
   async recall(file) {
     try {
       const got = await this.db.pictures(file);
-      return { file, size: got.size, paths: got.rows.map((r) => r.path), rows: got.rows };
+      return { file, size: got.size, mark: got.mark ?? "", paths: got.rows.map((r) => r.path), rows: got.rows };
     } catch { return null; }
   }
 
@@ -112,7 +114,8 @@ export class Look {
         const other = (before?.front && written.front && before.front.pid !== written.front.pid) || (before?.file && written.file && before.file !== written.file);
         if (other && !this.asked.some((i) => i.path === this.selected?.path)) {
           this.items = []; this.picked = false; this.selected = null; this.shown = null; this.pins = [];
-          this.kept = new Map(); this.asking = null;
+          this.kept = new Map([...this.kept].filter(([key]) => key.slice(0, address.length + 1) !== `${address}\n`));
+          if (this.asking?.who === address) this.asking = null;
         }
         if (written.failed) return;
         // No record for a moment (an agent still starting): keep the conversation already read.
@@ -123,19 +126,20 @@ export class Look {
         const named = [...(written.paths ?? []), ...mentions(screen, MOST).toReversed()].map((m) => resolvePath(m, cwd, homeDir)).filter(Boolean);
         const resolved = [...new Set(named)];
         const there = resolved.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...resolved])).stdout.split("\n")) : new Set();
-        const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)));
+        const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)) && !this.blind.has(path));
         const prior = (written.rows ?? []).map((row) => ({ ...row, color: row.color || this.colors.get(row.path) || null }));
         const rows = indexRows(prior, pictures, { replaced: Boolean(written.replaced) });
         if (written.file && written.size != null) {
-          try { await this.db.savePictures(written.file, written.size, rows); } catch { /* the next read stores it */ }
+          try { await this.db.savePictures(written.file, written.size, rows, written.mark ?? ""); } catch { /* the next read stores it */ }
         }
         const found = rows.toSorted((a, b) => b.ord - a.ord).map((row) => ({ ...itemOf(row.path), color: row.color || this.colors.get(row.path) || null }));
         if (address !== this.agent()) return;
         const fresh = arrived(found, this.items);
         const previous = this.list();
         this.items = found;
+        this.asked = this.asked.filter((i) => !this.blind.has(i.path));
         this.transcript = {
-          address, front: written.front, size: written.size, paths: written.paths, rows,
+          address, front: written.front, size: written.size, mark: written.mark ?? "", paths: written.paths, rows,
           file: written.file ?? (other ? null : before?.file ?? null),
         };
         const still = (i) => this.list().some((k) => k.path === i.path);
@@ -148,7 +152,12 @@ export class Look {
           else { this.hold(); this.selected = null; this.shown = null; this.pins = []; }
         } else if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
         const live = new Set(this.list().map((i) => i.path));
-        this.kept = new Map([...this.kept].filter(([path]) => live.has(path)));
+        this.kept = new Map([...this.kept].filter(([key]) => {
+          const cut = key.indexOf("\n");
+          const agent = cut < 0 ? "" : key.slice(0, cut);
+          const path = cut < 0 ? key : key.slice(cut + 1);
+          return agent !== address || live.has(path);
+        }));
         found.filter((i) => !i.color).forEach((i) => this.sample(i, written.file, cx));
       } catch { /* the next tick reads again */ }
       finally { this.reading = false; this.readAt = Date.now(); cx.notify(); }
@@ -169,12 +178,15 @@ export class Look {
     return [...this.asked, ...this.items.filter((i) => !asked.has(i.path))];
   }
 
-  // Unsent pins stay on the picture they were dropped on, including after a later read.
+  // Unsent pins stay on the picture they were dropped on, for the agent in focus then, until Send.
+  pinKey(path, who = this.agent()) { return who ? `${who}\n${path}` : path; }
+
   hold() {
     const path = this.selected?.path;
     if (!path) return;
-    if (this.pins.length) this.kept.set(path, this.pins.map((p) => ({ ...p })));
-    else this.kept.delete(path);
+    const key = this.pinKey(path);
+    if (this.pins.length) this.kept.set(key, this.pins.map((p) => ({ ...p })));
+    else this.kept.delete(key);
   }
 
   select(item, cx, picked) {
@@ -182,7 +194,7 @@ export class Look {
     if (this.selected?.path === item.path) return;
     this.hold();
     this.selected = item;
-    this.pins = (this.kept.get(item.path) ?? []).map((p) => ({ ...p }));
+    this.pins = (this.kept.get(this.pinKey(item.path)) ?? []).map((p) => ({ ...p }));
     this.shown = null; this.watching = null;
     if (shows(item)) { this.draw(item, cx); this.watch(item, cx); }
     cx.notify();
@@ -209,10 +221,13 @@ export class Look {
       if (last) this.draws.delete(path);
       if (!last || this.selected?.path !== path) { cx.notify(); return; }
       if (!made) {
-        this.shown = null;
-        const next = this.list().find((i) => i.path !== path);
-        if (next) this.select(next, cx, false);
-        else { this.hold(); this.selected = null; this.shown = null; this.pins = []; }
+        const previous = this.list();
+        const at = previous.findIndex((i) => i.path === path);
+        this.dropBlind(path);
+        this.selected = null; this.shown = null; this.pins = [];
+        const still = (i) => this.list().some((k) => k.path === i.path);
+        const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
+        if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
         cx.notify();
         return;
       }
@@ -221,10 +236,24 @@ export class Look {
     });
   }
 
+  // A file that will not open leaves the row for this session. It is not stored: the next read would put it back.
+  dropBlind(path) {
+    this.blind.add(path);
+    this.items = this.items.filter((i) => i.path !== path);
+    this.asked = this.asked.filter((i) => i.path !== path);
+    this.kept.delete(this.pinKey(path));
+  }
+
   // The copy image() draws: { image, picture } (the file the pins are on), or null.
+  // sips rejects a valid svg, so that one is the tag; a raster has to open.
   async copy(item) {
+    const ext = item.path.split(".").at(-1).toLowerCase();
+    const seen = ext === "svg"
+      ? (await exec("sh", ["-c", 'head -c 800 "$1" | grep -qi "<svg"', "sh", item.path]).catch(() => null))?.code === 0
+      : item.kind !== "image" || (await exec("sips", ["-g", "pixelWidth", item.path]).catch(() => null))?.code === 0;
+    if (!seen) return null;
     const key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
-    const name = `${key}-${Date.now()}.${item.kind === "image" ? item.path.split(".").at(-1).toLowerCase() : "png"}`, out = `${dir}/${name}`;
+    const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = `${dir}/${name}`;
     await exec("sh", ["-c", FRESH, "sh", dir, key]);
     const made = item.kind === "image" ? (await exec("cp", ["-f", item.path, out])).code === 0 : await toPng(item.path, out);
     return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
@@ -280,7 +309,7 @@ export class Look {
     if (!p) return;
     // Each dialog its own token: another window's answer, or an earlier one, is never taken for this pin's.
     const token = `${Date.now()}-${Math.random()}`;
-    this.asking = { id: p.id, token, path: this.selected.path }; this.note = null;
+    this.asking = { id: p.id, token, path: this.selected.path, who: this.agent() }; this.note = null;
     openOverlay({ mod: "kanso-prompt", kind: "dialog", width: 420, props: {
       title: `Pin ${index + 1}`, field: "What about this spot?", value: p.note ?? "", button: p.note ? "Save" : "Add", shared: NOTE, token } });
     cx.notify();
@@ -290,14 +319,16 @@ export class Look {
   answer() {
     const box = shared(NOTE), token = this.asking?.token, a = token ? box?.[token] : null;
     if (!a) return;
-    const { id, path } = this.asking; this.asking = null;
+    const { id, path, who } = this.asking; this.asking = null;
     // Taken: out of the box, with whatever was left there over an hour ago (a dialog nobody read, another window's).
     setShared(NOTE, Object.fromEntries(Object.entries(box).filter(([k, v]) => k !== token && (v?.at ?? 0) > Date.now() - 3600000)));
-    const pins = path === this.selected?.path ? this.pins : (this.kept.get(path) ?? []);
+    const key = this.pinKey(path, who);
+    const here = path === this.selected?.path && (who ?? null) === (this.agent() ?? null);
+    const pins = here ? this.pins : (this.kept.get(key) ?? []);
     const next = a.text ? pins.map((p) => (p.id === id ? { ...p, note: a.text } : p)) : pins.filter((p) => p.id !== id || p.note);
-    if (path === this.selected?.path) this.pins = next;
-    else if (next.length) this.kept.set(path, next);
-    else this.kept.delete(path);
+    if (here) this.pins = next;
+    else if (next.length) this.kept.set(key, next);
+    else this.kept.delete(key);
   }
 
   drop(index, cx) {
@@ -316,6 +347,7 @@ export class Look {
   send(cx) {
     const item = this.selected, address = this.agent(), pins = this.pins;
     if (!noted(pins).length || !item || this.sending) return;
+    const key = this.pinKey(item.path, address);
     if (!address) { this.note = { error: true, text: "No agent to send to" }; cx.notify(); return; }
     const { name, status } = this.who(address);
     if (status === "blocked") { this.note = { error: true, text: waitingNote([name]) }; cx.notify(); return; }
@@ -325,9 +357,9 @@ export class Look {
       const r = await deliver(address, aboutMessage(item, pins, picture), "you");
       this.sending = false;
       if (r.code === 0) {
-        this.kept.delete(item.path);
-        if (this.selected?.path === item.path) this.pins = [];
-        if (this.asking?.path === item.path) this.asking = null;
+        this.kept.delete(key);
+        if (this.selected?.path === item.path && this.agent() === address) this.pins = [];
+        if (this.asking?.path === item.path && this.asking?.who === address) this.asking = null;
         this.note = { text: `Sent to ${name}.` };
       }
       else this.note = { error: true, text: `Not sent: ${(r.stderr || r.stdout || "hc send failed").trim()}` };
@@ -410,7 +442,7 @@ export class Look {
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))
         .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(this.note?.error ? c.red : c.dim).child(status)))
         .child(quietLink("look-open", "Open", () => openPath(item.path), c))
-        .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(item.path); this.asking = null; cx.notify(); }, c)))
+        .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(this.pinKey(item.path)); this.asking = null; cx.notify(); }, c)))
         .child(Button.new("look-send").h(H.compact).px(G.md).flex_none().items_center().rounded(R.control).bg(c.primary)
           .when(!ready, (b) => b.opacity(0.45))
           .when(ready, (b) => b.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.send(cx)))

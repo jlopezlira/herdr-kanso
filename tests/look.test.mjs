@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -71,27 +71,29 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app" } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [] } = {}) {
   if (appHome !== "/app") dirs.push(appHome);
   const calls = [], store = {};
   // A pin's note, as the prompt dialog answers it: `say(text)` is what you typed, null is Cancel.
   const say = (text, token = calls.findLast((c) => c[0] === "openOverlay")?.[1].props.token) => { store["kanso.look.note"] = { ...(store["kanso.look.note"] ?? {}), [token]: { text, at: Date.now() } }; };
   // What Herdr reports, changed by a test as the agent ends.
   const world = {
+    focus, screen, files, bad,
     terminals: [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
     panes: [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
     session,
   };
+  const sipsPath = (args) => { const at = args.indexOf("--out"); return at > 0 ? args[at - 1] : args.at(-1); };
   const host = {
     ...singleUse(), image: singleUse().div,
     openOverlay: (spec) => { calls.push(["openOverlay", spec]); return "o1"; },
-    focused: () => ({ terminal: focus }), theme: () => ({}), home: () => "/home/me", appHome: () => appHome,
+    focused: () => ({ terminal: world.focus }), theme: () => ({}), home: () => "/home/me", appHome: () => appHome, window: () => ({ platform: "macos" }),
     terminals: () => world.terminals, panes: () => world.panes,
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
     watchFolder: async () => { throw new Error("no watch in a test"); },
     hc: async (args) => {
       calls.push(["hc", ...args]);
-      if (args[0] === "read") return { code: 0, stdout: screen };
+      if (args[0] === "read") return { code: 0, stdout: world.screen };
       if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: world.session ? { pid: world.session.pid, argv: world.session.argv ?? ["claude"] } : null }) };
       return { code: 0, stdout: "" };
     },
@@ -106,10 +108,12 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
         if (from === String(size)) return { code: 3, stdout: "" };
         const shrunk = Number(from) > size;
         const start = shrunk ? 0 : Number(from) || 0;
-        return { code: 0, stdout: `${size}\n${shrunk ? 0 : from}\n${transcript.slice(start)}` };
+        return { code: 0, stdout: `${size}\n${shrunk ? 0 : from}\nm\n${transcript.slice(start)}` };
       }
-      if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => files.includes(p)).map((p) => `${p}\n`).join("") };
+      if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => world.files.includes(p)).map((p) => `${p}\n`).join("") };
       if (cmd === "sh" && args[1].includes("kanso-dot")) return { code: 0, stdout: "#c45a3a\n" };
+      if (cmd === "sh" && args[1].startsWith("head -c 800")) return { code: world.bad.includes(args[3]) ? 1 : 0, stdout: "" };
+      if (cmd === "sips" && world.bad.includes(sipsPath(args))) return { code: 1, stdout: "" };
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
   };
@@ -156,7 +160,7 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   const { look, cx, drain, calls } = await panel({ screen, files, session, transcript });
   assert.deepEqual(clone(calls.filter((c) => c[0] === "hc" && c[1] === "get").map((c) => c[2])), ["t1"], "the agent's process, for its session record");
   const scan = calls.find((c) => c[0] === "sh" && c[2].startsWith('f="$1"'));
-  assert.deepEqual(clone(scan.slice(4)), ["/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl", "0", PATTERN, "2000"], "the whole file, first time");
+  assert.deepEqual(clone(scan.slice(4)), ["/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl", "0", PATTERN, "2000", ""], "the whole file, first time");
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "whole, newest first, only those that exist; the screen's stubs resolve to nothing");
   assert.equal(look.selected.path, "/repo/shots/u-desk-tasks.png");
   assert.equal(look.transcript.size, String(transcript.length));
@@ -409,6 +413,7 @@ test("Images reads only the bytes appended since the offset it stored, and repla
   assert.equal(first.look.list()[0].color, "#c45a3a");
   const second = await panel({ screen: "", files, session, transcript: a + b, appHome: dir });
   assert.equal(scanOf(second.calls)[5], String(a.length), "only the bytes after the stored offset");
+  assert.equal(scanOf(second.calls).at(-1), "m", "the stored prefix mark is what the next read checks");
   assert.deepEqual(clone(second.look.list().map((i) => i.path)), ["/repo/shots/b.png", "/repo/shots/a.png"]);
   assert.equal(second.look.list().find((i) => i.path.endsWith("a.png")).color, "#c45a3a", "the color stored the first time is kept");
   assert.deepEqual(clone(second.calls.filter((c) => c[0] === "sh" && String(c[2]).includes("kanso-dot")).map((c) => c[4])), ["/repo/shots/b.png"], "a picture that already has a color is not sampled again");
@@ -478,4 +483,155 @@ test("an agent with no pictures is told what shows up here", async () => {
   const none = await panel({ focus: "t2" });
   assert.equal(none.look.emptyLine(), "No agent in focus.");
   assert.ok(none.look.render(none.cx));
+});
+
+test("a path cut at the stored offset is indexed once the line is whole, and a rewritten file is read again", async () => {
+  const { scanFile } = await load("kanso-panel/transcript.js", ["scanFile"], { exec: run });
+  const dir = mkdtempSync(join(tmpdir(), "kanso-scan-"));
+  dirs.push(dir);
+  const file = join(dir, "s.jsonl");
+  const partial = "/repo/a.png\n/repo/b.pn";
+  writeFileSync(file, partial);
+  const first = await scanFile(file, "0", "");
+  assert.equal(first.code, 0);
+  assert.deepEqual(clone(first.paths), ["/repo/a.png"], "the unfinished path is not indexed");
+  assert.equal(first.size, String("/repo/a.png\n".length), "the offset stays after the last whole line");
+  const again = await scanFile(file, first.size, first.mark);
+  assert.equal(again.code, 3, "no new whole line: nothing is read");
+  writeFileSync(file, "/repo/a.png\n/repo/b.png");
+  const still = await scanFile(file, first.size, first.mark);
+  assert.equal(still.code, 3, "a line that still has no end is left where it was");
+  writeFileSync(file, "/repo/a.png\n/repo/b.png\n/repo/c.png\n");
+  const done = await scanFile(file, first.size, first.mark);
+  assert.equal(done.from, first.size, "the finished line is read with what was appended, not skipped");
+  assert.deepEqual(clone(done.paths), ["/repo/b.png", "/repo/c.png"]);
+  const repaired = await scanFile(file, String(partial.length), "");
+  assert.equal(repaired.from, "0", "an offset saved mid-line, with no mark, is read from the start");
+  assert.deepEqual(clone(repaired.paths), ["/repo/a.png", "/repo/b.png", "/repo/c.png"]);
+  const same = "/repo/z.png\n";
+  const named = join(dir, "same.jsonl");
+  writeFileSync(named, "/repo/a.png\n");
+  const kept = await scanFile(named, "0", "");
+  writeFileSync(named, same);
+  const rewritten = await scanFile(named, kept.size, kept.mark);
+  assert.equal(rewritten.from, "0", "the same length is not the same file");
+  assert.deepEqual(clone(rewritten.paths), ["/repo/z.png"]);
+  const longer = join(dir, "long.jsonl");
+  writeFileSync(longer, "/repo/old.png\n");
+  const head = await scanFile(longer, "0", "");
+  writeFileSync(longer, "/repo/new.png\n/repo/extra.png\n");
+  const grew = await scanFile(longer, head.size, head.mark);
+  assert.equal(grew.from, "0");
+  assert.deepEqual(clone(grew.paths), ["/repo/new.png", "/repo/extra.png"]);
+  writeFileSync(longer, "");
+  const empty = await scanFile(longer, grew.size, grew.mark);
+  assert.equal(empty.code, 0);
+  assert.equal(empty.from, "0");
+  assert.deepEqual(clone(empty.paths), [], "a file replaced with nothing is read, not skipped");
+});
+
+test("an unsent pin stays with the agent it was pinned on", async () => {
+  const shot = "/repo/tests/shot.png";
+  const hero = "/repo/images/hero.jpg";
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
+  const { look, cx, drain, calls, say, world } = await panel({ session, transcript: `${shot}\n` });
+  world.panes = [
+    { pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } },
+    { pane: "p2", terminal: "t2", program: { name: "Claude", agent: true } },
+  ];
+  world.terminals[1] = { address: "t2", cwd: "/repo", status: "idle", labels: { "kanso.shown": "other agent" } };
+  const spot = { local_position: { x: 30, y: 10 }, bounds: { width: 300, height: 200 } };
+  const sent = () => calls.filter((c) => c[0] === "hc" && c[1] === "send").length;
+  const notes = () => look.pins.map((p) => p.note);
+  const show = async (path) => { const item = look.list().find((i) => i.path === path); assert.ok(item, path); look.select(item, cx, true); await drain(); };
+  await show(shot);
+  look.pin(spot, cx);
+  world.focus = "t2";
+  world.screen = "no pictures";
+  world.files = [hero];
+  look.tick(cx);
+  await drain();
+  say("keep mine");
+  look.render(cx);
+  assert.equal(look.agent(), "t2");
+  assert.deepEqual(clone(notes()), [], "the other agent's list does not take the note");
+  look.send(cx);
+  await drain();
+  assert.equal(sent(), 0, "Send does not deliver it there");
+  world.focus = "t1";
+  world.screen = OUTPUT;
+  world.files = [shot, hero, "/repo/docs/plan.md"];
+  look.tick(cx);
+  await drain();
+  await show(shot);
+  assert.deepEqual(clone(notes()), ["keep mine"], "the note is there when that agent is back");
+  world.focus = "t2";
+  world.screen = "tests/shot.png";
+  world.files = [shot];
+  look.tick(cx);
+  await drain();
+  assert.equal(look.selected?.path, shot);
+  assert.deepEqual(clone(notes()), [], "the same path on the other agent has its own pins");
+  look.send(cx);
+  await drain();
+  assert.equal(sent(), 0);
+  world.focus = "t1";
+  world.screen = OUTPUT;
+  world.files = [shot, hero];
+  look.tick(cx);
+  await drain();
+  await show(shot);
+  assert.deepEqual(clone(notes()), ["keep mine"]);
+  world.focus = "t2";
+  world.screen = "images/hero.jpg";
+  world.files = [hero];
+  look.tick(cx);
+  await drain();
+  look.pin(spot, cx);
+  say("from b");
+  look.render(cx);
+  assert.deepEqual(clone(notes()), ["from b"]);
+  world.focus = "t1";
+  world.screen = OUTPUT;
+  world.files = [shot, hero];
+  look.tick(cx);
+  await drain();
+  world.session = { ...session, sessionId: "11111111-2222-4333-8444-555555555555" };
+  look.readAt = 0;
+  look.read(cx);
+  await drain();
+  await show(shot);
+  assert.deepEqual(clone(notes()), [], "a new conversation clears that agent's pins");
+  world.focus = "t2";
+  world.screen = "images/hero.jpg";
+  world.files = [hero];
+  look.tick(cx);
+  await drain();
+  assert.equal(look.selected?.path, hero);
+  assert.deepEqual(clone(notes()), ["from b"], "the other agent's note stays");
+});
+
+test("a picture that will not open leaves the row and the next one is shown", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
+  const good = "/repo/shots/a.png";
+  const bad = "/repo/shots/bad.png";
+  const heic = "/repo/shots/a.heic";
+  const svg = "/repo/shots/a.svg";
+  const { look, cx, drain } = await panel({ screen: "", files: [good, bad], session, transcript: `${good}\n${bad}\n`, appHome: dir, bad: [bad] });
+  assert.equal(look.selected.path, good, "the picture after the one that will not open");
+  assert.deepEqual(clone(look.list().map((i) => i.path)), [good]);
+  look.readAt = 0;
+  look.read(cx);
+  await drain();
+  assert.deepEqual(clone(look.list().map((i) => i.path)), [good], "a later read does not bring it back");
+  const only = await panel({ screen: "", files: [heic], session: { ...session, sessionId: "11111111-2222-4333-8444-555555555555" }, transcript: `${heic}\n`, bad: [heic] });
+  assert.equal(only.look.list().length, 0);
+  assert.equal(only.look.selected, null);
+  assert.equal(only.look.emptyLine(), "Pictures this agent writes show up here, from its conversation.");
+  const drawing = await panel({ screen: "", files: [svg], session: { ...session, sessionId: "22222222-3333-4444-8555-666666666666" }, transcript: `${svg}\n` });
+  assert.deepEqual(clone(drawing.look.list().map((i) => i.path)), [svg], "a picture that opens stays");
+  const broken = await panel({ screen: "", files: [svg, good], session: { ...session, sessionId: "33333333-4444-4555-8666-777777777777" }, transcript: `${good}\n${svg}\n`, bad: [svg] });
+  assert.deepEqual(clone(broken.look.list().map((i) => i.path)), [good]);
 });
