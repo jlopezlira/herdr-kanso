@@ -5,7 +5,6 @@ export const START_SLACK = 120000; // ps counts whole seconds from a start a lit
 export const LINE_MAX = 100000;
 export const SLICE_BUDGET = 2000000;
 export const DRAW = 50;
-export const BLOCK = 320;
 export const EXCERPT = 64;
 const WORDS = 22;
 const MARK = /\p{M}/u;
@@ -109,36 +108,6 @@ export function partsOf(text, hit, radius = EXCERPT) {
   ].filter(Boolean);
 }
 
-const overlaps = (span, a, b) => span.start < b && span.end > a;
-
-function packTokens(toks, size, span) {
-  const packed = toks.reduce((acc, tok) => {
-    const n = tok[1] - tok[0];
-    const fits = !acc.cur.length || acc.len + n <= size || overlaps(span, tok[0], tok[1]);
-    const held = fits ? acc : { groups: acc.groups.concat([acc.cur]), cur: [], len: 0 };
-    const cur = held.cur.concat([tok]);
-    const len = held.len + n;
-    const full = len >= size && !(span.start < tok[1] && span.end > tok[1]);
-    return full ? { groups: held.groups.concat([cur]), cur: [], len: 0 } : { groups: held.groups, cur, len };
-  }, { groups: [], cur: [], len: 0 });
-  return packed.cur.length ? packed.groups.concat([packed.cur]) : packed.groups;
-}
-
-export function blocksOf(text, hit, size = BLOCK) {
-  const src = String(text ?? "");
-  const span = hit ? matchSpan(src, hit) : { start: 0, end: 0 };
-  const groups = packTokens([...src.matchAll(/\s+|\S+/g)].map((m) => [m.index, m.index + m[0].length]), size, span);
-  if (!groups.length) return { pieces: [{ text: "", from: 0, to: 0, mark: false }], at: 0 };
-  const pieces = groups.map((g) => {
-    const a = g[0][0];
-    const b = g.at(-1)[1];
-    const chunk = src.slice(a, b);
-    const mark = overlaps(span, a, b);
-    return { text: chunk, from: mark ? Math.max(0, span.start - a) : 0, to: mark ? Math.min(chunk.length, span.end - a) : 0, mark };
-  });
-  return { pieces, at: Math.max(0, pieces.findIndex((p) => p.mark)) };
-}
-
 export function drawWindow(count, at, cap = DRAW) {
   const n = Math.max(0, count | 0);
   if (!n) return { start: 0, end: 0 };
@@ -148,22 +117,44 @@ export function drawWindow(count, at, cap = DRAW) {
   return { start, end: start + span };
 }
 
-function rowOf(hit, i, at, open, textOf) {
-  if (!(open && i === at)) return { focus: i === at ? 0 : null, items: [{ kind: "hit", hit, index: i, head: true }] };
-  const { pieces, at: mark } = blocksOf(textOf ? textOf(hit) : "", hit);
-  return { focus: mark, items: pieces.map((piece, k) => ({ kind: "open", hit, index: i, piece, head: k === 0, k })) };
-}
-
 function placeFocus(acc, row) {
   if (acc.found) return acc;
   if (row.focus === null) return { at: acc.at + row.items.length, found: false };
   return { at: acc.at + row.focus, found: true };
 }
 
-export function layOut(hits, at, open, textOf, cap = DRAW) {
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export function dayKey(ms) {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+export function dayLabel(ms, now = Date.now()) {
+  const key = dayKey(ms);
+  if (!key) return "";
+  if (key === dayKey(now)) return "Today";
+  const clock = new Date(now);
+  const prev = new Date(clock.getFullYear(), clock.getMonth(), clock.getDate() - 1);
+  if (key === dayKey(prev.getTime())) return "Yesterday";
+  const day = new Date(ms);
+  const month = MONTHS[day.getMonth()];
+  return day.getFullYear() === clock.getFullYear() ? `${month} ${day.getDate()}` : `${month} ${day.getDate()}, ${day.getFullYear()}`;
+}
+
+export function layOut(hits, at, cap = DRAW, whenOf = () => null, now = Date.now()) {
   const list = Array.isArray(hits) ? hits : [];
   const win = drawWindow(list.length, at, cap);
-  const rows = list.slice(win.start, win.end).map((hit, k) => rowOf(hit, win.start + k, at, open, textOf));
+  const slice = list.slice(win.start, win.end);
+  const rows = slice.map((hit, k) => {
+    const i = win.start + k;
+    const label = dayLabel(whenOf(hit), now);
+    const prev = k ? dayLabel(whenOf(slice[k - 1]), now) : "";
+    const day = label && label !== prev ? [{ kind: "day", label, index: i }] : [];
+    return { focus: i === at ? day.length : null, items: day.concat([{ kind: "hit", hit, index: i, head: true }]) };
+  });
   return { items: rows.flatMap((row) => row.items), focus: rows.reduce(placeFocus, { at: 0, found: false }).at, start: win.start, end: win.end };
 }
 
@@ -183,9 +174,20 @@ export function placeOf(at, n) {
   return `${i + 1} of ${n}`;
 }
 export function countLabel(query, at, n) {
-  if (!fold(String(query ?? "").trim())) return "";
-  if (!n) return "0";
+  if (blankQuery(query)) return "";
+  if (!n) return "No matches";
   return placeOf(at, n);
+}
+
+export function keptQuery(state, terminal) {
+  const q = state?.queries?.[terminal];
+  return typeof q === "string" && !blankQuery(q) ? q : "";
+}
+
+export function withQuery(queries, terminal, query) {
+  const base = queries && typeof queries === "object" && !Array.isArray(queries) ? queries : {};
+  const rest = Object.fromEntries(Object.entries(base).filter(([key]) => key !== terminal));
+  return !terminal || blankQuery(query) ? rest : { ...rest, [terminal]: String(query) };
 }
 export const stepMatch = (at, n, dir) => (n ? (at + dir + n) % n : 0);
 
@@ -199,21 +201,23 @@ export function enterMatch(box, index, shift) {
 
 export function chooseMatch(state, index, action) {
   const pending = String(state.pending ?? "");
-  if (action?.key === "type") return { query: pending, hits: searchIndex(index, pending), at: 0, open: false, moved: "type" };
-  if (action?.key === "click") {
+  const key = action?.key;
+  if (key === "type") return { query: pending, hits: searchIndex(index, pending), at: 0, open: false, moved: "type" };
+  if (key === "click") {
     const at = action.at ?? -1;
     if (!state.hits?.length || at < 0 || at >= state.hits.length) return { ...state, open: false, moved: "none" };
     return { ...state, at, open: true, moved: "click" };
   }
-  const shift = action?.key === "shift";
+  if (key === "back") return { ...state, open: false, moved: "back" };
+  const newer = key === "up" || key === "shift";
+  if (!(newer || key === "down" || key === "enter")) return { ...state, moved: "none" };
   if (pending !== state.query) {
-    const next = enterMatch({ ...state, pending }, index, shift);
-    return { ...next, open: next.hits.length > 0 };
+    const next = enterMatch({ ...state, pending }, index, newer);
+    return { ...next, open: false };
   }
   if (!state.hits?.length) return { ...state, open: false, moved: "none" };
-  if (!state.open && !shift) return { ...state, open: true, moved: "open" };
-  const next = enterMatch({ ...state, pending }, index, shift);
-  return { ...next, open: next.hits.length > 0 };
+  const next = enterMatch({ ...state, pending }, index, newer);
+  return { ...next, open: Boolean(state.open) && next.hits.length > 0 };
 }
 
 export function retarget(index, query, prev) {

@@ -672,7 +672,10 @@ export default class Strip extends View {
   openFind() {
     const term = focused()?.terminal;
     if (!term || String(term).includes("/")) { run("terminal.search"); return; }
-    openOverlay({ mod: "kanso-panel", kind: "dialog", modal: true, width: 760, props: { panel: "find", terminal: term } });
+    const live = shared("kanso.find");
+    // A window keeps Escape, and stays the size of the bar; a dialog is centered and dims the whole window.
+    if (live?.terminal === term) { setShared("kanso.find", { ...live, select: (live.select ?? 0) + 1 }); return; }
+    openOverlay({ mod: "kanso-panel", kind: "window", frame: "none", width: 540, key: "kanso-find", props: { panel: "find", terminal: term } });
   }
 
   focusedPane() {

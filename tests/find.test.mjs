@@ -8,7 +8,7 @@ import {
   fold, foldSpan, searchTurns, matchSpan, partsOf, placeOf, countLabel, enterMatch, retarget, extendIndex,
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
   resolveFind, locateConversation, kindOf, sessionLive,
-  blankQuery, blocksOf, layOut, chooseMatch, indexTurns, readable,
+  blankQuery, layOut, chooseMatch, indexTurns, readable, dayLabel, keptQuery, withQuery,
 } from "../kanso/mods/kanso-panel/find.js";
 
 const line = (row) => JSON.stringify(row);
@@ -43,7 +43,7 @@ test("A phrase matches as typed, newest first, and Enter moves without skipping 
   assert.equal(placeOf(2, 12), "3 of 12");
   assert.equal(countLabel("alpha", 2, 12), "3 of 12");
   assert.equal(countLabel("   ", 0, 0), "");
-  assert.equal(countLabel("missing", 0, 0), "0");
+  assert.equal(countLabel("missing", 0, 0), "No matches");
   assert.equal(searchTurns([{ text: "foo bar" }], "foo bar").length, 1);
   assert.equal(searchTurns([{ text: "foo  bar" }], "foo bar").length, 0);
   assert.equal(searchTurns([{ text: "foobar" }], "foo bar").length, 0);
@@ -73,10 +73,10 @@ test("An empty query lays out nothing, and a query lays out only its matches", (
   const turns = [{ text: "alpha one" }, { text: "beta alone" }, { text: "alpha two" }];
   assert.equal(blankQuery(""), true);
   assert.equal(blankQuery("   "), true);
-  assert.equal(layOut(searchTurns(turns, ""), 0, false).items.length, 0);
-  assert.equal(layOut(searchTurns(turns, "   "), 0, false).items.length, 0);
+  assert.equal(layOut(searchTurns(turns, ""), 0).items.length, 0);
+  assert.equal(layOut(searchTurns(turns, "   "), 0).items.length, 0);
   const hits = searchTurns(turns, "alpha");
-  const laid = layOut(hits, 0, false);
+  const laid = layOut(hits, 0);
   assert.equal(laid.items.length, 2);
   assert.deepEqual(laid.items.map((item) => item.hit.turn), [2, 0]);
   assert.ok(laid.items.every((item) => item.kind === "hit"));
@@ -87,22 +87,19 @@ test("Find lays out the matches nearest the selection, then more as it moves", (
   const turns = Array.from({ length: 80 }, (_, i) => ({ text: `hit ${i} ${"pad ".repeat(40)}` }));
   const hits = searchTurns(turns, "hit");
   assert.equal(hits.length, 80);
-  const top = layOut(hits, 0, false);
+  const top = layOut(hits, 0);
   assert.equal(top.items.length, 50);
   assert.equal(top.end - top.start, 50);
   assert.equal(top.start, 0);
-  const mid = layOut(hits, 60, false);
+  const mid = layOut(hits, 60);
   assert.equal(mid.items.length, 50);
   assert.ok(mid.start <= 60 && 60 < mid.end);
   assert.ok(mid.start > top.start);
-  const opened = layOut(hits, 60, true, (hit) => turns[hit.turn].text);
-  assert.equal(opened.end - opened.start, 50);
-  assert.equal(opened.items[opened.focus].kind, "open");
-  assert.equal(opened.items[opened.focus].piece.mark, true);
-  assert.ok(opened.items.filter((item) => item.kind === "hit").length < 50);
+  assert.equal(mid.items[mid.focus].kind, "hit");
+  assert.equal(mid.items[mid.focus].index, 60);
 });
 
-test("Enter and a click open that match, and the next Enter moves", () => {
+test("Arrows and Enter move, and a click opens that turn", () => {
   const turns = [{ text: "one alpha" }, { text: "two alpha here" }, { text: "three alpha" }];
   const index = indexTurns(turns);
   let box = chooseMatch({ pending: "alpha", query: "", hits: [], at: 0, open: false }, index, { key: "type" });
@@ -110,40 +107,54 @@ test("Enter and a click open that match, and the next Enter moves", () => {
   assert.equal(box.hits.length, 3);
   assert.equal(box.at, 0);
   box = { ...box, pending: "alpha" };
-  const opened = chooseMatch(box, index, { key: "enter" });
-  assert.equal(opened.open, true);
-  assert.equal(opened.at, 0, "the first Enter stays on the newest and opens it");
-  const laid = layOut(opened.hits, opened.at, opened.open, (hit) => turns[hit.turn].text);
-  assert.equal(laid.items[laid.focus].kind, "open");
-  assert.equal(laid.items[laid.focus].piece.text.slice(laid.items[laid.focus].piece.from, laid.items[laid.focus].piece.to), "alpha");
-  const moved = chooseMatch({ ...opened, pending: "alpha" }, index, { key: "enter" });
-  assert.equal(moved.open, true);
+  const moved = chooseMatch(box, index, { key: "enter" });
+  assert.equal(moved.open, false);
   assert.equal(moved.at, 1);
   const back = chooseMatch({ ...moved, pending: "alpha" }, index, { key: "shift" });
   assert.equal(back.at, 0);
-  assert.equal(back.open, true);
-  const clicked = chooseMatch(back, index, { key: "click", at: 2 });
+  assert.equal(back.open, false);
+  const down = chooseMatch({ ...back, pending: "alpha" }, index, { key: "down" });
+  assert.equal(down.at, 1);
+  const up = chooseMatch({ ...down, pending: "alpha" }, index, { key: "up" });
+  assert.equal(up.at, 0);
+  const clicked = chooseMatch(up, index, { key: "click", at: 2 });
   assert.equal(clicked.at, 2);
   assert.equal(clicked.open, true);
-  const closed = chooseMatch({ ...clicked, pending: "nope" }, index, { key: "type" });
+  const followed = chooseMatch({ ...clicked, pending: "alpha" }, index, { key: "enter" });
+  assert.equal(followed.open, true);
+  assert.equal(followed.at, 0);
+  const shut = chooseMatch(followed, index, { key: "back" });
+  assert.equal(shut.open, false);
+  const closed = chooseMatch({ ...shut, pending: "nope" }, index, { key: "type" });
   assert.equal(closed.open, false);
   assert.equal(closed.hits.length, 0);
 });
 
-test("An excerpt stops at a word, and the open turn keeps the match whole", () => {
+test("A day label shows only when the day changes, and the last query is kept per agent", () => {
+  const now = Date.parse("2026-11-10T16:00:00");
+  const turns = [
+    { text: "alpha morning", at: Date.parse("2026-11-10T09:00:00") },
+    { text: "alpha noon", at: Date.parse("2026-11-10T12:00:00") },
+    { text: "alpha yesterday", at: Date.parse("2026-11-09T18:00:00") },
+  ];
+  const hits = searchTurns(turns, "alpha");
+  const laid = layOut(hits, 0, 50, (hit) => turns[hit.turn].at, now);
+  assert.deepEqual(laid.items.filter((item) => item.kind === "day").map((item) => item.label), ["Yesterday", "Today"]);
+  assert.equal(laid.items.filter((item) => item.kind === "hit").length, 3);
+  assert.equal(dayLabel(Date.parse("2026-11-10T08:00:00"), now), "Today");
+  assert.equal(dayLabel(Date.parse("2025-11-10T08:00:00"), now), "Nov 10, 2025");
+  const kept = withQuery(withQuery({}, "t1", "alpha"), "t2", "beta");
+  assert.equal(keptQuery({ queries: kept }, "t1"), "alpha");
+  assert.equal(keptQuery({ queries: withQuery(kept, "t1", "  ") }, "t1"), "");
+  assert.equal(keptQuery({ queries: withQuery(kept, "t1", "") }, "t2"), "beta");
+});
+
+test("An excerpt stops at a word and keeps the match whole", () => {
   const text = "hi wonderful day";
   const hit = searchTurns([{ text }], "wonderful")[0];
-  const { pieces } = blocksOf(text, hit, 4);
-  assert.equal(pieces.map((p) => p.text).join(""), text);
-  const marked = pieces.find((p) => p.mark);
-  assert.equal(marked.text.slice(marked.from, marked.to), "wonderful");
-  assert.ok(pieces.every((p) => !p.text.includes("wonder") || p.text.includes("wonderful")));
-  const phrase = "one two three four five six";
-  const across = searchTurns([{ text: phrase }], "two three")[0];
-  const packed = blocksOf(phrase, across, 4);
-  assert.equal(packed.pieces.map((p) => p.text).join(""), phrase);
-  const bit = packed.pieces[packed.at];
-  assert.equal(bit.text.slice(bit.from, bit.to), "two three");
+  const parts = partsOf(text, hit, 4);
+  assert.equal(parts.find((p) => p.mark).text, "wonderful");
+  assert.ok(parts.every((p) => !p.text.includes("wonder") || p.text.includes("wonderful")));
 });
 
 test("The part around a match keeps the word itself and who said it", () => {

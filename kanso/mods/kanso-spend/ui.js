@@ -24,7 +24,8 @@ export function tokens(t = {}) {
     border: t.border ?? t.input, input: t.input ?? t.border, subtle: t.hover ?? t.raised, raised: t.raised ?? canvas,
     selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface ?? canvas,
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
-    accent: t.accent ?? t.foreground, red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
+    accent: t.accent ?? t.foreground, highlight: t.selection ?? t.selected ?? t.hover,
+    red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
   };
 }
 
