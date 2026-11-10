@@ -542,9 +542,10 @@ export class PullRequest {
     const shown = all.filter((x) => !q || [x.name, x.login, x.description].some((v) => String(v ?? "").toLowerCase().includes(q)));
     const empty = { labels: "This repository has no labels.", assignees: "Nobody has access to this repository.", reviewers: "Nobody else has access to this repository." }[kind];
     const noMatch = kind === "labels" ? "No label matches that." : "Nobody with access matches that.";
+    const { block, line } = ghost(c);
     const list = v_flex().gap(1)
-      .when(!this.candidates && !this.pickerError, (el) => el.child(breathe(v_flex())
-        .children([90, 120, 70, 104].map((w, i) => h_flex().id(`${id}-ghost-${i}`).px(8).py(7).gap(G.sm).child(div().size(8).rounded_full().bg(c.border)).child(div().w(w).h(9).rounded(3).bg(c.border))))))
+      .when(!this.candidates && !this.pickerError, (el) => el.child(breathe(v_flex().id("kanso-skeleton"))
+        .children([90, 120, 70, 104].map((w, i) => h_flex().id(`${id}-ghost-${i}`).px(8).py(7).gap(G.sm).child(block(8, 8, 8)).child(line(w, 9))))))
       .when(Boolean(this.pickerError), (el) => el.child(div().p(8).text_size(11.5).text_color(c.dim).child(`${kind === "labels" ? "The labels" : "The people with access"} could not be read. ${this.pickerError}`)))
       .when(Boolean(this.candidates) && shown.length === 0, (el) => el.child(div().p(8).text_size(11.5).text_color(c.dim).child(q ? noMatch : empty)))
       .children(shown.map((x, i) => {
@@ -630,7 +631,7 @@ export class PullRequest {
 
   listPage(c) {
     const body = this.tab === "closed"
-      ? this.closedPrs === null ? div().text_size(12).text_color(c.dim).child(this.closedLoading ? "Reading the closed ones…" : "GitHub could not be read.")
+      ? this.closedPrs === null ? (this.closedLoading ? this.closedBones(c) : div().text_size(12).text_color(c.dim).child("GitHub could not be read."))
         : !this.closedPrs.length ? div().text_size(12).text_color(c.dim).child("Nothing closed yet.")
           : this.openPage(c, this.closedPrs)
       : !this.openPrs.length ? div().text_size(12).text_color(c.dim).child("Nothing open.")
@@ -724,9 +725,34 @@ export class PullRequest {
     cx.timer.after(1500, (cx) => { if (this.copiedAt === at) { this.copied = null; cx.notify(); } });
   }
 
+  closedBones(c) {
+    const { block, line } = ghost(c);
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.lg))
+      .children([0, 1, 2].map((i) => v_flex().w_full().px(G.md).py(10).gap(4)
+        .child(line([220, 180, 200][i], 14))
+        .child(line([140, 120, 160][i], 11))
+        .child(h_flex().gap(G.sm).items_center().child(block(6, 6, 6)).child(line(72, 12)))));
+  }
+
+  diffBones(c) {
+    const { line } = ghost(c);
+    return breathe(v_flex().id("kanso-skeleton").w_full().py(6).gap(2))
+      .children([160, 200, 120, 180, 90].map((w) => h_flex().h(20).flex_none().items_center().px(10).child(line(w, 11))));
+  }
+
+  bones(c, narrow = true) {
+    const { header } = ghost(c);
+    const pad = narrow ? G.lg : 32;
+    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
+      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
+        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+          .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
+          .child(this.skeleton(c, narrow))));
+  }
+
   skeleton(c, narrow) {
     const { block, row } = ghost(c);
-    return breathe(v_flex().w_full().gap(narrow ? 36 : 48))
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
       .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
         .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
       .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
@@ -892,7 +918,7 @@ export class PullRequest {
   }
 
   diffView(c, path) {
-    if (this.diffLoading && !this.diffs) return div().py(6).text_size(11).text_color(c.dim).child("Reading the diff…");
+    if (this.diffLoading && !this.diffs) return this.diffBones(c);
     const lines = this.diffs?.[path];
     if (!lines) return div().py(6).text_size(11).text_color(c.dim).child(this.diffs ? "No text diff for this file." : "");
     return v_flex().w_full().mb(G.sm).rounded(6).border_1().border_color(c.border).overflow_hidden().font_family(monoFont()).text_size(11)

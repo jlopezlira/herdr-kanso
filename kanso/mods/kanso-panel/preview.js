@@ -2,7 +2,8 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
 import { readTextFile, watchFolder, theme, openOverlay } from "herdr";
 import { codeState, isMarkdown, showPanel } from "./lib.js";
-import { MarkdownDoc, tildePath } from "./doc.js";
+import { MarkdownDoc, tildePath, readingLines } from "./doc.js";
+import { skeleton } from "./ui.js";
 import { tryOrAsync } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 
@@ -93,6 +94,14 @@ export class Preview {
     this.leave(cx, () => showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }));
   }
 
+  bones(c) {
+    const { header } = skeleton(c);
+    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
+      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(c.border)
+        .child(header(120, 13)))
+      .child(readingLines(c));
+  }
+
   render() {
     const t = theme();
     const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
@@ -112,6 +121,6 @@ export class Preview {
       .child(this.doc ? this.doc.body(t, "preview-md")
         : this.error ? div().p(12).text_color(t.dim).child(this.error)
         : this.code ? Editor.new(this.code).flex_1().min_h(0)
-        : this.path ? div().p(12).text_color(t.dim).child("Reading…") : div().flex_1());
+        : this.path ? readingLines(t) : div().flex_1());
   }
 }

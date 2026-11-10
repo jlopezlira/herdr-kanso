@@ -17,6 +17,12 @@ release.
 
 - Cmd+F in a focused terminal opens Find. It searches that terminal's screen and what has scrolled off it. Enter and Shift+Enter move through the matches, and Escape closes the bar. An update adds this key where you have not set Cmd+F yourself.
 
+## [3.18.12] - 2026-11-10
+
+### Changed
+
+- While something is still loading, it shows the shape of what is about to appear, in the same quiet blocks, instead of a blank space or a line that says it is reading.
+
 ## [3.18.11] - 2026-11-10
 
 ### Changed
