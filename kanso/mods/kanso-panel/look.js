@@ -1,30 +1,42 @@
-// Preview (the panel is "look" inside): what an agent made for you to look at, shown beside it instead of in the
-// system's Preview, and your notes back to it, pinned to the spots they are about. Herdr tells no mod about a click
-// on a terminal's link, so it reads what the agent printed: its screen, and for a Claude agent its conversation on
-// disk, where every path is whole and stays.
+// Images (the panel is "look" inside): pictures an agent made, beside it, and notes pinned to the spots
+// they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
+// printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay } from "herdr";
 import { tilde } from "./lib.js";
-import { G, R, tokens, quietLink, iconButton } from "./ui.js";
+import { G, H, R, T, tokens, quietLink, iconButton } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
-import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf } from "./look-model.js";
+import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
 import { transcriptPaths, MOST } from "./transcript.js";
+import { Kdb } from "./kdb.js";
 
 const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
 const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
-const KEPT = "kanso.look"; // { follow, pinned }: whose previews these are, kept while the panel is closed
+const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept while the panel is closed
 const NOTE = "kanso.look.note"; // the dialogs' answers, by token: { [token]: { text, at } }, each taken once by the pin that asked
-const THUMBS = 12; // the agent's other recent pictures, in one row under the one shown, to switch to another
-const STRIP = { w: 56, h: 40 }; // one picture in that row
-const MISSING = { image: "This picture can't be read", convert: "Nothing here turns this into a picture" };
+const EMPTY = "Pictures this agent writes show up here, from its conversation.";
+const NO_AGENT = "No agent in focus.";
 // $1 the copies' folder, $2 one file's key: its older copies go, and any left from yesterday.
 const FRESH = 'mkdir -p "$1" && rm -f "$1/$2"-* && find "$1" -type f -mtime +1 -exec rm -f {} + 2>/dev/null; true';
 const EXISTING = 'for f; do [ -f "$f" ] && printf "%s\\n" "$f"; done; true';
+// One pixel is the picture's average. Sampled once and stored, so a circle is not measured again.
+const COLOR = `d=$(mktemp -t kanso-dot).bmp
+sips -s format bmp -z 1 1 "$1" --out "$d" >/dev/null 2>&1 || { rm -f "$d"; exit 1; }
+python3 - "$d" <<'PY'
+import struct,sys
+b=open(sys.argv[1],"rb").read()
+if len(b)<30: raise SystemExit(1)
+off,bpp=struct.unpack_from("<I",b,10)[0],struct.unpack_from("<H",b,28)[0]
+px=b[off:off+4]
+r,g,bl=(px[2],px[1],px[0]) if bpp>=24 else (0,0,0)
+print("#%02x%02x%02x"%(r,g,bl))
+PY
+rm -f "$d"`;
 // An agent's terminal on this computer that still runs, or null: a shell would run the note, and another
 // machine's files are not here.
 function live(address) {
@@ -45,7 +57,9 @@ export class Look {
     this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
     this.transcript = null; // the agent's conversation on disk, as last read
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
-    this.thumbs = new Map(); this.draws = new Map(); // per file: the copy drawn small, and its latest big draw (its copy is published only if still the latest)
+    this.draws = new Map(); // per file: its latest big draw (its copy is published only if still the latest)
+    this.colors = new Map(); this.sampling = new Set();
+    this.db = new Kdb();
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
     this.tick(cx);
@@ -59,7 +73,9 @@ export class Look {
 
   keep() { setShared(KEPT, { follow: this.follow, pinned: this.pinned }); }
 
-  // A click on another terminal moves Look to it, unless you pinned one; a click on Look itself keeps it.
+  emptyLine() { return this.agent() ? EMPTY : NO_AGENT; }
+
+  // A click on another terminal moves Images to it, unless you pinned one; a click on Images itself keeps it.
   tick(cx) {
     if (this.pinned && !live(this.pinned)) { this.pinned = null; this.keep(); cx.notify(); } // its agent ended
     const now = this.pinned ? null : this.focusedTerminal();
@@ -73,6 +89,13 @@ export class Look {
     if (Date.now() - this.readAt >= READ_MS) this.read(cx);
   }
 
+  async recall(file) {
+    try {
+      const got = await this.db.pictures(file);
+      return { file, size: got.size, paths: got.rows.map((r) => r.path), rows: got.rows };
+    } catch { return null; }
+  }
+
   read(cx) {
     const address = this.agent();
     if (this.reading || !address) return;
@@ -80,31 +103,47 @@ export class Look {
     cx.spawn(async (cx) => {
       try {
         const r = await hc(["read", address, "--lines", String(LINES)]);
-        // The conversation first, the screen after: the newest mention wins, and the screen has the latest.
         const before = this.transcript?.address === address ? this.transcript : null;
-        const written = await transcriptPaths(address, home(), before);
+        const written = await transcriptPaths(address, home(), before, (file) => this.recall(file));
         if (address !== this.agent()) return;
-        // Another program or conversation in the same terminal (a new Claude, or Codex after Claude): what the
-        // last one made is not this one's.
+        // Another program or conversation in the same terminal: what the last one made is not this one's.
         const other = (before?.front && written.front && before.front.pid !== written.front.pid) || (before?.file && written.file && before.file !== written.file);
         if (other && !this.asked.some((i) => i.path === this.selected?.path)) {
           this.items = []; this.picked = false; this.selected = null; this.shown = null; this.pins = [];
         }
-        // A read that tells nothing (the terminal unread, a Claude still starting) keeps the last identity, so
-        // the next program or conversation is still told apart from it.
-        this.transcript = written.front || !before ? { address, ...written, file: written.file ?? (other ? null : before?.file ?? null), paths: written.paths } : before;
-        const text = `${written.paths.join("\n")}\n${r.code === 0 ? r.stdout : ""}`;
+        if (written.failed) return;
+        // No record for a moment (an agent still starting): keep the conversation already read.
+        if (!written.file && before?.file && !other) { this.transcript = before; return; }
+        const screen = r.code === 0 ? r.stdout : "";
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
-        // Every mention, then only the files that exist: a picture is not lost behind the files deleted since.
-        const paths = [...new Set(mentions(text, MOST).map((m) => resolvePath(m, cwd, home())).filter(Boolean))];
-        const there = paths.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...paths])).stdout.split("\n")) : new Set();
-        const found = paths.filter((path) => there.has(path)).map(itemOf);
+        const homeDir = home();
+        const named = [...(written.paths ?? []), ...mentions(screen, MOST).toReversed()].map((m) => resolvePath(m, cwd, homeDir)).filter(Boolean);
+        const resolved = [...new Set(named)];
+        const there = resolved.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...resolved])).stdout.split("\n")) : new Set();
+        const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)));
+        const prior = (written.rows ?? []).map((row) => ({ ...row, color: row.color || this.colors.get(row.path) || null }));
+        const rows = indexRows(prior, pictures, { replaced: Boolean(written.replaced) });
+        if (written.file && written.size != null) {
+          try { await this.db.savePictures(written.file, written.size, rows); } catch { /* the next read stores it */ }
+        }
+        const found = rows.toSorted((a, b) => b.ord - a.ord).map((row) => ({ ...itemOf(row.path), color: row.color || this.colors.get(row.path) || null }));
         if (address !== this.agent()) return;
         const fresh = arrived(found, this.items);
+        const previous = this.list();
         this.items = found;
-        // A pin or a note started counts as looking at it.
-        if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
-        this.list().slice(0, THUMBS).forEach((i) => this.thumbnail(i, cx));
+        this.transcript = {
+          address, front: written.front, size: written.size, paths: written.paths, rows,
+          file: written.file ?? (other ? null : before?.file ?? null),
+        };
+        const still = (i) => this.list().some((k) => k.path === i.path);
+        if (this.selected && !still(this.selected)) {
+          const at = previous.findIndex((i) => i.path === this.selected.path);
+          const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
+          this.picked = false;
+          if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
+          else { this.selected = null; this.shown = null; this.pins = []; }
+        } else if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
+        found.filter((i) => !i.color).forEach((i) => this.sample(i, written.file, cx));
       } catch { /* the next tick reads again */ }
       finally { this.reading = false; this.readAt = Date.now(); cx.notify(); }
     });
@@ -114,7 +153,7 @@ export class Look {
   ask(raw, cx) {
     const path = resolvePath(String(raw).trim().replace(/^file:\/\//, ""), null, home());
     const item = path ? itemOf(path) : null;
-    if (!item?.kind) { this.note = { error: true, text: `Preview shows pictures: ${raw}` }; return; }
+    if (!item?.kind) { this.note = { error: true, text: `Images shows pictures: ${raw}` }; return; }
     this.asked = [item, ...this.asked.filter((i) => i.path !== path)];
     this.select(item, cx, true);
   }
@@ -149,28 +188,19 @@ export class Look {
     cx.spawn(async (cx) => {
       const made = await done;
       if (this.chains.get(path) === done) this.chains.delete(path);
-      // The latest draw of the file publishes; a thumbnail queued after it does not take that from it.
       const last = this.draws.get(path) === done;
       if (last) this.draws.delete(path);
-      // The copy is the file's newest (the older ones went with it): the strip shows it whether or not the file is still shown.
-      if (made) this.thumbs.set(path, made.image);
       if (!last || this.selected?.path !== path) { cx.notify(); return; }
-      this.shown = made ? { path, ...made } : { path, error: MISSING[item.kind] };
+      if (!made) {
+        this.shown = null;
+        const next = this.list().find((i) => i.path !== path);
+        if (next) this.select(next, cx, false);
+        else { this.selected = null; this.pins = []; }
+        cx.notify();
+        return;
+      }
+      this.shown = { path, ...made };
       cx.notify();
-    });
-  }
-
-  // The small copy: made once per file, in the file's one queue with its draws (each copy clears the file's older
-  // ones, so two at once could delete the one shown); a draw in flight serves it, and a draw's copy replaces it later.
-  thumbnail(item, cx) {
-    const path = item.path;
-    if (this.thumbs.has(path) || this.chains.has(path)) return;
-    const done = Promise.resolve().then(() => (this.thumbs.has(path) ? null : this.copy(item))).catch(() => null);
-    this.chains.set(path, done);
-    cx.spawn(async (cx) => {
-      const made = await done;
-      if (this.chains.get(path) === done) this.chains.delete(path);
-      if (made && !this.thumbs.has(path)) { this.thumbs.set(path, made.image); cx.notify(); }
     });
   }
 
@@ -181,6 +211,25 @@ export class Look {
     await exec("sh", ["-c", FRESH, "sh", dir, key]);
     const made = item.kind === "image" ? (await exec("cp", ["-f", item.path, out])).code === 0 : await toPng(item.path, out);
     return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
+  }
+
+  sample(item, file, cx) {
+    if (!item || item.color || this.sampling.has(item.path)) return;
+    this.sampling.add(item.path);
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("sh", ["-c", COLOR, "sh", item.path]).catch(() => null);
+        const color = colorOf(r?.code === 0 ? r.stdout : "");
+        if (!color) return;
+        this.colors.set(item.path, color);
+        const paint = (i) => (i.path === item.path ? { ...i, color } : i);
+        this.items = this.items.map(paint);
+        this.asked = this.asked.map(paint);
+        if (this.transcript?.rows) this.transcript.rows = this.transcript.rows.map((row) => (row.path === item.path ? { ...row, color } : row));
+        if (file) await this.db.setPictureColor(file, item.path, color).catch(() => {});
+        cx.notify();
+      } finally { this.sampling.delete(item.path); }
+    });
   }
 
   // A file the agent writes again shows again. One watch at a time: picking another ends this one at its next change.
@@ -263,46 +312,52 @@ export class Look {
 
   // One pin's row: its number, its note (or that it has none yet), a click to write it again, an x to drop it.
   noteRow(p, i, c) {
-    return h_flex().id(`look-note-${i}`).flex_none().min_h(26).px(G.sm).gap(G.sm).items_center().rounded(R.control).cursor_pointer()
+    return h_flex().id(`look-note-${i}`).flex_none().min_h(H.compact).px(G.sm).gap(G.sm).items_center().rounded(R.control).cursor_pointer()
       .hover((s) => s.bg(c.subtle)).on_click((_e, cx) => this.askNote(i, cx))
-      .child(div().flex_none().size(18).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(10).font_bold().text_color(c.canvas).child(String(i + 1)))
-      .child(div().flex_1().min_w(0).text_size(12.5).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
-      .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(14).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
+      .child(div().flex_none().size(G.lg).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(T.label).font_bold().text_color(c.canvas).child(String(i + 1)))
+      .child(div().flex_1().min_w(0).text_size(T.body).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
+      .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(T.card).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
         .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }).child("×"));
   }
 
-  // One of the agent's other pictures in the strip: its copy, small and cropped, the one shown marked.
-  thumb(item, c) {
-    const on = this.selected?.path === item.path, src = this.thumbs.get(item.path);
-    const box = div().id(`look-${keyOf(item.path)}`).flex_none().w(STRIP.w).h(STRIP.h).rounded(R.control).overflow_hidden()
-      .bg(c.raised).border_1().border_color(on ? c.accent : c.border).cursor_pointer()
-      .when(!on, (el) => el.hover((s) => s.border_color(c.muted)))
-      .on_click((_e, cx) => this.select(item, cx, true));
-    return src ? box.child(image(src).w_full()) : box.child(div().size_full().flex().items_center().justify_center().text_size(9).text_color(c.dim).truncate().child(item.name));
+  // One circle per picture. The one shown is filled with that picture's color.
+  dot(item, c) {
+    const on = this.selected?.path === item.path;
+    const color = item.color || c.accent;
+    return Button.new(`look-dot-${keyOf(item.path)}`).size(H.compact).flex_none().items_center().justify_center().cursor_pointer()
+      .accessibility_label(item.name)
+      .when(!on, (el) => el.hover((s) => s.opacity(0.7)))
+      .on_click((_e, cx) => this.select(item, cx, true))
+      .child(div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color)));
   }
 
-  // The strip: one row, scrolled sideways when the panel is narrower than it. The picture stays the big thing.
-  strip(list, c) {
-    return h_flex().id("look-strip").flex_none().h(STRIP.h + G.sm * 2).px(G.md).gap(G.xs).items_center().overflow_x_scrollbar()
-      .border_t(1).border_color(c.border).children(list.slice(0, THUMBS).map((i) => this.thumb(i, c)));
+  dots(list, c) {
+    return h_flex().id("look-dots").flex_none().h(H.compact).px(G.lg).gap(G.sm).items_center().overflow_x_scrollbar()
+      .children(list.map((i) => this.dot(i, c)));
   }
 
   picture(c) {
     const s = this.shown;
-    if (!s || s.busy) return div().p(G.md).text_size(12).text_color(c.dim).child("Drawing it");
-    if (s.error) return div().p(G.md).text_size(12).text_color(c.dim).child(s.error);
-    const mark = (p, i) => div().absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-9).mt(-9).size(18).rounded_full().bg(p.note ? c.accent : c.muted)
-      .flex().items_center().justify_center().text_size(10).font_bold().text_color(c.canvas).child(String(i + 1));
+    if (!s?.image) return null;
+    const mark = (p, i) => div().absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-G.sm).mt(-G.sm).size(G.lg).rounded_full().bg(p.note ? c.accent : c.muted)
+      .flex().items_center().justify_center().text_size(T.label).font_bold().text_color(c.canvas).child(String(i + 1));
     return div().id("look-picture").relative().w_full().cursor_crosshair()
       .on_mouse_down("left", (e, cx) => this.pin(e, cx))
       .child(image(s.image).w_full())
       .children(this.pins.map(mark));
   }
 
+  empty(c) {
+    return v_flex().id("look-empty").flex_1().w_full().items_center().justify_center().gap(G.md).px(G.xl)
+      .child(div().size(G.lg).rounded_full().border_1().border_color(c.border))
+      .child(div().text_size(T.card).text_color(c.muted).text_center().child(this.emptyLine()));
+  }
+
   view(c) {
-    const item = this.selected;
-    if (!item) return div().p(G.md).text_size(12).text_color(c.dim).child(this.agent() ? "No pictures yet" : "No agent in focus");
-    return this.picture(c);
+    if (!this.selected) return this.empty(c);
+    if (this.shown?.image) return this.picture(c);
+    if (this.shown?.busy) return div().text_size(T.body).text_color(c.dim).child("Drawing it");
+    return div();
   }
 
   render() {
@@ -311,32 +366,29 @@ export class Look {
     const list = this.list();
     this.answer();
     const ready = Boolean(item && address && noted(this.pins).length) && !this.sending;
-    const actions = item ? [
-      div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(tilde(item.path)),
-      quietLink("look-open", "Open", () => openPath(item.path), c),
-      ...(this.pins.length ? [quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.asking = null; cx.notify(); }, c)] : []),
-    ] : [];
-    return v_flex().id("kanso-look").track_focus(this.handle).size_full().min_h(0).bg(c.canvas).text_color(c.text).text_size(13)
+    const status = this.note?.text ?? (this.pins.length ? "" : item ? "Pin a spot" : "");
+    return v_flex().id("kanso-look").track_focus(this.handle).size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .on_key_down((e, cx) => { if (sendKey(e)) { this.send(cx); cx.stop_propagation(); } })
-      .child(h_flex().h(42).flex_none().px(10).gap(G.sm).items_center().border_b(1).border_color(c.border)
+      .child(h_flex().flex_none().px(G.lg).py(G.sm).gap(G.sm).items_center().border_b(1).border_color(c.border)
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
-          .child(div().truncate().font_semibold().text_size(13).child(who?.name ?? "Preview"))
-          .child(div().truncate().text_size(11).text_color(c.dim).child(who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "")))
+          .child(div().truncate().font_semibold().text_size(T.card).child(who?.name ?? "Images"))
+          .child(div().truncate().text_size(T.small).text_color(c.dim).child(who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "")))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
         .child(iconButton("look-refresh", "refresh", "Read again", (cx) => { this.read(cx); if (item && shows(item)) this.draw(item, cx); }, c, { spin: this.reading })))
-      .child(v_flex().id("look-view").flex_1().min_h(0).overflow_y_scrollbar().child(this.view(c)))
-      .when(actions.length > 0, (el) => el.child(h_flex().flex_none().h(30).px(G.md).gap(G.lg).items_center().border_t(1).border_color(c.border).children(actions)))
-      .when(list.length > 1, (el) => el.child(this.strip(list, c)))
-      .when(Boolean(item), (el) => el.child(v_flex().flex_none().p(G.md).gap(G.sm).border_t(1).border_color(c.border)
-        .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").max_h(26 * 5 + G.xs * 4).gap(G.xs).overflow_y_scrollbar().children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
-        .child(h_flex().gap(G.md).items_center()
-          .child(div().flex_1().min_w(0).text_size(11.5).text_color(this.note?.error ? c.red : c.dim)
-            .child(this.note?.text ?? (this.pins.length ? "" : "Click a spot to pin it and say what about it")))
-          .child(Button.new("look-send").h(28).px(12).flex_none().items_center().rounded(R.control).bg(c.primary)
-            .when(!ready, (b) => b.opacity(0.45))
-            .when(ready, (b) => b.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.send(cx)))
-            .child(div().text_size(12).font_medium().text_color(c.primaryText).child(this.sending ? "Sending…" : noted(this.pins).length > 1 ? `Send ${noted(this.pins).length}  ⌘↩` : "Send  ⌘↩"))))));
+      .child(v_flex().id("look-view").flex_1().min_h(0).w_full().overflow_hidden().items_center().justify_center().child(this.view(c)))
+      .when(list.length > 0, (el) => el.child(this.dots(list, c)))
+      .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.compact * 5 + G.xs * 4).px(G.lg).py(G.sm).gap(G.xs).overflow_y_scrollbar().border_t(1).border_color(c.border)
+        .children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
+      .when(Boolean(item), (el) => el.child(h_flex().id("look-bar").flex_none().h(H.control).px(G.lg).gap(G.md).items_center().border_t(1).border_color(c.border)
+        .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))
+        .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(this.note?.error ? c.red : c.dim).child(status)))
+        .child(quietLink("look-open", "Open", () => openPath(item.path), c))
+        .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.asking = null; cx.notify(); }, c)))
+        .child(Button.new("look-send").h(H.compact).px(G.md).flex_none().items_center().rounded(R.control).bg(c.primary)
+          .when(!ready, (b) => b.opacity(0.45))
+          .when(ready, (b) => b.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.send(cx)))
+          .child(div().text_size(T.value).font_medium().text_color(c.primaryText).child(this.sending ? "Sending…" : noted(this.pins).length > 1 ? `Send ${noted(this.pins).length}  ⌘↩` : "Send  ⌘↩")))));
   }
 }

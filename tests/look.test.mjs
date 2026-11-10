@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import { load, clone, context, singleUse } from "./helpers.mjs";
+import { load, clone, context, singleUse, exec as run } from "./helpers.mjs";
+
+const dirs = [];
+process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
 
 const MODEL = ["mentions", "resolvePath", "itemOf", "shows", "arrived", "pinFrom", "aboutMessage", "keyOf"];
 const model = () => load("kanso-panel/look-model.js", MODEL);
@@ -65,7 +71,8 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "" } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app" } = {}) {
+  if (appHome !== "/app") dirs.push(appHome);
   const calls = [], store = {};
   // A pin's note, as the prompt dialog answers it: `say(text)` is what you typed, null is Cancel.
   const say = (text, token = calls.findLast((c) => c[0] === "openOverlay")?.[1].props.token) => { store["kanso.look.note"] = { ...(store["kanso.look.note"] ?? {}), [token]: { text, at: Date.now() } }; };
@@ -78,7 +85,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   const host = {
     ...singleUse(), image: singleUse().div,
     openOverlay: (spec) => { calls.push(["openOverlay", spec]); return "o1"; },
-    focused: () => ({ terminal: focus }), theme: () => ({}), home: () => "/home/me", appHome: () => "/app",
+    focused: () => ({ terminal: focus }), theme: () => ({}), home: () => "/home/me", appHome: () => appHome,
     terminals: () => world.terminals, panes: () => world.panes,
     shared: (k) => store[k], setShared: (k, v) => { store[k] = clone(v); },
     watchFolder: async () => { throw new Error("no watch in a test"); },
@@ -89,11 +96,20 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       return { code: 0, stdout: "" };
     },
     readTextFile: async (path) => (world.session && path === `/home/me/.claude/sessions/${world.session.pid}.json` ? JSON.stringify(world.session) : null),
-    exec: async (cmd, args) => {
+    exec: async (cmd, args, options) => {
       calls.push([cmd, ...args]);
+      if (cmd === "sqlite3" || cmd === "mkdir") return run(cmd, args, options);
       if (cmd === "ps") return { code: 0, stdout: world.session?.etime ?? "00:05" };
-      if (cmd === "sh" && args[1].startsWith('f="$1"')) return args[4] === String(transcript.length) ? { code: 3, stdout: "" } : { code: 0, stdout: `${transcript.length}\n${args[4]}\n${transcript}` };
+      if (cmd === "sh" && args[1].startsWith('f="$1"')) {
+        const from = args[4];
+        const size = transcript.length;
+        if (from === String(size)) return { code: 3, stdout: "" };
+        const shrunk = Number(from) > size;
+        const start = shrunk ? 0 : Number(from) || 0;
+        return { code: 0, stdout: `${size}\n${shrunk ? 0 : from}\n${transcript.slice(start)}` };
+      }
       if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => files.includes(p)).map((p) => `${p}\n`).join("") };
+      if (cmd === "sh" && args[1].includes("kanso-dot")) return { code: 0, stdout: "#c45a3a\n" };
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
   };
@@ -313,7 +329,7 @@ test("Look opens what kanso-tabs.look names, as if you picked it, and refuses wh
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/home/me/Desktop/mock.heic"]);
   assert.equal(look.picked, true);
   look.ask("http://localhost:3000", cx);
-  assert.match(look.note.text, /^Preview shows pictures/);
+  assert.match(look.note.text, /^Images shows pictures/);
   const r = look.render(cx);
   assert.ok(r, "it draws");
 });
@@ -350,15 +366,80 @@ test("Look draws a HEIC with sips or ImageMagick and a PDF's first page with Qui
   assert.deepEqual(clone(mac.calls.at(-2)), ["pdftoppm", "-png", "-singlefile", "-f", "1", "-scale-to", "736", "/r/spec.pdf", "/app/k"]);
 });
 
-test("Preview keeps the picture big and the others in one row under it, never a grid of tiles", async () => {
+test("Images keeps the picture big and one circle per picture, the active one in that picture's color", async () => {
   const { readFile } = await import("node:fs/promises");
   const src = await readFile(new URL("../kanso/mods/kanso-panel/look.js", import.meta.url), "utf8");
-  const strip = src.slice(src.indexOf("strip(list, c) {"), src.indexOf("picture(c) {"));
-  assert.match(strip, /h_flex\(\)\.id\("look-strip"\)/, "a row");
-  assert.match(strip, /overflow_x_scrollbar\(\)/, "scrolled sideways when it does not fit");
-  assert.doesNotMatch(src, /flex_wrap\(\)/, "nothing wraps into a grid");
+  const dots = src.slice(src.indexOf("dots(list, c) {"), src.indexOf("picture(c) {"));
+  assert.match(dots, /h_flex\(\)\.id\("look-dots"\)/, "a row of circles");
+  assert.match(dots, /overflow_x_scrollbar\(\)/, "scrolled sideways when it does not fit");
+  assert.match(src, /item\.color/, "the active circle uses the picture's color");
+  assert.match(src, /Pictures this agent writes show up here, from its conversation\./);
+  assert.doesNotMatch(src, /look-strip|flex_wrap\(\)|thumbnail\(/, "no thumbnail strip and nothing wraps into a grid");
   const { look, cx, drain } = await panel();
   await drain();
   assert.equal(look.list().length, 2);
-  assert.ok(look.render(cx), "the picture and the strip draw");
+  assert.equal(look.list()[0].color, "#c45a3a", "the color is stored on the picture");
+  assert.ok(look.render(cx), "the picture and the circles draw");
+});
+
+test("an index keeps first-seen order and a color, and a full read starts again", async () => {
+  const { indexRows, colorOf } = await load("kanso-panel/look-model.js", ["indexRows", "colorOf"]);
+  assert.equal(colorOf("pixel #C45A3A\n"), "#c45a3a");
+  assert.equal(colorOf("none"), null);
+  const first = indexRows([], ["/a.png", "/b.png"]);
+  assert.deepEqual(clone(first.map((r) => [r.path, r.ord])), [["/a.png", 1], ["/b.png", 2]]);
+  const colored = first.map((r) => (r.path === "/a.png" ? { ...r, color: "#c45a3a" } : r));
+  const more = indexRows(colored, ["/a.png", "/b.png", "/c.png"]);
+  assert.equal(more.at(-1).ord, 3);
+  assert.equal(more[0].color, "#c45a3a");
+  assert.deepEqual(clone(indexRows(more, ["/a.png", "/c.png"]).map((r) => r.path)), ["/a.png", "/c.png"], "one no longer found is dropped");
+  assert.deepEqual(clone(indexRows(more, ["/c.png"], { replaced: true })), [{ path: "/c.png", ord: 1, color: null }]);
+});
+
+test("Images reads only the bytes appended since the offset it stored, and replaces the rows when the file shrinks", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
+  const a = "/repo/shots/a.png\n", b = "/repo/shots/b.png\n";
+  const files = ["/repo/shots/a.png", "/repo/shots/b.png", "/repo/shots/c.png"];
+  const scanOf = (calls) => calls.find((c) => c[0] === "sh" && String(c[2]).startsWith('f="$1"'));
+  const first = await panel({ screen: "", files, session, transcript: a, appHome: dir });
+  assert.equal(scanOf(first.calls)[5], "0", "nothing stored yet: the whole file");
+  assert.deepEqual(clone(first.look.list().map((i) => i.path)), ["/repo/shots/a.png"]);
+  assert.equal(first.look.list()[0].color, "#c45a3a");
+  const second = await panel({ screen: "", files, session, transcript: a + b, appHome: dir });
+  assert.equal(scanOf(second.calls)[5], String(a.length), "only the bytes after the stored offset");
+  assert.deepEqual(clone(second.look.list().map((i) => i.path)), ["/repo/shots/b.png", "/repo/shots/a.png"]);
+  assert.equal(second.look.list().find((i) => i.path.endsWith("a.png")).color, "#c45a3a", "the color stored the first time is kept");
+  assert.deepEqual(clone(second.calls.filter((c) => c[0] === "sh" && String(c[2]).includes("kanso-dot")).map((c) => c[4])), ["/repo/shots/b.png"], "a picture that already has a color is not sampled again");
+  const third = await panel({ screen: "", files, session, transcript: "/repo/shots/c.png\n", appHome: dir });
+  assert.equal(scanOf(third.calls)[5], String((a + b).length), "the stored offset is what is asked");
+  assert.deepEqual(clone(third.look.list().map((i) => i.path)), ["/repo/shots/c.png"], "a shorter file replaces that transcript's rows");
+});
+
+test("a picture whose file is gone leaves the index, and the next one is shown", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
+  const files = ["/repo/shots/a.png", "/repo/shots/b.png", "/repo/shots/c.png"];
+  const { look, cx, drain } = await panel({ screen: "", files, session, transcript: `${files.join("\n")}\n`, appHome: dir });
+  assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/c.png", "/repo/shots/b.png", "/repo/shots/a.png"]);
+  look.select(look.list().find((i) => i.path.endsWith("b.png")), cx, true);
+  await drain();
+  files.splice(files.indexOf("/repo/shots/b.png"), 1);
+  look.readAt = 0;
+  look.read(cx);
+  await drain();
+  assert.equal(look.selected.path, "/repo/shots/a.png", "the one after the picture that went");
+  assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/c.png", "/repo/shots/a.png"]);
+});
+
+test("an agent with no pictures is told what shows up here", async () => {
+  const { look, cx } = await panel({ screen: "nothing to see", files: [] });
+  assert.equal(look.list().length, 0);
+  assert.equal(look.emptyLine(), "Pictures this agent writes show up here, from its conversation.");
+  assert.ok(look.render(cx));
+  const none = await panel({ focus: "t2" });
+  assert.equal(none.look.emptyLine(), "No agent in focus.");
+  assert.ok(none.look.render(none.cx));
 });

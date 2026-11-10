@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, name TEXT, title TEXT, sa
 CREATE INDEX IF NOT EXISTS agents_space ON agents(space_id, status);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL, machine TEXT NOT NULL DEFAULT '', added INTEGER NOT NULL, removed INTEGER, agent TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
+CREATE TABLE IF NOT EXISTS picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS pictures(file TEXT NOT NULL, path TEXT NOT NULL, ord INTEGER NOT NULL, color TEXT, there INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(file, path));
+CREATE INDEX IF NOT EXISTS pictures_ord ON pictures(file, ord);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
 export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents
@@ -376,4 +379,20 @@ export class Kdb {
 
   prefs() { return this.read("SELECT key, value FROM prefs;"); }
   setPref(key, value) { return this.run(`INSERT INTO prefs(key,value) VALUES(${q(key)},${q(value)}) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`); }
+
+  // Images keeps what a transcript already said, so the next read starts at `size`.
+  async pictures(file) {
+    const scan = (await this.read(`SELECT size FROM picture_scans WHERE file=${q(file)};`))[0];
+    const rows = await this.read(`SELECT path, ord, color, there FROM pictures WHERE file=${q(file)} ORDER BY ord;`);
+    return { size: scan ? String(scan.size) : "0", rows };
+  }
+  savePictures(file, size, rows) {
+    const keep = rows.length ? rows.map((r) => q(r.path)).join(",") : "NULL";
+    const writes = rows.map((r) => `INSERT INTO pictures(file,path,ord,color,there) VALUES(${q(file)},${q(r.path)},${n(r.ord)},${q(r.color)},1)
+      ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord,there=1,color=COALESCE(pictures.color,excluded.color);`).join("");
+    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND path NOT IN (${keep});${writes}INSERT INTO picture_scans(file,size) VALUES(${q(file)},${n(size)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size;COMMIT;`);
+  }
+  setPictureColor(file, path, color) {
+    return this.run(`UPDATE pictures SET color=${q(color)} WHERE file=${q(file)} AND path=${q(path)};`);
+  }
 }

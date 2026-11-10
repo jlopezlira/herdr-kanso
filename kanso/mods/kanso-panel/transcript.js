@@ -69,19 +69,23 @@ export async function sessionOf(address, homeDir, front = null) {
   return Math.abs(started - Number(record.startedAt)) <= START_SLACK ? record : null;
 }
 
-// The paths a conversation mentions, oldest first, with the program in front, the file and the size read up to. `before` (the
-// last answer) is read on from and comes back as it was while the file has not grown; none without a conversation.
-export async function transcriptPaths(address, homeDir, before = null) {
+// The paths a conversation mentions, oldest first, with the program in front, the file and the size read up to.
+// `before` (the last answer) is read on from when it is this file; otherwise `recall` (what was stored) is.
+// Comes back as it was while the file has not grown. `replaced`: the file shrank, so it was read whole.
+// `failed`: the read did not happen. None without a conversation.
+export async function transcriptPaths(address, homeDir, before = null, recall = null) {
   const front = await frontOf(address);
   const file = transcriptPath(await sessionOf(address, homeDir, front), homeDir);
-  if (!file) return { front, file: null, size: null, paths: [] };
-  const known = before?.file === file ? before : { paths: [], size: "0" };
+  if (!file) return { front, file: null, size: null, from: null, paths: [], rows: [], replaced: false, failed: false };
+  const known = before?.file === file ? before : (await recall?.(file)) ?? { paths: [], size: "0", rows: [] };
   const r = await exec("sh", ["-c", SCAN, "sh", file, String(known.size ?? "0"), PATTERN, String(MOST)], { timeout: 60000 }).catch(() => null);
-  if (r?.code === 3) return { front, file, size: known.size, paths: known.paths };
-  if (r?.code !== 0) return { front, file, size: null, paths: [] };
+  const rows = known.rows ?? [];
+  if (r?.code === 3) return { front, file, size: known.size, from: String(known.size ?? "0"), paths: known.paths ?? [], rows, replaced: false, failed: false };
+  if (r?.code !== 0) return { front, file, size: known.size ?? null, from: null, paths: known.paths ?? [], rows, replaced: false, failed: true };
   const [size, from, ...lines] = r.stdout.split("\n");
   const fresh = lines.map(pathOf).filter(Boolean);
   // Appended to what was read before (none when the file was read whole again); each once, where it was last said.
-  const all = [...(from === "0" ? [] : known.paths), ...fresh];
-  return { front, file, size, paths: [...new Set(all.toReversed())].toReversed().slice(-MOST) };
+  const all = [...(from === "0" ? [] : (known.paths ?? [])), ...fresh];
+  const replaced = from === "0" && String(known.size ?? "0") !== "0";
+  return { front, file, size, from, paths: [...new Set(all.toReversed())].toReversed().slice(-MOST), rows, replaced, failed: false };
 }
