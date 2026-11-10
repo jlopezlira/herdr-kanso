@@ -77,6 +77,6 @@ export const DEFAULT_KEYS = {
     "escape": "kanso-guard.back"
   },
   "terminal": {
-    "cmd-f": "terminal.search"
+    "cmd-f": "kanso-strip.find"
   }
 };

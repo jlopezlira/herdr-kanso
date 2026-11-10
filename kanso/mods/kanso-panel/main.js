@@ -10,10 +10,11 @@ import { Shipped } from "./shipped.js";
 import { Worktrees } from "./worktrees.js";
 import { Ports } from "./ports.js";
 import { Look } from "./look.js";
+import { Find } from "./find-view.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { takeState, giveState } from "./panel-state.js";
 
-const PANELS = { files: Files, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees, ports: Ports, look: Look };
+const PANELS = { files: Files, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees, ports: Ports, look: Look, find: Find };
 
 const projectNow = () => { try { return projectKey(spaces().find((s) => s.active), home()); } catch { return null; } };
 

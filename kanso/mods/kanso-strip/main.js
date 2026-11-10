@@ -669,6 +669,12 @@ export default class Strip extends View {
     else notify({ title: "No agent needs you", level: "info", timeout: 1800 });
   }
 
+  openFind() {
+    const term = focused()?.terminal;
+    if (!term || String(term).includes("/")) { run("terminal.search"); return; }
+    openOverlay({ mod: "kanso-panel", kind: "dialog", modal: true, width: 760, height: 640, props: { panel: "find", terminal: term } });
+  }
+
   focusedPane() {
     const f = focused();
     const all = panes();
@@ -691,6 +697,7 @@ export default class Strip extends View {
     if (name === "next-needs-you") { this.goNeedsYou(); return; }
     if (name === "send") { const p = this.focusedPane(); if (p?.terminal) openSend(p); return; }
     if (name === "arrange") { openArrange(); return; }
+    if (name === "find") { this.openFind(); return; }
     const tab = this.tab();
     const st = tab && this.state[tab];
     if (!st) return;

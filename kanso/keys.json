@@ -76,6 +76,6 @@
     "escape": "kanso-guard.back"
   },
   "terminal": {
-    "cmd-f": "terminal.search"
+    "cmd-f": "kanso-strip.find"
   }
 }

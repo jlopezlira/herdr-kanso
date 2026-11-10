@@ -84,7 +84,8 @@ test("A chord reads as glyphs on macOS and as names elsewhere", async () => {
 // ones macOS keeps for itself: Kanso's keys never give either another
 // meaning. Where Kanso takes one of Herdr's, it is the same command done
 // the strip's way (a split, going to or swapping a pane, close, zoom as the
-// width, a space that is there); everything else is a chord of Kanso's own.
+// width, a space that is there), or Find in the conversation, which falls
+// back to the terminal's own. Everything else is a chord of Kanso's own.
 const SAME_AS_HERDR = {
   "pane.split": /^kanso-strip\.new-(right|down)$/,
   "pane.close": /^kanso-strip\.close$/,
@@ -94,7 +95,7 @@ const SAME_AS_HERDR = {
   "space.select": /^kanso-spaces\.space-\d$/,
   "app.settings": /^kanso-spend\.settings$/,
   "app.help": /^mod\.open:kanso-help$/,
-  "terminal.search": /^terminal\.search$/,
+  "terminal.search": /^kanso-strip\.find$/,
 };
 const MACOS = ["cmd-alt-d", "cmd-alt-h", "cmd-h", "cmd-m", "cmd-q", "cmd-tab", "cmd-space", "cmd-alt-escape", "cmd-shift-3", "cmd-shift-4", "cmd-shift-5", "ctrl-up", "ctrl-down", "ctrl-left", "ctrl-right", "cmd-`"];
 

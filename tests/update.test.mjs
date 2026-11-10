@@ -73,6 +73,27 @@ test("An update adds Find where an edited keys file has not set Cmd+F", async ()
   assert.equal(stays.keys.terminal["cmd-f"], undefined, "a later release leaves a Cmd+F you took out");
 });
 
+test("An update points Cmd+F at the conversation when it still searches the terminal", async () => {
+  const { mergeKeys } = await updater();
+  const before = { terminal: { "cmd-c": "terminal.copy", "cmd-f": "terminal.search" } };
+  const after = { terminal: { "cmd-c": "terminal.copy", "cmd-f": "kanso-strip.find" } };
+  const moved = clone(mergeKeys(clone(before), before, after));
+  assert.equal(moved.changed, true);
+  assert.equal(moved.keys.terminal["cmd-f"], "kanso-strip.find");
+  assert.equal(moved.keys.terminal["cmd-c"], "terminal.copy");
+
+  const custom = clone(before);
+  custom.terminal["cmd-f"] = "mine.search";
+  assert.equal(clone(mergeKeys(custom, before, after)).keys.terminal["cmd-f"], "mine.search");
+
+  const removed = { terminal: { "cmd-c": "terminal.copy" } };
+  assert.equal(clone(mergeKeys(clone(removed), before, after)).keys.terminal["cmd-f"], undefined, "a Cmd+F you took out stays out");
+
+  const older = { "layout:kanso": { "cmd-d": "kanso-strip.new-right" } };
+  const added = clone(mergeKeys(clone(older), { "layout:kanso": { "cmd-d": "kanso-strip.new-right" } }, after));
+  assert.equal(added.keys.terminal["cmd-f"], "kanso-strip.find", "a keys file from before Find gains the conversation");
+});
+
 // A Herdr home with Kanso 1.0.0 installed and used, and two releases served
 // from file:// URLs: what v1.0.0 shipped and the v1.1.0 tarball.
 async function fixture(t, { layoutChanged = true } = {}) {

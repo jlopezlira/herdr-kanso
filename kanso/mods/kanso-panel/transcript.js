@@ -3,8 +3,9 @@
 import { exec, hc, readTextFile } from "herdr";
 import { KINDS } from "./kinds.js";
 import { etimeMs } from "./procs.js";
+import { projectDir, transcriptPath, START_SLACK, sessionLive } from "./find.js";
 
-export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
+export { projectDir, transcriptPath, START_SLACK };
 export const MOST = 2000; // the latest distinct paths kept from a conversation: a long one names a thousand after a picture
 const LONGEST = 100000; // a line longer than this is a pasted picture in base64, never a message: skipped unread
 // What was appended since the last look (`$2`, the offset after the last whole line; `$5` the cksum of those
@@ -44,18 +45,6 @@ const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.lengt
 // each their own: the delimiter grep takes with one leaves one for the next.
 export const PATTERN = `(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(${EXT})([^A-Za-z0-9]|$)`;
 
-// Claude Code keeps each conversation under a folder named after its working folder: every character not a
-// letter or digit as "-", and a folder over 200 characters cut there with a hash of the whole (Claude Code 2.1).
-export function projectDir(cwd) {
-  const path = String(cwd ?? "");
-  const slug = path.replace(/[^A-Za-z0-9]/g, "-");
-  if (slug.length <= 200) return slug;
-  const h = Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).reduce((n, c) => ((n << 5) - n + c) | 0, 0);
-  return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
-}
-export const transcriptPath = (session, homeDir) =>
-  session?.sessionId && session.cwd ? `${homeDir}/.claude/projects/${projectDir(session.cwd)}/${session.sessionId}.jsonl` : null;
-
 // One match as a path: the delimiters grep printed with it go, and the "\n" a JSON string starts it with
 // ("\n./docs/a.md" is "./docs/a.md"); a URL's tail (":" before "//host.com") is no path.
 export function pathOf(match) {
@@ -83,7 +72,7 @@ export async function sessionOf(address, homeDir, front = null) {
   // Nor is a record of an earlier Claude that had this pid: the process must have started when the record says.
   const up = await exec("ps", ["-o", "etime=", "-p", String(pid)]).catch(() => null);
   const started = up?.code === 0 ? Date.now() - etimeMs(up.stdout.trim()) : NaN;
-  return Math.abs(started - Number(record.startedAt)) <= START_SLACK ? record : null;
+  return sessionLive(record, pid, started) ? record : null;
 }
 
 // One transcript file from a stored offset. `code` 3: nothing new and whole. `mark` is the cksum of the bytes read.
