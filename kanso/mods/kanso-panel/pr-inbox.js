@@ -72,12 +72,10 @@ export async function readInbox(db, { provider, host, login }) {
   const needs = items.filter((item) => item.role === "reviewer" || item.role === "both");
   const yours = items.filter((item) => item.role === "author");
   const now = Date.now();
-  const known = new Set(repos.filter((repo) => repo.project_id).map((repo) => repo.id));
   return {
     needs, yours, items, repos, projects, fetch, login,
     unseen: needs.filter(isNew).length,
     limitedUntil: fetch?.retry_at != null && Number(fetch.retry_at) > now ? Number(fetch.retry_at) : null,
-    lag: items.some((item) => !known.has(repoId(item.provider, item.host, item.owner, item.name))),
   };
 }
 
@@ -184,7 +182,6 @@ export function mergeInbox(parts) {
     projects: all[0]?.projects ?? [],
     unseen: needs.filter(isNew).length,
     limitedUntil: limited[0] ?? null,
-    lag: all.some((part) => part.lag),
     login: all.find((part) => part.login)?.login ?? null,
     logins: [...new Set(all.flatMap((part) => part.logins ?? [part.login]).filter(Boolean))],
     writeError: all.map((part) => part.writeError).find(Boolean) ?? null,

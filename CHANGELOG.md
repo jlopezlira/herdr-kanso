@@ -17,10 +17,6 @@ release.
 
 - The pull request panel lists what is waiting on your review and what you have open, across projects on this machine, when the GitHub CLI is signed in. A provider that is not installed or not signed in is left out.
 
-### Fixed
-
-- Each signed-in GitHub host is read as its own account, and one host that fails to sign in leaves the others in the list. Cached reviews stay up while a refresh runs. A project you removed is no longer asked about. When GitHub is no longer signed in, copy and open come back for the pull request on screen.
-
 ## [3.18.6] - 2026-11-09
 
 ### Fixed

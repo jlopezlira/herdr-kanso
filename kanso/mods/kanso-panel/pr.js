@@ -946,7 +946,6 @@ export class PullRequest {
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
       .when(Boolean(this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(limitLine(this.inbox.limitedUntil))))
-      .when(Boolean(this.inbox?.lag), (el) => el.child(div().text_size(12).text_color(c.dim).child("A review in a repository that is not a project comes from search, which can lag.")))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
