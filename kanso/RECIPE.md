@@ -397,10 +397,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - A footnote (10.5, dim): read from GitHub with gh, when.
       - Loading is the view's silhouette in `border` tone, breathing between
         35% and 80%. Without a PR: "No pull request for <branch>." and
-        "Create it on GitHub" (the web form, once the branch has an
-        upstream). Errors read the same way, with "Try again". Outside a git
-        repository it is a place, not a failure: "No repository here" in
-        `muted`, no retry.
+        "Create it on GitHub" (the web form) only once the branch has an
+        upstream; before, "Push it to GitHub to open one." Errors read the
+        same way, with "Try again". What gh lacks is a place, not a failure,
+        one `muted` line with no action: "No repository here", "No remote",
+        "No GitHub remote", "Not signed in to GitHub", "No branch checked out".
   - **Status bar**, 26 tall: `kanso-status` with `{side: "left"}`, a
     180-wide minimap (`kanso-strip`) exactly in the middle, and
     `kanso-status` with `{side: "right"}`. The minimap is a centred row of

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load, context } from "./helpers.mjs";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { load, context, exec as realExec, singleUse, temporary } from "./helpers.mjs";
 
 test("PR agent edit actions open the prompt editor with the right task and checkout", async () => {
   const overlays = [];
@@ -240,4 +242,84 @@ test("Pull request panel keeps finished ones in the list's Closed tab, never as 
   assert.equal(panel.pr.number, 6, "a colleague's merged one opens when picked");
   assert.equal(panel.pr.state, "MERGED");
   assert.equal(panel.listing, false);
+});
+
+test("Pull request panel offers to create one only where gh can: a branch pushed to a GitHub remote", async (t) => {
+  const git = (cwd, ...args) => realExec("git", ["-c", "user.email=t@e", "-c", "user.name=t", "-c", "commit.gpgsign=false", ...args], { cwd });
+  const repo = async (name, branch = "feat") => {
+    const dir = join(await temporary(t), name);
+    await mkdir(dir);
+    await git(dir, "init", "-q", "-b", branch);
+    await git(dir, "commit", "-q", "--allow-empty", "-m", "one");
+    return dir;
+  };
+  const noPr = { code: 1, stdout: "", stderr: 'no pull requests found for branch "feat"' };
+  const show = async (cwd, view) => {
+    const ids = [];
+    const ui = singleUse();
+    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+      ...ui, Button: { new: (id) => { ids.push(id); return ui.Button.new(); } },
+      exec: (command, args, options) => command === "gh"
+        ? Promise.resolve(args[1] === "list" ? { code: 0, stdout: "[]", stderr: "" } : view)
+        : realExec(command, args, options),
+      key: () => cwd, location: () => ({ cwd, on: null }),
+    });
+    const panel = new PullRequest();
+    Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
+    const { cx, drain } = context();
+    panel.refresh(cx); await drain();
+    let said = null;
+    const waiting = panel.waiting.bind(panel);
+    panel.waiting = (c, title, detail, action) => { said = { title, detail }; return waiting(c, title, detail, action); };
+    panel.body({}, true);
+    return { panel, said, link: ids.includes("pr-create") };
+  };
+
+  const plain = join(await temporary(t), "plain");
+  await mkdir(plain);
+  let r = await show(plain, noPr);
+  assert.equal(r.panel.outside, true);
+  assert.equal(r.link, false, "not a repository");
+
+  r = await show(await repo("alone"), { code: 1, stdout: "", stderr: "no git remotes found\n" });
+  assert.deepEqual(r.said, { title: "No remote", detail: null });
+  assert.equal(r.panel.error, null, "a missing remote is not a failure");
+  assert.equal(r.panel.canSwitch(), false);
+  assert.equal(r.link, false, "no remote");
+
+  const gitlab = await repo("gitlab");
+  await git(gitlab, "remote", "add", "origin", "git@gitlab.com:o/here.git");
+  r = await show(gitlab, { code: 1, stdout: "", stderr: "none of the git remotes configured for this repository point to a known GitHub host. To tell gh about a new GitHub host, please use `gh auth login`\n" });
+  assert.equal(r.said.title, "No GitHub remote");
+  assert.equal(r.link, false, "remote not on GitHub");
+
+  const github = await repo("github");
+  await git(github, "remote", "add", "origin", "https://github.com/o/here.git");
+  r = await show(github, { code: 4, stdout: "", stderr: "To get started with GitHub CLI, please run:  gh auth login\n" });
+  assert.equal(r.said.title, "Not signed in to GitHub");
+  assert.equal(r.link, false, "no gh login");
+
+  r = await show(github, noPr);
+  assert.equal(r.panel.none, true);
+  assert.equal(r.panel.pushed, false);
+  assert.deepEqual(r.said, { title: "No pull request for feat.", detail: "Push it to GitHub to open one." });
+  assert.equal(r.link, false, "branch not pushed");
+
+  await git(github, "commit", "-q", "--allow-empty", "-m", "two");
+  await git(github, "checkout", "-q", "--detach", "HEAD~1");
+  r = await show(github, { code: 1, stdout: "", stderr: "could not determine current branch: failed to run git: not on any branch\n" });
+  assert.equal(r.panel.branch, null);
+  assert.equal(r.said.title, "No branch checked out");
+  assert.equal(r.link, false, "detached HEAD");
+
+  await git(github, "checkout", "-q", "feat");
+  const bare = join(await temporary(t), "bare.git");
+  await git(github, "init", "-q", "--bare", bare);
+  await git(github, "remote", "set-url", "origin", bare);
+  await git(github, "push", "-q", "-u", "origin", "feat");
+  await git(github, "remote", "set-url", "origin", "https://github.com/o/here.git");
+  r = await show(github, noPr);
+  assert.equal(r.panel.pushed, true);
+  assert.equal(r.said.title, "No pull request for feat.");
+  assert.equal(r.link, true, "a pushed branch on GitHub keeps the link");
 });
