@@ -426,7 +426,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
-- **Needs you**: Cmd+J/Windows Ctrl+J (`kanso-spaces.needs-you.next`) cycles
+- **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   Count opens project/name/reason/age; click/Enter focuses. Empty: "Nobody is waiting";
   loading: kit; unavailable: error. Status shares this queue.
@@ -766,10 +766,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
   - `kanso-sleep`: a dialog (520 wide); asleep is a status in `kanso.db`.
-    The sidebar runs it (sleepwork.js): requested, saving, clearing,
-    exiting, left, or stuck (retry, undo); then the tab closes. One owner
-    per row (20 s). A sleeping project or tab is one row until clicked;
-    stuck keeps Retry and Undo. Wake: `claude --resume`.
+    Ordering hides it at once; the sidebar then runs saving, clearing,
+    exiting, left, or stuck (retry, undo). One owner (20 s). One row until
+    clicked, breathing while it goes; stuck keeps Retry and Undo. A wake
+    still going cancels it. Wake: `claude --resume`.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

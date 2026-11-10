@@ -41,7 +41,6 @@ export const DEFAULT_KEYS = {
     "cmd-shift-=": "kanso-strip.more",
     "cmd-shift-0": "kanso-strip.fit",
     "cmd-j": "kanso-spaces.needs-you.next",
-    "ctrl-j": "kanso-spaces.needs-you.next",
     "cmd-alt-s": "kanso-strip.send",
     "cmd-alt-t": "kanso-strip.arrange",
     "ctrl-1": "kanso-spaces.space-1",

@@ -37,6 +37,12 @@ function customPanels() {
   return Array.isArray(list) ? list.filter((p) => p && typeof p.id === "string" && typeof p.mod === "string" && !(p.id in PANELS)) : [];
 }
 
+// A tab put to sleep leaves the bar in the same turn.
+export function shownTabs(tabs, hidden) {
+  const away = new Set((hidden ?? []).flatMap((h) => h.settle ?? []));
+  return (tabs ?? []).filter((c) => !c.settled && !away.has(c.id));
+}
+
 // Both shared, so the Panels popup and every bar agree.
 const ORDER = "kanso.panels.order", OFF = "kanso.panels.off";
 const ICON = "mods/kanso-chrome/icons/";
@@ -264,7 +270,7 @@ export default class Tabs extends View {
   render() {
     const t = theme();
     const space = spaces().find(p => p.active);
-    const shown = space?.tabs ?? [];
+    const shown = shownTabs(space?.tabs, shared("kanso.sleep.hidden"));
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();
     const tree = layout();

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { waitingQueue, nextWaiting, queueState, waitingReason, queueMessage, NEEDS_YOU } from "../kanso/mods/kanso-spaces/needs-you.js";
+import { waitingQueue, nextWaiting, queueState, waitingSignature, sameQueue, waitingReason, queueMessage, NEEDS_YOU, EMPTY_NOTICE_MS } from "../kanso/mods/kanso-spaces/needs-you.js";
 import { modScript } from "../scripts/mod-source.mjs";
 import { load, clone, singleUse } from "./helpers.mjs";
 
@@ -59,6 +59,28 @@ test("The queue has empty, loading and unavailable states without inventing agen
   assert.equal(queueMessage(queueState([], [{ layout: "unavailable" }]).state), "Queue unavailable");
 });
 
+test("The queue signature follows agent state, names and sleep, excluding unrelated terminals", () => {
+  const list = [agent("a")], terms = [terminal("a"), terminal("unrelated")];
+  const signature = (agents = list, terminals = terms, excluded = new Set()) => waitingSignature(agents, terminals, excluded, "name");
+  const original = signature();
+  assert.equal(signature(list.map((a) => ({ ...a, focused: true }))), original);
+  assert.equal(signature(list, [terms[0], terminal("unrelated", 5)]), original);
+  assert.notEqual(signature([agent("a", "done")]), original);
+  assert.notEqual(signature(list, [terminal("a", 5)]), original);
+  assert.notEqual(signature(list, [terminal("a", 1, { labels: { name: "Renamed" } })]), original);
+  assert.notEqual(signature(list, terms, new Set(["a"])), original);
+  assert.notEqual(signature([agent("a", "blocked", { pane: "moved" })]), original);
+});
+
+test("Only changed queue rows or availability need to be published", () => {
+  const queue = queueState(waitingQueue([agent("a")], [terminal("a")]), []);
+  assert.equal(sameQueue(queue, clone(queue)), true);
+  assert.equal(sameQueue(queue, null), false);
+  assert.equal(sameQueue({ ...queue, rows: [] }, queue), false);
+  assert.equal(sameQueue({ ...queue, state: "unavailable" }, queue), false);
+  assert.equal(sameQueue({ ...queue, rows: [{ ...queue.rows[0], name: "Renamed" }] }, queue), false);
+});
+
 function tape() {
   const texts = [], handlers = new Map();
   const node = (initial = null) => {
@@ -77,10 +99,11 @@ function tape() {
 }
 
 async function controller() {
-  const state = { list: [agent("a"), agent("b", "done")], terms: [terminal("a", 1), terminal("b", 2)], runs: [], timers: [], writes: 0 };
+  const state = { list: [agent("a"), agent("b", "done")], terms: [terminal("a", 1), terminal("b", 2)], layouts: [], runs: [], timers: [], writes: 0, builds: 0 };
   const sharedState = new Map(), ui = tape();
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { ...ui.host,
-    agents: () => state.list, terminals: () => state.terms, spaces: () => [], machines: () => [],
+    agents: () => state.list, terminals: () => state.terms, spaces: () => [], machines: () => state.layouts,
+    waitingQueue: (...args) => { state.builds++; return waitingQueue(...args); },
     shared: (key) => sharedState.get(key), setShared: (key, value) => { sharedState.set(key, value); state.writes++; },
     run: (...args) => state.runs.push(args), focused: () => ({ pane: "original" }), home: () => "C:\\Users\\person",
   });
@@ -108,6 +131,31 @@ test("The command only focuses live agents and publishes the same queue used by 
   assert.equal(state.runs.length, 3, "a stale click cannot wake or open a closed agent");
 });
 
+test("Redraws and focus reuse the queue, while agent changes rebuild it and availability keeps its rows", async () => {
+  const { state, view, sharedState } = await controller();
+  const first = view.refreshNeeds();
+  assert.equal(view.refreshNeeds(), first);
+  state.list = state.list.map((a) => ({ ...a, focused: true }));
+  view.refreshNeeds();
+  assert.equal(state.builds, 1);
+  assert.equal(state.writes, 1);
+  state.layouts = [{ layout: "unavailable" }];
+  const unavailable = view.refreshNeeds();
+  assert.equal(unavailable.state, "unavailable");
+  assert.equal(unavailable.rows, first.rows);
+  assert.equal(state.builds, 1);
+  state.terms = state.terms.map((t) => ({ ...t, status_ms: 10 }));
+  view.refreshNeeds();
+  assert.equal(state.builds, 2);
+  assert.equal(state.writes, 2, "a rebuilt but equal queue is not published");
+  state.list = [agent("a"), agent("b", "idle")];
+  assert.equal(view.refreshNeeds().rows.length, 1);
+  assert.equal(state.builds, 3);
+  sharedState.set("kanso.sleep.away", { rows: [{ going: true, state: "sleeping", agents: [{ terminal: "a" }] }] });
+  assert.equal(view.refreshNeeds().rows.length, 0, "a sleep hides its agent without a status change");
+  assert.equal(state.builds, 4);
+});
+
 test("The sidebar list supports click and Enter, with project, name, reason and age", async () => {
   const { state, view, cx, ui } = await controller();
   const scrolled = [];
@@ -133,7 +181,7 @@ test("An empty jump stays in the sidebar briefly and never posts a notification 
   view.nextNeeds(cx);
   assert.equal(view.needsEmpty, true);
   assert.equal(state.runs.length, 0);
-  assert.equal(state.timers[0].ms, 1800);
+  assert.equal(state.timers[0].ms, EMPTY_NOTICE_MS);
   view.nextNeeds(cx);
   state.timers[0].fn(cx);
   assert.equal(view.needsEmpty, true, "an earlier timeout cannot hide the latest empty state");
@@ -179,11 +227,20 @@ test("The kit renders every queue state with single-use elements", async () => {
   assert.ok(ui.texts.includes("Queue unavailable"));
 });
 
-test("Windows and macOS bindings share the command and source loading accepts CRLF", async () => {
+test("The count label distinguishes normal, collapsed, empty and unavailable states", async () => {
+  const { queueLabel } = await load("kanso-spaces/needs-you-view.js", ["queueLabel"]);
+  const queue = queueState(waitingQueue([agent("a")], []), []);
+  assert.equal(queueLabel(queue, false, false), "Needs you · 1");
+  assert.equal(queueLabel(queue, true, false), "1");
+  assert.equal(queueLabel(queue, false, true), "Nobody is waiting");
+  assert.equal(queueLabel({ ...queue, state: "unavailable" }, false, true), "Queue unavailable");
+});
+
+test("The queue keeps Ctrl+J available to the terminal and source loading accepts CRLF", async () => {
   const keys = JSON.parse(await readFile(new URL("../kanso/keys.json", import.meta.url), "utf8"));
   const bindings = keys["layout:kanso"];
-  assert.equal(bindings["ctrl-j"], "kanso-spaces.needs-you.next");
-  assert.equal(bindings["cmd-j"], bindings["ctrl-j"]);
+  assert.equal(bindings["cmd-j"], "kanso-spaces.needs-you.next");
+  assert.ok(!("ctrl-j" in bindings));
   const source = 'import { value } from "./model.js";\r\nexport const result = value;\r\n';
   const script = modScript(source, () => "export const value = 1;\r\n");
   assert.doesNotMatch(script, /\bimport\b|\bexport\b/);

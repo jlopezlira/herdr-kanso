@@ -3,11 +3,16 @@ import { v_flex, h_flex } from "gpui-base";
 import { G, H, R, T, tokens, quietLink, skeleton } from "./ui.js";
 import { waitingReason, queueMessage } from "./needs-you.js";
 
+export function queueLabel(queue, collapsed, empty) {
+  if (empty) return queueMessage(queue.state);
+  if (collapsed) return String(queue.rows.length);
+  return `Needs you · ${queue.rows.length}`;
+}
+
 export function queueControl(t, queue, collapsed, empty, toggle) {
-  const c = tokens(t), count = queue.rows.length;
-  const label = empty ? queueMessage(queue.state) : collapsed ? String(count) : `Needs you · ${count}`;
-  return h_flex().flex_none().px(G.sm).child(quietLink("needs-you-count", label, toggle, c,
-    { size: T.body, label: `Needs you: ${count}`, color: count ? c.text : c.dim }).tooltip(`Needs you: ${count}`));
+  const c = tokens(t), count = queue.rows.length, spoken = `Needs you: ${count}`;
+  return h_flex().flex_none().px(G.sm).child(quietLink("needs-you-count", queueLabel(queue, collapsed, empty), toggle, c,
+    { size: T.body, label: spoken, color: count ? c.text : c.dim }).tooltip(spoken));
 }
 
 export function queueList(t, queue, rowFor, age, scroll = null) {

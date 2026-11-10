@@ -103,10 +103,36 @@ test("an asleep project renders collapsed, a click shows its agents, and waking 
 });
 
 test("a sleep that is stuck keeps Retry and Undo on the collapsed row", async () => {
-  const { ids } = await draw({ asleep: [sleepOf({ stuck: "Bob did not exit", busy: true })] });
+  const { ids } = await draw({ asleep: [sleepOf({ stuck: "Bob did not exit", busy: true, state: "stuck" })] });
   assert.equal(has(ids, "asleep-undo-sl1"), true);
   assert.equal(has(ids, "asleep-retry-sl1"), true);
+  assert.equal(has(ids, "asleep-why-project::/Users/me/fury"), true, "the failure stays on the row");
   assert.equal(has(ids, "space-agent-zz:c1"), false, "stuck stays collapsed, the buttons are on the row");
+});
+
+test("a project going to sleep is one row, with Undo and no Retry, and its awake agent is already gone", async () => {
+  const space = [{ id: "sp1", name: "fury", folder: "/Users/me/fury", machine: null, active: true, tabs: [{ id: "tb", name: "Main", active: true }] }];
+  const live = [{ address: "t1", pane: "p1", tab: "tb", space: "sp1", space_name: "fury", status: "idle", name: "Ada", seq: 1 }];
+  const asleep = [sleepOf({ spaceId: "sp1", state: "sleeping", pending: true, agents: [{ name: "Ada", resume: "c1", terminal: "t1", title: null, said: null, spaceId: "sp1", at: 0, program: null }] })];
+  const { ids } = await draw({
+    asleep, spaces: () => space, agents: () => live,
+    panes: () => [{ pane: "p1", tab: "tb", terminal: "t1", cwd: "/Users/me/fury" }],
+    terminals: () => [{ address: "t1", state: "live", labels: {} }],
+  });
+  assert.equal(has(ids, "space-sp1"), true);
+  assert.equal(has(ids, "asleep-going-project:sp1"), true, "the moon breathes while it goes");
+  assert.equal(has(ids, "asleep-undo-sl1"), true);
+  assert.equal(has(ids, "asleep-retry-sl1"), false);
+  assert.equal(has(ids, "space-agent-t1"), false, "the awake row has already gone");
+  assert.equal(has(ids, "space-agent-zz:c1"), false, "a project going to sleep stays one row");
+});
+
+test("a project with no space left, going to sleep, is one row", async () => {
+  const { ids } = await draw({ asleep: [sleepOf({ state: "sleeping", pending: true })] });
+  assert.equal(has(ids, "asleep-going-project::/Users/me/fury"), true);
+  assert.equal(has(ids, "asleep-undo-sl1"), true);
+  assert.equal(has(ids, "asleep-retry-sl1"), false);
+  assert.equal(has(ids, "space-agent-zz:c1"), false);
 });
 
 test("a sleeping tab inside a live project is one row, and a click shows its agents", async () => {
