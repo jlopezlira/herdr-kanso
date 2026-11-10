@@ -43,6 +43,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
 CREATE TABLE IF NOT EXISTS picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL, mark TEXT);
 CREATE TABLE IF NOT EXISTS pictures(file TEXT NOT NULL, path TEXT NOT NULL, ord INTEGER NOT NULL, color TEXT, there INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(file, path));
 CREATE INDEX IF NOT EXISTS pictures_ord ON pictures(file, ord);
+CREATE TABLE IF NOT EXISTS pr_providers(provider TEXT NOT NULL, host TEXT NOT NULL, login TEXT, status TEXT NOT NULL, detail TEXT, checked_at INTEGER NOT NULL, PRIMARY KEY(provider, host));
+CREATE TABLE IF NOT EXISTS pr_repos(id TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, project_id TEXT, folder TEXT, machine TEXT, remote TEXT, seen_at INTEGER);
+CREATE INDEX IF NOT EXISTS pr_repos_project ON pr_repos(project_id);
+CREATE TABLE IF NOT EXISTS pr_items(url TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, number INTEGER NOT NULL, title TEXT NOT NULL, state TEXT, draft INTEGER NOT NULL DEFAULT 0, author TEXT, role TEXT NOT NULL, head TEXT, base TEXT, review_decision TEXT, additions INTEGER, deletions INTEGER, updated_at TEXT, fetched_at INTEGER NOT NULL, seen_at INTEGER);
+CREATE INDEX IF NOT EXISTS pr_items_repo ON pr_items(provider, host, owner, name);
+CREATE TABLE IF NOT EXISTS pr_fetches(key TEXT PRIMARY KEY, fetched_at INTEGER, retry_at INTEGER, error TEXT);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
 export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents

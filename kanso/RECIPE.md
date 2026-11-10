@@ -325,9 +325,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       GitHub's. Each refresh reads only what changed. The panel rereads
       every 5 minutes while shown; a dim line names the step it is on.
       The PR panel (`kanso-panel` with `pr`) shows one pull request at a time: the focused
-      pane's branch's own while it is open, as T3 Code does (a merged or closed
-      one counts as none), else the newest open one in that repository
-      ("the newest open; <branch> has none" after its author and age), drawn like the Spend panel: one
+      pane's branch while open (a merged or closed one counts as none), else the newest
+      open one ("the newest open; <branch> has none"), drawn like Spend: one
       centered column (max 1080, 16 px sides under 560 wide, else 32), no
       cards or uppercase labels, `canvas` behind, hierarchy from size, weight
       and tone, hairlines between list rows. Top to bottom:
@@ -335,7 +334,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         hairline pill "N open" with a chevron, refresh (spins while reading),
         copy link (the PR's URL to the clipboard; a check for 1.5 s) and open
         on GitHub. The pill is hidden when the only open one is the
-        one shown.
+        one shown. Signed in, "N to review" lists Needs you and Yours by project;
+        an unseen review opens there, else today's. Absent when `gh` is not signed in.
+        Reread every 120 s while shown.
       - The page of open ones: the pill turns the panel to it (the title
         reads "Open pull requests", the pill "Back to #n"); it scrolls with
         the panel, as a popover's layer did not. The repository's open pull
@@ -790,9 +791,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     each is a plain class in its own file (`files.js`: lazy file tree via
     `sh`, git status marks, a file shown in place as read-only code, a
     Markdown file sent to `preview.js` with `back: "files"`; `changes.js`:
-    git diff and commit; `pr.js`: the pull request panel, read with `gh pr
-    view`, `gh pr diff` and one GraphQL query for unresolved review
-    threads; `preview.js`: one file by full path, `{path, on, back}`, read
+    git diff and commit; `pr.js`: the pull request, and reviews across this
+    machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
     again whenever its folder changes, with Open with, read-again and close
     buttons: code read-only, Markdown as `doc.js` `MarkdownDoc`, formatted
     and edited in place (a double-click opens one block, a table as cells;
@@ -846,8 +846,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Shipped overlays used**: `menu`, `new-menu`, `picker`, `machine-add`.
 - **Programs run**: `git` (spaces, Files), `sh` (Files listing),
   `hc` (machines) and, for Open with, `sh`, `open`, `plutil` and `sips`
-  (macOS) and the chosen editor. The PR panel runs `gh` (GitHub's API) and
-  `git`, only while it is shown. Nothing else reaches the network.
+  (macOS) and the chosen editor. The PR panel runs `gh` and `git` only while
+  shown. Nothing else reaches the network.
 
 ## Watch out
 

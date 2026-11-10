@@ -4,9 +4,12 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
 import { exec, knownAgents, notify, openOverlay, run, theme } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
-import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary } from "./ghchecks.js";
+import { Kdb } from "./kdb.js";
+import { readyProviders } from "./pr-providers.js";
+import { groupInbox, isNew, limitLine, mergeInbox, refreshInbox, seenSql } from "./pr-inbox.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -152,6 +155,7 @@ export class PullRequest {
       this.openPrs = []; this.selected = null; this.home = null; this.branchUrl = null; this.outside = false;
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
+      this.inboxOn = false; this.inbox = null; this.inboxOpen = null; this.inboxTab = "needs"; this.inboxForce = false;
     }
     if (this.listing && this.tab === "closed") this.loadClosed(cx);
     if (!cwd) return;
@@ -159,12 +163,19 @@ export class PullRequest {
     this.loading = true;
     const want = this.selected;
     cx.spawn(async (cx) => {
+      const inbox = this.syncInbox(context);
       const failed = (e) => { if (key() === context) this.error = { title: "GitHub could not be read.", detail: String(e?.message ?? e) }; };
       try {
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on });
         if (key() !== context) return;
         // Not a repository is a place, not a failure: a quiet placeholder, no retry.
-        if (top.code !== 0) { this.outside = true; this.missing = null; this.error = null; this.none = false; this.pr = null; this.openPrs = []; return; }
+        if (top.code !== 0) {
+          this.outside = true; this.missing = null; this.error = null; this.none = false; this.openPrs = [];
+          if (!this.selected) { this.pr = null; return; }
+          try { await this.readShown(context, this.selected, null); }
+          catch (e) { failed(e); }
+          return;
+        }
         this.outside = false;
         this.root = top.stdout.trim();
         const [branch, remote, pushed] = await Promise.all([
@@ -182,10 +193,64 @@ export class PullRequest {
         finally { await list; }
       } catch (e) { failed(e); }
       finally {
+        await inbox;
         this.loading = false; this.loadedAt = Date.now(); cx.notify();
         if (this.selected !== want && key() === context) this.refresh(cx);
       }
     });
+  }
+
+  // The account, not the focused folder. Absent unless a provider is installed and signed in here.
+  async syncInbox(context) {
+    const ready = await readyProviders(exec).catch(() => []);
+    if (key() !== context) return;
+    if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
+    if (!this.inboxDb) {
+      try { this.inboxDb = new Kdb(); await this.inboxDb.open(); }
+      catch (e) {
+        this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`;
+        this.inboxOn = false; this.inboxOpen = null;
+        return;
+      }
+    }
+    const force = Boolean(this.inboxForce);
+    this.inboxForce = false;
+    const model = await ready.reduce(async (prev, { provider, session }) => {
+      const soFar = await prev;
+      return [...soFar, await refreshInbox({
+        db: this.inboxDb, run: exec, provider, session, force, shown: true,
+        onCache: (cached, pending) => { if (key() === context) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
+      })];
+    }, Promise.resolve([])).then(mergeInbox).catch((e) => e);
+    if (model instanceof Error) {
+      const e = model;
+      if (key() !== context) return;
+      this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`;
+      return;
+    }
+    if (key() !== context) return;
+    this.paintInbox(model, true);
+    if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
+  }
+
+  paintInbox(model, decide) {
+    this.inbox = model;
+    this.inboxOn = true;
+    if (decide && this.inboxOpen == null) {
+      this.inboxOpen = model.unseen > 0;
+      if (this.inboxOpen) this.inboxTab = "needs";
+    }
+    if (model.writeError) this.note = `Could not keep pull requests: ${model.writeError}`;
+  }
+
+  async noteSeen(url) {
+    if (!url || this.inboxOpen !== false || !this.inboxDb) return;
+    const now = Date.now();
+    try { await this.inboxDb.run(seenSql(url, now)); }
+    catch (e) { this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`; return; }
+    const stamp = (item) => item.url === url ? { ...item, seenAt: now } : item;
+    const needs = (this.inbox?.needs ?? []).map(stamp);
+    if (this.inbox) this.inbox = { ...this.inbox, needs, yours: (this.inbox.yours ?? []).map(stamp), unseen: needs.filter(isNew).length };
   }
 
   // gh pr create --web refuses a branch unless it sits exactly on a remote upstream.
@@ -236,6 +301,7 @@ export class PullRequest {
     this.pr = pr; this.none = false; this.error = null; this.fallback = fallback;
     if (!want) this.branchUrl = fallback ? null : pr.url;
     if (!this.home && !want) this.home = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(pr.url)?.[1] ?? null;
+    await this.noteSeen(pr.url);
     const repo = this.repo();
     if (repo) {
       const q = await this.gh(["api", "graphql", "-f", `query=${THREADS}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`, "-F", `n=${pr.number}`]).catch(() => null);
@@ -574,15 +640,37 @@ export class PullRequest {
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
+  reviewCount() { return this.inbox?.needs?.length ?? 0; }
+
+  reviewPill(c) {
+    const back = this.inboxOn && this.inboxOpen && this.pr;
+    const label = this.inboxOn && this.inboxOpen ? (back ? `Back to #${this.pr.number}` : "This pane") : `${this.reviewCount()} to review`;
+    return Button.new("pr-reviews").h(26).px(10).flex_none().items_center().rounded(6).cursor_pointer()
+      .border_1().border_color(this.inboxOpen ? c.muted : c.border)
+      .accessibility_label(label)
+      .tooltip(this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests")
+      .hover((s) => s.bg(c.subtle))
+      .on_click((_e, cx) => {
+        this.inboxOpen = !this.inboxOpen;
+        if (this.inboxOpen) this.inboxTab = this.inboxTab ?? "needs";
+        else this.noteSeen(this.pr?.url);
+        cx.notify();
+      })
+      .child(div().text_size(12).text_color(c.text).child(label));
+  }
+
   header(c, narrow) {
-    const pr = this.pr, pill = this.listing || this.canSwitch();
+    const pr = this.pr, here = this.inboxOn && this.inboxOpen, pill = (this.listing || this.canSwitch()) && !here;
+    const limited = this.inbox?.limitedUntil;
+    const refreshed = limited ? `limited until ${limitLine(limited).match(/\d{2}:\d{2}/)?.[0]}` : this.loadedAt ? `updated ${clock(this.loadedAt)}` : null;
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child(this.listing ? "Pull requests" : "Pull request"))
+      .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
+        .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
-        .child(iconButton("pr-refresh", "refresh", this.loadedAt ? `Refresh · updated ${clock(this.loadedAt)}` : "Refresh", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c, { spin: this.loading }))
-        .when(Boolean(pr) && !this.listing, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
-        .when(Boolean(pr), (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
+        .child(iconButton("pr-refresh", "refresh", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => { this.loadedAt = 0; this.inboxForce = true; this.refresh(cx); }, c, { spin: this.loading }))
+        .when(Boolean(pr?.url) && !this.listing && !here, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
+        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
   }
 
   copyUrl(url, cx) {
@@ -816,7 +904,53 @@ export class PullRequest {
       .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
   }
 
+  inboxState(item, c) {
+    if (item.draft) return { text: "Draft", color: c.dim };
+    if (item.reviewDecision === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
+    if (item.reviewDecision === "APPROVED") return { text: "Approved", color: c.green };
+    return { text: "Open", color: c.dim };
+  }
+
+  openInboxItem(item, cx) {
+    this.inboxOpen = false;
+    this.choose(item, cx);
+  }
+
+  inboxPage(c) {
+    const tab = this.inboxTab || "needs";
+    const rows = tab === "yours" ? (this.inbox?.yours ?? []) : (this.inbox?.needs ?? []);
+    const groups = groupInbox(rows, { repos: this.inbox?.repos ?? [], projects: this.inbox?.projects ?? [] });
+    const mine = new Set((this.inbox?.logins ?? [this.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
+    const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, group) => n + group.rows.length, 0));
+    const row = (item, i) => {
+      const state = this.inboxState(item, c);
+      const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
+      return Button.new(`pr-in-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
+        .hover((s) => s.bg(c.subtle))
+        .accessibility_label(`#${item.number} ${item.title}`)
+        .on_click((_e, cx) => this.openInboxItem(item, cx))
+        .child(v_flex().w_full().min_w(0).gap(4)
+          .child(div().w_full().min_w(0).text_size(14).line_height(1.35).text_color(c.text).child(item.title))
+          .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
+          .child(h_flex().w_full().gap(G.sm).items_center()
+            .child(div().size(6).flex_none().rounded_full().bg(state.color))
+            .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
+            .when(item.additions != null, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${item.additions} −${item.deletions}`)))));
+    };
+    return v_flex().w_full().gap(G.lg)
+      .child(quietTabs("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
+      .when(this.outside, (el) => el.child(div().text_size(12).text_color(c.dim).child("This pane is not in a repository.")))
+      .child(!groups.length
+        ? div().text_size(12).text_color(c.dim).child("Nothing waiting on you.")
+        : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(2)
+          .child(section(c, group.title, String(group.rows.length)))
+          .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
+      .when(Boolean(this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(limitLine(this.inbox.limitedUntil))))
+      .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
+  }
+
   body(c, narrow) {
+    if (this.inboxOn && this.inboxOpen) return this.inboxPage(c);
     if (this.listing) return this.listPage(c);
     if (this.pr) {
       return v_flex().w_full().gap(narrow ? 36 : 48)
