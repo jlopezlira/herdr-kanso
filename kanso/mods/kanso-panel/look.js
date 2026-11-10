@@ -143,11 +143,9 @@ export class Look {
           const gone = this.selected.path;
           const at = previous.findIndex((i) => i.path === gone);
           const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
-          this.kept.delete(gone);
-          if (this.asking?.path === gone) this.asking = null;
-          this.pins = []; this.picked = false;
+          this.picked = false;
           if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
-          else { this.selected = null; this.shown = null; }
+          else { this.hold(); this.selected = null; this.shown = null; this.pins = []; }
         } else if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
         const live = new Set(this.list().map((i) => i.path));
         this.kept = new Map([...this.kept].filter(([path]) => live.has(path)));
@@ -171,11 +169,11 @@ export class Look {
     return [...this.asked, ...this.items.filter((i) => !asked.has(i.path))];
   }
 
-  // The picture being left keeps its unsent pins; the one shown gets its own back.
+  // Unsent pins stay on the picture they were dropped on, including after a later read.
   hold() {
     const path = this.selected?.path;
     if (!path) return;
-    if (this.pins.length) this.kept.set(path, this.pins);
+    if (this.pins.length) this.kept.set(path, this.pins.map((p) => ({ ...p })));
     else this.kept.delete(path);
   }
 
@@ -183,7 +181,9 @@ export class Look {
     this.picked = this.picked || picked;
     if (this.selected?.path === item.path) return;
     this.hold();
-    this.selected = item; this.pins = this.kept.get(item.path) ?? []; this.shown = null; this.watching = null;
+    this.selected = item;
+    this.pins = (this.kept.get(item.path) ?? []).map((p) => ({ ...p }));
+    this.shown = null; this.watching = null;
     if (shows(item)) { this.draw(item, cx); this.watch(item, cx); }
     cx.notify();
   }
@@ -212,7 +212,7 @@ export class Look {
         this.shown = null;
         const next = this.list().find((i) => i.path !== path);
         if (next) this.select(next, cx, false);
-        else { this.hold(); this.selected = null; this.pins = []; }
+        else { this.hold(); this.selected = null; this.shown = null; this.pins = []; }
         cx.notify();
         return;
       }

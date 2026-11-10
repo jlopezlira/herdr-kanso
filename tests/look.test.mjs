@@ -434,21 +434,23 @@ test("a picture whose file is gone leaves the index, and the next one is shown",
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/c.png", "/repo/shots/a.png"]);
 });
 
-test("a pin and its note stay on their picture until Send", async () => {
+test("a pin and its note stay on their picture until Send, including after another read", async () => {
   const { look, cx, drain, calls, say } = await panel();
   const [first, second] = look.list();
   const spot = (x) => ({ local_position: { x, y: 10 }, bounds: { width: 300, height: 200 } });
   const notes = () => look.pins.map((p) => p.note);
-  look.pin(spot(30), cx);
+  look.pin(spot(30), cx); say("on the first"); look.render(cx);
+  assert.deepEqual(clone(notes()), ["on the first"]);
   look.select(second, cx, true);
   await drain();
-  say("on the first");
-  look.render(cx);
-  assert.deepEqual(clone(notes()), [], "the note does not land on the picture you moved to");
+  assert.equal(look.selected.path, second.path);
+  assert.deepEqual(clone(notes()), [], "the other picture does not take this note");
+  look.readAt = 0; look.read(cx); await drain();
+  assert.equal(look.selected.path, second.path, "a later read stays on the picture you opened");
   look.pin(spot(60), cx); say("on the second"); look.render(cx);
   look.select(first, cx, true);
   await drain();
-  assert.deepEqual(clone(notes()), ["on the first"], "leaving and coming back keeps the note");
+  assert.deepEqual(clone(notes()), ["on the first"], "leaving and a read in between keep the note");
   assert.equal(Math.round(look.pins[0].x * 100), 10);
   look.select(second, cx, true);
   await drain();
