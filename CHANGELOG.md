@@ -11,11 +11,17 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.18.10] - 2026-11-10
+## [3.18.11] - 2026-11-10
 
 ### Changed
 
 - A panel you open in a project stays open there, with what it was showing: the file, the folder, the pull request, the picture. Another project keeps its own, and one with nothing open stays closed. It is still there after a restart. A file that is gone, or a pull request that has closed, leaves the panel empty.
+
+## [3.18.10] - 2026-11-10
+
+### Fixed
+
+- A switch shows its knob at the left when off and at the right when on, in light and in dark. The track fills when it is on, and a focused switch is marked.
 
 ## [3.18.9] - 2026-11-10
 
