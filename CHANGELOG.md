@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.19.1] - 2026-11-10
+
+### Fixed
+
+- Cmd+F on an agent finds the words in the whole conversation and shows that point, whoever said it and when. Capitals and accents do not matter. It starts at the newest match; Enter and Shift+Enter move, and Escape closes Find and returns to the terminal. A terminal with no conversation still searches that terminal's screen.
+
 ## [3.19.0] - 2026-11-10
 
 ### Added
