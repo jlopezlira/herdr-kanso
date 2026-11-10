@@ -11,11 +11,26 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.18.5] - 2026-11-09
+## [3.18.6] - 2026-11-09
 
 ### Fixed
 
 - The pull request panel offers "Create it on GitHub" only where it can work: a branch level with its upstream on a GitHub remote that is not the default branch. A repository with no remote, or none on GitHub, gh not signed in, a detached HEAD, a branch ahead of or behind its upstream, or the default branch now say so in one quiet line instead of showing a link that fails or a red "GitHub could not be read."
+
+## [3.18.5] - 2026-11-09
+
+### Changed
+
+- Preview is now Images: the tab, the panel and the docs say so. The newest picture stays big; each picture is a circle, and the one you are on is filled with that picture's color. `herdr-app do 'kanso-tabs.look <path>'` is unchanged, and `kanso-tabs.gallery` still works.
+- Images keeps the pictures it has already found and reads a conversation only from where it left off. A picture whose file is gone leaves the row, and an agent with none is told what shows up here.
+
+### Fixed
+
+- A pin and its note stay on that picture when you move to another, until you send them.
+- A pin and its note stay with the agent they were pinned on when another agent is in focus, and they are not sent to that agent.
+- A picture named on a line that was still being written, or in a conversation replaced in place, is still indexed.
+- A picture that cannot be opened leaves the row.
+- A file named like a picture that is not one leaves the row. A conversation that no longer names a picture drops the ones it kept. One that failed to open is tried again the next time Images is opened.
 
 ## [3.18.4] - 2026-11-09
 
