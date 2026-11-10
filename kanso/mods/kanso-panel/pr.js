@@ -150,7 +150,7 @@ export class PullRequest {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
       this.openPrs = []; this.selected = null; this.home = null; this.branchUrl = null; this.outside = false;
-      this.missing = null; this.pushed = false;
+      this.missing = null; this.pushed = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
     }
     if (this.listing && this.tab === "closed") this.loadClosed(cx);
@@ -167,13 +167,13 @@ export class PullRequest {
         if (top.code !== 0) { this.outside = true; this.missing = null; this.error = null; this.none = false; this.pr = null; this.openPrs = []; return; }
         this.outside = false;
         this.root = top.stdout.trim();
-        const [branch, remote, upstream] = await Promise.all([
+        const [branch, remote, pushed] = await Promise.all([
           exec("git", ["branch", "--show-current"], { cwd: this.root, on }),
           exec("git", ["remote", "get-url", "origin"], { cwd: this.root, on }).catch(() => null),
-          exec("git", ["rev-parse", "--symbolic-full-name", "@{u}"], { cwd: this.root, on }).catch(() => null),
+          this.readPushed(this.root, on),
         ]);
         this.branch = branch.stdout.trim() || null;
-        this.pushed = upstream?.code === 0 && upstream.stdout.trim().startsWith("refs/remotes/");
+        this.pushed = pushed;
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remote?.stdout ?? "")?.[1] ?? null;
         // Awaited in the finally so the read never outlives this refresh.
         const list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
@@ -186,6 +186,15 @@ export class PullRequest {
         if (this.selected !== want && key() === context) this.refresh(cx);
       }
     });
+  }
+
+  // gh pr create --web refuses a branch with no remote upstream or with commits past it.
+  async readPushed(cwd, on) {
+    const [up, ahead] = await Promise.all([
+      exec("git", ["rev-parse", "--symbolic-full-name", "@{u}"], { cwd, on }).catch(() => null),
+      exec("git", ["rev-list", "--count", "@{u}..HEAD"], { cwd, on }).catch(() => null),
+    ]);
+    return up?.code === 0 && up.stdout.trim().startsWith("refs/remotes/") && ahead?.code === 0 && String(ahead.stdout).trim() === "0";
   }
 
   async readShown(context, want, list) {
@@ -204,6 +213,10 @@ export class PullRequest {
     // `gh pr view` also finds the branch's merged or closed one; that counts as none.
     const done = (v) => tryOr(() => ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state), false);
     const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
+    if (branchHasNone && this.branch && this.base === undefined) {
+      const b = await this.gh(["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"]).catch(() => null);
+      if (b?.code === 0 && key() === context) this.base = b.stdout.trim() || null;
+    }
     if (branchHasNone && !this.openPrs.length) { this.none = true; this.pr = null; this.error = null; this.branchUrl = null; return; }
     const fallback = branchHasNone;
     const view = branchHasNone
@@ -308,8 +321,7 @@ export class PullRequest {
     this.busy = "Create"; this.note = null;
     cx.spawn(async (cx) => {
       try {
-        const up = await exec("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd: this.root, on: this.on });
-        if (up.code !== 0) throw new Error(`push ${this.branch ?? "the branch"} first; it has no upstream`);
+        if (!(await this.readPushed(this.root, this.on))) throw new Error(`push ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
       } catch (e) { this.note = `Could not create it: ${String(e?.message ?? e)}`; }
@@ -474,7 +486,8 @@ export class PullRequest {
     return Boolean(this.root) && !this.outside && !this.missing;
   }
 
-  canCreate() { return Boolean(this.branch) && this.pushed; }
+  isBase() { return Boolean(this.branch) && this.branch === this.base; }
+  canCreate() { return Boolean(this.branch) && this.pushed && !this.isBase(); }
 
   switchPill(c) {
     const back = this.listing && this.pr;
@@ -522,7 +535,7 @@ export class PullRequest {
       ["Yours", list.filter((p) => !here(p) && mine(p))],
       [me ? "Others" : "Open", list.filter((p) => !here(p) && !mine(p))],
     ].filter(([, rows]) => rows.length);
-    const create = !finished && (this.fallback || this.none) && Boolean(this.branch);
+    const create = !finished && (this.fallback || this.none) && Boolean(this.branch) && !this.isBase();
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
     const row = (p, i) => {
@@ -553,7 +566,7 @@ export class PullRequest {
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => row(p, firsts[g] + k)))))
       .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
-        .child(div().text_size(12).text_color(c.dim).child(this.pushed ? `${this.branch} has no pull request yet.` : `${this.branch} is not on GitHub yet.`))
+        .child(div().text_size(12).text_color(c.dim).child(this.pushed ? `${this.branch} has no pull request yet.` : `Push ${this.branch} to GitHub to open one.`))
         .when(this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }))))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
@@ -818,6 +831,7 @@ export class PullRequest {
     if (this.error) return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c));
     if (this.none) {
       if (!this.branch) return this.waiting(c, "No branch checked out", this.note);
+      if (this.isBase()) return this.waiting(c, `No pull request for ${this.branch}.`, "It is the default branch; open one from another.");
       if (!this.pushed) return this.waiting(c, `No pull request for ${this.branch}.`, this.note ?? "Push it to GitHub to open one.");
       return this.waiting(c, `No pull request for ${this.branch}.`, this.note,
         quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));

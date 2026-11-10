@@ -254,13 +254,17 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
     return dir;
   };
   const noPr = { code: 1, stdout: "", stderr: 'no pull requests found for branch "feat"' };
-  const show = async (cwd, view) => {
+  const other = { number: 3, title: "Other", url: "https://github.com/o/here/pull/3", state: "OPEN", author: { login: "you" }, headRefName: "x", updatedAt: "2026-10-05T00:00:00Z" };
+  const show = async (cwd, view, open = []) => {
     const ids = [];
     const ui = singleUse();
     const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
-      ...ui, Button: { new: (id) => { ids.push(id); return ui.Button.new(); } },
+      ...ui, Popover: ui.Button, Button: { new: (id) => { ids.push(id); return ui.Button.new(); } },
       exec: (command, args, options) => command === "gh"
-        ? Promise.resolve(args[1] === "list" ? { code: 0, stdout: "[]", stderr: "" } : view)
+        ? Promise.resolve(args[1] === "list" ? { code: 0, stdout: JSON.stringify(open), stderr: "" }
+          : args[0] === "repo" ? { code: 0, stdout: "main\n", stderr: "" }
+            : args[1] === "view" && args[2] !== "--json" ? { code: 0, stdout: JSON.stringify(other), stderr: "" }
+              : args[1] === "view" ? view : { code: 1, stdout: "", stderr: "offline" })
         : realExec(command, args, options),
       key: () => cwd, location: () => ({ cwd, on: null }),
     });
@@ -272,7 +276,10 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
     const waiting = panel.waiting.bind(panel);
     panel.waiting = (c, title, detail, action) => { said = { title, detail }; return waiting(c, title, detail, action); };
     panel.body({}, true);
-    return { panel, said, link: ids.includes("pr-create") };
+    const link = ids.includes("pr-create");
+    panel.listing = true; panel.tab = "open"; ids.length = 0;
+    panel.body({}, true);
+    return { panel, said, link, listLink: ids.includes("pr-create-list") };
   };
 
   const plain = join(await temporary(t), "plain");
@@ -322,4 +329,26 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   assert.equal(r.panel.pushed, true);
   assert.equal(r.said.title, "No pull request for feat.");
   assert.equal(r.link, true, "a pushed branch on GitHub keeps the link");
+  r = await show(github, noPr, [other]);
+  assert.equal(r.panel.fallback, true);
+  assert.equal(r.listLink, true, "and the list's link");
+
+  await git(github, "commit", "-q", "--allow-empty", "-m", "three");
+  r = await show(github, noPr);
+  assert.equal(r.panel.pushed, false, "a commit past the upstream is not on GitHub");
+  assert.equal(r.said.detail, "Push it to GitHub to open one.");
+  assert.equal(r.link, false, "branch ahead of its upstream");
+  r = await show(github, noPr, [other]);
+  assert.equal(r.listLink, false, "nor in the list");
+
+  await git(github, "checkout", "-q", "-b", "main");
+  await git(github, "remote", "set-url", "origin", bare);
+  await git(github, "push", "-q", "-u", "origin", "main");
+  await git(github, "remote", "set-url", "origin", "https://github.com/o/here.git");
+  r = await show(github, { code: 1, stdout: "", stderr: 'no pull requests found for branch "main"' });
+  assert.equal(r.panel.pushed, true);
+  assert.equal(r.said.detail, "It is the default branch; open one from another.");
+  assert.equal(r.link, false, "the default branch");
+  r = await show(github, { code: 1, stdout: "", stderr: 'no pull requests found for branch "main"' }, [other]);
+  assert.equal(r.listLink, false, "nor in the list");
 });
