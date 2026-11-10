@@ -27,8 +27,17 @@ test("a terminal address given to another agent after a sleep neither hides the 
   const settled = sleepingNow(spaces, terms, slept(false));
   assert.deepEqual([settled.rows.length, settled.dozing.size], [1, 0], "asleep, and t1 is Bob's now");
   const going = sleepingNow(spaces, terms, slept(true));
-  assert.equal(going.rows.length, 0);
-  assert.equal(going.dozing.has("t1"), true, "on its way to sleep: its own terminal shows the moon");
+  assert.equal(going.rows.length, 1, "on its way, it is already in the asleep list");
+  assert.equal(going.rows[0].asleep.going, true);
+  assert.equal(going.dozing.has("t1"), true, "and its awake row is gone");
+});
+
+test("a row drawn before the write is dropped once the database has that terminal", async () => {
+  const { withAway } = await load("kanso-spaces/roster.js", ["withAway"], {});
+  const db = [{ id: "z1", agents: [{ terminal: "t1" }] }];
+  const away = { rows: [{ id: "away:tb", agents: [{ terminal: "t1" }] }, { id: "away:tb2", agents: [{ terminal: "t9" }] }] };
+  assert.deepEqual(clone(withAway(db, away).map((s) => s.id)), ["z1", "away:tb2"]);
+  assert.deepEqual(clone(withAway(db, null).map((s) => s.id)), ["z1"]);
 });
 
 test("one name per agent, kept with its conversation: the one you gave it, else its conversation's title", async () => {
