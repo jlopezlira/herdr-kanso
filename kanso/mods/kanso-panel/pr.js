@@ -286,7 +286,7 @@ export class PullRequest {
   }
 
   async keepPrFacts(items) {
-    try { await recordPrFacts(this.inboxDb ??= new Kdb(), items); } catch { }
+    return tryOrAsync(() => recordPrFacts(this.inboxDb ??= new Kdb(), items));
   }
 
   async readShown(context, want, list) {

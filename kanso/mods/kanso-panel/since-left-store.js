@@ -1,16 +1,21 @@
 import { q, pruneSinceSql } from "./kdb.js";
-import { changes, digest } from "./since-left-model.js";
+import { changes, digest, LOG_LIMITS } from "./since-left-model.js";
 
 export class SinceStore {
   constructor(db) { this.db = db; }
 
-  async observe(snapshots, now = Date.now(), seedOnly = false) {
-    const sources = await this.db.read("SELECT source, value, at FROM since_observed;");
+  seed(snapshots, now = Date.now()) { return this.writeSnapshots(snapshots, now, (row) => !row); }
+
+  observe(snapshots, now = Date.now()) { return this.writeSnapshots(snapshots, now, (row) => !row || row.at <= now); }
+
+  async writeSnapshots(snapshots, now, accepts) {
+    if (!snapshots.length) return;
+    const sources = await this.db.read(`SELECT source, value, at FROM since_observed WHERE source IN (${snapshots.map((s) => q(s.source)).join(",")});`);
     const previous = new Map(sources.map((row) => [row.source, row]));
     const unique = [...new Map(snapshots.toReversed().map((snapshot) => [snapshot.source, snapshot])).values()];
     const writes = unique.flatMap(({ source, project, value }) => {
       const row = previous.get(source);
-      if (row && (seedOnly || row.at > now)) return [];
+      if (!accepts(row)) return [];
       const raw = row?.value;
       const before = raw ? JSON.parse(raw) : null;
       const after = { ...before, ...value };
@@ -24,7 +29,7 @@ export class SinceStore {
       return [`${events}INSERT INTO since_observed(source,value,at) VALUES(${q(source)},${q(json)},${now})
         ON CONFLICT(source) DO UPDATE SET value=excluded.value,at=excluded.at WHERE ${guard};`];
     });
-    if (writes.length) await this.db.run(`BEGIN IMMEDIATE;${writes.join("")}${pruneSinceSql(now)}COMMIT;`);
+    if (writes.length) await this.db.run(`BEGIN IMMEDIATE;${writes.join("")}${pruneSinceSql(now, LOG_LIMITS)}COMMIT;`);
   }
 
   async enter(project, now = Date.now()) {
@@ -41,9 +46,14 @@ export class SinceStore {
     return this.db.run(`UPDATE since_focus SET focused_at=MAX(focused_at,${now}) WHERE project=${q(project)};`);
   }
 
+  touchSources(sources, now) {
+    if (!sources.length) return;
+    return this.db.run(`UPDATE since_observed SET at=MAX(at,${now}) WHERE source IN (${sources.map(q).join(",")});`);
+  }
+
   dismiss(project, through) {
     return this.db.run(`UPDATE since_focus SET pending_json=NULL,dismissed_to=MAX(dismissed_to,${through}) WHERE project=${q(project)};`);
   }
 
-  prune(now = Date.now()) { return this.db.run(pruneSinceSql(now)); }
+  prune(now = Date.now()) { return this.db.run(pruneSinceSql(now, LOG_LIMITS)); }
 }

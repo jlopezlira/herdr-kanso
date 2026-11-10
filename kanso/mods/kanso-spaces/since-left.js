@@ -1,7 +1,7 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { G, H, R, T, tokens, quietLink, iconButton } from "./ui.js";
-import { lines, focusedTarget } from "./since-left-model.js";
+import { lines, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
 
 export class SinceLeft {
@@ -16,10 +16,12 @@ export class SinceLeft {
     if (this.busy) return;
     this.busy = true;
     try {
-      const signature = JSON.stringify(snapshots);
-      if (signature !== this.signature || now - (this.observed ?? 0) >= 30_000) {
+      if (snapshots) {
         await this.store.observe(snapshots, now);
-        this.signature = signature;
+        this.sources = snapshots.map((snapshot) => snapshot.source);
+        this.observed = now;
+      } else if (this.sources?.length && now - this.observed >= MAINTENANCE_MS) {
+        await this.store.touchSources(this.sources, now);
         this.observed = now;
       }
       if (project !== this.project) {
@@ -38,9 +40,9 @@ export class SinceLeft {
       } else if (project) {
         if (this.showing && (focusedTarget(this.rows, this.target, target) || this.rows.some((row) => row.target === seenTarget))) await this.dismiss(cx);
         this.target = target;
-        if (now - this.touched >= 30_000) { await this.store.touch(project, now); this.touched = now; }
+        if (now - this.touched >= MAINTENANCE_MS) { await this.store.touch(project, now); this.touched = now; }
       }
-      if (now - (this.pruned ?? 0) >= 30_000) { await this.store.prune(now); this.pruned = now; }
+      if ((project || this.sources?.length) && now - (this.pruned ?? 0) >= MAINTENANCE_MS) { await this.store.prune(now); this.pruned = now; }
     } finally { this.busy = false; }
   }
 

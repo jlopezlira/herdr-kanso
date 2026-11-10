@@ -12,7 +12,7 @@ import { parseProcesses } from "./procs.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
-import { agentSnapshot, agentTargets, observedAgents } from "./since-left-model.js";
+import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
@@ -654,21 +654,26 @@ export default class Spaces extends View {
   }
 
   trackReturn(sp, ps, active, now, cx) {
-    const focus = focused(), terms = new Map(terminals().map((term) => [term.address, term]));
-    const live = observedAgents(agents(), ps, sp, [...terms.values()]);
-    const snapshots = live.map((agent) => {
-      const seen = this.seenNow?.get(agent.address), term = terms.get(agent.address);
-      const snapshot = agentSnapshot(agent, seen, term, projectKey(sp.find((space) => space.id === agent.space)));
-      const assigned = this.panel.agents.get(snapshot.source.slice(6))?.project;
+    if (this.sinceLeft.busy) return;
+    const focus = focused(), list = agents(), rawTerms = terminals();
+    const signature = returnSignature(list, rawTerms, sp, ps, this.seenNow, this.panel.agents);
+    const changed = signature !== this.returnSignature;
+    const terms = changed ? new Map(rawTerms.map((term) => [term.address, term])) : null;
+    const live = changed ? observedAgents(list, ps, sp, rawTerms) : [];
+    const snapshots = changed ? live.map((agent) => {
+      const snapshot = agentSnapshot(agent, this.seenNow?.get(agent.address), terms.get(agent.address), projectKey(sp.find((space) => space.id === agent.space)));
+      const assigned = this.panel.agents.get(parseTarget(snapshot.source).id)?.project;
       return { ...snapshot, project: assigned ?? snapshot.project };
-    });
+    }) : undefined;
+    const targets = changed ? new Map(live.map((agent, index) => [agent.address, snapshots[index].value.target])) : this.returnTargets;
     const project = active && focus ? sp.find((space) => space.id === focus.space) : null;
-    const agent = snapshots[live.findIndex((agent) => agent.address === focus?.terminal)];
     const pr = shared("kanso.pr.seen");
-    const seenTarget = pr && pr.at > (this.prSeenAt ?? 0) ? `pr:${pr.url}` : null;
-    const target = agent?.value.target ?? null;
-    if (pr) this.prSeenAt = pr.at;
-    this.sinceLeft.update({ project: project ? projectKey(project) : null, target, seenTarget, snapshots, now }, cx).catch(() => {});
+    const seenTarget = pr && pr.at > (this.prSeenAt ?? 0) ? targetOf("pr", pr.url) : null;
+    this.sinceLeft.update({ project: project ? projectKey(project) : null, target: targets?.get(focus?.terminal) ?? null, seenTarget, snapshots, now }, cx).then(() => {
+      this.returnSignature = signature;
+      this.returnTargets = targets;
+      if (pr) this.prSeenAt = pr.at;
+    }).catch(() => {});
   }
 
   returnRows(t, space) {
@@ -678,15 +683,20 @@ export default class Spaces extends View {
   }
 
   jumpReturn(row) {
-    if (row.target.startsWith("pr:")) {
-      commitLayout({ panel: { id: "pr", type: "block", content: { mod: "kanso-panel", props: { panel: "pr", url: row.target.slice(3), at: Date.now() } } } });
-    } else if (row.target.startsWith("sleep:")) wakeRow(row.target.slice(6));
-    else {
-      const terms = new Map(terminals().map((term) => [term.address, term]));
-      const agent = observedAgents(agents(), panes(), spaces(), [...terms.values()]).find((a) => agentTargets(a, this.seenNow?.get(a.address), terms.get(a.address)).includes(row.target));
-      if (!agent) return false;
-      run("agent.focus", { terminal: agent.address });
-    }
+    const { kind, id } = parseTarget(row.target);
+    const destinations = {
+      pr: () => commitLayout({ panel: { id: "pr", type: "block", content: { mod: "kanso-panel", props: { panel: "pr", url: id, at: Date.now() } } } }),
+      sleep: () => wakeRow(id),
+      agent: () => this.focusReturnAgent(row.target),
+    };
+    return Object.hasOwn(destinations, kind) ? destinations[kind]() : false;
+  }
+
+  focusReturnAgent(target) {
+    const terms = new Map(terminals().map((term) => [term.address, term]));
+    const agent = observedAgents(agents(), panes(), spaces(), [...terms.values()]).find((a) => agentTargets(a, this.seenNow?.get(a.address), terms.get(a.address)).includes(target));
+    if (!agent) return false;
+    run("agent.focus", { terminal: agent.address });
   }
 
   // `seen` goes to the database; each name goes to shared "kanso.names" (Sleep keeps it),

@@ -38,7 +38,7 @@ export const SHARED = [
   { source: "kanso/mods/kanso-sleep/resume.js", copies: ["kanso/mods/kanso-guard/resume.js", "kanso/mods/kanso-arrange/resume.js", "kanso/mods/kanso-spaces/resume.js"] },
   // The left nav's one database and what sleeps in it (sleep is a state of an
   // agent there): the sidebar owns them, Sleep uses the same files.
-  { source: "kanso/mods/kanso-spaces/since-left-model.js", copies: ["kanso-sleep", "kanso-panel", "kanso-tabs"].map((m) => `kanso/mods/${m}/since-left-model.js`) },
+  { source: "kanso/mods/kanso-spaces/since-left-model.js", copies: ["kanso-sleep", "kanso-panel"].map((m) => `kanso/mods/${m}/since-left-model.js`) },
   { source: "kanso/mods/kanso-spaces/since-left-store.js", copies: ["kanso/mods/kanso-panel/since-left-store.js"] },
   { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-sleep/kdb.js", "kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js"] },
   // Which panel is open, and the two hooks every panel uses to keep its own state.

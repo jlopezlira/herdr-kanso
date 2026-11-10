@@ -3,7 +3,6 @@
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
 import { exec, appHome } from "herdr";
 import { mapSeries, parseOr } from "./pure.js";
-import { EVENT_CAP, KEEP_MS } from "./since-left-model.js";
 
 export const DIR = "data/kanso";
 export const VERSION = 1;
@@ -16,8 +15,8 @@ export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}
 const n = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
 // `col` not among `xs` (always true for none; `NOT IN (NULL)` would be never).
 const notIn = (col, xs) => (xs.length ? `${col} NOT IN (${xs.map(q).join(",")})` : "1");
-export const pruneSinceSql = (now) => `DELETE FROM since_events WHERE at < ${n(now - KEEP_MS)} OR id NOT IN (SELECT id FROM since_events ORDER BY id DESC LIMIT ${EVENT_CAP});
-  DELETE FROM since_observed WHERE at < ${n(now - KEEP_MS)};`;
+export const pruneSinceSql = (now, { cap, keepMs }) => `DELETE FROM since_events WHERE at < ${n(now - keepMs)} OR id NOT IN (SELECT id FROM since_events ORDER BY id DESC LIMIT ${n(cap)});
+  DELETE FROM since_observed WHERE at < ${n(now - keepMs)};`;
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 export const projectKey = (w, home = "") => `${w?.machine ?? ""}:${w?.folder || home}`;
 // A conversation's id from its file (Claude's <id>.jsonl, Codex's rollout-…-<id>.jsonl).
@@ -319,8 +318,8 @@ export class Kdb {
       AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)}) RETURNING id;`);
   }
   // Stuck lets go of the row: nothing moves until you retry or undo it (or the agent goes on its own).
-  setWorkState(id, me, from, to, why = null, now = Date.now()) {
-    const event = to === "stuck" ? this.sinceSleep(id, "sleep_failed", "could not sleep", `pending=${q(me)} AND state=${q(from)}`, now) : "";
+  setWorkState(id, me, from, to, why = null, now = Date.now(), fact = null) {
+    const event = this.sinceSleep(id, fact, `pending=${q(me)} AND state=${q(from)}`, now);
     const owner = to === "stuck" ? "pending=NULL,pending_at=NULL" : `pending_at=${n(now)}`;
     return this.held(`BEGIN;${event}UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;COMMIT;`);
   }
@@ -342,13 +341,14 @@ export class Kdb {
     return this.held(`UPDATE sleeps SET state='undoing',why=NULL,pending_at=CASE WHEN pending IS NULL THEN ${n(now)} ELSE pending_at END
       WHERE id=${q(id)} AND state IN ('sleeping','stuck') AND waking IS NULL RETURNING id;`);
   }
-  finishSleep(id, me, why = null, now = Date.now()) {
+  finishSleep(id, me, why = null, now = Date.now(), fact = null) {
     const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
-    return this.held(`BEGIN;${this.sinceSleep(id, "sleep_finished", "slept", `pending=${q(me)} AND state='sleeping'`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+    return this.held(`BEGIN;${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping'`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;COMMIT;`);
   }
-  sinceSleep(id, kind, word, guard, now) {
-    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,'sleep:' || id,${q(kind)},name || ${q(` ${word}`)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now)}`;
+  sinceSleep(id, fact, guard, now) {
+    if (!fact) return "";
+    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,${q(fact.target)},${q(fact.kind)},name || ${q(` ${fact.word}`)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
   }
   // An undo's agent that is back (or never left) is awake.
   freeAgent(id, me, conversation) {

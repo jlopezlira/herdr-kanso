@@ -1,9 +1,10 @@
 // The inbox cache in kanso.db. Network stays in the provider; this file only reads and writes rows.
+import { targetOf } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
 import { checkState, onePerJob, checkSummary } from "./ghchecks.js";
 import { q } from "./kdb.js";
 import { matchRemote } from "./pr-providers.js";
-import { fetchDue, isNew, limitLine, parseRemotes, projectSignature, publicUrl, repoId, SCAN_MS } from "./pr-remote.js";
+import { fetchDue, isNew, limitLine, parsePullRequest, parseRemotes, projectSignature, publicUrl, repoId, SCAN_MS } from "./pr-remote.js";
 
 const num = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
 const SCAN = "repos:scan";
@@ -133,28 +134,45 @@ async function scanRepos(db, run, { sessions, now }) {
   await db.run(`BEGIN;${rows.join("")}${drop}${dropGone}${mark}COMMIT;`);
 }
 
-export async function recordPrFacts(db, items, now = Date.now(), seedOnly = false) {
-  const repos = await db.read("SELECT r.*, p.folder AS project_folder, p.machine AS project_machine FROM pr_repos r JOIN projects p ON p.id=r.project_id WHERE p.removed IS NULL;");
+async function withPrFacts(db, items, write) {
+  const parsed = items.flatMap((item) => {
+    const repo = parsePullRequest(item.url);
+    return repo ? [repo] : [];
+  });
+  if (!parsed.length) return;
+  const hosts = [...new Set(parsed.map((repo) => repo.host))];
+  const repos = await db.read(`SELECT r.*, p.folder AS project_folder, p.machine AS project_machine FROM pr_repos r JOIN projects p ON p.id=r.project_id WHERE p.removed IS NULL AND lower(r.host) IN (${hosts.map(q).join(",")});`);
   const snapshots = (rows) => rows.flatMap((item) => {
-    const url = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(item.url ?? "");
-    if (!url) return [];
-    const repo = repos.find((row) => [row.host, row.owner, row.name].join("/").toLowerCase() === url.slice(1, 4).join("/").toLowerCase());
+    const remote = parsePullRequest(item.url);
+    if (!remote) return [];
+    const repo = repos.find((row) => repoId(row.provider, row.host, row.owner, row.name) === repoId(row.provider, remote.host, remote.owner, remote.name));
     if (!repo) return [];
-    return [{ source: `pr:${item.url}`, project: `${repo.project_machine ?? ""}:${repo.project_folder}`, value: {
-      type: "pr", target: `pr:${item.url}`, number: item.number,
+    const target = targetOf("pr", remote.url);
+    return [{ source: target, project: `${repo.project_machine ?? ""}:${repo.project_folder}`, value: {
+      type: "pr", target, number: remote.number,
       ...(item.state != null ? { state: item.state } : {}),
       ...(item.reviewDecision != null ? { review: item.reviewDecision } : {}),
       ...(Array.isArray(item.statusCheckRollup) ? { checks: checkSummary(onePerJob(item.statusCheckRollup).map(checkState)).state } : {}),
     } }];
   });
-  const store = new SinceStore(db);
-  const cached = (await db.read("SELECT * FROM pr_items;")).map(itemOf);
-  await store.observe(snapshots(cached), now, true);
-  if (!seedOnly) await store.observe(snapshots(items), now);
+  await write(new SinceStore(db), snapshots);
 }
 
-async function storeInbox(db, { provider, host, items, skipped = [], rate, error, searchOk = false, now }) {
-  await recordPrFacts(db, [], now, true);
+export function seedPrFacts(db, items, now = Date.now()) {
+  return withPrFacts(db, items, (store, snapshots) => store.seed(snapshots(items), now));
+}
+
+export function recordPrFacts(db, items, now = Date.now()) {
+  return withPrFacts(db, items, async (store, snapshots) => {
+    const urls = items.map((item) => q(publicUrl(item.url)));
+    const cached = await db.read(`SELECT * FROM pr_items WHERE url IN (${urls.join(",")});`);
+    await store.seed(snapshots(cached.map(itemOf)), now);
+    await store.observe(snapshots(items), now);
+  });
+}
+
+async function storeInbox(db, { provider, host, items, before, skipped = [], rate, error, searchOk = false, now }) {
+  await seedPrFacts(db, before.filter((cached) => items.some((item) => item.url === cached.url)), now);
   const key = `inbox:${provider}:${host}`;
   const upserts = items.map((item) => itemSql(item, now)).join("");
   const urls = items.map((item) => item.url);
@@ -195,7 +213,7 @@ export async function refreshInbox({ db, run, provider, session, force = false, 
     const queried = new Set((result.queried ?? []).map((repo) => `${repo.owner}\n${repo.name}`.toLowerCase()));
     const skipped = repos.filter((repo) => !queried.has(`${repo.owner}\n${repo.name}`.toLowerCase()));
     try {
-      await storeInbox(db, { provider: provider.id, host: part.hostRow.host, items: result.items ?? [], skipped, rate: result.rate, error: result.error, searchOk: Boolean(result.searchOk), now });
+      await storeInbox(db, { provider: provider.id, host: part.hostRow.host, items: result.items ?? [], before: part.before.items, skipped, rate: result.rate, error: result.error, searchOk: Boolean(result.searchOk), now });
     } catch (e) {
       return [...soFar, { ...part.before, writeError: String(e?.message ?? e).split("\n")[0] }];
     }

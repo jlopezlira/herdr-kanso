@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { load, clone, temporary, exec, singleUse } from "./helpers.mjs";
-import { AWAY_MS, KEEP_MS, EVENT_CAP, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents } from "../kanso/mods/kanso-spaces/since-left-model.js";
+import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, sleepEvent, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const project = ":C:\\work\\kanso";
 const event = (id, kind = "finished", at = id) => ({ id, project, target: `agent:${id}`, kind, text: `Agent ${id}`, at });
@@ -103,7 +103,7 @@ test("two observers record one transition, reject older sightings, and do not re
   await store.observe([snapshot("working")], 100);
   await Promise.all([store.observe([snapshot("done")], 200), store.observe([snapshot("done")], 200)]);
   await store.observe([snapshot("working")], 150);
-  await store.observe([snapshot("working")], 300, true);
+  await store.seed([snapshot("working")], 300);
   await store.observe([snapshot("done")], 400);
   assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n, 1);
 });
@@ -122,12 +122,12 @@ test("the event log prunes by age and cap and sqlite output accepts Windows line
 test("sleep completion and failure log only a transition held by its owner", async (t) => {
   const { db } = await database(t);
   await db.run(`INSERT INTO sleeps(id,name,project,layout,saved,pending,state) VALUES('s1','Padme','${project}','{}',0,'owner','sleeping');`);
-  assert.equal(await db.setWorkState("s1", "other", "sleeping", "stuck", "failed", 10), false);
-  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "failed", 11), true);
-  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "failed", 12), false);
+  assert.equal(await db.setWorkState("s1", "other", "sleeping", "stuck", "failed", 10, sleepEvent("s1", "stuck")), false);
+  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "failed", 11, sleepEvent("s1", "stuck")), true);
+  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "failed", 12, sleepEvent("s1", "stuck")), false);
   await db.run("UPDATE sleeps SET state='sleeping',pending='owner' WHERE id='s1';");
-  assert.equal(await db.finishSleep("s1", "other", null, 13), false);
-  assert.equal(await db.finishSleep("s1", "owner", null, 14), true);
+  assert.equal(await db.finishSleep("s1", "other", null, 13, sleepEvent("s1", "asleep")), false);
+  assert.equal(await db.finishSleep("s1", "owner", null, 14, sleepEvent("s1", "asleep")), true);
   assert.deepEqual(clone(await db.read("SELECT kind, target FROM since_events ORDER BY id;")), [
     { kind: "sleep_failed", target: "sleep:s1" }, { kind: "sleep_finished", target: "sleep:s1" },
   ]);
@@ -233,7 +233,7 @@ test("a first detailed PR read compares against the inbox cache, including a mer
   const { recordPrFacts } = await load("kanso-panel/pr-inbox.js", ["recordPrFacts"]);
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 2);
   assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "PR #4 merged");
-  await recordPrFacts(db, [], 3, true);
+  await recordPrFacts(db, [], 3);
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 4);
   assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n, 1);
 });
@@ -264,4 +264,69 @@ test("an unseen digest adds the next absence's events and skips events from the 
   assert.deepEqual(clone(await store.enter(project, AWAY_MS * 2 + 2)).map((row) => row.id), [1, 3]);
   await store.prune(KEEP_MS * 2);
   assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_focus;"))[0].n, 1);
+});
+
+test("targets round trip ids containing colons and reject unknown destinations", async () => {
+  for (const [kind, id] of [["pr", "https://ghe.example/o/r/pull/1"], ["agent", "t1:123"], ["sleep", "s1"]]) {
+    assert.deepEqual(parseTarget(targetOf(kind, id)), { kind, id });
+  }
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"]);
+  assert.equal(new Spaces().jumpReturn({ target: "unknown:id" }), false);
+  assert.equal(new Spaces().jumpReturn({ target: "constructor:id" }), false);
+  assert.equal(sleepEvent("s1", "sleeping"), null);
+});
+
+test("PR facts reuse remote identities, sanitize URLs, and query only received PRs", async (t) => {
+  const { db } = await database(t);
+  const { parsePullRequest } = await load("kanso-panel/pr-remote.js", ["parsePullRequest"]);
+  assert.deepEqual(clone(parsePullRequest("https://token@ghe.example/Group/sub/repo/pull/12")), {
+    host: "ghe.example", owner: "Group/sub", name: "repo", number: 12, url: "https://ghe.example/Group/sub/repo/pull/12",
+  });
+  for (const url of ["bad", "https://ghe.example/o/r/pull/no", "https://ghe.example/o/r/issues/1", "https://ghe.example/o/../r/pull/1"]) assert.equal(parsePullRequest(url), null);
+  const { recordPrFacts, seedPrFacts } = await load("kanso-panel/pr-inbox.js", ["recordPrFacts", "seedPrFacts"]);
+  const reads = [];
+  const tracked = { read(sql) { reads.push(sql); return db.read(sql); }, run: (sql) => db.run(sql) };
+  await recordPrFacts(tracked, [], 1);
+  await seedPrFacts(tracked, [], 1);
+  assert.equal(reads.length, 0);
+  await db.run("INSERT INTO projects(id,name,folder,added) VALUES('p','App','app',0);");
+  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r','github','ghe.example','Group/sub','repo','p');");
+  const pr = { url: "https://ghe.example/Group/sub/repo/pull/12", state: "OPEN" };
+  await seedPrFacts(tracked, [pr], 1);
+  await recordPrFacts(tracked, [{ ...pr, state: "MERGED" }], 2);
+  assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "PR #12 merged");
+  assert.ok(reads.filter((sql) => sql.includes("FROM pr_items")).every((sql) => sql.includes("WHERE url IN")));
+  assert.ok(reads.filter((sql) => sql.includes("FROM since_observed")).every((sql) => sql.includes("WHERE source IN")));
+});
+
+test("the return signature changes with event facts and project assignment", () => {
+  const agent = { address: "t1", status: "working", space: "s" };
+  const term = { address: "t1", turn: 1, created_ms: 1 };
+  const space = { id: "s", folder: "C:\\work" };
+  const signature = (a = agent, t = term, s = space, seen = new Map(), assigned = new Map()) => returnSignature([a], [t], [s], [], seen, assigned);
+  const before = signature();
+  assert.equal(signature({ ...agent }, { ...term }, { ...space }), before);
+  for (const next of [signature({ ...agent, status: "done" }), signature(agent, { ...term, turn: 2 }), signature(agent, term, { ...space, machine: "remote" }),
+    signature(agent, term, space, new Map([["t1", { conversation: "c1" }]])), signature(agent, term, space, new Map(), new Map([["t1:1", { project: "other" }]]))]) assert.notEqual(next, before);
+});
+
+test("unchanged return polling skips snapshots and sleeping projects never read the log", async () => {
+  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
+  const view = new SinceLeft(null), calls = [];
+  view.store = { async observe(rows) { if (rows.length) calls.push("observe"); }, async prune() { calls.push("prune"); }, async touchSources() { calls.push("heartbeat"); } };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { agents: () => [], terminals: () => [], focused: () => null, shared: () => null });
+  const spaces = new Spaces();
+  spaces.panel = { agents: new Map() };
+  const updates = [];
+  spaces.sinceLeft = { update(args) { updates.push(args); return view.update(args, cx); } };
+  spaces.trackReturn([], [], false, 1, cx);
+  await new Promise((resolve) => setImmediate(resolve));
+  spaces.trackReturn([], [], false, MAINTENANCE_MS * 3, cx);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(clone(updates[0].snapshots), []);
+  assert.equal(updates[1].snapshots, undefined);
+  assert.deepEqual(calls, []);
+  await view.update({ project: null, snapshots: [snapshot("working")], now: 1 }, cx);
+  await view.update({ project: null, now: MAINTENANCE_MS + 1 }, cx);
+  assert.deepEqual(calls, ["observe", "heartbeat", "prune"]);
 });
