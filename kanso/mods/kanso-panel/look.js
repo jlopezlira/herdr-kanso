@@ -126,13 +126,13 @@ export class Look {
         const named = [...(written.paths ?? []), ...mentions(screen, MOST).toReversed()].map((m) => resolvePath(m, cwd, homeDir)).filter(Boolean);
         const resolved = [...new Set(named)];
         const there = resolved.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...resolved])).stdout.split("\n")) : new Set();
-        const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)) && !this.blind.has(path));
+        const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)));
         const prior = (written.rows ?? []).map((row) => ({ ...row, color: row.color || this.colors.get(row.path) || null }));
         const rows = indexRows(prior, pictures, { replaced: Boolean(written.replaced) });
         if (written.file && written.size != null) {
           try { await this.db.savePictures(written.file, written.size, rows, written.mark ?? ""); } catch { /* the next read stores it */ }
         }
-        const found = rows.toSorted((a, b) => b.ord - a.ord).map((row) => ({ ...itemOf(row.path), color: row.color || this.colors.get(row.path) || null }));
+        const found = rows.toSorted((a, b) => b.ord - a.ord).map((row) => ({ ...itemOf(row.path), color: row.color || this.colors.get(row.path) || null })).filter((i) => !this.blind.has(i.path));
         if (address !== this.agent()) return;
         const fresh = arrived(found, this.items);
         const previous = this.list();
@@ -236,7 +236,7 @@ export class Look {
     });
   }
 
-  // A file that will not open leaves the row for this session. It is not stored: the next read would put it back.
+  // Hidden this session. The row stays, so the next open tries the file again.
   dropBlind(path) {
     this.blind.add(path);
     this.items = this.items.filter((i) => i.path !== path);
@@ -245,12 +245,13 @@ export class Look {
   }
 
   // The copy image() draws: { image, picture } (the file the pins are on), or null.
-  // sips rejects a valid svg, so that one is the tag; a raster has to open.
+  // sips exits 0 and prints pixelWidth <nil> when a raster is not a picture. A valid svg is the tag.
   async copy(item) {
     const ext = item.path.split(".").at(-1).toLowerCase();
+    const opened = item.kind === "image" && ext !== "svg" ? await exec("sips", ["-g", "pixelWidth", item.path]).catch(() => null) : null;
     const seen = ext === "svg"
       ? (await exec("sh", ["-c", 'head -c 800 "$1" | grep -qi "<svg"', "sh", item.path]).catch(() => null))?.code === 0
-      : item.kind !== "image" || (await exec("sips", ["-g", "pixelWidth", item.path]).catch(() => null))?.code === 0;
+      : item.kind !== "image" || (opened?.code === 0 && /pixelWidth:\s*[1-9]\d*/.test(opened.stdout ?? ""));
     if (!seen) return null;
     const key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
     const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = `${dir}/${name}`;

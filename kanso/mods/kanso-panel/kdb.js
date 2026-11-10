@@ -388,10 +388,10 @@ export class Kdb {
     return { size: scan ? String(scan.size) : "0", mark: scan?.mark ?? "", rows };
   }
   savePictures(file, size, rows, mark = null) {
-    const keep = rows.length ? rows.map((r) => q(r.path)).join(",") : "NULL";
+    const drop = notIn("path", rows.map((r) => r.path));
     const writes = rows.map((r) => `INSERT INTO pictures(file,path,ord,color,there) VALUES(${q(file)},${q(r.path)},${n(r.ord)},${q(r.color)},1)
       ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord,there=1,color=COALESCE(pictures.color,excluded.color);`).join("");
-    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND path NOT IN (${keep});${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
+    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND ${drop};${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
   }
   setPictureColor(file, path, color) {
     return this.run(`UPDATE pictures SET color=${q(color)} WHERE file=${q(file)} AND path=${q(path)};`);

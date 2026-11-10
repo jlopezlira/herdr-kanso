@@ -499,6 +499,10 @@ test("a transcript's pictures stay, a color already stored is kept, and one left
   assert.equal(next.rows[0].color, "#c45a3a");
   assert.equal(next.size, "18");
   assert.equal(next.mark, "222");
+  await db.savePictures(file, 18, [], "333");
+  const none = await db.pictures(file);
+  assert.equal(clone(none.rows).length, 0, "a save that names nothing drops the rows");
+  assert.equal(none.mark, "333");
 });
 
 test("an older picture index gains the prefix mark", async (t) => {

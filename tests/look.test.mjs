@@ -113,6 +113,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (cmd === "sh" && args[1].startsWith("for f;")) return { code: 0, stdout: args.slice(3).filter((p) => world.files.includes(p)).map((p) => `${p}\n`).join("") };
       if (cmd === "sh" && args[1].includes("kanso-dot")) return { code: 0, stdout: "#c45a3a\n" };
       if (cmd === "sh" && args[1].startsWith("head -c 800")) return { code: world.bad.includes(args[3]) ? 1 : 0, stdout: "" };
+      if (cmd === "sips" && args[0] === "-g") return { code: 0, stdout: world.bad.includes(args.at(-1)) ? "pixelWidth: <nil>\n" : "pixelWidth: 32\n" };
       if (cmd === "sips" && world.bad.includes(sipsPath(args))) return { code: 1, stdout: "" };
       return cmd === "cp" ? copy(args) : { code: 0, stdout: "" };
     },
@@ -634,4 +635,29 @@ test("a picture that will not open leaves the row and the next one is shown", as
   assert.deepEqual(clone(drawing.look.list().map((i) => i.path)), [svg], "a picture that opens stays");
   const broken = await panel({ screen: "", files: [svg, good], session: { ...session, sessionId: "33333333-4444-4555-8666-777777777777" }, transcript: `${good}\n${svg}\n`, bad: [svg] });
   assert.deepEqual(clone(broken.look.list().map((i) => i.path)), [good]);
+});
+
+test("a transcript that names no picture drops the ones it kept, and the next open stays empty", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
+  const file = "/repo/shots/a.png";
+  const first = await panel({ screen: "", files: [file], session, transcript: `${file}\n`, appHome: dir });
+  assert.deepEqual(clone(first.look.list().map((i) => i.path)), [file]);
+  const cleared = await panel({ screen: "", files: [file], session, transcript: "no pictures\n", appHome: dir });
+  assert.deepEqual(clone(cleared.look.list()), []);
+  const again = await panel({ screen: "", files: [file], session, transcript: "no pictures\n", appHome: dir });
+  assert.deepEqual(clone(again.look.list()), [], "the mark of that read does not bring the old picture back");
+});
+
+test("a picture that failed to open is tried again the next time Images opens", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
+  const good = "/repo/shots/a.png";
+  const heic = "/repo/shots/a.heic";
+  const first = await panel({ screen: "", files: [good, heic], session, transcript: `${good}\n${heic}\n`, appHome: dir, bad: [heic] });
+  assert.deepEqual(clone(first.look.list().map((i) => i.path)), [good], "this session hides the one sips could not convert");
+  const again = await panel({ screen: "", files: [good, heic], session, transcript: `${good}\n${heic}\n`, appHome: dir });
+  assert.deepEqual(clone(again.look.list().map((i) => i.path)), [heic, good], "the next open tries that path again");
 });

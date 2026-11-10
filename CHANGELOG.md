@@ -24,6 +24,7 @@ release.
 - A pin and its note stay with the agent they were pinned on when another agent is in focus, and they are not sent to that agent.
 - A picture named on a line that was still being written, or in a conversation replaced in place, is still indexed.
 - A picture that cannot be opened leaves the row.
+- A file named like a picture that is not one leaves the row. A conversation that no longer names a picture drops the ones it kept. One that failed to open is tried again the next time Images is opened.
 
 ## [3.18.4] - 2026-11-09
 
