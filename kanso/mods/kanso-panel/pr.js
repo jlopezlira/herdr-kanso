@@ -28,6 +28,16 @@ export function cleanBody(text) {
 }
 export const longBody = (text) => text.split("\n").length > 6 || text.length > 480;
 
+// What gh needs and this repository lacks, from gh's own refusal; null when it is something else.
+export function ghMissing(r) {
+  if (!r || r.code === 0) return null;
+  const why = `${r.stderr ?? ""}\n${r.stdout ?? ""}`;
+  if (/no git remotes found/i.test(why)) return { title: "No remote", detail: null };
+  if (/known GitHub host/i.test(why)) return { title: "No GitHub remote", detail: null };
+  if (/gh auth login|not logged in|HTTP 401|bad credentials/i.test(why)) return { title: "Not signed in to GitHub", detail: "Run gh auth login in a terminal." };
+  return null;
+}
+
 function ago(iso) {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
   if (s < 60) return "just now";
@@ -140,6 +150,7 @@ export class PullRequest {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
       this.openPrs = []; this.selected = null; this.home = null; this.branchUrl = null; this.outside = false;
+      this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
     }
     if (this.listing && this.tab === "closed") this.loadClosed(cx);
@@ -153,14 +164,16 @@ export class PullRequest {
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on });
         if (key() !== context) return;
         // Not a repository is a place, not a failure: a quiet placeholder, no retry.
-        if (top.code !== 0) { this.outside = true; this.error = null; this.none = false; this.pr = null; this.openPrs = []; return; }
+        if (top.code !== 0) { this.outside = true; this.missing = null; this.error = null; this.none = false; this.pr = null; this.openPrs = []; return; }
         this.outside = false;
         this.root = top.stdout.trim();
-        const [branch, remote] = await Promise.all([
+        const [branch, remote, pushed] = await Promise.all([
           exec("git", ["branch", "--show-current"], { cwd: this.root, on }),
           exec("git", ["remote", "get-url", "origin"], { cwd: this.root, on }).catch(() => null),
+          this.readPushed(this.root, on),
         ]);
         this.branch = branch.stdout.trim() || null;
+        this.pushed = pushed === "pushed"; this.behind = pushed === "behind";
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remote?.stdout ?? "")?.[1] ?? null;
         // Awaited in the finally so the read never outlives this refresh.
         const list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
@@ -175,11 +188,25 @@ export class PullRequest {
     });
   }
 
+  // gh pr create --web refuses a branch unless it sits exactly on a remote upstream.
+  async readPushed(cwd, on) {
+    const [up, counts] = await Promise.all([
+      exec("git", ["rev-parse", "--symbolic-full-name", "@{u}"], { cwd, on }).catch(() => null),
+      exec("git", ["rev-list", "--left-right", "--count", "@{u}...HEAD"], { cwd, on }).catch(() => null),
+    ]);
+    if (up?.code !== 0 || !up.stdout.trim().startsWith("refs/remotes/") || counts?.code !== 0) return "unpushed";
+    const [behind, ahead] = String(counts.stdout).trim().split(/\s+/).map(Number);
+    return ahead !== 0 || Number.isNaN(ahead) ? "unpushed" : behind !== 0 ? "behind" : "pushed";
+  }
+
   async readShown(context, want, list) {
     const asked = await tryOrAsync(async () => ({ view: await this.gh(["pr", "view", ...(want ? [want] : []), "--json", FIELDS]) }));
-    if (!asked) { this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return; }
+    if (!asked) { this.missing = null; this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return; }
     // A click picked another one while this read was out: drop it, the finally reads again.
     if (key() !== context || this.selected !== want) return;
+    const missing = ghMissing(asked.view);
+    if (missing) { this.missing = missing; this.pr = null; this.none = false; this.error = null; this.openPrs = []; this.branchUrl = null; return; }
+    this.missing = null;
     const open = await list;
     if (open?.code === 0 && key() === context) {
       const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
@@ -188,6 +215,10 @@ export class PullRequest {
     // `gh pr view` also finds the branch's merged or closed one; that counts as none.
     const done = (v) => tryOr(() => ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state), false);
     const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
+    if (branchHasNone && this.branch && this.base === undefined) {
+      const b = await this.gh(["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"]).catch(() => null);
+      if (b?.code === 0 && key() === context) this.base = b.stdout.trim() || null;
+    }
     if (branchHasNone && !this.openPrs.length) { this.none = true; this.pr = null; this.error = null; this.branchUrl = null; return; }
     const fallback = branchHasNone;
     const view = branchHasNone
@@ -292,8 +323,8 @@ export class PullRequest {
     this.busy = "Create"; this.note = null;
     cx.spawn(async (cx) => {
       try {
-        const up = await exec("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd: this.root, on: this.on });
-        if (up.code !== 0) throw new Error(`push ${this.branch ?? "the branch"} first; it has no upstream`);
+        const now = await this.readPushed(this.root, this.on);
+        if (now !== "pushed") throw new Error(`${now === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
       } catch (e) { this.note = `Could not create it: ${String(e?.message ?? e)}`; }
@@ -455,8 +486,11 @@ export class PullRequest {
   }
 
   canSwitch() {
-    return Boolean(this.root) && !this.outside;
+    return Boolean(this.root) && !this.outside && !this.missing;
   }
+
+  isBase() { return Boolean(this.branch) && this.branch === this.base; }
+  canCreate() { return Boolean(this.branch) && this.pushed && !this.isBase(); }
 
   switchPill(c) {
     const back = this.listing && this.pr;
@@ -504,7 +538,7 @@ export class PullRequest {
       ["Yours", list.filter((p) => !here(p) && mine(p))],
       [me ? "Others" : "Open", list.filter((p) => !here(p) && !mine(p))],
     ].filter(([, rows]) => rows.length);
-    const create = !finished && (this.fallback || this.none) && Boolean(this.branch);
+    const create = !finished && (this.fallback || this.none) && Boolean(this.branch) && !this.isBase();
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
     const row = (p, i) => {
@@ -535,8 +569,8 @@ export class PullRequest {
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => row(p, firsts[g] + k)))))
       .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
-        .child(div().text_size(12).text_color(c.dim).child(`${this.branch} has no pull request yet.`))
-        .child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) })))))
+        .child(div().text_size(12).text_color(c.dim).child(this.pushed ? `${this.branch} has no pull request yet.` : `${this.behind ? "Pull" : "Push"} ${this.branch} ${this.behind ? "from" : "to"} GitHub to open one.`))
+        .when(this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }))))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
@@ -796,10 +830,13 @@ export class PullRequest {
         .child(div().text_size(10.5).text_color(c.dim).child(`Read from GitHub with gh${this.loadedAt ? ` · updated ${clock(this.loadedAt)}` : ""}. It rereads every minute while shown, every 20 s while a check runs.`));
     }
     if (this.outside) return this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
+    if (this.missing) return this.waiting(c, this.missing.title, this.missing.detail);
     if (this.error) return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => { this.loadedAt = 0; this.refresh(cx); }, c));
     if (this.none) {
-      return this.waiting(c, `No pull request for ${this.branch ?? "this branch"}.`,
-        this.note ?? "Push the branch, then open one on GitHub.",
+      if (!this.branch) return this.waiting(c, "No branch checked out", this.note);
+      if (this.isBase()) return this.waiting(c, `No pull request for ${this.branch}.`, "It is the default branch; open one from another.");
+      if (!this.pushed) return this.waiting(c, `No pull request for ${this.branch}.`, this.note ?? (this.behind ? "Pull it from GitHub to open one." : "Push it to GitHub to open one."));
+      return this.waiting(c, `No pull request for ${this.branch}.`, this.note,
         quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
     }
     return this.loading || !this.context ? this.skeleton(c, narrow) : this.waiting(c, "No folder", "Focus a pane inside a repository.");

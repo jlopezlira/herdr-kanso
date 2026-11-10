@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.18.6] - 2026-11-09
+
+### Fixed
+
+- The pull request panel offers "Create it on GitHub" only where it can work: a branch level with its upstream on a GitHub remote that is not the default branch. A repository with no remote, or none on GitHub, gh not signed in, a detached HEAD, a branch ahead of or behind its upstream, or the default branch now say so in one quiet line instead of showing a link that fails or a red "GitHub could not be read."
+
 ## [3.18.5] - 2026-11-09
 
 ### Changed

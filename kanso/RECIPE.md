@@ -347,7 +347,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         checks failing, changes requested, checks running, approved, waiting
         for a review, checks passed) and `+a −d`. A click shows it and leaves
         the page; the branch's own goes back to following the branch. When
-        the branch has none, the page ends with "Create one for <branch>".
+        the branch has none, the page ends with "Create one for <branch>"
+        under the same rule as "Create it on GitHub".
         The page is titled "Pull requests" and starts with two tabs (26 tall,
         12, `selected` wash on the active one): "Open N", the page above, and
         "Closed", the repository's 30 most recently finished ones (`gh pr list
@@ -397,10 +398,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - A footnote (10.5, dim): read from GitHub with gh, when.
       - Loading is the view's silhouette in `border` tone, breathing between
         35% and 80%. Without a PR: "No pull request for <branch>." and
-        "Create it on GitHub" (the web form, once the branch has an
-        upstream). Errors read the same way, with "Try again". Outside a git
-        repository it is a place, not a failure: "No repository here" in
-        `muted`, no retry.
+        "Create it on GitHub" (the web form), only for a pushed branch that
+        is not the default one. Errors read the same way, with "Try again".
+        What gh lacks is one `muted` line with no action ("No remote").
   - **Status bar**, 26 tall: `kanso-status` with `{side: "left"}`, a
     180-wide minimap (`kanso-strip`) exactly in the middle, and
     `kanso-status` with `{side: "right"}`. The minimap is a centred row of
