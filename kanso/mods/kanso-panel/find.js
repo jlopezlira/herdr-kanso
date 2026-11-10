@@ -179,6 +179,11 @@ export function countLabel(query, at, n) {
   return placeOf(at, n);
 }
 
+export function findChord(modifiers) {
+  const m = modifiers ?? {};
+  return Boolean(m.platform || m.meta || m.control);
+}
+
 export function keptQuery(state, terminal) {
   const q = state?.queries?.[terminal];
   return typeof q === "string" && !blankQuery(q) ? q : "";
@@ -396,16 +401,15 @@ export function applySlice(state, parsed) {
 }
 
 // The next read starts at `end`. A line over the limit is a pasted picture and is left out; a chunk with none is too.
-export const SLICE = String.raw`f="$1"; from="$2"; budget="$3"; longest="$4"
-[ -f "$f" ] || exit 2
-size=$(wc -c < "$f" | tr -d '[:space:]')
-python3 - "$f" "$from" "$budget" "$longest" "$size" <<'PY'
-import sys
-path, frm_s, budget_s, longest_s, size_s = sys.argv[1:]
+export const SLICE_PY = String.raw`import os, sys
+path, frm_s, budget_s, longest_s = sys.argv[1:]
+try:
+    size = os.path.getsize(path)
+except OSError:
+    sys.exit(2)
 frm = int(frm_s)
 budget = int(budget_s)
 longest = int(longest_s)
-size = int(size_s)
 if frm < 0 or frm > size:
     frm = 0
 fh = open(path, "rb")
@@ -453,10 +457,13 @@ for line in data.decode("utf-8", "replace").split("\n"):
 sys.stdout.write(str(end) + " " + str(size) + "\n")
 sys.stdout.write("\n".join(kept))
 fh.close()
-PY`;
+`;
 
 export async function readSlice(exec, file, from = 0, budget = SLICE_BUDGET, longest = LINE_MAX) {
-  const r = await Promise.resolve(exec("sh", ["-c", SLICE, "sh", file, String(from), String(budget), String(longest)], { timeout: 60000 })).catch(() => null);
+  const args = ["-c", SLICE_PY, file, String(from), String(budget), String(longest)];
+  const run = (cmd) => Promise.resolve(exec(cmd, args, { timeout: 60000 })).catch(() => null);
+  const first = await run("python3");
+  const r = first && (first.code === 0 || first.code === 2) ? first : await run("python");
   if (!r || r.code !== 0 || typeof r.stdout !== "string") return null;
   return parseSlice(r.stdout);
 }

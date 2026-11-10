@@ -15,7 +15,7 @@ release.
 
 ### Fixed
 
-- Find is a quiet bar. It lists nothing until you type, then only the matching turns, newest first and grouped by day, and leaves out a tool's delivery note. Arrows, Enter and Shift+Enter move; a click opens that turn; Escape clears the query and the next Escape closes. The last query for each agent comes back selected.
+- Find is a quiet bar. It lists nothing until you type, then only the matching turns, newest first and grouped by day, and leaves out a tool's delivery note. Arrows, Enter and Shift+Enter move; a click opens that turn; Escape clears the query and the next Escape closes. The last query for each agent comes back selected. Ctrl+F opens it the same way.
 
 ## [3.19.1] - 2026-11-10
 

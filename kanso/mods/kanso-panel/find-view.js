@@ -4,7 +4,7 @@ import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, 
 import { tokens, skeleton, controlInput, iconButton, G, H, R, T } from "./ui.js";
 import {
   locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
-  chooseMatch, layOut, partsOf, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, EXCERPT, DRAW,
+  chooseMatch, layOut, partsOf, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, findChord, EXCERPT, DRAW,
 } from "./find.js";
 
 const WAIT = 120;
@@ -368,8 +368,7 @@ export class Find {
       if (mark.select) this.selectAll();
     }
     const onKey = (e, cx) => {
-      const cmd = e.modifiers?.platform || e.modifiers?.meta;
-      if (cmd && String(e.key).toLowerCase() === "f") { this.selectAll(); cx.stop_propagation(); return; }
+      if (findChord(e.modifiers) && String(e.key).toLowerCase() === "f") { this.selectAll(); cx.stop_propagation(); return; }
       if (e.key === "escape") { this.escape(cx); cx.stop_propagation(); return; }
       if (e.key === "up") { this.move(true, cx); cx.stop_propagation(); return; }
       if (e.key === "down") { this.move(false, cx); cx.stop_propagation(); }

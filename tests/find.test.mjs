@@ -1,6 +1,7 @@
 // Find in a conversation: capitals and accents do not matter, newest match first, and a shell keeps the terminal's Find.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { exec, temporary } from "./helpers.mjs";
@@ -8,7 +9,7 @@ import {
   fold, foldSpan, searchTurns, matchSpan, partsOf, placeOf, countLabel, enterMatch, retarget, extendIndex,
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
   resolveFind, locateConversation, kindOf, sessionLive,
-  blankQuery, layOut, chooseMatch, indexTurns, readable, dayLabel, keptQuery, withQuery,
+  blankQuery, layOut, chooseMatch, indexTurns, readable, dayLabel, keptQuery, withQuery, findChord,
 } from "../kanso/mods/kanso-panel/find.js";
 
 const line = (row) => JSON.stringify(row);
@@ -263,7 +264,17 @@ test("A slice keeps whole lines, skips a pasted picture, and a missing file is n
   const skipped = await readSlice(exec, picture, 0, 80, 60);
   assert.equal(readTurns(skipped.body).map((turn) => turn.text).join(""), "after");
   assert.equal(await readSlice(exec, join(dir, "missing.jsonl"), 0), null);
+  const crlf = join(dir, "crlf.jsonl");
+  await writeFile(crlf, `${line({ type: "user", message: { content: "win" } })}\r\n`);
+  const win = await readSlice(exec, crlf, 0, 10000, 60);
+  assert.deepEqual(readTurns(win.body).map((turn) => turn.text), ["win"]);
   assert.equal(applySlice({ ...freshRead(), size: 50 }, { end: 10, size: 10, body: "" }).reset, true);
+});
+
+test("Find opens from Cmd+F and from Ctrl+F", () => {
+  const keys = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
+  assert.equal(keys.terminal["cmd-f"], "kanso-strip.find");
+  assert.equal(keys.terminal["ctrl-f"], "kanso-strip.find");
 });
 
 test("No conversation, a shell, or a remote terminal falls back to the terminal's Find", async () => {
@@ -272,7 +283,13 @@ test("No conversation, a shell, or a remote terminal falls back to the terminal'
   assert.equal(resolveFind({ file: "/tmp/a.jsonl", kind: "codex" }).action, "find");
   assert.equal(kindOf("node", "claude-code"), "claude");
   assert.equal(kindOf("/Applications/Codex.app/codex", ""), "codex");
+  assert.equal(kindOf("C:\\Program Files\\Codex\\codex.exe", ""), "codex");
   assert.equal(kindOf("zsh", ""), null);
+  assert.equal(findChord({ platform: true }), true);
+  assert.equal(findChord({ control: true }), true);
+  assert.equal(findChord({ meta: true }), true);
+  assert.equal(findChord({ shift: true }), false);
+  assert.equal(findChord(null), false);
   assert.equal(sessionLive({ pid: 7, sessionId: "s", startedAt: 1000 }, 7, 1000), true);
   assert.equal(sessionLive({ pid: 7, sessionId: "s", startedAt: 1000 }, 7, 1000 + 120001), false);
   assert.equal(sessionLive({ pid: 8, sessionId: "s", startedAt: 1000 }, 7, 1000), false);
