@@ -8,7 +8,7 @@ import { parseProcesses, etimeMs } from "./procs.js";
 
 export { NAME_LABEL };
 
-const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px avatar, the gap
+export const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px avatar, the gap
 
 // Native GPUI motion, no per-frame script; fold and pill share the pace so they move together.
 export const FOLD = { duration: 220, easing: "ease-out" };
