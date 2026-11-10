@@ -5,7 +5,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay } from "herdr";
 import { tilde } from "./lib.js";
-import { G, H, R, T, tokens, quietLink, iconButton } from "./ui.js";
+import { G, H, R, T, tokens, quietLink, iconButton, skeleton, breathe } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -425,10 +425,23 @@ export class Look {
       .child(div().text_size(T.card).text_color(c.muted).text_center().child(this.emptyLine()));
   }
 
+  drawing(c) {
+    const { block } = skeleton(c);
+    return breathe(v_flex().id("kanso-skeleton").flex_1().w_full().items_center().justify_center()).child(block(240, 180, 8));
+  }
+
+  bones(c) {
+    const { header } = skeleton(c);
+    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
+      .child(h_flex().flex_none().px(G.lg).py(G.sm).gap(G.sm).items_center().border_b(1).border_color(c.border)
+        .child(header(72, 13)))
+      .child(this.drawing(c));
+  }
+
   view(c) {
     if (!this.selected) return this.empty(c);
     if (this.shown?.image) return this.picture(c);
-    if (this.shown?.busy) return div().text_size(T.body).text_color(c.dim).child("Drawing it");
+    if (this.shown?.busy) return this.drawing(c);
     return div();
   }
 

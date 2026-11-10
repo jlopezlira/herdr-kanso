@@ -249,7 +249,7 @@ export default class Memory extends View {
   skeleton(c, narrow) {
     const { block, row } = ghost(c);
     const heights = [40, 44, 42, 46, 50, 48, 52, 38, 30, 26, 34, 42, 48, 54, 56, 52, 50, 46, 44, 48, 52, 50, 46, 44];
-    return breathe(v_flex().w_full().gap(narrow ? 36 : 48))
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
       .child(v_flex().gap(G.md)
         .child(block(narrow ? 120 : 170, narrow ? 40 : 58, 6))
         .child(block(190, 11))

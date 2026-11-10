@@ -667,9 +667,29 @@ export class Worktrees {
         .child(iconButton("wt-refresh", "refresh", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
   }
 
+  freedBones(c, narrow) {
+    const { block, line } = ghost(c);
+    const heights = [28, 50, 36, 72, 40, 60, 24, 44, 32];
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.lg))
+      .child(h_flex().items_end().gap(G.md).child(block(narrow ? 90 : 120, narrow ? 36 : 48, 6)).child(line(80, 13)))
+      .child(line(200, 12))
+      .child(h_flex().w_full().h(96).items_end()
+        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))));
+  }
+
+  bones(c, narrow = true) {
+    const { header } = ghost(c);
+    const pad = narrow ? G.lg : 32;
+    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
+      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
+        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+          .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
+          .child(this.skeleton(c, narrow))));
+  }
+
   skeleton(c, narrow) {
     const { block, row } = ghost(c);
-    return breathe(v_flex().w_full().gap(narrow ? 36 : 48))
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
       .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
         .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
       .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
@@ -851,7 +871,7 @@ export class Worktrees {
   freed(c, narrow) {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(section(c, "Freed"))
-      .child(div().text_size(12).text_color(this.storeNote ? c.red : c.dim).child(this.storeNote ?? "Reading the history…"));
+      .child(this.storeNote ? div().text_size(12).text_color(c.red).child(this.storeNote) : this.freedBones(c, narrow));
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
     const stats = [

@@ -8,6 +8,8 @@ import { exec, readTextFile, watchFolder, theme, window, openOverlay, shared, se
 import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel, mapWith } from "./lib.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
+import { readingLines } from "./doc.js";
+import { skeleton, breathe } from "./ui.js";
 
 const PER_FOLDER = 500, TOTAL = 5000;
 const RETURN = "kanso.files.return";
@@ -228,6 +230,19 @@ export class Files {
       .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark)));
   }
 
+  listBones(c) {
+    const { row } = skeleton(c);
+    return breathe(v_flex().id("kanso-skeleton").w_full().p(6)).children([0, 1, 2, 3, 4, 5, 6].map((i) => row(i, 28)));
+  }
+
+  bones(c) {
+    const { header } = skeleton(c);
+    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
+      .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(c.border)
+        .child(header(52, 13)))
+      .child(this.listBones(c));
+  }
+
   render(cx) {
     if (key() !== this.context) this.refresh(cx);
     const t = theme();
@@ -256,10 +271,12 @@ export class Files {
               if (item && !item.entry.dir) this.openWith(path);
             }).size_full())
           .child(Scrollbar.vertical("files-rows").absolute().inset_0())))
-        .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))
+        .when(Boolean(this.error), el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.error)))
+        .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
+        .when(!this.error && !this.loading && !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.root ? "No files" : "No folder")))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
       .when(Boolean(this.file), el => el.child(this.code ? Editor.new(this.code).flex_1().min_h(0)
         : this.text !== null ? markdownView("files-md", this.text, t)
-        : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")));
+        : this.fileError ? div().p(12).text_color(t.dim).child(this.fileError) : readingLines(t)));
   }
 }

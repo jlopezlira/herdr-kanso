@@ -3,7 +3,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout } from "herdr";
-import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section } from "./ui.js";
+import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { tryOr, tryOrAsync } from "./pure.js";
@@ -423,37 +423,33 @@ export default class TokenSpend extends View {
         .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", icon("settings"), "Settings", (cx) => this.openSettings(cx), c))));
   }
 
+  sourcesBones(c) {
+    const { line } = ghost(c);
+    return breathe(v_flex().id("kanso-skeleton").w_full())
+      .children([0, 1, 2].map((i) => v_flex().w_full().py(G.sm).gap(2).child(line([100, 80, 120][i], 13)).child(line([180, 160, 140][i], 11))));
+  }
+
   skeleton(c, narrow) {
-    const block = (w, h, radius = 3) => div().w(w).h(h).flex_none().rounded(radius).bg(c.border);
+    const { block, line, row } = ghost(c);
     const heights = [18, 26, 22, 40, 64, 92, 48, 52, 36, 44, 20, 38, 70, 50, 42, 46, 28, 34, 58, 30, 44, 24, 14, 10, 8, 8, 6, 6, 6, 6, 8];
-    const row = (i) => h_flex().w_full().items_center().gap(G.md).py(9)
-      .child(block([120, 96, 140, 84, 110, 72][i % 6], 9))
-      .child(div().flex_1())
-      .child(block(48, 11));
-    return breathe(v_flex().w_full().gap(narrow ? 36 : 48))
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
       .child(h_flex().w_full().gap(G.lg).items_center()
         .children([44, 52, 34, 52].map((w) => block(w, 10))))
       .child(v_flex().gap(G.md)
-        .child(block(110, 12))
+        .child(line(110, 12))
         .child(block(narrow ? 170 : 250, narrow ? 40 : 58, 6))
-        .child(block(170, 11))
+        .child(line(170, 11))
         .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([46, 64, 58].map((w) => block(w, narrow ? 18 : 22, 4)))))
       .child(h_flex().w_full().h(150).items_end()
         .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))))
       .child(v_flex().w_full()
-        .child(h_flex().pb(G.sm).child(block(70, 12)))
+        .child(h_flex().pb(G.sm).child(line(70, 12)))
         .children([0, 1, 2, 3, 4].map(row)));
   }
 
   waitingView(c, narrow) {
     const failed = this.runtimeError || (this.error && !this.running);
-    if (!failed) {
-      const scan = this.scan;
-      return v_flex().w_full().gap(G.lg)
-        .when(Boolean(scan?.partial), (el) => el.child(div().text_size(12).text_color(c.dim)
-          .child(`Reading your history for the first time: ${scan.processed} of ${scan.total} files.`)))
-        .child(this.skeleton(c, narrow));
-    }
+    if (!failed) return this.skeleton(c, narrow);
     const scan = this.scan;
     const title = failed ? "Spend could not read your sessions." : "Adding up your sessions";
     const detail = failed ? (this.runtimeError || this.error)
@@ -681,7 +677,7 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(44)
       .child(v_flex().w_full()
         .child(heading("Sources", "Where Spend reads your sessions. Turning one off removes it from every number."))
-        .when(!s, (el) => el.child(div().text_size(12).text_color(c.dim).child("Loading…")))
+        .when(!s, (el) => el.child(this.sourcesBones(c)))
         .children((s?.sources ?? []).map((source, index) => h_flex().w_full().items_center().gap(G.md).py(G.sm)
           .when(index > 0, (el) => el.border_t(1).border_color(c.border))
           .child(v_flex().flex_1().min_w(0).gap(2)

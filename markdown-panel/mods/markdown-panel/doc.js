@@ -2,6 +2,13 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
+import { skeleton, breathe } from "./ui.js";
+
+export function readingLines(t) {
+  const { line } = skeleton({ border: t.border });
+  return breathe(v_flex().id("kanso-skeleton").w_full().max_w(760).px(16).pt(14).gap(10))
+    .children([280, 200, 240, 120, 220, 160, 190].map((w) => line(w, 12)));
+}
 
 const MAX_TEXT = 400000;
 const AUTOSAVE_MS = 700;
@@ -255,7 +262,7 @@ export class MarkdownDoc {
 
   body(t, id) {
     if (this.error) return div().p(16).text_color(t.dim).child(this.error);
-    if (this.text === null) return div().p(16).text_color(t.dim).child("Reading…");
+    if (this.text === null) return readingLines(t);
     const conflict = this.conflict ? h_flex().flex_none().px(16).py(8).gap(8).items_center().border_b(1).border_color(t.border)
       .child(div().flex_1().min_w(0).text_size(12).text_color(t.blocked).child("The file changed on disk while you edited it."))
       .child(this.pill(`${id}-mine`, "Keep mine", t, (cx) => this.keepMine(cx), true))
