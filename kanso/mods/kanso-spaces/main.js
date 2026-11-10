@@ -19,6 +19,7 @@ import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, readN
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
+import { skeleton, breathe } from "./ui.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -1475,7 +1476,7 @@ export default class Spaces extends View {
       return state === "loading" || (!state && this.machines.some(k => k.name === m && k.state === "connected"))
         || rows.length < sp.length && sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => item(div().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…"), 28);
+    const loadingRow = m => item(this.machineBones(t, collapsed, m), collapsed ? RAIL_MARK : PLAIN_ROW);
     // Projects with no space open (added, or asleep whole), on their machine; each keeps a + to start an agent in it.
     const names = shownNames(ctx.registry);
     const closed = (m) => this.closedOn(m, ctx).flatMap((c) => {
@@ -1706,14 +1707,21 @@ export default class Spaces extends View {
       .child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim));
   }
 
+  machineBones(t, collapsed, m) {
+    const { block, line } = skeleton({ border: t.border });
+    if (collapsed) return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).w_full().h(RAIL_MARK).flex_none().justify_center().items_center()).child(block(28, 32, 6));
+    return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).h(PLAIN_ROW).flex_none().px(8).gap(9).items_center()).child(block(16, 16, 4)).child(line(112, 11));
+  }
+
   silhouette(t) {
-    const block = (w, h, radius = 3) => div().w(w).h(h).flex_none().rounded(radius).bg(t.border);
+    const { block, line } = skeleton({ border: t.border });
+    const titles = [132, 104, 150, 92, 118], seconds = [170, 138, 120, 160, 100];
     const row = (i) => h_flex().h(64).mb(6).px(12).gap(12).items_center()
       .child(v_flex().h(64).pt(11).flex_none().child(block(20, 20, 6)))
       .child(v_flex().flex_1().min_w(0).gap(9)
-        .child(h_flex().items_center().child(block([132, 104, 150, 92, 118][i], 10)).child(div().flex_1()).child(block(22, 8)))
-        .child(block([170, 138, 120, 160, 100][i], 8)));
-    return v_flex().w_full().loop("opacity", { from: 0.35, to: 0.8, period: 1800 }).children([0, 1, 2, 3, 4].map(row));
+        .child(h_flex().items_center().child(line(titles[i], 10)).child(div().flex_1()).child(block(22, 8)))
+        .child(line(seconds[i], 8)));
+    return breathe(v_flex().id("kanso-skeleton").w_full()).children([0, 1, 2, 3, 4].map(row));
   }
 
   empty(t, title, body) {

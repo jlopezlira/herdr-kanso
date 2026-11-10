@@ -11,6 +11,7 @@ import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, fol
 import { resumeArgv, isClaude } from "./resume.js";
 import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, agentsOf } from "./sleepwork.js";
 import { retry, tryOr, tryOrAsync, mapSeries, reduceSeries } from "./pure.js";
+import { skeleton, breathe } from "./ui.js";
 
 const ARM_MS = 4000;
 
@@ -441,6 +442,27 @@ export default class Sleep extends View {
     return move;
   }
 
+  sleepBones(t) {
+    const { line } = skeleton({ border: t.border });
+    return breathe(v_flex().id("kanso-skeleton").w_full().pt(14).gap(10))
+      .children([0, 1, 2].map((i) => h_flex().w_full().gap(10).items_center().child(line([140, 110, 160][i], 12)).child(div().flex_1()).child(line(80, 11))));
+  }
+
+  progressBones(t) {
+    const { line } = skeleton({ border: t.border });
+    return breathe(v_flex().id("kanso-skeleton").w_full().pt(14).gap(10))
+      .child(line(120, 11))
+      .children([0, 1, 2].map((i) => h_flex().w_full().gap(10).items_center().child(line([150, 120, 170][i], 12)).child(div().flex_1()).child(line(70, 11))));
+  }
+
+  asleepBones(t) {
+    const { block, line } = skeleton({ border: t.border });
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(2))
+      .children([0, 1, 2, 3].map((i) => h_flex().w_full().px(10).py(8).gap(10).items_center()
+        .child(block(15, 15, 4))
+        .child(v_flex().flex_1().gap(2).child(line([130, 100, 150, 90][i], 13)).child(line([170, 140, 110, 160][i], 11)))));
+  }
+
   render() {
     const t = theme();
     const p = props() ?? {};
@@ -490,7 +512,7 @@ export default class Sleep extends View {
           whole ? "Every tab's agents exit and the tabs close. Wake opens them again, each agent on its conversation."
           : alone ? "It exits and its pane closes; the rest of the tab stays. Wake opens it again in that tab, on its conversation."
           : "Its agents exit and the tab closes. Wake opens it again, each agent on its conversation."))
-        .when(this.sleepers === null, (el) => el.child(note("Reading")))
+        .when(this.sleepers === null, (el) => el.child(this.sleepBones(t)))
         .children(list.map((r, k) => v_flex().pt(14).gap(4)
           .when(whole, (el) => el.child(div().pb(3).text_size(11.5).text_color(t.dim).child(r.name)))
           .children(panesOf(r).map((q, j) => line(q, starts[k] + j)))))
@@ -511,7 +533,7 @@ export default class Sleep extends View {
       const held = rows.find((r) => r.state === "stuck");
       return shell
         .child(head("Going to sleep", "It goes on if you close this."))
-        .when(this.progress === null, (el) => el.child(note("Reading")))
+        .when(this.progress === null, (el) => el.child(this.progressBones(t)))
         .children(rows.map((r, k) => v_flex().pt(14).gap(4)
           .child(div().pb(3).text_size(11.5).text_color(r.state === "stuck" ? t.blocked : t.dim).child(`${r.name}: ${stateOf(r)}`))
           .children(stepsOf(r).map((a, j) => h_flex().id(`pg-${k}-${j}`).w_full().gap(10).items_center()
@@ -561,7 +583,7 @@ export default class Sleep extends View {
       .child(head("Asleep", "Tabs put to sleep, each agent's conversation kept. Wake opens one again in its project."))
       // A column that never shrinks: past max_h 420 the list scrolls.
       .child(v_flex().id("zz-list").pt(10).max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().gap(2)
-        .when(this.asleep === null, (el) => el.child(div().py(8).text_size(12).text_color(t.dim).child("Reading")))
+        .when(this.asleep === null, (el) => el.child(this.asleepBones(t)))
         .when(work.length > 0, (el) => el.child(label("Not asleep yet")).children(work.map(workRow)))
         .when(this.asleep !== null && !asleep.length && !work.length, (el) => el.child(v_flex().py(6).gap(4)
           .child(div().text_size(13).text_color(t.muted).child("Nothing is asleep."))

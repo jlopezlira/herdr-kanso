@@ -3,7 +3,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared } from "herdr";
-import { G, Armed, tokens, quietLink, iconButton } from "./ui.js";
+import { G, Armed, tokens, quietLink, iconButton, ghost, breathe } from "./ui.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
   parseContainers, parseInspect, contextOf, parseImages, parseStats, vmPids, dockerVms, dockerHeld, byProject, imageRows,
@@ -357,6 +357,18 @@ export default class Containers extends View {
         { size: 12, color: armed ? c.red : c.text }));
   }
 
+  skeleton(c) {
+    const { block, line } = ghost(c);
+    const two = (i) => v_flex().w_full().py(9).gap(4)
+      .child(line([160, 140, 180, 120][i], 13)).child(line([200, 150, 110, 170][i], 11));
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(32))
+      .child(v_flex().gap(G.md)
+        .child(line(180, 12))
+        .child(block(120, 48, 6))
+        .child(h_flex().gap(G.md).children([70, 64, 48].map((w) => line(w, 13)))))
+      .child(v_flex().w_full().children([0, 1, 2, 3].map(two)));
+  }
+
   body(c) {
     if (this.state === "missing") return div().text_size(13).text_color(c.dim).child("Docker is not installed on this computer.");
     if (this.state === "down") {
@@ -364,7 +376,7 @@ export default class Containers extends View {
         .child(div().text_size(13).text_color(c.muted).child("Docker isn't running."))
         .child(h_flex().child(quietLink("ct-open-docker", "Open Docker", (cx) => this.openDocker(cx), c, { color: c.text })));
     }
-    if (this.groups === null) return div().text_size(13).text_color(c.dim).child("Asking Docker");
+    if (this.groups === null) return this.skeleton(c);
     const all = this.groups.flatMap((g) => g.containers);
     const running = all.filter((k) => k.health === "running").length, failed = all.filter((k) => k.health === "failed").length;
     const armedQuit = this.armed.is("quit"), remote = Boolean(this.context?.remote);

@@ -2,7 +2,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, exec, run } from "herdr";
-import { G, tokens, quietTabs, toggleSwitch, quietLink } from "./ui.js";
+import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe } from "./ui.js";
 import { glyphs, keycap } from "./marks.js";
 import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
@@ -236,6 +236,13 @@ export default class Settings extends View {
     });
   }
 
+  newsBones(c) {
+    const { line } = skeleton(c);
+    return breathe(v_flex().id("kanso-skeleton").w_full().pt(G.lg).gap(G.sm))
+      .child(line(72, 15)).child(line(220, 12)).child(line(180, 12))
+      .child(line(64, 15)).child(line(200, 12));
+  }
+
   newsPage(t, c) {
     const { entries, error, from } = this.news;
     const have = this.installed;
@@ -270,7 +277,7 @@ export default class Settings extends View {
             .text_size(13).font_semibold().text_color(c.canvas).hover((s) => s.opacity(0.88))
             .on_click(() => run("kanso-tabs.check"))
             .child("Check for updates")))
-      .when(entries === null, (el) => el.child(div().py(G.md).text_size(12.5).text_color(c.dim).child("Reading")))
+      .when(entries === null, (el) => el.child(this.newsBones(c)))
       .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(c.accent + "1a")
         .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
         .child(div().id("update-kanso").flex_none().h(28).px(12).rounded(6).bg(c.primary).text_color(c.primaryText).text_size(12.5).font_medium()

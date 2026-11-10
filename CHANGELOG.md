@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.18.12] - 2026-11-10
+
+### Changed
+
+- While something is still loading, it shows the shape of what is about to appear, in the same quiet blocks, instead of a blank space or a line that says it is reading.
+
 ## [3.18.11] - 2026-11-10
 
 ### Changed

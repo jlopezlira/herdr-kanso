@@ -7,7 +7,7 @@ import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share } from "./share.js";
-import { G, tokens, iconButton, section } from "./ui.js";
+import { G, tokens, iconButton, section, ghost, breathe } from "./ui.js";
 import { range, tryOrAsync, mapSeries } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
 
@@ -563,6 +563,30 @@ export class Shipped {
           .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(m.n)} commits · +${fmt(m.a)} −${fmt(m.d)}`))))));
   }
 
+  skeleton(c, narrow) {
+    const { block, line, row } = ghost(c);
+    const hours = [8, 12, 6, 10, 18, 28, 40, 48, 36, 22, 14, 10, 16, 30, 44, 50, 38, 20, 12, 8, 6, 10, 18, 24];
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
+      .child(v_flex().gap(G.md)
+        .child(line(120, 15))
+        .child(block(narrow ? 140 : 180, narrow ? 40 : 56, 6))
+        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([40, 52, 36].map((w) => block(w, narrow ? 20 : 24, 4)))))
+      .child(h_flex().w_full().h(56).items_end().gap(2)
+        .children(hours.map((h) => div().flex_1().min_w(2).h(h).rounded(2).bg(c.border))))
+      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(90, 12))).children([0, 1, 2, 3].map(row)));
+  }
+
+  bones(c, narrow = true) {
+    const { header, block } = ghost(c);
+    const pad = narrow ? G.lg : 32;
+    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
+      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
+        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+          .child(header(narrow ? 90 : 110, narrow ? 17 : 20))
+          .child(h_flex().h(26).gap(G.xs).items_center().children([64, 52, 48, 40].map((w) => block(w, 26, 6))))
+          .child(this.skeleton(c, narrow))));
+  }
+
   render(cx) {
     const c = tokens(theme());
     const width = this.width || 368, narrow = width < 560;
@@ -570,7 +594,7 @@ export class Shipped {
     const inner = Math.min(1080, width - 2 * pad);
     const gh = this.github[this.key()], status = this.status(c), rhythm = this.rhythmView(c);
     const body = !gh && !this.stats
-      ? v_flex().w_full().gap(G.sm).child(div().text_size(15).text_color(c.muted).child("Adding up what you shipped")).child(div().text_size(12).text_color(c.dim).child("This takes a second."))
+      ? this.skeleton(c, narrow)
       : v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
         .when(Boolean(status), (el) => el.child(status))
