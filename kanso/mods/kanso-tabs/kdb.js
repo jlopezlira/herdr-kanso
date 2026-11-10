@@ -3,6 +3,7 @@
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
 import { exec, appHome } from "herdr";
 import { mapSeries, parseOr } from "./pure.js";
+import { EVENT_CAP, KEEP_MS } from "./since-left-model.js";
 
 export const DIR = "data/kanso";
 export const VERSION = 1;
@@ -15,6 +16,8 @@ export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}
 const n = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
 // `col` not among `xs` (always true for none; `NOT IN (NULL)` would be never).
 const notIn = (col, xs) => (xs.length ? `${col} NOT IN (${xs.map(q).join(",")})` : "1");
+export const pruneSinceSql = (now) => `DELETE FROM since_events WHERE at < ${n(now - KEEP_MS)} OR id NOT IN (SELECT id FROM since_events ORDER BY id DESC LIMIT ${EVENT_CAP});
+  DELETE FROM since_observed WHERE at < ${n(now - KEEP_MS)};`;
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 export const projectKey = (w, home = "") => `${w?.machine ?? ""}:${w?.folder || home}`;
 // A conversation's id from its file (Claude's <id>.jsonl, Codex's rollout-…-<id>.jsonl).
@@ -49,6 +52,10 @@ CREATE INDEX IF NOT EXISTS pr_repos_project ON pr_repos(project_id);
 CREATE TABLE IF NOT EXISTS pr_items(url TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, number INTEGER NOT NULL, title TEXT NOT NULL, state TEXT, draft INTEGER NOT NULL DEFAULT 0, author TEXT, role TEXT NOT NULL, head TEXT, base TEXT, review_decision TEXT, additions INTEGER, deletions INTEGER, updated_at TEXT, fetched_at INTEGER NOT NULL, seen_at INTEGER);
 CREATE INDEX IF NOT EXISTS pr_items_repo ON pr_items(provider, host, owner, name);
 CREATE TABLE IF NOT EXISTS pr_fetches(key TEXT PRIMARY KEY, fetched_at INTEGER, retry_at INTEGER, error TEXT);
+CREATE TABLE IF NOT EXISTS since_focus(project TEXT PRIMARY KEY, focused_at INTEGER NOT NULL, pending_json TEXT, dismissed_to INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS since_events(id INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL, target TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS since_events_project ON since_events(project, id);
+CREATE TABLE IF NOT EXISTS since_observed(source TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
@@ -68,7 +75,7 @@ export function statements(text) {
 }
 
 // sqlite3 -json prints one array per statement; a raw newline never appears inside JSON, so "]\n[" only parts them.
-export const rowsOfOutput = (out) => (out.trim() ? JSON.parse(`[${out.trim().replace(/\]\n\[/g, "],[")}]`).flat() : []);
+export const rowsOfOutput = (out) => (out.trim() ? JSON.parse(`[${out.trim().replace(/\r\n?/g, "\n").replace(/\]\n\[/g, "],[")}]`).flat() : []);
 
 // By id only: a space of the same folder and name may have stood beside it; pre-id rows match only when exactly one fits.
 export function spaceFor(place, spaces, home = "") {
@@ -313,8 +320,9 @@ export class Kdb {
   }
   // Stuck lets go of the row: nothing moves until you retry or undo it (or the agent goes on its own).
   setWorkState(id, me, from, to, why = null, now = Date.now()) {
+    const event = to === "stuck" ? this.sinceSleep(id, "sleep_failed", "could not sleep", `pending=${q(me)} AND state=${q(from)}`, now) : "";
     const owner = to === "stuck" ? "pending=NULL,pending_at=NULL" : `pending_at=${n(now)}`;
-    return this.held(`UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;`);
+    return this.held(`BEGIN;${event}UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;COMMIT;`);
   }
   // A stuck agent seen gone has left; once none is stuck the sleep goes on. True when it does.
   unstick(id, conversation = null, now = Date.now()) {
@@ -334,10 +342,13 @@ export class Kdb {
     return this.held(`UPDATE sleeps SET state='undoing',why=NULL,pending_at=CASE WHEN pending IS NULL THEN ${n(now)} ELSE pending_at END
       WHERE id=${q(id)} AND state IN ('sleeping','stuck') AND waking IS NULL RETURNING id;`);
   }
-  finishSleep(id, me, why = null) {
+  finishSleep(id, me, why = null, now = Date.now()) {
     const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
-    return this.held(`BEGIN;UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+    return this.held(`BEGIN;${this.sinceSleep(id, "sleep_finished", "slept", `pending=${q(me)} AND state='sleeping'`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;COMMIT;`);
+  }
+  sinceSleep(id, kind, word, guard, now) {
+    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,'sleep:' || id,${q(kind)},name || ${q(` ${word}`)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now)}`;
   }
   // An undo's agent that is back (or never left) is awake.
   freeAgent(id, me, conversation) {

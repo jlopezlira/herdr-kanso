@@ -1,4 +1,6 @@
 // The inbox cache in kanso.db. Network stays in the provider; this file only reads and writes rows.
+import { SinceStore } from "./since-left-store.js";
+import { checkState, onePerJob, checkSummary } from "./ghchecks.js";
 import { q } from "./kdb.js";
 import { matchRemote } from "./pr-providers.js";
 import { fetchDue, isNew, limitLine, parseRemotes, projectSignature, publicUrl, repoId, SCAN_MS } from "./pr-remote.js";
@@ -131,7 +133,28 @@ async function scanRepos(db, run, { sessions, now }) {
   await db.run(`BEGIN;${rows.join("")}${drop}${dropGone}${mark}COMMIT;`);
 }
 
+export async function recordPrFacts(db, items, now = Date.now(), seedOnly = false) {
+  const repos = await db.read("SELECT r.*, p.folder AS project_folder, p.machine AS project_machine FROM pr_repos r JOIN projects p ON p.id=r.project_id WHERE p.removed IS NULL;");
+  const snapshots = (rows) => rows.flatMap((item) => {
+    const url = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(item.url ?? "");
+    if (!url) return [];
+    const repo = repos.find((row) => [row.host, row.owner, row.name].join("/").toLowerCase() === url.slice(1, 4).join("/").toLowerCase());
+    if (!repo) return [];
+    return [{ source: `pr:${item.url}`, project: `${repo.project_machine ?? ""}:${repo.project_folder}`, value: {
+      type: "pr", target: `pr:${item.url}`, number: item.number,
+      ...(item.state != null ? { state: item.state } : {}),
+      ...(item.reviewDecision != null ? { review: item.reviewDecision } : {}),
+      ...(Array.isArray(item.statusCheckRollup) ? { checks: checkSummary(onePerJob(item.statusCheckRollup).map(checkState)).state } : {}),
+    } }];
+  });
+  const store = new SinceStore(db);
+  const cached = (await db.read("SELECT * FROM pr_items;")).map(itemOf);
+  await store.observe(snapshots(cached), now, true);
+  if (!seedOnly) await store.observe(snapshots(items), now);
+}
+
 async function storeInbox(db, { provider, host, items, skipped = [], rate, error, searchOk = false, now }) {
+  await recordPrFacts(db, [], now, true);
   const key = `inbox:${provider}:${host}`;
   const upserts = items.map((item) => itemSql(item, now)).join("");
   const urls = items.map((item) => item.url);
@@ -145,6 +168,7 @@ async function storeInbox(db, { provider, host, items, skipped = [], rate, error
       ? `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(key)},${num(now)},NULL,${q(error)}) ON CONFLICT(key) DO UPDATE SET fetched_at=excluded.fetched_at,retry_at=NULL,error=excluded.error;`
       : `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(key)},NULL,NULL,${q(error)}) ON CONFLICT(key) DO UPDATE SET error=excluded.error;`;
   await db.run(`BEGIN;${upserts}${drop}${fetch}COMMIT;`);
+  await recordPrFacts(db, items, now);
 }
 
 export async function refreshInbox({ db, run, provider, session, force = false, shown = true, now = Date.now(), onCache } = {}) {
