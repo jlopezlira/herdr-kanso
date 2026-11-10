@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.19.0] - 2026-11-10
+
+### Added
+
+- Cmd+F in a focused terminal opens Find. It searches that terminal's screen and what has scrolled off it. Enter and Shift+Enter move through the matches, and Escape closes the bar. An update adds this key where you have not set Cmd+F yourself.
+
 ## [3.18.12] - 2026-11-10
 
 ### Changed

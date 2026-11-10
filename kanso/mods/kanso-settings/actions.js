@@ -49,8 +49,8 @@ export const GROUPS = [
   ] },
 ];
 
-// Herdr's own commands the strip does its own way, on Herdr's keys; the Keys page leaves them out.
-export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right|up|down)|width)|kanso-spaces\.space-\d|mod\.open:kanso-help)$/;
+// Herdr's own commands, on Herdr's keys; the Keys page leaves them out.
+export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|up|down)|move-(left|right|up|down)|width)|kanso-spaces\.space-\d|mod\.open:kanso-help|terminal\.search)$/;
 
 export const ofRow = (row, action) => (row.family ? new RegExp(`^${row.family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[1-9]$`).test(action) : action === row.action);
 

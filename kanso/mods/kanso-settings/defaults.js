@@ -75,5 +75,8 @@ export const DEFAULT_KEYS = {
   "mod:kanso-guard": {
     "cmd-r": "kanso-guard.refresh",
     "escape": "kanso-guard.back"
+  },
+  "terminal": {
+    "cmd-f": "terminal.search"
   }
 };
