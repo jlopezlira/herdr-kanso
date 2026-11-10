@@ -1,26 +1,28 @@
 import { div, list, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, TextView, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
 import { tokens, skeleton, controlInput, iconButton, G, H, R, T } from "./ui.js";
+import { markdownView } from "./lib.js";
 import {
   locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
-  chooseMatch, layOut, partsOf, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, findChord, EXCERPT, DRAW,
+  chooseMatch, layOut, partsOf, excerptLines, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, findChord, EXCERPT, DRAW,
 } from "./find.js";
 
 const WAIT = 120;
 const EASE = { duration: 180, easing: "ease-out" };
 const MAX = 300; // the list stops here so Find does not cover the terminal
-const READ = 8000;
 const FIND = "kanso.find";
 
 function hintOf(address) {
-  try {
-    const agent = agents().find((a) => a.address === address);
-    return [agent?.app, agent?.program?.key].filter(Boolean).join(" ");
-  } catch { return ""; }
+  const agent = agents().find((a) => a.address === address);
+  return [agent?.app, agent?.program?.key].filter(Boolean).join(" ");
 }
 
 export class Find {
+  constructor() {
+    this.fits = true;
+  }
+
   init(cx, p) {
     const remembered = keptQuery({ queries: this.kept }, p?.terminal);
     this.terminal = p?.terminal ?? null;
@@ -41,7 +43,6 @@ export class Find {
     this.file = null;
     this.pendingScroll = false;
     this.gen = 0;
-    this.enterAt = 0;
     this.rise = null;
     this.slicing = false;
     this.boxH = 0;
@@ -84,19 +85,23 @@ export class Find {
     if (scroll) this.pendingScroll = true;
   }
 
+  clearMatch() {
+    this.hits = [];
+    this.at = 0;
+    this.open = false;
+  }
+
   note(cx) {
     this.pending = this.input.value();
     this.gen = this.gen + 1;
     const gen = this.gen;
-    if (!blankQuery(this.pending)) this.arm(cx);
     if (blankQuery(this.pending)) {
       this.query = "";
-      this.hits = [];
-      this.at = 0;
-      this.open = false;
+      this.clearMatch();
       cx.notify();
       return;
     }
+    this.arm(cx);
     cx.timer.after(WAIT, (cx) => {
       if (this.gone || gen !== this.gen || this.pending === this.query) return;
       this.apply(chooseMatch(this.snap(), this.index, { key: "type" }));
@@ -111,9 +116,6 @@ export class Find {
   }
 
   enter(shift, cx) {
-    const now = Date.now();
-    if (now - this.enterAt < 40) return;
-    this.enterAt = now;
     this.move(Boolean(shift), cx);
   }
 
@@ -152,9 +154,7 @@ export class Find {
       this.input.set_value("");
       this.pending = "";
       this.query = "";
-      this.hits = [];
-      this.at = 0;
-      this.open = false;
+      this.clearMatch();
       this.gen = this.gen + 1;
       cx.notify();
       return;
@@ -167,9 +167,7 @@ export class Find {
     this.index = extendIndex(this.index, this.state.turns, applied.from, applied.reindex);
     this.loading = false;
     if (blankQuery(this.query)) {
-      this.hits = [];
-      this.at = 0;
-      this.open = false;
+      this.clearMatch();
       return;
     }
     const prev = keep ? this.hits[this.at] : null;
@@ -180,9 +178,7 @@ export class Find {
   restart() {
     this.state = freshRead();
     this.index = [];
-    this.hits = [];
-    this.at = 0;
-    this.open = false;
+    this.clearMatch();
   }
 
   async locate(cx) {
@@ -270,17 +266,12 @@ export class Find {
     return v_flex().w_full().rounded(R.card).bg(c.canvas).border_1().border_color(c.border).child(this.bar(c));
   }
 
-  block(parts, c) {
-    const stepped = parts.reduce((acc, part) => String(part.text ?? "").split("\n").reduce((state, bit, i) => {
-      const words = bit.split(/\s+/).filter(Boolean).map((w) => ({ w, mark: part.mark }));
-      return i ? { lines: state.lines.concat([state.cur]), cur: words } : { lines: state.lines, cur: state.cur.concat(words) };
-    }, acc), { lines: [], cur: [] });
-    const lines = stepped.cur.length || !stepped.lines.length ? stepped.lines.concat([stepped.cur]) : stepped.lines;
+  excerpt(parts, c) {
     const word = ({ w, mark }) => {
       const el = div().text_size(T.card).child(w);
       return mark ? el.rounded(R.control).px(G.xs).bg(c.highlight).text_color(c.accent) : el.text_color(c.muted);
     };
-    return v_flex().w_full().children(lines.map((line) => (
+    return v_flex().w_full().children(excerptLines(parts).map((line) => (
       line.length
         ? h_flex().w_full().flex_wrap().gap_x(G.xs).children(line.map(word))
         : div().text_size(T.card).child(" ")
@@ -308,22 +299,20 @@ export class Find {
       .child(h_flex().gap(G.sm).items_center()
         .child(div().text_size(T.small).text_color(c.muted).child(whoOf(turn)))
         .child(div().text_size(T.small).text_color(c.dim).child(whenLabel(turn?.at))))
-      .child(this.block(this.partsFor(item), c));
+      .child(this.excerpt(this.partsFor(item), c));
   }
 
-  reading(c) {
+  reading(c, t) {
     const hit = this.hits[this.at];
     const turn = this.state.turns[hit?.turn];
     const text = String(turn?.text ?? "");
-    const body = text.length > READ ? `${text.slice(0, READ)}\n\n…` : text;
     return v_flex().w_full().max_h(MAX)
       .child(h_flex().px(G.sm).pt(G.xs).items_center()
         .child(iconButton("find-back", "chevron-left", "Back", (cx) => this.back(cx), c))
         .child(div().text_size(T.small).text_color(c.muted).child(whoOf(turn)))
         .child(div().text_size(T.small).text_color(c.dim).child(whenLabel(turn?.at))))
-      .child(div().px(G.md).pb(G.xs).child(this.block(hit ? partsOf(text, hit, EXCERPT) : [], c)))
-      .child(div().id(`find-read-${hit?.turn ?? 0}`).w_full().flex_1().min_h(0).max_h(MAX).overflow_y_scrollbar().px(G.lg).py(G.sm)
-        .child(TextView.markdown(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, body).selectable(true)));
+      .child(div().px(G.md).pb(G.xs).child(this.excerpt(hit ? partsOf(text, hit, EXCERPT) : [], c)))
+      .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(MAX));
   }
 
   listBox(c, laid) {
@@ -379,7 +368,7 @@ export class Find {
       : { items: [], focus: 0 };
     const show = this.open || laid.items.length > 0 || showSkel || (this.missing && !blankQuery(this.pending) && !this.loading);
     const body = this.open
-      ? this.reading(c)
+      ? this.reading(c, t)
       : laid.items.length
         ? this.listBox(c, laid)
         : showSkel

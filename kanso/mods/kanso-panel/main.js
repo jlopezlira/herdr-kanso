@@ -61,7 +61,6 @@ export default class Panel extends View {
   render(cx) {
     this.keep();
     const body = this.ready && this.panel ? this.panel.render(cx) : this.panel ? this.panel.bones(tokens(theme()), true) : div().size_full();
-    // Find sizes to its bar; every other panel fills the column.
-    return div().w_full().when(this.id !== "find", (el) => el.size_full()).opacity(this.shown ? 1 : 0).transition("opacity", { duration: 180, easing: "ease-out" }).child(body);
+    return div().w_full().when(!this.panel?.fits, (el) => el.size_full()).opacity(this.shown ? 1 : 0).transition("opacity", { duration: 180, easing: "ease-out" }).child(body);
   }
 }

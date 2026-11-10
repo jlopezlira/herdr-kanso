@@ -1,4 +1,5 @@
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
+import { join } from "path";
 import { etimeMs } from "./procs.js";
 
 export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
@@ -20,8 +21,11 @@ export function projectDir(cwd) {
   const h = Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).reduce((n, c) => ((n << 5) - n + c) | 0, 0);
   return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
 }
+export const sessionPath = (homeDir, pid) => join(homeDir, ".claude", "sessions", `${pid}.json`);
 export const transcriptPath = (session, homeDir) =>
-  session?.sessionId && session.cwd ? `${homeDir}/.claude/projects/${projectDir(session.cwd)}/${session.sessionId}.jsonl` : null;
+  session?.sessionId && session.cwd && homeDir
+    ? join(homeDir, ".claude", "projects", projectDir(session.cwd), `${session.sessionId}.jsonl`)
+    : null;
 
 export function sessionLive(record, pid, started) {
   if (!record || record.pid !== pid || !record.sessionId) return false;
@@ -106,6 +110,27 @@ export function partsOf(text, hit, radius = EXCERPT) {
     cut.right.length ? { text: cut.right.join(" "), mark: false } : null,
     right.more || cut.right.length < right.words.length ? { text: "\u2026", mark: false } : null,
   ].filter(Boolean);
+}
+
+const markedWord = (w, mark) => ({ w, mark: Boolean(mark) });
+
+function takeLine(text, mark) {
+  return String(text ?? "").split(/\s+/).filter(Boolean).map((w) => markedWord(w, mark));
+}
+
+function addLine(lines, text, mark, fresh) {
+  const words = takeLine(text, mark);
+  if (!fresh && lines.length) return lines.slice(0, -1).concat([lines.at(-1).concat(words)]);
+  return lines.concat([words]);
+}
+
+export function excerptLines(parts) {
+  const list = Array.isArray(parts) ? parts : [];
+  const lines = list.reduce((acc, part) => String(part?.text ?? "").split("\n").reduce(
+    (state, bit, i) => addLine(state, bit, part?.mark, i > 0),
+    acc,
+  ), []);
+  return lines.length ? lines : [[]];
 }
 
 export function drawWindow(count, at, cap = DRAW) {
@@ -495,10 +520,9 @@ export async function locateConversation(host, address, hint = "") {
   const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
   const pid = front?.pid;
   if (!pid) return { kind: null, file: null };
-  const program = String(front.argv?.[0] ?? "").split("/").at(-1);
-  const kind = kindOf(program, hint);
+  const kind = kindOf(front.argv?.[0], hint);
   if (kind === "claude") {
-    const record = parsed(await host.readTextFile(`${host.home()}/.claude/sessions/${pid}.json`).catch(() => null));
+    const record = parsed(await host.readTextFile(sessionPath(host.home(), pid)).catch(() => null));
     const up = record?.sessionId ? await host.exec("ps", ["-o", "etime=", "-p", String(pid)]).catch(() => null) : null;
     const started = up?.code === 0 ? Date.now() - etimeMs(String(up.stdout).trim()) : NaN;
     if (!sessionLive(record, pid, started)) return { kind: null, file: null };

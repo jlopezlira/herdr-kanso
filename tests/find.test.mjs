@@ -10,6 +10,7 @@ import {
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
   resolveFind, locateConversation, kindOf, sessionLive,
   blankQuery, layOut, chooseMatch, indexTurns, readable, dayLabel, keptQuery, withQuery, findChord,
+  excerptLines, sessionPath, transcriptPath, projectDir,
 } from "../kanso/mods/kanso-panel/find.js";
 
 const line = (row) => JSON.stringify(row);
@@ -312,18 +313,30 @@ test("No conversation, a shell, or a remote terminal falls back to the terminal'
     session: { pid: 9, sessionId: "abc", cwd: "/repo", startedAt: Date.now() - 4000 },
   }), "t1", "claude-code");
   assert.equal(live.kind, "claude");
-  assert.equal(live.file, "/home/me/.claude/projects/-repo/abc.jsonl");
+  assert.equal(live.file, join("/home/me", ".claude", "projects", "-repo", "abc.jsonl"));
   const codex = await locateConversation(host({ argv: ["codex"], pid: 4, rollout: "/home/me/.codex/sessions/rollout-1.jsonl" }), "t1", "");
   assert.deepEqual(codex, { kind: "codex", file: "/home/me/.codex/sessions/rollout-1.jsonl" });
   const none = await locateConversation(host({ argv: ["codex"], pid: 4, rollout: "" }), "t1", "");
   assert.equal(none.file, null);
 });
 
+test("An excerpt keeps marked words on their line, and a transcript is joined under the home folder", () => {
+  assert.deepEqual(excerptLines([{ text: "hola mundo", mark: false }, { text: "lindo", mark: true }]), [[
+    { w: "hola", mark: false }, { w: "mundo", mark: false }, { w: "lindo", mark: true },
+  ]]);
+  assert.deepEqual(excerptLines([{ text: "a\nb", mark: true }]), [[{ w: "a", mark: true }], [{ w: "b", mark: true }]]);
+  assert.deepEqual(excerptLines([]), [[]]);
+  assert.equal(sessionPath("/home/me", 9), join("/home/me", ".claude", "sessions", "9.json"));
+  assert.equal(transcriptPath({ sessionId: "abc", cwd: "/repo" }, "/home/me"), join("/home/me", ".claude", "projects", "-repo", "abc.jsonl"));
+  assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null);
+  assert.equal(projectDir("C:\\repo"), "C--repo");
+});
+
 function host({ argv = ["zsh"], pid = 1, etime = "00:01", session = null, rollout = null } = {}) {
   return {
     home: () => "/home/me",
     hc: async () => ({ code: 0, stdout: JSON.stringify({ foreground: { pid, argv } }) }),
-    readTextFile: async (path) => (session && path.endsWith(`/${pid}.json`) ? JSON.stringify(session) : null),
+    readTextFile: async (path) => (session && path === sessionPath("/home/me", pid) ? JSON.stringify(session) : null),
     exec: async (cmd, args) => {
       if (cmd === "ps") return { code: 0, stdout: `${etime}\n` };
       if (rollout) return { code: 0, stdout: `${rollout}\n` };
