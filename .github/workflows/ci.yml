@@ -17,6 +17,8 @@ jobs:
           node-version: 22
       - name: Versioning (version.json, CHANGELOG.md, semantic bumps)
         run: npm run check:version
+      - name: Shared files
+        run: npm run sync:share -- --check
       - name: sqlite3 (Shipped's store tests run the real one)
         run: command -v sqlite3 || (sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3)
       - name: Tests

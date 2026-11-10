@@ -344,9 +344,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         with a count: This branch, Yours, Others. A row reads as the hero in
         small: the whole title (14, wraps; medium and on `selected` with
         "Shown" at the right when shown), then `#n · author ("you") · updated
-        <age>` (11.5, dim), then a 6 dot and its state in its color (draft,
-        checks failing, changes requested, checks running, approved, waiting
-        for a review, checks passed) and `+a −d`. A click shows it and leaves
+        <age>` (11.5, dim), then a 6 dot and its state (the same words as
+        the verdict, ready only when GitHub would merge) and `+a −d`. A click shows it and leaves
         the page; the branch's own goes back to following the branch. When
         the branch has none, the page ends with "Create one for <branch>"
         under the same rule as "Create it on GitHub".
@@ -359,16 +358,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         picked here; the pill is there whenever the pane is in a repository.
         Every `gh pr` action names the pull request by URL.
       - Hero: `#n · head → base` (15, muted); the title (22, 28 wide, light,
-        line height 1.25); a 6 dot and the verdict (15): ready to merge
-        (green), checks failing, conflicts or changes requested (red),
-        checks running or waiting for a review (yellow, breathing), draft
-        (dim), merged (`ansi5`), closed (red); author and age (12, dim).
-        Then light numbers (22/28) with 12 dim units: files, added, removed,
-        threads, checks. Then, while open, a 30-tall primary Merge button
-        (`solid`; a second press within 4 s merges with the first method the
-        repository allows; red while armed; disabled while draft,
-        conflicting or blocked) and quiet links Ready for review or Back to
-        draft, and Close. A closed PR offers Reopen.
+        line height 1.25); a 6 dot and the verdict (15). Ready to merge
+        (green) only when GitHub would and you can push. Otherwise a few
+        words: review required, changes requested, checks failing, behind
+        the base, draft, blocked by branch rules, conflicts, or still
+        computing. Merge (30 tall, second press within 4 s, red while armed)
+        is shown only then. Quiet links: Ready for review or Back to draft,
+        and Close. A closed one offers Reopen. Author and age (12, dim),
+        then light numbers (22/28): files, added, removed, threads, checks.
       - Description: the PR's body as Markdown (`TextView.markdown`,
         selectable, 13, links open in the browser), template comments
         stripped. Past 6 lines or 480 characters it folds to 150 tall with
@@ -436,10 +433,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   you". The controller checks panes every 1.5 s; one that leaves
   `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
   commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
-  (open only, checks from `statusCheckRollup`) in shared `kanso.digest`
+  (open only; checks and merge state) in shared `kanso.digest`
   by pane, cleared when it works again or closes. The header shows it
-  after the branch: files, +/-, commits, #number with a checks dot; the
-  tooltip says it in words. The header's send button opens `kanso-send`.
+  after the branch: files, +/-, commits, #number. A blocked one is not
+  green and the tooltip names why. Send opens `kanso-send`.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
   status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
@@ -520,7 +517,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     at rest, those last words in `dim`). Without one: while working or
     blocked, the agent's own title when the row shows a name you gave it
     (else the title is the name already); when done, the pane's digest from
-    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 failing"). After the
+    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 failing", or "PR #575, review required" when the merge is blocked). After the
     line, a working agent three minutes on the same step shows its time
     (`dim`; past fifteen, `blocked`), counted from when the `msg` changed
     or was first seen (`trackSteps`, `stepOf`; `status_ms` is not it). Before the mark

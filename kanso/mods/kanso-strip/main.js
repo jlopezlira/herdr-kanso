@@ -10,7 +10,7 @@ import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, 
 import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from "./layout.js";
 import { tryOr, tryOrAsync } from "./pure.js";
-import { rollupState } from "./ghchecks.js";
+import { rollupState, mergeReadiness, checkSummary, onePerJob, checkState } from "./ghchecks.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -125,6 +125,15 @@ export function parseShortstat(text) {
 // gh's statusCheckRollup, read as the pull request panel reads it (ghchecks.js), in the header's words.
 const CHECKS = { fail: "failing", pending: "running", unknown: "unknown", pass: "passing" };
 export const checksOf = (rollup) => CHECKS[rollupState(rollup)] ?? null;
+const PR_FIELDS = "number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,statusCheckRollup";
+
+// Open pull request for the header. `hold` is why GitHub would not call it ready; a clean one has none.
+export function digestPr(view) {
+  if (!view?.number || view.state !== "OPEN") return null;
+  const checks = checkSummary(onePerJob(view.statusCheckRollup).map(checkState));
+  const gate = mergeReadiness(view, { permission: "WRITE", checks });
+  return { number: view.number, state: view.state, checks: checksOf(view.statusCheckRollup), hold: gate.text === "Ready to merge" ? null : gate.text };
+}
 
 // `run(cmd, args)` resolves with stdout, or null when the command fails.
 export async function readDigest(cwd, run) {
@@ -140,11 +149,8 @@ export async function readDigest(cwd, run) {
   const ahead = pushed ? Number(upstream.trim()) || 0 : await aheadOfBase();
   const prOf = async () => {
     if (!branch?.trim()) return null;
-    const out = await run("gh", ["pr", "view", "--json", "number,state,statusCheckRollup"], cwd);
-    return tryOr(() => { // null: not a pull request
-      const v = out ? JSON.parse(out) : null;
-      return v?.number && v.state === "OPEN" ? { number: v.number, state: v.state, checks: checksOf(v.statusCheckRollup) } : null;
-    });
+    const out = await run("gh", ["pr", "view", "--json", PR_FIELDS], cwd);
+    return tryOr(() => digestPr(out ? JSON.parse(out) : null));
   };
   const pr = await prOf();
   return { files, ...parseShortstat(stat), ahead, pushed, pr };
@@ -156,7 +162,7 @@ export function digestTip(d) {
   const parts = [
     d.files ? `${n("files", "changed file", "changed files")} (+${d.add} −${d.del})` : null,
     d.ahead ? `${n("ahead", "commit", "commits")} ${d.pushed ? "not pushed" : "not on the default branch"}` : null,
-    d.pr ? `pull request #${d.pr.number}${d.pr.checks ? `, checks ${d.pr.checks}` : ""}` : null,
+    d.pr ? `pull request #${d.pr.number}${d.pr.hold ? `, ${d.pr.hold[0].toLowerCase()}${d.pr.hold.slice(1)}` : d.pr.checks ? `, checks ${d.pr.checks}` : ""}` : null,
   ].filter((x) => x !== null);
   return parts.length ? `In its folder now: ${parts.join("; ")}.` : "";
 }
@@ -400,7 +406,8 @@ export default class Strip extends View {
 
   digestBadge(t, pane, d, on) {
     const tone = on ? t.muted : t.dim;
-    const ci = { failing: t.blocked, running: t.working, passing: t.done }[d.pr?.checks] ?? null;
+    const held = d.pr?.hold, bad = held && /failing|Conflicts|Changes requested/.test(held);
+    const ci = held ? (bad ? t.blocked : t.working) : { failing: t.blocked, running: t.working, passing: t.done }[d.pr?.checks] ?? null;
     return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).gap(8).items_center().text_size(11.5).text_color(tone).tooltip(digestTip(d))
       .when(d.files > 0, (el) => el.child(h_flex().flex_none().gap(4)
         .child(`${d.files} ${d.files === 1 ? "file" : "files"}`)
