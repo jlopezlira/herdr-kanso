@@ -150,7 +150,7 @@ export class PullRequest {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
       this.openPrs = []; this.selected = null; this.home = null; this.branchUrl = null; this.outside = false;
-      this.missing = null; this.pushed = false; this.base = undefined;
+      this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
     }
     if (this.listing && this.tab === "closed") this.loadClosed(cx);
@@ -173,7 +173,7 @@ export class PullRequest {
           this.readPushed(this.root, on),
         ]);
         this.branch = branch.stdout.trim() || null;
-        this.pushed = pushed;
+        this.pushed = pushed === "pushed"; this.behind = pushed === "behind";
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remote?.stdout ?? "")?.[1] ?? null;
         // Awaited in the finally so the read never outlives this refresh.
         const list = this.gh(["pr", "list", "--state", "open", "--limit", "100", "--json", OPEN]).catch(() => null);
@@ -188,13 +188,15 @@ export class PullRequest {
     });
   }
 
-  // gh pr create --web refuses a branch with no remote upstream or with commits past it.
+  // gh pr create --web refuses a branch unless it sits exactly on a remote upstream.
   async readPushed(cwd, on) {
-    const [up, ahead] = await Promise.all([
+    const [up, counts] = await Promise.all([
       exec("git", ["rev-parse", "--symbolic-full-name", "@{u}"], { cwd, on }).catch(() => null),
-      exec("git", ["rev-list", "--count", "@{u}..HEAD"], { cwd, on }).catch(() => null),
+      exec("git", ["rev-list", "--left-right", "--count", "@{u}...HEAD"], { cwd, on }).catch(() => null),
     ]);
-    return up?.code === 0 && up.stdout.trim().startsWith("refs/remotes/") && ahead?.code === 0 && String(ahead.stdout).trim() === "0";
+    if (up?.code !== 0 || !up.stdout.trim().startsWith("refs/remotes/") || counts?.code !== 0) return "unpushed";
+    const [behind, ahead] = String(counts.stdout).trim().split(/\s+/).map(Number);
+    return ahead !== 0 || Number.isNaN(ahead) ? "unpushed" : behind !== 0 ? "behind" : "pushed";
   }
 
   async readShown(context, want, list) {
@@ -321,7 +323,8 @@ export class PullRequest {
     this.busy = "Create"; this.note = null;
     cx.spawn(async (cx) => {
       try {
-        if (!(await this.readPushed(this.root, this.on))) throw new Error(`push ${this.branch ?? "the branch"} first`);
+        const now = await this.readPushed(this.root, this.on);
+        if (now !== "pushed") throw new Error(`${now === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
       } catch (e) { this.note = `Could not create it: ${String(e?.message ?? e)}`; }
@@ -566,7 +569,7 @@ export class PullRequest {
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => row(p, firsts[g] + k)))))
       .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
-        .child(div().text_size(12).text_color(c.dim).child(this.pushed ? `${this.branch} has no pull request yet.` : `Push ${this.branch} to GitHub to open one.`))
+        .child(div().text_size(12).text_color(c.dim).child(this.pushed ? `${this.branch} has no pull request yet.` : `${this.behind ? "Pull" : "Push"} ${this.branch} ${this.behind ? "from" : "to"} GitHub to open one.`))
         .when(this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }))))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
@@ -832,7 +835,7 @@ export class PullRequest {
     if (this.none) {
       if (!this.branch) return this.waiting(c, "No branch checked out", this.note);
       if (this.isBase()) return this.waiting(c, `No pull request for ${this.branch}.`, "It is the default branch; open one from another.");
-      if (!this.pushed) return this.waiting(c, `No pull request for ${this.branch}.`, this.note ?? "Push it to GitHub to open one.");
+      if (!this.pushed) return this.waiting(c, `No pull request for ${this.branch}.`, this.note ?? (this.behind ? "Pull it from GitHub to open one." : "Push it to GitHub to open one."));
       return this.waiting(c, `No pull request for ${this.branch}.`, this.note,
         quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
     }

@@ -15,7 +15,7 @@ release.
 
 ### Fixed
 
-- The pull request panel offers "Create it on GitHub" only where it can work: a branch pushed to a GitHub remote, with nothing left to push, that is not the default branch. A repository with no remote, or none on GitHub, gh not signed in, a detached HEAD, a branch with commits not pushed yet or the default branch now say so in one quiet line instead of showing a link that fails or a red "GitHub could not be read."
+- The pull request panel offers "Create it on GitHub" only where it can work: a branch level with its upstream on a GitHub remote that is not the default branch. A repository with no remote, or none on GitHub, gh not signed in, a detached HEAD, a branch ahead of or behind its upstream, or the default branch now say so in one quiet line instead of showing a link that fails or a red "GitHub could not be read."
 
 ## [3.18.4] - 2026-11-09
 

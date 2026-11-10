@@ -341,6 +341,18 @@ test("Pull request panel offers to create one only where gh can: a branch pushed
   r = await show(github, noPr, [other]);
   assert.equal(r.listLink, false, "nor in the list");
 
+  await git(github, "remote", "set-url", "origin", bare);
+  await git(github, "push", "-q", "origin", "feat");
+  await git(github, "remote", "set-url", "origin", "https://github.com/o/here.git");
+  await git(github, "reset", "-q", "--hard", "HEAD~1");
+  r = await show(github, noPr);
+  assert.equal(r.panel.pushed, false, "an upstream past HEAD is not this branch on GitHub");
+  assert.equal(r.panel.behind, true);
+  assert.equal(r.said.detail, "Pull it from GitHub to open one.");
+  assert.equal(r.link, false, "branch behind its upstream");
+  r = await show(github, noPr, [other]);
+  assert.equal(r.listLink, false, "nor in the list");
+
   await git(github, "checkout", "-q", "-b", "main");
   await git(github, "remote", "set-url", "origin", bare);
   await git(github, "push", "-q", "-u", "origin", "main");
