@@ -18,6 +18,10 @@ release.
 - Preview is now Images: the tab, the panel and the docs say so. The newest picture stays big; each picture is a circle, and the one you are on is filled with that picture's color. `herdr-app do 'kanso-tabs.look <path>'` is unchanged, and `kanso-tabs.gallery` still works.
 - Images keeps the pictures it has already found and reads a conversation only from where it left off. A picture whose file is gone leaves the row, and an agent with none is told what shows up here.
 
+### Fixed
+
+- A pin and its note stay on that picture when you move to another, until you send them.
+
 ## [3.18.4] - 2026-11-09
 
 ### Changed

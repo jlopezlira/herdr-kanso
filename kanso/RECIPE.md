@@ -823,7 +823,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and replaces its rows. A missing file is dropped; none yet is one line.
     Copies in `data/kanso-panel/look` draw the newest big (`image()` reads
     the app folder; HEIC/TIFF via `sips`/`magick`); each picture is a circle,
-    the active one filled with its color. A click drops a numbered pin and
+    the active one filled with its color. A click drops a numbered pin, kept on that picture until Send, and
     opens `kanso-prompt` with `shared: "kanso.look.note"` (`{[token]: {text,
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).

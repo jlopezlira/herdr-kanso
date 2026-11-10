@@ -434,6 +434,40 @@ test("a picture whose file is gone leaves the index, and the next one is shown",
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/c.png", "/repo/shots/a.png"]);
 });
 
+test("a pin and its note stay on their picture until Send", async () => {
+  const { look, cx, drain, calls, say } = await panel();
+  const [first, second] = look.list();
+  const spot = (x) => ({ local_position: { x, y: 10 }, bounds: { width: 300, height: 200 } });
+  const notes = () => look.pins.map((p) => p.note);
+  look.pin(spot(30), cx);
+  look.select(second, cx, true);
+  await drain();
+  say("on the first");
+  look.render(cx);
+  assert.deepEqual(clone(notes()), [], "the note does not land on the picture you moved to");
+  look.pin(spot(60), cx); say("on the second"); look.render(cx);
+  look.select(first, cx, true);
+  await drain();
+  assert.deepEqual(clone(notes()), ["on the first"], "leaving and coming back keeps the note");
+  assert.equal(Math.round(look.pins[0].x * 100), 10);
+  look.select(second, cx, true);
+  await drain();
+  assert.deepEqual(clone(notes()), ["on the second"]);
+  look.send(cx);
+  await drain();
+  assert.equal(look.pins.length, 0, "Send clears the picture that was sent");
+  assert.equal(calls.filter((c) => c[0] === "hc" && c[1] === "send").length, 1);
+  look.select(first, cx, true);
+  await drain();
+  assert.deepEqual(clone(notes()), ["on the first"], "the other picture's note is still there");
+  look.send(cx);
+  await drain();
+  assert.equal(look.pins.length, 0);
+  look.select(second, cx, true);
+  await drain();
+  assert.deepEqual(clone(notes()), [], "a sent picture does not get its pins back");
+});
+
 test("an agent with no pictures is told what shows up here", async () => {
   const { look, cx } = await panel({ screen: "nothing to see", files: [] });
   assert.equal(look.list().length, 0);

@@ -52,6 +52,7 @@ export class Look {
     this.follow = this.focusedTerminal() ?? live(kept.follow);
     this.items = []; this.asked = []; // what the agent printed; what `kanso-tabs.look` opened
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
+    this.kept = new Map(); // unsent pins, by picture, until Send
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.watching = null;
     this.asking = null; // { id, token }: the pin whose note a dialog asks for, and which dialog
     this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
@@ -81,6 +82,7 @@ export class Look {
     const now = this.pinned ? null : this.focusedTerminal();
     if (now && now !== this.follow) {
       // A note goes to the agent shown, so what another agent made is not left selected.
+      this.hold();
       this.follow = now; this.items = []; this.picked = false; this.readAt = 0;
       if (!this.asked.some((i) => i.path === this.selected?.path)) { this.selected = null; this.shown = null; this.pins = []; }
       this.keep();
@@ -110,6 +112,7 @@ export class Look {
         const other = (before?.front && written.front && before.front.pid !== written.front.pid) || (before?.file && written.file && before.file !== written.file);
         if (other && !this.asked.some((i) => i.path === this.selected?.path)) {
           this.items = []; this.picked = false; this.selected = null; this.shown = null; this.pins = [];
+          this.kept = new Map(); this.asking = null;
         }
         if (written.failed) return;
         // No record for a moment (an agent still starting): keep the conversation already read.
@@ -137,12 +140,17 @@ export class Look {
         };
         const still = (i) => this.list().some((k) => k.path === i.path);
         if (this.selected && !still(this.selected)) {
-          const at = previous.findIndex((i) => i.path === this.selected.path);
+          const gone = this.selected.path;
+          const at = previous.findIndex((i) => i.path === gone);
           const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
-          this.picked = false;
+          this.kept.delete(gone);
+          if (this.asking?.path === gone) this.asking = null;
+          this.pins = []; this.picked = false;
           if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
-          else { this.selected = null; this.shown = null; this.pins = []; }
+          else { this.selected = null; this.shown = null; }
         } else if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
+        const live = new Set(this.list().map((i) => i.path));
+        this.kept = new Map([...this.kept].filter(([path]) => live.has(path)));
         found.filter((i) => !i.color).forEach((i) => this.sample(i, written.file, cx));
       } catch { /* the next tick reads again */ }
       finally { this.reading = false; this.readAt = Date.now(); cx.notify(); }
@@ -163,10 +171,19 @@ export class Look {
     return [...this.asked, ...this.items.filter((i) => !asked.has(i.path))];
   }
 
+  // The picture being left keeps its unsent pins; the one shown gets its own back.
+  hold() {
+    const path = this.selected?.path;
+    if (!path) return;
+    if (this.pins.length) this.kept.set(path, this.pins);
+    else this.kept.delete(path);
+  }
+
   select(item, cx, picked) {
     this.picked = this.picked || picked;
     if (this.selected?.path === item.path) return;
-    this.selected = item; this.pins = []; this.shown = null; this.watching = null;
+    this.hold();
+    this.selected = item; this.pins = this.kept.get(item.path) ?? []; this.shown = null; this.watching = null;
     if (shows(item)) { this.draw(item, cx); this.watch(item, cx); }
     cx.notify();
   }
@@ -195,7 +212,7 @@ export class Look {
         this.shown = null;
         const next = this.list().find((i) => i.path !== path);
         if (next) this.select(next, cx, false);
-        else { this.selected = null; this.pins = []; }
+        else { this.hold(); this.selected = null; this.pins = []; }
         cx.notify();
         return;
       }
@@ -263,7 +280,7 @@ export class Look {
     if (!p) return;
     // Each dialog its own token: another window's answer, or an earlier one, is never taken for this pin's.
     const token = `${Date.now()}-${Math.random()}`;
-    this.asking = { id: p.id, token }; this.note = null;
+    this.asking = { id: p.id, token, path: this.selected.path }; this.note = null;
     openOverlay({ mod: "kanso-prompt", kind: "dialog", width: 420, props: {
       title: `Pin ${index + 1}`, field: "What about this spot?", value: p.note ?? "", button: p.note ? "Save" : "Add", shared: NOTE, token } });
     cx.notify();
@@ -273,11 +290,14 @@ export class Look {
   answer() {
     const box = shared(NOTE), token = this.asking?.token, a = token ? box?.[token] : null;
     if (!a) return;
-    const id = this.asking.id; this.asking = null;
+    const { id, path } = this.asking; this.asking = null;
     // Taken: out of the box, with whatever was left there over an hour ago (a dialog nobody read, another window's).
     setShared(NOTE, Object.fromEntries(Object.entries(box).filter(([k, v]) => k !== token && (v?.at ?? 0) > Date.now() - 3600000)));
-    if (a.text) this.pins = this.pins.map((p) => (p.id === id ? { ...p, note: a.text } : p));
-    else this.pins = this.pins.filter((p) => p.id !== id || p.note);
+    const pins = path === this.selected?.path ? this.pins : (this.kept.get(path) ?? []);
+    const next = a.text ? pins.map((p) => (p.id === id ? { ...p, note: a.text } : p)) : pins.filter((p) => p.id !== id || p.note);
+    if (path === this.selected?.path) this.pins = next;
+    else if (next.length) this.kept.set(path, next);
+    else this.kept.delete(path);
   }
 
   drop(index, cx) {
@@ -294,17 +314,22 @@ export class Look {
   }
 
   send(cx) {
-    const item = this.selected, address = this.agent();
-    if (!noted(this.pins).length || !item || this.sending) return;
+    const item = this.selected, address = this.agent(), pins = this.pins;
+    if (!noted(pins).length || !item || this.sending) return;
     if (!address) { this.note = { error: true, text: "No agent to send to" }; cx.notify(); return; }
     const { name, status } = this.who(address);
     if (status === "blocked") { this.note = { error: true, text: waitingNote([name]) }; cx.notify(); return; }
     const picture = this.shown?.path === item.path ? this.shown.picture : undefined;
     this.sending = true; cx.notify();
     cx.spawn(async (cx) => {
-      const r = await deliver(address, aboutMessage(item, this.pins, picture), "you");
+      const r = await deliver(address, aboutMessage(item, pins, picture), "you");
       this.sending = false;
-      if (r.code === 0) { this.pins = []; this.note = { text: `Sent to ${name}.` }; }
+      if (r.code === 0) {
+        this.kept.delete(item.path);
+        if (this.selected?.path === item.path) this.pins = [];
+        if (this.asking?.path === item.path) this.asking = null;
+        this.note = { text: `Sent to ${name}.` };
+      }
       else this.note = { error: true, text: `Not sent: ${(r.stderr || r.stdout || "hc send failed").trim()}` };
       cx.notify();
     });
@@ -385,7 +410,7 @@ export class Look {
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))
         .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(this.note?.error ? c.red : c.dim).child(status)))
         .child(quietLink("look-open", "Open", () => openPath(item.path), c))
-        .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.asking = null; cx.notify(); }, c)))
+        .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(item.path); this.asking = null; cx.notify(); }, c)))
         .child(Button.new("look-send").h(H.compact).px(G.md).flex_none().items_center().rounded(R.control).bg(c.primary)
           .when(!ready, (b) => b.opacity(0.45))
           .when(ready, (b) => b.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.send(cx)))
