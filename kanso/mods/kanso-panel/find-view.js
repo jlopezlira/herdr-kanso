@@ -1,27 +1,24 @@
 import { div, list, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
-import { tokens, skeleton, controlInput, iconButton, G, H, R, T } from "./ui.js";
+import { tokens, skeleton, controlInput, iconButton, G, H, R, T, ICON, EASE } from "./ui.js";
 import { markdownView } from "./lib.js";
+import { tryOr } from "./pure.js";
 import {
   locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
-  chooseMatch, layOut, partsOf, excerptLines, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, findChord, EXCERPT, DRAW,
+  chooseMatch, layOut, partsOf, wordsByLine, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, findChord, FIND, EXCERPT, DRAW,
 } from "./find.js";
 
 const WAIT = 120;
-const EASE = { duration: 180, easing: "ease-out" };
 const MAX = 300; // the list stops here so Find does not cover the terminal
-const FIND = "kanso.find";
 
 function hintOf(address) {
-  const agent = agents().find((a) => a.address === address);
+  const agent = tryOr(() => agents().find((a) => a.address === address));
   return [agent?.app, agent?.program?.key].filter(Boolean).join(" ");
 }
 
 export class Find {
-  constructor() {
-    this.fits = true;
-  }
+  static fits = true;
 
   init(cx, p) {
     const remembered = keptQuery({ queries: this.kept }, p?.terminal);
@@ -85,7 +82,8 @@ export class Find {
     if (scroll) this.pendingScroll = true;
   }
 
-  clearMatch() {
+  clear() {
+    this.query = "";
     this.hits = [];
     this.at = 0;
     this.open = false;
@@ -96,17 +94,16 @@ export class Find {
     this.gen = this.gen + 1;
     const gen = this.gen;
     if (blankQuery(this.pending)) {
-      this.query = "";
-      this.clearMatch();
+      this.clear();
       cx.notify();
-      return;
+    } else {
+      this.arm(cx);
+      cx.timer.after(WAIT, (cx) => {
+        if (this.gone || gen !== this.gen || this.pending === this.query) return;
+        this.apply(chooseMatch(this.snap(), this.index, { key: "type" }));
+        cx.notify();
+      });
     }
-    this.arm(cx);
-    cx.timer.after(WAIT, (cx) => {
-      if (this.gone || gen !== this.gen || this.pending === this.query) return;
-      this.apply(chooseMatch(this.snap(), this.index, { key: "type" }));
-      cx.notify();
-    });
   }
 
   arm(cx) {
@@ -153,8 +150,7 @@ export class Find {
     if (!blankQuery(this.pending) || !blankQuery(this.query) || this.open) {
       this.input.set_value("");
       this.pending = "";
-      this.query = "";
-      this.clearMatch();
+      this.clear();
       this.gen = this.gen + 1;
       cx.notify();
       return;
@@ -167,7 +163,7 @@ export class Find {
     this.index = extendIndex(this.index, this.state.turns, applied.from, applied.reindex);
     this.loading = false;
     if (blankQuery(this.query)) {
-      this.clearMatch();
+      this.clear();
       return;
     }
     const prev = keep ? this.hits[this.at] : null;
@@ -176,9 +172,11 @@ export class Find {
   }
 
   restart() {
+    const query = this.query; // the file shrank; the same query is searched again
     this.state = freshRead();
     this.index = [];
-    this.clearMatch();
+    this.clear();
+    this.query = query;
   }
 
   async locate(cx) {
@@ -255,7 +253,7 @@ export class Find {
   bar(c, count, field) {
     const quiet = !count || count === "No matches";
     return h_flex().w_full().flex_none().px(G.md).py(G.sm).gap(G.sm).items_center()
-      .child(svg("mods/kanso-chrome/icons/search.svg").size(15).flex_none().text_color(c.muted))
+      .child(svg("mods/kanso-chrome/icons/search.svg").size(ICON).flex_none().text_color(c.muted))
       .child(field ? controlInput(field, c).flex_1() : div().flex_1().h(H.control))
       .child(div().flex_none().text_size(T.value).text_color(quiet ? c.dim : c.muted).whitespace_nowrap().child(count ?? ""))
       .child(iconButton("find-prev", "chevron-up", "Previous match", (cx) => this.move(true, cx), c, { disabled: !this.hits?.length }))
@@ -271,7 +269,7 @@ export class Find {
       const el = div().text_size(T.card).child(w);
       return mark ? el.rounded(R.control).px(G.xs).bg(c.highlight).text_color(c.accent) : el.text_color(c.muted);
     };
-    return v_flex().w_full().children(excerptLines(parts).map((line) => (
+    return v_flex().w_full().children(wordsByLine(parts).map((line) => (
       line.length
         ? h_flex().w_full().flex_wrap().gap_x(G.xs).children(line.map(word))
         : div().text_size(T.card).child(" ")
@@ -348,6 +346,13 @@ export class Find {
       }).child(content));
   }
 
+  bodyOf(c, t, laid, showSkel) {
+    if (this.open) return this.reading(c, t);
+    if (laid.items.length) return this.listBox(c, laid);
+    if (showSkel) return v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1].map((i) => skeleton(c).row(i)));
+    return div().px(G.md).py(G.sm).text_size(T.small).text_color(c.dim).child("This conversation is no longer there.");
+  }
+
   render(cx) {
     const t = theme();
     const c = tokens(t);
@@ -367,13 +372,7 @@ export class Find {
       ? layOut(this.hits, this.at, DRAW, (hit) => this.state.turns[hit.turn]?.at)
       : { items: [], focus: 0 };
     const show = this.open || laid.items.length > 0 || showSkel || (this.missing && !blankQuery(this.pending) && !this.loading);
-    const body = this.open
-      ? this.reading(c, t)
-      : laid.items.length
-        ? this.listBox(c, laid)
-        : showSkel
-          ? v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1].map((i) => skeleton(c).row(i)))
-          : div().px(G.md).py(G.sm).text_size(T.small).text_color(c.dim).child("This conversation is no longer there.");
+    const body = this.bodyOf(c, t, laid, showSkel);
     const root = v_flex().id("find").w_full().rounded(R.card).bg(c.canvas).border_1().border_color(c.border)
       .text_color(t.foreground).track_focus(this.handle).on_key_down(onKey)
       .opacity(this.leaving ? 0 : 1).transition("opacity", EASE)

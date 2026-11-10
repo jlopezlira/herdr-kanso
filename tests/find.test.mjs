@@ -10,7 +10,7 @@ import {
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
   resolveFind, locateConversation, kindOf, sessionLive,
   blankQuery, layOut, chooseMatch, indexTurns, readable, dayLabel, keptQuery, withQuery, findChord,
-  excerptLines, sessionPath, transcriptPath, projectDir,
+  wordsByLine, sessionPath, transcriptPath, projectDir, FIND,
 } from "../kanso/mods/kanso-panel/find.js";
 
 const line = (row) => JSON.stringify(row);
@@ -270,6 +270,19 @@ test("A slice keeps whole lines, skips a pasted picture, and a missing file is n
   const win = await readSlice(exec, crlf, 0, 10000, 60);
   assert.deepEqual(readTurns(win.body).map((turn) => turn.text), ["win"]);
   assert.equal(applySlice({ ...freshRead(), size: 50 }, { end: 10, size: 10, body: "" }).reset, true);
+  const calls = [];
+  const fake = async (cmd) => {
+    calls.push(cmd);
+    if (cmd === "python3") return { code: 127, stdout: "" };
+    return { code: 0, stdout: "4 4\n" };
+  };
+  const fallen = await readSlice(fake, join(dir, "c.jsonl"), 0);
+  assert.deepEqual(calls, ["python3", "python"]);
+  assert.equal(fallen.end, 4);
+  const once = [];
+  const missingPy = async (cmd) => { once.push(cmd); return { code: 2, stdout: "" }; };
+  assert.equal(await readSlice(missingPy, join(dir, "gone.jsonl"), 0), null);
+  assert.deepEqual(once, ["python3"]);
 });
 
 test("Find opens from Cmd+F and from Ctrl+F", () => {
@@ -321,11 +334,15 @@ test("No conversation, a shell, or a remote terminal falls back to the terminal'
 });
 
 test("An excerpt keeps marked words on their line, and a transcript is joined under the home folder", () => {
-  assert.deepEqual(excerptLines([{ text: "hola mundo", mark: false }, { text: "lindo", mark: true }]), [[
+  assert.equal(FIND, "kanso.find");
+  assert.equal(readFileSync(new URL("../kanso/mods/kanso-strip/find-key.js", import.meta.url), "utf8"), readFileSync(new URL("../kanso/mods/kanso-panel/find-key.js", import.meta.url), "utf8"));
+  assert.equal(readFileSync(new URL("../kanso/mods/kanso-strip/main.js", import.meta.url), "utf8").includes('"kanso.find"'), false);
+  assert.equal(readFileSync(new URL("../kanso/mods/kanso-panel/find-view.js", import.meta.url), "utf8").includes('"kanso.find"'), false);
+  assert.deepEqual(wordsByLine([{ text: "hola mundo", mark: false }, { text: "lindo", mark: true }]), [[
     { w: "hola", mark: false }, { w: "mundo", mark: false }, { w: "lindo", mark: true },
   ]]);
-  assert.deepEqual(excerptLines([{ text: "a\nb", mark: true }]), [[{ w: "a", mark: true }], [{ w: "b", mark: true }]]);
-  assert.deepEqual(excerptLines([]), [[]]);
+  assert.deepEqual(wordsByLine([{ text: "a\nb", mark: true }]), [[{ w: "a", mark: true }], [{ w: "b", mark: true }]]);
+  assert.deepEqual(wordsByLine([]), [[]]);
   assert.equal(sessionPath("/home/me", 9), join("/home/me", ".claude", "sessions", "9.json"));
   assert.equal(transcriptPath({ sessionId: "abc", cwd: "/repo" }, "/home/me"), join("/home/me", ".claude", "projects", "-repo", "abc.jsonl"));
   assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null);

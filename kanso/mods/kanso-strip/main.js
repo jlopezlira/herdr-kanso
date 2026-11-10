@@ -10,6 +10,7 @@ import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, 
 import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from "./layout.js";
 import { tryOr, tryOrAsync } from "./pure.js";
+import { FIND } from "./find-key.js";
 import { rollupState, mergeReadiness, checkSummary, onePerJob, checkState } from "./ghchecks.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
@@ -672,9 +673,9 @@ export default class Strip extends View {
   openFind() {
     const term = focused()?.terminal;
     if (!term || String(term).includes("/")) { run("terminal.search"); return; }
-    const live = shared("kanso.find");
-    // A window keeps Escape, and stays the size of the bar; a dialog is centered and dims the whole window.
-    if (live?.terminal === term) { setShared("kanso.find", { ...live, select: (live.select ?? 0) + 1 }); return; }
+    const live = shared(FIND);
+    if (live?.terminal === term) { setShared(FIND, { ...live, select: (live.select ?? 0) + 1 }); return; }
+    // A window keeps Escape and stays the size of the bar. A dialog is centered and dims the whole window.
     openOverlay({ mod: "kanso-panel", kind: "window", frame: "none", width: 540, key: "kanso-find", props: { panel: "find", terminal: term } });
   }
 

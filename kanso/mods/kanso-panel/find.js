@@ -1,6 +1,8 @@
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
 import { join } from "path";
 import { etimeMs } from "./procs.js";
+import { FIND } from "./find-key.js";
+export { FIND };
 
 export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
 export const LINE_MAX = 100000;
@@ -124,7 +126,7 @@ function addLine(lines, text, mark, fresh) {
   return lines.concat([words]);
 }
 
-export function excerptLines(parts) {
+export function wordsByLine(parts) {
   const list = Array.isArray(parts) ? parts : [];
   const lines = list.reduce((acc, part) => String(part?.text ?? "").split("\n").reduce(
     (state, bit, i) => addLine(state, bit, part?.mark, i > 0),
