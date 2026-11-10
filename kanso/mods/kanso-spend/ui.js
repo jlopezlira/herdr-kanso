@@ -91,16 +91,16 @@ export class Armed {
 }
 
 export function toggleSwitch(id, checked, onChange, c, { label = "Toggle" } = {}) {
-  return Toggle.new(id).w(36).h(20).p(2).items_center().rounded_full()
-    .bg(checked ? c.primary : c.raised).border_1().border_color(checked ? c.primary : c.input)
+  // Toggle centers its child; justify pins the knob. The 1px border is inside the box.
+  const pad = G.xs, knob = H.compact - pad * 2 - 2;
+  return Toggle.new(id).w(knob * 2 + pad * 2 + 2).h(H.compact).p(pad).items_center()
+    .justify_start().when(checked, (el) => el.justify_end())
+    .rounded_full().bg(checked ? c.primary : c.raised).border_1().border_color(checked ? c.primary : c.input)
     .cursor_pointer().pressed(checked)
     .accessibility_label(label)
     .on_change((next, cx) => { onChange(next, cx); cx.notify(); })
-    .hover((s) => s.border_color(checked ? c.primary : c.input))
     .focus((s) => s.border_color(c.accent))
-    .child(div().size(14).flex_none().rounded_full()
-      .bg(checked ? c.primaryText : c.muted)
-      .when(checked, (el) => el.ml(16)));
+    .child(div().size(knob).flex_none().rounded_full().bg(checked ? c.primaryText : c.muted));
 }
 
 export function controlInput(el, c) {
