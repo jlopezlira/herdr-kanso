@@ -467,8 +467,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent finds its conversation, ignoring case and accents, and shows it.
 - **Kanso settings** (kanso-settings, the gear): Keys rebinds Kanso-only keys,
-  Mods orders and hides panels and pieces, Sync shares token spend when a
-  computer is on, What's new, Credits.
+  Mods orders and hides panels and pieces, Sync shares token spend when both
+  computers are on this version, What's new, Credits.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.

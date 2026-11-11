@@ -1,6 +1,7 @@
 // Ports' history, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // No host calls here, so the tests load it as is.
-import { parseOr } from "./pure.js";
+import { parseOr, clock } from "./pure.js";
+export { clock };
 
 /** ports.json older than this means the guard stopped. */
 export const STALE_MS = 3 * 60_000;
@@ -28,13 +29,6 @@ export function lasted(ms) {
   if (n < HOUR) return `${Math.round(n / 60_000)} min`;
   if (n < 2 * DAY) return `${Math.round(n / HOUR)} h`;
   return `${Math.round(n / DAY)} d`;
-}
-
-export function clock(ms, now = Date.now()) {
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "";
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  return new Date(now).toDateString() === d.toDateString() ? time : `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`;
 }
 
 const day = (ms) => `${MONTHS[new Date(ms).getMonth()]} ${new Date(ms).getDate()}`;

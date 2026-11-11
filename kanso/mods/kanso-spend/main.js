@@ -3,11 +3,12 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines } from "herdr";
+import { mkdir } from "fs/promises";
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
-import { tryOr, tryOrAsync } from "./pure.js";
-import { EXCHANGE_MS, MKDIR_SOURCE, clock, configFrom, exchangeAll, identityFrom, periodKeyOf, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncOn } from "./sync.js";
+import { clock, tryOr, tryOrAsync } from "./pure.js";
+import { EXCHANGE_MS, configFrom, exchangeAll, holdsOf, identityFrom, joinUnder, periodKeyOf, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
 
 const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
@@ -106,6 +107,7 @@ export default class TokenSpend extends View {
     this.settingsNote = null;
     this.openMenu = null;
     this.menuOptions = null;
+    this.syncHolds = [];
 
     this.ticker = null;
     this.awake = false;
@@ -298,25 +300,25 @@ export default class TokenSpend extends View {
     if (!this.awake || this.closed) return;
     const now = Date.now();
     if (!force && this.syncOffUntil > now) return;
-    const dir = `${appHome()}/data/kanso-sync`;
-    const config = configFrom(await readTextFile(`${dir}/config.json`).catch(() => null));
-    if (!syncOn(config)) { this.syncOffUntil = now + EXCHANGE_MS; return; }
+    const dir = syncDir(appHome());
+    const config = configFrom(await readTextFile(joinUnder(dir, "config.json")).catch(() => null));
+    if (!syncOn(config)) { this.syncOffUntil = now + EXCHANGE_MS; this.syncHolds = []; return; }
     this.syncOffUntil = 0;
     const periodKey = periodKeyOf(this.cost);
     const options = { today: this.options().today, cost: { period: this.cost.period, offset: Number(this.cost.offset) || 0, project: "all", model: "all" } };
-    const self = this.costs?.syncSelf || identityFrom(await readTextFile(`${dir}/identity.json`).catch(() => null), () => "", "").id;
+    const self = this.costs?.syncSelf || identityFrom(await readTextFile(joinUnder(dir, "identity.json")).catch(() => null), () => "", "").id;
     const out = await exchangeAll({ exec }, {
-      config, peers: machines(), status: statusFrom(await readTextFile(`${dir}/status.json`).catch(() => null)),
-      rows: rowsFrom(await readTextFile(`${dir}/rows.json`).catch(() => null)),
+      config, peers: machines(), status: statusFrom(await readTextFile(joinUnder(dir, "status.json")).catch(() => null)),
+      rows: rowsFrom(await readTextFile(joinUnder(dir, "rows.json")).catch(() => null)),
       self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
       now, periodKey, options,
     });
-    if (!out.ran || !this.awake || this.closed) return;
-    const bin = this.nodeBinary || "node";
-    const made = await exec(bin, ["--input-type=module", "-e", MKDIR_SOURCE, "--", dir]);
-    if (made?.code) return;
-    const rowsFile = `${dir}/rows.json`;
-    const statusFile = `${dir}/status.json`;
+    if (!this.awake || this.closed) return;
+    this.syncHolds = holdsOf(out.status);
+    if (!out.ran) return;
+    await mkdir(dir, { recursive: true });
+    const rowsFile = joinUnder(dir, "rows.json");
+    const statusFile = joinUnder(dir, "status.json");
     await writeTextFile(rowsFile, rowsText(out.rows), await readTextFile(rowsFile).catch(() => null));
     await writeTextFile(statusFile, statusText(out.status), await readTextFile(statusFile).catch(() => null));
     this.run("prepare", cx);
@@ -528,6 +530,10 @@ export default class TokenSpend extends View {
       .child(this.controls(c, Boolean(top)))
       .child(this.hero(c, data.hero, narrow))
       .when(!top && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
+      .when(!top && (this.syncHolds?.length ?? 0) > 0, (el) => el.child(v_flex().w_full().gap(G.xs).pt(G.sm)
+        .children(this.syncHolds.map((hold) => h_flex().w_full().items_center().gap(G.md)
+          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(hold.id))
+          .child(div().text_size(12).text_color(c.muted).child(hold.text))))))
       .when(!data.hero.empty, (el) => el
         .child(this.chart(c, data.chart))
         .when(!top && Array.isArray(data.live) && data.live.length > 0, (live) => live.child(this.live(c, data.live)))

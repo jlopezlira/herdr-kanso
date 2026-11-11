@@ -36,3 +36,13 @@ export async function mapSeries(list, fn, from = 0, to = list.length) {
 export async function reduceSeries(list, fn, acc, i = 0) {
   return i >= list.length ? acc : reduceSeries(list, fn, await fn(acc, list[i], i), i + 1);
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const pad2 = (n) => String(n).padStart(2, "0");
+
+export function clock(ms, now = Date.now()) {
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "";
+  const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return new Date(now).toDateString() === d.toDateString() ? time : `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`;
+}

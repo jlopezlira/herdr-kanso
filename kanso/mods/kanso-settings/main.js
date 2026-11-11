@@ -2,13 +2,14 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, exec, run, machines } from "herdr";
+import { mkdir } from "fs/promises";
 import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe } from "./ui.js";
 import { glyphs, keycap } from "./marks.js";
 import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { parseChangelog, plain, compare } from "./changelog.js";
 import { tryOr, tryOrAsync } from "./pure.js";
-import { MKDIR_SOURCE, configFrom, statusFrom, syncRoster, withKind, withPeer } from "./sync.js";
+import { configFrom, joinUnder, statusFrom, syncDir, syncRoster, withKind, withPeer } from "./sync.js";
 
 const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "sync", label: "Sync" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
 const PLACES = [
@@ -327,9 +328,9 @@ export default class Settings extends View {
     const generation = this.syncLoad + 1;
     this.syncLoad = generation;
     cx.spawn(async (syncCx) => {
-      const dir = `${appHome()}/data/kanso-sync`;
-      const configText = await tryOrAsync(() => readTextFile(`${dir}/config.json`));
-      const statusText = await tryOrAsync(() => readTextFile(`${dir}/status.json`));
+      const dir = syncDir(appHome());
+      const configText = await tryOrAsync(() => readTextFile(joinUnder(dir, "config.json")));
+      const statusText = await tryOrAsync(() => readTextFile(joinUnder(dir, "status.json")));
       if (this.syncLoad !== generation) return;
       this.syncConfig = configFrom(configText);
       this.syncStatus = statusFrom(statusText);
@@ -355,7 +356,7 @@ export default class Settings extends View {
       const machinesChanged = Boolean(next) && JSON.stringify(next) !== JSON.stringify(this.syncMachines);
       if (machinesChanged) this.syncMachines = next;
       timerCx.spawn(async (readCx) => {
-        const status = statusFrom(await tryOrAsync(() => readTextFile(`${appHome()}/data/kanso-sync/status.json`)));
+        const status = statusFrom(await tryOrAsync(() => readTextFile(joinUnder(syncDir(appHome()), "status.json"))));
         if (this.page !== "sync") return;
         const statusChanged = JSON.stringify(status) !== JSON.stringify(this.syncStatus);
         if (statusChanged) this.syncStatus = status;
@@ -384,11 +385,10 @@ export default class Settings extends View {
   }
 
   async persistSync(config, cx) {
-    const dir = `${appHome()}/data/kanso-sync`;
-    const file = `${dir}/config.json`;
+    const dir = syncDir(appHome());
+    const file = joinUnder(dir, "config.json");
     try {
-      const made = await exec("node", ["--input-type=module", "-e", MKDIR_SOURCE, "--", dir]);
-      if (made?.code) throw new Error("mkdir");
+      await mkdir(dir, { recursive: true });
       const prev = await readTextFile(file);
       const text = `${JSON.stringify(config)}\n`;
       if (prev !== text) await writeTextFile(file, text, prev);

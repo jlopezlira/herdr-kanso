@@ -1,11 +1,18 @@
 // Runs on one computer: writes only that computer's spend row, and keeps everyone else's as they arrived.
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
-import { appHomeFrom, syncPaths, identityFrom, identityText, rowsFrom, rowsText, pull, mergeRows, rowFromCosts, costsOf } from "./sync.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseOr } from "./pure.js";
+import { appHomeFrom, syncPaths, identityFrom, identityText, rowsFrom, rowsText, pull, mergeRows, rowFromCosts, versionFrom, PROTOCOL } from "./sync.js";
+
+const costsOf = (body) => (body?.costs?.hero ? body.costs : body);
+const samePath = (left, right) => {
+  try { return Boolean(left) && realpathSync(left) === realpathSync(right); }
+  catch { return false; }
+};
 
 export async function exchange(payload, deps = {}) {
   const join = deps.join ?? path.join;
@@ -15,7 +22,8 @@ export async function exchange(payload, deps = {}) {
   const home = deps.homedir ?? os.homedir();
   const appHome = deps.appHome ?? appHomeFrom(deps.env ?? process.env, home, join);
   const paths = syncPaths(appHome, join);
-  if (!exists(paths.presenter)) return { reason: "no-kanso" };
+  const version = versionFrom(await read(paths.version));
+  if (!exists(paths.presenter)) return { reason: "update", version, protocol: PROTOCOL };
   await fs.mkdir(paths.dir, { recursive: true });
   const idFile = join(paths.dir, "identity.json");
   const rowFile = join(paths.dir, "rows.json");
@@ -35,5 +43,12 @@ export async function exchange(payload, deps = {}) {
   })();
   const rows = own ? mergeRows(pulled, [own]) : pulled;
   await fs.writeFile(rowFile, rowsText(rows));
-  return { machine: identity.id, rows };
+  return { machine: identity.id, version, protocol: PROTOCOL, rows };
+}
+
+if (samePath(process.argv[1], fileURLToPath(import.meta.url))) {
+  exchange(parseOr(process.argv[2] ?? "", {})).then(
+    (value) => process.stdout.write(`${JSON.stringify(value)}\n`),
+    () => process.stdout.write(`${JSON.stringify({ reason: "update", version: "", protocol: PROTOCOL })}\n`),
+  );
 }

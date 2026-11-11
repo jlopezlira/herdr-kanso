@@ -1,7 +1,7 @@
 // Each computer keeps its own spend ledger. Sync only adds the others.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
@@ -10,7 +10,10 @@ import { temporary } from "./helpers.mjs";
 const runFile = promisify(execFile);
 const { exchange } = await import("../kanso/mods/kanso-spend/sync-probe.mjs");
 const { foldCosts } = await import("../kanso/mods/kanso-spend/sync-spend.js");
+const { clock } = await import("../kanso/mods/kanso-spaces/pure.js");
 const sync = await import("../kanso/mods/kanso-settings/sync.js");
+const shipped = JSON.parse(await readFile(new URL("../kanso/mods/kanso-chrome/version.json", import.meta.url), "utf8")).version;
+const reply = (rows) => ({ machine: PEER, version: sync.MIN_VERSION, protocol: sync.PROTOCOL, rows });
 
 const SELF = "11111111-2222-4333-8444-555555555555";
 const PEER = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
@@ -59,7 +62,7 @@ test("A computer does not take another computer's ledger, or give its own away",
   const out = await sync.exchangeAll({
     exec: async (command, args, options) => {
       calls.push({ command, args, options });
-      return { code: 0, stdout: JSON.stringify({ machine: PEER, rows: forged }) };
+      return { code: 0, stdout: JSON.stringify(reply(forged)) };
     },
   }, {
     config: on(), peers: ready(), status: {}, rows: local, self: SELF, own: local[0],
@@ -67,7 +70,8 @@ test("A computer does not take another computer's ledger, or give its own away",
   });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, "node");
-  assert.ok(Array.isArray(calls[0].args));
+  assert.deepEqual(calls[0].args[0], sync.PROBE_REL);
+  assert.equal(JSON.parse(calls[0].args[1]).push[0].machine, SELF);
   assert.equal(calls[0].options.on, "odin");
   assert.equal(calls[0].options.timeout, 25_000);
   assert.equal(out.rows.find((row) => row.machine === SELF).body.usd, 1);
@@ -134,10 +138,11 @@ test("Sync off, or a computer that is not connected, asks nothing", async () => 
 
 test("A computer out of reach keeps the last figures, then waits longer", async () => {
   const rows = [spend(PEER, 7, "2026-11-10T01:00:00.000Z", { name: "odin" })];
-  const status = { odin: { at: NOW - 10_000, failures: 0, reason: null, synced_at: "2026-11-10T14:00:00.000Z", machine: PEER, period: "month:0" } };
+  const status = { odin: { at: NOW - 10_000, failures: 0, reason: null, synced_at: "2026-11-10T14:00:00.000Z", machine: PEER, period: "month:0", marker: "keep" } };
   const kept = sync.applyExchange(rows, status, { id: "odin", name: "odin" }, null, NOW, "month:0");
   assert.equal(kept.rows, rows);
   assert.equal(kept.status.odin.synced_at, status.odin.synced_at);
+  assert.equal(kept.status.odin.marker, "keep");
   assert.equal(kept.status.odin.reason, "unreachable");
   assert.equal(kept.status.odin.failures, 1);
   assert.equal(sync.due(kept.status.odin, NOW + sync.delayMs(1) - 1, "month:0"), false);
@@ -156,39 +161,57 @@ test("A computer out of reach keeps the last figures, then waits longer", async 
   assert.equal(sync.due(undefined, NOW, "month:0"), true);
 });
 
-test("A computer without kansō is said so, and nothing is written there", async (t) => {
+test("A computer on an older kansō says to update it, and nothing is written there", async (t) => {
+  assert.equal(sync.MIN_VERSION, shipped);
   const empty = await temporary(t);
   const missing = await exchange({}, { appHome: empty });
-  assert.deepEqual(missing, { reason: "no-kanso" });
+  assert.deepEqual(missing, { reason: "update", version: "", protocol: sync.PROTOCOL });
   assert.deepEqual(await readdir(empty), []);
 
-  const rows = [spend(PEER, 7, "2026-11-10T01:00:00.000Z")];
-  const out = await sync.exchangeAll({
-    exec: async () => ({ code: 0, stdout: "noise\n" + JSON.stringify({ reason: "no-kanso" }) }),
+  const rows = [spend(SELF, 1, "2026-11-10T00:00:00.000Z")];
+  const stale = await sync.exchangeAll({
+    exec: async () => ({ code: 0, stdout: `noise\n${JSON.stringify({ machine: PEER, version: "3.21.1", protocol: 1, rows: [spend(PEER, 9, "2026-11-11T00:00:00.000Z")] })}` }),
   }, { config: on(), peers: ready(), status: {}, rows, self: SELF, now: NOW, periodKey: "month:0" });
-  assert.equal(out.rows, rows);
-  assert.equal(out.status.odin.reason, "no-kanso");
-  assert.equal(out.status.odin.failures, 1);
+  assert.equal(stale.rows, rows);
+  assert.equal(stale.status.odin.reason, "update");
+  assert.equal(sync.holdsOf(stale.status)[0].text, sync.UPDATE_TEXT);
+
+  const absent = await sync.exchangeAll({
+    exec: async () => ({ code: 1, stderr: "Error: Cannot find module" }),
+  }, { config: on(), peers: ready(), status: {}, rows, self: SELF, now: NOW, periodKey: "month:0" });
+  assert.equal(absent.status.odin.reason, "update");
+  assert.equal(sync.due(absent.status.odin, NOW + sync.delayMs(1) - 1, "month:0"), false);
 
   const home = await temporary(t);
-  const { stdout } = await runFile(process.execPath, ["--input-type=module", "-e", sync.LOADER_SOURCE, "--", "{}"], {
-    env: { ...process.env, HERDR_APP_HOME: home, HOME: home, USERPROFILE: home },
+  const app = path.join(home, ".config", "herdr-app");
+  const custom = await temporary(t);
+  const probeDir = path.join(app, "mods", "kanso-spend");
+  await mkdir(path.join(custom, "mods", "kanso-chrome"), { recursive: true });
+  await mkdir(probeDir, { recursive: true });
+  const fromMod = (name) => new URL(`../kanso/mods/kanso-spend/${name}`, import.meta.url);
+  await copyFile(fromMod("sync-probe.mjs"), path.join(probeDir, "sync-probe.mjs"));
+  await copyFile(fromMod("sync.js"), path.join(probeDir, "sync.js"));
+  await copyFile(fromMod("pure.js"), path.join(probeDir, "pure.js"));
+  await writeFile(path.join(custom, "mods", "kanso-chrome", "version.json"), `${JSON.stringify({ version: "3.21.0" })}\n`);
+  const { stdout } = await runFile(process.execPath, [sync.PROBE_REL, "{}"], {
+    cwd: home,
+    env: { ...process.env, HOME: home, USERPROFILE: home, HERDR_APP_HOME: custom },
   });
-  assert.deepEqual(JSON.parse(stdout), { reason: "no-kanso" });
-  assert.deepEqual(await readdir(home), []);
+  assert.deepEqual(JSON.parse(stdout), { reason: "update", version: "3.21.0", protocol: sync.PROTOCOL });
+  assert.deepEqual(await readdir(custom), ["mods"]);
 
   const day = new Date(2026, 10, 10, 9, 5, 0);
   const later = new Date(2026, 10, 10, 15, 4, 0);
-  assert.equal(sync.clock(day.toISOString(), later.getTime()), "09:05");
-  assert.equal(sync.clock(new Date(2026, 10, 9, 9, 5, 0).toISOString(), later.getTime()), "Nov 9");
+  assert.equal(clock(day.toISOString(), later.getTime()), "09:05");
+  assert.equal(clock(new Date(2026, 10, 9, 9, 5, 0).toISOString(), later.getTime()), "Nov 9 09:05");
   const roster = sync.syncRoster(
     [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
     on(),
-    { odin: out.status.odin },
+    { odin: stale.status.odin },
     later.getTime(),
   );
   assert.equal(roster.state, "peers");
-  assert.equal(roster.peers[0].state.text, "No kansō there");
+  assert.equal(roster.peers[0].state.text, "Update kanso there");
   assert.equal(sync.syncRoster([{ name: null, layout: "ready" }], {}, {}, later.getTime()).state, "empty");
   assert.equal(sync.syncRoster([], {}, {}, later.getTime()).state, "loading");
   const enabled = sync.withPeer({ version: 1, peers: {} }, "odin", true);
@@ -196,18 +219,39 @@ test("A computer without kansō is said so, and nothing is written there", async
   assert.equal(sync.syncOn(sync.withKind(enabled, "odin", "spend", false)), false);
 });
 
-test("Paths are built with the other computer's path API", () => {
+test("Paths are built with the other computer's path API", async () => {
   const join = path.win32.join;
   const home = sync.appHomeFrom({}, "C:\\Users\\me", join);
   const paths = sync.syncPaths(home, join);
   assert.equal(home, "C:\\Users\\me\\.config\\herdr-app");
   assert.equal(paths.store, "C:\\Users\\me\\.config\\herdr-app\\data\\kanso-spend\\store.json");
   assert.equal(paths.probe, "C:\\Users\\me\\.config\\herdr-app\\mods\\kanso-spend\\sync-probe.mjs");
+  assert.equal(paths.version, "C:\\Users\\me\\.config\\herdr-app\\mods\\kanso-chrome\\version.json");
   assert.equal(sync.appHomeFrom({ HERDR_APP_HOME: "D:\\herdr" }, "C:\\Users\\me", join), "D:\\herdr");
-  const argv = sync.loaderArgv({ push: [] });
-  assert.ok(argv.every((part) => typeof part === "string"));
-  assert.deepEqual(argv.slice(0, 2), ["--input-type=module", "-e"]);
-  assert.equal(argv[3], "--");
-  assert.doesNotMatch(argv[2], /kanso-spend\/presenter\.mjs/);
-  assert.match(argv[2], /path\.join/);
+  assert.equal(sync.syncDir("C:\\Users\\me\\.config\\herdr-app"), "C:\\Users\\me\\.config\\herdr-app\\data\\kanso-sync");
+  assert.equal(sync.joinUnder(sync.syncDir("/Users/me/.config/herdr-app"), "config.json"), "/Users/me/.config/herdr-app/data/kanso-sync/config.json");
+  assert.equal(sync.PROBE_REL, ".config/herdr-app/mods/kanso-spend/sync-probe.mjs");
+
+  const seen = [];
+  const root = "C:\\Users\\me\\.config\\herdr-app";
+  const out = await exchange({ options: { cost: { period: "month", offset: 0 } } }, {
+    join,
+    appHome: root,
+    homedir: () => "C:\\Users\\me",
+    env: {},
+    now: "2026-11-10T12:00:00.000Z",
+    mint: () => SELF,
+    exists: (file) => file === join(root, "mods", "kanso-spend", "presenter.mjs"),
+    fs: {
+      readFile: async (file) => (file === paths.version ? `${JSON.stringify({ version: shipped })}\n` : ""),
+      writeFile: async (file) => { seen.push(file); },
+      mkdir: async (dir) => { seen.push(dir); },
+    },
+    run: async (argv) => { seen.push(argv); return { exitCode: 0, stdout: JSON.stringify(priced(2)) }; },
+  });
+  assert.equal(out.version, shipped);
+  assert.equal(out.protocol, sync.PROTOCOL);
+  assert.equal(out.rows[0].machine, SELF);
+  assert.equal(seen[0], "C:\\Users\\me\\.config\\herdr-app\\data\\kanso-sync");
+  assert.equal(seen.find((item) => Array.isArray(item))[2], paths.store);
 });

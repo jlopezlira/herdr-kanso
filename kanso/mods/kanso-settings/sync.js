@@ -1,46 +1,24 @@
 // Machine sync: a stable id, peers, and rows moved each way. No machine is in charge.
-import { parseOr, reduceSeries } from "./pure.js";
+import { clock, parseOr, reduceSeries } from "./pure.js";
 
 export const KINDS = [{ id: "spend", label: "Token spend" }];
 export const EXCHANGE_MS = 180_000;
 export const BACKOFF_MAX_MS = 1_800_000;
 export const RETRY_FLOOR_MS = 15_000;
-export const MKDIR_SOURCE = "import { mkdir } from 'node:fs/promises'; await mkdir(process.argv[1], { recursive: true });";
+export const MIN_VERSION = "3.22.0";
+export const PROTOCOL = 1;
+export const UPDATE_TEXT = "Update kanso there";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-// The peer resolves these; they are joined with its path API, never a shell string.
 export const REL = {
   probe: ["mods", "kanso-spend", "sync-probe.mjs"],
   presenter: ["mods", "kanso-spend", "presenter.mjs"],
   store: ["data", "kanso-spend", "store.json"],
   dir: ["data", "kanso-sync"],
+  version: ["mods", "kanso-chrome", "version.json"],
 };
-
-const joinRel = (parts) => parts.map((part) => JSON.stringify(part)).join(", ");
-export const LOADER_SOURCE = [
-  "import { existsSync } from 'node:fs';",
-  "import os from 'node:os';",
-  "import path from 'node:path';",
-  "import { pathToFileURL } from 'node:url';",
-  "const appHome = process.env.HERDR_APP_HOME || path.join(os.homedir(), '.config', 'herdr-app');",
-  `const probe = path.join(appHome, ${joinRel(REL.probe)});`,
-  `const presenter = path.join(appHome, ${joinRel(REL.presenter)});`,
-  `const store = path.join(appHome, ${joinRel(REL.store)});`,
-  "const payload = JSON.parse(process.argv[1] ?? '{}');",
-  "const say = (value) => { console.log(JSON.stringify(value)); };",
-  "if (!existsSync(probe)) {",
-  "  if (!existsSync(presenter)) { say({ reason: 'no-kanso' }); process.exit(0); }",
-  "  const { run } = await import(pathToFileURL(presenter).href);",
-  "  const result = await run(['prepare', '--store', store, '--home', os.homedir(), '--options', JSON.stringify(payload.options ?? {})]);",
-  "  if (result.exitCode !== 0) { say({ reason: 'unreachable' }); process.exit(0); }",
-  "  const body = JSON.parse(result.stdout);",
-  "  say({ reason: 'costs', costs: body && body.costs && body.costs.hero ? body.costs : body });",
-  "  process.exit(0);",
-  "}",
-  "const mod = await import(pathToFileURL(probe).href);",
-  "say(await mod.exchange(payload));",
-].join("\n");
+// Node resolves this from the other computer's home, with either separator.
+export const PROBE_REL = [".config", "herdr-app", ...REL.probe].join("/");
 
 export function appHomeFrom(env, homedir, join) {
   const set = String(env?.HERDR_APP_HOME ?? "").trim();
@@ -49,11 +27,16 @@ export function appHomeFrom(env, homedir, join) {
 
 export function syncPaths(appHome, join) {
   const at = (parts) => parts.reduce((dir, part) => join(dir, part), appHome);
-  return { probe: at(REL.probe), presenter: at(REL.presenter), store: at(REL.store), dir: at(REL.dir) };
+  return { probe: at(REL.probe), presenter: at(REL.presenter), store: at(REL.store), dir: at(REL.dir), version: at(REL.version) };
 }
 
-export function loaderArgv(payload) {
-  return ["--input-type=module", "-e", LOADER_SOURCE, "--", JSON.stringify(payload ?? {})];
+export function joinUnder(dir, ...names) {
+  const sep = String(dir).includes("\\") ? "\\" : "/";
+  return names.reduce((base, name) => `${base}${sep}${name}`, String(dir));
+}
+
+export function syncDir(root) {
+  return joinUnder(root, ...REL.dir);
 }
 
 export function identityFrom(text, mint, now) {
@@ -151,10 +134,6 @@ export function push(local) {
   return (Array.isArray(local) ? local : []).filter(kept);
 }
 
-export function dropMachine(rows, machine) {
-  return machine ? rows.filter((row) => row.machine !== machine) : rows;
-}
-
 export function stampName(rows, machine, name) {
   if (!machine || !name) return rows;
   return rows.map((row) => (row.machine === machine ? { ...row, body: { ...row.body, name } } : row));
@@ -183,10 +162,23 @@ export function delayMs(failures) {
   return Math.min(BACKOFF_MAX_MS, EXCHANGE_MS * 2 ** n);
 }
 
+export function versionFrom(text) {
+  const parsed = parseOr(typeof text === "string" ? text : "", null);
+  return typeof parsed?.version === "string" ? parsed.version : "";
+}
+
+export function versionBelow(version, min = MIN_VERSION) {
+  const part = (text) => String(text ?? "").split(".").map((n) => Number(n) || 0);
+  const pa = part(version);
+  const pb = part(min);
+  const i = [0, 1, 2].find((k) => (pa[k] ?? 0) !== (pb[k] ?? 0));
+  return i !== undefined && (pa[i] ?? 0) < (pb[i] ?? 0);
+}
+
 export function due(status, now, periodKey) {
   const at = Number(status?.at) || 0;
   if (!at) return true;
-  const failed = status.reason === "unreachable" || status.reason === "no-kanso";
+  const failed = status.reason === "unreachable" || status.reason === "update";
   if (failed) return now - at >= delayMs(status.failures);
   if (periodKey && status.period !== periodKey) return now - at >= RETRY_FLOOR_MS;
   return now - at >= EXCHANGE_MS;
@@ -210,28 +202,25 @@ export function parseOutcome(stdout) {
   }, null);
 }
 
-export function costsOf(body) {
-  return body?.costs?.hero ? body.costs : body;
-}
-
 export function applyExchange(rows, status, peer, outcome, now, periodKey) {
   const prev = status?.[peer.id] ?? {};
-  const fail = (reason) => ({
+  const failed = (reason) => ({
     rows,
-    status: { ...status, [peer.id]: { ...prev, at: now, failures: (prev.failures ?? 0) + 1, reason, synced_at: prev.synced_at ?? null, machine: prev.machine ?? null, period: prev.period ?? null } },
+    status: { ...status, [peer.id]: { ...prev, at: now, failures: (prev.failures ?? 0) + 1, reason } },
   });
-  if (!outcome || outcome.reason === "unreachable" || outcome.error) return fail("unreachable");
-  if (outcome.reason === "no-kanso") return fail("no-kanso");
-  const iso = new Date(now).toISOString();
-  const priced = outcome.reason === "costs" ? rowFromCosts(costsOf(outcome.costs), `peer:${peer.id}`, iso, outcome.options) : null;
-  const pulled = outcome.reason === "costs" ? rows : pull(rows, outcome.rows, outcome.self);
-  const named = outcome.reason === "costs"
-    ? (priced ? stampName(mergeRows(rows, [priced]), priced.machine, peer.name) : rows)
-    : (outcome.machine ? stampName(dropMachine(pulled, `peer:${peer.id}`), outcome.machine, peer.name) : pulled);
-  const machine = priced?.machine ?? outcome.machine ?? prev.machine ?? null;
+  if (!outcome || outcome.reason === "unreachable" || outcome.error) return failed("unreachable");
+  if (outcome.reason === "update" || outcome.protocol !== PROTOCOL || versionBelow(outcome.version)) return failed("update");
+  const pulled = pull(rows, outcome.rows, outcome.self);
+  const named = outcome.machine ? stampName(pulled, outcome.machine, peer.name) : pulled;
   return {
     rows: named,
-    status: { ...status, [peer.id]: { at: now, failures: 0, reason: null, synced_at: iso, machine, period: periodKey } },
+    status: {
+      ...status,
+      [peer.id]: {
+        at: now, failures: 0, reason: null, synced_at: new Date(now).toISOString(),
+        machine: outcome.machine ?? prev.machine ?? null, period: periodKey,
+      },
+    },
   };
 }
 
@@ -243,26 +232,18 @@ export async function exchangeAll(runner, input) {
   const steps = planExchange({ config: input.config, peers: input.peers, status, now, periodKey });
   if (!steps.length) return { rows, status, ran: false };
   const done = await reduceSeries(steps, async (state, step) => {
-    const result = await runner.exec("node", loaderArgv({ push: push(state.rows), options: input.options, kinds: step.kinds }), { on: step.on, timeout: 25_000 }).catch(() => null);
-    const outcome = result?.code === 0 ? parseOutcome(result.stdout) : null;
-    return applyExchange(state.rows, state.status, step, { ...(outcome ?? { reason: "unreachable" }), self: input.self, options: input.options }, now, periodKey);
+    const payload = JSON.stringify({ push: push(state.rows), options: input.options, kinds: step.kinds });
+    const result = await runner.exec("node", [PROBE_REL, payload], { on: step.on, timeout: 25_000 }).catch(() => null);
+    const parsed = result?.code === 0 ? parseOutcome(result.stdout) : null;
+    const outcome = parsed ?? { reason: result ? "update" : "unreachable" };
+    return applyExchange(state.rows, state.status, step, { ...outcome, self: input.self }, now, periodKey);
   }, { rows, status });
   return { ...done, ran: true };
 }
 
-export function clock(iso, now) {
-  const time = Date.parse(iso ?? "");
-  if (!Number.isFinite(time)) return "";
-  const date = new Date(time);
-  const today = new Date(now ?? Date.now());
-  const hm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  const same = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
-  return same ? hm : `${MONTHS[date.getMonth()]} ${date.getDate()}`;
-}
-
 function peerState(peer, status, now) {
   if (peer.layout === "loading") return { kind: "loading", text: "" };
-  if (status?.reason === "no-kanso") return { kind: "no-kanso", text: "No kansō there" };
+  if (status?.reason === "update") return { kind: "update", text: UPDATE_TEXT };
   const time = clock(status?.synced_at, now);
   if (peer.layout === "unavailable" || status?.reason === "unreachable") return { kind: "unreachable", text: time ? `${time} · Unreachable` : "Unreachable" };
   if (time) return { kind: "synced", text: time };
@@ -278,6 +259,10 @@ export function peerView(peer, config, status, now) {
     kinds: KINDS.map((kind) => ({ id: kind.id, label: kind.label, on: Boolean(stored?.[kind.id]) })),
     state: peerState(peer, status, now),
   };
+}
+
+export function holdsOf(status) {
+  return Object.entries(status ?? {}).flatMap(([id, row]) => (row?.reason === "update" ? [{ id, text: UPDATE_TEXT }] : []));
 }
 
 export function syncRoster(list, config, status, now) {
