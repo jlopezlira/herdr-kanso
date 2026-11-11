@@ -1,8 +1,9 @@
+import { localPlatform, paths } from "./platform.js";
 // Memory, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, appHome, theme, nextCommand, readTextFile, layout } from "herdr";
-import { G, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { appHome, theme, nextCommand, readTextFile, layout } from "herdr";
+import { G, T, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { memorySpec, memoryText } from "./memory-card.js";
@@ -52,7 +53,7 @@ export default class Memory extends View {
     this.historyAt = 0;
     this.reading = false;
     this.range = "day";
-    this.share = new Share(MOD, `${appHome()}/${DATA_DIR}/share`);
+    this.share = new Share(MOD, paths.join(appHome(), DATA_DIR, "share"));
     this.batch = null;
     this.batchSeen = 0; // the finished batch you dismissed
     this.showAll = false;
@@ -115,19 +116,19 @@ export default class Memory extends View {
     if (this.closed || !this.awake || this.reading) return;
     this.reading = true;
     cx.spawn(async (readCx) => {
-      const dir = `${appHome()}/${DATA_DIR}`;
-      const now = await tryOrAsync(async () => parseNow(await readTextFile(`${dir}/now.json`)), { state: "bad", data: null });
+      const dir = paths.join(appHome(), DATA_DIR);
+      const now = await tryOrAsync(async () => parseNow(await readTextFile(paths.join(dir, "now.json"))), { state: "bad", data: null });
       const last = this.digest;
       // A history.json that can't be read keeps the last digest.
       const fresh = now.data && (!last || Date.now() - this.historyAt >= HISTORY_MS)
         ? await tryOrAsync(async () => {
-          const read = digestHistory(await readTextFile(`${dir}/history.json`), Date.now(), now.data.limits?.lowFreePct ?? null);
+          const read = digestHistory(await readTextFile(paths.join(dir, "history.json")), Date.now(), now.data.limits?.lowFreePct ?? null);
           this.historyAt = Date.now();
           return { read };
         })
         : null;
       const digest = fresh ? fresh.read : last;
-      const batch = await tryOrAsync(async () => parseBatch(await readTextFile(`${dir}/batch.json`)), null);
+      const batch = await tryOrAsync(async () => parseBatch(await readTextFile(paths.join(dir, "batch.json"))), null);
       this.reading = false;
       if (this.closed || !this.awake) return;
       this.now = now;
@@ -155,17 +156,17 @@ export default class Memory extends View {
   // Detached, so exec's 30 s limit never applies to the guard.
   act(key, args, done, cx) {
     // One action at a time: two recycles never race each other.
-    if (this.closed || this.busy[key] || Object.keys(this.busy).some((k) => k !== "check")) return;
+    if (!localPlatform().system.memoryGuardAvailable || this.closed || this.busy[key] || Object.keys(this.busy).some((k) => k !== "check")) return;
     this.busy[key] = { at: Date.now(), done };
     cx.notify();
     cx.spawn(async (actCx) => {
       try {
         if (!this.node) {
-          const raw = await readTextFile(`${appHome()}/${RUNTIME_FILE}`).catch(() => null);
+          const raw = await readTextFile(paths.join(appHome(), RUNTIME_FILE)).catch(() => null);
           const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
           this.node = typeof v === "string" && v.trim() ? v.trim() : "node";
         }
-        await exec("sh", ["-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', this.node, `${appHome()}/${GUARD_FILE}`, ...args]);
+        await localPlatform().system.guardRun(this.node, paths.join(appHome(), GUARD_FILE), args);
       } catch {
         delete this.busy[key];
       }
@@ -209,6 +210,7 @@ export default class Memory extends View {
       });
     }
     const c = tokens(theme());
+    if (!localPlatform().system.memoryGuardAvailable) return v_flex().size_full().p(G.xl).text_size(T.card).text_color(c.muted).child(localPlatform().system.memoryGuardReason);
     const narrow = (this.width || 960) < 560;
     const state = this.now?.state;
     const body = !this.now ? this.skeleton(c, narrow)

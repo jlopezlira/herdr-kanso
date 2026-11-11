@@ -293,7 +293,7 @@ test("a name a wake could not put back is kept until its terminal has it again",
   assert.deepEqual(clone(await db.read("SELECT name, restore FROM agents")), [{ name: "Hashiko", restore: null }], "back on its terminal: done");
 });
 
-test("a folder whose message only names 'No such file' in its path is still an error, not nothing there", async (t) => {
+test("a folder whose message only names 'No such file' in its path is still an error, not nothing there", { skip: process.platform === "win32" && "Unix directory permissions" }, async (t) => {
   const dir = join(await temporary(t), "No such file here");
   await mkdir(dir, { recursive: true });
   await legacy(dir);
@@ -508,7 +508,7 @@ test("a transcript's pictures stay, a color already stored is kept, and one left
 test("an older picture index gains the prefix mark", async (t) => {
   const { db, dir } = await database(t);
   const file = join(dir, "kanso", "kanso.db");
-  await exec("mkdir", ["-p", join(dir, "kanso")]);
+  await mkdir(join(dir, "kanso"), { recursive: true });
   await exec("sqlite3", [file, "CREATE TABLE picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL); INSERT INTO picture_scans(file,size) VALUES('/t.jsonl', 4);"]);
   const got = await db.pictures("/t.jsonl");
   assert.equal(got.size, "4");

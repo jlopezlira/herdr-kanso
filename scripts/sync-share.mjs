@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 const root = new URL("../", import.meta.url);
 // Each shared file (relative to the repo), and where it is copied.
 export const SHARED = [
+  { source: "kanso/mods/kanso-panel/platform-paths.js", copies: ["kanso/mods/kanso-strip/platform-paths.js", "kanso/mods/kanso-send/platform-paths.js"] },
+  ...["platform-command", "platform-paths", "platform-processes", "platform-ports", "platform-kill", "platform-open", "platform-clipboard", "platform-files", "platform-transcripts", "platform-repositories", "platform-images", "platform-system", "platform-markdown", "platform-pets", "platform"].map((name) => ({ source: `kanso/mods/kanso-panel/${name}.js`, copies: ["kanso-spaces", "kanso-sleep", "kanso-arrange", "kanso-guard", "kanso-chrome", "kanso-tabs", "kanso-settings", "kanso-spend", "kanso-dojo", "kanso-help", "kanso-containers", "open-with"].map((mod) => `kanso/mods/${mod}/${name}.js`).concat([`markdown-panel/mods/markdown-panel/${name}.js`]) })),
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
   { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js", "kanso/mods/kanso-help/ui.js", "kanso/mods/kanso-dojo/ui.js", "kanso/mods/kanso-containers/ui.js", "kanso/mods/kanso-spaces/ui.js", "kanso/mods/kanso-sleep/ui.js", "kanso/mods/kanso-arrange/ui.js", "markdown-panel/mods/markdown-panel/ui.js"] },

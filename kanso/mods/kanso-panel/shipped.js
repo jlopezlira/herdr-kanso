@@ -1,3 +1,4 @@
+import { localPlatform } from "./platform.js";
 // Kanso's Shipped panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Statistics only, never one item at a time from GitHub.
 // One of the kanso-panel mod's panels: it exists only while shown.
@@ -335,7 +336,7 @@ export class Shipped {
     const due = [...repos].filter(([name, pushed]) => { const had = known.get(name); return !had || had.pending || (pushed && Date.parse(pushed) > had.fetched); });
     const rounds = async (due, round) => {
       if (!due.length || round >= RETRIES) return;
-      if (round) await exec("sleep", ["5"]);
+      if (round) await localPlatform().sleep(5);
       const answers = await mapSeries(range(Math.ceil(due.length / PARALLEL)), async (k) => {
         this.phase = `GitHub's sums, ${fmt(Math.max(0, due.length - k * PARALLEL))} repositories to go`; cx.notify();
         return Promise.all(due.slice(k * PARALLEL, k * PARALLEL + PARALLEL).map(async ([repo, pushed]) => {

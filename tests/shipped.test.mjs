@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, temporary, clone, exec as run } from "./helpers.mjs";
+import { load, context, temporary, clone, exec as run, nativeWindow } from "./helpers.mjs";
 
 const names = ["Shipped", "periodRange", "comparedRange", "periodLabel", "streaks", "computeRecords", "mergeRecords", "periodQuery",
   "REPOS", "fmt", "yourWeeks", "weekAt", "sumWeeks", "heatLayout", "contributionsIn"];
@@ -107,7 +107,7 @@ function github({ computing = new Set(), weeks = {} } = {}) {
   const calls = [];
   const repos = Object.keys(weeks);
   const exec = async (command, args, options) => {
-    if (command === "sleep") return { code: 0, stdout: "", stderr: "" };
+    if (command === "sleep" || command === "pwsh" && args.at(-1).includes("Start-Sleep")) return { code: 0, stdout: "", stderr: "" };
     if (command !== "gh") return run(command, args, options);
     if (args.some((a) => a.startsWith("gists"))) {
       if (args[1].startsWith("gists?")) return { code: 0, stdout: "", stderr: "" };
@@ -147,7 +147,7 @@ async function panelWith(t, gh) {
   const home = join(root, "app");
   const store = {}, toasts = [];
   const host = {
-    exec: gh.exec, appHome: () => home, home: () => join(root, "home"), spaces: () => [], panes: () => [], theme: () => ({}),
+    window: nativeWindow, exec: gh.exec, appHome: () => home, home: () => join(root, "home"), spaces: () => [], panes: () => [], theme: () => ({}),
     shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
     notify: (n) => { toasts.push(n); return "1"; },
     readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },

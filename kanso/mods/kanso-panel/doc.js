@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home } from "herdr";
@@ -23,12 +24,11 @@ export function readable(text) {
 
 export function linkTarget(url, docPath) {
   if (/^(https?:|mailto:)/i.test(url)) return { web: url };
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^file:/i.test(url)) return null;
-  const given = decodeURIComponent(url.replace(/^file:\/\//i, "").replace(/[?#].*$/, ""));
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^file:/i.test(url) && !/^[a-z]:[\\/]/i.test(url)) return null;
+  const raw = url.replace(/[?#].*$/, "");
+  const given = /^file:/i.test(raw) ? paths.fromFileUrl(raw) : decodeURIComponent(raw);
   if (!given) return null;
-  const p = given.startsWith("/") ? given : docPath.replace(/\/[^/]*$/, "") + "/" + given;
-  const out = p.split("/").reduce((parts, part) => (part === ".." ? parts.slice(0, -1) : part && part !== "." ? [...parts, part] : parts), []);
-  return { file: "/" + out.join("/") };
+  return { file: paths.isAbsolute(given) ? paths.normalize(given) : paths.join(paths.dirname(docPath), given) };
 }
 
 export class MarkdownDoc {
@@ -334,5 +334,5 @@ export class MarkdownDoc {
 export const tildePath = (dir, on) => {
   const h = home();
   if (on) return `${on}: ${dir}`;
-  return dir === h ? "~" : dir.startsWith(h + "/") ? "~" + dir.slice(h.length) : dir;
+  return paths.shorten(dir, h);
 };

@@ -1,3 +1,4 @@
+import { localPlatform, paths } from "./platform.js";
 // Derived from the `workspace-chrome` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: brand bar, solid sidebar footer with Settings, Add machine and an account chip.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
@@ -8,7 +9,7 @@ import { theme, run, props, shared, setShared, updates, agents, home, window, ne
 import { Updater } from "./update.js";
 import { tryOrAsync } from "./pure.js";
 
-const basename = (path) => path.replace(/\/+$/, "").split("/").at(-1);
+const basename = (path) => paths.basename(path);
 const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
 
@@ -45,9 +46,8 @@ export default class WorkspaceChrome extends View {
   // Written only when it changes: every mod draws again on a shared write.
   power(cx) {
     cx.spawn(async () => {
-      const r = await exec("pmset", ["-g", "ps"]).catch(() => null);
-      if (r?.code !== 0) return;
-      const on = /Battery Power/.test(r.stdout);
+      const on = await localPlatform().system.battery().catch(() => null);
+      if (on === null) return;
       if (shared("kanso.battery") !== on) setShared("kanso.battery", on);
     });
   }
@@ -58,7 +58,7 @@ export default class WorkspaceChrome extends View {
     this.watching = true;
     cx.spawn(async (cx) => {
       const status = await tryOrAsync(async () => {
-        const r = await exec("sh", ["-c", 'HERDR_APP_HOME="$1" herdr-app status', "_", appHome()]);
+        const r = await localPlatform().system.status(appHome());
         return { errors: JSON.parse(r.stdout).errors ?? [] };
       });
       this.watching = false;
@@ -74,7 +74,7 @@ export default class WorkspaceChrome extends View {
 
   // Started detached, so the new window survives this one quitting.
   restart() {
-    exec("sh", ["-c", '(sleep 1; HERDR_APP_HOME="$1" nohup herdr-app >/dev/null 2>&1 &) >/dev/null 2>&1', "_", appHome()]).catch(() => {});
+    localPlatform().system.restart(appHome()).catch(() => {});
     run("app.quit");
   }
 

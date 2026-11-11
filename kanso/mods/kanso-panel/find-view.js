@@ -1,10 +1,11 @@
+import { localPlatform } from "./platform.js";
 // Cmd+F on an agent: the conversation, scrolled to the match. No conversation falls back to the terminal's Find.
 import { div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents } from "herdr";
 import { tokens, skeleton, controlInput } from "./ui.js";
 import {
-  locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
+  locateConversation, resolveFind, readSlice, SLICE_BUDGET, LINE_MAX, freshRead, applySlice, extendIndex, searchIndex,
   enterMatch, retarget, partsOf, whoOf, whenLabel, countLabel,
 } from "./find.js";
 
@@ -132,8 +133,9 @@ export class Find {
   }
 
   async open(cx) {
-    const where = await locateConversation({ exec, hc, readTextFile, home }, this.terminal, hintOf(this.terminal)).catch(() => ({ file: null }));
+    const where = await locateConversation({ exec, hc, readTextFile, home, platform: localPlatform() }, this.terminal, hintOf(this.terminal)).catch(() => ({ file: null }));
     if (this.gone) return;
+    if (where.unavailable) { this.unavailable = where.unavailable; this.loading = false; this.missing = true; cx.notify(); return; }
     if (resolveFind(where).action !== "find") { this.giveBack(); return; }
     this.file = where.file;
     await this.catchUp(cx);
@@ -144,7 +146,7 @@ export class Find {
   async catchUp(cx) {
     while (!this.gone) {
       const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev);
+      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localPlatform().name);
       if (this.gone) return;
       if (!parsed) { this.missing = prev === 0 && !this.state.turns.length; break; }
       if (parsed.end === prev) { this.loading = false; this.caughtUp = true; break; }
@@ -164,7 +166,7 @@ export class Find {
     this.reading = true;
     try {
       const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev);
+      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localPlatform().name);
       if (this.gone || !parsed) return;
       const applied = applySlice(this.state, parsed);
       if (applied.reset) { this.restart(); await this.catchUp(cx); return; }
@@ -223,7 +225,7 @@ export class Find {
         .child(div().text_size(12).text_color(t.dim).whitespace_nowrap().child(countLabel(this.query, this.at, this.hits.length)))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .when(this.loading, (el) => el.child(v_flex().flex_1().p(8).gap(8).children([0, 1, 2, 3, 4].map((i) => skeleton({ border: t.border }).row(i, 28)))))
-      .when(this.missing, (el) => el.child(div().p(12).text_size(12).text_color(t.dim).child("This conversation is no longer there.")))
+      .when(this.missing, (el) => el.child(div().p(12).text_size(12).text_color(t.dim).child(this.unavailable ?? "This conversation is no longer there.")))
       .when(!this.loading && !this.missing && n > 0, (el) => el.child(v_flex().flex_1().min_h(0).relative()
         .child(v_virtual_list("kanso-find-list", n, ROW, (i) => String(i), (range) => (
           Array.from({ length: range.end - range.start }, (_, k) => this.turnRow(range.start + k, t))

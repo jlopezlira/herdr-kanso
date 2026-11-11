@@ -1,3 +1,4 @@
+import { localPlatform, paths } from "./platform.js";
 // Kanso's one database, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
@@ -99,9 +100,9 @@ export function layoutWithout(layout, ids) {
 }
 
 export class Kdb {
-  constructor(dir = `${appHome()}/${DIR}`) {
+  constructor(dir = paths.join(appHome(), DIR)) {
     this.dir = dir;
-    this.file = `${dir}/kanso.db`;
+    this.file = paths.join(dir, "kanso.db");
     this.ready = null;
     this.chain = Promise.resolve();
   }
@@ -118,7 +119,7 @@ export class Kdb {
     return (this.ready ??= (async () => {
       const ok = await exec("sqlite3", ["-version"]).catch(() => null);
       if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-      await exec("mkdir", ["-p", this.dir]);
+      await localPlatform().files.mkdir(this.dir);
       await this.sql([...statements(SCHEMA), ONE_SLEEP]);
       // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
       const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name), picture_scans: (await this.sql("PRAGMA table_info(picture_scans);")).map((c) => c.name) };

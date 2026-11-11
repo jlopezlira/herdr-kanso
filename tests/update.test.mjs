@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { load, context, exec, temporary, clone } from "./helpers.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER"];
+const unixTest = (name, fn) => test(name, { skip: process.platform === "win32" && "Unix updater; PowerShell updater belongs to piece 3" }, fn);
 const repo = new URL("../kanso/", import.meta.url);
 
 async function updater(host) {
@@ -209,7 +210,7 @@ const version = async (home) => JSON.parse(await readFile(join(home, "mods/kanso
 const told = (toasts) => toasts.filter((n) => n.title === "kansō is already being updated");
 const updated = (toasts) => toasts.filter((n) => n.title === "kansō updated to 1.1.0");
 
-test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
+unixTest("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -263,7 +264,7 @@ test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside
   assert.deepEqual(f.resizes, [192, 156], "and gives the room back");
 });
 
-test("A copy that started before version.json arrived stops offering what is installed", async (t) => {
+unixTest("A copy that started before version.json arrived stops offering what is installed", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -277,7 +278,7 @@ test("A copy that started before version.json arrived stops offering what is ins
   assert.equal(f.toasts.length, 1);
 });
 
-test("A release that kept the layout leaves yours as it is", async (t) => {
+unixTest("A release that kept the layout leaves yours as it is", async (t) => {
   const f = await fixture(t, { layoutChanged: false });
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -290,7 +291,7 @@ test("A release that kept the layout leaves yours as it is", async (t) => {
   assert.ok(!(await readdir(join(f.home, "layouts"))).some((n) => n.startsWith("kanso.json.old-")));
 });
 
-test("A tag whose files say another version is not installed", async (t) => {
+unixTest("A tag whose files say another version is not installed", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -311,7 +312,7 @@ test("A tag whose files say another version is not installed", async (t) => {
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("Update from the footer and from the tab bar at once: one installs, the other is told", async (t) => {
+unixTest("Update from the footer and from the tab bar at once: one installs, the other is told", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -332,7 +333,7 @@ test("Update from the footer and from the tab bar at once: one installs, the oth
   assert.equal(tabs.busy, false);
 });
 
-test("Two windows installing at once share no state, and the lock lets one through", async (t) => {
+unixTest("Two windows installing at once share no state, and the lock lets one through", async (t) => {
   const f = await fixture(t);
   const other = await f.window();
   const { cx } = context();
@@ -350,7 +351,7 @@ test("Two windows installing at once share no state, and the lock lets one throu
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
+unixTest("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -373,7 +374,7 @@ test("An install whose owner is alive is left alone, staging and all; once it is
   assert.deepEqual(await staged(f.home), [], "the dead install's staging, swept under the lock (no live one can have any)");
 });
 
-test("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
+unixTest("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -394,7 +395,7 @@ test("An owner that lets go while another waits: the next to take the lock keeps
   assert.equal(await version(f.home), "1.1.0");
 });
 
-test("An install longer than exec's limit runs to the end, and keeps the lock all along", async (t) => {
+unixTest("An install longer than exec's limit runs to the end, and keeps the lock all along", async (t) => {
   const f = await fixture(t);
   const other = await f.window();
   // Herdr kills an exec at 30 s; here at 1 s, and the install takes longer.
@@ -424,7 +425,7 @@ test("An install longer than exec's limit runs to the end, and keeps the lock al
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("A swap that fails on its last mod puts back every one before it: the old version stays", async (t) => {
+unixTest("A swap that fails on its last mod puts back every one before it: the old version stays", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -524,7 +525,7 @@ async function recovered(s, home, at) {
   return end;
 }
 
-test("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one, and the next install goes through", async (t) => {
+unixTest("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one, and the next install goes through", async (t) => {
   const s = await small(t);
   assert.equal(s.after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
   assert.equal(s.after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
@@ -557,7 +558,7 @@ test("Killed after any step of the swap or of its undoing, recovery ends at the 
   assert.deepEqual(back.last, s.before, "a failed swap undone in full");
 });
 
-test("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
+unixTest("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
   const s = await small(t);
   // The sabotaged install, killed once every slot is back (its last step, the journal emptied,
   // before the journal goes); then all the stage holds but its journal is gone, as a removal
@@ -572,7 +573,7 @@ test("An undoing killed as its stage was being removed never takes back what it 
   assert.equal(await recovered(s, home, "a removal cut short"), "old");
 });
 
-test("A finished install killed as its stage was being removed is not done again: the next install goes through", async (t) => {
+unixTest("A finished install killed as its stage was being removed is not done again: the next install goes through", async (t) => {
   const s = await small(t);
   // Killed after the commit and the layout you had kept; then the stage loses all but its journal
   // and the `committed` mark, as a removal cut short could leave it: the release's themes and
@@ -586,7 +587,7 @@ test("A finished install killed as its stage was being removed is not done again
   assert.equal(await recovered(s, home, "a removal cut short"), "new");
 });
 
-test("Keys merged from another keys.json than the one in place are not installed: nothing changes", async (t) => {
+unixTest("Keys merged from another keys.json than the one in place are not installed: nothing changes", async (t) => {
   const s = await small(t);
   const home = await s.fresh("stale");
   assert.equal(await s.run(home, 0, { base: '{"half":true}\n' }), "failed: your keys.json changed while the update was prepared; try again");
@@ -622,7 +623,7 @@ const chromeIn = async () => {
   return 4 + 1 + themes + (mods - 1) + 2;
 };
 
-test("An install that died with the new keys in place, retried from another window, ends with the new keys", async (t) => {
+unixTest("An install that died with the new keys in place, retried from another window, ends with the new keys", async (t) => {
   const f = await fixture(t);
   await killed(t, f, 2); // keys aside, then the merged ones in
   const now = JSON.parse(await readFile(new URL("keys.json", repo), "utf8"))["layout:kanso"];
@@ -645,7 +646,7 @@ test("An install that died with the new keys in place, retried from another wind
   assert.deepEqual(await stages(f.home), [], "the dead install's stage settled (its outcome stays for its own window to report)");
 });
 
-test("A follower whose recovery finds the lock taken waits for it, then reports once what recovery left", async (t) => {
+unixTest("A follower whose recovery finds the lock taken waits for it, then reports once what recovery left", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died half new");
@@ -666,7 +667,7 @@ test("A follower whose recovery finds the lock taken waits for it, then reports 
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("A recovery killed partway is not taken for done: the follower tries again and reports what it left", async (t) => {
+unixTest("A recovery killed partway is not taken for done: the follower tries again and reports what it left", async (t) => {
   const f = await fixture(t);
   const { cx } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died half new");
@@ -681,7 +682,7 @@ test("A recovery killed partway is not taken for done: the follower tries again 
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("A window that starts while another recovers, which then dies, recovers itself", async (t) => {
+unixTest("A window that starts while another recovers, which then dies, recovers itself", async (t) => {
   const f = await fixture(t);
   await killed(t, f, await chromeIn());
   // The other recoverer: it holds the lock, then dies without settling anything.
@@ -700,7 +701,7 @@ test("A window that starts while another recovers, which then dies, recovers its
   assert.deepEqual(await stages(f.home), []);
 });
 
-test("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
+unixTest("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died with the new kanso-chrome in place");
@@ -716,7 +717,7 @@ test("A copy that starts after an install died mid-swap undoes it before it read
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("A copy started while another prepares its install waits for it, and the outcome is told once, with its version", async (t) => {
+unixTest("A copy started while another prepares its install waits for it, and the outcome is told once, with its version", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -738,7 +739,7 @@ test("A copy started while another prepares its install waits for it, and the ou
   assert.equal(await version(f.home), "1.1.0");
 });
 
-test("The copy the swap starts picks up the install's outcome and reports it", async (t) => {
+unixTest("The copy the swap starts picks up the install's outcome and reports it", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };

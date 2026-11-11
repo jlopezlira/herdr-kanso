@@ -1,36 +1,9 @@
+import { localPlatform, paths } from "./platform.js";
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
-import { exec, hc } from "herdr";
+import { hc, home } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
 
-const TAIL = 8192;
-const RS = "\u001e";
-
-// Codex may run under a launcher, so its children are asked too.
-const LOCATE = String.raw`pid="$1"; kind="$2"
-if [ "$kind" = claude ]; then
-  f="$HOME/.claude/sessions/$pid.json"; [ -f "$f" ] && printf 'claude\t%s\n' "$(tr -d '\n' < "$f")"
-  exit 0
-fi
-for p in "$pid" $(pgrep -P "$pid" 2>/dev/null); do
-  f=$(lsof -a -p "$p" -d 0-999 -Fn 2>/dev/null | sed -n 's/^n\(.*rollout-.*\.jsonl\)$/\1/p' | head -1)
-  [ -n "$f" ] || continue
-  id=$(basename "$f" .jsonl | grep -o '[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}$')
-  name=$(grep -h "\"id\":\"$id\"" "$HOME/.codex/session_index.jsonl" 2>/dev/null | tail -1)
-  printf 'codex\t%s\t%s\n' "$f" "$name"
-  exit 0
-done`;
-
-// Files grow to tens of MB: only the first and last 4 MB are searched, and lines over 16 KB (a pasted image) are left out to spare the heap.
-// Claude Code writes the title again every few turns, so the whole file is searched only when the end has none.
-const READ = String.raw`f="$1"; said() { grep -h -e '"type":"user"' -e '"user_message"' | grep -v '"tool_result"' | awk 'length($0) < 16000'; }
-t=$(tail -c 4000000 "$f" | grep -h '"type":"ai-title"' | awk 'length($0) < 16000' | tail -1)
-[ -n "$t" ] || t=$(grep -h '"type":"ai-title"' "$f" | awk 'length($0) < 16000' | tail -1)
-printf '%s\n\036\n' "$t"
-head -c 4000000 "$f" | said | head -n 60; printf '\n\036\n'
-tail -c 4000000 "$f" | said | tail -n 40; printf '\n\036\n'
-tail -c ${TAIL} "$f"`;
-
-export const claudeFile = (home, cwd, session) => `${home}/.claude/projects/${cwd.replace(/[^A-Za-z0-9]/g, "-")}/${session}.jsonl`;
+export const claudeFile = (home, cwd, session) => paths.join(home, ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
 
 export function parseLocated(text, home) {
   const [kind, a, b] = (text ?? "").replace(/\n$/, "").split("\t");
@@ -89,14 +62,16 @@ async function findThread({ address, app }, known, home) {
   const pid = got?.foreground?.pid;
   if (!pid) return null;
   const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
-  const where = parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
+  const located = await localPlatform().transcripts.locate(pid, kind, home);
+  if (located.state === "unavailable") return { pid, unavailable: located.reason };
+  const where = parseLocated(located.stdout, home);
   if (!where) return null;
-  const size = Number((await exec("sh", ["-c", "wc -c < \"$1\"", "sh", where.file])).stdout.trim());
+  const size = await localPlatform().transcripts.size(where.file);
   if (!size) return null;
   if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return known;
-  const r = await exec("sh", ["-c", READ, "sh", where.file]);
+  const r = await localPlatform().transcripts.thread(where.file);
   if (r.code !== 0 && !r.stdout) return null;
-  const [titleLine, head, recent, tail] = r.stdout.split(`\n${RS}\n`);
+  const [titleLine, head, recent, tail] = r.stdout.split("\n\u001e\n");
   return { kind, file: where.file, name: where.name, size, pid, ...readThread(kind, titleLine, head, recent, tail, where.name) };
 }
 
@@ -104,12 +79,12 @@ async function findThread({ address, app }, known, home) {
 const AT_ONCE = 4;
 
 export async function findThreads(list, known = {}) {
-  const home = (await exec("sh", ["-c", "printf %s \"$HOME\""])).stdout;
+  const homeDir = home();
   const queue = list.values();
   const lane = async (got = []) => {
     const { value: item, done } = queue.next();
     if (done) return got;
-    return lane([...got, [item.address, await findThread(item, known[item.address], home)]]);
+    return lane([...got, [item.address, await findThread(item, known[item.address], homeDir)]]);
   };
   const found = await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
   return Object.fromEntries(found.flat().filter(([, thread]) => thread));

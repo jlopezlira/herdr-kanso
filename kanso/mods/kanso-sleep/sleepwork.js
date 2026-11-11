@@ -1,3 +1,4 @@
+import { localPlatform, paths } from "./platform.js";
 // Sleep as work the sidebar does, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // This is the source copy; `npm run sync:share` copies it into kanso-sleep, and a test fails when a copy differs.
 // The dialog only writes what is to sleep. The tab or pane leaves when sleep is ordered; this worker does the slow
@@ -260,40 +261,17 @@ export const terminalsOf = (row) => (parseOr(row.layout, { cols: [] })?.cols ?? 
 // --- Processes and terminals. ---
 
 // true, false, or null when the check itself failed (a failed exec is no sighting of anything).
-export const alive = async (pid) => { if (!pid) return null; const r = await exec("kill", ["-0", String(pid)]).catch(() => null); return r ? r.code === 0 : null; };
+export const alive = async (pid) => { if (!pid) return null; return localPlatform().processes.exists(pid).catch(() => null); };
 
 // The pid still on conversation `session`, matched by start time (a reused pid is not it); throws when it can't tell: never "none" for what it could not see.
-const RUNNING = String.raw`d="$2"/.claude/sessions
-if ! out=$(LC_ALL=C ls -d "$d" 2>&1); then case "$out" in *": No such file or directory") exit 0;; *) echo "can't look at $d: $out" >&2; exit 2;; esac; fi
-if [ ! -r "$d" ] || [ ! -x "$d" ]; then echo "can't read $d" >&2; exit 2; fi
-for f in "$d"/*.json; do
-  [ -f "$f" ] || continue
-  grep -qF "\"sessionId\":\"$1\"" "$f"; rc=$?
-  if [ $rc -eq 1 ]; then continue; elif [ $rc -ne 0 ]; then echo "can't read $f" >&2; exit 2; fi
-  p=$(basename "$f" .json)
-  kill -0 "$p" 2>/dev/null || continue
-  comm=$(LC_ALL=C ps -p "$p" -o comm= 2>/dev/null)
-  [ "$(basename "$comm")" = claude ] || continue
-  want=$(sed -n 's/.*"procStart":"\([^"]*\)".*/\1/p' "$f")
-  if [ -n "$want" ]; then have=$(LC_ALL=C TZ=UTC ps -p "$p" -o lstart= 2>/dev/null | sed 's/^ *//;s/ *$//'); [ "$have" = "$want" ] || continue; fi
-  echo "$p"; exit 0
-done
-exit 0`;
-export async function runningOn(session) {
-  const r = await exec("sh", ["-c", RUNNING, "sh", session, home()]);
-  if (r.code !== 0) throw new Error((r.stderr || "the check failed").trim().split("\n")[0]);
-  const pid = Number(r.stdout?.trim());
-  return Number.isInteger(pid) && pid > 0 ? pid : null;
-}
+export const runningOn = (session) => localPlatform().processes.runningSession(session, home());
 
 // At its own shell's prompt: another shell in front (a script, say) counts as running.
 export const atPrompt = (x) => Boolean(x) && (!x.foreground?.pid || x.foreground.pid === x.pid);
 
 export async function procOf(pid, now = Date.now()) {
-  const ps = await exec("ps", ["-p", String(pid), "-o", "etime=,comm="]).catch(() => null);
-  const m = ps?.code === 0 ? /^\s*(\S+)\s+(.+?)\s*$/.exec(ps.stdout) : null;
-  if (!m) return null;
-  return { comm: base(m[2]), start: now - etimeMs(m[1]) };
+  const proc = await localPlatform().processes.identity(pid, now).catch(() => null);
+  return proc ? { ...proc, comm: base(proc.comm) } : null;
 }
 // A pid given to another process since is not it: the start time must match.
 export async function stillThere(pid, before, now = Date.now()) {
@@ -336,7 +314,7 @@ export async function resumed(terminal, session, cx, saw = async (_fg, mine) => 
     const seen = await saw(fg, mine);
     const starting = Boolean(fg?.pid) && !SHELLS.has(base(fg.argv?.[0])) && (fg.argv ?? []).map(String).includes(session);
     if (!fg?.pid || SHELLS.has(base(fg.argv?.[0]))) return { pid: null, mine: seen, stop: k >= 29 };
-    const record = await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))); // null: none
+    const record = await tryOrAsync(async () => JSON.parse(await readTextFile(paths.join(home(), ".claude", "sessions", `${fg.pid}.json`)))); // null: none
     return { pid: isResumed(fg, record, session) ? fg.pid : null, mine: seen, stop: k >= 29 && !starting };
   };
   return reduceSeries(range(90), (st, k) => (st.pid || st.stop ? st : look(st, k)), { pid: null, mine: null, stop: false });
@@ -353,7 +331,7 @@ export async function stopIn(terminal, cx, only = null) {
     const pid = await front();
     if (pid === 0 || (only && pid !== only && pid != null)) return true;
     if (pid == null) return false;
-    await exec("kill", [sig, String(pid)]).catch(() => null);
+    await localPlatform().kill.stop(pid, { force: sig === "-KILL" }).catch(() => null);
     return (await retry(10, async () => { await cx.sleep(300); return (await front()) === 0; })) ? true : null;
   };
   return (await reduceSeries(["-TERM", "-KILL"], async (got, sig) => (got === null ? signal(sig) : got), null)) === true;
@@ -363,7 +341,7 @@ export async function stopIn(terminal, cx, only = null) {
 // "out" when nothing of it runs, "unsure" when something it started could not be stopped.
 // The terminal must be at its prompt right before the line goes, and only what that line started is ever stopped.
 export async function comeBack(p, cx, onBack = () => {}) {
-  const line = `cd ${shq(p.cwd || home())} && ${p.wake.map(shq).join(" ")}`;
+  const line = localPlatform().opener.terminalLine(p.cwd || home(), p.wake);
   const front = async () => {
     const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
     try { const x = JSON.parse(g.stdout); return { x, idle: atPrompt(x) }; } catch { return null; }
@@ -422,7 +400,7 @@ async function see(a) {
   const front = x ? (fg?.pid ?? 0) : null;
   const reads = ["clearing", "exiting"].includes(a.step) || a.sent_at != null;
   const shot = x && reads ? await hc(["read", a.terminal]).catch(() => null) : null;
-  const record = x && a.step === "saving" && fg?.pid ? await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))) : null;
+  const record = x && a.step === "saving" && fg?.pid ? await tryOrAsync(async () => JSON.parse(await readTextFile(paths.join(home(), ".claude", "sessions", `${fg.pid}.json`)))) : null;
   return { alive: await alive(a.pid), front, state: x?.status?.state ?? null, screen: shot?.code === 0 ? shot.stdout : null, record, title: x?.title ?? null, cwd: fg?.cwd ?? null };
 }
 

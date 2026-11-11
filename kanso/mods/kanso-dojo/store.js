@@ -1,3 +1,4 @@
+import { localPlatform, paths } from "./platform.js";
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, appHome } from "herdr";
 import { tryOrAsync } from "./pure.js";
@@ -27,7 +28,7 @@ export function totalsOf(rows, days) {
 
 export class Store {
   constructor() {
-    this.db = `${appHome()}/${STORE_DIR}/dojo.db`;
+    this.db = paths.join(appHome(), STORE_DIR, "dojo.db");
     this.ready = null;
   }
 
@@ -41,7 +42,7 @@ export class Store {
     return (this.ready ??= (async () => {
       const ok = await tryOrAsync(() => exec("sqlite3", ["-version"])); // null: no sqlite3, below
       if (ok?.code !== 0) { this.ready = null; throw new Error("Install sqlite3 to keep your rounds."); }
-      await exec("mkdir", ["-p", `${appHome()}/${STORE_DIR}`]);
+      await localPlatform().files.mkdir(paths.join(appHome(), STORE_DIR));
       await this.sql(SCHEMA);
     })());
   }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { exec, temporary } from "./helpers.mjs";
+import { exec, temporary, nativePlatform } from "./helpers.mjs";
 import {
   fold, foldSpan, searchTurns, matchSpan, partsOf, placeOf, countLabel, enterMatch, retarget, extendIndex,
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
@@ -147,15 +147,15 @@ test("A slice keeps whole lines, skips a pasted picture, and a missing file is n
   const big = "x".repeat(80);
   const rows = [line({ type: "user", message: { content: "one" } }), big, line({ type: "assistant", message: { content: "two" } })];
   await writeFile(file, `${rows.join("\n")}\n`);
-  const all = await readSlice(exec, file, 0, 10000, 60);
+  const all = await readSlice(exec, file, 0, 10000, 60, nativePlatform);
   assert.ok(all && all.end === all.size);
   assert.ok(!all.body.includes(big));
   assert.deepEqual(readTurns(all.body).map((t) => t.text), ["one", "two"]);
   const picture = join(dir, "picture.jsonl");
   await writeFile(picture, `${"y".repeat(100)}\n${line({ type: "user", message: { content: "after" } })}\n`);
-  const skipped = await readSlice(exec, picture, 0, 80, 60);
+  const skipped = await readSlice(exec, picture, 0, 80, 60, nativePlatform);
   assert.equal(readTurns(skipped.body).map((turn) => turn.text).join(""), "after");
-  assert.equal(await readSlice(exec, join(dir, "missing.jsonl"), 0), null);
+  assert.equal(await readSlice(exec, join(dir, "missing.jsonl"), 0, undefined, undefined, nativePlatform), null);
   assert.equal(applySlice({ ...freshRead(), size: 50 }, { end: 10, size: 10, body: "" }).reset, true);
 });
 
@@ -197,6 +197,11 @@ test("No conversation, a shell, or a remote terminal falls back to the terminal'
 
 function host({ argv = ["zsh"], pid = 1, etime = "00:01", session = null, rollout = null } = {}) {
   return {
+    platform: { processes: {
+      startTime: async () => Date.now() - etime.split(":").reduce((n, part) => n * 60 + Number(part), 0) * 1000,
+      list: async () => ({ byParent: new Map() }),
+      openFiles: async () => ({ state: "ok", values: rollout ? [{ path: rollout }] : [] }),
+    } },
     home: () => "/home/me",
     hc: async () => ({ code: 0, stdout: JSON.stringify({ foreground: { pid, argv } }) }),
     readTextFile: async (path) => (session && path.endsWith(`/${pid}.json`) ? JSON.stringify(session) : null),

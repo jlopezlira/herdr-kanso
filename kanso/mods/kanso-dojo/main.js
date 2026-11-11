@@ -1,3 +1,4 @@
+import { paths } from "./platform.js";
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -18,7 +19,7 @@ export default class Dojo extends View {
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.store = new Store();
-    this.share = new Share("kanso-dojo", `${appHome()}/data/kanso-dojo/share`);
+    this.share = new Share("kanso-dojo", paths.join(appHome(), "data", "kanso-dojo", "share"));
     this.totals = { bests: {}, rounds: 0, rings: 0, fewest: 0, longest: 0, days: [], first: null };
     this.snippet = 0;
     this.pending = ""; // a count, a first g, or f t F T waiting for its letter

@@ -1,3 +1,4 @@
+import { localPlatform, paths } from "./platform.js";
 // Derived from the `spaces` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: New space button, initial tiles, nested worktrees on guide lines, ahead/behind counts.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-spaces; each space lists its agents (agents.js), folded by clicking the space. The active space is a faint wash of the text color, never a theme accent.
@@ -7,8 +8,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
-import { findThreads, pidsOf, pidsListed, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
-import { parseProcesses } from "./procs.js";
+import { findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
@@ -57,7 +57,7 @@ function laidOut(items, gap) {
   };
   return { els: items.map((it) => it.el), space: last("space"), agent: last("agent") };
 }
-const base = (path) => path.replace(/\/+$/, "").split("/").at(-1);
+const base = (path) => paths.basename(path);
 // Changes made outside Herdr (an editor's save, a commit in another app) are found this often, while the window is in front.
 const FALLBACK = 60000;
 // A `ps` answers in milliseconds; one still out after this is taken for hung (psRun).
@@ -124,7 +124,7 @@ async function publishRegistry(kdb) {
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
 // Kanso's worktrees: beside its database here; on another machine, ~/.kanso/worktrees (the script's default).
-const kansoWorktrees = (machine) => (machine ? "" : `${appHome()}/${WORKTREES}`);
+const kansoWorktrees = (machine) => (machine ? "" : paths.join(appHome(), WORKTREES));
 // Where a new agent of a project goes. Plain data, so a menu can be given it.
 const placeOfSpace = (w) => {
   const project = registry().find((p) => keyOfProject(p) === keyOfSpace(w, home())) ?? null;
@@ -538,10 +538,10 @@ export default class Spaces extends View {
   psFree(now) {
     return this.psLook == null || now - this.psLook >= PS_GIVE_UP_MS;
   }
-  async psRun(now, args, take) {
+  async psRun(now, options, take) {
     this.psLook = now;
     try {
-      const r = await exec("ps", args);
+      const r = await localPlatform().processes.list(options);
       if (this.psLook === now && Date.now() - now < PS_GIVE_UP_MS) take(r);
     } catch { /* the last look stands */ }
     finally { if (this.psLook === now) this.psLook = null; }
@@ -551,15 +551,13 @@ export default class Spaces extends View {
   // The whole table, read once, also says which conversations still run, so checkAlive needs no `ps` of its own meanwhile.
   checkTasks(cx) {
     const now = Date.now();
-    if (!this.psFree(now) || window().platform === "windows" || this.shownView() === "threads") return;
+    if (!this.psFree(now) || this.shownView() === "threads") return;
     if (!window().active && now - (this.psAt ?? 0) < 30000) return;
     const mine = terminals().filter((k) => k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
     if (!mine.length) { if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); } return; }
     this.psAt = now;
     const pids = pidsOf(this.threads);
-    cx.spawn((cx) => this.psRun(now, ["-axo", "pid=,ppid=,etime=,command="], (r) => {
-      if (r.code !== 0) return;
-      const table = parseProcesses(r.stdout);
+    cx.spawn((cx) => this.psRun(now, {}, (table) => {
       if (pids.length) this.sawAlive(aliveIn(table.byPid, pids), pids.join(","), now, cx);
       const next = Object.fromEntries(mine.flatMap((k) => {
         const had = this.tasks[k.address] ?? [];
@@ -1059,7 +1057,7 @@ export default class Spaces extends View {
 
   zzProject(a, t) {
     const key = a.asleep.from;
-    return { name: a.asleep.spaceName || key.slice(key.indexOf(":") + 1).split("/").at(-1) || "~", fill: t.muted };
+    return { name: a.asleep.spaceName || paths.basename(key.slice(key.indexOf(":") + 1)) || "~", fill: t.muted };
   }
 
   sleepingNow(sp, terms) { return sleepingNow(sp, terms, withAway(shared("kanso.asleep") ?? [], shared("kanso.sleep.away")), () => home()); }
@@ -1144,7 +1142,7 @@ export default class Spaces extends View {
   openTree(place, x) {
     // A pane's machine is its space's (panes don't name one).
     const machineOf = new Map(spaces().flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, w.machine ?? ""])));
-    const p = panes().find((k) => k.cwd && (k.cwd === x.path || k.cwd.startsWith(`${x.path}/`)) && (machineOf.get(k.tab) ?? "") === (place.machine ?? ""));
+    const p = panes().find((k) => k.cwd && paths.within(k.cwd, x.path) && (machineOf.get(k.tab) ?? "") === (place.machine ?? ""));
     if (p) run("pane.focus", { pane: p.pane });
     else openAt(place, x.path, null, x.branch);
   }
@@ -1178,7 +1176,7 @@ export default class Spaces extends View {
     const tabs = w?.tabs?.length ?? 0;
     const trees = this.trees ?? [];
     const home_ = trimmed(home()), base = trimmed(kansoWorktrees(place?.machine));
-    const where = (path) => (base && path.startsWith(`${base}/`) ? "kans\u014d" : path.startsWith(`${home_}/`) ? `~/${path.slice(home_.length + 1).split("/").slice(-2).join("/")}` : path.split("/").slice(-2).join("/"));
+    const where = (path) => base && paths.within(path, base) ? "kans\u014d" : paths.within(path, home_) ? `~/${paths.relative(home_, path).split(/[\\/]/).slice(-2).join("/")}` : path.split(/[\\/]/).slice(-2).join("/");
     // Keeping it: a space's folder (not home) can be a project of yours.
     const keepable = Boolean(w && !project && w.folder && trimmed(w.folder) !== home_);
     return this.menuFrame(t)
@@ -1426,7 +1424,7 @@ export default class Spaces extends View {
     this.aliveSig = sig;
     this.aliveAt = now;
     // `ps -p` exits 1 when none runs: an empty answer, every one of them gone.
-    cx.spawn((cx) => this.psRun(now, ["-o", "pid=", "-p", sig], (r) => this.sawAlive(aliveIn(pidsListed(r.stdout), pids), sig, now, cx)));
+    cx.spawn((cx) => this.psRun(now, { pids, onlyIds: true }, (table) => this.sawAlive(aliveIn(table.byPid, pids), sig, now, cx)));
   }
 
   sawAlive(next, sig, at, cx) {
@@ -1960,7 +1958,7 @@ export default class Spaces extends View {
         strong: unread || up,
         project: nested ? null : project(a.space),
         // What the agent says it is on, or said last; else the last thing you wrote.
-        activity: a.asleep ? (a.asleep.stuck ? `Stuck: ${a.asleep.stuck}` : a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`) : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
+        activity: a.asleep ? (a.asleep.stuck ? `Stuck: ${a.asleep.stuck}` : a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`) : this.threads[a.address]?.unavailable ?? said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         roomy: true,
         oneLine: this.narrow,
         ...this.extras(a, ctx),
@@ -2045,7 +2043,7 @@ export default class Spaces extends View {
     const item = this.items(t);
     const rule = () => div().mx(8).my(4).h(1).bg(t.border);
     const copy = (text) => (cx) => cx.write_to_clipboard?.(text);
-    const session = m.session ? m.session.split("/").at(-1).replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
+    const session = m.session ? paths.basename(m.session).replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
     const title = m.title ?? l[THREAD_LABEL] ?? null;
     // Its project is kept with the agent (conversation key, else its terminal's id); the sidebar holds the database.
     const conversation = session && /^[0-9a-f]{8}-/.test(session) ? session : null;

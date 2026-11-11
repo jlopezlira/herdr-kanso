@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, rm, writeFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { load, context, temporary, clone, exec } from "./helpers.mjs";
 
 const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
@@ -14,7 +14,7 @@ const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
   knownAgents: async () => [], Share: class { constructor() { this.open = false; } }, postText: (parts, fallback) => (parts.length ? parts.join(", ") + "." : fallback), ...host,
 });
 const git = async (cwd, ...args) => {
-  const r = await exec("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd });
+  const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd });
   assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
   return r.stdout.trim();
 };
@@ -205,7 +205,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   // Everything here was touched a moment ago: Clean up leaves it all but the record of a gone folder.
   const busy = new Worktrees();
   busy.init(cx); await drain();
-  assert.deepEqual(clone(busy.plan().map((w) => w.path.split("/").pop()).sort()), ["gone", "reused"]);
+  assert.deepEqual(clone(busy.plan().map((w) => basename(w.path)).sort()), ["gone", "reused"]);
   assert.equal(stateOf(busy.groups[0].items.find((w) => w.path.endsWith("/merged"))), "recent");
 
   settings["kanso.worktrees.idleHours"] = 0;
@@ -213,9 +213,9 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   panel.init(cx); await drain();
   assert.equal(panel.note, null);
   assert.equal(panel.groups.length, 1);
-  const g = panel.groups[0], by = Object.fromEntries(g.items.map((w) => [w.path.split("/").pop(), w]));
+  const g = panel.groups[0], by = Object.fromEntries(g.items.map((w) => [basename(w.path), w]));
   // Rows are values, replaced on every change: what one holds now is read from the panel.
-  const row = (n) => panel.groups[0].items.find((w) => w.path.split("/").pop() === n);
+  const row = (n) => panel.groups[0].items.find((w) => basename(w.path) === n);
   assert.deepEqual(Object.fromEntries(Object.entries(by).map(([k, w]) => [k, stateOf(w)])), {
     merged: "merged", squashed: "merged", unmerged: "unmerged", dirty: "changes", lost: "lost", detached: "detached", open: "open", gone: "missing", reused: "missing", moved: "broken", late: "merged",
   });
@@ -225,7 +225,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.ok(by.merged.size > 0, "measured");
   assert.deepEqual(clone(panel.orphans.map((o) => o.path)), [orphan]);
 
-  assert.deepEqual(clone(panel.plan().map((w) => w.path.split("/").pop()).sort()), ["detached", "gone", "late", "merged", "reused", "squashed", "unmerged"]);
+  assert.deepEqual(clone(panel.plan().map((w) => basename(w.path)).sort()), ["detached", "gone", "late", "merged", "reused", "squashed", "unmerged"]);
   await writeFile(join(late, "new.txt"), "started after the scan\n");
   panel.cleanUp(cx); await drain();
   assert.equal(panel.note, null, "no error: what changed is left alone");
@@ -258,12 +258,12 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.ok(!(await exists(dirty)), "uncommitted work goes only when confirmed");
   panel.remove(panel.orphans[0], cx); await drain();
   assert.ok(!(await exists(orphan)), "orphan folder deleted");
-  assert.deepEqual(clone(panel.groups[0].items.map((w) => w.path.split("/").pop()).sort()), ["late", "lost", "moved", "open"]);
+  assert.deepEqual(clone(panel.groups[0].items.map((w) => basename(w.path)).sort()), ["late", "lost", "moved", "open"]);
 
   // Remove all: the commit only "lost" had and late's new file go with them; the open one and the broken link stay.
   panel.removeAll(panel.groups[0].items.filter(removable), cx); await drain();
   assert.ok(!existsSync(lost) && existsSync(open) && existsSync(join(moved, "wip.txt")));
-  assert.deepEqual(clone(panel.groups[0].items.map((w) => w.path.split("/").pop()).sort()), ["moved", "open"]);
+  assert.deepEqual(clone(panel.groups[0].items.map((w) => basename(w.path)).sort()), ["moved", "open"]);
 
   // Repaired, git reads it again, and its uncommitted file shows.
   panel.repair(by.moved, cx); await drain();

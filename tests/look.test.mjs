@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { load, clone, context, singleUse, exec as run } from "./helpers.mjs";
+import { load, clone, context, singleUse, exec as run, nativeWindow } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -367,7 +367,7 @@ test("Look draws a HEIC with sips or ImageMagick and a PDF's first page with Qui
   assert.equal(await onLinux.toPng("/r/a.heic", "/app/k.png"), true);
   assert.deepEqual(clone(linux.calls[0]), ["magick", "/r/a.heic", "/app/k.png"]);
   assert.equal(await onMac.firstPage("/r/spec.pdf", 736, "/app/k.png"), true, "QuickLook failed: Poppler did it");
-  assert.deepEqual(clone(mac.calls.filter((c) => c[0] !== "sh").map((c) => c[0])), ["sips", "qlmanage", "pdftoppm"]);
+  assert.deepEqual(clone(mac.calls.filter((c) => !["sh", "test"].includes(c[0])).map((c) => c[0])), ["sips", "qlmanage", "pdftoppm"]);
   assert.deepEqual(clone(mac.calls.at(-2)), ["pdftoppm", "-png", "-singlefile", "-f", "1", "-scale-to", "736", "/r/spec.pdf", "/app/k"]);
 });
 
@@ -487,7 +487,7 @@ test("an agent with no pictures is told what shows up here", async () => {
 });
 
 test("a path cut at the stored offset is indexed once the line is whole, and a rewritten file is read again", async () => {
-  const { scanFile } = await load("kanso-panel/transcript.js", ["scanFile"], { exec: run });
+  const { scanFile } = await load("kanso-panel/transcript.js", ["scanFile"], { exec: run, window: nativeWindow });
   const dir = mkdtempSync(join(tmpdir(), "kanso-scan-"));
   dirs.push(dir);
   const file = join(dir, "s.jsonl");

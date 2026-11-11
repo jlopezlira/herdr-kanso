@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Containers, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // What Docker says, read into plain rows, and which Kanso project each belongs to.
 
@@ -8,7 +9,7 @@ export const PS_FORMAT = ["{{.ID}}", "{{.Names}}", "{{.State}}", "{{.Status}}", 
   label("com.docker.compose.project"), label("com.docker.compose.project.working_dir"), label("com.docker.compose.service"),
   label("com.docker.compose.project.config_files")].join(TAB);
 // JSON for the lists: no raw tab or newline gets in, so a line is one container.
-export const INSPECT_FORMAT = ["{{.Id}}", "{{.Image}}", "{{json .Mounts}}", "{{.HostConfig.RestartPolicy.Name}}", "{{json .NetworkSettings.Networks}}", "{{json .Config.Env}}", "{{.Created}}"].join("\t");
+export const INSPECT_FORMAT = ["{{.Id}}", "{{.Image}}", "{{json .Mounts}}", "{{.HostConfig.RestartPolicy.Name}}", "{{json .NetworkSettings.Networks}}", "{{json .Config.Env}}", "{{.Created}}", "{{.Platform}}"].join("\t");
 export const VOLUMES_FORMAT = "{{.Name}}\t{{.Driver}}";
 export const COMPOSE_FILES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
 // Ports a browser can open.
@@ -87,6 +88,7 @@ export const parseInspect = (text) => new Map(lines(text).map((l) => l.split(TAB
   networks: Object.keys(json(f[4], {})),
   env: json(f[5], []).map((e) => String(e).split("=")[0]).filter(Boolean),
   created: f[6] ?? null,
+  platform: f[7] || "linux",
 }]));
 export const parseImageIds = (text) => new Map([...parseInspect(text)].map(([id, d]) => [id, d.imageId]));
 
@@ -106,8 +108,8 @@ export const reclaimable = (text) => Object.fromEntries(lines(text).map((l) => j
 // Folders to look in for compose files: each project folder's own two levels (find -maxdepth 2), and
 // its parents up to `up` levels (find -maxdepth 1), never home, what holds it, or a top folder.
 export function lookIn(folders, homeDir, up = 3) {
-  const parentsOf = (f) => Array.from({ length: up }, (_, i) => f.split("/").slice(0, -(i + 1)).join("/"))
-    .filter((p) => p.split("/").length > 2 && p !== homeDir && !homeDir.startsWith(`${p}/`));
+  const parentsOf = (f) => Array.from({ length: up }).reduce((out) => [...out, paths.dirname(out.at(-1) ?? f)], [])
+    .filter((p) => !paths.equal(paths.dirname(p), paths.dirname(paths.dirname(p))) && !paths.within(homeDir, p));
   const deep = [...new Set(folders)];
   return { deep, shallow: [...new Set(deep.flatMap(parentsOf))].filter((p) => !deep.includes(p)) };
 }
@@ -116,13 +118,13 @@ export function lookIn(folders, homeDir, up = 3) {
 // containers' labels and the names kept after a Down.
 export function knownStacks(files, containers, names) {
   const dirs = [...new Set([...containers.filter((c) => c.dir && c.compose).map((c) => c.dir), ...names.keys()])].filter((d) => !files.some((f) => f.dir === d));
-  return [...files, ...dirs.map((dir) => ({ dir, file: containers.find((c) => c.dir === dir && c.files?.length)?.files[0] ?? names.get(dir)?.[0]?.files?.[0] ?? dir, name: dir.split("/").at(-1) }))];
+  return [...files, ...dirs.map((dir) => ({ dir, file: containers.find((c) => c.dir === dir && c.files?.length)?.files[0] ?? names.get(dir)?.[0]?.files?.[0] ?? dir, name: paths.basename(dir) }))];
 }
 
 export function composeFiles(text) {
-  const found = lines(text).filter((p) => COMPOSE_FILES.includes(p.split("/").at(-1)));
-  const dirs = [...new Set(found.map((p) => p.slice(0, p.lastIndexOf("/"))))];
-  return dirs.map((dir) => ({ dir, file: `${dir}/${COMPOSE_FILES.find((f) => found.includes(`${dir}/${f}`))}`, name: dir.split("/").at(-1) }));
+  const found = lines(text).map((p) => paths.normalize(p)).filter((p) => COMPOSE_FILES.includes(paths.basename(p)));
+  const dirs = [...new Set(found.map((p) => paths.dirname(p)))];
+  return dirs.map((dir) => ({ dir, file: paths.join(dir, COMPOSE_FILES.find((f) => found.includes(paths.join(dir, f)))), name: paths.basename(dir) }));
 }
 
 // The containers on an image: by the image id Docker gave each, else as `docker ps` names it.
@@ -140,7 +142,7 @@ export function contextOf(text) {
 const words = (s) => String(s ?? "").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
 const foldersOf = (p) => p.folders ?? (p.folder ? [p.folder] : []);
-const within = (dir, f) => dir === f || dir.startsWith(`${f}/`) || f.startsWith(`${dir}/`);
+const within = (dir, f) => dir === f || dir.startsWith(`${f}/`) || f.startsWith(paths.join(dir));
 
 // The Kanso project a container is for, among `projects` [{ name, folders }] (where its panes work;
 // never home itself): the one with the deepest folder holding its compose folder, else the one working
@@ -157,7 +159,7 @@ export function projectOf(c, projects) {
     .filter(({ w }) => w.length > 0 && w.length <= own.length && w.every((x, i) => own[i] === x))
     .toSorted((a, b) => b.w.length - a.w.length)[0];
   if (byName) return byName.p.name;
-  return dir ? dir.split("/").filter(Boolean).at(-1) : OTHER;
+  return dir ? paths.basename(dir) : OTHER;
 }
 
 const order = { running: 0, busy: 1, failed: 2, stopped: 3 };
@@ -222,12 +224,13 @@ export const STATS_FORMAT = ["{{.ID}}", "{{.MemUsage}}"].join(TAB);
 // `docker stats --no-stream`: short id -> megabytes.
 export const parseStats = (text) => new Map(lines(text).map((l) => l.split(TAB)).filter((f) => f.length >= 2).map((f) => [f[0].slice(0, 12), memMB(f[1])]));
 
-const VM = /com\.apple\.Virtualization\.VirtualMachine/;
+const VM = /com\.apple\.Virtualization\.VirtualMachine|^vmmem(?:WSL)?(?:\.exe)?$/i;
 const procs = (text) => lines(text).map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter(Boolean).map((m) => ({ pid: Number(m[1]), kb: Number(m[2]), comm: m[3] }));
 // `ps -axo pid=,rss=,comm=`: the virtual machines running, Docker's or another app's.
 export const vmPids = (text) => procs(text).filter((p) => VM.test(p.comm)).map((p) => p.pid);
 // `lsof -Fpn` of those: the ones with Docker's disk or kernel open are Docker's.
 export function dockerVms(text) {
+  if (Array.isArray(text)) return new Set(text.filter((row) => /Docker\.app\/|com\.docker\./.test(row.path)).map((row) => row.pid));
   const ls = lines(text);
   const starts = ls.flatMap((l, i) => (l[0] === "p" ? [i] : []));
   return new Set(starts.filter((at, k) => ls.slice(at + 1, starts[k + 1] ?? ls.length).some((l) => l[0] === "n" && /Docker\.app\/|com\.docker\.docker/.test(l)))

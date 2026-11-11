@@ -1,3 +1,4 @@
+import { localPlatform, paths } from "./platform.js";
 // The Worktrees panel's store, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // A gone worktree's row stays, with when, by whom (`kanso` or `outside`) and the size it had: that is what was freed.
 import { exec, appHome, writeTextFile } from "herdr";
@@ -62,8 +63,8 @@ export function itemOf(r) {
 
 export class WorktreeStore {
   constructor(dir) {
-    this.dir = dir ?? `${appHome()}/${STORE_DIR}`;
-    this.db = `${this.dir}/worktrees.db`;
+    this.dir = dir ?? paths.join(appHome(), STORE_DIR);
+    this.db = paths.join(this.dir, "worktrees.db");
     this.batches = 0;
   }
 
@@ -78,18 +79,18 @@ export class WorktreeStore {
     if (!text.trim()) return;
     const n = this.batches;
     this.batches = n + 1;
-    const path = `${this.dir}/.worktrees-${Date.now()}-${n}.sql`;
+    const path = paths.join(this.dir, `.worktrees-${Date.now()}-${n}.sql`);
     await writeTextFile(path, `BEGIN;\n${text}\nCOMMIT;\n`, null);
     try {
-      const r = await exec("sqlite3", [...BUSY, this.db, `.read '${path}'`]);
+      const r = await exec("sqlite3", [...BUSY, this.db, paths.sqliteRead(path)]);
       if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
-    } finally { await exec("rm", ["-f", path]).catch(() => {}); }
+    } finally { await localPlatform().files.remove([path]).catch(() => {}); }
   }
 
   async open() {
     const ok = await tryOrAsync(() => exec("sqlite3", ["-version"]));
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the history of your worktrees.");
-    await exec("mkdir", ["-p", this.dir]);
+    await localPlatform().files.mkdir(this.dir);
     await this.sql(SCHEMA);
   }
 
@@ -106,8 +107,9 @@ export class WorktreeStore {
     if (!unseen.length) return 0;
     const check = unseen.filter((r) => !r.missing).map((r) => r.path);
     const listed = await mapSeries(range(Math.ceil(check.length / 200)), async (k) => {
-      const r = await exec("bash", ["-c", 'for p in "$@"; do [ -e "$p" ] || printf "%s\\n" "$p"; done', "sweep", ...check.slice(k * 200, k * 200 + 200)]);
-      return String(r.stdout).split("\n").filter(Boolean);
+      const batch = check.slice(k * 200, k * 200 + 200);
+      const present = new Set(await localPlatform().files.existing(batch, "any"));
+      return batch.filter((path) => !present.has(path));
     });
     const absent = new Set(listed.flat());
     const gone = unseen.filter((r) => (r.missing ? repos.has(r.repo) : absent.has(r.path)));

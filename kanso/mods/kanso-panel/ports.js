@@ -1,9 +1,12 @@
+import { localPlatform, paths } from "./platform.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
+import { hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
 import { tilde } from "./lib.js";
 import { tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
+import { STOP_LOOP } from "./platform-system.js";
+export { STOP_LOOP };
 import { G, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, breathe } from "./ui.js";
 import { Share } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
@@ -19,8 +22,7 @@ const HISTORY_MS = 30_000; // the guard writes once a minute
 const BUSY_MS = 90_000;
 const LIST_ROWS = 12;
 // One detached shell stops them one at a time: $0 node, $1 guard.mjs, then a pid each ("pid:force" for a force stop).
-export const STOP_LOOP = 'g="$1"; shift; for a in "$@"; do case "$a" in *:force) "$0" "$g" stop-server "${a%:force}" force;; *) "$0" "$g" stop-server "$a";; esac; done';
-const DETACHED = 'nohup "$0" "$@" >/dev/null 2>&1 &';
+
 
 const EVERY_MS = 10000;
 
@@ -58,7 +60,7 @@ export function ownerOf(pid, ps, shells) {
 export function servers(listen, cwds, ps, shells, homeDir) {
   return [...listen.values()].flatMap((s) => {
     const cwd = cwds.get(s.pid) ?? null, owner = ownerOf(s.pid, ps, shells);
-    const mine = cwd && cwd.startsWith(homeDir + "/") && !cwd.startsWith(homeDir + "/Library/");
+    const mine = cwd && !paths.equal(cwd, homeDir) && paths.within(cwd, homeDir) && !paths.within(cwd, paths.join(homeDir, "Library"));
     if (!owner && !mine) return [];
     const p = ps.get(s.pid);
     return [{ pid: s.pid, ports: s.ports, command: s.command, args: p?.args ?? s.command, secs: p?.secs ?? 0, cwd, owner }];
@@ -67,7 +69,7 @@ export function servers(listen, cwds, ps, shells, homeDir) {
 
 export const shortArgs = (args) => {
   const [cmd, ...rest] = String(args).split(" ");
-  return [cmd.split("/").at(-1), ...rest].join(" ");
+  return [paths.basename(cmd), ...rest].join(" ");
 };
 
 const age = (secs) => secs < 3600 ? `${Math.max(1, Math.round(secs / 60))} min` : secs < 86400 ? `${Math.round(secs / 3600)} h` : `${Math.round(secs / 86400)} d`;
@@ -115,13 +117,12 @@ export class Ports {
   }
 
   async read() {
-    const listen = parseListen((await exec("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcn"])).stdout);
-    const pids = [...listen.keys()];
-    const [cwdOut, psOut, shells] = await Promise.all([
-      pids.length ? exec("lsof", ["-a", "-d", "cwd", "-p", pids.join(","), "-F", "pn"]).then((r) => r.stdout) : "",
-      exec("ps", ["-axo", "pid=,ppid=,etime=,args="]).then((r) => r.stdout),
-      this.shells()]);
-    const list = servers(listen, parseCwds(cwdOut), parsePs(psOut), shells, home());
+    const host = localPlatform();
+    const listen = await host.ports.listen();
+    const [cwd, table, shells] = await Promise.all([host.processes.cwd([...listen.keys()]), host.processes.list(), this.shells()]);
+    this.attribution = cwd.state === "unavailable" ? "Some servers cannot be attributed: working directories require a Herdr API on Windows." : null;
+    const ps = new Map(table.rows.map((r) => [r.pid, { ppid: r.ppid, secs: etimeSecs(r.etime), args: r.command }]));
+    const list = servers(listen, cwd.values ?? new Map(), ps, shells, home());
     const now = Date.now();
     return list.map((s) => {
       const h = historyOf(s, this.hist?.data, now);
@@ -136,7 +137,7 @@ export class Ports {
 
   /** Read ports.json: a file read, no process. */
   async readHistory() {
-    const text = await readTextFile(`${appHome()}/${PORTS_FILE}`).catch(() => null);
+    const text = await readTextFile(paths.join(appHome(), PORTS_FILE)).catch(() => null);
     const now = Date.now();
     const hist = parsePorts(text, now);
     this.hist = hist;
@@ -155,21 +156,21 @@ export class Ports {
     cx.spawn(async (cx) => {
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
-        this.list = await this.read(); this.note = null;
+        this.list = await this.read(); this.note = this.attribution;
       } catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list = this.list ?? []; }
       finally { this.reading = false; then?.(); cx.notify(); }
     });
   }
 
   async guardReady() {
-    if (!this.hist?.data) return false;
-    if (this.guardFile === undefined) this.guardFile = (await exec("test", ["-f", `${appHome()}/${GUARD_FILE}`]).catch(() => null))?.code === 0;
+    if (!this.hist?.data || !localPlatform().system.memoryGuardAvailable) return false;
+    if (this.guardFile === undefined) this.guardFile = await localPlatform().files.test(paths.join(appHome(), GUARD_FILE)).catch(() => false);
     return this.guardFile;
   }
 
   async node() {
     if (this.nodeBin) return this.nodeBin;
-    const raw = await readTextFile(`${appHome()}/${RUNTIME_FILE}`).catch(() => null);
+    const raw = await readTextFile(paths.join(appHome(), RUNTIME_FILE)).catch(() => null);
     const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
     const node = typeof v === "string" && v.trim() ? v.trim() : "node";
     this.nodeBin = node;
@@ -185,9 +186,9 @@ export class Ports {
       if (viaGuard) {
         // pid@start: the guard stops it only if that pid is still the process this row showed.
         const args = items.map((s) => `${s.pid}@${Math.round(Date.now() - (s.secs ?? 0) * 1000)}${s.force ? ":force" : ""}`);
-        await exec("sh", ["-c", DETACHED, "sh", "-c", STOP_LOOP, await this.node(), `${appHome()}/${GUARD_FILE}`, ...args]).catch(() => null);
+        await localPlatform().system.guardStop(await this.node(), paths.join(appHome(), GUARD_FILE), args).catch(() => null);
       } else {
-        for (const s of items) await exec("kill", [s.force ? "-KILL" : "-TERM", String(s.pid)]).catch(() => null);
+        for (const s of items) await localPlatform().kill.stop(s.pid, { force: s.force }).catch(() => null);
       }
       this.forced = new Set([...this.forced, ...items.map((s) => s.pid)]);
       await cx.sleep(1500);
@@ -206,11 +207,12 @@ export class Ports {
   }
 
   turnOn(cx) {
+    if (!localPlatform().system.memoryGuardAvailable) { this.note = localPlatform().system.memoryGuardReason; cx.notify(); return; }
     if (this.busy.install && Date.now() - this.busy.install < BUSY_MS) return;
     this.busy = { ...this.busy, install: Date.now() };
     cx.notify();
     cx.spawn(async (cx) => {
-      await exec("sh", ["-c", DETACHED, await this.node(), `${appHome()}/${GUARD_FILE}`, "install"]).catch(() => { this.idle(); });
+      await localPlatform().system.guardRun(await this.node(), paths.join(appHome(), GUARD_FILE), ["install"]).catch(() => { this.idle(); });
       this.guardFile = undefined;
       for (const ms of [3000, 8000, 20_000]) cx.timer.after(ms, (cx) => this.refresh(cx, { history: true }));
       cx.notify();

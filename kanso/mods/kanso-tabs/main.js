@@ -1,3 +1,4 @@
+import { localPlatform, paths } from "./platform.js";
 // Derived from the `tabs` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: segmented tab pill, outlined Files and Changes buttons, no bar background.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-tabs; a Specs panel button with the pending count and a needs-you dot (sdd.badge).
@@ -95,9 +96,9 @@ const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chose
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
-  const r = await exec("sh", ["-c", 'for f in "$1"/*.path; do [ -f "$f" ] || continue; cat "$f"; printf "\\0"; rm -f "$f"; done', "sh", dir]);
-  const paths = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter((p) => p.startsWith("/"));
-  return paths.at(-1) ?? null;
+  const r = await localPlatform().files.drain(dir);
+  const opened = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter(paths.isAbsolute);
+  return opened.at(-1) ?? null;
 }
 
 export default class Tabs extends View {
@@ -153,10 +154,10 @@ export default class Tabs extends View {
 
   // markdown-handler.sh leaves .md paths opened from outside in data/kanso-open; the newest shows in the preview.
   watchOpens(cx) {
-    const dir = `${appHome()}/data/kanso-open`;
+    const dir = paths.join(appHome(), "data", "kanso-open");
     cx.spawn(async (cx) => {
       try {
-        await exec("mkdir", ["-p", dir]);
+        await localPlatform().files.mkdir(dir);
         for (;;) {
           const path = await takeOpens(dir);
           if (path) this.preview(path);

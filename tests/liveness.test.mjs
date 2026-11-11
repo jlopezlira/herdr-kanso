@@ -114,20 +114,19 @@ test("a slow `ps` is never asked again before it answers, from either check", as
 });
 
 test("one table for every terminal: each `ps -axo` is parsed once, and tasksOf walks its index", async () => {
-  const real = { ...await load("kanso-spaces/procs.js", ["parseProcesses"]), ...await load("kanso-spaces/agents.js", ["tasksOf"]) };
-  const parsed = [], given = [];
+  const real = { ...await load("kanso-spaces/platform-processes.js", ["unixProcesses"]), ...await load("kanso-spaces/agents.js", ["tasksOf"]) };
+  const given = [], tables = [];
   const terms = [101, 202, 303, 404].map((pid, i) => ({ address: `t${i + 1}`, state: "live", status: "working", pid: 50 + i, foreground: { pid } }));
   const rows = [303, 404].flatMap((pid) => [`${pid} 1 00:10 claude`, `${pid}1 ${pid} 00:05 npm test`]);
   const { h, v } = await sidebar({
     terms, rows: [...rows, "1011 101 00:05 npm run dev", "1012 101 00:05 caffeinate -i"],
     host: {
-      parseProcesses: (text) => { parsed.push(h.clock); return real.parseProcesses(text); },
-      tasksOf: (table, ...rest) => { given.push(typeof table); return real.tasksOf(table, ...rest); },
+      tasksOf: (table, ...rest) => { given.push(typeof table); tables.push(table); return real.tasksOf(table, ...rest); },
     },
   });
   await h.run(15000);
   const whole = h.ps.filter((x) => x.whole).map((x) => x.at);
-  assert.deepEqual(parsed, whole, "one parse per table");
+  assert.equal(new Set(tables).size, whole.length, "one table shared by all terminals per read");
   assert.deepEqual([...new Set(given)], ["object"], "never the text again");
   assert.equal(given.length, whole.length * terms.length, "and each terminal asked of it");
   assert.deepEqual(clone(Object.fromEntries(Object.entries(v.tasks).map(([a, l]) => [a, l.map((x) => x.command)]))),

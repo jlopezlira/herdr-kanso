@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { load, clone, temporary, exec, nativeWindow } from "./helpers.mjs";
 
 const C1 = "00000000-0000-4000-8000-000000000001";
 const C2 = "00000000-0000-4000-8000-000000000002";
@@ -50,8 +50,8 @@ function herdr(dir, exits = {}) {
     return ok;
   };
   const host = {
-    hc, home: () => "/nonexistent-home", appHome: () => dir,
-    exec: async (c, a, o) => (c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : exec(c, a, o)),
+    window: nativeWindow, hc, home: () => "/nonexistent-home", appHome: () => dir,
+    exec: async (c, a, o) => (c === "pwsh" && a.at(-1).includes("Get-CimInstance") ? { code: 0, stdout: JSON.stringify([...alive].map((pid) => ({ pid, ppid: 1, name: "claude.exe" }))) } : c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : exec(c, a, o)),
     terminals: () => Object.keys(terms).map((address) => ({ address })),
     panes: () => Object.keys(terms).map((t, i) => ({ pane: `p${i}`, terminal: t, tab: "tb1" })),
     run: (cmd, args) => {

@@ -1,11 +1,12 @@
+import { platformOn, paths } from "./platform.js";
 // Derived from the `files` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-files.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-files; one of the kanso-panel mod's panels.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
-import { exec, readTextFile, watchFolder, theme, window, openOverlay, shared, setShared } from "herdr";
-import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel, mapWith } from "./lib.js";
+import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared } from "herdr";
+import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { readingLines } from "./doc.js";
@@ -15,43 +16,7 @@ const PER_FOLDER = 500, TOTAL = 5000;
 const RETURN = "kanso.files.return";
 
 async function directory(path, on) {
-  if (!on && window()?.platform === "windows") {
-    // The path is the process's cwd, not part of -Command: a folder name inside the script could run as code.
-    const script = "& { @(Get-ChildItem -LiteralPath . -Force -ErrorAction Stop | Where-Object Name -ne '.git' | Select-Object -First 501 | ForEach-Object { @{ name=$_.Name; dir=($_.PSIsContainer -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) } }) | ConvertTo-Json -Compress }";
-    const r = await exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { cwd: path });
-    if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-    const result = JSON.parse(r.stdout || "[]");
-    return Array.isArray(result) ? result : [result];
-  }
-  // find prints each directory twice in a row, so its type costs no extra call.
-  // -H follows only the folder itself (a link to a folder should open); entries are not followed.
-  const fast = await exec("find", ["-H", ".", "-mindepth", "1", "-maxdepth", "1", "!", "-name", ".git",
-    "(", "-type", "d", "-print0", "-print0", "-o", "-print0", ")"], { cwd: path, on }).catch(() => null);
-  if (fast?.code === 0) {
-    // Names kept: two per folder, one for anything else; "./" dropped.
-    const names = fast.stdout.split("\0").slice(0, -1).slice(0, 2 * (PER_FOLDER + 2)).map((name) => name.slice(2));
-    // A name equal to the one before it, unless that was itself a pair's second, is a folder's second print.
-    const second = mapWith(names, (last, name) => (name === last ? [null, true] : [name, false]), null);
-    const out = names.flatMap((name, i) => (second[i] ? [] : [{ name, dir: second[i + 1] === true }]));
-    // One past the cap tells the panel the folder was cut short.
-    return out.slice(0, PER_FOLDER + 1);
-  }
-  // Fallback when find is missing or its output would pass exec's limit; one extra entry detects truncation.
-  const script = `
-n=0
-find -H "$1" -mindepth 1 -maxdepth 1 ! -name .git -print0 2>/dev/null |
-while IFS= read -r -d '' p; do
-  name=\${p##*/}
-  if [ -d "$p" ] && [ ! -L "$p" ]; then kind=d; else kind=f; fi
-  printf '%s\\0%s\\0' "$kind" "$name"
-  n=$((n+1))
-  [ "$n" -ge ${PER_FOLDER + 1} ] && break
-done
-test -d "$1"`;
-  const r = await exec("bash", ["-c", script, "files", path], { on });
-  if (r.code !== 0) throw new Error(r.stderr || "Cannot list this folder");
-  const fields = r.stdout.split("\0");
-  return Array.from({ length: Math.floor(fields.length / 2) }, (_, k) => ({ name: fields[2 * k + 1], dir: fields[2 * k] === "d" }));
+  return (await platformOn(on)).files.directory(path);
 }
 
 export class Files {
@@ -104,7 +69,7 @@ export class Files {
   async loadFolder(path, context) {
     if (path && !insideRoot(path)) return;
     const on = this.on, root = this.root;
-    const entries = await directory(path ? `${root}/${path}` : root, on);
+    const entries = await directory(path ? paths.join(root, path) : root, on);
     if (key() !== context || (path && !this.folders.has(path))) return;
     const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
     const kept = entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).toSorted((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
@@ -175,14 +140,14 @@ export class Files {
 
   openWith(path) {
     if (!insideRoot(path)) return;
-    openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { file: `${this.root}/${path}`, folder: this.root, machine: this.on } });
+    openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { file: paths.join(this.root, path), folder: this.root, machine: this.on } });
   }
 
   // The open folders are kept so returning from the preview restores them.
   read(path) {
     if (!insideRoot(path)) return;
     setShared(RETURN, { context: this.context, folders: [...this.folders] });
-    showPanel("preview", { mod: "kanso-panel", props: { panel: "preview", path: `${this.root}/${path}`, on: this.on, back: "files" } });
+    showPanel("preview", { mod: "kanso-panel", props: { panel: "preview", path: paths.join(this.root, path), on: this.on, back: "files" } });
   }
 
   show(path, cx, quiet = false) {
@@ -192,7 +157,7 @@ export class Files {
     const context = this.context, root = this.root, on = this.on;
     cx.spawn(async cx => {
       try {
-        const text = await readTextFile(`${root}/${path}`, { on });
+        const text = await readTextFile(paths.join(root, path), { on });
         if (this.file !== path || key() !== context) return;
         if (text === null || text.includes("\0")) {
           if (quiet) { this.file = null; this.fileError = null; return; }
@@ -216,7 +181,7 @@ export class Files {
     if (depth > 40) return [];
     return (this.entries.get(prefix) ?? []).flatMap((entry) => {
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const row = { path, entry, depth, mark: this.marks[`${this.root}/${path}`] };
+      const row = { path, entry, depth, mark: this.marks[paths.join(this.root, path)] };
       return entry.dir && this.folders.has(path) ? [row, ...this.flat(path, depth + 1)] : [row];
     });
   }

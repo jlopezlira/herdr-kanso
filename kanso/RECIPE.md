@@ -710,14 +710,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - `tabs`: block `kanso-tabs`, 48 px, `window_drag`.
       - `work-body` (row, `chrome` background, gap 6):
         - `main`: `{tab: "active"}` with the `kanso-strip` header (height 34),
-          radius 8, gap 6 and no pane borders. `kanso-strip` replaces it with
-          the canvas's columns (`strip-*` nodes, `background`, radius 8) and
-          puts it back for tabs it can't show.
+          radius 8, gap 6 and no pane borders. `kanso-strip` mounts canvas columns (`strip-*`, `background`, radius 8), restoring it for other tabs.
         - `panel-body`: stack, 368 px (280 to 900), hidden, no children.
-          `kanso-tabs` mounts the open panel in it.
+          `kanso-tabs` mounts panels here.
     - `status-row` (row, 26 px): `status` (`kanso-status` `{side: "left"}`,
       weight 1), `strip-map` (`kanso-strip`, 180 px), `status-right`
       (`kanso-status` `{side: "right"}`, weight 1).
+- **Platform**: shared `platform-*.js` services use injected runners.
 - **Mods**:
   - `kanso-spaces`: spaces, agents (`agents.js`), git per space via `exec`,
     machines via `hc machine ls`.
@@ -976,5 +975,4 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## Spend and Memory
 
-Their briefs, in this one's order: [RECIPE-spend.md](RECIPE-spend.md),
-[RECIPE-guard.md](RECIPE-guard.md).
+Briefs: [RECIPE-spend.md](RECIPE-spend.md), [RECIPE-guard.md](RECIPE-guard.md).

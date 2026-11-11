@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Kanso strip, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Herdr can't clip a terminal, so the view shows only whole, live panes and slides a column at a time.
 // Herdr rules that shape the tree: a layout nests at most 16 levels (columns sit directly in work-body), and Herdr folds empty and single-child containers.
@@ -97,8 +98,7 @@ const PROMPT_W = 420;
 const BADGE_MAX_W = 220;
 const folder = (cwd) => {
   if (!cwd) return "";
-  const h = home();
-  return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
+  return paths.shorten(cwd, home());
 };
 
 // Blocked on a question before done; from the focused agent, the next in Herdr's order, wrapping round.

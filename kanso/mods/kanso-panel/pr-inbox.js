@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // The inbox cache in kanso.db. Network stays in the provider; this file only reads and writes rows.
 import { q } from "./kdb.js";
 import { matchRemote } from "./pr-providers.js";
@@ -51,7 +52,7 @@ function itemOf(row) {
 function titles(projects) {
   const count = projects.reduce((acc, project) => ({ ...acc, [project.name]: (acc[project.name] ?? 0) + 1 }), {});
   return new Map(projects.map((project) => {
-    const parent = String(project.folder ?? "").replace(/\/+$/, "").split("/").at(-2);
+    const parent = paths.basename(paths.dirname(project.folder));
     return [project.id, count[project.name] > 1 && parent ? `${parent}/${project.name}` : project.name];
   }));
 }

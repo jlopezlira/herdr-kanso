@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec, psMissing } from "./helpers.mjs";
+import { load, clone, temporary, exec, psMissing, nativeWindow } from "./helpers.mjs";
 
 const HOME = "/nonexistent-home";
 const C1 = "00000000-0000-4000-8000-000000000001";
@@ -37,7 +37,7 @@ function herdr(dir) {
   };
   const shared = (k) => (k === "strip.state" ? strip : null);
   const host = {
-    exec, appHome: () => dir, home: () => HOME, spaces: () => spaces, panes: () => panes, terminals: () => panes.map((p) => ({ address: p.terminal, argv: p.argv })),
+    window: nativeWindow, exec, appHome: () => dir, home: () => HOME, spaces: () => spaces, panes: () => panes, terminals: () => panes.map((p) => ({ address: p.terminal, argv: p.argv })),
     shared, setShared: () => {}, hc, run, props: () => ({}), closeOverlay: () => { host.closed = true; }, theme: () => ({}),
     readTextFile: async () => JSON.stringify({ pid: 77, sessionId: C1 }),
     div: () => null, svg: () => null, v_flex: () => null, h_flex: () => null,
@@ -149,7 +149,7 @@ test("a conversation check that outlasts the hold opens nothing: the hold is ren
     // before it opens, another window takes the row.
     let looks = 0;
     w.host.exec = async (c, args, o) => {
-      if (c === "sh" && String(args?.[1] ?? "").includes(".claude/sessions") && store && ++looks === 2) await store.kdb.run(`UPDATE sleeps SET waking='other',waking_at=${Date.now()};`);
+      if ((c === "sh" && String(args?.[1] ?? "").includes(".claude/sessions") || c === "pwsh" && args.at(-1).includes(".claude")) && store && ++looks === 2) await store.kdb.run(`UPDATE sleeps SET waking='other',waking_at=${Date.now()};`);
       return exec(c, args, o);
     };
   });
