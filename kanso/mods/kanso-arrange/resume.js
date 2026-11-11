@@ -13,7 +13,7 @@ export const DROP_VALUE = new Set(["--resume", "-r", "--session-id"]);
 export const DROP_FLAG = new Set(["--continue", "-c", "--fork-session"]);
 
 // A program's name from its path; a login shell's leading "-" dropped.
-export const base = (s) => String(s ?? "").split("/").at(-1).replace(/^-/, "");
+export const base = (s) => String(s ?? "").split(/[\\/]/).at(-1).replace(/^-/, "").replace(/\.(exe|cmd|bat)$/i, "");
 export const isClaude = (argv) => Array.isArray(argv) && argv.length > 0 && base(argv[0]) === "claude";
 
 const split = (a) => {

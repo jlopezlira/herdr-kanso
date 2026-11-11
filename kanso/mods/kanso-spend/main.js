@@ -1,16 +1,18 @@
+import { localService, serviceOn } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared } from "herdr";
-import { mkdir } from "fs/promises";
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
 import { Kdb } from "./kdb.js";
-import { EXCHANGE_MS, SYNC_KICK, configFrom, exchangeAll, holdsOf, identityFrom, joinUnder, periodKeyOf, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
+import { EXCHANGE_MS, SYNC_KICK, configFrom, exchangeAll, holdsOf, identityFrom, periodKeyOf, probeApi, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
 
 const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
@@ -91,7 +93,7 @@ export default class TokenSpend extends View {
     this.runtimeTask = null;
     this.scan = null;
     this.costs = null;
-    this.share = new Share(MOD, `${appHome()}/${DATA_DIR}`);
+    this.share = new Share(MOD, paths.join(appHome(), DATA_DIR));
     this.error = null;
     this.running = null;
     this.queued = { snapshot: false, prepare: false };
@@ -157,9 +159,8 @@ export default class TokenSpend extends View {
       this.runtimeTask = cx.spawn(async (runtimeCx) => {
         try {
           // One-time migration of the old token-spend mod's data, so its history carries over.
-          await exec("sh", ["-c", 'if [ ! -e "$2/store.json" ] && [ -d "$1" ]; then mkdir -p "$2" && cp -R "$1/." "$2/" && rm -rf "$2"/*.lock; fi', "sh",
-            `${appHome()}/data/token-spend`, `${appHome()}/${DATA_DIR}`]).catch(() => null);
-          this.nodeBinary = parseRuntimeNode(await readTextFile(`${appHome()}/${RUNTIME_FILE}`));
+          await localService(fileApi).migrate(paths.join(appHome(), "data", "token-spend"), paths.join(appHome(), DATA_DIR)).catch(() => null);
+          this.nodeBinary = parseRuntimeNode(await readTextFile(paths.join(appHome(), RUNTIME_FILE)));
         } catch (error) {
           this.runtimeError = `Spend needs ${RUNTIME_FILE} with the path to Node 22: ${sanitizeError(error)}`;
         }
@@ -251,8 +252,8 @@ export default class TokenSpend extends View {
   async ask(command, sent, extra) {
     const result = await exec(this.nodeBinary, [
       "--disable-warning=ExperimentalWarning",
-      `${appHome()}/${PRESENTER_FILE}`, command,
-      "--store", `${appHome()}/${DATA_DIR}/store.json`,
+      paths.join(appHome(), PRESENTER_FILE), command,
+      "--store", paths.join(appHome(), DATA_DIR, "store.json"),
       "--home", home(),
       "--options", JSON.stringify(sent),
       ...(command === "configure" ? ["--sources", JSON.stringify(extra ?? {})] : []),
@@ -306,27 +307,27 @@ export default class TokenSpend extends View {
     const now = Date.now();
     if (!force && this.syncOffUntil > now) return;
     const dir = syncDir(appHome());
-    const config = configFrom(await readTextFile(joinUnder(dir, "config.json")).catch(() => null));
+    const config = configFrom(await readTextFile(paths.join(dir, "config.json")).catch(() => null));
     if (!syncOn(config)) { this.syncOffUntil = now + EXCHANGE_MS; this.syncHolds = []; return; }
     this.syncOffUntil = 0;
     const periodKey = periodKeyOf(this.cost);
     const options = { today: this.options().today, cost: { period: this.cost.period, offset: Number(this.cost.offset) || 0, project: "all", model: "all" } };
-    const self = this.costs?.syncSelf || identityFrom(await readTextFile(joinUnder(dir, "identity.json")).catch(() => null), () => "", "").id;
+    const self = this.costs?.syncSelf || identityFrom(await readTextFile(paths.join(dir, "identity.json")).catch(() => null), () => "", "").id;
     const power = await powerOf(this.db, this.syncStored);
     if (!this.awake || this.closed) return;
     this.syncStored = power.stored;
-    const out = await exchangeAll({ exec }, {
-      config, peers: machines(), status: statusFrom(await readTextFile(joinUnder(dir, "status.json")).catch(() => null)),
-      rows: rowsFrom(await readTextFile(joinUnder(dir, "rows.json")).catch(() => null)),
+    const out = await exchangeAll((on, payload) => serviceOn(probeApi, on).then((probe) => probe.exchange(payload)), {
+      config, peers: machines(), status: statusFrom(await readTextFile(paths.join(dir, "status.json")).catch(() => null)),
+      rows: rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null)),
       self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
       now, periodKey, options, stored: power.stored, live: power.live,
     });
     if (!this.awake || this.closed) return;
     this.syncHolds = holdsOf(out.status, power.stored, power.live);
     if (!out.ran) return;
-    await mkdir(dir, { recursive: true });
-    const rowsFile = joinUnder(dir, "rows.json");
-    const statusFile = joinUnder(dir, "status.json");
+    await localService(fileApi).mkdir(dir);
+    const rowsFile = paths.join(dir, "rows.json");
+    const statusFile = paths.join(dir, "status.json");
     await writeTextFile(rowsFile, rowsText(out.rows), await readTextFile(rowsFile).catch(() => null));
     await writeTextFile(statusFile, statusText(out.status), await readTextFile(statusFile).catch(() => null));
     this.run("prepare", cx);
@@ -390,7 +391,7 @@ export default class TokenSpend extends View {
 
   /** Plans live in prices.json next to the store; other keys there are kept. */
   savePlans(cx) {
-    const file = this.settings?.pricesPath ?? `${appHome()}/${DATA_DIR}/prices.json`;
+    const file = this.settings?.pricesPath ?? paths.join(appHome(), DATA_DIR, "prices.json");
     const plans = this.planInputs
       .map((input) => ({ name: input.name.value().trim(), usdPerMonth: Number(String(input.amount.value()).replace(/[^0-9.]/g, "")) }))
       .filter((plan) => plan.name && Number.isFinite(plan.usdPerMonth) && plan.usdPerMonth > 0);

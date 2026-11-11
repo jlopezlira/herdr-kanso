@@ -2,7 +2,6 @@
 // sub-agents under their parent, and the Agents view's sections.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
 import { load, clone } from "./helpers.mjs";
 
 const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "segmentAt", "unwrap"];
@@ -154,8 +153,8 @@ test("The Agents view: by what each needs from you, a parent with its sub-agents
 
 test("Threads: which conversation a terminal holds, and its own name", async () => {
   const { parseLocated, readThread, claudeFile } = await load("kanso-spaces/threads.js", ["parseLocated", "readThread", "claudeFile"]);
-  assert.equal(claudeFile("/Users/me", "/Users/me/Apps/herdr-kanso", "s1"), join("/Users/me", ".claude", "projects", "-Users-me-Apps-herdr-kanso", "s1.jsonl"));
-  assert.deepEqual(clone(parseLocated(`claude\t{"pid":7,"sessionId":"s1","cwd":"/r/api"}\n`, "/h")), { kind: "claude", file: join("/h", ".claude", "projects", "-r-api", "s1.jsonl"), name: null });
+  assert.equal(claudeFile("/Users/me", "/Users/me/Apps/herdr-kanso", "s1"), "/Users/me/.claude/projects/-Users-me-Apps-herdr-kanso/s1.jsonl");
+  assert.deepEqual(clone(parseLocated(`claude\t{"pid":7,"sessionId":"s1","cwd":"/r/api"}\n`, "/h")), { kind: "claude", file: "/h/.claude/projects/-r-api/s1.jsonl", name: null });
   assert.deepEqual(clone(parseLocated(`codex\t/h/.codex/sessions/rollout-x.jsonl\t{"id":"x","thread_name":"Daily quotas"}\n`, "/h")),
     { kind: "codex", file: "/h/.codex/sessions/rollout-x.jsonl", name: "Daily quotas" });
   assert.equal(parseLocated("codex\t/f.jsonl\t\n", "/h").name, null, "Codex hasn't named it yet");

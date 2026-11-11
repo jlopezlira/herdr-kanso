@@ -6,7 +6,7 @@
   "type": "module",
   "engines": { "node": ">=22.15" },
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test",
     "bench": "node benchmarks/macos.mjs",
     "bench:report": "node benchmarks/summarize.mjs",
     "check:version": "node scripts/check-version.mjs",

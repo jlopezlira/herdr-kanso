@@ -1,6 +1,7 @@
 // Machine sync: a stable id, peers, and rows moved each way. No machine is in charge.
 import { isOff, machineState } from "./machines.js";
 import { clock, parseOr, reduceSeries } from "./pure.js";
+import { paths, pathApi } from "./platform-paths.js";
 
 export const KINDS = ["spend"];
 export const EXCHANGE_MS = 180_000;
@@ -20,8 +21,9 @@ export const REL = {
   dir: ["data", "kanso-sync"],
   version: ["mods", "kanso-chrome", "version.json"],
 };
-// Node resolves this from the other computer's home, with either separator.
-export const PROBE_REL = [".config", "herdr-app", ...REL.probe].join("/");
+// Node resolves it from the other computer's home, joined by that computer's own separator.
+export const PROBE = [".config", "herdr-app", ...REL.probe];
+export const probeApi = (platform, run) => ({ exchange: (payload) => run("node", [pathApi(platform).join(...PROBE), payload], { timeout: 25_000 }) });
 
 export function appHomeFrom(env, homedir, join) {
   const set = String(env?.HERDR_APP_HOME ?? "").trim();
@@ -33,13 +35,8 @@ export function syncPaths(appHome, join) {
   return { probe: at(REL.probe), presenter: at(REL.presenter), store: at(REL.store), dir: at(REL.dir), version: at(REL.version) };
 }
 
-export function joinUnder(dir, ...names) {
-  const sep = String(dir).includes("\\") ? "\\" : "/";
-  return names.reduce((base, name) => `${base}${sep}${name}`, String(dir));
-}
-
 export function syncDir(root) {
-  return joinUnder(root, ...REL.dir);
+  return paths.join(root, ...REL.dir);
 }
 
 export function identityFrom(text, mint, now) {
@@ -221,7 +218,7 @@ export function applyExchange(rows, status, peer, outcome, now, periodKey) {
   };
 }
 
-export async function exchangeAll(runner, input) {
+export async function exchangeAll(probe, input) {
   const now = input.now;
   const periodKey = input.periodKey;
   const rows = input.own ? mergeRows(input.rows ?? [], [input.own]) : (input.rows ?? []);
@@ -230,7 +227,7 @@ export async function exchangeAll(runner, input) {
   if (!steps.length) return { rows, status, ran: false };
   const done = await reduceSeries(steps, async (state, step) => {
     const payload = JSON.stringify({ push: push(state.rows), options: input.options, kinds: step.kinds });
-    const result = await runner.exec("node", [PROBE_REL, payload], { on: step.on, timeout: 25_000 }).catch(() => null);
+    const result = await probe(step.on, payload).catch(() => null);
     const parsed = result?.code === 0 ? parseOutcome(result.stdout) : null;
     const outcome = parsed ?? { reason: result ? "update" : "unreachable" };
     return applyExchange(state.rows, state.status, step, { ...outcome, self: input.self }, now, periodKey);

@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Images' reading of a terminal: the pictures an agent printed, and what you tell it about one.
 import { KINDS, kindOf } from "./kinds.js";
 
@@ -18,25 +19,24 @@ const SHOWN = Object.keys(KINDS);
 export function mentions(text, max = 40) {
   const clean = String(text ?? "").replace(ANSI, "").replace(LINK, " ");
   const quoted = [...clean.matchAll(QUOTED)].map((m) => ({ path: m[2], from: m.index, end: m.index + m[0].length }));
-  const whole = quoted.filter((q) => q.path.includes("/"));
-  const bare = [...clean.matchAll(PATH)].filter((m) => !whole.some((q) => m.index > q.from && m.index < q.end))
+  const whole = quoted.filter((q) => /[\\/]/.test(q.path));
+  const windows = [...clean.matchAll(new RegExp(`(?:[A-Za-z]:[\\\\/]|\\\\\\\\)[^\\s"\'\x60<>|]*?\\.(?:${EXT})(?=$|[\\s"\'\x60),;]|\\.(?:\\s|$))`, "gim"))].filter((m) => !whole.some((q) => m.index > q.from && m.index < q.end)).map((m) => ({ path: m[0], from: m.index, end: m.index + m[0].length }));
+  const bare = [...clean.matchAll(PATH)].filter((m) => ![...whole, ...windows].some((q) => m.index >= q.from && m.index < q.end))
     .map((m) => ({ path: m[1], end: m.index + m[0].length }));
   // By where each ends, so a quoted path counts after the bare name inside it.
-  const found = [...bare, ...quoted].toSorted((a, b) => a.end - b.end).map((x) => x.path);
+  const found = [...bare, ...windows, ...quoted].toSorted((a, b) => a.end - b.end).map((x) => x.path);
   return [...new Set(found.toReversed())].slice(0, max);
 }
 
 // Absolute and tidied: "~/" from home, a relative one from the terminal's folder; null without one.
 export function resolvePath(raw, cwd, homeDir) {
   const p = String(raw ?? "");
-  if (p.startsWith("~") && !p.startsWith("~/")) return null; // another user's home
-  const abs = p.startsWith("~/") ? `${homeDir}${p.slice(1)}` : p.startsWith("/") ? p : cwd ? `${cwd}/${p}` : null;
-  if (!abs) return null;
-  const parts = abs.split("/").reduce((acc, part) => (part === "" || part === "." ? acc : part === ".." ? acc.slice(0, -1) : [...acc, part]), []);
-  return `/${parts.join("/")}`;
+  if (p.startsWith("~") && !/^~[\\/]/.test(p)) return null;
+  const abs = /^~[\\/]/.test(p) ? paths.join(homeDir, p.slice(2)) : paths.isAbsolute(p) ? p : cwd ? paths.join(cwd, p) : null;
+  return abs ? paths.normalize(abs) : null;
 }
 
-export const itemOf = (path) => ({ path, name: path.split("/").at(-1), kind: kindOf(path) });
+export const itemOf = (path) => ({ path, name: paths.basename(path), kind: kindOf(path) });
 
 export const shows = (item) => SHOWN.includes(item?.kind);
 

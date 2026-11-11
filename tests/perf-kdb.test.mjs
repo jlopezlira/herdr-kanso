@@ -43,6 +43,21 @@ test("kdb rejects only the failing caller and rolls back its transaction before 
   assert.deepEqual(clone(await db.read("SELECT 3 AS next;")), [{ next: 3 }]);
 });
 
+test("a batch too long for one command line goes through a SQL file and keeps each caller's result and failure", async (t) => {
+  const { db, calls } = await database(t);
+  const long = "x".repeat(9000);
+  const results = await Promise.allSettled([
+    db.read(`SELECT length('${long}') AS size;`),
+    db.read("SELECT * FROM missing_table;"),
+    db.read("SELECT 'after' AS value;"),
+  ]);
+  assert.ok(calls.every(([, args]) => args.join(" ").length < 8192));
+  assert.ok(calls.some(([, args]) => /^\.read /.test(args.at(-1))));
+  assert.deepEqual(clone(results[0].value), [{ size: 9000 }]);
+  assert.match(results[1].reason.message, /missing_table/);
+  assert.deepEqual(clone(results[2].value), [{ value: "after" }]);
+});
+
 test("kdb caches preferences and panel state until a write or the 30-second reload", async (t) => {
   const { db, calls, clock } = await database(t);
   await db.setPref("view", "spaces");

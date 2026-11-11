@@ -67,7 +67,7 @@ test("project folders are checked only after registry changes or five minutes", 
   const rows = [{ id: "p1", folder: "/project", name: "Project", machine: "" }];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     Date: { now: () => now }, shared: () => null, spaces: () => [], home: () => "/home",
-    exec: async () => { checks += 1; return { code: 0, stdout: "/project\n" }; },
+    fileApi: () => ({ existing: async () => { checks += 1; return []; } }),
   });
   const view = new Spaces(), db = { projects: async () => rows };
   assert.equal((await view.publishRegistry(db))[0].missing, true);

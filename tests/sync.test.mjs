@@ -59,21 +59,16 @@ test("A computer does not take another computer's ledger, or give its own away",
     spend(PEER, 4, "2026-11-10T01:00:00.000Z"),
   ];
   const calls = [];
-  const out = await sync.exchangeAll({
-    exec: async (command, args, options) => {
-      calls.push({ command, args, options });
-      return { code: 0, stdout: JSON.stringify(reply(forged)) };
-    },
+  const out = await sync.exchangeAll(async (on, payload) => {
+    calls.push({ on, payload });
+    return { code: 0, stdout: JSON.stringify(reply(forged)) };
   }, {
     config: on(), peers: ready(), status: {}, rows: local, self: SELF, own: local[0],
     now: NOW, periodKey: "month:0", options: { cost: { period: "month", offset: 0 } },
   });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].command, "node");
-  assert.deepEqual(calls[0].args[0], sync.PROBE_REL);
-  assert.equal(JSON.parse(calls[0].args[1]).push[0].machine, SELF);
-  assert.equal(calls[0].options.on, "odin");
-  assert.equal(calls[0].options.timeout, 25_000);
+  assert.equal(JSON.parse(calls[0].payload).push[0].machine, SELF);
+  assert.equal(calls[0].on, "odin");
   assert.equal(out.rows.find((row) => row.machine === SELF).body.usd, 1);
   assert.equal(out.rows.find((row) => row.machine === PEER).body.usd, 4);
   assert.equal(out.rows.find((row) => row.machine === PEER).body.name, "odin");
@@ -120,7 +115,7 @@ test("Spend adds each computer and leaves one computer as it was", () => {
 
 test("Sync off, or a computer that is not connected, asks nothing", async () => {
   let calls = 0;
-  const runner = { exec: async () => { calls += 1; return { code: 0, stdout: "" }; } };
+  const runner = async () => { calls += 1; return { code: 0, stdout: "" }; };
   const base = { peers: ready(), status: {}, rows: [], self: SELF, now: NOW, periodKey: "month:0" };
   const off = await sync.exchangeAll(runner, { ...base, config: { version: 1, peers: {} } });
   const disabled = await sync.exchangeAll(runner, { ...base, config: { version: 1, peers: { odin: { enabled: false } } } });
@@ -151,9 +146,7 @@ test("A computer out of reach keeps the last figures, then waits longer", async 
 
   let calls = 0;
   const dueStatus = { odin: { ...status.odin, at: NOW - sync.EXCHANGE_MS - 1 } };
-  const out = await sync.exchangeAll({
-    exec: async () => { calls += 1; throw new Error("down"); },
-  }, { config: on(), peers: ready(), status: dueStatus, rows, self: SELF, now: NOW, periodKey: "month:0" });
+  const out = await sync.exchangeAll(async () => { calls += 1; throw new Error("down"); }, { config: on(), peers: ready(), status: dueStatus, rows, self: SELF, now: NOW, periodKey: "month:0" });
   assert.equal(calls, 1);
   assert.equal(out.rows, rows);
   assert.equal(out.status.odin.synced_at, status.odin.synced_at);
@@ -169,16 +162,12 @@ test("A computer on an older kansō says to update it, and nothing is written th
   assert.deepEqual(await readdir(empty), []);
 
   const rows = [spend(SELF, 1, "2026-11-10T00:00:00.000Z")];
-  const stale = await sync.exchangeAll({
-    exec: async () => ({ code: 0, stdout: `noise\n${JSON.stringify({ machine: PEER, version: "3.21.1", protocol: 1, rows: [spend(PEER, 9, "2026-11-11T00:00:00.000Z")] })}` }),
-  }, { config: on(), peers: ready(), status: {}, rows, self: SELF, now: NOW, periodKey: "month:0" });
+  const stale = await sync.exchangeAll(async () => ({ code: 0, stdout: `noise\n${JSON.stringify({ machine: PEER, version: "3.21.1", protocol: 1, rows: [spend(PEER, 9, "2026-11-11T00:00:00.000Z")] })}` }), { config: on(), peers: ready(), status: {}, rows, self: SELF, now: NOW, periodKey: "month:0" });
   assert.equal(stale.rows, rows);
   assert.equal(stale.status.odin.reason, "update");
   assert.equal(sync.holdsOf(stale.status)[0].text, sync.UPDATE_TEXT);
 
-  const absent = await sync.exchangeAll({
-    exec: async () => ({ code: 1, stderr: "Error: Cannot find module" }),
-  }, { config: on(), peers: ready(), status: {}, rows, self: SELF, now: NOW, periodKey: "month:0" });
+  const absent = await sync.exchangeAll(async () => ({ code: 1, stderr: "Error: Cannot find module" }), { config: on(), peers: ready(), status: {}, rows, self: SELF, now: NOW, periodKey: "month:0" });
   assert.equal(absent.status.odin.reason, "update");
   assert.equal(sync.due(absent.status.odin, NOW + sync.delayMs(1) - 1, "month:0"), false);
 
@@ -193,8 +182,9 @@ test("A computer on an older kansō says to update it, and nothing is written th
   await copyFile(fromMod("sync.js"), path.join(probeDir, "sync.js"));
   await copyFile(fromMod("pure.js"), path.join(probeDir, "pure.js"));
   await copyFile(fromMod("machines.js"), path.join(probeDir, "machines.js"));
+  await copyFile(fromMod("platform-paths.js"), path.join(probeDir, "platform-paths.js"));
   await writeFile(path.join(custom, "mods", "kanso-chrome", "version.json"), `${JSON.stringify({ version: "3.21.0" })}\n`);
-  const { stdout } = await runFile(process.execPath, [sync.PROBE_REL, "{}"], {
+  const { stdout } = await runFile(process.execPath, [path.join(...sync.PROBE), "{}"], {
     cwd: home,
     env: { ...process.env, HOME: home, USERPROFILE: home, HERDR_APP_HOME: custom },
   });
@@ -214,7 +204,7 @@ test("A computer turned off from the sidebar is not asked and shows as off", asy
   const live = [];
   const connected = [{ name: "odin", state: "connected" }];
   let calls = 0;
-  const runner = { exec: async () => { calls += 1; return { code: 0, stdout: JSON.stringify(reply([])) }; } };
+  const runner = async () => { calls += 1; return { code: 0, stdout: JSON.stringify(reply([])) }; };
   const base = { config: on(), peers: ready(), status: {}, rows: [], self: SELF, now: NOW, periodKey: "month:0", stored };
   const parked = await sync.exchangeAll(runner, { ...base, live });
   assert.equal(calls, 0);
@@ -263,6 +253,17 @@ test("The sidebar's sync icon is on, off or cannot run, and its tooltip says whe
   assert.deepEqual(icon({}, { dark: { reason: "update" } }), { state: "off", tip: "Sync dark" }, "a failure from before it was off is not shown");
 });
 
+test("The probe runs node on the other computer, its path joined with that computer's separator", async () => {
+  const seen = [];
+  const run = async (...call) => { seen.push(call); return { code: 0, stdout: "" }; };
+  await sync.probeApi("macos", run).exchange("{}");
+  await sync.probeApi("windows", run).exchange("{}");
+  assert.deepEqual(seen, [
+    ["node", [".config/herdr-app/mods/kanso-spend/sync-probe.mjs", "{}"], { timeout: 25_000 }],
+    ["node", [".config\\herdr-app\\mods\\kanso-spend\\sync-probe.mjs", "{}"], { timeout: 25_000 }],
+  ]);
+});
+
 test("Paths are built with the other computer's path API", async () => {
   const join = path.win32.join;
   const home = sync.appHomeFrom({}, "C:\\Users\\me", join);
@@ -273,8 +274,7 @@ test("Paths are built with the other computer's path API", async () => {
   assert.equal(paths.version, "C:\\Users\\me\\.config\\herdr-app\\mods\\kanso-chrome\\version.json");
   assert.equal(sync.appHomeFrom({ HERDR_APP_HOME: "D:\\herdr" }, "C:\\Users\\me", join), "D:\\herdr");
   assert.equal(sync.syncDir("C:\\Users\\me\\.config\\herdr-app"), "C:\\Users\\me\\.config\\herdr-app\\data\\kanso-sync");
-  assert.equal(sync.joinUnder(sync.syncDir("/Users/me/.config/herdr-app"), "config.json"), "/Users/me/.config/herdr-app/data/kanso-sync/config.json");
-  assert.equal(sync.PROBE_REL, ".config/herdr-app/mods/kanso-spend/sync-probe.mjs");
+  assert.equal(sync.syncDir("/Users/me/.config/herdr-app"), "/Users/me/.config/herdr-app/data/kanso-sync");
 
   const seen = [];
   const root = "C:\\Users\\me\\.config\\herdr-app";

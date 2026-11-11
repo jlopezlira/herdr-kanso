@@ -4,7 +4,8 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { exec, temporary } from "./helpers.mjs";
+import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
+import { exec, temporary, nativePlatform } from "./helpers.mjs";
 import {
   fold, foldSpan, searchTurns, matchSpan, partsOf, placeOf, countLabel, enterMatch, retarget, extendIndex,
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
@@ -256,18 +257,18 @@ test("A slice keeps whole lines, skips a pasted picture, and a missing file is n
   const big = "x".repeat(80);
   const rows = [line({ type: "user", message: { content: "one" } }), big, line({ type: "assistant", message: { content: "two" } })];
   await writeFile(file, `${rows.join("\n")}\n`);
-  const all = await readSlice(exec, file, 0, 10000, 60);
+  const all = await readSlice(exec, file, 0, 10000, 60, nativePlatform);
   assert.ok(all && all.end === all.size);
   assert.ok(!all.body.includes(big));
   assert.deepEqual(readTurns(all.body).map((t) => t.text), ["one", "two"]);
   const picture = join(dir, "picture.jsonl");
   await writeFile(picture, `${"y".repeat(100)}\n${line({ type: "user", message: { content: "after" } })}\n`);
-  const skipped = await readSlice(exec, picture, 0, 80, 60);
+  const skipped = await readSlice(exec, picture, 0, 80, 60, nativePlatform);
   assert.equal(readTurns(skipped.body).map((turn) => turn.text).join(""), "after");
-  assert.equal(await readSlice(exec, join(dir, "missing.jsonl"), 0), null);
+  assert.equal(await readSlice(exec, join(dir, "missing.jsonl"), 0, undefined, undefined, nativePlatform), null);
   const crlf = join(dir, "crlf.jsonl");
   await writeFile(crlf, `${line({ type: "user", message: { content: "win" } })}\r\n`);
-  const win = await readSlice(exec, crlf, 0, 10000, 60);
+  const win = await readSlice(exec, crlf, 0, 10000, 60, nativePlatform);
   assert.deepEqual(readTurns(win.body).map((turn) => turn.text), ["win"]);
   assert.equal(applySlice({ ...freshRead(), size: 50 }, { end: 10, size: 10, body: "" }).reset, true);
   const calls = [];
@@ -325,7 +326,7 @@ test("No conversation, a shell, or a remote terminal falls back to the terminal'
     session: { pid: 9, sessionId: "abc", cwd: "/repo", startedAt: Date.now() - 4000 },
   }), "t1", "claude-code");
   assert.equal(live.kind, "claude");
-  assert.equal(live.file, join("/home/me", ".claude", "projects", "-repo", "abc.jsonl"));
+  assert.equal(live.file, "/home/me/.claude/projects/-repo/abc.jsonl");
   const codex = await locateConversation(host({ argv: ["codex"], pid: 4, rollout: "/home/me/.codex/sessions/rollout-1.jsonl" }), "t1", "");
   assert.deepEqual(codex, { kind: "codex", file: "/home/me/.codex/sessions/rollout-1.jsonl" });
   const none = await locateConversation(host({ argv: ["codex"], pid: 4, rollout: "" }), "t1", "");
@@ -342,14 +343,19 @@ test("An excerpt keeps marked words on their line, and a transcript is joined un
   ]]);
   assert.deepEqual(wordsByLine([{ text: "a\nb", mark: true }]), [[{ w: "a", mark: true }], [{ w: "b", mark: true }]]);
   assert.deepEqual(wordsByLine([]), [[]]);
-  assert.equal(sessionPath("/home/me", 9), join("/home/me", ".claude", "sessions", "9.json"));
-  assert.equal(transcriptPath({ sessionId: "abc", cwd: "/repo" }, "/home/me"), join("/home/me", ".claude", "projects", "-repo", "abc.jsonl"));
+  assert.equal(sessionPath("/home/me", 9), "/home/me/.claude/sessions/9.json");
+  assert.equal(transcriptPath({ sessionId: "abc", cwd: "/repo" }, "/home/me"), "/home/me/.claude/projects/-repo/abc.jsonl");
   assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null);
   assert.equal(projectDir("C:\\repo"), "C--repo");
 });
 
 function host({ argv = ["zsh"], pid = 1, etime = "00:01", session = null, rollout = null } = {}) {
   return {
+    platform: { processes: {
+      startTime: async () => Date.now() - etime.split(":").reduce((n, part) => n * 60 + Number(part), 0) * 1000,
+      list: async () => ({ byParent: new Map() }),
+      openFiles: async () => ({ state: "ok", values: rollout ? [{ path: rollout }] : [] }),
+    } },
     home: () => "/home/me",
     hc: async () => ({ code: 0, stdout: JSON.stringify({ foreground: { pid, argv } }) }),
     readTextFile: async (path) => (session && path === sessionPath("/home/me", pid) ? JSON.stringify(session) : null),
@@ -359,4 +365,32 @@ function host({ argv = ["zsh"], pid = 1, etime = "00:01", session = null, rollou
       return { code: 1, stdout: "" };
     },
   };
+}
+
+for (const kind of ["claude", "codex"]) {
+  test(`Windows Find ${kind === "claude" ? "verifies a live session" : "reports unavailable foreign open files without running commands"}`, async () => {
+    const home = "C:\\Users\\A B", cwd = "C:\\work\\repo", created = "2026-11-10T12:00:00Z";
+    const calls = [], reads = [];
+    const run = async (program, args) => {
+      calls.push(program);
+      assert.equal(program, "pwsh");
+      assert.match(args.at(-1), /Get-CimInstance Win32_Process/);
+      return { code: 0, stdout: JSON.stringify([{ pid: 42, name: "claude.exe", created }]), stderr: "" };
+    };
+    const found = await locateConversation({
+      home: () => home, platform: { processes: processApi("windows", run) },
+      hc: async () => ({ code: 0, stdout: JSON.stringify({ foreground: { pid: 42, argv: [`C:\\Program Files\\${kind}.exe`] } }) }),
+      readTextFile: async (file) => { reads.push(file); return JSON.stringify({ pid: 42, sessionId: "session", cwd, startedAt: Date.parse(created) }); },
+    }, "t1");
+    if (kind === "claude") {
+      assert.equal(found.file, "C:\\Users\\A B\\.claude\\projects\\C--work-repo\\session.jsonl");
+      assert.deepEqual(reads, ["C:\\Users\\A B\\.claude\\sessions\\42.json"]);
+      assert.deepEqual(calls, ["pwsh"]);
+    } else {
+      assert.equal(found.file, null);
+      assert.match(found.unavailable, /Herdr API/);
+      assert.deepEqual(calls, []);
+      assert.deepEqual(reads, []);
+    }
+  });
 }

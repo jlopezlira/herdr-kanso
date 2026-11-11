@@ -71,6 +71,6 @@ test("Spend moves a store.json from before into SQLite once", async (t) => {
   assert.equal((await run(g, "snapshot")).costs.hero.value, "$22.50");
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(join(old, "spend.db"), { readOnly: true });
-  t.after(() => db.close());
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM files").get().n, Object.keys(legacy.files).length);
+  try { assert.equal(db.prepare("SELECT COUNT(*) n FROM files").get().n, Object.keys(legacy.files).length); }
+  finally { db.close(); }
 });

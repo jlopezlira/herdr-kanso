@@ -3,6 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { powershell, psQuote } from "../kanso/mods/kanso-panel/platform-command.js";
 import { load, clone, temporary, exec } from "./helpers.mjs";
 
 const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI", "Companion"];
@@ -71,15 +73,17 @@ test("the agents' pets are brought into Kanso's folder, never Codex's; one missi
   await writeFile(join(pack, "pet.json"), JSON.stringify({ id: "clawd", displayName: "Clawd by someone" }));
   await writeFile(join(pack, "spritesheet.webp"), "webp");
   await writeFile(join(pack, "extra.sh"), "echo nope");
-  const zipped = await exec("zip", ["-q", "-j", join(dir, "clawd.zip"), join(pack, "pet.json"), join(pack, "spritesheet.webp"), join(pack, "extra.sh")]);
+  const zipped = process.platform === "win32"
+    ? await powershell(exec, `Compress-Archive -Path ${psQuote(join(pack, "*"))} -DestinationPath ${psQuote(join(dir, "clawd.zip"))}`)
+    : await exec("zip", ["-q", "-j", join(dir, "clawd.zip"), join(pack, "pet.json"), join(pack, "spritesheet.webp"), join(pack, "extra.sh")]);
   assert.equal(zipped.code, 0, zipped.stderr);
   await writeFile(join(dir, "rocky.webp"), "webp");
   const { bringAgentPets } = await pets({ home: () => home, appHome: () => app });
   const list = [
-    { id: "rocky", name: "Rocky", from: "Codex", url: `file://${join(dir, "rocky.webp")}` },
-    { id: "clawd", name: "Clawd", from: "Claude Code", url: `file://${join(dir, "clawd.zip")}`, zip: true },
-    { id: "gone", name: "Gone", from: "Codex", url: `file://${join(dir, "missing.webp")}` },
-    { id: "seedy", name: "Seedy", from: "Codex", url: `file://${join(dir, "missing.webp")}` },
+    { id: "rocky", name: "Rocky", from: "Codex", url: pathToFileURL(join(dir, "rocky.webp")).href },
+    { id: "clawd", name: "Clawd", from: "Claude Code", url: pathToFileURL(join(dir, "clawd.zip")).href, zip: true },
+    { id: "gone", name: "Gone", from: "Codex", url: pathToFileURL(join(dir, "missing.webp")).href },
+    { id: "seedy", name: "Seedy", from: "Codex", url: pathToFileURL(join(dir, "missing.webp")).href },
   ];
   const missed = clone(await bringAgentPets(new Set(["seedy"]), list));
   assert.deepEqual(missed, ["gone"], "one that could not be had is told; one you have is not asked for");

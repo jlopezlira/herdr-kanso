@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
 import { spaces, panes, focused, layout, theme, settings, home } from "herdr";
@@ -6,7 +7,7 @@ import { walkLayout, commitLayout } from "./layout.js";
 export function tilde(path) {
   if (!path) return "";
   const h = home();
-  return path === h ? "~" : path.startsWith(`${h}/`) ? `~${path.slice(h.length)}` : path;
+  return paths.shorten(path, h);
 }
 
 // Pairs are gathered in runs of 64 so a long list is not copied once per item.

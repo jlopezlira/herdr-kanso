@@ -26,7 +26,7 @@ export function exportedNames(text) {
 
 // `read(name)` gives the source of a sibling file by its import name ("./x.js").
 export function inlineImports(text, read, seen = new Set()) {
-  return text.replace(IMPORT, (_m, names, from) => {
+  return text.replace(/\r\n?/g, "\n").replace(IMPORT, (_m, names, from) => {
     if (!from.startsWith("./")) return "";
     if (seen.has(from)) throw new Error(`${from} imports itself by way of another file`);
     const source = read(from);

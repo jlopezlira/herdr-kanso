@@ -1,3 +1,5 @@
+import { localService, localName } from "./platform-host.js";
+import { processApi } from "./platform-processes.js";
 import { div, list, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
@@ -180,8 +182,9 @@ export class Find {
   }
 
   async locate(cx) {
-    const where = await locateConversation({ exec, hc, readTextFile, home }, this.terminal, hintOf(this.terminal)).catch(() => ({ file: null }));
+    const where = await locateConversation({ exec, hc, readTextFile, home, platform: { processes: localService(processApi) } }, this.terminal, hintOf(this.terminal)).catch(() => ({ file: null }));
     if (this.gone) return;
+    if (where.unavailable) { this.unavailable = where.unavailable; this.loading = false; this.missing = true; cx.notify(); return; }
     if (resolveFind(where).action !== "find") { this.giveBack(cx); return; }
     this.file = where.file;
     if (this.asked) this.begin(cx);
@@ -201,7 +204,7 @@ export class Find {
   async catchUp(cx) {
     while (!this.gone) {
       const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev);
+      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
       if (this.gone) return;
       if (!parsed) { this.missing = prev === 0 && !this.state.turns.length; break; }
       if (parsed.end === prev) break;
@@ -220,7 +223,7 @@ export class Find {
     this.slicing = true;
     try {
       const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev);
+      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
       if (this.gone || !parsed) return;
       const applied = applySlice(this.state, parsed);
       if (applied.reset) { this.restart(); await this.catchUp(cx); return; }
@@ -350,7 +353,7 @@ export class Find {
     if (this.open) return this.reading(c, t);
     if (laid.items.length) return this.listBox(c, laid);
     if (showSkel) return v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1].map((i) => skeleton(c).row(i)));
-    return div().px(G.md).py(G.sm).text_size(T.small).text_color(c.dim).child("This conversation is no longer there.");
+    return div().px(G.md).py(G.sm).text_size(T.small).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
   }
 
   render(cx) {

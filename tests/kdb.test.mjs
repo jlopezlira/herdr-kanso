@@ -1,3 +1,4 @@
+import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 // The left nav's one database: identity by conversation, asleep as a status,
 // holds that say whether they held, a migration that happens once or not at all.
 import test from "node:test";
@@ -161,9 +162,9 @@ async function legacy(dir) {
     INSERT INTO agents VALUES('t3q','Hashiko','Memory leaks',9,'sp-shield','${project}',2,NULL,1);`);
   return { sleep, panel };
 }
-async function storeIn(t, dir, run = exec) {
-  const { Store } = await load("kanso-spaces/store.js", ["Store"], { exec: run, appHome: () => dir });
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: run, appHome: () => dir });
+async function storeIn(t, dir, run = exec, host = {}) {
+  const { Store } = await load("kanso-spaces/store.js", ["Store"], { exec: run, appHome: () => dir, ...host });
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: run, appHome: () => dir, ...host });
   const db = new Kdb(join(dir, "kanso"));
   return { store: new Store(db, dir), db };
 }
@@ -260,18 +261,26 @@ test("a sleep that lost its row knows it before it touches an agent", async (t) 
   assert.equal(await db.holdSleep(id, token), false, "another window has it: nothing more of this sleep");
 });
 
-test("a folder that can't be looked into is not taken for nothing there", async (t) => {
-  const dir = await temporary(t);
-  await legacy(dir);
-  const { chmod } = await import("node:fs/promises");
-  await chmod(join(dir, "kanso-sleep"), 0o000);
-  t.after(() => chmod(join(dir, "kanso-sleep"), 0o755).catch(() => {}));
-  const { store, db } = await storeIn(t, dir);
-  await assert.rejects(store.asleep(), /could not be (looked at|read)/);
-  assert.equal(await db.migrated(), false, "nothing marked: it is taken in once it can be read");
-  await chmod(join(dir, "kanso-sleep"), 0o755);
-  assert.equal((await store.asleep(true)).length, 2);
-});
+for (const [name, folder, reason] of [
+  ["a folder that can't be looked into is not taken for nothing there", "locked", "Access denied"],
+  ["a folder whose message only names 'No such file' in its path is still an error, not nothing there", "No such file here", "No such file here: Permission denied"],
+]) {
+  test(name, async (t) => {
+    const dir = join(await temporary(t), folder);
+    await legacy(dir);
+    let denied = true;
+    const { store, db } = await storeIn(t, dir, exec, {
+      fileApi: (platform, run) => {
+        const api = fileApi(platform, run);
+        return { ...api, legacyStatus: (file) => denied ? Promise.resolve(`error: ${reason}`) : api.legacyStatus(file) };
+      },
+    });
+    await assert.rejects(store.asleep(), /could not be (looked at|read)/);
+    assert.equal(await db.migrated(), false, "nothing marked: it is taken in once it can be read");
+    denied = false;
+    assert.equal((await store.asleep(true)).length, 2);
+  });
+}
 
 test("one conversation twice in one old tab is taken in once", async (t) => {
   const dir = await temporary(t);
@@ -293,18 +302,6 @@ test("a name a wake could not put back is kept until its terminal has it again",
   assert.deepEqual(clone(await db.read("SELECT name, restore FROM agents")), [{ name: "Hashiko", restore: null }], "back on its terminal: done");
 });
 
-test("a folder whose message only names 'No such file' in its path is still an error, not nothing there", async (t) => {
-  const dir = join(await temporary(t), "No such file here");
-  await mkdir(dir, { recursive: true });
-  await legacy(dir);
-  const { chmod } = await import("node:fs/promises");
-  await chmod(join(dir, "kanso-sleep"), 0o000);
-  t.after(() => chmod(join(dir, "kanso-sleep"), 0o755).catch(() => {}));
-  const { store, db } = await storeIn(t, dir);
-  await assert.rejects(store.asleep(), /could not be looked at/);
-  assert.equal(await db.migrated(), false);
-  await chmod(join(dir, "kanso-sleep"), 0o755);
-});
 
 test("a name a wake keeps to put back is written with the wake itself, or not at all", async (t) => {
   const { db } = await database(t);
@@ -508,7 +505,7 @@ test("a transcript's pictures stay, a color already stored is kept, and one left
 test("an older picture index gains the prefix mark", async (t) => {
   const { db, dir } = await database(t);
   const file = join(dir, "kanso", "kanso.db");
-  await exec("mkdir", ["-p", join(dir, "kanso")]);
+  await mkdir(join(dir, "kanso"), { recursive: true });
   await exec("sqlite3", [file, "CREATE TABLE picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL); INSERT INTO picture_scans(file,size) VALUES('/t.jsonl', 4);"]);
   const got = await db.pictures("/t.jsonl");
   assert.equal(got.size, "4");

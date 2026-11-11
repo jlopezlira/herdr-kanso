@@ -1,9 +1,13 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 // Images (the panel is "look" inside): pictures an agent made, beside it, and notes pinned to the spots
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { exec, hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay } from "herdr";
+import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay } from "herdr";
 import { tilde } from "./lib.js";
 import { G, H, R, T, tokens, quietLink, iconButton, skeleton, breathe } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
@@ -22,21 +26,6 @@ const NOTE = "kanso.look.note"; // the dialogs' answers, by token: { [token]: { 
 const EMPTY = "Pictures this agent writes show up here, from its conversation.";
 const NO_AGENT = "No agent in focus.";
 // $1 the copies' folder, $2 one file's key: its older copies go, and any left from yesterday.
-const FRESH = 'mkdir -p "$1" && rm -f "$1/$2"-* && find "$1" -type f -mtime +1 -exec rm -f {} + 2>/dev/null; true';
-const EXISTING = 'for f; do [ -f "$f" ] && printf "%s\\n" "$f"; done; true';
-// One pixel is the picture's average. Sampled once and stored, so a circle is not measured again.
-const COLOR = `d=$(mktemp -t kanso-dot).bmp
-sips -s format bmp -z 1 1 "$1" --out "$d" >/dev/null 2>&1 || { rm -f "$d"; exit 1; }
-python3 - "$d" <<'PY'
-import struct,sys
-b=open(sys.argv[1],"rb").read()
-if len(b)<30: raise SystemExit(1)
-off,bpp=struct.unpack_from("<I",b,10)[0],struct.unpack_from("<H",b,28)[0]
-px=b[off:off+4]
-r,g,bl=(px[2],px[1],px[0]) if bpp>=24 else (0,0,0)
-print("#%02x%02x%02x"%(r,g,bl))
-PY
-rm -f "$d"`;
 // An agent's terminal on this computer that still runs, or null: a shell would run the note, and another
 // machine's files are not here.
 function live(address) {
@@ -75,8 +64,7 @@ export class Look {
   async restoreState(state) {
     const path = typeof state?.path === "string" ? state.path : "";
     if (!path) return false;
-    const there = await exec("sh", ["-c", EXISTING, "sh", path]).catch(() => null);
-    const ok = there?.code === 0 && String(there.stdout ?? "").split("\n").includes(path);
+    const ok = await localService(fileApi).test(path).catch(() => false);
     if (!lookMemory(state, () => ok) || !shows(itemOf(path))) return false;
     this.keptPath = path;
     return true;
@@ -139,7 +127,7 @@ export class Look {
         const homeDir = home();
         const named = [...(written.paths ?? []), ...mentions(screen, MOST).toReversed()].map((m) => resolvePath(m, cwd, homeDir)).filter(Boolean);
         const resolved = [...new Set(named)];
-        const there = resolved.length ? new Set((await exec("sh", ["-c", EXISTING, "sh", ...resolved])).stdout.split("\n")) : new Set();
+        const there = resolved.length ? new Set(await localService(fileApi).existing(resolved)) : new Set();
         const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)));
         const prior = (written.rows ?? []).map((row) => ({ ...row, color: row.color || this.colors.get(row.path) || null }));
         const rows = indexRows(prior, pictures, { replaced: Boolean(written.replaced) });
@@ -262,15 +250,12 @@ export class Look {
   // sips exits 0 and prints pixelWidth <nil> when a raster is not a picture. A valid svg is the tag.
   async copy(item) {
     const ext = item.path.split(".").at(-1).toLowerCase();
-    const opened = item.kind === "image" && ext !== "svg" ? await exec("sips", ["-g", "pixelWidth", item.path]).catch(() => null) : null;
-    const seen = ext === "svg"
-      ? (await exec("sh", ["-c", 'head -c 800 "$1" | grep -qi "<svg"', "sh", item.path]).catch(() => null))?.code === 0
-      : item.kind !== "image" || (opened?.code === 0 && /pixelWidth:\s*[1-9]\d*/.test(opened.stdout ?? ""));
+    const seen = await localService(imageApi).probe(item.path, item.kind, ext);
     if (!seen) return null;
-    const key = keyOf(item.path), dir = `${appHome()}/${DIR}`;
-    const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = `${dir}/${name}`;
-    await exec("sh", ["-c", FRESH, "sh", dir, key]);
-    const made = item.kind === "image" ? (await exec("cp", ["-f", item.path, out])).code === 0 : await toPng(item.path, out);
+    const key = keyOf(item.path), dir = paths.join(appHome(), DIR);
+    const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = paths.join(dir, name);
+    await localService(imageApi).fresh(dir, key);
+    const made = item.kind === "image" ? (await localService(fileApi).copy(item.path, out)).code === 0 : await toPng(item.path, out);
     return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
   }
 
@@ -279,7 +264,7 @@ export class Look {
     this.sampling.add(item.path);
     cx.spawn(async (cx) => {
       try {
-        const r = await exec("sh", ["-c", COLOR, "sh", item.path]).catch(() => null);
+        const r = await localService(imageApi).color(item.path).catch(() => null);
         const color = colorOf(r?.code === 0 ? r.stdout : "");
         if (!color) return;
         this.colors.set(item.path, color);
@@ -296,7 +281,7 @@ export class Look {
   // A file the agent writes again shows again. One watch at a time: picking another ends this one at its next change.
   // macOS may name the folder through /private, hence endsWith.
   watch(item, cx) {
-    const dir = item.path.replace(/\/[^/]+$/, "") || "/";
+    const dir = paths.dirname(item.path);
     if (this.watching?.path === item.path) return;
     const mine = { path: item.path };
     this.watching = mine;

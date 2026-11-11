@@ -1,3 +1,8 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { repositoryApi } from "./platform-repositories.js";
+import { systemApi } from "./platform-system.js";
 // Kanso's Worktrees panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Removing a worktree keeps its branch; only uncommitted changes and commits no branch, tag or remote holds can be lost.
 import { div } from "gpui-kit";
@@ -13,37 +18,22 @@ import { worktreesMemory } from "./panel-state.js";
 const TEMP = ["/private/tmp", "/tmp"];
 
 export function rootsFor(folders, homeDir, chosen) {
-  if (Array.isArray(chosen) && chosen.some((s) => typeof s === "string" && s.startsWith("/"))) {
-    return [...new Set(chosen.filter((s) => typeof s === "string" && s.startsWith("/")))];
+  if (Array.isArray(chosen) && chosen.some((s) => typeof s === "string" && paths.isAbsolute(s))) {
+    return [...new Set(chosen.filter((s) => typeof s === "string" && paths.isAbsolute(s)))];
   }
   const roots = folders.flatMap((f) => {
-    if (typeof f !== "string" || !f.startsWith("/")) return [];
-    if (f.startsWith(`${homeDir}/`)) {
-      const top = f.slice(homeDir.length + 1).split("/")[0];
-      return top && !top.startsWith(".") ? [`${homeDir}/${top}`] : [];
+    if (typeof f !== "string" || !paths.isAbsolute(f)) return [];
+    if (paths.within(f, homeDir)) {
+      const top = paths.relative(homeDir, f).split(/[\\/]/)[0];
+      return top && !top.startsWith(".") ? [paths.join(homeDir, top)] : [];
     }
-    return f !== homeDir && !TEMP.some((t) => f === t || f.startsWith(`${t}/`)) ? [f] : [];
+    return f !== homeDir && !TEMP.some((t) => paths.within(f, t)) ? [f] : [];
   });
   return [...new Set(roots)];
 }
 
 // Prints `R <repo>` for each repository with linked worktrees, `O <folder>` for an orphaned `.git`.
-const DISCOVER = `
-list=$(for root in "$@"; do
-  [ -d "$root" ] || continue
-  find "$root" -maxdepth 9 \\( -name node_modules -o -name .venv -o -name venv -o -name target -o -name dist -o -name build -o -name .next \\
-    -o -name .turbo -o -name .cache -o -name vendor -o -name Pods -o -name DerivedData -o -name coverage -o -name __pycache__ -o -name .Trash -o -name Library \\
-    -o -path '*/.git/*' -a ! -path '*/.git/worktrees' -a ! -path '*/.git/worktrees/*' \\) -prune \\
-    -o -path '*/.git/worktrees/*/gitdir' -type f -print -o -name .git -type f -print 2>/dev/null
-done | sort -u)
-printf '%s\\n' "$list" | grep '/\\.git/worktrees/.*/gitdir$' | sed 's#/\\.git/worktrees/.*##' | sort -u | awk '{ print "R\\t" $0 }'
-printf '%s\\n' "$list" | grep '/\\.git$' | tr '\\n' '\\0' | xargs -0 grep -H -m 1 '^gitdir: ' 2>/dev/null | while IFS= read -r line; do
-  f=\${line%%:gitdir: *}; g=\${line#*:gitdir: }
-  case "$g" in */worktrees/*) ;; *) continue ;; esac
-  case "$g" in /*) ;; *) g="\${f%/.git}/$g" ;; esac
-  [ -e "$g" ] || printf 'O\\t%s\\n' "\${f%/.git}"
-done
-exit 0`;
+
 
 export function parseDiscovery(out) {
   const lines = String(out).split("\n").map((line) => line.split("\t")).filter(([, path]) => path);
@@ -51,16 +41,7 @@ export function parseDiscovery(out) {
 }
 
 // The branches work lands in: the default one, plus develop or dev where used; origin's and the local one of each.
-const BASES = `
-cd "$1" || exit 3
-o=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)
-for r in "$o" "\${o#origin/}" origin/main main origin/master master; do
-  [ -n "$r" ] && git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1 && echo "$r"
-done
-for r in origin/develop develop origin/dev dev; do
-  git rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1 && echo "+$r"
-done
-exit 0`;
+
 
 // The default branch's refs first (its name is the one shown), then develop's.
 export function basesFrom(out) {
@@ -89,44 +70,6 @@ export function parseWorktrees(out) {
   });
 }
 
-// $2 is the idle window in minutes; --no-optional-locks so probing never touches the index.
-const PROBE = `
-cd "$1" 2>/dev/null || { echo gone; exit 0; }
-[ -d .git ] && { echo replaced; exit 0; }
-# git can't read it (its .git names where the repository used to be): nothing
-# below would be true, so it says so and stops.
-git rev-parse --git-dir >/dev/null 2>&1 || { echo broken; exit 0; }
-status=$(git --no-optional-locks status --porcelain=v1 --untracked-files=normal 2>/dev/null) || { echo broken; exit 0; }
-idle=$2
-shift 2
-if [ "$idle" -gt 0 ] 2>/dev/null; then
-  gd=$(git rev-parse --absolute-git-dir 2>/dev/null)
-  if [ -n "$(find . -maxdepth 3 \\( -name node_modules -o -name .git \\) -prune -o -mmin -"$idle" -print 2>/dev/null | head -n 1)" ] ||
-     { [ -n "$gd" ] && [ -n "$(find "$gd/HEAD" "$gd/logs/HEAD" -mmin -"$idle" 2>/dev/null | head -n 1)" ]; }; then echo recent; fi
-fi
-printf 'only\\t%s\\n' "$(git rev-list --count HEAD --not --branches --tags --remotes 2>/dev/null)"
-printf 'dirty\\t%s\\n' "$(printf '%s' "$status" | grep -c .)"
-printf 'last\\t%s\\n' "$(git log -1 --format=%ct 2>/dev/null)"
-ahead=
-for b in "$@"; do
-  a=$(git rev-list --count "$b..HEAD" 2>/dev/null) || continue
-  if [ -z "$ahead" ] || [ "$a" -lt "$ahead" ]; then ahead=$a; fi
-  if git merge-base --is-ancestor HEAD "$b" 2>/dev/null; then echo merged; continue; fi
-  t=$(git merge-tree --write-tree "$b" HEAD 2>/dev/null) && [ "$t" = "$(git rev-parse "$b^{tree}" 2>/dev/null)" ] && echo merged
-done
-printf 'ahead\\t%s\\n' "$ahead"
-exit 0`;
-
-// Removes the record of a worktree whose folder is now a repository of its own; prints "forgot" per removal.
-const FORGET = `
-c=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 3
-[ -d "$2/.git" ] || exit 4
-for d in "$c"/worktrees/*/; do
-  [ -f "$d/gitdir" ] || continue
-  if [ "$(head -n 1 "$d/gitdir")" = "$2/.git" ]; then rm -rf -- "$d" && echo forgot; fi
-done
-exit 0`;
-
 export function parseProbe(out) {
   const start = { gone: false, replaced: false, broken: false, dirty: 0, last: null, ahead: null, merged: false, recent: false, only: 0 };
   return String(out).split("\n").reduce((p, line) => {
@@ -140,8 +83,8 @@ export function parseProbe(out) {
 }
 
 // On macOS git and panes may report /tmp or /private/tmp, so both forms are normalized.
-const real = (p) => String(p ?? "").replace(/^\/(tmp|var)(\/|$)/, "/private/$1$2").replace(/\/+$/, "");
-export const inside = (dir, path) => { const d = real(dir), p = real(path); return Boolean(d) && (p === d || p.startsWith(`${d}/`)); };
+const real = (p) => paths.canonical(p);
+export const inside = (dir, path) => Boolean(dir) && paths.within(real(path), real(dir));
 
 // The order of the checks decides the state.
 export function stateOf(w) {
@@ -302,7 +245,7 @@ const ORDER = { merged: 0, detached: 1, unmerged: 2, recent: 3, broken: 4, lost:
 // Drawn only until you ask for more, so a frame stays quick.
 const REPOS = 8, ROWS = 4;
 
-const name = (p) => String(p).split("/").filter(Boolean).at(-1) ?? p;
+const name = (p) => paths.basename(p) || p;
 
 // Rows are values, keyed by path: an action that runs later re-reads the row as it is then.
 const keyOf = (w) => (typeof w === "string" ? w : w?.path);
@@ -413,7 +356,7 @@ export class Worktrees {
   roots() {
     const folders = [...spaces().filter((s) => !s.machine).map((s) => s.folder), ...panes().map((p) => p.cwd)];
     const chosen = shared("kanso.worktrees.roots"), roots = rootsFor(folders, home(), chosen);
-    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...TEMP] };
+    return { roots, search: roots.length && Array.isArray(chosen) && chosen.length ? roots : [...roots, ...(this.tempDirs ?? TEMP)] };
   }
 
   // Runs on every draw, so only a row whose answer changed is replaced.
@@ -425,19 +368,21 @@ export class Worktrees {
   }
 
   refresh(cx) {
-    const id = this.scan + 1, { roots, search } = this.roots();
+    const id = this.scan + 1;
     this.scan = id;
     this.phase = "Finding repositories"; this.note = null; this.picked = this.heldPick === undefined ? null : this.heldPick; this.heldPick = undefined; this.armed.clear(); this.done = false;
     cx.spawn(async (cx) => {
+      this.tempDirs = await localService(systemApi).temporary().catch(() => []);
+      const { roots, search } = this.roots();
       try {
-        const found = await exec("bash", ["-c", DISCOVER, "worktrees", ...search]);
+        const found = await localService(repositoryApi).discover(search);
         if (id !== this.scan) return;
         const { repos, orphans } = parseDiscovery(found.stdout);
         this.phase = `Reading ${repos.length} repositories`;
         const read = await pool(repos, 6, async (repo) => {
           const [list, bases] = await Promise.all([
             exec("git", ["worktree", "list", "--porcelain", "-z"], { cwd: repo }),
-            exec("bash", ["-c", BASES, "bases", repo]),
+            localService(repositoryApi).bases(repo),
           ]);
           if (id !== this.scan || list.code !== 0) return null;
           const all = parseWorktrees(list.stdout), b = basesFrom(bases.stdout);
@@ -455,7 +400,7 @@ export class Worktrees {
         const live = groups.flatMap((g) => g.items.filter((w) => !w.missing).map((w) => [w.path, g.bases]));
         this.counted = 0;
         await pool(live, 8, async ([path, bases]) => {
-          const r = await exec("bash", ["-c", PROBE, "probe", path, idle, ...bases]);
+          const r = await localService(repositoryApi).probe(path, idle, bases);
           if (id !== this.scan) return;
           this.apply(path, parseProbe(r.stdout));
           this.counted = this.counted + 1;
@@ -466,9 +411,9 @@ export class Worktrees {
         const sized = [...live.map(([path]) => this.item(path)).filter((w) => w && !w.missing), ...this.orphans].map((w) => w.path);
         this.counted = 0;
         await pool(sized, 4, async (path) => {
-          const r = await exec("du", ["-sk", path]);
+          const measured = await localService(fileApi).size(path);
           if (id !== this.scan) return;
-          const size = Number(String(r.stdout).split("\t")[0]) || 0;
+          const size = Number.isFinite(measured) ? measured : 0;
           this.update(path, (w) => ({ ...w, size }));
           this.counted = this.counted + 1;
           this.phase = `Measuring ${this.counted} of ${sized.length}`;
@@ -500,7 +445,7 @@ export class Worktrees {
         const r = await exec("git", ["worktree", "repair", w.path], { cwd: w.repo });
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
         const g = this.groups.find((g) => g.repo === w.repo);
-        const p = parseProbe((await exec("bash", ["-c", PROBE, "probe", w.path, idleMinutes(), ...(g?.bases ?? [])])).stdout);
+        const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
         this.apply(w.path, p);
         if (p.broken) throw new Error("git still can't read it");
         notify({ title: `Repaired ${name(w.path)}`, body: "It is linked to its repository again.", level: "success" });
@@ -513,13 +458,13 @@ export class Worktrees {
   async removeOne(w) {
     if (w.orphan) {
       // Checked again right before deleting: if it is a worktree again, the script exits instead.
-      const r = await exec("bash", ["-c", 'g=$(sed -n "1s/^gitdir: //p" "$1/.git" 2>/dev/null); case "$g" in */worktrees/*) ;; *) exit 4 ;; esac; case "$g" in /*) ;; *) g="$1/$g" ;; esac; [ -e "$g" ] && exit 5; rm -rf -- "$1"', "orphan", w.path]);
+      const r = await localService(repositoryApi).removeOrphan(w.path).catch((error) => ({ code: 1, stderr: String(error) }));
       if (r.code !== 0) throw new Error(r.code === 4 || r.code === 5 ? "It is a worktree again; refresh" : (r.stderr || "Cannot delete it").trim());
       return { kb: w.size ?? 0, orphans: 1 };
     }
     if (w.replaced) {
       // git worktree remove refuses it and prune keeps it, so only the record is removed; the folder is not touched.
-      const r = await exec("bash", ["-c", FORGET, "forget", w.repo, w.path]);
+      const r = await localService(repositoryApi).forget(w.repo, w.path);
       if (r.code !== 0 || !r.stdout.includes("forgot")) throw new Error(r.code === 4 ? "It is a worktree again; refresh" : (r.stderr || "No record of it was found").trim());
       return { records: 1 };
     }
@@ -544,11 +489,12 @@ export class Worktrees {
     if (!w) return null;
     if (w.orphan) return w; // removeOne checks a left-behind folder itself
     if (w.missing) {
-      const r = await exec("bash", ["-c", w.replaced ? '[ -d "$1/.git" ]' : '[ ! -e "$1" ]', "check", w.path]);
+      const exists = await localService(fileApi).test(w.replaced ? paths.join(w.path, ".git") : w.path, w.replaced ? "directory" : "any");
+      const r = { code: (w.replaced ? exists : !exists) ? 0 : 1 };
       return r.code === 0 ? this.item(path) : null;
     }
     const g = this.groups.find((g) => g.repo === w.repo);
-    const p = parseProbe((await exec("bash", ["-c", PROBE, "probe", w.path, idleMinutes(), ...(g?.bases ?? [])])).stdout);
+    const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
     this.apply(path, p);
     this.markOpen();
     const now = this.item(path);

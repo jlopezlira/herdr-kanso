@@ -504,8 +504,9 @@ test("one click saves the machine on, tells Spend, and a failed save turns the i
   const files = { "/app/data/kanso-sync/config.json": JSON.stringify({ version: 1, peers: { loki: { enabled: true } } }) };
   const kicks = [];
   const toasts = [];
+  const made = [];
   const host = {
-    mkdir: async () => {}, notify: (n) => toasts.push(n), setShared: (key, value) => kicks.push([key, value]),
+    exec: async (command, args) => { made.push([command, ...args]); return { code: 0, stdout: "" }; }, notify: (n) => toasts.push(n), setShared: (key, value) => kicks.push([key, value]),
     readTextFile: async (file) => files[file] ?? null,
     writeTextFile: async (file, text, expected) => { assert.equal(expected, files[file] ?? null); files[file] = text; },
   };
@@ -516,6 +517,7 @@ test("one click saves the machine on, tells Spend, and a failed save turns the i
   await drain();
   assert.deepEqual(JSON.parse(files["/app/data/kanso-sync/config.json"]), { version: 1, peers: { loki: { enabled: true }, dark: { enabled: true } } });
   assert.deepEqual(kicks.map(([key]) => key), ["kanso.sync.kick"]);
+  assert.deepEqual(made, [["mkdir", "-p", "/app/data/kanso-sync"]]);
   assert.equal(view.syncSaving, false);
 
   const broken = await syncView({ host: { ...host, writeTextFile: async () => { throw new Error("stale"); } } });
