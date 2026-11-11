@@ -197,13 +197,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
   loading: kit; unavailable: error. The bar names the oldest blocked one from this queue.
-  Strip checks panes each 1.5 s; leaving
-  `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
-  commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
-  (open only; checks and merge state) in shared `kanso.digest`
-  by pane, cleared when it works again or closes. The header shows it
-  after the branch: files, +/-, commits, #number. A blocked one is not
-  green and the tooltip names why. Send opens `kanso-send`.
+  Leaving `working` stores files, commits and the open pull request in
+  `kanso.digest` (kept while it works; dropped when the pane closes).
+  Files, commits and `#N` open the diff, the unpushed work and the
+  section the verdict names. Files and commits dim while working.
+  Sleep and Send stay on the focused finished pane; no Send while it waits on you.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
   status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
@@ -291,7 +289,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     at rest, those last words in `dim`). Without one: while working or
     blocked, the agent's own title when the row shows a name you gave it
     (else the title is the name already); when done, the pane's digest from
-    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 failing", or "PR #575, review required" when the merge is blocked). After the
+    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 · test / unit failed", or "PR #575 · review required"). After the
     line, a working agent three minutes on the same step shows its time
     (`dim`; past fifteen, `blocked`), counted from when the `msg` changed
     or was first seen (`trackSteps`, `stepOf`; `status_ms` is not it). Before the mark

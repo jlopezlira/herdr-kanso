@@ -48,9 +48,10 @@ test("What a row says under its name", async () => {
   assert.equal(activityOf({ status: "done" }, { files: 2, add: 12, del: 3, ahead: 1, pr: null }), "+12 −3 · 1 commit");
   assert.equal(activityOf({ status: "idle" }, { files: 2, add: 12, del: 3 }), null, "once seen, one line");
   assert.equal(activityOf({ status: "done" }, { files: 0, ahead: 0, pr: null }), null, "it left nothing");
-  assert.equal(digestLine({ files: 1, add: 0, del: 0, ahead: 2, pr: { number: 41, checks: "failing" } }), "1 file · 2 commits · PR #41 failing");
-  assert.equal(digestLine({ pr: { number: 575, checks: "passing", hold: "Review required" } }), "PR #575, review required");
-  assert.equal(/ready/i.test(digestLine({ pr: { number: 575, checks: "passing", hold: "Review required" } })), false);
+  assert.equal(digestLine({ files: 1, add: 0, del: 0, ahead: 2, pr: { number: 41, state: "OPEN", mergeStateStatus: "UNSTABLE", fail: 1, failed: "test / unit" } }), "1 file · 2 commits · PR #41 · test / unit failed");
+  assert.equal(digestLine({ pr: { number: 575, state: "OPEN", mergeStateStatus: "BLOCKED", reviewDecision: "REVIEW_REQUIRED", fail: 0, pending: 0 } }), "PR #575 · review required");
+  assert.equal(digestLine({ pr: { number: 9, state: "OPEN", mergeStateStatus: "CLEAN", fail: 0, pending: 0 } }), "PR #9");
+  assert.equal(/ready/i.test(digestLine({ pr: { number: 9, state: "OPEN", mergeStateStatus: "CLEAN", fail: 0, pending: 0 } })), false);
 });
 
 test("What the agent says it is on comes first, its first line", async () => {
