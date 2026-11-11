@@ -508,16 +508,8 @@ export function windowsLaunchScript(dir, id, file) {
   const pid = paths.join(dir, `${id}.pid`);
   return [
     "$exe = (Get-Process -Id $PID).Path",
-    "$psi = New-Object System.Diagnostics.ProcessStartInfo",
-    "$psi.FileName = $exe",
-    `$psi.Arguments = '-NoProfile -NonInteractive -File ' + ${psQuote(windowsArg(file))}`,
-    "$psi.UseShellExecute = $false",
-    "$psi.CreateNoWindow = $true",
-    "$psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden",
-    // Closed stdin is EOF. An inherited pipe stays open and a checker .cmd waits on it forever.
-    "$psi.RedirectStandardInput = $true",
-    "$proc = [System.Diagnostics.Process]::Start($psi)",
-    "$proc.StandardInput.Close()",
+    // Shell execute passes no handle on, so exec's pipes close when this script ends, not the install.
+    `$proc = Start-Process -FilePath $exe -ArgumentList ('-NoProfile -NonInteractive -File ' + ${psQuote(windowsArg(file))}) -WindowStyle Hidden -PassThru`,
     "$enc = New-Object System.Text.UTF8Encoding $false",
     `[IO.File]::WriteAllText(${psQuote(pid)}, ([string]$proc.Id + [char]10), $enc)`,
   ].join("; ");
