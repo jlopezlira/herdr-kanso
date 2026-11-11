@@ -57,13 +57,14 @@ Top to bottom:
   - "Save plans" writes `plans` into `prices.json`, keeping its other keys. The hero then shows what your plans cost in the period and how much they saved you.
 - **Keys** (from `keys.json`, only while the panel has focus): ⌘R refresh, ⌘, Settings, Esc and ⌘[ back.
 - **When it runs.** A copy starts the first time it shows. While visible, it refreshes every 60 s, or every 30 s while any session is active. Hidden (a closed panel column, another child of its stack, a hidden ancestor), its timer stops, its data is dropped and no process runs. When shown again, it reloads within a second, woken by the `kanso-spend.open` command or by its next render. A side-panel toggle should run `run("kanso-spend.open")` after showing it.
+- **Other computers.** Sync is off until Settings turns a computer on; nothing is asked of it until then. Spend then reads that computer's stored totals (`prepare`, no new scan) and lists each computer under the total. One computer is unchanged. A computer out of reach keeps the last figures and their time. The share card hides while other computers are in the total. `sync.js` is shared with Settings; `sync-probe.mjs` is what the other computer runs.
 - **First run.** Herdr stops an `exec` after 30 s, so each scan stops at 18 s, saves what it read and continues a second later. A history of about 1400 sessions takes two passes. Afterwards a refresh reads only files that changed (about 0.6 s).
 - **Sample data.** Create `data/kanso-spend/demo` (any content) to show sample data instead of your sessions, for screenshots. Delete it to go back.
 
 ## Built from
 
 - **`mods/kanso-spend/main.js`** (the view, QuickJS). One `View` class. Its state is the cost options `{period, offset, project, model}`, a navigation stack, `page` (home or settings), the last payload, and a single-flight runner: one presenter call at a time; a request made meanwhile is queued, and a scan wins over a re-price. Every call is `exec(node, [presenter, command, --store, --home, --options JSON])`, where `node` comes from `runtime.json`. A 35 s watchdog per call shows "took too long" instead of hanging.
-  - herdr functions: `exec`, `appHome`, `home`, `theme`, `layout`, `nextCommand`, `readTextFile`, `writeTextFile`.
+  - herdr functions: `exec`, `appHome`, `home`, `theme`, `layout`, `machines`, `nextCommand`, `readTextFile`, `writeTextFile`.
   - gpui-base controls: `Button`, `Popover`, `Input`, `InputState`, and `Toggle` (through `ui.js`).
   - Native animation: `svg().spin(900)` for the refresh icon, `.loop("opacity", …)` for the skeleton and the live dot.
   - Commands: `kanso-spend.refresh`, `.open`, `.settings`, `.back`.
@@ -83,7 +84,7 @@ Top to bottom:
 - **`ui.js`:** the theme token mapping and a few helpers (`toggleSwitch`, `controlInput`).
 - **`share.js` and `spend-card.js`:** Share, the same as Shipped's (see `kanso-panel/share.js`, of which this is a byte-for-byte copy; `npm run sync:share`). A share icon in the header, shown only on the home view with no project or model filter; it opens the "Share to" row. `spend-card.js` turns the costs into the card: "Spend" and the period, the total "of AI work at API list price", the rise against the period before (only a rise), tasks, per task, tokens, the project and model counts, the plan note, and the chart's bars by ratio with its first and last labels. No names reach it.
 - **`icons/`:** `refresh`, `settings`, `back`, `close` and `share`, as 24 px stroke-2 line SVGs drawn with `svg()` and tinted by text color.
-- **Network:** one HTTPS GET a day to the OpenRouter catalog. **Programs:** `node`. **Files read outside the mod:** the four session folders above and, if present, `~/.prjct/pi-usage/`. **Files written:** only under `data/kanso-spend/`.
+- **Network:** one HTTPS GET a day to the OpenRouter catalog. **Programs:** `node` (on another computer too, when Sync is on; no new port). **Files read outside the mod:** the four session folders above and, if present, `~/.prjct/pi-usage/`. **Files written:** under `data/kanso-spend/`, and under `data/kanso-sync/` when Sync is on.
 
 ## Watch out
 

@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.22.0] - 2026-11-10
+
+### Added
+
+- Sync in settings is off until you turn a computer on. Spend then adds that computer's token spend to the total and shows each computer's share. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
+
 ## [3.21.0] - 2026-11-10
 
 ### Added

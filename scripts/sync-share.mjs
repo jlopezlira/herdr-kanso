@@ -48,6 +48,8 @@ export const SHARED = [
   { source: "kanso/mods/kanso-spaces/sleepwork.js", copies: ["kanso/mods/kanso-sleep/sleepwork.js"] },
   // No reassignment anywhere: retry, range, parseOr... in every mod.
   { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js"]) },
+  // Who this computer is, and rows exchanged with the others. Settings edits it; Spend runs it.
+  { source: "kanso/mods/kanso-settings/sync.js", copies: ["kanso/mods/kanso-spend/sync.js"] },
   { source: "kanso/mods/kanso-tabs/layout.js", copies: ["kanso/mods/kanso-strip/layout.js", "kanso/mods/kanso-spaces/layout.js", "kanso/mods/kanso-panel/layout.js", "kanso/mods/open-with/layout.js"] },
   // The Markdown editor: Kanso's preview panel is the source, the standalone
   // markdown-panel mod a copy.
