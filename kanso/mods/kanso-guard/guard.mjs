@@ -674,7 +674,7 @@ async function recycleDue(snap) {
     .toSorted((a, b) => b.mb - a.mb);
   // One per check: the heaviest that recycles.
   await findAsync(due, async (a) => {
-    const why = a.mb > limits.agentMB ? `${a.mb} MB, over ${limits.agentMB}` : `machine low: ${snap.machine.freePct}% free, ${snap.machine.swapMB} MB ${host.swapLabel}`;
+    const why = a.mb > limits.agentMB ? `${a.mb} MB, over ${limits.agentMB}` : `this computer is low: ${snap.machine.freePct}% free, ${snap.machine.swapMB} MB ${host.swapLabel}`;
     return (await recycle(a.pid, why)).ok;
   });
 }

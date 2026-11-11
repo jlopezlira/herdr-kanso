@@ -51,7 +51,7 @@ export const copyFailure = (error, machine) => {
 export const listFailure = (error, machine) => {
   const text = said(error);
   if (DENIED.test(text)) return "Cannot list this folder: permission denied";
-  if (!text || QUIET.test(text)) return machine ? `${machine} did not answer` : "This machine did not answer";
+  if (!text || QUIET.test(text)) return machine ? `${machine} did not answer` : "This computer did not answer";
   return text || "Cannot list this folder";
 };
 
