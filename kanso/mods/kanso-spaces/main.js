@@ -21,7 +21,8 @@ import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThr
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
-import { skeleton, breathe, H, G } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, toggleSwitch, tokens, quietLink } from "./ui.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys } from "./machines.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -189,6 +190,12 @@ export default class Spaces extends View {
     this.pressed = null;
     this.over = null;
     this.machines = [];
+    this.parked = [];
+    this.waking = new Set();
+    this.login = new Set();
+    this.failed = new Set();
+    this.powerBusy = new Set();
+    this.hostName = "";
     // The first frame uses localStorage's copy; the database's answer replaces it when it comes.
     this.panel = new Panel(PREFS, this.leftNavStore());
     this.panelReady = false;
@@ -224,6 +231,23 @@ export default class Spaces extends View {
     this.foldH = {};
     this.migrate();
     this.refreshMachines(cx);
+    cx.spawn(async (cx) => {
+      const rev = this.parkRev ?? 0;
+      try {
+        const rows = (await this.db().machinesOff()).map((row) => machineRecord(row)).filter(Boolean);
+        if ((this.parkRev ?? 0) !== rev) return;
+        this.parked = rows;
+        await this.settleParked();
+      } catch { /* the next look reads it */ }
+      cx.notify();
+    });
+    cx.spawn(async (cx) => {
+      try {
+        const result = await exec("hostname", []);
+        const name = String(result?.stdout ?? "").replace(/\r/g, "").trim();
+        if (result?.code === 0 && name) { this.hostName = name; cx.notify(); }
+      } catch { /* the header says This computer */ }
+    });
     // `hc machine ls` is a process: every 30 s in front, every 2 min behind.
     cx.timer.every(30000, cx => {
       if (window().active) { this.refreshMachines(cx); return; }
@@ -657,7 +681,7 @@ export default class Spaces extends View {
     const projects = JSON.stringify(registry());
     if (projects !== this.projectsSeen) { this.projectsSeen = projects; cx.notify(); }
     // Read once per look: each read copies every record.
-    const sp = spaces(), ps = panes();
+    const sp = visibleSpaces(spaces(), this.offNames()), ps = panes();
     this.trackAgents(now, sp, cx);
     this.trackReturn(sp, ps, active, now, cx);
     // Each agent's name is its conversation's title: read every minute, every 15 s while Threads shows in front.
@@ -674,7 +698,8 @@ export default class Spaces extends View {
 
   trackReturn(sp, ps, active, now, cx) {
     if (this.sinceLeft.busy) return;
-    const focus = focused(), list = agents(), rawTerms = terminals();
+    const off = this.offNames();
+    const focus = focused(), list = visibleAgents(agents(), off), rawTerms = visibleAgents(terminals(), off);
     const signature = returnSignature(list, rawTerms, sp, ps, this.seenNow, this.panel.agents);
     const changed = signature !== this.returnSignature;
     const terms = changed ? new Map(rawTerms.map((term) => [term.address, term])) : null;
@@ -781,9 +806,10 @@ export default class Spaces extends View {
   // Labels are written only when they change, so any agent of any model finds them with Herdr alone;
   // a label just sent is not sent again while Herdr's list catches up.
   nameTerminals(seen) {
-    const sp = spaces();
+    const off = this.offNames();
+    const sp = visibleSpaces(spaces(), off);
     const spaceName = (id) => sp.find((w) => w.id === id)?.name ?? null;
-    const shown = new Map([...seen].map(([address, v]) => [address, { name: v.name, project: spaceName(v.space) }]));
+    const shown = new Map([...seen].filter(([address]) => !off.has(machineOf(address))).map(([address, v]) => [address, { name: v.name, project: spaceName(v.space) }]));
     const terms = terminals();
     const names = terminalNames(terms, shown, (k) => spaceName(k.labels?.["herdr.space"]));
     const byAddress = new Map(terms.map((k) => [k.address, k]));
@@ -822,7 +848,7 @@ export default class Spaces extends View {
 
   // The done agent you are looking at stays in Done until you leave it.
   trackAgents(now, sp, cx) {
-    const list = agents();
+    const list = visibleAgents(agents(), this.offNames());
     const tabs = new Map(sp.flatMap((s) => s.tabs ?? []).map((tb) => [tb.id, tb]));
     const next = track(this.since, list, now, (id) => tabs.get(id));
     // An agent came or went: read the conversations now, so it shows by its name at once rather than in a minute.
@@ -881,7 +907,7 @@ export default class Spaces extends View {
       const asks = this.git[k] || this.unsure.has(k);
       return asks && !this.folded.has(onOf.get(k)) && now - (this.checked[k] ?? 0) > FALLBACK;
     }) : [];
-    return new Set([...fresh, ...moved, ...ended, ...back, ...stale]);
+    return new Set(pollKeys([...fresh, ...moved, ...ended, ...back, ...stale], this.offNames()));
   }
 
   // `key` and the other places in its repo (a commit there moves their ahead/behind).
@@ -890,15 +916,122 @@ export default class Spaces extends View {
     return [key, ...(repo ? [...keys].filter((k) => this.git[k]?.repo === repo) : [])];
   }
 
+  offNames() { return heldNames(this.parked ?? []); }
+
+  phaseOf(name, layouts = null) {
+    const layout = (layouts ?? machines()).find((row) => row.name === name)?.layout ?? null;
+    return machinePhase({
+      name, stored: this.parked ?? [], live: this.machines ?? [], layout,
+      asking: this.waking?.has(name) ?? false, login: this.login?.has(name) ?? false, failed: this.failed?.has(name) ?? false,
+    });
+  }
+
+  async readMachines() {
+    const result = await hc(["machine", "ls", "--json"]);
+    if (result.code !== 0) return;
+    this.machines = (JSON.parse(result.stdout).machines ?? []).filter((row) => !row.temporary);
+    await this.settleParked();
+  }
+
+  async settleParked() {
+    const done = connectedNames(this.parked ?? [], this.machines ?? []);
+    if (done.length) {
+      const drop = new Set(done);
+      this.parked = (this.parked ?? []).filter((row) => !drop.has(row.name));
+      for (const name of done) {
+        this.waking.delete(name);
+        this.login.delete(name);
+        this.failed.delete(name);
+        await this.db().forgetMachine(name).catch(() => {});
+      }
+    }
+    for (const row of this.parked ?? []) {
+      const live = (this.machines ?? []).find((item) => item.name === row.name);
+      if (live?.state !== "needs_login") continue;
+      this.login.add(row.name);
+      this.waking.delete(row.name);
+    }
+  }
+
   // One look at a time: a herdr-core that hangs must not stack them up.
   refreshMachines(cx) {
     if (this.machinesBusy) return;
     this.machinesBusy = true;
-    cx.spawn(async cx => {
-      try { const r = await hc(["machine", "ls", "--json"]); if (r.code === 0) this.machines = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary); } catch {}
+    cx.spawn(async (cx) => {
+      try { await this.readMachines(); } catch { /* the last list stands */ }
       finally { this.machinesBusy = false; }
       cx.notify();
     });
+  }
+
+  setPower(name, on, cx) {
+    if (!name || this.powerBusy?.has(name)) return;
+    if (on) this.turnOn(name, cx);
+    else this.turnOff(name, cx);
+  }
+
+  // hc machine rm forgets it here; work already running there keeps running.
+  turnOff(name, cx) {
+    const live = (this.machines ?? []).find((row) => row.name === name) ?? null;
+    const had = (this.parked ?? []).find((row) => row.name === name) ?? null;
+    const record = machineRecord(live) ?? had;
+    if (!canRestore(record)) return;
+    this.parkRev = (this.parkRev ?? 0) + 1;
+    const rev = this.parkRev;
+    this.powerBusy.add(name);
+    this.login.delete(name);
+    this.failed.delete(name);
+    this.waking.delete(name);
+    this.parked = [...(this.parked ?? []).filter((row) => row.name !== name), record];
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        await this.db().parkMachine(record);
+        if (!live || (this.parkRev ?? 0) !== rev) return;
+        const result = await hc(rmArgs(name));
+        if ((this.parkRev ?? 0) !== rev || result.code === 0) return;
+        this.parked = (this.parked ?? []).filter((row) => row.name !== name);
+        await this.db().forgetMachine(name).catch(() => {});
+      } catch {
+        if (live && (this.parkRev ?? 0) === rev) {
+          this.parked = (this.parked ?? []).filter((row) => row.name !== name);
+          await this.db().forgetMachine(name).catch(() => {});
+        }
+      } finally {
+        this.powerBusy.delete(name);
+        cx.notify();
+      }
+    });
+  }
+
+  turnOn(name, cx) {
+    const record = (this.parked ?? []).find((row) => row.name === name);
+    if (!canRestore(record)) return;
+    this.powerBusy.add(name);
+    this.failed.delete(name);
+    this.login.delete(name);
+    this.waking.add(name);
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        const result = await hc(addArgs(record)).catch((error) => ({ code: 1, stdout: "", stderr: String(error) }));
+        const why = hcError(result);
+        if (!why) { await this.readMachines().catch(() => {}); return; }
+        this.waking.delete(name);
+        if (needsLogin(why)) this.login.add(name);
+        else this.failed.add(name);
+      } finally {
+        this.powerBusy.delete(name);
+        cx.notify();
+      }
+    });
+  }
+
+  retryMachine(name, cx) {
+    const parked = (this.parked ?? []).some((row) => row.name === name);
+    const listed = (this.machines ?? []).some((row) => row.name === name);
+    if (parked && !listed) this.turnOn(name, cx);
+    else this.refreshMachines(cx);
   }
 
   // One look at a time, each place once however often it was asked for meanwhile.
@@ -921,6 +1054,7 @@ export default class Spaces extends View {
 
   async check(key, cx) {
     const [on, cwd] = JSON.parse(key);
+    if (on && this.offNames().has(on)) return;
     this.checked[key] = Date.now();
     this.unsure.delete(key);
     try {
@@ -1391,7 +1525,7 @@ export default class Spaces extends View {
 
   listed(ps, sp, terms) {
     const byAddress = new Map(terms.map((k) => [k.address, k]));
-    return withTerminals(agents(), ps, sp).map((a) => {
+    return visibleAgents(withTerminals(agents(), ps, sp), this.offNames()).map((a) => {
       const k = byAddress.get(a.address), l = k?.labels, pin = l?.[PIN_LABEL];
       return { ...a, parent: k?.parent ?? null, labels: l ?? {}, turn: k?.turn ?? 0, msg: k?.report?.msg ?? null, name: l?.[NAME_LABEL] || undefined, pin: pin != null && pin !== "" && !Number.isNaN(Number(pin)) ? Number(pin) : null };
     });
@@ -1561,7 +1695,7 @@ export default class Spaces extends View {
         .map((el) => item(el, open ? ((this.foldH ?? {})[r.w.id] ?? st?.h ?? 0) : 0, open && st?.focus != null ? agentMark(st.focus, st.focusH) : null));
       return [...gap, head, ...returned, ...box];
     };
-    const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].toSorted();
+    const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...(this.machines ?? []).map((row) => row.name), ...(this.parked ?? []).map((row) => row.name)])].filter(Boolean).toSorted();
     const loading = m => {
       const state = live.find(k => k.name === m)?.layout;
       return state === "loading" || (!state && this.machines.some(k => k.name === m && k.state === "connected"))
@@ -1578,36 +1712,111 @@ export default class Spaces extends View {
       return [item(div().h(10).flex_none(), 10), item(this.closedRow(t, c, names, group), rowHeight({ tree: null })), ...box];
     });
     if (!remote.length) return loading(null) && !rows.length && !this.closedOn(null, ctx).length ? [loadingRow(null)] : [...rows.flatMap(draw), ...closed(null)];
-    const machineNames = [null, ...remote];
-    const byMachine = machineNames.flatMap((m) => {
-      const mine = rows.filter((r) => (r.w.machine ?? null) === m);
-      const machine = this.machines.find(k => k.name === m);
-      const connected = !m || machine?.state === "connected";
-      const folded = this.folded.has(m);
-      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
-        .cursor_pointer().hover(s => s.bg(t.hover))
-        .on_click((_e, cx) => {
-          folded ? this.folded.delete(m) : this.folded.add(m);
-          this.panel.set("machines.folded", [...this.folded]);
-          cx.notify();
-        })
-        .child(svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(14).flex_none())
-        .when(!collapsed, el => el.child(div().flex_1().truncate().child(m ?? "This computer"))
-          .when(!connected, el => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
-          .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
-            .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
-          .child(div().size(6).rounded_full().flex_none().bg(connected ? t.ansi2 : t.dim))
-          .child(svg(`mods/kanso-chrome/icons/chevron-${folded ? "right" : "down"}.svg`).size(12).flex_none()));
-      const headItem = item(head, 26);
-      const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(6)
-        .text_size(12).text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground))
-        .on_click(() => run("space.new", { machine: m ?? "" }))
-        .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
-      if (folded) return [headItem];
-      const asleep = this.closedOn(m, ctx).length > 0;
-      return [headItem, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
-    });
-    return byMachine;
+    return [null, ...remote].flatMap((m) => this.machineBlock(m, t, collapsed, rows, draw, closed, loading, loadingRow, ctx, live));
+  }
+
+  machineMark(t, phase) {
+    const tip = { connected: "Connected", loading: "Loading", unavailable: "Unavailable", off: "Off", login: "Needs a login" }[phase] ?? "Connected";
+    const color = phase === "connected" ? t.ansi2 : phase === "unavailable" || phase === "login" ? t.blocked : phase === "off" ? t.dim : t.muted;
+    const glyph = svg(`mods/kanso-chrome/icons/${phase === "loading" ? "refresh" : "plug"}.svg`).size(15).flex_none().text_color(color).tooltip(tip);
+    return phase === "loading" ? glyph.spin(900) : glyph;
+  }
+
+  machineSwitch(m, phase, t, collapsed) {
+    const id = powerId(m);
+    if (!id) return null;
+    const on = phase !== "off";
+    const ring = this.navMark(`machine-power:${m}`, (cx) => this.setPower(m, this.phaseOf(m) === "off", cx));
+    const stop = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
+    if (collapsed) {
+      return stop(div().id(id).size(15).flex_none().cursor_pointer().tooltip(on ? "On" : "Off"))
+        .when(ring, (el) => el.border_1().border_color(t.accent))
+        .on_click((_e, cx) => { cx.stop_propagation(); this.setPower(m, !on, cx); })
+        .child(svg("mods/kanso-chrome/icons/plug.svg").size(15).text_color(on ? t.foreground : t.muted));
+    }
+    return stop(toggleSwitch(id, on, (next, cx) => this.setPower(m, next, cx), tokens(t), { label: on ? `Disconnect ${m}` : `Connect ${m}` }))
+      .when(ring, (el) => el.border_color(t.accent));
+  }
+
+  machineHead(m, phase, t, collapsed, folded) {
+    const title = machineTitle(m, this.hostName);
+    const off = phase === "off";
+    const connected = phase === "connected";
+    const ink = off ? t.dim : t.foreground;
+    const go = (cx) => {
+      if (off && m) { this.setPower(m, true, cx); return; }
+      if (!connected) return;
+      if (folded) this.folded.delete(m); else this.folded.add(m);
+      this.panel?.set("machines.folded", [...this.folded]);
+      cx.notify();
+    };
+    const ring = this.navMark(`machine:${m ?? "local"}`, go);
+    const power = this.machineSwitch(m, phase, t, collapsed);
+    const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(17).flex_none().text_color(ink);
+    return h_flex().id(`machine-${m ?? "local"}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
+      .px(collapsed ? 0 : G.sm).gap(collapsed ? G.xs : G.sm).items_center().justify_center().text_color(ink)
+      .when(!collapsed, (el) => el.justify_start())
+      .when(ring, (el) => el.border_1().border_color(t.accent))
+      .when(connected || (off && Boolean(m)), (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)))
+      .on_click((_e, cx) => go(cx))
+      .when(collapsed, (el) => el.tooltip(phase === "login" ? `${title}: ${loginLine(m)}` : title).child(icon).when(Boolean(power), (row) => row.child(power)))
+      .when(!collapsed, (el) => el.child(icon)
+        .child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().text_color(ink).child(title))
+        .when(connected, (row) => row.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(6)
+          .hover((s) => s.bg(t.hover).text_color(t.foreground))
+          .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
+        .child(this.machineMark(t, phase))
+        .when(Boolean(power), (row) => row.child(power))
+        .when(connected, (row) => row.child(svg(`mods/kanso-chrome/icons/chevron-${folded ? "right" : "down"}.svg`).size(12).flex_none().text_color(t.dim))));
+  }
+
+  machineDown(m, t, collapsed) {
+    const retry = (cx) => this.retryMachine(m, cx);
+    if (collapsed) {
+      return div().id(`machine-retry-${m}`).size(15).flex_none().cursor_pointer().tooltip("Unavailable")
+        .on_click((_e, cx) => retry(cx))
+        .child(svg("mods/kanso-chrome/icons/refresh.svg").size(15).text_color(t.blocked));
+    }
+    return h_flex().id(`machine-unavailable-${m}`).h(H.compact).flex_none().px(G.sm).gap(G.sm).items_center()
+      .child(div().text_size(T.body).text_color(t.blocked).child("Unavailable"))
+      .child(quietLink(`machine-retry-${m}`, "Retry", retry, tokens(t), { color: t.foreground, label: "Retry" }));
+  }
+
+  machineLogin(m, t, collapsed) {
+    const line = loginLine(m);
+    const onCopy = (_e, cx) => { cx.stop_propagation(); cx.write_to_clipboard?.(line); this.copiedLogin = line; cx.notify(); };
+    if (collapsed) {
+      return div().id(`machine-login-copy-${m}`).size(15).flex_none().cursor_pointer().tooltip(line)
+        .on_click(onCopy)
+        .child(svg("mods/kanso-chrome/icons/copy.svg").size(15).text_color(t.foreground));
+    }
+    return v_flex().id(`machine-login-${m}`).px(G.sm).gap(G.xs).flex_none()
+      .child(div().text_size(T.small).text_color(t.blocked).child("needs a login: run"))
+      .child(h_flex().gap(G.xs).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(t.muted).child(line))
+        .child(div().id(`machine-login-copy-${m}`).flex_none().px(G.xs).rounded(R.control).cursor_pointer()
+          .text_size(T.small).text_color(t.foreground).tooltip(line)
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .on_click(onCopy)
+          .child(this.copiedLogin === line ? "Copied" : "Copy")));
+  }
+
+  machineBlock(m, t, collapsed, rows, draw, closed, loading, loadingRow, ctx, layouts) {
+    const phase = this.phaseOf(m, layouts);
+    const folded = phase === "connected" && (this.folded ?? new Set()).has(m);
+    const mine = rows.filter((r) => (r.w.machine ?? null) === m);
+    const headItem = item(this.machineHead(m, phase, t, collapsed, folded), collapsed ? RAIL_MARK : PLAIN_ROW);
+    if (phase === "off") return [headItem];
+    if (phase === "loading") return [headItem, loadingRow(m)];
+    if (phase === "unavailable") return [headItem, item(this.machineDown(m, t, collapsed), collapsed ? RAIL_MARK : H.compact)];
+    if (phase === "login") return [headItem, item(this.machineLogin(m, t, collapsed), collapsed ? RAIL_MARK : H.compact * 2)];
+    const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(6)
+      .text_size(12).text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
+      .on_click(() => run("space.new", { machine: m ?? "" }))
+      .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
+    if (folded) return [headItem];
+    const asleep = this.closedOn(m, ctx).length > 0;
+    return [headItem, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
   }
 
   // Only a worktree row drops the branch: its name already is the branch.
@@ -2178,7 +2387,7 @@ export default class Spaces extends View {
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && (collapsed || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
-    const sp = spaces();
+    const sp = visibleSpaces(spaces(), this.offNames());
     const ps = panes();
     this.assignColors(sp);
     const quiet = (id, icon, tip, action) => div().id(id).size(32).flex_none().flex().items_center().justify_center().rounded(6)
