@@ -24,7 +24,8 @@ import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThr
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
-import { afterMount, commandLoop, runRead } from "./pure.js";
+import { afterMount } from "./pure.js";
+import { commandLoop, MachineRead } from "./sidebar.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
@@ -219,7 +220,7 @@ export default class Spaces extends View {
     this.foldH = {};
     this.migrate();
     this.awake = createAwake({ now: () => Date.now(), run: (call) => exec(call.command, call.args, { on: call.on, timeout: call.timeout }) });
-    this.machineRead = { busy: false };
+    this.machineRead = new MachineRead();
     afterMount(cx, (cx) => { this.pollSleepWork(cx); this.refreshMachines(cx); });
     cx.spawn(async (cx) => {
       const rev = this.parkRev ?? 0;
@@ -256,6 +257,7 @@ export default class Spaces extends View {
       () => nextCommand(),
       () => cx.notify(),
       (command) => this.command(String(command).replace(/^kanso-spaces\./, ""), cx),
+      cx.timer,
     ));
   }
 
@@ -1181,17 +1183,10 @@ export default class Spaces extends View {
 
   // One look at a time. A read that never settles is given up, and the next look runs.
   refreshMachines(cx, repeat = false) {
-    this.machineRead ??= { busy: false };
+    this.machineRead ??= new MachineRead();
     if (repeat && !this.machineRead.busy && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
-    const opened = runRead(this.machineRead, cx.timer, MACHINE_READ_MS, () => this.readMachines());
-    if (!opened) return;
-    this.machineRead = opened.state;
-    cx.spawn(async (cx) => {
-      const done = await opened.job;
-      this.machineRead = { busy: done.busy };
-      this.holdAwake(cx);
-      cx.notify();
-    });
+    const job = this.machineRead.start(cx.timer, MACHINE_READ_MS, () => this.readMachines());
+    if (job) cx.spawn(async (cx) => { await job; this.holdAwake(cx); cx.notify(); });
   }
 
   // The list is read every two minutes behind; the hold still renews on time.

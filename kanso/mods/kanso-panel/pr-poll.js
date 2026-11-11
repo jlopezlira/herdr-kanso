@@ -1,8 +1,4 @@
 // What the pull request panel asks GitHub, and what it keeps when an answer does not arrive.
-import { bounded, LATE } from "./pure.js";
-
-export { bounded, LATE };
-
 export const TICK_MS = 20_000;
 export const QUIET_MS = 58_000;
 export const AUTH_MS = 10 * 60_000;

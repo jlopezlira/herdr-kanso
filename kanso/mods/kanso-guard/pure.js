@@ -26,36 +26,6 @@ export function bounded(promise, timer, ms = 30_000) {
   return Promise.race([promise, deadline]);
 }
 
-// A second start while one is out does nothing. The caller stores the state this returns; a lost read frees it after `ms`.
-export function runRead(state, timer, ms, read) {
-  if (state.busy) return null;
-  try {
-    const job = bounded(Promise.resolve(read()), timer, ms).then(
-      (value) => ({ busy: false, value }),
-      () => ({ busy: false }),
-    );
-    return { state: { busy: true }, job };
-  } catch {
-    return { state: { busy: false }, job: Promise.resolve({ busy: false }) };
-  }
-}
-
-// `touch` throws once this build was replaced. Any other throw is one command and the loop stays.
-export async function commandTurn(read, touch, act) {
-  const live = () => { try { touch(); return true; } catch { return false; } };
-  const onward = () => (live() ? "next" : "stop");
-  const got = await Promise.resolve().then(read).then((command) => ({ command }), () => null);
-  if (!got) return onward();
-  if (!live()) return "stop";
-  const acted = await Promise.resolve(got.command).then((command) => act(command)).then(() => true, () => false);
-  if (!acted) return onward();
-  return "next";
-}
-
-export async function commandLoop(read, touch, act) {
-  for (;;) if (await commandTurn(read, touch, act) === "stop") return;
-}
-
 export async function retry(times, fn, { done = Boolean, between = async () => {} } = {}, k = 0) {
   const v = await fn(k);
   if (done(v) || k + 1 >= times) return v;
