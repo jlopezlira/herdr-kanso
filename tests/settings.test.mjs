@@ -52,13 +52,7 @@ test("The Keys page lists Kanso's own keys only, and Reset knows them all", asyn
       if (action === "terminal") continue;
       const rows = GROUPS.filter((g) => g.section === section).flatMap((g) => g.actions);
       const listed = rows.some((r) => ofRow(r, action));
-      if (HERDRS.test(action)) {
-        assert.ok(!listed, `${action} is Herdr's command: not on Kanso's Keys page`);
-        const mate = chord === "ctrl-f" ? "cmd-f" : null;
-        const same = mate && Object.values(shipped).some((map) => map?.[mate] === action && herdrChords.has(mate));
-        assert.ok(herdrChords.has(chord) || same, `${chord} = ${action} is not on Herdr's key`);
-        continue;
-      }
+      if (HERDRS.test(action)) { assert.ok(!listed, `${action} is Herdr's command: not on Kanso's Keys page`); assert.ok(herdrChords.has(chord), `${chord} = ${action} is not on Herdr's key`); continue; }
       assert.ok(listed, `${chord} = ${action} has no row on the Keys page`);
       if (section === "layout:kanso" && !ASKED.has(chord)) assert.ok(!herdrChords.has(chord), `${chord} = ${action}: Kanso's own key on one of Herdr's`);
     }

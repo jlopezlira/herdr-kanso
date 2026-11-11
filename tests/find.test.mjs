@@ -285,10 +285,9 @@ test("A slice keeps whole lines, skips a pasted picture, and a missing file is n
   assert.deepEqual(once, ["python3"]);
 });
 
-test("Find opens from Cmd+F and from Ctrl+F", () => {
+test("Find opens from Cmd+F", () => {
   const keys = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
   assert.equal(keys.terminal["cmd-f"], "kanso-strip.find");
-  assert.equal(keys.terminal["ctrl-f"], "kanso-strip.find");
 });
 
 test("No conversation, a shell, or a remote terminal falls back to the terminal's Find", async () => {

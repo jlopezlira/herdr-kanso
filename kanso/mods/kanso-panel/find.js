@@ -126,12 +126,13 @@ function addLine(lines, text, mark, fresh) {
   return lines.concat([words]);
 }
 
-export function wordsByLine(parts) {
+function piecesOf(parts) {
   const list = Array.isArray(parts) ? parts : [];
-  const lines = list.reduce((acc, part) => String(part?.text ?? "").split("\n").reduce(
-    (state, bit, i) => addLine(state, bit, part?.mark, i > 0),
-    acc,
-  ), []);
+  return list.flatMap((part) => String(part?.text ?? "").split("\n").map((bit, i) => ({ bit, mark: part?.mark, fresh: i > 0 })));
+}
+
+export function wordsByLine(parts) {
+  const lines = piecesOf(parts).reduce((state, piece) => addLine(state, piece.bit, piece.mark, piece.fresh), []);
   return lines.length ? lines : [[]];
 }
 
