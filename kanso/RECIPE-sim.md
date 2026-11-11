@@ -1,90 +1,79 @@
 # Simulator (`kanso-sim`)
 
-Part of the Kanso recipe ([RECIPE.md](RECIPE.md)): the brief for the
-Simulator panel, kept in its own file so RECIPE.md stays under the gallery
-limit.
+An own-mod panel beside the agent, written from the platform tools and the
+panel kit. No package, helper process, server, additional transport or install.
 
-## What you see
+## Registration
 
-A side panel, id `sim`, the smartphone icon, mounted by `kanso-tabs` like the
-other panels and removed when it closes. Cmd+Shift+S (`kanso-tabs.sim`, only
-in `layout:kanso`) toggles it; on Windows the same action is Ctrl+Shift+M.
-It can be turned off in Settings, like every panel.
+Panel id `sim`, mod `kanso-sim`, icon
+`mods/kanso-chrome/icons/smartphone.svg`. The existing `kanso-tabs.sim`
+binding stays: Cmd+Shift+S, Ctrl+Shift+M on Windows.
 
-It stays off until this computer has Xcode's `simctl` or an Android SDK. That
-first choice is saved in shared `kanso.sim.defaulted`, so a later choice is
-left alone. A probe that does not finish in 8 seconds leaves the panel on.
+The tab bar probes once after mount and when the panel catalog or its saved
+order or switches change. A deadline bounds the probe. Cached plain tool
+paths and capabilities live in shared `kanso.sim.tools`; pending work belongs
+to each view. No simctl and no SDK with adb means no button or message.
+The panel's saved off switch remains independent of tool availability.
 
-The head names the device, its OS and "Booted" when it is running. Boot starts
-one that is off. Change opens the list: name, OS, Booted, and a dim row for an
-Android image that cannot run on this computer. The last pick is shared
-`kanso.sim.device`.
+`registration.js` is copied to kanso-tabs as `sim-registration.js` by
+sync:share. Platform services, the kit and front.js are copied the same way.
 
-The screen keeps the device's aspect. Touch, drag, scroll and typing go to
-the device. The toolbar is Home, Lock, volume down, volume up, rotate, and,
-on iOS, the software keyboard.
+## Devices
 
-States, from the panel kit: no devices ("No simulators or emulators."); a
-missing tool names itself, with `xcode-select --install` or a link
-(`nodejs.org`, Apple's Xcode page, Android Studio); booting and starting are
-skeletons; "The picture stalled." and "The stream stopped." offer Reconnect;
-"Input failed." sits under the toolbar and clears on the next input that
-works.
+Only the platforms here appear, in one list with Booted or Off. Xcode's
+`xcrun simctl list devices --json` supplies available iOS devices on macOS.
+Android combines `emulator -list-avds`, `adb devices`, and each connected
+emulator's `adb -s <serial> emu avd name`. Physical Android devices are also
+shown. No iOS row or message on other operating systems.
 
-On Linux and Windows one line says "iOS simulators are on macOS." A project on
-another computer says these are this computer's devices. There is no remote
-stream.
+SDK roots: ANDROID_HOME, ANDROID_SDK_ROOT, then ~/Library/Android/sdk on
+macOS, ~/Android/Sdk on Linux, or %LOCALAPPDATA%/Android/Sdk on Windows.
+The first root with platform-tools/adb wins. A missing emulator binary is one
+fact line; connected Android devices still work. No install instructions.
 
-## How it streams
+Start runs simctl boot or detaches the SDK emulator with its AVD name.
+Starting has a 90-second deadline and a plain failure line. Device reads run
+only in front, every five seconds, or roughly every second while starting.
+A project on another computer has one fact: devices are on this computer.
 
-Nothing streams while the panel is closed or the window is behind others.
-Closing the panel unmounts the mod.
+## Pictures
 
-A viewer count is shared by every open Simulator. Closing one view never
-kills a helper another view still holds. The iOS helper (`serve-sim --kill`)
-exits only when its last viewer closes or the window goes behind, not when
-the stream ends. The Android helper, `android-stream.mjs`, exits about 3
-seconds after its last HTTP viewer leaves.
+One screenshot in flight. After it lands, wait 700 ms before the next.
+iOS uses `simctl io <udid> screenshot --type=jpeg <file>`; Android writes
+`adb -s <serial> exec-out screencap -p` to a file through the platform command
+service. Windows copies the command's binary stream directly to a file.
 
-"Live" means a frame arrived within the last 2 seconds. Older than that is
-"The picture stalled." A stream that ends is "The stream stopped."
+Frames live under the app's `data/kanso-sim/`. A unique filename refreshes
+image()'s picture; older frames for that device are removed after a new one
+lands. PNG/JPEG headers supply proportions, fitted to the available panel
+width and height. A failed frame retains the last picture and says
+"as of <age>". No screenshot work behind another window or a hidden layout
+node. front.js schedules one immediate frame on return. Closing releases
+timers and inputs; no module-global pending state survives a remount.
 
-Frames are written under `mods/kanso-sim-frames/` (not a mod), twelve files
-per view, and the picture swaps 200 ms after a write so Herdr can reload it.
+## Controls
 
-## What it runs
+Android reads `shell wm size` for coordinate scaling, swapping its natural
+axes when the captured picture is rotated. A click sends `shell input tap`;
+a drag sends `shell input swipe`. Focus the picture to type. Text is batched
+in order with keys, escaped for Android's shell input, and literal percent-s
+is split so it does not become a space. Enter, Backspace and arrows are
+keyevents. Back, Home, Recents, Power and both volume keys use the same queue.
+Rotate is `adb -s <serial> emu rotate`, and is shown only for emulators.
+The next screenshot already has its new orientation. Emulators also offer
+Shut down through `emu kill`.
 
-Node comes from PATH, the same way Spend requires it.
+iOS is a view. Its controls are simctl appearance light/dark, openurl and
+shutdown. Open in Simulator runs `open -a Simulator` for touch in Apple's
+own window. No iOS tap, swipe or keyboard controls.
 
-iOS needs `serve-sim@0.1.49`. Nothing is downloaded until you press the
-button, which runs `npx --yes serve-sim@0.1.49 --version` (10 minutes). The
-`--version` is so that process exits. Later launches use
-`npx --no --offline serve-sim@0.1.49`, and only while the panel is open.
-Herdr's `exec` cannot set an environment variable, so
-`SERVE_SIM_DISABLE_DEVICE_HUB_KEYBOARD` is not set.
+## Verification
 
-Android finds the SDK from `ANDROID_HOME`, then `ANDROID_SDK_ROOT`, then the
-default folder: `~/Library/Android/sdk` on macOS, `~/Android/Sdk` on Linux,
-`%LOCALAPPDATA%\Android\Sdk` on Windows. `adb` and `emulator` are run
-directly (`adb.exe` and `emulator.exe` on Windows). No `sh` on Windows.
-Paths go through `platform-paths`. A booted emulator and the stream helper
-are detached with the shared `platform-open` spawn.
+Pure tests cover output parsing, platform combinations, frame timing and
+failure, coordinate scaling and rotation, escaped/batched text, key mapping,
+and availability independent of the off switch. Mocked runtime tests cover
+capture, cleanup, visibility, input and every UI state. A source guard refuses
+package runners and alternative transports. No test starts a simulator.
 
-The stream helper is a Node process. The mod passes it the discovery
-folders (`*.ini` under the emulator's running directory) as arguments. It
-does not import the mod.
-
-Sockets, binary frame writes and `mkdir` live only in `host-io.js`, so they
-can be swapped. `import net from "net"`, `import { writeFile } from
-"fs/promises"` and `import { WebSocket } from "websocket"` are not in
-`herdr.d.ts` or `AGENTS.md`. `mkdir` is the same `fs/promises` module.
-
-## Built from
-
-Device lists, the multipart frames, the touch mapping and the Android
-stream come from herdr-sim by Robert Soriano (MIT,
-https://github.com/wobsoriano/herdr-sim). The notice is in
-`LICENSE-herdr-sim.txt` and in each file that carries that code.
-
-Toolbar icons are Lucide (ISC), except `android.svg`, which herdr-sim drew.
-The ISC notice is in `icons/LICENSE-lucide.txt`.
+Run npm test, npm run sync:share -- --check, npm run check:version and
+herdr-app check for kanso-sim and kanso-tabs. Not tried in the running app.

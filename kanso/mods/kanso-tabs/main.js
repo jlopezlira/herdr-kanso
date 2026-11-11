@@ -1,6 +1,5 @@
 import { localService } from "./platform-host.js";
-import { paths, pathApi } from "./platform-paths.js";
-import { powershell } from "./platform-command.js";
+import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Derived from the `tabs` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: segmented tab pill, outlined Files and Changes buttons, no bar background.
@@ -16,7 +15,7 @@ import { Updater } from "./update.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
-import { DEFAULTED, ENV_NAMES, PROBE_MS, applySimDefault, probeTools, readNamedEnv } from "./sim-register.js";
+import { TOOLS, PROBE_MS, available, simOn, probeTools } from "./sim-registration.js";
 
 function storedObject(key) {
   try {
@@ -66,13 +65,15 @@ const BUILTIN = [
   { id: "sim", label: "Simulator", icon: `${ICON}smartphone.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
+const simulatorRoster = () => JSON.stringify([list(ORDER), list(OFF), customPanels()]);
 
 // Panels you never placed keep their catalog place after the ones you dragged.
 function panelList() {
-  const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
+  const tools = shared(TOOLS);
+  const all = [...BUILTIN.filter((p) => p.id !== "sim" || available(tools)), ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
   const order = list(ORDER), off = new Set(list(OFF));
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
-  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: !off.has(p.id) }));
+  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: p.id === "sim" ? simOn(tools, [...off]) : !off.has(p.id) }));
 }
 
 function movePanel(from, to) {
@@ -119,13 +120,13 @@ export default class Tabs extends View {
     this.db = null;
     this.holding = false;
     this.openRow = undefined;
+    if (cx) cx.timer.after(0, (next) => this.probeSimulator(next));
     if (!this.arrange && cx) {
       this.db = new Kdb();
       this.watchOpens(cx);
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
       this.updater.start(cx);
-      cx.timer.after(0, (cx) => this.defaultSimulator(cx));
       // keys.json: tab-N and panel-N arrive here as commands.
       cx.spawn(async (cx) => {
         for (;;) {
@@ -142,27 +143,22 @@ export default class Tabs extends View {
     }
   }
 
-  defaultSimulator(cx) {
-    if (shared(DEFAULTED)) return;
-    const platform = window()?.platform ?? "macos";
-    const before = JSON.stringify(list(OFF));
+  probeSimulator(cx) {
+    const signature = simulatorRoster();
+    if (this.simSignature === signature) return;
+    this.simSignature = signature;
+    this.simProbe = (this.simProbe ?? 0) + 1;
     this.simSettled = false;
-    const finish = (off) => {
-      if (this.simSettled) return;
+    const probe = this.simProbe;
+    const finish = (tools) => {
+      if (this.simProbe !== probe || this.simSettled) return;
       this.simSettled = true;
-      if (off && JSON.stringify(list(OFF)) === before) setShared(OFF, off);
-      if (!shared(DEFAULTED)) setShared(DEFAULTED, true);
-      cx.notify();
+      setShared(TOOLS, tools); cx.notify();
     };
-    cx.timer.after(PROBE_MS, () => finish(null));
+    const deadline = cx.timer.after(PROBE_MS, () => finish({}));
     cx.spawn(async () => {
-      try {
-        const env = await readNamedEnv(platform, exec, ENV_NAMES, powershell);
-        const tools = await probeTools({ platform, home: home(), env, run: exec, api: pathApi(platform) });
-        if (JSON.stringify(list(OFF)) !== before) { finish(null); return; }
-        const next = applySimDefault(JSON.parse(before), tools, false);
-        finish(JSON.stringify(next.off) === before ? null : next.off);
-      } catch { finish(null); }
+      const tools = await probeTools(window()?.platform ?? "macos", home(), exec).catch(() => ({}));
+      deadline.cancel(); finish(tools);
     });
   }
 
@@ -177,7 +173,7 @@ export default class Tabs extends View {
       if (Number(tab[1]) <= tabs.length) run("tab.select", { index: Number(tab[1]) });
     } else if (name === "sim" || panel) {
       const id = panel ? panelList().filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
-      if (!id) return;
+      if (!id || !panelList().some((item) => item.id === id && item.on)) return;
       const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
       this.mount(now === id ? null : id);
     }
@@ -248,7 +244,7 @@ export default class Tabs extends View {
     else if (mounted && child?.id) {
       const want = panelContent(child.id);
       // A panel this Kanso no longer has closes; "preview" is opened by Files or Open with, not by a button.
-      if (!want) { if (child.id !== "preview") this.mount(null); return; }
+      if (!want || child.id === "sim" && !available(shared(TOOLS))) { if (child.id !== "preview") this.mount(null); return; }
       if (want?.mod && child.content?.mod && child.content.mod !== want.mod) this.mount(hidden ? null : child.id);
     }
   }
@@ -306,7 +302,11 @@ export default class Tabs extends View {
     this.wheelSum = 0;
   }
 
-  render() {
+  render(cx) {
+    if (cx && !this.simQueued && this.simSignature !== simulatorRoster()) {
+      this.simQueued = true;
+      cx.timer.after(0, (next) => { this.simQueued = false; this.probeSimulator(next); });
+    }
     const t = theme();
     const space = spaces().find(p => p.active);
     const shown = shownTabs(space?.tabs, shared("kanso.sleep.hidden"));

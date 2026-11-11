@@ -178,7 +178,7 @@ test("kanso-tabs.look opens Look on the path its name carries, since Herdr gives
 });
 
 test("kanso-tabs shows its panels in the order you drag them, without the ones you turned off", async () => {
-  const store = {};
+  const store = { "kanso.sim.tools": { ios: true } };
   const host = { shared: (k) => store[k], setShared: (k, v) => { store[k] = v; } };
   const { panelList, movePanel, setPanelOn } = await load("kanso-tabs/main.js", ["panelList", "movePanel", "setPanelOn"], host);
   const ids = () => clone(panelList().filter((p) => p.on).map((p) => p.id));
@@ -200,6 +200,7 @@ test("kanso-tabs shows its panels in the order you drag them, without the ones y
 
 test("kanso-tabs.sim toggles the Simulator panel", async () => {
   const f = await layoutFixture();
+  f.host.setShared("kanso.sim.tools", { ios: true });
   const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
   const tabs = new Tabs();
   const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
@@ -207,6 +208,25 @@ test("kanso-tabs.sim toggles the Simulator panel", async () => {
   assert.equal(panelBody().children[0].content.mod, "kanso-sim");
   tabs.command("sim"); f.flush();
   assert.deepEqual(panelBody().children, []);
+});
+
+test("Simulator is absent without native tools, present with either, and respects its off switch", async () => {
+  const f = await layoutFixture();
+  const { Tabs, panelList } = await load("kanso-tabs/main.js", ["Tabs", "panelList"], f.host);
+  const tabs = new Tabs();
+  const listed = () => panelList().find((panel) => panel.id === "sim");
+  assert.equal(listed(), undefined);
+  tabs.command("sim"); f.flush();
+  assert.deepEqual(f.body().children.find((node) => node.id === "panel-body").children, []);
+  for (const tools of [{ ios: true }, { adb: "/sdk/adb" }]) {
+    f.host.setShared("kanso.sim.tools", tools);
+    assert.equal(listed().on, true);
+    f.host.setShared("kanso.panels.off", ["sim"]);
+    assert.equal(listed().on, false);
+    tabs.command("sim"); f.flush();
+    assert.deepEqual(f.body().children.find((node) => node.id === "panel-body").children, []);
+    f.host.setShared("kanso.panels.off", []);
+  }
 });
 
 test("kanso-tabs closes a panel Kanso no longer has (Specs)", async () => {

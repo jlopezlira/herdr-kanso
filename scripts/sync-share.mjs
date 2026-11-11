@@ -49,7 +49,7 @@ const COMMON = [
   { source: "kanso/mods/kanso-spaces/machines.js", copies: ["kanso/mods/kanso-spend/machines.js"] },
   // Which panel is open, and the two hooks every panel uses to keep its own state.
   { source: "kanso/mods/kanso-panel/panel-state.js", copies: ["kanso/mods/kanso-tabs/panel-state.js"] },
-  { source: "kanso/mods/kanso-sim/sim-register.js", copies: ["kanso/mods/kanso-tabs/sim-register.js"] },
+  { source: "kanso/mods/kanso-sim/registration.js", copies: ["kanso/mods/kanso-tabs/sim-registration.js"] },
   { source: "kanso/mods/kanso-spaces/store.js", copies: ["kanso/mods/kanso-sleep/store.js"] },
   // Sleep as the sidebar's work: the dialog writes what is to sleep, the sidebar moves it step by step.
   { source: "kanso/mods/kanso-spaces/sleepwork.js", copies: ["kanso/mods/kanso-sleep/sleepwork.js"] },
@@ -64,7 +64,7 @@ const COMMON = [
   // A file on another machine, copied here so a picture can be drawn. The markdown editor uses it too.
   { source: "kanso/mods/kanso-panel/remote-file.js", copies: ["markdown-panel/mods/markdown-panel/remote-file.js"] },
   // One wake when a panel that was behind, or hidden, is in front again.
-  { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js"] },
+  { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js", "kanso/mods/kanso-sim/front.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];

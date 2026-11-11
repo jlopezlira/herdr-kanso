@@ -88,10 +88,10 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Spend and Shipped.** What your AI work is worth at list price, and what you
   delivered on GitHub, with share images that carry totals only. Turn Sync on
   from another computer's row and Spend adds that computer's tokens.
-- **The device beside the agent.** Simulator shows an iOS simulator or an
-  Android emulator: its screen, and touch, typing, Home, Lock, volume and
-  rotate. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows.
-  Nothing is downloaded until you press the button that installs serve-sim.
+- **The device beside the agent.** Simulator is kansō's own panel, using only
+  Xcode's and Android's tools. It installs nothing. The iOS screen is a view;
+  touch it in Apple's Simulator. Android keeps touch, typing and keys, with
+  Rotate for emulators. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows.
 - **Keys you can see.** Cmd+? draws your keys on a keyboard, layer by modifier,
   and opens the hjkl dōjō, a game for vim's moves with a pixel pet.
 - Two themes, `kanso` and `kanso-day`.
@@ -126,12 +126,11 @@ tab bar rebinds kansō's own keys and hides the panels you don't use.
 ## Privacy
 
 Everything runs on your machine, and reads only the folders you work in:
-`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `npx`, `docker`,
+`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `docker`,
 `xcrun`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
 Shipped through `gh`, only while their panel is shown (Shipped keeps a private
-gist of your own statistics); Spend's daily fetch of OpenRouter's price list;
-and, only when you press the button, the install of `serve-sim` for Simulator.
-Simulator otherwise stays on this computer. Threads and
+gist of your own statistics); Spend's daily fetch of OpenRouter's price list.
+Simulator's pictures and input stay on this computer. Threads and
 Images read the agents' conversation files for the pictures
 they printed; Spend reads the session files your AI tools write, for tokens and
 prices. State lives under `~/.config/herdr-app/data/`. Nothing is sent to an
@@ -156,6 +155,8 @@ the stable `vX.Y.Z`. Docs do not bump the version. How to work on it:
 [kanso/RECIPE.md](kanso/RECIPE.md).
 
 ## Credits and license
+
+The idea of a simulator panel beside the agent came from herdr-sim by Robert Soriano.
 
 Grown out of the mods shipped with Herdr; [NOTICE](NOTICE) says who changed
 what. Contributors: Iván Campaña ([icampana](https://github.com/icampana)),

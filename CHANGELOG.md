@@ -15,6 +15,8 @@ release.
 
 ### Changed
 
+- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
+
 - Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
 - Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
 - A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.
@@ -37,7 +39,6 @@ release.
 - Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
 - The pane header does not call a pull request ready before it knows you can merge it.
 - A missed answer from GitHub keeps the pull request on screen, with how long ago it was read and Retry, instead of a blank error or a spinner that never ends.
-- Opening an iOS simulator reads the stream's address without a function Herdr does not promise to have.
 - Asleep tabs on another computer stay in the list and can be woken when no project is open there.
 
 ## [3.29.0] - 2026-11-11
