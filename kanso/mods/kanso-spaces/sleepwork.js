@@ -743,11 +743,12 @@ export class SleepWork {
   }
   // Held still, and still sleeping (an undo meanwhile keeps the tab), right before anything closes.
   async close(row) {
-    const looked = await this.lookIdle(row);
+    // No agent: nothing to ask, so the tab closes on this tick.
+    const looked = agentsOf(row).length ? await this.lookIdle(row) : terminalsOf(row).map((t) => ({ t, idle: true }));
     const { plan, why, tab } = closingOf(row, this.machine, looked);
     if (!(await this.kdb.finishSleep(row.id, this.me, why, Date.now(), this.fact(row.id, "asleep", why)))) return this.held.size > 0;
     this.endTab(plan, tab);
-    this.changed();
+    this.changed({ ...row, state: "asleep", why, pending: null });
     this.take((this.rows ?? []).filter((kept) => kept.id !== row.id));
     return this.held.size > 0;
   }

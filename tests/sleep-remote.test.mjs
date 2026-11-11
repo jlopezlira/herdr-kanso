@@ -271,6 +271,95 @@ test("a worker on another computer calls only there, and a local row never does"
   for (const c of local.calls) assert.equal(c.timeout, null, c.c);
 });
 
+test("a shell-only tab on another computer is asleep on the first tick and nothing is asked", async (t) => {
+  const dir = await temporary(t);
+  const calls = [], hcLog = [], sleeps = [];
+  const clock = { now: 1_700_000_000_000 };
+  const Clock = class extends Date {
+    static now() { return clock.now; }
+    constructor(...args) { super(...(args.length ? args : [clock.now])); }
+  };
+  const address = "light/t1";
+  const host = {
+    Date: Clock, window: () => ({ platform: "macos" }), home: () => "/Users/local", appHome: () => dir,
+    terminals: () => [{ address }], panes: () => [{ pane: "p1", terminal: address, tab: "light/tb1" }], run() {},
+    exec: hostExec(calls),
+    hc: async (args) => { hcLog.push([...args]); return { code: 0, stdout: JSON.stringify({ pid: 7, foreground: { pid: 7, argv: ["/bin/zsh"] } }) }; },
+  };
+  const { SleepWork, homePlace } = await load("kanso-spaces/sleepwork.js", ["SleepWork", "homePlace"], host);
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
+  const kdb = new Kdb(join(dir, "kanso"), "light");
+  const layout = { per: null, tab: "tb1", cols: [{ w: 1, panes: [{ argv: null, cwd: "/w", resume: null, terminal: "t1", tab: "tb1", front: 0 }] }] };
+  await kdb.sleepTab({ name: "Shell", space: { id: "sp1", name: "kanso" }, project: "light:/w", layout, agents: [], requested: true, saved: clock.now, now: clock.now });
+  await homePlace("light");
+  const opened = calls.length;
+  const tasks = [];
+  const cx = { sleep: async (ms) => { sleeps.push(ms); clock.now += ms; }, spawn: (fn) => { const task = fn(cx); tasks.push(task); return task; } };
+  new SleepWork(kdb, () => {}, "win-a", () => false, "light").start(cx);
+  while (tasks.length) await tasks.shift();
+  assert.equal((await kdb.sleeps())[0].state, "asleep");
+  assert.deepEqual(sleeps, [], "no timer before it is asleep");
+  assert.deepEqual(hcLog, [], "a shell is not asked");
+  const during = calls.slice(opened);
+  assert.ok(during.length <= 3, during.map((c) => c.c).join(","));
+  assert.ok(during.every((c) => c.c === "sqlite3"));
+  assert.equal(clock.now, 1_700_000_000_000);
+});
+
+test("a kick reads another computer at once", async () => {
+  let kick = 0, reads = 0;
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    Date: { now: () => 1000 },
+    shared: (key) => (key === "kanso.sleep.kick" ? kick : 0),
+    spaces: () => [{ id: "light/sp", machine: "light", name: "Kanso", folder: "/w" }],
+    window: () => ({ platform: "macos", active: true }),
+    machines: () => [{ name: "light", layout: "ready" }],
+    home: () => "/Users/jj",
+  });
+  const view = Object.assign(new Spaces(), {
+    sleepWork: { start() {} },
+    asleepReads: 0, asleepApplied: 0,
+    leftNavStore: () => ({ asleep: async () => [] }),
+    loadProjects: async () => {}, settleHidden() {},
+    storeOn: async () => ({ asleep: async () => { reads += 1; return []; } }),
+  });
+  view.pollSleepWork({});
+  await Promise.resolve();
+  assert.equal(reads, 0, "nothing was ordered");
+  kick = 9;
+  view.pollSleepWork({});
+  await new Promise((done) => setTimeout(done, 0));
+  assert.equal(reads, 1);
+  view.pollSleepWork({});
+  await new Promise((done) => setTimeout(done, 0));
+  assert.equal(reads, 1, "the same kick is not a second read");
+});
+
+test("a shell that just closed is shown asleep without reading that computer again", async () => {
+  const bag = { list: null, at: 0 };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    Date: { now: () => 5000 },
+    shared: (key) => (key === "kanso.asleep" ? bag.list : key === "kanso.asleep.at" ? bag.at : 0),
+    setShared: (key, value) => { if (key === "kanso.asleep") bag.list = value; if (key === "kanso.asleep.at") bag.at = value; },
+  });
+  const sleeping = { id: "s1", state: "sleeping", pending: true, busy: true, machine: "light", name: "Shell" };
+  const view = Object.assign(new Spaces(), {
+    remoteShown: [sleeping],
+    remoteKept: new Map([["light", [sleeping]]]),
+    localShown: [],
+  });
+  let reads = 0;
+  view.storeOn = async () => ({ asleep: async () => { reads += 1; return []; } });
+  view.markRemoteAsleep("light", { id: "s1", state: "asleep", why: null });
+  assert.equal(reads, 0);
+  assert.equal(view.remoteShown[0].state, "asleep");
+  assert.equal(view.remoteShown[0].pending, false);
+  assert.equal(view.remoteShown[0].busy, false);
+  assert.equal(view.remoteKept.get("light")[0].state, "asleep");
+  assert.equal(bag.list[0].state, "asleep");
+  assert.equal(bag.list[0].machine, "light");
+});
+
 test("a quiet asleep row keeps its reason and offers no retry", async () => {
   const { sleepingNow, asleepGroups } = await load("kanso-spaces/roster.js", ["sleepingNow", "asleepGroups"], {});
   const spaces = [{ id: "light/sp", name: "Kanso", folder: "/w", machine: "light", tabs: [] }];
