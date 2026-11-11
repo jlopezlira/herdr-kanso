@@ -21,9 +21,9 @@ release.
 
 ### Changed
 
-- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
 - The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
 - A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
+- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
 
 ### Fixed
 
