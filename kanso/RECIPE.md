@@ -537,10 +537,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
   - `kanso-sleep`: a dialog (520 wide); asleep is a status in `kanso.db`.
-    Ordering hides it at once; the sidebar then runs saving, clearing,
-    exiting, left, or stuck (retry, undo). One owner (20 s). One row until
-    clicked, breathing while it goes; stuck keeps Retry and Undo. A wake
-    still going cancels it. Wake: `claude --resume`.
+    Sleep hides it; a last tab selects a neighbour (Undo
+    returns), or stays shown when alone. Worker: saving, clearing, exiting,
+    left or stuck (Retry/Undo). Acts never hold ticks or repeat while pending.
+    One owner (20 s). Wake mid-flight cancels; else resume.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

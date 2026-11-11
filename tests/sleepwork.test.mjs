@@ -97,7 +97,7 @@ async function setup(t, exits = {}) {
   const steps = async () => Object.fromEntries((await kdb.read("SELECT id, step FROM agents ORDER BY id")).map((a) => [a.id === C1 ? "Alice" : "Bob", a.step]));
   return { world, mod, kdb, id, worker, changes, row, steps };
 }
-const cx = { sleep: async () => {} };
+const cx = { sleep: async () => {}, spawn: (fn) => fn(cx) };
 // Ticks until the worker holds nothing (or `until` holds), at most n times.
 async function drive(w, n = 40, until = async () => false) {
   for (let k = 0; k < n; k++) {
