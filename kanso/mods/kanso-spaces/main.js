@@ -15,7 +15,7 @@ import { Kdb, spaceFor, inPlace } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
-import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
+import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { listKey, moveTo } from "./listkeys.js";
@@ -115,7 +115,7 @@ const fromOf = (a) => (isUnread(a.labels) ? a.labels?.[FROM_LABEL] || null : nul
 const label = (address, key, value) => hc(["label", address, `${key}=${value ?? ""}`]).catch(() => {});
 
 // The projects, as every view of the sidebar draws them (the database read last, which local folders are gone).
-const registry = () => (Array.isArray(shared(REGISTRY)) ? shared(REGISTRY) : []);
+const registry = () => { const rows = shared(REGISTRY); return Array.isArray(rows) ? rows : []; };
 async function publishRegistry(kdb) {
   const list = await kdb.projects();
   const missing = await missingFolders(list.filter((p) => !p.machine).map((p) => p.folder));
@@ -720,21 +720,24 @@ export default class Spaces extends View {
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
     this.takeMoves();
-    const projects = JSON.stringify(registry());
-    if (projects !== this.projectsSeen) { this.projectsSeen = projects; cx.notify(); }
-    // Read once per look: each read copies every record.
-    const sp = spaces(), ps = panes();
+    const projects = registry();
+    if (!sameProjects(projects, this.projectsSeen)) { this.projectsSeen = projects; cx.notify(); }
+    this.trackFocus();
+    const sp = spaces();
+    for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
+    if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
+    if (now - (this.trackedAt ?? -Infinity) < 2000) return;
+    this.trackedAt = now;
+    const ps = panes();
     this.trackAgents(now, sp, cx);
     this.trackReturn(sp, ps, active, now, cx);
     // Each agent's name is its conversation's title: read every minute, every 15 s while Threads shows in front.
     if (now - (this.threadsAt ?? 0) > (this.view === "threads" && active ? 15000 : 60000)) this.refreshThreads(cx);
     this.checkAlive(cx, now, active);
     this.keepSeen(now);
-    for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     // Git shows on space rows only: the Agents and Threads views don't ask.
     const due = this.due(now, sp, ps, placesOf(sp, ps), active);
     if (due.size && this.shownView() === "spaces") this.refreshGit(due, cx);
-    if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
     if (now - (this.prunedAt ?? 0) > 30000) { this.prunedAt = now; this.prune(sp, now); }
   }
 
@@ -887,6 +890,13 @@ export default class Spaces extends View {
   }
 
   // The done agent you are looking at stays in Done until you leave it.
+  trackFocus(list = null) {
+    const address = list ? list.find((a) => a.focused)?.address : focused()?.terminal;
+    if ((address ?? null) === (this.held?.address ?? null)) return;
+    const cur = (list ?? agents()).find((a) => a.address === address);
+    this.held = cur ? { address, done: cur.status === "done" || this.lastSeen?.[address] === "done" } : null;
+  }
+
   trackAgents(now, sp, cx) {
     const list = agents();
     const tabs = new Map(sp.flatMap((s) => s.tabs ?? []).map((tb) => [tb.id, tb]));
@@ -894,10 +904,7 @@ export default class Spaces extends View {
     // An agent came or went: read the conversations now, so it shows by its name at once rather than in a minute.
     const sig = list.map((a) => a.address).toSorted().join(" ");
     if (sig !== this.agentSig) { this.agentSig = sig; this.threadsAt = 0; }
-    const cur = list.find((a) => a.focused);
-    // Looking turns done into idle at once: what it was a moment ago counts.
-    const was = this.lastSeen ?? {};
-    if (cur?.address !== this.held?.address) this.held = cur ? { address: cur.address, done: cur.status === "done" || was[cur.address] === "done" } : null;
+    this.trackFocus(list);
     this.lastSeen = Object.fromEntries(list.map((a) => [a.address, a.status]));
     const terms = new Map(terminals().map((k) => [k.address, k]));
     this.tidyLabels(list, now, terms);
