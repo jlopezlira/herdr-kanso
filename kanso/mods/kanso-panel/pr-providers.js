@@ -14,5 +14,6 @@ export function matchRemote(url, sessions) {
 // A provider that is not installed, or not signed in, is left out.
 export async function readyProviders(run) {
   const sessions = await Promise.all(providers.map(async (provider) => ({ provider, session: await provider.probe(run) })));
+  if (sessions.some(({ session }) => session.status === "late")) return null;
   return sessions.filter(({ session }) => session.status === "ok");
 }

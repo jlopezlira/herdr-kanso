@@ -11,15 +11,27 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [Unreleased]
+## [3.29.1] - 2026-11-11
 
 ### Changed
 
+- Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
+- Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
+- A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.
+- Memory's Esc leaves the full list when that list is open, and otherwise does nothing.
+- The lines under Ports, Containers, Shipped and Worktrees that only explained the panel are gone. A scan time, a count and an error stay.
+- A beta and a release candidate can be published before a version is the one everyone gets.
+- Docs: the README, the gallery card and the site say what kansō does on macOS, Windows and Linux.
+- While the panel is open it asks GitHub only for the pull request in front. The list of every open one is read when you open that list. A limit from GitHub pauses the panel until the time it gives, including when you press refresh. While the window is behind others, or the panel is hidden, it does not ask, and it reads again as soon as you come back to it.
 - A mod that imports a name Herdr does not provide fails the test run, so it cannot ship with its panels dead.
 
 ### Fixed
 
-- Opening an iOS simulator no longer fails before its screen appears.
+- The pull request panel stays on this branch. Reviews waiting on you stay on the "N to review" pill.
+- Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
+- The pane header does not call a pull request ready before it knows you can merge it.
+- A missed answer from GitHub keeps the pull request on screen, with how long ago it was read and Retry, instead of a blank error or a spinner that never ends.
+- Opening an iOS simulator reads the stream's address without a function Herdr does not promise to have.
 
 ## [3.29.0] - 2026-11-11
 

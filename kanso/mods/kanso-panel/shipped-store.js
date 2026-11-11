@@ -68,7 +68,7 @@ export function readMachineFile(text) {
   try {
     const f = JSON.parse(text);
     if (f?.v !== 1 || !Array.isArray(f.commits) || !Array.isArray(f.repos)) return null;
-    return { machine: String(f.machine ?? "another machine"), identities: Array.isArray(f.identities) ? f.identities.map(String) : [], commits: f.commits.map(([r, hash, at, add, del]) => ({ repo: f.repos[r], hash, at, add, del })).filter((c) => c.repo && c.hash) };
+    return { machine: String(f.machine ?? "another computer"), identities: Array.isArray(f.identities) ? f.identities.map(String) : [], commits: f.commits.map(([r, hash, at, add, del]) => ({ repo: f.repos[r], hash, at, add, del })).filter((c) => c.repo && c.hash) };
   } catch { return null; }
 }
 

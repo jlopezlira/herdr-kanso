@@ -95,6 +95,10 @@ test("Pull request panel lists the repository's open ones, by anyone, and shows 
   const { cx, drain } = context();
   panel.refresh(cx); await drain();
   assert.equal(panel.pr.number, 1);
+  assert.equal(calls.some((c) => c.includes("pr list")), false, "the branch's pull request does not ask for every open one");
+  panel.listing = true;
+  panel.loading = false;
+  panel.refresh(cx); await drain();
   assert.deepEqual([...panel.openPrs].map((p) => p.number), [3, 2, 1], "every author, newest first");
   assert.ok(calls.includes(`gh pr list --state open --limit 100 --json ${calls.find((c) => c.startsWith("gh pr list")).split("--json ")[1]}`));
   assert.ok(!calls.some((c) => c.includes("--author")), "not only yours");
@@ -390,6 +394,8 @@ async function shownMerge(pr, permission = "WRITE") {
   const panel = new PullRequest();
   Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
   const { cx, drain } = context();
+  panel.context = "repo";
+  panel.listing = true;
   panel.refresh(cx); await drain();
   panel.hero(TONE, true);
   return { panel, merge: ids.includes("pr-merge") };
@@ -431,11 +437,11 @@ test("A pull request with hooks still offers merge when GitHub would", async () 
   assert.equal(view.merge, true);
 });
 
-test("An unstable pull request can merge and does not say it is ready", async () => {
+test("An unstable pull request shows the failing checks and no Merge", async () => {
   const view = await shownMerge(pull({ mergeStateStatus: "UNSTABLE", statusCheckRollup: failed }));
   assert.equal(view.panel.verdict(TONE).text, "1 check failing");
-  assert.equal(view.panel.canMerge(), true);
-  assert.equal(view.merge, true);
+  assert.equal(view.panel.canMerge(), false);
+  assert.equal(view.merge, false);
   assert.equal(/ready/i.test(view.panel.verdict(TONE).text), false);
   assert.equal(view.panel.rowState(view.panel.openPrs[0], TONE).text, "1 check failing");
 });

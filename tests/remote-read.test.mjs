@@ -67,7 +67,7 @@ test("a failure says whether the computer is quiet or the folder cannot be read"
   assert.equal(pure.copyFailure("The copy was cut short", "light"), "The copy was cut short");
   assert.equal(pure.listFailure(new Error("Error: Access is denied"), "light"), "Cannot list this folder: permission denied");
   assert.equal(pure.listFailure("timed out", "dark"), "dark did not answer");
-  assert.equal(pure.listFailure("", null), "This machine did not answer");
+  assert.equal(pure.listFailure("", null), "This computer did not answer");
   assert.equal(pure.remoteDue(null, true, false), false);
   assert.equal(pure.remoteDue("light", false, false), false);
   assert.equal(pure.remoteDue("light", true, true), false);
