@@ -437,33 +437,34 @@ export class Kdb {
   }
 
   // The sidebar's sleep work (sleepwork.js). Every write holds only while `me` owns the row in the state it was read in.
-  holdWork(id, me, now = Date.now()) {
-    return this.held(`UPDATE sleeps SET pending=${q(me)},pending_at=${n(now)} WHERE id=${q(id)} AND state IN ('sleeping','undoing') AND waking IS NULL
-      AND (pending IS NULL OR pending=${q(me)} OR pending_at IS NULL OR pending_at < ${n(now - LEASE_MS)}) RETURNING id;`);
+  holdSql(id, me, now = Date.now()) {
+    return `UPDATE sleeps SET pending=${q(me)},pending_at=${n(now)} WHERE id=${q(id)} AND state IN ('sleeping','undoing') AND waking IS NULL AND (pending IS NULL OR pending=${q(me)} OR pending_at IS NULL OR pending_at < ${n(now - LEASE_MS)}) RETURNING id;`;
   }
+  holdWork(id, me, now = Date.now()) { return this.held(this.holdSql(id, me, now)); }
   // True while `me` owns the row in `state`: checked right before an act that writes nothing first.
-  stillMine(id, me, state, now = Date.now()) {
-    return this.held(`UPDATE sleeps SET pending_at=${n(now)} WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)} AND waking IS NULL RETURNING id;`);
+  stillSql(id, me, state, now = Date.now()) {
+    return `UPDATE sleeps SET pending_at=${n(now)} WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)} AND waking IS NULL RETURNING id;`;
   }
+  stillMine(id, me, state, now = Date.now()) { return this.held(this.stillSql(id, me, state, now)); }
   // `from`: the agent's step as read; another window that moved it meanwhile wins.
-  stepAgent(id, me, state, conversation, from, fields) {
+  stepSql(id, me, state, conversation, from, fields) {
     const set = Object.entries(fields).filter(([k]) => STEP_FIELDS.includes(k)).map(([k, v]) => `${k}=${typeof v === "number" ? n(v) : q(v)}`).join(",");
-    return this.held(`UPDATE agents SET ${set} WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step IS ${q(from)}
-      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)}) RETURNING id;`);
+    return `UPDATE agents SET ${set} WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step IS ${q(from)} AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)}) RETURNING id;`;
   }
+  stepAgent(id, me, state, conversation, from, fields) { return this.held(this.stepSql(id, me, state, conversation, from, fields)); }
   // Stuck lets go of the row: nothing moves until you retry or undo it (or the agent goes on its own).
-  setWorkState(id, me, from, to, why = null, now = Date.now(), fact = null) {
+  stateSql(id, me, from, to, why = null, now = Date.now(), fact = null) {
     const event = this.sinceSleep(id, fact, `pending=${q(me)} AND state=${q(from)}`, now);
     const owner = to === "stuck" ? "pending=NULL,pending_at=NULL" : `pending_at=${n(now)}`;
-    return this.held(`BEGIN;${event}UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;COMMIT;`);
+    return `BEGIN;${event}UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;COMMIT;`;
   }
+  setWorkState(id, me, from, to, why = null, now = Date.now(), fact = null) { return this.held(this.stateSql(id, me, from, to, why, now, fact)); }
   // A stuck agent seen gone has left; once none is stuck the sleep goes on. True when it does.
-  unstick(id, conversation = null, now = Date.now()) {
-    const left = conversation ? `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step='stuck'
-      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');` : "";
-    return this.held(`BEGIN;${left}UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck'
-      AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step='stuck') RETURNING id;COMMIT;`);
+  unstickSql(id, conversation = null, now = Date.now()) {
+    const left = conversation ? `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step='stuck' AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');` : "";
+    return `BEGIN;${left}UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step='stuck') RETURNING id;COMMIT;`;
   }
+  unstick(id, conversation = null, now = Date.now()) { return this.held(this.unstickSql(id, conversation, now)); }
   // sent_at stays: an /exit that went may still land, and an undo needs to know it went.
   retry(id, now = Date.now()) {
     return this.held(`BEGIN;UPDATE agents SET step='saving',step_at=${n(now)},nudged_at=NULL,why=NULL WHERE sleep_id=${q(id)} AND step='stuck'
@@ -485,18 +486,51 @@ export class Kdb {
     return `INSERT INTO since_events(project,target,kind,text,did,at) SELECT project,${q(fact.target)},${q(fact.kind)},name,${q(fact.did)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
   }
   // An undo's agent that is back (or never left) is awake.
-  freeAgent(id, me, conversation) {
-    return this.held(`UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE id=${q(conversation)} AND sleep_id=${q(id)}
-      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state='undoing') RETURNING id;`);
+  freeSql(id, me, conversation) {
+    return `UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state='undoing') RETURNING id;`;
   }
+  freeAgent(id, me, conversation) { return this.held(this.freeSql(id, me, conversation)); }
   // `layout`: what did not come back, asleep; null: all did, and the row goes.
-  endUndo(id, me, layout) {
+  endUndo(id, me, layout) { return this.held(this.endSql(id, me, layout)); }
+  endSql(id, me, layout) {
     const mine = `id=${q(id)} AND pending=${q(me)} AND state='undoing'`;
     const end = layout ? `UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       UPDATE sleeps SET layout=${q(JSON.stringify(layout))},state='asleep',why=NULL,pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;`
       : `UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
-    return this.held(`BEGIN;${end}COMMIT;`);
+    return `BEGIN;${end}COMMIT;`;
+  }
+
+  // Statements queued here share one sqlite3 call. The selects run after the writes.
+  async stage(texts) {
+    await this.open();
+    const pending = texts.map((text) => this.enqueue(text));
+    const sleeps = this.enqueue("SELECT * FROM sleeps;");
+    const agents = this.enqueue("SELECT * FROM agents WHERE sleep_id IS NOT NULL;");
+    const out = await Promise.all([...pending, sleeps, agents]);
+    const rows = out.at(-2).map((r) => ({ ...r, agents: out.at(-1).filter((a) => a.sleep_id === r.id) }));
+    return { wrote: out.slice(0, -2), rows };
+  }
+  // Take what this window may own, and move a requested agent to saving, in that one call.
+  claimSql(me, now, liveIds, longMs, log = null) {
+    const mine = q(me), lease = n(now - LEASE_MS), long = n(now - longMs);
+    const seen = liveIds.length ? liveIds.map((id) => `instr(layout, ${q(`"terminal":${JSON.stringify(id)}`)}) > 0`).join(" OR ") : "0";
+    const holdable = `state IN ('sleeping','undoing') AND waking IS NULL AND (pending IS NULL OR pending=${mine} OR pending_at IS NULL OR pending_at < ${lease})`;
+    const visible = `(pending=${mine} OR ${seen} OR pending IS NULL OR pending_at IS NULL OR pending_at <= ${long})`;
+    const strand = `state IN ('sleeping','undoing') AND waking IS NULL AND pending IS NOT NULL AND pending<>${mine} AND pending_at IS NOT NULL AND pending_at < ${lease} AND pending_at > ${long} AND NOT (${seen})`;
+    const why = "COALESCE(why, 'The sleep stopped')";
+    const event = log ? `INSERT INTO since_events(project,target,kind,text,did,at) SELECT project,'sleep:'||id,'sleep_failed',name,${why},${n(now)} FROM sleeps WHERE ${strand};${pruneSinceSql(now, log)}` : "";
+    return `BEGIN;${event}UPDATE sleeps SET state='stuck',why=${why},pending=NULL,pending_at=NULL WHERE ${strand};UPDATE sleeps SET pending=${mine},pending_at=${n(now)} WHERE ${holdable} AND ${visible};UPDATE agents SET step='saving',step_at=${n(now)} WHERE step='requested' AND sleep_id IN (SELECT id FROM sleeps WHERE pending=${mine} AND state='sleeping' AND waking IS NULL);COMMIT;`;
+  }
+  openWork(me, now, liveIds, { log = null, longMs = 5 * 60_000 } = {}) {
+    return this.stage([this.claimSql(me, now, liveIds, longMs, log)]).then((out) => out.rows);
+  }
+  // The last agent left and the row finished, or neither did: the finish sees this update.
+  leaveSql(id, me, conversation, from, why, now, fact) {
+    const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
+    const gone = `NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step IS NOT NULL AND step!='left')`;
+    const step = `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step IS ${q(from)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`;
+    return `BEGIN;${step}${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping' AND ${gone}`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine}) AND ${gone};UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} AND ${gone} RETURNING id;COMMIT;`;
   }
 
   async sleeps(spaces = null, now = Date.now()) {

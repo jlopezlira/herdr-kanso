@@ -4,7 +4,7 @@ import { processApi } from "./platform-processes.js";
 import { killApi } from "./platform-kill.js";
 import { openApi } from "./platform-open.js";
 import { systemApi } from "./platform-system.js";
-import { sleepEvent } from "./since-left-model.js";
+import { sleepEvent, LOG_LIMITS } from "./since-left-model.js";
 // Sleep as work the sidebar does, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // This is the source copy; `npm run sync:share` copies it into kanso-sleep, and a test fails when a copy differs.
 // The dialog only writes what is to sleep. The tab or pane leaves when sleep is ordered; this worker does the slow
@@ -256,6 +256,19 @@ export function closePlan(looked, fresh) {
   const idle = looked.filter((x) => x.idle).map((x) => x.t);
   return { closeTab: !fresh && !busy.length, kill: idle, busy };
 }
+function closeWhy(plan, machine) {
+  const busy = plan.busy.map((t) => seenAddress(t, machine));
+  return busy.length ? `${busy.join(", ")} ${busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${busy.length === 1 ? "stays" : "stay"} open.` : null;
+}
+function closingOf(row, machine, looked) {
+  const known = [...new Set(terminalsOf(row))];
+  const tab = parseOr(row.layout, { cols: [] }).tab ?? null;
+  const seen = (id) => seenAddress(id, machine);
+  const have = new Set(known.map(seen));
+  const fresh = !tab || panes().some((p) => p.tab === seen(tab) && p.terminal && !have.has(p.terminal));
+  const plan = closePlan(looked, fresh);
+  return { plan, why: closeWhy(plan, machine), tab };
+}
 
 // The row's agents in the order of its panes, each with its pane (pid, terminal, wake, front...).
 export function agentsOf(row) {
@@ -287,9 +300,22 @@ export async function homePlace(machine) {
 export async function homeOf(machine) {
   return (await homePlace(machine)).home;
 }
+async function probeMachine(machine, pids) {
+  const ids = [...new Set(pids.map(Number).filter((pid) => Number.isInteger(pid) && pid > 0))];
+  return hosted(async (platform, run) => {
+    const seen = await processApi(platform, run).look(ids);
+    const had = homes.get(machine);
+    if (seen.home && !(had?.home && had.platform)) homes.put(machine, { home: seen.home, platform });
+    return seen;
+  }, machine);
+}
 const sessionText = async (pid, machine) => {
-  const path = paths.join(await homeOf(machine), ".claude", "sessions", `${pid}.json`);
-  return machine ? readTextFile(path, { on: machine }) : readTextFile(path);
+  if (machine) {
+    const record = (await probeMachine(machine, [pid])).found.get(Number(pid))?.record;
+    if (!record) throw new Error("missing session");
+    return JSON.stringify(record);
+  }
+  return readTextFile(paths.join(await homeOf(null), ".claude", "sessions", `${pid}.json`));
 };
 
 // true, false, or null when the check itself failed (a failed exec is no sighting of anything).
@@ -423,18 +449,36 @@ export async function returnAgain(p, cx, machine = null) {
 
 // --- The worker: one per sidebar. ---
 
+async function termOf(address) {
+  const g = await hc(["get", address, "--json"]).catch(() => null);
+  const x = tryOr(() => (g?.code === 0 ? JSON.parse(g.stdout) : null));
+  if (!x) return null;
+  const fg = x.foreground ?? null;
+  return { front: fg?.pid ?? 0, pid: fg?.pid ?? null, state: x.status?.state ?? null, title: x.title ?? null, cwd: fg?.cwd ?? null };
+}
+const screenOf = async (address) => {
+  const shot = await hc(["read", address]).catch(() => null);
+  return shot?.code === 0 ? shot.stdout : null;
+};
+
 // What one look at an agent's terminal shows; `screen` and `record` only when its step reads them.
 async function see(a, machine = null) {
   const terminal = seenAddress(a.terminal, machine);
   const there = Boolean(a.terminal) && terminals().some((t) => t.address === terminal);
-  const g = there ? await hc(["get", terminal, "--json"]).catch(() => null) : null;
-  const x = tryOr(() => (g?.code === 0 ? JSON.parse(g.stdout) : null));
-  const fg = x?.foreground ?? null;
-  const front = x ? (fg?.pid ?? 0) : null;
+  const got = there ? await termOf(terminal) : null;
   const reads = ["clearing", "exiting"].includes(a.step) || a.sent_at != null;
-  const shot = x && reads ? await hc(["read", terminal]).catch(() => null) : null;
-  const record = x && a.step === "saving" && fg?.pid ? await tryOrAsync(async () => JSON.parse(await sessionText(fg.pid, machine))) : null;
-  return { alive: await alive(a.pid, machine), front, state: x?.status?.state ?? null, screen: shot?.code === 0 ? shot.stdout : null, record, title: x?.title ?? null, cwd: fg?.cwd ?? null };
+  const record = got?.pid && a.step === "saving" ? await tryOrAsync(async () => JSON.parse(await sessionText(got.pid, machine))) : null;
+  return { alive: await alive(a.pid, machine), front: got ? got.front : null, state: got?.state ?? null, screen: got && reads ? await screenOf(terminal) : null, record, title: got?.title ?? null, cwd: got?.cwd ?? null };
+}
+
+// A remote step is asked again only when the last look is stale or its timer is due. Exiting is never skipped.
+export function lookDue(agent, now, look) {
+  if (!agent || agent.step === "requested" || agent.step === "left" || KEPT.includes(agent.step)) return false;
+  if (!look || look.step !== agent.step) return true;
+  const since = now - (Number(agent.step_at) || now);
+  if (agent.step === "saving") return since > SAVE_MS;
+  if (agent.step === "clearing") return since > CLEAR_MS;
+  return true;
 }
 
 const acts = (machine) => ({
@@ -456,6 +500,10 @@ export class SleepWork {
     this.running = false;
     this.kicked = 0;
     this.watchedAt = 0;
+    this.rows = null;
+    this.due = null;
+    this.looks = new Map();
+    this.seenKick = 0;
   }
 
   // Runs while there is work this window holds; started on load, on a kick from the dialog and with the sidebar's poll.
@@ -472,7 +520,7 @@ export class SleepWork {
           if (!more && this.kicked === at) break;
           await cx.sleep(TICK_MS);
         }
-      } finally { this.running = false; this.held = new Set(); }
+      } finally { this.running = false; this.held = new Set(); this.rows = null; this.due = null; this.looks = new Map(); }
     });
   }
 
@@ -483,6 +531,11 @@ export class SleepWork {
 
   // True while this window holds a row; rows held elsewhere are left to their owner until its heartbeat stops.
   async tick(cx, now = Date.now()) {
+    if (this.machine) return this.tickFar(cx, now);
+    return this.tickNear(cx, now);
+  }
+
+  async tickNear(cx, now = Date.now()) {
     const first = await this.kdb.sleeps();
     const watching = now - this.watchedAt >= 5000 ? first.filter((r) => r.state === "stuck") : [];
     if (watching.length) this.watchedAt = now;
@@ -546,7 +599,7 @@ export class SleepWork {
   startAct(key, cx, act) {
     this.pending.add(key);
     cx.spawn(async (cx) => {
-      try { await act(cx); } catch {} finally { this.pending.delete(key); }
+      try { await act(cx); } catch {} finally { this.pending.delete(key); this.rows = null; }
     });
   }
 
@@ -559,32 +612,195 @@ export class SleepWork {
     else await this.kdb.stepAgent(row.id, this.me, row.state, a.conversation, "returning", { step: kept });
   }
 
-  // Every agent left: what slept is ended so it can't run twice, then the row is asleep.
-  async close(row) {
+  async lookIdle(row) {
     const layout = parseOr(row.layout, { cols: [] });
     const known = [...new Set(terminalsOf(row))];
     const fronts = new Map((layout.cols ?? []).flatMap((c) => c.panes ?? []).map((p) => [p.terminal, p.front ?? null]));
-    const seen = (id) => seenAddress(id, this.machine);
-    const looked = await mapSeries(known, async (t) => {
-      const address = seen(t);
+    return mapSeries(known, async (t) => {
+      const address = seenAddress(t, this.machine);
       const now = terminals().some((k) => k.address === address) ? await frontOf(address) : 0;
       return { t, idle: now === 0 || (now != null && now === fronts.get(t)) };
     });
-    const tab = layout.tab ?? null;
-    const knownSeen = new Set(known.map(seen));
-    const fresh = !tab || panes().some((p) => p.tab === seen(tab) && p.terminal && !knownSeen.has(p.terminal));
-    const plan = closePlan(looked, fresh);
-    // Held still, and still sleeping (an undo meanwhile keeps the tab), right before anything closes.
-    if (!(await this.kdb.stillMine(row.id, this.me, "sleeping"))) return;
+  }
+  endTab(plan, tab) {
+    const seen = (id) => seenAddress(id, this.machine);
     const open = new Set(panes().map((p) => p.terminal));
     if (plan.closeTab) run("tab.close", { id: seen(tab), confirmed: true });
     for (const t of plan.kill) {
       const address = seen(t);
       if (!plan.closeTab || !open.has(address)) run("terminal.kill", { terminal: address });
     }
-    const busy = plan.busy.map(seen);
-    const why = busy.length ? `${busy.join(", ")} ${busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${busy.length === 1 ? "stays" : "stay"} open.` : null;
+  }
+  // Every agent left: what slept is ended so it can't run twice, then the row is asleep.
+  async close(row) {
+    const looked = await this.lookIdle(row);
+    const { plan, why, tab } = closingOf(row, this.machine, looked);
+    // Held still, and still sleeping (an undo meanwhile keeps the tab), right before anything closes.
+    if (!(await this.kdb.stillMine(row.id, this.me, "sleeping"))) return;
+    this.endTab(plan, tab);
     if (await this.kdb.finishSleep(row.id, this.me, why, Date.now(), this.fact(row.id, "asleep", why))) this.changed();
+  }
+
+  liveIds() { return terminals().map((t) => localAddress(t.address, this.machine)).filter(Boolean); }
+  logLimits() { return this.records() ? LOG_LIMITS : null; }
+  take(rows) {
+    this.rows = rows;
+    this.held = new Set(rows.filter((r) => r.pending === this.me && WORKING.includes(r.state)).map((r) => r.id));
+  }
+  stuckAgents() {
+    return (this.rows ?? []).filter((r) => r.state === "stuck").flatMap((row) => (sleepStep(row, agentsOf(row)).watch ?? []).map((agent) => ({ row, agent })));
+  }
+  async tickFar(cx, now) {
+    if (this.kicked !== this.seenKick) {
+      this.seenKick = this.kicked;
+      this.rows = null;
+      this.due = null;
+      this.looks = new Map();
+    }
+    if (this.due) return this.playDue();
+    if (!this.rows) {
+      this.take(await this.kdb.openWork(this.me, now, this.liveIds(), { log: this.logLimits(), longMs: LONG_MS }));
+      if (this.held.size > 0) return true;
+    }
+    const stuck = this.stuckAgents();
+    if (!this.held.size && stuck.length && now - this.watchedAt >= 5000) return this.watchFar(stuck, now);
+    const job = this.job(now);
+    if (!job || job.kind === "skip") return this.renew(now);
+    if (job.kind === "state") return this.writeState(job, now);
+    if (job.kind === "finish") return this.finishFar(job);
+    if (job.kind === "close") return this.closeFar(job);
+    return this.observe(job, cx, now);
+  }
+  // The key waits a tick: the write showed this window owns the row, and the lease covers the gap.
+  async playDue() {
+    const due = this.due;
+    this.due = null;
+    await acts(this.machine)[due.act](due.agent).catch(() => null);
+    const look = this.looks.get(due.key);
+    if (look) this.looks = new Map([...this.looks, [due.key, { ...look, sent: true }]]);
+    return true;
+  }
+  rowJob(row, now) {
+    const agents = agentsOf(row);
+    const plan = sleepStep(row, agents);
+    if (plan.state) return { kind: "state", row, plan };
+    if (plan.finish) return { kind: "finish", row, agents };
+    if (plan.close) return { kind: "close", row };
+    if (!plan.agent) return null;
+    const agent = plan.agent;
+    const key = `${row.id}:${agent.conversation}`;
+    const blind = Boolean(plan.undo) && agent.step === "left";
+    const waiting = !blind && (this.pending.has(JSON.stringify([row.id, agent.conversation, "return"])) || !lookDue(agent, now, this.looks.get(key)));
+    return waiting ? { kind: "skip", row } : { kind: "agent", row, agent, agents, undo: Boolean(plan.undo), key };
+  }
+  job(now) {
+    const marked = (this.rows ?? []).filter((row) => this.held.has(row.id)).map((row) => this.rowJob(row, now)).filter(Boolean);
+    return marked.find((item) => item.kind !== "skip") ?? marked[0] ?? null;
+  }
+  async renew(now) {
+    const due = (this.rows ?? []).filter((r) => this.held.has(r.id) && now - Number(r.pending_at) > LEASE_MS - TICK_MS * 2);
+    if (!due.length) return this.held.size > 0;
+    this.take((await this.kdb.stage(due.map((r) => this.kdb.holdSql(r.id, this.me, now)))).rows);
+    return this.held.size > 0;
+  }
+  async writeState(job, now) {
+    const { row, plan } = job;
+    const { wrote, rows } = await this.kdb.stage([this.kdb.stateSql(row.id, this.me, row.state, plan.state, plan.why ?? null, now, this.fact(row.id, plan.state, plan.why))]);
+    this.take(rows);
+    if (wrote[0]?.length) this.changed({ ...row, state: plan.state, why: plan.why ?? null });
+    return this.held.size > 0;
+  }
+  async finishFar(job) {
+    const { row, agents } = job;
+    const kept = agents.filter((a) => KEPT.includes(a.step)).map((a) => ({ ...a.pane, ...(a.step === "unsure" ? { check: a.terminal } : {}) }));
+    const layout = kept.length ? { ...parseOr(row.layout, {}), cols: [{ w: 1, panes: kept }] } : null;
+    const { wrote, rows } = await this.kdb.stage([this.kdb.endSql(row.id, this.me, layout)]);
+    this.take(rows);
+    if (wrote[0]?.length) this.changed();
+    return this.held.size > 0;
+  }
+  async closeFar(job) {
+    const looked = await this.lookIdle(job.row);
+    const { plan, why, tab } = closingOf(job.row, this.machine, looked);
+    if (!(await this.kdb.finishSleep(job.row.id, this.me, why, Date.now(), this.fact(job.row.id, "asleep", why)))) return this.held.size > 0;
+    this.endTab(plan, tab);
+    this.changed();
+    this.take((this.rows ?? []).filter((r) => r.id !== job.row.id));
+    return this.held.size > 0;
+  }
+  async watchFar(stuck, now) {
+    this.watchedAt = now;
+    const probed = await probeMachine(this.machine, stuck.map((x) => x.agent.pid)).catch(() => null);
+    if (!probed) return false;
+    const gone = stuck.filter((x) => probed.found.get(Number(x.agent.pid))?.alive === false);
+    if (!gone.length) return false;
+    const texts = gone.flatMap((x) => [this.kdb.unstickSql(x.row.id, x.agent.conversation, now), this.kdb.holdSql(x.row.id, this.me, now)]);
+    const { wrote, rows } = await this.kdb.stage(texts);
+    this.take(rows);
+    if (wrote.some((part) => part.length)) this.changed();
+    return this.held.size > 0;
+  }
+  async seenNow(agent, probed, key) {
+    const item = probed.found.get(Number(agent.pid));
+    const prior = this.looks.get(key);
+    const address = seenAddress(agent.terminal, this.machine);
+    const there = Boolean(agent.terminal) && terminals().some((t) => t.address === address);
+    const dying = item?.alive === false;
+    const front = prior?.front ?? null;
+    const got = !dying && front == null && there ? await termOf(address) : null;
+    const wantScreen = !dying && (["clearing", "exiting"].includes(agent.step) || agent.sent_at != null || prior?.sent);
+    const screen = wantScreen && there ? await screenOf(address) : null;
+    return { alive: item ? item.alive : null, front: got ? got.front : front, state: got?.state ?? null, screen, record: item?.record ?? null, title: got?.title ?? null, cwd: got?.cwd ?? null };
+  }
+  async observe(job, cx, now) {
+    const { row, agent, agents, undo, key } = job;
+    if (undo && agent.step === "left") return this.bringBack(job, cx, now);
+    const probed = await probeMachine(this.machine, [agent.pid]).catch(() => null);
+    if (!probed) {
+      await this.kdb.holdWork(row.id, this.me, now).catch(() => null);
+      return this.held.size > 0;
+    }
+    const seen = await this.seenNow(agent, probed, key);
+    const next = undo ? undoStep(agent, seen, now) : leaveStep(agent, seen, now);
+    const last = !undo && next.write?.step === "left" && row.state === "sleeping" && agents.every((a) => a.conversation === agent.conversation || a.step === "left");
+    const looked = last ? await this.lookIdle(row) : null;
+    const closed = last ? closingOf(row, this.machine, looked) : null;
+    this.looks.set(key, { step: agent.step, front: seen.front ?? null, sent: false });
+    const extra = closed
+      ? this.kdb.leaveSql(row.id, this.me, agent.conversation, agent.step, closed.why, now, this.fact(row.id, "asleep", closed.why))
+      : next.write
+        ? this.kdb.stepSql(row.id, this.me, row.state, agent.conversation, agent.step, next.write)
+        : next.act === "free"
+          ? this.kdb.freeSql(row.id, this.me, agent.conversation)
+          : next.act
+            ? this.kdb.stillSql(row.id, this.me, row.state, now)
+            : null;
+    const { wrote, rows } = await this.kdb.stage([this.kdb.holdSql(row.id, this.me, now), ...(extra ? [extra] : [])]);
+    this.take(rows);
+    const wroteIt = !extra || Boolean(wrote[1]?.length);
+    if (closed && wroteIt) { this.endTab(closed.plan, closed.tab); this.changed(); }
+    if (!wroteIt) this.looks.delete(key);
+    if (closed || !wroteIt || next.act === "free" || !next.act) return this.held.size > 0;
+    if (next.act === "return" || next.act === "again") {
+      const actKey = JSON.stringify([row.id, agent.conversation, "return"]);
+      if (!this.pending.has(actKey)) this.startAct(actKey, cx, (task) => this.returnAgent(row, agent, next.act === "again", task));
+      return true;
+    }
+    this.due = { act: next.act, agent, key };
+    return true;
+  }
+  async bringBack(job, cx, now) {
+    const { row, agent } = job;
+    const next = undoStep(agent, { alive: null, front: null, screen: null, record: null }, now);
+    const { wrote, rows } = await this.kdb.stage([
+      this.kdb.holdSql(row.id, this.me, now),
+      this.kdb.stepSql(row.id, this.me, row.state, agent.conversation, agent.step, next.write),
+    ]);
+    this.take(rows);
+    if (!wrote[1]?.length) return this.held.size > 0;
+    const actKey = JSON.stringify([row.id, agent.conversation, "return"]);
+    if (next.act && !this.pending.has(actKey)) this.startAct(actKey, cx, (task) => this.returnAgent(row, agent, next.act === "again", task));
+    return true;
   }
 
   // An undo is done: what came back is awake, what did not stays asleep (one unsure with its terminal looked at first).

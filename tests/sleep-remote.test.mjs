@@ -261,7 +261,7 @@ test("a worker on another computer calls only there, and a local row never does"
   const at = { calls: remote.calls.length, reads: remote.reads.length, hc: remote.hcLog.length };
   assert.equal(await one.tick(remote.cx, 1_002_000), true);
   side(remote.calls.slice(at.calls), remote.reads.slice(at.reads), remote.hcLog.slice(at.hc), "light");
-  assert.ok(remote.reads.slice(at.reads).some((r) => r.path.endsWith("/.claude/sessions/11.json")));
+  assert.ok(remote.calls.slice(at.calls).some((c) => c.c === "sh" && String(c.a[1] ?? "").includes("kanso-look-end")));
   side(remote.calls, remote.reads, remote.hcLog, "light");
   const local = await worker(t, null, "t1");
   const mine = new local.SleepWork(local.kdb, () => {}, "win-a");

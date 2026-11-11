@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.29.1] - 2026-11-11
+
+### Changed
+
+- Sleeping or waking a tab on another computer asks that computer less often, so a slow connection waits less. What it promises is the same: one owner, no second copy of an agent, and nothing saved when that computer does not answer.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added
