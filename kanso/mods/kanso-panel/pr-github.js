@@ -20,6 +20,7 @@ const firstLine = (r) => String(r?.stderr || r?.stdout || "").trim().split("\n")
 
 export async function probe(run = exec) {
   const result = await run("gh", ["auth", "status"]).catch(() => null);
+  if (result?.late) return { status: "late", login: null, hosts: [] };
   if (!result || result.code === 127 || result.code === "ENOENT") return { status: "no_cli", login: null, hosts: [] };
   const text = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
   if (result.code !== 0 && /not found|No such file|ENOENT/i.test(text)) return { status: "no_cli", login: null, hosts: [] };

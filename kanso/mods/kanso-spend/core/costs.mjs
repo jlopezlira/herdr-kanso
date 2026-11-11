@@ -186,34 +186,46 @@ export function costRange(period, offset, today, firstDay) {
   if (period === "30d") {
     const end = new Date(now); end.setDate(end.getDate() + shift * 30);
     const start = new Date(end); start.setDate(start.getDate() - 29);
-    return { period, start: dayKey(start), end: dayKey(end), unit: "day", label: `${dayLabelShort(start)} – ${dayLabelShort(end)}`, name: shift === 0 ? "the last 30 days" : `${dayLabelShort(start)} – ${dayLabelShort(end)}`, months: 30 / 30.44 };
+    const name = shift === 0 ? "the last 30 days" : `${dayLabelShort(start)} – ${dayLabelShort(end)}`;
+    return { period, start: dayKey(start), end: dayKey(end), unit: "day", label: `${dayLabelShort(start)} – ${dayLabelShort(end)}`, name, said: `in ${name}`, months: 30 / 30.44 };
   }
   if (period === "year") {
     const year = now.getFullYear() + shift;
-    return { period, start: `${year}-01-01`, end: `${year}-12-31`, unit: "month", label: String(year), name: String(year), months: 12 };
+    const name = String(year);
+    return { period, start: `${year}-01-01`, end: `${year}-12-31`, unit: "month", label: name, name, said: `in ${name}`, months: 12 };
   }
   if (period === "all") {
     const first = firstDay ? parseDay(firstDay) : now;
     const start = new Date(first.getFullYear(), first.getMonth(), 1);
     const months = (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth() + 1;
-    return { period, start: dayKey(start), end: today, unit: "month", label: "All time", name: `since ${MONTHS_LONG[start.getMonth()]} ${start.getFullYear()}`, months };
+    const said = `since ${MONTHS_LONG[start.getMonth()]} ${start.getFullYear()}`;
+    return { period, start: dayKey(start), end: today, unit: "month", label: "All time", said, months };
+  }
+  if (period === "day") {
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + shift);
+    const date = dayLabelShort(end);
+    const said = shift === 0 ? "today" : shift === -1 ? "yesterday" : `on ${date}`;
+    const bare = said.replace(/^on /, "");
+    return { period, start: dayKey(end), end: dayKey(end), unit: "day", label: shift === 0 ? "Today" : shift === -1 ? "Yesterday" : date, ...(bare === said ? {} : { name: bare }), said, months: 1 / 30.44 };
   }
   const first = new Date(now.getFullYear(), now.getMonth() + shift, 1);
   const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
-  return { period: "month", start: dayKey(first), end: dayKey(last), unit: "day", label: `${MONTHS_LONG[first.getMonth()]} ${first.getFullYear()}`, name: MONTHS_LONG[first.getMonth()] + (first.getFullYear() === now.getFullYear() ? "" : ` ${first.getFullYear()}`), months: 1 };
+  const name = MONTHS_LONG[first.getMonth()] + (first.getFullYear() === now.getFullYear() ? "" : ` ${first.getFullYear()}`);
+  return { period: "month", start: dayKey(first), end: dayKey(last), unit: "day", label: `${MONTHS_LONG[first.getMonth()]} ${first.getFullYear()}`, name, said: `in ${name}`, months: 1 };
 }
 
 function dayLabelShort(d) {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
-function previousRange(range, today, firstDay) {
+export function previousRange(range, today, firstDay) {
   if (range.period === "all") return null;
   const now = parseDay(today);
   const start = parseDay(range.start);
   const offset = range.period === "year" ? start.getFullYear() - now.getFullYear() - 1
     : range.period === "month" ? (start.getFullYear() - now.getFullYear()) * 12 + start.getMonth() - now.getMonth() - 1
-      : Math.round((parseDay(range.end) - now) / (30 * 86400000)) - 1;
+      : range.period === "day" ? Math.round((start - now) / 86400000) - 1
+        : Math.round((parseDay(range.end) - now) / (30 * 86400000)) - 1;
   return costRange(range.period, offset, today, firstDay);
 }
 
@@ -381,7 +393,7 @@ function cleanTitle(text) {
 export function deriveCosts(rows, { catalog, overrides, labels, options = {}, today, live = null }) {
   const price = pricer(catalog ?? { rates: [] }, overrides ?? { models: {}, plans: [] }, rows);
   const firstDay = rows.reduce((min, row) => (!min || row.day < min ? row.day : min), null);
-  const range = costRange(options.period ?? "month", Number(options.offset) || 0, today, firstDay);
+  const range = costRange(options.period ?? "day", Number(options.offset) || 0, today, firstDay);
   const previous = previousRange(range, today, firstDay);
   const project = options.project && options.project !== "all" ? options.project : null;
   const model = options.model && options.model !== "all" ? options.model : null;
@@ -478,10 +490,10 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
   const labelStep = chart.length > 16 ? 5 : 1;
   const when = catalog?.fetchedAt ? new Date(catalog.fetchedAt) : null;
 
-  const prevName = previous ? (range.period === "30d" ? "the 30 days before" : previous.name) : null;
+  const prevName = previous ? (range.period === "30d" ? "the 30 days before" : (previous.name ?? previous.said)) : null;
   const said = change !== null && Math.abs(change) >= 0.01 ? `${Math.abs(Math.round(change * 100))}% ${change > 0 ? "more" : "less"} than ${prevName}`
     : change !== null ? `About the same as ${prevName}`
-      : range.period === "all" ? `${usdText(perMonth)} a month ${range.name}`
+      : range.period === "all" ? `${usdText(perMonth)} a month ${range.said}`
         : "";
   const note = said ? said[0].toUpperCase() + said.slice(1) : "";
 
@@ -495,7 +507,7 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
       tip: `${usdText(total.usd, true)} at API list price`,
       title: range.period === "all" ? "All time" : range.period === "30d" ? "Last 30 days" : range.label,
       note,
-      empty: total.tokens === 0 ? `Nothing used in ${range.name}. Try another period.` : null,
+      empty: total.tokens === 0 ? `Nothing used ${range.said}. Try another period.` : null,
       stats: [
         { value: intText(tasks.size), unit: tasks.size === 1 ? "task" : "tasks", tip: `${intText(sessions)} sessions` },
         { value: usdText(tasks.size ? total.usd / tasks.size : 0), unit: "per task", tip: "API value divided by tasks" },

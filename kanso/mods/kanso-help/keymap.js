@@ -67,18 +67,18 @@ const WORDS = {
   "kanso-spaces.view-spaces": "Sidebar: Projects", "kanso-spaces.view-agents": "Sidebar: Status", "kanso-spaces.view-threads": "Sidebar: Threads", "kanso-spaces.sidebar": "Hide or show the sidebar",
   "kanso-tabs.settings": "kansō settings", "kanso-tabs.sim": "Simulator", "mod.open:kanso-help": "This help",
   "tab.new": "New tab", "tab.close": "Close the tab", "tab.next": "Next tab", "tab.prev": "Previous tab",
-  "space.new": "New space", "space.next": "Next space", "space.prev": "Previous space",
+  "space.new": "New project", "space.next": "Next project", "space.prev": "Previous project",
   "agent.next": "Next agent", "agent.prev": "Previous agent", "app.palette": "Command palette", "app.settings": "Herdr settings",
   "app.quit": "Quit", "app.hide": "Hide Herdr", "app.hide_others": "Hide the other apps", "app.help": "Herdr's help",
-  "mod.open:picker": "Search spaces, tabs and agents", "mod.open:open-with": "Open the folder in an editor", "layout.switch": "Switch layout",
+  "mod.open:picker": "Search projects, tabs and agents", "mod.open:open-with": "Open the folder in an editor", "layout.switch": "Switch layout",
   "pane.zoom": "Zoom the pane", "pane.close": "Close the pane", "pane.split": "Split the pane",
   "list:down": "Down the list", "list:up": "Up the list", "list:first": "First row (press g twice)", "list:last": "Last row", "list:open": "Open the row", "list:search": "Search",
 };
 const FAMILY = [
   [/^kanso-strip\.col-(\d)$/, (n) => `Column ${n}`],
-  [/^kanso-spaces\.space-(\d)$/, (n) => `Space ${n}`],
+  [/^kanso-spaces\.space-(\d)$/, (n) => `Project ${n}`],
   [/^kanso-tabs\.panel-(\d)$/, (n) => `Panel ${n}`],
-  [/^space\.select:(\d)$/, (n) => `Space ${n}`],
+  [/^space\.select:(\d)$/, (n) => `Project ${n}`],
   [/^tab\.select:(\d)$/, (n) => `Tab ${n}`],
   [/^kanso-strip\.per-(\d)$/, (n) => `${n} panes in view`],
 ];
