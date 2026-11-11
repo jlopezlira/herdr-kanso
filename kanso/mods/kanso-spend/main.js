@@ -5,8 +5,9 @@ import { fileApi } from "./platform-files.js";
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
-import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared } from "herdr";
+import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
@@ -102,7 +103,7 @@ export default class TokenSpend extends View {
     this.watchdog = null;
     this.continueTimer = null;
     this.lastSnapshotAt = 0;
-    this.cost = { period: "month", offset: 0, project: "all", model: "all" };
+    this.cost = { period: spendPeriod(shared(PERIOD_KEY)), offset: 0, project: "all", model: "all" };
     this.expanded = {};
     this.page = "home";
     this.stack = [];
@@ -335,6 +336,7 @@ export default class TokenSpend extends View {
 
   setCost(patch, cx) {
     this.cost = { ...this.cost, ...patch };
+    if (patch.period) setShared(PERIOD_KEY, patch.period);
     this.run("prepare", cx);
     this.exchange(cx, true);
     cx.notify();
@@ -570,12 +572,7 @@ export default class TokenSpend extends View {
     ].filter(Boolean).join(" and ");
     return v_flex().w_full().gap(G.md)
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center().justify_between()
-        .child(quietTabs("ins-period", [
-          { key: "month", label: "Month" },
-          { key: "30d", label: "30 days" },
-          { key: "year", label: "Year" },
-          { key: "all", label: "All time" },
-        ], this.cost.period, (key, cx) => this.setCost({ period: key, offset: 0 }, cx), c))
+        .child(quietTabs("ins-period", SPEND_PERIODS, this.cost.period, (key, cx) => this.setCost({ period: key, offset: 0 }, cx), c))
         .when(!inDetail, (row) => row.child(h_flex().gap(G.lg).items_center()
           .child(this.menu("project", c))
           .child(this.menu("model", c)))))
@@ -686,7 +683,7 @@ export default class TokenSpend extends View {
   machineSplit(c, rows) {
     const note = rows.length === 1 ? "1 computer" : `${rows.length} computers`;
     return v_flex().w_full().gap(G.xs)
-      .child(section(c, "Machines", note))
+      .child(section(c, "Computers", note))
       .children(rows.map((row) => metricLine(c, row.name, row.tokensText, row.value, { tip: clock(row.updated_at) })));
   }
 

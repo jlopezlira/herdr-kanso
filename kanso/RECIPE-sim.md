@@ -31,8 +31,8 @@ skeletons; "The picture stalled." and "The stream stopped." offer Reconnect;
 "Input failed." sits under the toolbar and clears on the next input that
 works.
 
-On Linux and Windows one line says "iOS simulators are on macOS." A space on
-another machine says these are this computer's devices. There is no remote
+On Linux and Windows one line says "iOS simulators are on macOS." A project on
+another computer says these are this computer's devices. There is no remote
 stream.
 
 ## How it streams

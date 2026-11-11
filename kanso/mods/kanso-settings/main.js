@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe } from "./ui.js";
+import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe, Armed } from "./ui.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
@@ -36,7 +36,7 @@ export const PIECES = [
   { id: "sidebar.activity", label: "What each agent is on", note: "The line under each agent in the sidebar" },
   { id: "sidebar.away", label: "While you were away", note: "What finished, failed or needs you since you last looked" },
   { id: "tabs.arrange", label: "Arrangements", note: "The button in the tab bar; the key still opens them" },
-  { id: "footer.machine", label: "Add machine", note: "In the sidebar's footer" },
+  { id: "footer.machine", label: "Add computer", note: "In the sidebar's footer" },
   { id: "status.agents", label: "Agents at work", note: "The count in the status bar" },
   { id: "status.palette", label: "Command palette key", note: "In the status bar" },
   { id: "strip.minimap", label: "Minimap", note: "The columns in the status bar" },
@@ -52,6 +52,7 @@ export default class Settings extends View {
     this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
     this.capture = null; // { key, section, row, old }: the row waiting for a press
     this.conflict = null; // { chord, taken }: the press that needs a second one
+    this.armed = new Armed();
     this.message = null;
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
@@ -81,7 +82,7 @@ export default class Settings extends View {
 
   startCapture(row, section, old, cx) {
     this.capture = { row, section, old, key: `${section}:${row.family ?? row.action}:${old ?? "+"}` };
-    this.conflict = null; this.message = null;
+    this.conflict = null; this.message = null; this.armed.clear();
     this.handle.focus();
     cx.notify();
   }
@@ -92,22 +93,30 @@ export default class Settings extends View {
       return;
     }
     cx.stop_propagation();
-    if (e.key === "escape") { this.capture = null; this.conflict = null; this.message = null; cx.notify(); return; }
+    if (e.key === "escape") { this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); return; }
     if (MODIFIERS.has(String(e.key).toLowerCase())) return;
     const { row, section, old } = this.capture;
     if ((e.key === "backspace" || e.key === "delete") && !e.modifiers.control && !e.modifiers.alt && !e.modifiers.platform) {
       if (old) this.change(cx, (doc) => rebound(doc, section, { drop: row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old] }));
-      else { this.capture = null; cx.notify(); }
+      else { this.capture = null; this.conflict = null; this.armed.clear(); cx.notify(); }
       return;
     }
     const chord = e.keystroke;
     const chords = row.family ? familyChords(chord) : [chord];
     if (!chords) { this.message = "Press a key with a digit from 1 to 9: N takes its place."; cx.notify(); return; }
     const taken = chords.flatMap((c) => conflictsOf(keys(), c, row.family ? `${row.family}${c.slice(-1)}` : row.action));
-    if (taken.length && this.conflict?.chord !== chord) { this.conflict = { chord, taken }; cx.notify(); return; }
-    const set = Object.fromEntries(chords.map((c) => [c, row.family ? `${row.family}${c.slice(-1)}` : row.action]));
-    const drop = old ? (row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old]) : [];
-    this.change(cx, (doc) => rebound(doc, section, { drop, set }));
+    const apply = () => {
+      this.armed.clear();
+      const set = Object.fromEntries(chords.map((c) => [c, row.family ? `${row.family}${c.slice(-1)}` : row.action]));
+      const drop = old ? (row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old]) : [];
+      this.change(cx, (doc) => rebound(doc, section, { drop, set }));
+    };
+    if (taken.length && !this.armed.is(chord)) {
+      this.conflict = { chord, taken };
+      this.armed.press(chord, cx, apply);
+      return;
+    }
+    apply();
   }
 
   reset(row, section, cx) {
@@ -128,7 +137,7 @@ export default class Settings extends View {
         await writeTextFile(path, JSON.stringify(change(doc), null, 2) + "\n", text);
         this.message = null;
       } catch (e) { this.message = `keys.json could not be written: ${String(e?.message ?? e)}`; }
-      this.capture = null; this.conflict = null;
+      this.capture = null; this.conflict = null; this.armed.clear();
       cx.notify();
     });
   }
@@ -164,10 +173,11 @@ export default class Settings extends View {
   }
 
   pressNote(c, ask) {
-    const text = this.conflict
-      ? `${glyphs(this.conflict.chord)} already does ${[...new Set(this.conflict.taken.map((k) => k.action))].join(", ")}. Press it again to take it, Esc to keep yours.`
+    const live = this.conflict && this.armed.is(this.conflict.chord);
+    const text = live
+      ? `${glyphs(this.conflict.chord)} already does ${[...new Set(this.conflict.taken.map((k) => k.action))].join(", ")}. Press again to take it, Esc to keep yours.`
       : this.message ?? ask;
-    return div().px(G.sm).py(4).text_size(12).line_height(1.45).text_color(this.conflict ? c.yellow : this.message ? c.red : c.accent).child(text);
+    return div().px(G.sm).py(4).text_size(12).line_height(1.45).text_color(live ? c.yellow : this.message ? c.red : c.accent).child(text);
   }
 
   keysPage(t, c) {
@@ -332,7 +342,7 @@ export default class Settings extends View {
         .when(Boolean(this.installed), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.installed ?? "")))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
+      .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))
       .child(v_flex().id(`settings-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

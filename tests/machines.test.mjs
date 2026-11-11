@@ -223,7 +223,7 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(back.ids.includes("machine-power-dark"), true);
   assert.equal(back.ids.includes("machine-add-dark"), true);
   assert.equal(back.tips.includes("Turn off"), true);
-  assert.equal(back.tips.includes("New space"), true);
+  assert.equal(back.tips.includes("New project"), true);
   assert.equal(back.texts.includes("Off"), false);
   assert.equal(back.tips.includes("Connected"), false);
 
