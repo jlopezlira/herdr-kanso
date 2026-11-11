@@ -23,12 +23,6 @@ release.
 
 - The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
 - A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
-- A finished agent's row shows what it last said. Files, commits and the pull request stay on the pane header.
-- An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
-- What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
-- When memory is low, the notice says "Memory N% free", the same words as the status bar.
-- When a sleep cannot finish, the notice and the Asleep line say the same sentence. Retry and undo stay on that line.
-- Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
 - Needs you stays out of the sidebar until you choose it. A finished agent is not listed there.
 - On the project you are in, + stays visible. On the others it shows when you point at the row.
 - A count behind the branch asks Press again, then says Pulling… until git answers. A count ahead goes to that project and opens the pull request panel.
@@ -36,6 +30,12 @@ release.
 - A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
 - An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
 - An asleep row shows Wake. Enter wakes it. A click opens its menu.
+- A finished agent's row shows what it last said. Files, commits and the pull request stay on the pane header.
+- An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
+- What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
+- When memory is low, the notice says "Memory N% free", the same words as the status bar.
+- When a sleep cannot finish, the notice and the Asleep line say the same sentence. Retry and undo stay on that line.
+- Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
 
 ### Fixed
 
