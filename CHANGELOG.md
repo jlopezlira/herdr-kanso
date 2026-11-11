@@ -11,13 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-<<<<<<< HEAD
 ## [3.24.0] - 2026-11-10
 
 ### Added
 
 - Sync is turned on from another computer's row in the sidebar. Its icon stays in sight while Sync is on, and its tooltip says when it last synced. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then the icon takes the warning tone and Spend says Update kanso there. A computer turned off from the sidebar is not asked. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
-=======
+
 ## [3.23.2] - 2026-11-10
 
 ### Changed
@@ -25,7 +24,6 @@ release.
 - Each row of While you were away says what happened beside the agent's name (Finished, Needs you, Failed, Went to sleep, Could not sleep, or the pull request's new state) and, under it, what the agent said it was doing at that moment, kept after it moves on. A sleep that could not finish says why.
 - A click or Enter on a row takes you to that agent's pane, wherever it is; to its Wake menu when it was put to sleep; or to the pull request. The row of an agent that no longer exists stays, dimmed, and leads nowhere.
 - While you were away can be switched off in Settings > Mods > Pieces and in the sidebar's Show menu. Off, nothing is recorded or read for it.
->>>>>>> main
 
 ## [3.23.1] - 2026-11-10
 
