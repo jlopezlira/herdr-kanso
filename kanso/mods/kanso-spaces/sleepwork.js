@@ -15,7 +15,7 @@ import { sleepEvent } from "./since-left-model.js";
 // off one row.
 import { hc, run, panes, terminals, readTextFile, home } from "herdr";
 import { promptEmpty, asksToExit, base } from "./resume.js";
-import { SHELLS } from "./tabkit.js";
+import { SHELLS, spaceBeside } from "./tabkit.js";
 import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries, parseOr } from "./pure.js";
 import { LEASE_MS } from "./kdb.js";
 
@@ -46,7 +46,7 @@ export const isAway = (id) => String(id ?? "").startsWith(AWAY);
 export const tabOfAway = (id) => (isAway(id) ? String(id).slice(AWAY.length) : null);
 
 // A lone pane's tab settles too, so an empty tab does not stay. Nothing here ends a terminal.
-export function hidePlan(order, panes, tabs = []) {
+export function hidePlan(order, panes, tabs = [], allSpaces = []) {
   if (order.scope === "agent") {
     const p = (panes ?? []).find((x) => x.pane === order.pane);
     if (!p) return { settle: [], park: [], tabs: [] };
@@ -54,7 +54,9 @@ export function hidePlan(order, panes, tabs = []) {
     return { park: p.terminal ? [p.terminal] : [], settle: others || !p.tab ? [] : [p.tab], tabs: p.tab ? [p.tab] : [] };
   }
   const ids = order.scope === "project" ? (tabs ?? []).map((t) => t.id) : [order.tab].filter(Boolean);
-  return { park: [], settle: ids, tabs: ids };
+  const space = allSpaces.find((s) => s.active && s.tabs.some((t) => t.active && ids.includes(t.id)));
+  const nextSpace = space && !tabs.some((t) => !ids.includes(t.id)) ? spaceBeside(space.id, allSpaces) : null;
+  return { park: [], settle: ids, tabs: ids, ...(nextSpace ? { space: space.id, nextSpace: nextSpace.id } : {}) };
 }
 
 export function hideEntries(plan) {
@@ -62,6 +64,7 @@ export function hideEntries(plan) {
   const tabs = plan.tabs?.length ? plan.tabs : [...settled];
   return tabs.map((tab) => ({
     id: `away:${tab}`, tab,
+    ...(plan.nextSpace ? { space: plan.space, nextSpace: plan.nextSpace } : {}),
     settle: settled.has(tab) ? [tab] : [],
     park: tabs.length === 1 ? (plan.park ?? []) : [],
   }));
@@ -69,8 +72,8 @@ export function hideEntries(plan) {
 
 export function commandsOf(hide, { back = false, active = null, next = null } = {}) {
   const settle = hide?.settle ?? [], park = hide?.park ?? [];
-  if (back) return [...settle.map((id) => ["tab.unsettle", { id }]), ...park.map((terminal) => ["terminal.keep", { terminal }])];
-  const select = next && active && settle.includes(active) ? [["tab.select", { id: next }]] : [];
+  if (back) return [...settle.map((id) => ["tab.unsettle", { id }]), ...park.map((terminal) => ["terminal.keep", { terminal }]), ...(hide?.nextSpace ? [["space.select", { id: hide.space }]] : [])];
+  const select = hide?.nextSpace ? [["space.select", { id: hide.nextSpace }]] : next && active && settle.includes(active) ? [["tab.select", { id: next }]] : [];
   return [...park.map((terminal) => ["terminal.park", { terminal }]), ...settle.map((id) => ["tab.settle", { id }]), ...select];
 }
 
@@ -422,6 +425,7 @@ export class SleepWork {
     this.changed = changed;
     this.me = me || keptOwner();
     this.held = new Set();
+    this.pending = new Set();
     this.running = false;
     this.kicked = 0;
     this.watchedAt = 0;
@@ -500,21 +504,32 @@ export class SleepWork {
     const a = plan.agent;
     const seen = await see(a);
     const next = plan.undo ? undoStep(a, seen, now) : leaveStep(a, seen, now);
+    const returning = ["return", "again"].includes(next.act);
+    const key = JSON.stringify([row.id, a.conversation, returning ? "return" : next.act]);
+    if (next.act && this.pending.has(key)) return;
     // Written before it acts, and only while this window holds the row in the state it was read in: else nothing is done.
     if (next.write && !(await this.kdb.stepAgent(row.id, this.me, row.state, a.conversation, a.step, next.write))) return;
     // An act with nothing to write (Enter on Claude's question) goes only while this window holds the row in the state it read.
     if (next.act && !next.write && !(await this.kdb.stillMine(row.id, this.me, row.state))) return;
     if (next.act === "free") { await this.kdb.freeAgent(row.id, this.me, a.conversation); return; }
-    if (next.act === "return" || next.act === "again") {
-      const p = { ...a.pane, terminal: a.terminal, resume: a.conversation, pid: a.pid };
-      const how = !p.wake ? "out" : await (next.act === "again" ? returnAgain(p, cx) : comeBack(p, cx)).catch(() => "unsure");
-      // "here" is the process that was told to exit, still in front: it may yet leave, so one with an /exit sent stays asleep.
-      const kept = how === "here" && a.sent_at != null ? "unsure" : how;
-      if (kept === "back" || kept === "here") await this.kdb.freeAgent(row.id, this.me, a.conversation);
-      else await this.kdb.stepAgent(row.id, this.me, row.state, a.conversation, "returning", { step: kept });
-      return;
-    }
-    if (next.act) await ACTS[next.act](a).catch(() => null);
+    if (next.act) this.startAct(key, cx, (cx) => returning
+      ? this.returnAgent(row, a, next.act === "again", cx) : ACTS[next.act](a));
+  }
+
+  startAct(key, cx, act) {
+    this.pending.add(key);
+    cx.spawn(async (cx) => {
+      try { await act(cx); } catch {} finally { this.pending.delete(key); }
+    });
+  }
+
+  async returnAgent(row, a, again, cx) {
+    const p = { ...a.pane, terminal: a.terminal, resume: a.conversation, pid: a.pid };
+    const how = !p.wake ? "out" : await (again ? returnAgain(p, cx) : comeBack(p, cx)).catch(() => "unsure");
+    // An original process told to exit may still leave after the undo.
+    const kept = how === "here" && a.sent_at != null ? "unsure" : how;
+    if (kept === "back" || kept === "here") await this.kdb.freeAgent(row.id, this.me, a.conversation);
+    else await this.kdb.stepAgent(row.id, this.me, row.state, a.conversation, "returning", { step: kept });
   }
 
   // Every agent left: what slept is ended so it can't run twice, then the row is asleep.
