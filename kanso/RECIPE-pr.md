@@ -84,7 +84,9 @@ and tone, hairlines between list rows. Top to bottom:
   lines, monospace, in a hairline box).
 - A footnote (10.5, dim): read from GitHub with gh, and when. While
   this one is shown it rereads about once a minute, and every 20 s
-  while a check runs. A missed or timed-out reread keeps the last pull
+  while a check runs. While the window is behind others, or this panel
+  is hidden, that wait does nothing, and the next look in front reads
+  at once. A missed or timed-out reread keeps the last pull
   request, with "as of <age>" and Retry. When GitHub asks to wait, the
   line is "GitHub asks to wait until <time>" and refresh does not call.
 - Loading is the view's silhouette in `border` tone, breathing between

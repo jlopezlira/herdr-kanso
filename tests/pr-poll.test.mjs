@@ -287,6 +287,87 @@ test("a read that never answers still finishes, and the last pull request stays"
   assert.match(panel.readNote(), /^as of /);
 });
 
+test("the timer returns while the window is behind or the panel is hidden, and reads when it comes forward", async () => {
+  const { pollTick, pollFacing } = await load("kanso-panel/pr-poll.js", ["pollTick", "pollFacing"], {});
+  assert.equal(pollFacing(false, false), false);
+  assert.equal(pollFacing(true, true), false);
+  assert.equal(pollFacing(undefined, undefined), true);
+  const behind = pollTick({ shown: false, away: false, picker: false, due: true });
+  assert.equal(behind.away, true);
+  assert.equal(behind.read, false);
+  const quiet = pollTick({ shown: true, away: false, picker: false, due: false });
+  assert.equal(quiet.read, false);
+  const held = pollTick({ shown: true, away: true, picker: true, due: true });
+  assert.equal(held.read, false);
+  assert.equal(held.away, true);
+  const forward = pollTick({ shown: true, away: true, picker: false, due: false });
+  assert.equal(forward.read, true);
+  assert.equal(forward.away, false);
+
+  let active = true;
+  let hidden = false;
+  const views = [];
+  const exec = async (command, args) => {
+    if (command === "gh" && args[0] === "pr" && args[1] === "view") views.push(args[2] ?? "");
+    if (command === "git") return { code: 0, stdout: gitOut(args), stderr: "" };
+    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
+    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(pull()), stderr: "" };
+    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
+    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
+    if (args.includes("viewerPermission")) return { code: 0, stdout: "WRITE\n", stderr: "" };
+    return { code: 1, stdout: "", stderr: "offline" };
+  };
+  const pending = [];
+  const after = [];
+  let tick = null;
+  const cx = {
+    notify() {},
+    spawn(fn) { pending.push(fn(cx)); },
+    timer: { every(_ms, fn) { tick = fn; }, after(_ms, fn) { after.push(fn); } },
+  };
+  const drain = async () => { while (pending.length) await pending.shift(); };
+  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+    exec,
+    key: () => "repo",
+    location: () => ({ cwd: "/repo", on: null }),
+    window: () => ({ active }),
+    layout: () => ({ id: "panel-body", hidden }),
+    InputState: { new: () => ({ on() {} }) },
+  });
+  const panel = new PullRequest();
+  panel.init(cx);
+  await drain();
+  const seen = views.length;
+  assert.equal(seen > 0, true);
+  assert.equal(typeof tick, "function");
+
+  active = false;
+  const queued = after.length;
+  tick(cx);
+  panel.comeForward(cx);
+  await drain();
+  assert.equal(views.length, seen);
+  assert.equal(panel.away, true);
+  assert.equal(after.length, queued);
+
+  active = true;
+  hidden = true;
+  tick(cx);
+  panel.comeForward(cx);
+  await drain();
+  assert.equal(views.length, seen);
+  assert.equal(panel.away, true);
+  assert.equal(after.length, queued);
+
+  hidden = false;
+  panel.comeForward(cx);
+  assert.equal(after.length, queued + 1);
+  after.at(-1)(cx);
+  await drain();
+  assert.equal(views.length, seen + 1);
+  assert.equal(panel.away, false);
+});
+
 test("unseen reviews do not replace the branch's pull request", async () => {
   const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {});
   const panel = new PullRequest();

@@ -9,6 +9,16 @@ export const LATE = Object.freeze({ late: true, code: 1, stdout: "", stderr: "ti
 
 export const readDue = (loadedAt, now, pending) => Boolean(pending) || now - (loadedAt ?? 0) > QUIET_MS;
 
+// In front: the window is not behind others and this panel is not hidden.
+export const pollFacing = (active, hidden) => active !== false && hidden !== true;
+
+// The 20s timer. Behind or hidden it returns and remembers; the first look in front reads at once.
+export function pollTick({ shown, away, picker, due }) {
+  if (!shown) return { away: true, read: false };
+  if (picker) return { away: Boolean(away), read: false };
+  return { away: false, read: Boolean(away) || Boolean(due) };
+}
+
 const ticksFrom = (t, from, pending, until) => {
   if (t > until) return [];
   const due = readDue(from, t, pending);

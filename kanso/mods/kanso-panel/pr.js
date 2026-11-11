@@ -4,8 +4,9 @@ import { openApi } from "./platform-open.js";
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
-import { exec, knownAgents, notify, openOverlay, run, theme, setShared, shared } from "herdr";
+import { exec, knownAgents, notify, openOverlay, run, theme, setShared, shared, window, layout } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
+import { walkLayout } from "./layout.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./ghchecks.js";
@@ -15,7 +16,7 @@ import { prMemory } from "./panel-state.js";
 import { awayShown } from "./since-left-model.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
-import { CALL_MS, TICK_MS, ageOf, asOfAge, authFresh, bounded, heldView, needsPermission, needsThreads, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
+import { CALL_MS, TICK_MS, ageOf, asOfAge, authFresh, bounded, heldView, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
 const keepsFacts = () => awayShown(shared("kanso.hidden"));
 
@@ -127,10 +128,33 @@ export class PullRequest {
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.jumpUrl = props.url ?? null;
     this.refresh(cx);
-    cx.timer.every(TICK_MS, (cx) => {
-      if (this.picker) return;
-      if (readDue(this.loadedAt, Date.now(), this.checks().some((ch) => ch.state === "pending"))) this.refresh(cx);
+    cx.timer.every(TICK_MS, (cx) => this.onPoll(cx));
+  }
+
+  pollNow(due) {
+    return pollTick({
+      shown: pollFacing(window()?.active, walkLayout(layout(), "panel-body")?.hidden),
+      away: Boolean(this.away), picker: Boolean(this.picker), due,
     });
+  }
+
+  onPoll(cx) {
+    const next = this.pollNow(readDue(this.loadedAt, Date.now(), this.checks().some((ch) => ch.state === "pending")));
+    this.away = next.away;
+    if (next.read) this.refresh(cx);
+  }
+
+  comeForward(cx) {
+    if (this.waking || !this.pollNow(false).read) return;
+    this.waking = true;
+    // A read started inside render can be lost; the timer runs it on the next turn.
+    const wake = (wakeCx) => {
+      this.waking = false;
+      if (!this.pollNow(false).read) return;
+      this.refresh(wakeCx);
+    };
+    if (cx.timer?.after) cx.timer.after(0, wake);
+    else wake(cx);
   }
 
   // Cached per reading: a draw asks several times, on every shared write anywhere.
@@ -210,6 +234,7 @@ export class PullRequest {
 
   refresh(cx) {
     if (this.loading) return;
+    this.away = false;
     this.bind(cx);
     const { cwd, on } = location(), context = key();
     if (context !== this.context) {
@@ -1165,6 +1190,7 @@ export class PullRequest {
   }
 
   render(cx) {
+    this.comeForward(cx);
     if (key() !== this.context) this.refresh(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
