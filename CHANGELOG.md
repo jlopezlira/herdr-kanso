@@ -6,16 +6,28 @@ Removed changes is a major version, one that lists Added or Deprecated is a
 minor version, anything else is a patch. The format follows
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version`
 checks all of this, and merging to main releases the version in
-`kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
+`kanso/mods/kanso-chrome/version.json`, the stable release the updater
+offers unless Early is on.
 Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
+
+## [3.31.0] - 2026-11-11
+
+### Added
+
+- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
+- kansō installs and updates on Windows the same way it does on macOS and Linux. The installer and the updater use Windows PowerShell, and the download uses the curl and tar that ship with Windows. The Windows keymap is merged on Windows. A file that is in use is retried, then the update is undone and the file is named; a read-only file is updated. The update runs with no console window.
+
+### Changed
+
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
 
 ## [3.30.0] - 2026-11-11
 
 ### Added
 
-- kansō installs and updates on Windows the same way it does on macOS and Linux. The installer and the updater use Windows PowerShell, and the download uses the curl and tar that ship with Windows. The Windows keymap is merged on Windows. A file that is in use is retried, then the update is undone and the file is named; a read-only file is updated. The update runs with no console window.
+- What's new lets you choose Stable or Early. Stable is the release everyone gets. Early gets changes before they are tested by everyone, and nothing is required. Going back to Stable keeps the version you have until Stable reaches it.
 
 ### Changed
 

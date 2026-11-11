@@ -5,7 +5,9 @@ import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, wind
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, readTextFile, appHome, shared, setShared, notify, layout, run, writeTextFile } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
-export { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript };
+import { pieces, runs, shown, hiddenSet } from "./pieces.js";
+import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease } from "./release.js";
+export { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript, newestTag };
 
 export const SOURCE = {
   remote: "https://github.com/jlopezlira/herdr-kanso.git",
@@ -52,23 +54,8 @@ function findNode(node, id) {
   return null;
 }
 
-export const parseVersion = (v) => {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(v ?? "").trim());
-  return m ? m.slice(1).map(Number) : null;
-};
-
 export function compareVersions(a, b) {
-  const x = parseVersion(a), y = parseVersion(b);
-  const i = [0, 1, 2].find((k) => x[k] !== y[k]);
-  return i === undefined ? 0 : x[i] - y[i];
-}
-
-export function newestTag(stdout) {
-  const best = String(stdout).split("\n").reduce((best, line) => {
-    const tag = line.split("refs/tags/")[1]?.trim();
-    return parseVersion(tag) && (!best || compareVersions(tag, best) > 0) ? tag : best;
-  }, null);
-  return best && best.replace(/^v/, "");
+  return compareReleases(a, b);
 }
 
 // Three-way merge: keys you changed stay yours, keys you removed stay removed, the rest follow the release.
@@ -292,19 +279,21 @@ export class Updater {
   installs() { return this.state().installs ?? {}; }
   mark(id, patch) { this.setState({ installs: { ...this.installs(), [id]: { ...this.installs()[id], ...patch } } }); }
   unmark(id) { this.setState({ installs: Object.fromEntries(Object.entries(this.installs()).filter(([k]) => k !== id)) }); }
-  autoCheckEnabled() { return this.state().autoCheck !== false; }
+  autoCheckEnabled() { return this.state().autoCheck !== false && runs("update.check", pieces(shared)); }
+  channel() { return channelOf(this.state().channel); }
+  // The tag written when an install landed, or version.json when that tag is absent or no longer matches.
+  current() { return installedRelease(this.installed, this.state().tag); }
 
-  available() {
-    const { latest } = this.state();
-    if (!parseVersion(latest) || !parseVersion(this.installed)) return null;
-    return compareVersions(latest, this.installed) > 0 ? latest : null;
-  }
+  available() { return offerRelease(this.state().latest, this.current(), this.channel()); }
 
   // Not cached: mid-update a copy can start before version.json lands and would re-offer what is installed.
   async readInstalled() {
     try {
-      const v = JSON.parse(await readTextFile(paths.join(appHome(), "mods", "kanso-chrome", "version.json")) ?? "{}").version;
-      if (parseVersion(v)) this.installed = v;
+      const rel = parseRelease(JSON.parse(await readTextFile(paths.join(appHome(), "mods", "kanso-chrome", "version.json")) ?? "{}").version);
+      if (!rel || rel.channel) return;
+      this.installed = `${rel.major}.${rel.minor}.${rel.patch}`;
+      const recorded = hostInstall(this.state().tag);
+      if (this.state().tag != null && (!recorded || recorded.want !== this.installed)) this.setState({ tag: null });
     } catch {}
   }
 
@@ -332,9 +321,13 @@ export class Updater {
       cx.notify();
     }));
     // The polling copy fits the footer when a row is turned on or off, or a release is found. The other copy fits on start and on its slow tick.
-    if (polls) cx.timer.every(1500, () => {
-      const now = JSON.stringify([shared("kanso.hidden") ?? [], this.state().latest ?? null]);
+    if (polls) cx.timer.every(1500, (cx) => {
+      const channel = this.channel();
+      const changed = this.seenChannel != null && this.seenChannel !== channel;
+      this.seenChannel = channel;
+      const now = JSON.stringify([pieces(shared), this.state().latest ?? null, channel]);
       if (now !== this.hiddenSeen) { this.hiddenSeen = now; this.fit(); }
+      if (changed) cx.spawn((cx) => this.check(cx, true));
     });
   }
 
@@ -343,7 +336,7 @@ export class Updater {
     const found = tryOr(() => ({ size: findNode(layout()?.root ?? layout(), FOOTER)?.size?.px }));
     if (!found) return;
     const { size } = found;
-    const hidden = new Set(tryOr(() => (Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []), []));
+    const hidden = tryOr(() => hiddenSet(pieces(shared)), new Set());
     const want = footerPx(hidden, Boolean(this.available()));
     if (size !== want && OURS(size)) run("layout.resize", { id: FOOTER, px: want });
   }
@@ -354,7 +347,7 @@ export class Updater {
     if (!done) return;
     this.setState({ done: null });
     if (done.version !== this.installed) return;
-    notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
+    if (shown("toast.update", true, pieces(shared))) notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
   }
 
   async check(cx, force = false, report = false) {
@@ -371,15 +364,16 @@ export class Updater {
       if (report) notify({ title: "kansō could not check for updates", body: "GitHub could not be reached.", level: "warning" });
       return;
     }
-    this.setState({ latest: newestTag(r.stdout), checked: Date.now() });
+    this.setState({ latest: newestTag(r.stdout, this.channel()), checked: Date.now() });
     const v = this.available();
-    if (report && !v) notify({ title: "kansō is up to date", body: `You have ${this.installed}, the newest release.`, level: "success" });
+    const have = this.current();
+    if (report && !v) notify({ title: "kansō is up to date", body: `You have ${have}, the newest release.`, level: "success" });
     if (report && v && this.state().notified === v) this.setState({ notified: null }); // an explicit check re-notifies for the same version
     if (v && this.state().notified !== v) {
       this.setState({ notified: v });
-      notify({
+      if (report || shown("toast.update", true, pieces(shared))) notify({
         title: `kansō ${v} is available`,
-        body: `You have ${this.installed}. Click to update; Herdr's own updates stay under Settings.`,
+        body: `You have ${have}. Click to update; Herdr's own updates stay under Settings.`,
         action: { name: "kanso-tabs.update" },
         timeout: 30000,
       });
@@ -395,7 +389,8 @@ export class Updater {
     const id = opId();
     this.working = true;
     this.error = null;
-    this.mark(id, { version: v, notes: "", at: Date.now(), phase: "preparing" });
+    const spec = hostInstall(v, this.installed);
+    this.mark(id, { version: v, from: this.installed, notes: "", at: Date.now(), phase: "preparing" });
     cx.notify();
     const home = appHome(), dir = paths.join(home, UPDATES);
     const started = await tryOrAsync(async () => {
@@ -405,7 +400,7 @@ export class Updater {
       const plan = await this.plan(v, home);
       this.mark(id, { notes: plan.notes });
       return this.host.launch({
-        dir, id, url: this.source.tarball(v), home, want: v, from: this.installed,
+        dir, id, url: this.source.tarball(spec.tag), home, want: spec.want, from: spec.from,
         checker: this.source.checker ?? SOURCE.checker, stamp: stamp(),
         keys: plan.keys, layout: plan.layout ? "1" : "", base: plan.base,
       });
@@ -482,7 +477,9 @@ export class Updater {
             return null;
           }
           await this.readInstalled();
-          return this.installed === mark.version ? { state: "ok", why: "" } : { state: "error", why: "the update stopped before it finished; what you had is back" };
+          const wanted = hostInstall(mark.version);
+          const landed = this.installed === mark.version || (wanted && this.installed === wanted.want && mark.from != null && this.installed !== mark.from);
+          return landed ? { state: "ok", why: "" } : { state: "error", why: "the update stopped before it finished; what you had is back" };
         }
         await this.pause();
       }
@@ -501,7 +498,10 @@ export class Updater {
   async report(cx, state, why, mark = {}) {
     await this.readInstalled();
     const told = state === "busy" || state === "already" ? this.elsewhere() : undefined;
-    if (state === "ok" && mark.version) notify({ title: `kansō updated to ${mark.version}`, body: mark.notes || undefined, level: "success" });
+    if (state === "ok" && mark.version) {
+      if (hostInstall(mark.version)?.want === this.installed) this.setState({ tag: mark.version });
+      notify({ title: `kansō updated to ${mark.version}`, body: mark.notes || undefined, level: "success" });
+    }
     if (state === "error") {
       this.error = why || "the update failed";
       notify({ title: "kansō was not updated", body: this.error, level: "error" });
@@ -527,9 +527,12 @@ export class Updater {
       } catch { return null; }
     };
     const keymap = shippedKeymap(localName());
+    const tagOf = (value) => hostInstall(value)?.tag ?? value;
+    const had = tagOf(this.current() ?? this.installed);
+    const next = tagOf(v);
     const [beforeKeys, oldLayout, newKeys, newLayout] = await Promise.all([
-      shipped(this.installed, keymap), shipped(this.installed, "kanso/layouts/kanso.json"),
-      shipped(v, keymap), shipped(v, "kanso/layouts/kanso.json"),
+      shipped(had, keymap), shipped(had, "kanso/layouts/kanso.json"),
+      shipped(next, keymap), shipped(next, "kanso/layouts/kanso.json"),
     ]);
     const oldKeys = beforeKeys ?? missingKeys(localName());
     const layout = oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout);

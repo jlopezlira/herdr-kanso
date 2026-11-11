@@ -91,7 +91,7 @@ export async function load(file, names, host = {}, root = mods) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host, __herdrModule: (name) => modules[name] }));
+  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), layout: () => null, focused: () => null, panes: () => [], terminals: () => [], settings: () => ({}), ...host, __herdrModule: (name) => modules[name] }));
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
@@ -103,6 +103,16 @@ export async function temporary(t) {
   const dir = await mkdtemp(join(tmpdir(), "kanso-test-"));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
   return dir;
+}
+
+// Waits for a state real processes or files bring, never longer than exec's own limit.
+export async function until(ready, limit = 30000) {
+  const deadline = Date.now() + limit;
+  do {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    if (await ready()) return;
+  } while (Date.now() < deadline);
+  throw new Error(`Still not true after ${limit} ms: ${ready}`);
 }
 
 // Herdr's exec, backed by the real programs, and like Herdr's it kills one that runs past its

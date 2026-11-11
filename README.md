@@ -47,7 +47,9 @@ Simulator. Memory supports macOS and Windows; Windows uses its built-in
 PowerShell and Task Scheduler without administrator rights. kansō updates
 itself the same way on Windows, with Windows PowerShell and the curl and tar
 that ship with Windows: a release shows as a row above Settings, and a click
-installs it. `ctrl-shift-l` goes back to your previous layout.
+installs it. Stable is what you get. Early, under What's new, also follows a beta
+or a release candidate, and going back to Stable never installs an older
+version. `ctrl-shift-l` goes back to your previous layout.
 On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 `kanso/keys.json`.
 
@@ -150,8 +152,8 @@ bump than the section already has. `npm run check:version` checks it. `npm test`
 against the Herdr names in `tests/herdr-api.json` (`node scripts/herdr-api.mjs`
 rewrites that file from this machine's declarations), and `npm run check:mods`
 runs `herdr-app check` on every mod when the app is installed. A push
-to `develop` publishes `vX.Y.Z-beta.N` when what kansō installs changed since
-the last beta or the newest stable tag. Running the Release candidate workflow
+to `develop` publishes `vX.Y.Z-beta.N`, once CI passes on all three platforms,
+when what kansō installs changed since the last beta or the newest stable tag. Running the Release candidate workflow
 on `develop` publishes `vX.Y.Z-rc.N`. Merging `develop` into `main` publishes
 the stable `vX.Y.Z`. Docs do not bump the version. How to work on it:
 [CONTRIBUTING.md](CONTRIBUTING.md). How every part is built:

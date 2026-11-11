@@ -94,7 +94,9 @@ const LIB = [
   "function Unlock-Tree([string]$Path) {",
   "  if (-not (Test-Path -LiteralPath $Path)) { return }",
   "  Clear-Readonly $Path",
-  "  & icacls.exe @($Path, '/reset', '/T', '/C', '/Q') 2>$null | Out-Null",
+  // A denied tree writes an error per file. Piping that fills the buffer and icacls never returns.
+  "  $quoted = '\"' + $Path.Replace('\"', '\"\"') + '\"'",
+  "  & cmd.exe /d /c ('icacls.exe ' + $quoted + ' /reset /T /C /Q >NUL 2>&1 <NUL')",
   "}",
   "function Join-Rel([string]$Root, [string]$Rel) {",
   "  $path = $Root",
@@ -512,7 +514,10 @@ export function windowsLaunchScript(dir, id, file) {
     "$psi.UseShellExecute = $false",
     "$psi.CreateNoWindow = $true",
     "$psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden",
+    // Closed stdin is EOF. An inherited pipe stays open and a checker .cmd waits on it forever.
+    "$psi.RedirectStandardInput = $true",
     "$proc = [System.Diagnostics.Process]::Start($psi)",
+    "$proc.StandardInput.Close()",
     "$enc = New-Object System.Text.UTF8Encoding $false",
     `[IO.File]::WriteAllText(${psQuote(pid)}, ([string]$proc.Id + [char]10), $enc)`,
   ].join("; ");
@@ -527,8 +532,10 @@ export function windowsHoldScript(lockPath) {
     "  if ($_.Exception.HResult -eq -2147024864 -or ($_.Exception.InnerException -and $_.Exception.InnerException.HResult -eq -2147024864) -or ([string]$_.Exception.Message -match 'being used by another process')) { exit 75 }",
     "  exit 1",
     "}",
-    "[Console]::Out.WriteLine('held')",
-    "[Console]::Out.Flush()",
+    // Console.Out is not the redirected stdout pipe, so the holder never says held and then sleeps.
+    "$script:heldOut = New-Object System.IO.StreamWriter -ArgumentList ([Console]::OpenStandardOutput())",
+    "$script:heldOut.AutoFlush = $true",
+    "$script:heldOut.WriteLine('held')",
     "while ($true) { Start-Sleep -Seconds 60 }",
   ].join("\n");
 }
