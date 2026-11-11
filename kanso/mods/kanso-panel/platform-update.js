@@ -543,8 +543,10 @@ export function windowsHoldScript(lockPath) {
 async function runPowershellFile(run, file, options) {
   const args = ["-NoProfile", "-NonInteractive", "-File", file];
   const first = await run("pwsh", args, options);
-  if (first && first.code !== "ENOENT" && first.code !== 127 && first.code !== 9009) return first;
-  return run("powershell", args, options);
+  const result = first && first.code !== "ENOENT" && first.code !== 127 && first.code !== 9009 ? first : await run("powershell", args, options);
+  // The interpreter holds the script open, so the script cannot delete itself.
+  try { await unlink(file); } catch { /* already gone */ }
+  return result;
 }
 
 async function place(dir, name, text, writeTextFile) {

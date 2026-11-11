@@ -467,6 +467,8 @@ export class Updater {
         if (now.state !== "running") return now;
         const alive = await tryOrAsync(() => this.host.alive(slot("pid")));
         if (alive?.code !== 0) {
+          // The probe was killed or never ran. That is not the worker dying.
+          if (alive?.code !== 1) { await this.pause(); continue; }
           const last = await read(); // it may have said so just before it ended
           if (last.state !== "running") return last;
           // Until recovery has ended with 0, the version on disk may be a half swap's: it says
@@ -491,7 +493,7 @@ export class Updater {
     const claimed = await tryOrAsync(() => this.host.claim(slot("pid"), slot("reported")));
     if (claimed?.code !== 0) return; // another copy reports it
     this.unmark(id);
-    await tryOrAsync(() => this.host.clear([slot("status"), slot("reported"), slot("log")]));
+    await tryOrAsync(() => this.host.clear([slot("status"), slot("reported"), slot("log"), slot("ps1")]));
     return this.report(cx, outcome.state, outcome.why, mark);
   }
 
