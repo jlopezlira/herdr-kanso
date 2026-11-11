@@ -57,16 +57,22 @@ function herdr(dir, exits = {}) {
       return { ...api, exists: (pid, options) => unreadable.has(pid) ? Promise.reject(new Error("Process access denied")) : api.exists(pid, options) };
     },
     window: nativeWindow, hc, home: () => "/nonexistent-home", appHome: () => dir,
-    exec: async (c, a, o) => {
-      if (c === "sh" && String(a?.[1] ?? "").includes("kanso-look-end")) {
-        const lines = ["home=/nonexistent-home", ...(a ?? []).slice(3).map(Number).flatMap((pid) => {
+    exec: async (c, a = [], o) => {
+      const script = String(a.at?.(-1) ?? "");
+      const shLook = c === "sh" && String(a[1] ?? "").includes("kanso-look-end");
+      const winLook = (c === "pwsh" || c === "powershell") && script.includes("kanso-look-end");
+      if (shLook || winLook) {
+        const ids = shLook ? a.slice(3).map(Number) : [...script.matchAll(/@\(([\d,\s]*)\)/g)].flatMap((match) => match[1].split(",").map((part) => Number(part.trim()))).filter((pid) => pid > 0);
+        const lines = ["home=/nonexistent-home", ...ids.flatMap((pid) => {
           const record = records.has(pid) ? JSON.stringify(records.get(pid)) : "";
           const mark = unreadable.has(pid) ? "" : alive.has(pid) ? "1" : "0";
           return [`pid=${pid}`, `alive=${mark}`, "record", record, "kanso-look-end"];
         })];
         return { code: 0, stdout: lines.join("\n"), stderr: "" };
       }
-      return c === "pwsh" && a.at(-1).includes("Get-CimInstance") ? { code: 0, stdout: JSON.stringify([...alive].map((pid) => ({ pid, ppid: 1, name: "claude.exe", created: "2026-01-01T00:00:00Z" }))) } : c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : exec(c, a, o);
+      if ((c === "pwsh" || c === "powershell") && script.includes("Get-CimInstance")) return { code: 0, stdout: JSON.stringify([...alive].map((pid) => ({ pid, ppid: 1, name: "claude.exe", created: "2026-01-01T00:00:00Z" }))) };
+      if (c === "kill" && a[0] === "-0") return { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" };
+      return exec(c, a, o);
     },
     terminals: () => Object.keys(terms).map((address) => ({ address })),
     panes: () => Object.keys(terms).map((t, i) => ({ pane: `p${i}`, terminal: t, tab: "tb1" })),
