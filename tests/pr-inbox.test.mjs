@@ -251,7 +251,7 @@ test("Needs you groups another project apart from the focused one, and skips the
   const { cx, drain } = context();
   panel.refresh(cx); await drain();
   assert.equal(calls.some((call) => call.startsWith("gh search") || call.includes(" -R ")), false, "fresh cache skips the network");
-  assert.equal(panel.inboxOpen, true);
+  assert.equal(panel.inboxOpen, false, "an unseen review stays on this branch");
   assert.equal(panel.inboxTab, "needs");
   const { groupInbox } = await load("kanso-panel/pr-inbox.js", ["groupInbox"], {});
   const needs = groupInbox(panel.inbox.needs, panel.inbox);
@@ -305,7 +305,7 @@ test("a review search missed still shows from the project list, at most 20 repos
   assert.equal(listed.includes("acme/repo-21"), false);
   assert.equal(listed.includes("acme/repo-09"), true);
   assert.equal(panel.inbox.needs.some((item) => item.title === "From the repo" && item.draft), true);
-  assert.equal(panel.inboxOpen, true);
+  assert.equal(panel.inboxOpen, false, "the review stays behind the pill");
 });
 
 test("a rate limit keeps the cache and is not asked again until it resets", async (t) => {
@@ -314,13 +314,14 @@ test("a rate limit keeps the cache and is not asked again until it resets", asyn
   await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at) VALUES('https://github.com/amtelser/eres-admin-app/pull/149','github','github.com','amtelser','eres-admin-app',149,'Kept','OPEN',0,'ada','reviewer','2026-11-09T00:00:00Z',1);");
   const reset = Math.floor(Date.now() / 1000) + 3600;
   let searches = 0;
+  let views = 0;
   const { panel, ui } = await panelFor(t, {
     dir,
     git: gitAt({ "/work/eres-admin-app": "amtelser/eres-admin-app" }),
     gh: async (args) => {
       if (args[0] === "auth") return { code: 0, stdout: AUTH, stderr: "" };
       if (args[0] === "search") { searches += 1; return { code: 1, stdout: "", stderr: `HTTP 429\nX-RateLimit-Reset: ${reset}` }; }
-      if (args[1] === "view") return { code: 0, stdout: JSON.stringify(focused), stderr: "" };
+      if (args[1] === "view") { views += 1; return { code: 0, stdout: JSON.stringify(focused), stderr: "" }; }
       return { code: 0, stdout: "[]", stderr: "" };
     },
   });
@@ -330,22 +331,24 @@ test("a rate limit keeps the cache and is not asked again until it resets", asyn
   assert.equal(panel.inbox.needs[0].title, "Kept");
   assert.equal(panel.inbox.limitedUntil, reset * 1000);
   panel.inboxPage(tone);
-  assert.ok(ui.texts.some((text) => text.startsWith("GitHub is limiting requests until ")));
+  assert.ok(ui.texts.some((text) => /GitHub (is limiting requests|asks to wait) until \d{2}:\d{2}/.test(text)));
   const row = JSON.parse((await realExec("sqlite3", ["-json", file, "SELECT retry_at FROM pr_fetches WHERE key='inbox:github:github.com';"])).stdout);
   assert.equal(row[0].retry_at, reset * 1000);
+  const seen = views;
   panel.inboxForce = true;
   panel.loading = false;
   panel.refresh(cx); await drain();
   assert.equal(searches, 1, "manual refresh waits out the limit");
+  assert.equal(views, seen, "the panel's own poll waits too");
 });
 
-test("a seen review opens today's pull request; an unseen one opens Needs you", async (t) => {
+test("a seen review opens today's pull request; an unseen one stays on the branch", async (t) => {
   const { dir, db } = await database(t);
   await db.addProject({ name: "eres-admin-app", folder: "/work/eres-admin-app" });
   const seenAt = Date.now();
   await db.run(`INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at,seen_at) VALUES('https://github.com/amtelser/eres-admin-app/pull/3','github','github.com','amtelser','eres-admin-app',3,'Seen','OPEN',0,'ada','reviewer','2026-11-01T00:00:00Z',1,${seenAt});`);
   await db.run(`INSERT INTO pr_fetches(key,fetched_at) VALUES('inbox:github:github.com',${Date.now()});`);
-  const { panel } = await panelFor(t, {
+  const { panel, ui } = await panelFor(t, {
     dir,
     git: gitAt({ "/work/eres-admin-app": "amtelser/eres-admin-app" }),
     gh: async (args) => {
@@ -363,8 +366,12 @@ test("a seen review opens today's pull request; an unseen one opens Needs you", 
   panel.context = null;
   panel.loading = false;
   panel.refresh(cx); await drain();
-  assert.equal(panel.inboxOpen, true);
-  assert.equal(panel.inboxTab, "needs");
+  assert.equal(panel.inboxOpen, false);
+  assert.equal(panel.pr.number, 4, "the branch stays in front");
+  assert.equal(panel.reviewCount(), 1);
+  ui.texts.length = 0;
+  panel.header(tone, false);
+  assert.ok(ui.texts.includes("1 to review"));
 });
 
 test("a failed read does not mark the review seen", async (t) => {
@@ -384,7 +391,7 @@ test("a failed read does not mark the review seen", async (t) => {
   });
   const { cx, drain } = context();
   panel.refresh(cx); await drain();
-  assert.equal(panel.inboxOpen, true);
+  assert.equal(panel.inboxOpen, false);
   panel.openInboxItem(panel.inbox.needs[0], cx);
   await drain();
   const row = JSON.parse((await realExec("sqlite3", ["-json", file, "SELECT seen_at FROM pr_items;"])).stdout);
@@ -618,7 +625,8 @@ test("signing out brings back copy, open, and the repository list", async (t) =>
   });
   const { cx, drain } = context();
   panel.refresh(cx); await drain();
-  assert.equal(panel.inboxOpen, true);
+  assert.equal(panel.inboxOpen, false);
+  panel.inboxOpen = true;
   ui.ids.length = 0;
   panel.header(tone, false);
   assert.equal(ui.ids.includes("pr-reviews"), true);
@@ -626,6 +634,15 @@ test("signing out brings back copy, open, and the repository list", async (t) =>
   assert.equal(ui.ids.includes("pr-web"), false);
   assert.equal(ui.ids.includes("pr-switch"), false);
   signed = false;
+  panel.inboxOpen = false;
+  ui.ids.length = 0;
+  panel.loading = false;
+  panel.refresh(cx); await drain();
+  panel.header(tone, false);
+  assert.equal(panel.inboxOn, true, "signing out waits for the next account check");
+  assert.equal(ui.ids.includes("pr-reviews"), true);
+  const { AUTH_MS } = await load("kanso-panel/pr-poll.js", ["AUTH_MS"], {});
+  panel.auth.at = Date.now() - AUTH_MS - 1;
   ui.ids.length = 0;
   panel.loading = false;
   panel.refresh(cx); await drain();

@@ -36,7 +36,7 @@ for (const quiet of ["sleeping", "off"]) {
   });
 }
 
-for (const [working, budget] of [[2, 15], [0, 3]]) test(`sidebar at rest with 10 agents, ${working} working, in 4 projects starts at most ${budget} processes per minute`, async (t) => {
+for (const [working, budget] of [[2, 8], [0, 2]]) test(`sidebar at rest with 10 agents, ${working} working, in 4 projects starts at most ${budget} processes per minute`, async (t) => {
   const dir = await temporary(t), f = fixture({ dir, working });
   const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
   f.host.Kdb = Kdb;

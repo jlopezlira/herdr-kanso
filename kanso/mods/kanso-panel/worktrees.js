@@ -661,7 +661,7 @@ export class Worktrees {
       .bg(can ? (armed ? c.red : c.primary) : c.subtle)
       .when(can, (el) => el.cursor_pointer().hover((s) => s.opacity(0.85)))
       .on_click((_e, cx) => { if (can) this.armed.press("all", cx, (cx) => this.cleanUp(cx)); })
-      .child(div().text_size(12).font_medium().text_color(can ? (armed ? "#ffffff" : c.primaryText) : c.dim)
+      .child(div().text_size(12).font_medium().text_color(can ? c.primaryText : c.dim)
         .child(busy ? "Removing…" : armed ? `Press again to remove ${plan.length}` : `Clean up ${plan.length}`));
     const gist = !this.done ? "Clean up waits for the scan to finish."
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
@@ -880,8 +880,8 @@ export class Worktrees {
       .when(groups.length > REPOS, (el) => el.child(h_flex().child(quietLink("wt-repos", this.allRepos ? "Show fewer repositories" : `Show ${groups.length - REPOS} more repositories`,
         (cx) => { this.allRepos = !this.allRepos; cx.notify(); }, c))))
       .when(this.orphans.length > 0, (el) => el.child(this.group("orphans", "Left behind", "Folders of worktrees whose repository moved or was deleted", this.orphans, c)))
-      .child(div().text_size(10.5).text_color(c.dim)
-        .child(`Searches ${this.roots().roots.map(tilde).join(", ") || "your spaces"} and the temp folders, then asks each repository where its worktrees are.${this.scannedAt ? ` Scanned ${new Date(this.scannedAt).toTimeString().slice(0, 5)}.` : ""}`));
+      .when(Boolean(this.scannedAt), (el) => el.child(div().text_size(10.5).text_color(c.dim)
+        .child(`Scanned ${new Date(this.scannedAt).toTimeString().slice(0, 5)}.`)));
   }
 
   render(cx) {

@@ -19,12 +19,12 @@ export function guideSections(bindings, platform, home) {
       `Pin a pane to its side${strip("pin")} so it stays in view while you slide. New to h j k l? The hjkl dōjō is where to practice.`,
     ]],
     ["The sidebar", [
-      `Projects lists your spaces and their agents${hint(["kanso-spaces.view-spaces"])}, Status sorts them by what they need from you${hint(["kanso-spaces.view-agents"])}, Threads by conversation${hint(["kanso-spaces.view-threads"])}.`,
+      `Projects lists your projects and their agents${hint(["kanso-spaces.view-spaces"])}, Status sorts them by what they need from you${hint(["kanso-spaces.view-agents"])}, Threads by conversation${hint(["kanso-spaces.view-threads"])}.`,
       `Move left from the first pane${strip("vim-left")} to put the keyboard on the list: J and K move, gg and G go to the ends, Enter or L opens the row, / searches, Esc goes back.`,
-      `Go to the next agent that needs you, in any space${hint(["kanso-spaces.needs-you.next"])}.`,
+      `Go to the next agent that needs you, in any project${hint(["kanso-spaces.needs-you.next"])}.`,
     ]],
     ["Panels", [
-      `The icons at the top right open a panel beside the strip: Files, the PR, Ports, Memory, Spend and more. Open them by place${family("kanso-tabs.panel-")}.`,
+      `The icons at the top right open a panel beside the strip: Files, PR, Ports, Memory, Spend and more. Open them by place${family("kanso-tabs.panel-")}.`,
     ]],
     ["Sleep and Arrangements", [
       "Sleep puts a tab, or a whole project, away: its agents exit and keep their conversations; Wake brings them back on the same ones. Right-click a project, or the moon in a pane's header.",

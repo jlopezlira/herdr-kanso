@@ -20,6 +20,8 @@ const COMMON = [
   // Kanso's own updates: the footer shows the row, the tab bar (always on
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
+  // Order of a beta, a release candidate and a stable tag, shared with that updater.
+  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js"] },
   // A pull request's checks, read one way in the PR panel and the header's digest.
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
@@ -61,6 +63,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/doc.js", copies: ["markdown-panel/mods/markdown-panel/doc.js"] },
   // A file on another machine, copied here so a picture can be drawn. The markdown editor uses it too.
   { source: "kanso/mods/kanso-panel/remote-file.js", copies: ["markdown-panel/mods/markdown-panel/remote-file.js"] },
+  // One wake when a panel that was behind, or hidden, is in front again.
+  { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];

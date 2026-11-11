@@ -16,8 +16,9 @@ import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { readingLines } from "./doc.js";
 import { skeleton, breathe, quietLink, tokens } from "./ui.js";
+import { Front } from "./front.js";
 
-const PER_FOLDER = 500, TOTAL = 5000;
+const PER_FOLDER = 500, TOTAL = 5000, WATCHED_MS = 60_000;
 const RETURN = "kanso.files.return";
 const ranked = (entries, room) => entries.slice(0, Math.max(0, room)).toSorted((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
 const markOf = (xy) => xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
@@ -39,8 +40,16 @@ export class Files {
       if (back.context === key()) { this.context = back.context; ({ cwd: this.root, on: this.on } = location()); this.folders = new Set(back.folders ?? []); }
     }
     this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
-    this.refresh(cx);
-    cx.timer.every(10000, (cx) => { if (!this.on) this.refresh(cx); });
+    this.front = new Front();
+    if (this.front.behind()) this.front.rest();
+    else this.refresh(cx);
+    cx.timer.every(10000, (cx) => this.laterLocal(cx));
+  }
+
+  laterLocal(cx) {
+    if (this.on) return;
+    if (this.front.behind()) { this.front.rest(); return; }
+    if (this.front.woke() || !(this.watched && Date.now() - (this.listedAt ?? 0) < WATCHED_MS)) this.refresh(cx);
   }
 
   saveState() {
@@ -88,6 +97,7 @@ export class Files {
   }
 
   refresh(cx) {
+    this.front.woke();
     if (this.loading) { this.later(cx); return; }
     const { cwd, on } = location(), context = key();
     // No folder yet: keep the remembered tree until the place is known.
@@ -135,7 +145,7 @@ export class Files {
       : null;
     if (key() !== context) return;
     this.marks = status?.code === 0 ? marksFrom(top.stdout.trim(), status.stdout.split("\0")) : {};
-    this.rev = this.rev + 1; this.error = null; this.watch(cwd, cx);
+    this.rev = this.rev + 1; this.error = null; this.listedAt = Date.now(); this.watch(cwd, cx);
     if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
   }
 
@@ -279,7 +289,11 @@ export class Files {
   }
 
   render(cx) {
-    if (key() !== this.context) this.refresh(cx);
+    if (!this.on) this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
+    if (key() !== this.context) {
+      if (!this.on && this.front.behind()) this.front.rest();
+      else this.refresh(cx);
+    }
     if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     const t = theme();
     const items = this.file ? [] : this.rows();

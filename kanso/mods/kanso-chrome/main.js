@@ -12,6 +12,7 @@ import { Updater } from "./update.js";
 import { tryOrAsync } from "./pure.js";
 
 const basename = (path) => paths.basename(path);
+const SAMPLE_MS = 120_000;
 const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
 
@@ -40,9 +41,9 @@ export default class WorkspaceChrome extends View {
         else if (c === "restart") this.restart();
       }
     });
-    cx.timer.every(60000, (cx) => this.watch(cx));
+    cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
     this.power(cx);
-    cx.timer.every(30000, (cx) => this.power(cx));
+    cx.timer.every(SAMPLE_MS, (cx) => this.power(cx));
   }
 
   // Written only when it changes: every mod draws again on a shared write.
@@ -115,7 +116,7 @@ export default class WorkspaceChrome extends View {
           .when(ready && !collapsed, el => el.child(dot()))
           .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
         // A server, not a second "+": the rail already has one for New space.
-        .when(!hidden().has("footer.machine"), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add machine", () => run("mod.open", { name: "machine-add" }))))
+        .when(!hidden().has("footer.machine"), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add computer", () => run("mod.open", { name: "machine-add" }))))
         .child(div().h(8).flex_none())
         .child(chip);
     }

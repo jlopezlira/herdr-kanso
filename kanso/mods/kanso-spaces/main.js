@@ -25,7 +25,7 @@ import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
 import { tryOrAsync } from "./pure.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { readSync, saveSync } from "./sync-row.js";
@@ -151,7 +151,7 @@ export default class Spaces extends View {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
     if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
-      this.confirmClose = false; this.menuAt = -1; this.handle = cx.focus_handle();
+      this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
       if (props()?.newConversation || props()?.railMenu) this.convScroll = VirtualListScrollHandle.new();
       this.openPopup(cx); return;
@@ -248,7 +248,7 @@ export default class Spaces extends View {
     cx.timer.every(500, (cx) => this.checkNew(cx));
     cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // A sleep or wake that stopped half way shows again once old; another window's changes arrive.
-    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); cx.notify(); });
+    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); });
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -1136,9 +1136,15 @@ export default class Spaces extends View {
       this.ready[m.name] = ready;
       return ready && was === false ? [...keys].filter((k) => onOf.get(k) === m.name) : [];
     });
-    const stale = active ? [...keys].filter((k) => {
+    const railOpen = shared("sidebar.collapsed") !== true;
+    const opened = railOpen && this.railWasClosed === true;
+    this.railWasClosed = !railOpen;
+    const forward = Boolean(active) && this.gitBehind === true;
+    this.gitBehind = !active;
+    // Collapsed or behind: no fallback read. Opening the rail, or coming forward, reads at once.
+    const stale = active && railOpen ? [...keys].filter((k) => {
       const asks = this.git[k] || this.unsure.has(k);
-      return asks && !this.folded.has(onOf.get(k)) && now - (this.checked[k] ?? 0) > FALLBACK;
+      return asks && !this.folded.has(onOf.get(k)) && (opened || forward || now - (this.checked[k] ?? 0) > FALLBACK);
     }) : [];
     return new Set(pollKeys([...fresh, ...moved, ...ended, ...back, ...stale], this.offNames()));
   }
@@ -1672,9 +1678,9 @@ export default class Spaces extends View {
           .finally(() => this.thenClose(null));
       }, { icon: "file", keep: true })))
       // Any project you see can go: one you added (its row too), or an open space you never kept.
-      .when(Boolean(project) || Boolean(w), (el) => el.child(this.confirmClose
-        ? item("remove-project", w ? `Click again: remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "Click again to remove it", () => this.removeProject(project, w), { icon: "close", ink: t.blocked, keep: true })
-        : item("remove-project", "Remove project", () => { this.confirmClose = true; }, { icon: "close", ink: t.muted, keep: true })));
+      .when(Boolean(project) || Boolean(w), (el) => el.child(item("remove-project", this.armed.is("remove")
+        ? (w ? `Press again: remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "Press again to remove it")
+        : "Remove project", (cx) => { this.armed.press("remove", cx, () => this.removeProject(project, w)); }, { icon: "close", ink: this.armed.is("remove") ? t.blocked : t.muted, keep: true })));
   }
 
   // Every + ends here: which agent of the ones installed (or a shell), none chosen for you; the one used last
@@ -1910,9 +1916,13 @@ export default class Spaces extends View {
     if (!list.length) { this.readingThreads = false; return; }
     this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {
-      try { this.threads = await findThreads(list, this.threads ?? {}, terminals(), this.threadLocator); } catch { this.threads ??= {}; }
+      try {
+        const before = this.threads ?? {};
+        const next = await findThreads(list, before, terminals(), this.threadLocator);
+        this.threads = next;
+        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) cx.notify();
+      } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }
-      cx.notify();
     });
   }
 
@@ -2013,7 +2023,7 @@ export default class Spaces extends View {
       copy: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t),
       power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", tip[phase] ?? "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
       retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t),
-      plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t),
+      plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New project", () => run("space.new", { machine: m ?? "" }), t),
       sync: () => this.syncButton(m, t),
     };
     return machineVisible(phase, hot, Boolean(m), peerOn(this.sync.config, m)).map((name) => button[name]()).filter(Boolean);
@@ -2091,7 +2101,7 @@ export default class Spaces extends View {
     const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(R.control)
       .text_size(12).text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_click(() => run("space.new", { machine: m ?? "" }))
-      .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
+      .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New project");
     const asleep = this.closedOn(m, ctx).length > 0;
     return [headItem, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
   }
@@ -2601,7 +2611,7 @@ export default class Spaces extends View {
       .child(item("pin", pinned ? "Unpin" : "Pin to the top", () => this.pinThread({ address: m.address, pin: pinned ? 1 : null }), { icon: "pin" }))
       .when(settled, (el) => el.child(item("unsettle", "Bring back", () => label(m.address, SETTLED_LABEL), { icon: "undo" })))
       .when(!settled && free, (el) => el.child(item("settle", "Settle", () => label(m.address, SETTLED_LABEL, `${now}:${k?.turn ?? 0}`), { icon: "check" })))
-      .when(snoozed, (el) => el.child(item("wake", "Wake now", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })))
+      .when(snoozed, (el) => el.child(item("wake", "Wake", () => label(m.address, SNOOZE_LABEL), { icon: "clock" })))
       .when(!snoozed, (el) => el.child(div().h(26).pl(32).flex().items_center().text_size(11.5).text_color(t.dim).child("Snooze"))
         .children(snoozePresets(now).map((x) => item(`snooze-${x.id}`, x.label, () => label(m.address, SNOOZE_LABEL, x.until), { hint: x.when }))))
       .when(Boolean(p?.tab) && Boolean(sp) && Boolean(a), (el) => el.child(item("sleep-agent", "Sleep this agent", () => sleepAgent(sp.id, p.tab, p.pane), { icon: "moon" })))
@@ -2619,9 +2629,9 @@ export default class Spaces extends View {
       .when(Boolean(p?.branch), (el) => el.child(item("copy-branch", "Copy branch", copy(p.branch), { icon: "branch" })))
       .when(Boolean(session), (el) => el.child(item("copy-id", "Copy conversation id", copy(session), { icon: "copy" })))
       .child(rule())
-      .child(this.confirmClose
-        ? item("close", "Click again to close it", () => run("terminal.kill", { terminal: m.address }), { icon: "close", ink: t.blocked })
-        : item("close", a ? "Close agent" : "Close terminal", (cx) => { this.confirmClose = true; }, { icon: "close", ink: t.blocked, keep: true }));
+      .child(item("close", this.armed.is("close") ? "Press again to close it" : (a ? "Close agent" : "Close terminal"), (cx) => {
+        this.armed.press("close", cx, () => run("terminal.kill", { terminal: m.address }));
+      }, { icon: "close", ink: t.blocked, keep: !this.armed.is("close") }));
   }
 
   zzMenuView(t, m) {

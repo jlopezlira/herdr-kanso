@@ -13,6 +13,9 @@ export const VERSION = 1;
 export const STALE_MS = 10 * 60_000; // a wake's hold not renewed this long stopped half way
 export const ABANDON_MS = 3 * 60_000; // a sleep's: it renews its hold before each agent leaves, and one leaves in under a minute
 export const GONE_MS = 60_000; // an agent not seen this long, and not asleep, is gone
+export const SPACE_KEEP_MS = 7 * 86400_000; // a project gone this long is forgotten, the same keep as since-left
+export const forgetAgentsSql = () => "DELETE FROM agents WHERE status='gone' AND project_at IS NULL AND sleep_id IS NULL;";
+export const forgetSpacesSql = (now) => `DELETE FROM spaces WHERE gone IS NOT NULL AND gone < ${n(now - SPACE_KEEP_MS)};`;
 export const LEASE_MS = 20_000; // a sleep's owner (sleepwork.js) not heard from this long is gone: another window takes the row
 export const CALL_MS = 15_000; // one remote statement; past this the machine did not answer
 export const REST_MS = 60_000; // a remote database, while this window is in front and nothing was ordered
@@ -302,7 +305,7 @@ export class Kdb {
   syncSpaces(spaces, now = Date.now()) {
     const rows = spaces.map((w) => `INSERT INTO spaces(id,name,folder,machine,seen,gone) VALUES(${q(w.id)},${q(w.name)},${q(w.folder)},${q(w.machine)},${n(now)},NULL)
       ON CONFLICT(id) DO UPDATE SET name=excluded.name,folder=excluded.folder,machine=excluded.machine,seen=excluded.seen,gone=NULL;`);
-    return this.run(`BEGIN;${rows.join("")}UPDATE spaces SET gone=${n(now)} WHERE gone IS NULL AND ${notIn("id", spaces.map((w) => w.id))};COMMIT;`);
+    return this.run(`BEGIN;${rows.join("")}UPDATE spaces SET gone=${n(now)} WHERE gone IS NULL AND ${notIn("id", spaces.map((w) => w.id))};${forgetSpacesSql(now)}COMMIT;`);
   }
   adoptSpaces(found) {
     const rows = found.map(({ sleep, space }) => `UPDATE sleeps SET space_id=${q(space)} WHERE id=${q(sleep)} AND space_id IS NULL;
@@ -332,7 +335,7 @@ export class Kdb {
         restore=CASE WHEN excluded.name IS NOT NULL THEN NULL ELSE restore END,title=COALESCE(excluded.title,title),said=COALESCE(excluded.said,said),program=COALESCE(excluded.program,program),
         cwd=excluded.cwd,space_id=excluded.space_id,tab_id=excluded.tab_id,pos=excluded.pos,terminal=excluded.terminal,status=excluded.status,since=excluded.since,seen=excluded.seen
       WHERE sleep_id IS NULL AND excluded.seen >= seen;`);
-    return this.run(`BEGIN;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE sleep_id IS NULL AND status!='gone' AND seen < ${n(now - GONE_MS)};COMMIT;`);
+    return this.run(`BEGIN;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE sleep_id IS NULL AND status!='gone' AND seen < ${n(now - GONE_MS)};${forgetAgentsSql()}COMMIT;`);
   }
   // A name the wake could not put back on the new terminal yet; observe clears it once it is there.
   toRestore(conversation, name) { return this.run(`UPDATE agents SET restore=${q(name)} WHERE id=${q(conversation)};`); }

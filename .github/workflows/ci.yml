@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   platform:
@@ -20,6 +20,8 @@ jobs:
         with:
           node-version: 22
       - name: Versioning (version.json, CHANGELOG.md, semantic bumps)
+        env:
+          KANSO_BRANCH: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
         run: npm run check:version
       - name: Shared files
         run: npm run sync:share -- --check

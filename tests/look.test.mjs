@@ -325,11 +325,13 @@ test("A, B, then A again while A still draws: A's draws run in turn and the show
   look.select(a, cx, true); await settle();
   assert.equal(held.length, 2, "the second A waits for the first");
   assert.equal(cleared().length, 1);
-  held[0](); await settle(); await settle();
+  held[0]();
+  for (let turn = 0; turn < 40 && held.length < 3; turn += 1) await settle();
   assert.equal(look.shown.busy, true, "the first A's copy, about to be replaced, never shows");
   assert.equal(held.length, 3, "the second A starts once the first is done");
   assert.ok(cleared()[1] > copied()[0], "its cleanup runs after the first copy, never during it");
-  held[2](); await settle(); await settle();
+  held[2]();
+  for (let turn = 0; turn < 40 && !look.shown?.image; turn += 1) await settle();
   const shown = look.shown.image;
   assert.equal(`/app/${shown}`, calls[copied()[1]][3], "the second A's copy shows");
   held[1]();
@@ -351,7 +353,7 @@ test("Only the latest drawing of a picture lands, and one file is never drawn tw
   look.select(b, cx, true);
   await new Promise((r) => setImmediate(r));
   held[1]();
-  await new Promise((r) => setImmediate(r));
+  for (let turn = 0; turn < 20 && !look.shown?.image; turn += 1) await settle();
   assert.match(look.shown.image, /\.png$/);
   const bShown = look.shown.image;
   held[0]();
