@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { ROOT, STANDALONE, differences } from "../scripts/sync-mods.mjs";
@@ -12,13 +12,22 @@ const RECIPE_LIMIT = 64 * 1024;
 // version of what they do): their shared files are checked below.
 const OWN = ["markdown-panel"];
 const FOLDERS = ["kanso", ...STANDALONE, ...OWN];
+const RECIPES = [
+  ...FOLDERS.map((folder) => `${folder}/RECIPE.md`),
+  ...readdirSync(join(ROOT, "kanso")).filter((file) => /^RECIPE-.+\.md$/.test(file)).map((file) => `kanso/${file}`),
+];
 
-for (const folder of FOLDERS) {
-  test(`${folder}/RECIPE.md fits the gallery's 64 KB`, () => {
-    const bytes = statSync(join(ROOT, folder, "RECIPE.md")).size;
-    assert.ok(bytes <= RECIPE_LIMIT, `${folder}/RECIPE.md is ${bytes} bytes; move a part into its own file`);
+for (const file of RECIPES) {
+  test(`${file} fits the gallery's 64 KB`, () => {
+    const bytes = statSync(join(ROOT, file)).size;
+    assert.ok(bytes <= RECIPE_LIMIT, `${file} is ${bytes} bytes; move a part into its own file`);
   });
 }
+
+test("kanso/RECIPE.md leaves room below 60,000 bytes", () => {
+  const bytes = statSync(join(ROOT, "kanso/RECIPE.md")).size;
+  assert.ok(bytes < 60_000, `kanso/RECIPE.md is ${bytes} bytes; move a part into its own file`);
+});
 
 for (const { source, copies } of SHARED) {
   for (const copy of copies) {
