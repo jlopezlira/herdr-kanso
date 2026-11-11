@@ -172,8 +172,8 @@ export function recordPrFacts(db, items, now = Date.now()) {
   });
 }
 
-async function storeInbox(db, { provider, host, items, before, skipped = [], rate, error, searchOk = false, now }) {
-  await seedPrFacts(db, before.filter((cached) => items.some((item) => item.url === cached.url)), now);
+async function storeInbox(db, { provider, host, items, before, skipped = [], rate, error, searchOk = false, facts = true, now }) {
+  if (facts) await seedPrFacts(db, before.filter((cached) => items.some((item) => item.url === cached.url)), now);
   const key = `inbox:${provider}:${host}`;
   const upserts = items.map((item) => itemSql(item, now)).join("");
   const urls = items.map((item) => item.url);
@@ -187,10 +187,10 @@ async function storeInbox(db, { provider, host, items, before, skipped = [], rat
       ? `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(key)},${num(now)},NULL,${q(error)}) ON CONFLICT(key) DO UPDATE SET fetched_at=excluded.fetched_at,retry_at=NULL,error=excluded.error;`
       : `INSERT INTO pr_fetches(key,fetched_at,retry_at,error) VALUES(${q(key)},NULL,NULL,${q(error)}) ON CONFLICT(key) DO UPDATE SET error=excluded.error;`;
   await db.run(`BEGIN;${upserts}${drop}${fetch}COMMIT;`);
-  await recordPrFacts(db, items, now);
+  if (facts) await recordPrFacts(db, items, now);
 }
 
-export async function refreshInbox({ db, run, provider, session, force = false, shown = true, now = Date.now(), onCache } = {}) {
+export async function refreshInbox({ db, run, provider, session, force = false, shown = true, facts = true, now = Date.now(), onCache } = {}) {
   const readHost = (hostRow) => readInbox(db, { provider: provider.id, host: hostRow.host, login: hostRow.login });
   if (!shown) {
     const parts = await session.hosts.reduce(async (prev, hostRow) => [...await prev, await readHost(hostRow)], Promise.resolve([]));
@@ -214,7 +214,7 @@ export async function refreshInbox({ db, run, provider, session, force = false, 
     const queried = new Set((result.queried ?? []).map((repo) => `${repo.owner}\n${repo.name}`.toLowerCase()));
     const skipped = repos.filter((repo) => !queried.has(`${repo.owner}\n${repo.name}`.toLowerCase()));
     try {
-      await storeInbox(db, { provider: provider.id, host: part.hostRow.host, items: result.items ?? [], before: part.before.items, skipped, rate: result.rate, error: result.error, searchOk: Boolean(result.searchOk), now });
+      await storeInbox(db, { provider: provider.id, host: part.hostRow.host, items: result.items ?? [], before: part.before.items, skipped, rate: result.rate, error: result.error, searchOk: Boolean(result.searchOk), facts, now });
     } catch (e) {
       return [...soFar, { ...part.before, writeError: String(e?.message ?? e).split("\n")[0] }];
     }

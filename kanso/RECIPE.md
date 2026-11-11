@@ -182,11 +182,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 ## How it behaves
 
 - **Since you left**: after 5 minutes away, a "While you were away" head under
-  the project lists up to three rows: a mark, the Kanso name, and the age.
-  The agent in front is left out; one row per agent. +N expands inline;
-  Enter or a click jumps and dismisses. Dismissal persists in kanso.db.
-  Events expire after 7 days, capped at 500. Nothing, loading or a failed
-  read: nothing. No extra fetches.
+  the project lists up to three rows: mark, name, outcome (Finished, Needs you,
+  Failed, Went to sleep, Could not sleep, a PR's state) and age; under it, dim,
+  the agent's line when it happened (`did`, kept with the event). The agent in
+  front is left out; one row per agent. +N expands inline. Enter or a click
+  goes to the agent's pane, a sleeper's Wake menu or the PR, and dismisses; a
+  gone agent's row is dim and inert. Dismissal persists in kanso.db. Events
+  expire after 7 days, capped at 500. Piece `sidebar.away`: off, no event is
+  written or read. Nothing, loading or a failed read: nothing.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;

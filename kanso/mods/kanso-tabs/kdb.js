@@ -29,7 +29,7 @@ export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[
 // Columns added after a table's first release: [table, name, type].
 const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["agents", "step", "TEXT"], ["agents", "step_at", "INTEGER"],
   ["agents", "sent_at", "INTEGER"], ["agents", "nudged_at", "INTEGER"], ["agents", "why", "TEXT"], ["sleeps", "state", "TEXT"], ["sleeps", "why", "TEXT"],
-  ["picture_scans", "mark", "TEXT"]];
+  ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"]];
 // A sleep the sidebar works on: sleeping or undoing (held by its owner), stuck (waiting on you). NULL or asleep: done.
 const DONE = "(state IS NULL OR state='asleep')";
 
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS pr_items(url TEXT PRIMARY KEY, provider TEXT NOT NULL
 CREATE INDEX IF NOT EXISTS pr_items_repo ON pr_items(provider, host, owner, name);
 CREATE TABLE IF NOT EXISTS pr_fetches(key TEXT PRIMARY KEY, fetched_at INTEGER, retry_at INTEGER, error TEXT);
 CREATE TABLE IF NOT EXISTS since_focus(project TEXT PRIMARY KEY, focused_at INTEGER NOT NULL, pending_json TEXT, dismissed_to INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS since_events(id INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL, target TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS since_events(id INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL, target TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL, did TEXT);
 CREATE INDEX IF NOT EXISTS since_events_project ON since_events(project, id);
 CREATE TABLE IF NOT EXISTS since_observed(source TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
@@ -153,7 +153,7 @@ export class Kdb {
     await localService(fileApi).mkdir(this.dir);
     await this.sql([...statements(SCHEMA), ONE_SLEEP]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
-    const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name), picture_scans: (await this.sql("PRAGMA table_info(picture_scans);")).map((c) => c.name) };
+    const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));
     const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
     if (missing.length) await this.sql(missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`).join(""));
   }
@@ -433,7 +433,7 @@ export class Kdb {
   }
   sinceSleep(id, fact, guard, now) {
     if (!fact) return "";
-    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,${q(fact.target)},${q(fact.kind)},name,${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
+    return `INSERT INTO since_events(project,target,kind,text,did,at) SELECT project,${q(fact.target)},${q(fact.kind)},name,${q(fact.did)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
   }
   // An undo's agent that is back (or never left) is awake.
   freeAgent(id, me, conversation) {

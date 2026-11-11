@@ -29,7 +29,7 @@ export async function load(file, names, host = {}, root = mods) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host });
+  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host });
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
@@ -82,4 +82,22 @@ export function singleUse() {
   };
   const factory = { new: () => make() };
   return { div: make, svg: make, v_flex: make, h_flex: make, Button: factory, Toggle: factory, Input: factory, Textarea: factory };
+}
+
+// A UI host that keeps the text drawn and each clickable id's handler.
+export function tape() {
+  const texts = [], handlers = new Map();
+  const node = (initial = null) => {
+    let id = initial;
+    const el = new Proxy({}, { get(_target, key) {
+      if (key === "then") return undefined;
+      if (key === "id") return (value) => { id = value; return el; };
+      if (key === "child") return (value) => { if (typeof value === "string") texts.push(value); return el; };
+      if (key === "when") return (on, apply) => on ? apply(el) : el;
+      if (key === "on_click") return (fn) => { handlers.set(id, fn); return el; };
+      return () => el;
+    } });
+    return el;
+  };
+  return { texts, handlers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
 }

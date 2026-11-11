@@ -18,8 +18,15 @@ export class SinceLeft {
     this.project = null;
     this.rows = [];
     this.expanded = false;
-    this.visible = 0;
+    this.heights = [];
     this.headed = false;
+  }
+
+  leave() {
+    this.project = null;
+    this.rows = [];
+    this.expanded = false;
+    this.showing = false;
   }
 
   async update({ project, target, seenTarget, snapshots, now }, cx) {
@@ -36,10 +43,7 @@ export class SinceLeft {
       }
       if (project !== this.project) {
         if (this.project) await this.touch(this.project, now);
-        this.rows = [];
-        this.expanded = false;
-        this.showing = false;
-        this.project = null;
+        this.leave();
         if (project) {
           this.rows = await this.store.enter(project, now);
           this.project = project;
@@ -77,38 +81,41 @@ export class SinceLeft {
   lineCount() { return present(this.rows, this.viewOf()).rows.length; }
 
   blockHeight() {
-    const n = this.visible;
-    if (!n) return 0;
-    const row = agentRowH({}, {});
-    const items = n + (this.headed ? 1 : 0);
-    return items * row + (items - 1) * ROW_GAP;
+    if (!this.heights.length) return 0;
+    const items = [...this.heights, ...(this.headed ? [agentRowH({}, {})] : [])];
+    return items.reduce((sum, h) => sum + h, 0) + (items.length - 1) * ROW_GAP;
   }
 
   dismissControl(t) {
     return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, tokens(t));
   }
 
-  render(t, project, nav, jump, head = null) {
+  line(t, row, nav, reach) {
+    const id = `since-${row.id ?? "more"}`;
+    const to = row.more ? null : reach(row);
+    const go = row.more ? (cx) => { this.expanded = true; cx.notify(); } : to && ((cx) => { to(); this.dismiss(cx).catch(() => {}); });
+    const selected = go ? nav(id, go) : false;
+    const top = h_flex().gap(G.sm).min_w(0).items_center()
+      .child(div().min_w(0).truncate().text_size(row.more ? T.body : T.card).text_color(row.more || !go ? t.dim : t.foreground)
+        .when(!row.more, (el) => el.font_medium()).child(row.more ? `+${row.more}` : row.name))
+      .when(Boolean(row.outcome), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.muted).child(row.outcome)))
+      .child(div().flex_1())
+      .when(Boolean(row.age), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
+    return h_flex().id(id).h(agentRowH({}, { activity: row.did })).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
+      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(t.foreground + "0c")).on_click((_e, cx) => go(cx)))
+      .when(selected, (el) => el.border_1().border_color(t.accent))
+      .when(!row.more, (el) => el.child(lead(t, row.mark)))
+      .child(v_flex().flex_1().min_w(0).justify_center().child(top)
+        .when(Boolean(row.did), (el) => el.child(div().min_w(0).truncate().text_size(T.body).text_color(t.dim).child(row.did))));
+  }
+
+  render(t, project, nav, reach, head = null) {
     const shown = present(this.rows, this.viewOf());
     this.showing = project === this.project && shown.count > 0;
-    this.visible = this.showing ? shown.rows.length : 0;
+    this.heights = this.showing ? shown.rows.map((row) => agentRowH({}, { activity: row.did })) : [];
     this.headed = Boolean(head) && this.showing;
     if (!this.showing) return div();
-    const line = (row) => {
-      const go = row.more ? (cx) => { this.expanded = true; cx.notify(); }
-        : (cx) => { if (jump(row) !== false) this.dismiss(cx).catch(() => {}); };
-      const selected = nav(`since-${row.id ?? "more"}`, go);
-      return h_flex().id(`since-${row.id ?? "more"}`).h(agentRowH({}, {})).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card).cursor_pointer()
-        .hover((s) => s.bg(t.foreground + "0c"))
-        .when(selected, (el) => el.border_1().border_color(t.accent))
-        .on_click((_e, cx) => go(cx))
-        .when(!row.more, (el) => el.child(lead(t, row.mark)))
-        .child(div().flex_1().min_w(0).truncate().text_size(row.more ? T.body : T.card).text_color(row.more ? t.dim : t.foreground)
-          .when(!row.more, (el) => el.font_medium())
-          .child(row.more ? `+${row.more}` : row.name))
-        .when(Boolean(row.age) && !row.more, (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
-    };
-    const body = shown.rows.map(line);
+    const body = shown.rows.map((row) => this.line(t, row, nav, reach));
     return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(t)), ...body] : body);
   }
 }

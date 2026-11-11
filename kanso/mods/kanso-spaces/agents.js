@@ -6,6 +6,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
 import { parseProcesses, etimeMs } from "./procs.js";
+import { oneLine } from "./since-left-model.js";
 
 export { NAME_LABEL };
 
@@ -152,10 +153,7 @@ export function digestLine(d) {
 }
 
 // `msg` is OSC 7501: Claude Code sends the step it is on while it works, its last words when it finishes.
-export function said(a) {
-  const line = String(a.msg ?? "").split(/\r?\n/).find((l) => l.trim()) ?? "";
-  return line.replace(/\s+/g, " ").trim() || null;
-}
+export const said = (a) => oneLine(a.msg);
 
 export function activityOf(a, digest) {
   const msg = said(a);
