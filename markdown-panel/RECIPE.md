@@ -61,17 +61,18 @@ files next to it are one build of it.
   (skipping `node_modules`), at most 40, shallowest first. A click opens one.
 - A pane on another machine (an SSH machine in `hc machine ls`): the list
   and the file come from that machine (`exec` and `readTextFile` with `on`,
-  the space's `machine`), its folder shown as `machine: folder`. The file is
-  read only there and read again every 3 seconds (`watchFolder` watches only
-  this computer).
+  the space's `machine`), its folder shown as `machine: folder`. The file
+  can be edited there. It does not save while you type; leaving it writes it.
+  It is read again every 3 seconds (`watchFolder` watches only this computer).
 - **Editing**: a double-click on a block opens it; a double-click below the
   last block adds a paragraph there. Escape, or a double-click on another
   block, closes it, and the document is split into blocks again (an empty
   line you typed makes two paragraphs). A single click does nothing, so text
   reads and selects as text.
-- **Saving**: 700 ms after the last change, `writeTextFile(path, text,
-  expected)` with the text as last read or written. Cmd+S saves at once.
-  Before showing another file or closing, it saves first.
+- **Saving**: on this computer, 700 ms after the last change,
+  `writeTextFile(path, text, expected)` with the text as last read or written.
+  On another computer it does not save while you type. Before showing another
+  file or closing, it saves first.
 - **Conflicts**: a save the file refuses, or a change read from disk while
   yours is unsaved, shows the conflict bar. "Keep mine" writes yours over
   it; "Take the file's" drops yours. Nothing is written until you choose.
@@ -158,7 +159,7 @@ and made the default with `LSSetDefaultRoleHandlerForContentType` (through
 ## Watch out
 
 - It writes only the file you edit, and only after a change you made.
-- A file on another machine is read only (`writeTextFile` has no `on`).
+- A file on another machine does not save while you type. Leaving it writes it.
 - Blocks are drawn one by one, so a reference-style link whose definition is
   in another block shows as text.
 - `TextView` takes the mouse inside a block, so editing is a double-click on
@@ -171,7 +172,7 @@ and made the default with `LSSetDefaultRoleHandlerForContentType` (through
 - `herdr-app check mods/markdown-panel` reports nothing.
 - Cmd+Shift+M lists the folder's Markdown; a click shows one formatted.
 - In a pane on an SSH machine, Cmd+Shift+M lists that machine's Markdown
-  and a click shows it, read only.
+  and a click shows it, ready to edit.
 - A double-click on a paragraph shows only that paragraph's text; typing
   saves within a second ("Saved"); Escape shows it formatted again.
 - A double-click on a table shows the grid; "Add row" adds one to the file.

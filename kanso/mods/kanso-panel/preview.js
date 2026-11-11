@@ -1,14 +1,15 @@
 import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
 import { readTextFile, watchFolder, theme, openOverlay, window, layout, appHome, nextCommand } from "herdr";
+import { commandLoop } from "./sidebar.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
 import { codeState, isMarkdown, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
-import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo } from "./doc.js";
-import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs } from "./edit.js";
+import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo, readWhole } from "./doc.js";
+import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs, tooLarge } from "./edit.js";
 import { skeleton, quietLink, tokens, Armed } from "./ui.js";
 import { tryOrAsync, extOf } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
@@ -22,6 +23,37 @@ const PREVIEW_DIR = "data/kanso-panel/preview";
 const BACK = { files: "Back to Files", look: "Back to Look" };
 export const previewKind = (path) => isMarkdown(path) ? "markdown" : kindOf(path) === "image" ? "picture" : "text";
 
+class PreviewKeys {
+  constructor() { this.view = null; this.cx = null; this.live = false; }
+
+  bind(view, cx) {
+    this.view = view;
+    this.cx = cx;
+    if (this.live) return;
+    this.live = true;
+    cx.spawn((commandCx) => commandLoop(
+      () => nextCommand(),
+      () => {
+        if (!this.view || typeof nextCommand !== "function") throw new Error("gone");
+        this.cx.notify();
+      },
+      (command) => {
+        if (this.view && String(command).replace(/^kanso-panel\./, "") === "save") this.view.save(this.cx);
+      },
+      commandCx.timer,
+    ).finally(() => {
+      this.live = false;
+      if (this.view && this.cx && typeof nextCommand === "function") this.bind(this.view, this.cx);
+    }));
+  }
+
+  unbind(view) {
+    if (this.view === view) { this.view = null; this.cx = null; }
+  }
+}
+
+const previewKeys = new PreviewKeys();
+
 export class Preview {
   init(cx, p) {
     const kept = this.kept;
@@ -31,22 +63,8 @@ export class Preview {
     this.handle = cx.focus_handle();
     this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
     this.ask = new Armed(); this.edit = null;
-    this.commands(cx);
+    previewKeys.bind(this, cx);
     this.open(p.path || kept?.path || "", cx);
-  }
-
-  commands(cx) {
-    cx.spawn(async (commandCx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => {
-          const command = await nextCommand();
-          commandCx.notify();
-          return { command };
-        });
-        if (!next) break;
-        if (String(next.command).replace(/^kanso-panel\./, "") === "save") this.save(commandCx);
-      }
-    });
   }
 
   saveState() {
@@ -112,18 +130,23 @@ export class Preview {
     this.saveCode(cx);
   }
 
-  saveCode(cx) {
+  armCode() {
     const saving = beginSave(this.edit);
-    if (!saving) return;
+    if (!saving) return null;
     this.edit = saving;
+    return saving;
+  }
+
+  saveCode(cx) {
+    const saving = this.armCode();
+    if (!saving) return;
     cx.notify();
     cx.spawn(async (cx) => { await this.finishCode(saving); cx.notify(); });
   }
 
   async flushCode() {
-    const saving = beginSave(this.edit);
+    const saving = this.armCode();
     if (!saving) return;
-    this.edit = saving;
     await this.finishCode(saving);
   }
 
@@ -158,7 +181,7 @@ export class Preview {
 
   takeCode(cx) {
     this.edit = takeTheirs(this.edit);
-    this.code?.set_value?.(this.edit.text);
+    if (this.code) this.code.set_value(this.edit.text ?? "");
     remember(drafts, draftKey(this.path, this.on), this.edit);
     cx.notify();
   }
@@ -169,11 +192,18 @@ export class Preview {
     const path = this.path, on = this.on;
     cx.spawn(async (cx) => {
       try {
-        const text = on ? await (await serviceOn(fileApi, on)).read(path) : await readTextFile(path);
+        const got = await readWhole(path, on);
         if (this.path !== path) return;
+        if (got.big) {
+          if (this.code) this.code.release();
+          this.code = null; this.edit = tooLarge(); this.error = null; this.held = null;
+          return;
+        }
+        const text = got.text;
         if (text === null || text === undefined) this.keepUnreadable(path, on, "This file is no longer available");
         else if (String(text).includes("\0")) {
-          this.code?.release(); this.code = null; this.edit = null;
+          if (this.code) this.code.release();
+          this.code = null; this.edit = null;
           this.miss(on, "Binary file: no text preview");
         } else { this.error = null; this.held = null; this.fresh = Date.now(); this.placeText(path, text); }
       } catch (e) {
@@ -208,9 +238,9 @@ export class Preview {
   }
 
   showCode(path, state) {
-    const shown = this.code?.value?.();
+    const shown = this.code ? this.code.value() : null;
     if (!state.big && shown === state.text) return;
-    this.code?.release();
+    if (this.code) this.code.release();
     this.code = codeState(path, state.text ?? "", {
       readonly: Boolean(state.big), limit: EDIT_LIMIT,
       onChange: state.big ? null : (value, cx) => {
@@ -301,7 +331,7 @@ export class Preview {
   }
 
   goBack(cx) {
-    this.leave(cx, () => showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }));
+    this.leave(cx, () => { previewKeys.unbind(this); showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }); });
   }
 
   bones(c) {
@@ -322,10 +352,7 @@ export class Preview {
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { action(cx); })
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14));
     return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
-      .on_key_down((e, cx) => {
-        if ((e.modifiers?.platform || e.modifiers?.control) && e.key === "s") { this.save(cx); cx.stop_propagation(); return; }
-        this.doc?.key(e, cx);
-      })
+      .on_key_down((e, cx) => { this.doc?.key(e, cx); })
       .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx))))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
@@ -337,8 +364,9 @@ export class Preview {
         .child(button("preview-open-with", "open-with", "Open with…", () => this.openWith()))
         .when(armed, (el) => el.child(quietLink("preview-discard", "Press again to discard", (cx) => this.reread(cx), c)))
         .when(!armed, (el) => el.child(button("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.reread(cx))))
-        .child(button("preview-close", "close", "Close", (cx) => this.leave(cx, () => showPanel(null)))))
+        .child(button("preview-close", "close", "Close", (cx) => this.leave(cx, () => { previewKeys.unbind(this); showPanel(null); }))))
       .child(this.doc ? this.doc.body(t, "preview-md")
+        : this.edit?.big ? div().p(12).text_color(t.dim).child("Too large to edit")
         : this.code ? v_flex().flex_1().min_h(0)
           .when(this.edit?.phase === "conflict", (el) => el.child(conflictBar("preview-code", t, (cx) => this.keepCode(cx), (cx) => this.takeCode(cx))))
           .child(Editor.new(this.code).flex_1().min_h(0))

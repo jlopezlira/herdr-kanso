@@ -93,21 +93,26 @@ test("Files virtual rows use list-level handlers for open, expand and context me
   });
   const panel = new Files();
   Object.assign(panel, { context: "fixture", root: "/repo", folders: new Set(), marks: {},
-    entries: new Map([["", [{ name: "directory", dir: true }, { name: "file.txt", dir: false }, { name: "PLAN.md", dir: false }]]]),
+    entries: new Map([["", [
+      { name: "directory", dir: true }, { name: "file.txt", dir: false }, { name: "PLAN.md", dir: false },
+      { name: "Dockerfile", dir: false }, { name: "Makefile", dir: false }, { name: ".gitignore", dir: false },
+      { name: ".env.local", dir: false }, { name: "LICENSE", dir: false },
+    ]]]),
   });
   const actions = [];
   panel.toggle = (path) => actions.push(["toggle", path]);
-  panel.show = (path) => actions.push(["show", path]);
   panel.openWith = (path) => actions.push(["openWith", path]);
   panel.read = (path) => actions.push(["read", path]);
   panel.render({});
   deferred = true;
-  assert.equal(list.render({ start: 0, end: list.count }).length, 3);
+  assert.equal(list.render({ start: 0, end: list.count }).length, 8);
   deferred = false;
-  list.el.handlers.on_item_click(list.key(0), {});
-  list.el.handlers.on_item_click(list.key(1), {});
-  list.el.handlers.on_item_click(list.key(2), {});
+  for (let i = 0; i < 8; i += 1) list.el.handlers.on_item_click(list.key(i), {});
   list.el.handlers.on_item_secondary_click(list.key(0), {}, {});
   list.el.handlers.on_item_secondary_click(list.key(1), {}, {});
-  assert.deepEqual(actions, [["toggle", "directory"], ["read", "file.txt"], ["read", "PLAN.md"], ["openWith", "file.txt"]]);
+  assert.deepEqual(actions, [
+    ["toggle", "directory"], ["read", "file.txt"], ["read", "PLAN.md"], ["read", "Dockerfile"],
+    ["read", "Makefile"], ["read", ".gitignore"], ["read", ".env.local"], ["read", "LICENSE"],
+    ["openWith", "file.txt"],
+  ]);
 });

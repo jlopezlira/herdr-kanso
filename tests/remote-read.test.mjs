@@ -391,7 +391,7 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
       layout: () => ({ id: "panel-body", hidden }),
       readTextFile: async (path) => { reads.push(path); return "hello"; },
       isMarkdown: (path) => /\.md$/.test(path),
-      codeState: () => ({ release() {} }),
+      codeState: () => ({ release() {}, value() { return ""; }, set_value() {} }),
       theme: () => ({}),
       div: node, svg: node, image: node, h_flex: node, v_flex: node, Editor: { new: node },
       exec: async (cmd, args = []) => {

@@ -81,8 +81,7 @@ export const DEFAULT_KEYS = {
       "escape": "kanso-guard.back"
     },
     "mod:kanso-panel": {
-      "cmd-s": "kanso-panel.save",
-      "ctrl-s": "kanso-panel.save"
+      "cmd-s": "kanso-panel.save"
     },
     "terminal": {
       "cmd-f": "kanso-strip.find"

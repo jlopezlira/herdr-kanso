@@ -558,19 +558,21 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
-    (a failure says why), git marks, code in place, Markdown or a picture to
+    (a failure says why), git marks; a file that is not a directory opens in
     `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
     again when that file changed, with Open with and close:
-    a text file edited in place (Save, Cmd+S; Ctrl+S on Windows and Linux), on this computer or another,
+    any file that is not a picture, edited when the read has no NUL and fits in 1 MiB
+    (Save, Cmd+S; Ctrl+S on Windows), on this computer or another,
     a picture (png jpg jpeg gif webp svg), Markdown as `doc.js` `MarkdownDoc`
-    (a double-click opens one block, a table as cells; saved after 700 ms;
+    (a double-click opens one block, a table as cells; on this computer, saved after 700 ms;
+    on another, Save, that key, or leaving writes it, and it does not save while you type;
     a conflict when the file on disk changed; "Source" edits the whole file).
-    Over 2 MB stays a view. `blocks.js` splits and joins the blocks.
+    Over 1 MiB stays a view. `blocks.js` splits and joins the blocks.
     kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
     The markdown-panel mod is that copy, by sync:share); `lib.js` shares
-    `codeState` (an `EditorState`, read-only over 2 MB or when the file is not text)
+    `codeState` (an `EditorState`, read-only when the file is not text)
     and `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder

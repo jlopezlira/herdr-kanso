@@ -15,7 +15,7 @@ release.
 
 ### Added
 
-- Any text file opened from Files can be edited in Preview, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows and Linux). A file over 2 MB stays a view. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
+- Any file that is not a picture opens from Files into Preview. It can be edited when the read has no NUL byte and fits in 1 MiB, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. A file over 1 MiB stays a view. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
 
 ### Changed
 

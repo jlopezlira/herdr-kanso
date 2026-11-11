@@ -53,6 +53,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-spaces/store.js", copies: ["kanso/mods/kanso-sleep/store.js"] },
   // Sleep as the sidebar's work: the dialog writes what is to sleep, the sidebar moves it step by step.
   { source: "kanso/mods/kanso-spaces/sleepwork.js", copies: ["kanso/mods/kanso-sleep/sleepwork.js"] },
+  // One key waiter: the sidebar's commands, and Preview's Save, each while that view is up.
+  { source: "kanso/mods/kanso-spaces/sidebar.js", copies: ["kanso/mods/kanso-panel/sidebar.js"] },
   // No reassignment anywhere: retry, range, parseOr... in every mod.
   { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js"]) },
   // Who this computer is, and rows exchanged with the others. Spend runs it; the sidebar turns it on per machine.

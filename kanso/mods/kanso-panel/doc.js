@@ -7,7 +7,7 @@ import { readTextFile, writeTextFile, theme, settings, home, appHome } from "her
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
 import { skeleton, breathe, quietLink, tokens } from "./ui.js";
 import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
-import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs } from "./edit.js";
+import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs, tooLarge, wholeText, overRead } from "./edit.js";
 
 export function readingLines(t) {
   const { line } = skeleton({ border: t.border });
@@ -79,10 +79,10 @@ export class MarkdownDoc {
     cx.spawn(async (cx) => {
       const draft = this.saved === null && this.text === null ? drafts.peek(draftKey(path, this.on)) : null;
       try {
-        const text = this.on
-          ? await (await serviceOn(fileApi, this.on)).read(path)
-          : await readTextFile(path);
+        const got = await readWhole(path, this.on);
         if (this.path !== path) return;
+        if (got.big) { this.error = null; this.keep(tooLarge()); return; }
+        const text = got.text;
         if (text == null) {
           if (draft) { this.keep(didFail(restore(draft), "This file is no longer available")); return; }
           this.miss("This file is no longer available"); return;
@@ -104,6 +104,15 @@ export class MarkdownDoc {
   }
 
   keep(next) {
+    if (next.big) {
+      this.apply(next);
+      this.close();
+      if (this.source) { this.source.release(); this.source = null; }
+      this.text = null;
+      this.blocks = [];
+      this.remember();
+      return;
+    }
     const same = next.text === this.text && this.blocks.length > 0;
     this.apply(next);
     if (!same) this.setText(next.text);
@@ -121,7 +130,7 @@ export class MarkdownDoc {
     this.close();
     this.text = text;
     this.blocks = parseBlocks(text);
-    this.source?.set_value(text);
+    if (this.source) this.source.set_value(text);
   }
 
   open(i, cx) {
@@ -217,10 +226,21 @@ export class MarkdownDoc {
   }
 
   later(cx) {
-    if (this.phase === "failed" || this.phase === "conflict" || this.phase === "saving" || this.big || this.text === this.saved) return;
+    if (this.on || this.phase === "failed" || this.phase === "conflict" || this.phase === "saving" || this.big || this.text === this.saved) return;
     const seq = this.seq + 1;
     this.seq = seq;
     cx.timer.after(AUTOSAVE_MS, (cx) => { if (seq === this.seq && this.phase !== "failed" && this.phase !== "conflict") this.save(cx); });
+  }
+
+  async settle(saving, path) {
+    const outcome = await commitText(saving, textIo(path, this.on));
+    const next = applied(this.path === path ? this.snapshot() : saving, outcome.written, outcome.result);
+    if (this.path === path) {
+      this.apply(next);
+      if (this.phase === "saved") this.savedAt = Date.now();
+    }
+    remember(drafts, draftKey(path, this.on), next);
+    return next;
   }
 
   save(cx) {
@@ -231,12 +251,8 @@ export class MarkdownDoc {
     cx.notify();
     const path = this.path;
     cx.spawn(async (cx) => {
-      const outcome = await commitText(saving, textIo(path, this.on));
-      if (this.path !== path) { remember(drafts, draftKey(path, this.on), applied(saving, outcome.written, outcome.result)); return; }
-      this.apply(applied(this.snapshot(), outcome.written, outcome.result));
-      if (this.phase === "saved") this.savedAt = Date.now();
-      this.remember();
-      if (this.dirty && this.phase !== "conflict" && this.phase !== "failed") this.later(cx);
+      await this.settle(saving, path);
+      if (this.path === path && this.dirty && this.phase !== "conflict" && this.phase !== "failed") this.later(cx);
       cx.notify();
     });
   }
@@ -248,10 +264,7 @@ export class MarkdownDoc {
     const saving = beginSave(this.snapshot());
     if (!saving) return true;
     this.apply(saving);
-    const outcome = await commitText(saving, textIo(this.path, this.on));
-    this.apply(applied(this.snapshot(), outcome.written, outcome.result));
-    if (this.phase === "saved") this.savedAt = Date.now();
-    this.remember();
+    await this.settle(saving, this.path);
     return true;
   }
 
@@ -288,9 +301,7 @@ export class MarkdownDoc {
   }
 
   key(e, cx) {
-    const cmd = e.modifiers?.platform || e.modifiers?.control;
-    if (cmd && e.key === "s") { this.seq = this.seq + 1; this.save(cx); cx.stop_propagation(); }
-    else if (e.key === "escape" && this.active !== null) { this.close(); cx.notify(); cx.stop_propagation(); }
+    if (e.key === "escape" && this.active !== null) { this.close(); cx.notify(); cx.stop_propagation(); }
   }
 
   follow(url, cx) {
@@ -313,6 +324,7 @@ export class MarkdownDoc {
   }
 
   body(t, id) {
+    if (this.big) return div().p(16).text_color(t.dim).child("Too large to edit");
     if (this.error) return div().p(16).text_color(t.dim).child(this.error);
     if (this.text === null) return readingLines(t);
     const conflict = this.conflict ? conflictBar(id, t, (cx) => this.keepMine(cx), (cx) => this.takeTheirs(cx)) : null;
@@ -325,8 +337,6 @@ export class MarkdownDoc {
           .on_mouse_down("left", (e, cx) => { if (e.click_count === 2) this.append(cx); })));
     return v_flex().flex_1().min_h(0).when(Boolean(conflict), (el) => el.child(conflict)).child(main);
   }
-
-  pill(id, label, t, action, strong) { return pillButton(id, label, t, action, strong); }
 
   block(b, i, t, id) {
     if (b.kind === "blank") return null;
@@ -414,18 +424,34 @@ export class MarkdownDoc {
             .children(rows.map((r, ri) => line(r.map((s, c) => cell(s, `${id}-c${ri}-${c}`)), `${id}-row${ri}`, false,
               icon(`${id}-row-x-${ri}`, "Remove this row", (cx) => this.reshape((tb) => ({ ...tb, rows: tb.rows.toSpliced(ri, 1) }), cx))))))))
       .child(h_flex().gap(6)
-        .child(this.pill(`${id}-add-row`, "Add row", t, (cx) => this.reshape((tb) => ({ ...tb, rows: [...tb.rows, Array.from({ length: n }, () => "")] }), cx)))
-        .child(this.pill(`${id}-add-col`, "Add column", t, (cx) => this.reshape((tb) => ({ ...tb, head: [...tb.head, ""], align: [...tb.align, null], rows: tb.rows.map((r) => [...r, ""]) }), cx)))
+        .child(pillButton(`${id}-add-row`, "Add row", t, (cx) => this.reshape((tb) => ({ ...tb, rows: [...tb.rows, Array.from({ length: n }, () => "")] }), cx)))
+        .child(pillButton(`${id}-add-col`, "Add column", t, (cx) => this.reshape((tb) => ({ ...tb, head: [...tb.head, ""], align: [...tb.align, null], rows: tb.rows.map((r) => [...r, ""]) }), cx)))
         .child(div().flex_1())
-        .child(this.pill(`${id}-done`, "Done", t, (cx) => { this.close(); cx.notify(); })));
+        .child(pillButton(`${id}-done`, "Done", t, (cx) => { this.close(); cx.notify(); })));
   }
 
   release() { this.close(); this.source?.release(); this.source = null; }
 }
 
+export async function readWhole(path, on) {
+  if (!on) {
+    try { return wholeText(null, await readTextFile(path)); }
+    catch (error) { if (overRead(error)) return { big: true }; throw error; }
+  }
+  const api = await serviceOn(fileApi, on);
+  const info = await api.stat(path);
+  const size = Number(info.size);
+  if (size > EDIT_LIMIT) return { big: true };
+  return wholeText(size, await api.read(path, EDIT_LIMIT));
+}
+
 export const textIo = (path, on) => ({
   put: async (text, expected) => on ? (await serviceOn(fileApi, on)).write(path, text, expected) : writeTextFile(path, text, expected),
-  read: async () => on ? (await serviceOn(fileApi, on)).read(path) : readTextFile(path),
+  read: async () => {
+    const got = await readWhole(path, on);
+    if (got.big) throw new Error("Text file exceeds 1 MiB");
+    return got.text;
+  },
   quiet: quietError,
   note: (error) => on ? copyFailure(error, on) : (quietError(error) ? "This computer did not answer" : "Could not save"),
 });

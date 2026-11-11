@@ -1,7 +1,19 @@
-// One save for a text file and a Markdown note: edited, saving, saved, conflict, failed.
-export const EDIT_LIMIT = 2 * 1024 * 1024;
+// One save for a text file and a Markdown note: edited, saving, saved, conflict, failed. The read guarantee is 1 MiB of bytes.
+export const EDIT_LIMIT = 1048576;
 
-export const tooBig = (text) => String(text ?? "").length > EDIT_LIMIT;
+export const byteLength = (text) => [...String(text ?? "")].reduce((n, ch) => {
+  const cp = ch.codePointAt(0);
+  return n + (cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4);
+}, 0);
+
+export const tooBig = (text) => byteLength(text) > EDIT_LIMIT;
+
+export const overRead = (error) => /exceeds 1 MiB/i.test(String(error?.message ?? error));
+
+export const wholeText = (size, text) => (size != null && Number(size) > EDIT_LIMIT) || (text != null && byteLength(text) > EDIT_LIMIT)
+  ? { big: true } : { text };
+
+export const tooLarge = () => ({ saved: null, text: null, phase: "clean", disk: null, note: null, big: true });
 
 export const draftKey = (path, on) => `${on ?? ""}\0${path}`;
 
@@ -10,9 +22,9 @@ export class DraftBook {
 
   peek(key) { return this.rows.get(key) ?? null; }
 
-  put(key, draft) { this.rows = new Map([...this.rows, [key, draft]]); }
+  put(key, draft) { this.rows.set(key, draft); }
 
-  drop(key) { this.rows = new Map([...this.rows].filter(([held]) => held !== key)); }
+  drop(key) { this.rows.delete(key); }
 }
 
 export const drafts = new DraftBook();

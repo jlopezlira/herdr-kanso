@@ -1,7 +1,11 @@
 import { checked, jsonRows, powershell, psQuote, windowsArg } from "./platform-command.js";
 
-// 2097150 is a multiple of 3, so only the last slice's base64 is padded, and it stays under the exec cap.
+// 2097150 is a multiple of 3, so only the last read slice's base64 is padded. A write uses WRITE_RAW.
 export const CHUNK = 2097150;
+// Write chunks stay under Linux 131072 bytes per argument, macOS 1048576 for argv plus the environment, and Windows 32767 for the command line.
+export const WRITE_RAW = { linux: 90000, macos: 210000, windows: 4500 };
+const WIN_LINE = "powershell.exe -NoProfile -NonInteractive -Command ".length + "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); ".length + 2;
+export const windowsCommandLength = (script) => WIN_LINE + String(script).length;
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 class Utf8 {
@@ -33,134 +37,90 @@ export const base64Chunks = (text, chunk = CHUNK) => {
   return Array.from({ length: Math.ceil(n / chunk) }, (_, i) => encodeSlice(raw, i * chunk, Math.min(n, (i + 1) * chunk)));
 };
 
-export const b64Path = (path) => `${path}.kanso-b64`;
-export const newPath = (path) => `${path}.kanso-new`;
-export const expPath = (path) => `${path}.kanso-exp`;
-export const expB64Path = (path) => `${path}.kanso-exp.b64`;
-export const writeTemps = (path) => [b64Path(path), newPath(path), expPath(path), expB64Path(path)];
-
 export class SaveConflict extends Error {
   constructor() { super("changed on disk"); this.conflict = true; }
 }
 
-const unixPut = (file, body, fresh) => ({ cmd: "sh", args: ["-c", fresh ? 'printf %s "$1" > "$2"' : 'printf %s "$1" >> "$2"', "put", body, file] });
-
-const winPut = (file, body, fresh) => ({
-  script: `$enc = New-Object System.Text.UTF8Encoding $false; ${fresh ? "[IO.File]::WriteAllText" : "[IO.File]::AppendAllText"}(${psQuote(file)}, ${psQuote(body)}, $enc)`,
-});
-
-const unixDecode = (platform) => {
-  const one = platform === "macos" ? 'base64 -D -i "$src" -o "$dst"' : 'base64 -d "$src" > "$dst"';
-  const two = platform === "macos" ? 'base64 -D -i "$expsrc" -o "$expdst"' : 'base64 -d "$expsrc" > "$expdst"';
-  return `
-src=$1
-dst=$2
-expsrc=$3
-expdst=$4
-if [ ! -s "$src" ]; then : > "$dst"; else ${one} || exit 1; fi
-rm -f -- "$src"
-if [ -n "$expsrc" ]; then
-  if [ ! -s "$expsrc" ]; then : > "$expdst"; else ${two} || exit 1; fi
-  rm -f -- "$expsrc"
-fi`;
-};
-
-const unixCompare = (platform) => {
-  const stat = platform === "macos" ? "stat -f %z" : "stat -c %s";
+const unixScript = (platform) => {
+  const stat = platform === "macos" ? "stat -L -f %z" : "stat -c %s";
   const hash = platform === "macos" ? "shasum -a 256" : "sha256sum";
-  const dec = platform === "macos" ? "base64 -D" : "base64 -d";
-  return `
-target=$1
-decoded=$2
-expfile=$3
-mode=$4
-expb64=$5
-cleanup() { status=$?; rm -f -- "$decoded" "$expfile"; exit "$status"; }
-trap cleanup EXIT
-if [ "$mode" = create ]; then
-  if [ -e "$target" ]; then exit 3; fi
-elif [ "$mode" = files ]; then
-  if [ ! -f "$target" ] || [ ! -f "$expfile" ]; then exit 3; fi
-else
-  if [ ! -f "$target" ]; then exit 3; fi
-  if [ -z "$expb64" ]; then : > "$expfile"; else printf %s "$expb64" | ${dec} > "$expfile" || exit 1; fi
-fi
-if [ "$mode" != create ]; then
-  s1=$(${stat} "$target") || exit 1
-  s2=$(${stat} "$expfile") || exit 1
-  [ "$s1" = "$s2" ] || exit 3
-  h1=$(${hash} "$target") || exit 1
-  h2=$(${hash} "$expfile") || exit 1
-  [ "\${h1%% *}" = "\${h2%% *}" ] || exit 3
-fi
-mv -f -- "$decoded" "$target" || exit 1
-trap - EXIT
-rm -f -- "$expfile"`;
+  return [
+    "target=$1",
+    "textb64=$2",
+    "expb64=$3",
+    "mode=$4",
+    "phase=$5",
+    "dir=$6",
+    'if [ "$phase" = shot ] || [ "$phase" = begin ]; then dir=$(mktemp -d) || exit 1; fi',
+    'cleanup() { status=$?; trap - EXIT; if [ -n "$dir" ]; then rm -rf "$dir"; fi; exit "$status"; }',
+    "trap cleanup EXIT",
+    'if [ -n "$textb64" ]; then',
+    '  if [ "$phase" = more ] || [ "$phase" = end ]; then printf %s "$textb64" | base64 -d >> "$dir/new" || exit 1',
+    '  else printf %s "$textb64" | base64 -d > "$dir/new" || exit 1; fi',
+    'elif [ "$phase" = shot ] || [ "$phase" = begin ]; then : > "$dir/new"; fi',
+    'if [ "$mode" = match ]; then',
+    '  if [ -n "$expb64" ]; then',
+    '    if [ "$phase" = more ] || [ "$phase" = end ]; then printf %s "$expb64" | base64 -d >> "$dir/exp" || exit 1',
+    '    else printf %s "$expb64" | base64 -d > "$dir/exp" || exit 1; fi',
+    '  elif [ "$phase" = shot ] || [ "$phase" = begin ]; then : > "$dir/exp"; fi',
+    "fi",
+    'if [ "$phase" = begin ] || [ "$phase" = more ]; then trap - EXIT; printf %s "$dir"; exit 0; fi',
+    'if [ "$mode" = create ]; then if [ -e "$target" ] || [ -L "$target" ]; then exit 3; fi',
+    'else',
+    '  if [ ! -f "$target" ]; then exit 3; fi',
+    `  s1=$(${stat} "$target") || exit 1`,
+    `  s2=$(${stat} "$dir/exp") || exit 1`,
+    '  [ "$s1" = "$s2" ] || exit 3',
+    `  h1=$(${hash} "$target") || exit 1`,
+    `  h2=$(${hash} "$dir/exp") || exit 1`,
+    '  [ "${h1%% *}" = "${h2%% *}" ] || exit 3',
+    "fi",
+    'cat "$dir/new" > "$target"',
+  ].join("\n");
 };
 
-const winDecode = (path, withExp) => `
-$src = ${psQuote(b64Path(path))}
-$dst = ${psQuote(newPath(path))}
-$text = if (Test-Path -LiteralPath $src) { [IO.File]::ReadAllText($src) } else { '' }
-if ([string]::IsNullOrEmpty($text)) { [IO.File]::WriteAllBytes($dst, (New-Object byte[] 0)) } else { [IO.File]::WriteAllBytes($dst, [Convert]::FromBase64String(($text -replace '\\s',''))) }
-if (Test-Path -LiteralPath $src) { Remove-Item -LiteralPath $src -Force }
-${withExp ? `$esrc = ${psQuote(expB64Path(path))}
-$edst = ${psQuote(expPath(path))}
-$etext = if (Test-Path -LiteralPath $esrc) { [IO.File]::ReadAllText($esrc) } else { '' }
-if ([string]::IsNullOrEmpty($etext)) { [IO.File]::WriteAllBytes($edst, (New-Object byte[] 0)) } else { [IO.File]::WriteAllBytes($edst, [Convert]::FromBase64String(($etext -replace '\\s',''))) }
-if (Test-Path -LiteralPath $esrc) { Remove-Item -LiteralPath $esrc -Force }` : ""}`;
+const winPut = (b64, dest, append) => {
+  const quoted = psQuote(b64 ?? "");
+  if (append) return b64
+    ? `$extra=[Convert]::FromBase64String(${quoted}); $out=[IO.File]::Open(${dest},'Append','Write','Read'); try { $out.Write($extra,0,$extra.Length) } finally { $out.Dispose() }`
+    : "";
+  return `if ([string]::IsNullOrEmpty(${quoted})) { [IO.File]::WriteAllBytes(${dest}, [byte[]]::new(0)) } else { [IO.File]::WriteAllBytes(${dest}, [Convert]::FromBase64String(${quoted})) }`;
+};
 
-// Move-Item leaves a file that is already there, so that case is replaced.
-const winCompare = (path, mode, expb64) => `
-$code = 0
-$target = ${psQuote(path)}
-$decoded = ${psQuote(newPath(path))}
-$expfile = ${psQuote(expPath(path))}
-try {
-  if (${psQuote(mode)} -eq 'create') {
-    if (Test-Path -LiteralPath $target) { $code = 3 }
-  } elseif (${psQuote(mode)} -eq 'files') {
-    if (-not (Test-Path -LiteralPath $target -PathType Leaf) -or -not (Test-Path -LiteralPath $expfile -PathType Leaf)) { $code = 3 }
-  } elseif (-not (Test-Path -LiteralPath $target -PathType Leaf)) { $code = 3 }
-  else {
-    $expText = ${psQuote(expb64 ?? "")}
-    if ([string]::IsNullOrEmpty($expText)) { [IO.File]::WriteAllBytes($expfile, (New-Object byte[] 0)) }
-    else { [IO.File]::WriteAllBytes($expfile, [Convert]::FromBase64String(($expText -replace '\\s',''))) }
-  }
-  if ($code -eq 0 -and ${psQuote(mode)} -ne 'create') {
-    $a = Get-Item -LiteralPath $target
-    $b = Get-Item -LiteralPath $expfile
-    if ($a.Length -ne $b.Length) { $code = 3 }
-    else {
-      $ha = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
-      $hb = (Get-FileHash -LiteralPath $expfile -Algorithm SHA256).Hash
-      if ($ha -ne $hb) { $code = 3 }
-    }
-  }
-  if ($code -eq 0) {
-    if (Test-Path -LiteralPath $target -PathType Leaf) { [IO.File]::Replace($decoded, $target, $null) }
-    else { Move-Item -LiteralPath $decoded -Destination $target -Force }
-  }
-} finally {
-  if (Test-Path -LiteralPath $decoded) { Remove-Item -LiteralPath $decoded -Force -ErrorAction SilentlyContinue }
-  if (Test-Path -LiteralPath $expfile) { Remove-Item -LiteralPath $expfile -Force -ErrorAction SilentlyContinue }
-}
-if ($code -ne 0) { exit $code }`;
+const winScript = ({ path, textB64, expB64, mode, phase, dir }) => {
+  const fresh = phase === "shot" || phase === "begin";
+  const keep = phase === "begin" || phase === "more";
+  const start = fresh
+    ? "$dir=Join-Path $env:TEMP ('kanso-'+[guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $dir | Out-Null"
+    : `$dir=${psQuote(dir)}`;
+  const compare = mode === "create"
+    ? "if (Test-Path -LiteralPath $target) { $code = 3 }"
+    : "if (-not (Test-Path -LiteralPath $target)) { $code = 3 } else { $ra=[IO.File]::Open($target,'Open','Read','ReadWrite'); $rb=[IO.File]::Open($expected,'Open','Read','Read'); try { if ($ra.Length -ne $rb.Length) { $code = 3 } } finally { $ra.Dispose(); $rb.Dispose() }; if ($code -eq 0 -and (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $expected -Algorithm SHA256).Hash) { $code = 3 } }";
+  const put = "if ($code -eq 0) { $bytes=[IO.File]::ReadAllBytes($new); if (Test-Path -LiteralPath $target) { $fs=[IO.File]::Open($target,'Open','Write','Read'); try { $fs.SetLength(0); $fs.Write($bytes,0,$bytes.Length) } finally { $fs.Dispose() } } else { [IO.File]::WriteAllBytes($target,$bytes) } }";
+  const body = [
+    winPut(textB64, "$new", !fresh),
+    mode === "match" ? winPut(expB64, "$expected", !fresh) : "",
+    keep ? "$keep=$true; [Console]::Out.Write($dir)" : compare,
+    keep ? "" : put,
+  ].filter(Boolean).join("; ");
+  return `${start}; $code=0; $keep=$false; $target=${psQuote(path)}; $new=Join-Path $dir 'new'; $expected=Join-Path $dir 'exp'; try { ${body} } finally { if (-not $keep -and (Test-Path -LiteralPath $dir)) { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue } }; if ($code -ne 0) { exit $code }`;
+};
+
+const writeStep = (platform, path, textB64, expB64, mode, phase) => platform === "windows"
+  ? { script: (dir) => winScript({ path, textB64, expB64, mode, phase, dir }), keeps: phase === "begin" || phase === "more" }
+  : { cmd: "sh", args: (dir) => ["-c", unixScript(platform), "put", path, textB64, expB64, mode, phase, dir ?? ""], keeps: phase === "begin" || phase === "more" };
 
 export const writeSteps = (platform, path, text, expected) => {
-  const parts = base64Chunks(text);
-  const expParts = expected == null ? null : base64Chunks(expected);
-  const many = expParts != null && expParts.length > 1;
-  const mode = expected == null ? "create" : many ? "files" : "match";
-  const puts = parts.map((body, i) => (platform === "windows" ? winPut(b64Path(path), body, i === 0) : unixPut(b64Path(path), body, i === 0)));
-  const expPuts = many ? expParts.map((body, i) => (platform === "windows" ? winPut(expB64Path(path), body, i === 0) : unixPut(expB64Path(path), body, i === 0))) : [];
-  const decode = platform === "windows"
-    ? { script: winDecode(path, many) }
-    : { cmd: "sh", args: ["-c", unixDecode(platform), "dec", b64Path(path), newPath(path), many ? expB64Path(path) : "", many ? expPath(path) : ""] };
-  const compare = platform === "windows"
-    ? { script: winCompare(path, mode, many ? "" : expParts?.[0] ?? "") }
-    : { cmd: "sh", args: ["-c", unixCompare(platform), "cmp", path, newPath(path), expPath(path), mode, many ? "" : expParts?.[0] ?? ""] };
-  return [...puts, ...expPuts, decode, compare];
+  const raw = WRITE_RAW[platform] ?? WRITE_RAW.linux;
+  const parts = base64Chunks(text, raw);
+  const expParts = expected == null ? null : base64Chunks(expected, raw);
+  const mode = expected == null ? "create" : "match";
+  const one = parts.length === 1 && (expParts == null || expParts.length <= 1);
+  const rounds = one ? 1 : Math.max(parts.length, expParts?.length ?? 1);
+  return Array.from({ length: rounds }, (_, i) => writeStep(
+    platform, path, parts[i] ?? "", expParts ? (expParts[i] ?? "") : "", mode,
+    one ? "shot" : i === 0 ? "begin" : i === rounds - 1 ? "end" : "more",
+  ));
 };
 
 // find prints each directory twice in a row, so its type costs no extra call.
@@ -341,17 +301,17 @@ test -d "$1"`;
     return Boolean(result.stdout);
   };
   const write = async (path, text, expected, options) => {
-    try {
-      await writeSteps(platform, path, text, expected).reduce(async (done, step) => {
-        await done;
-        const result = step.script ? await ps(step.script, options) : await run(step.cmd, step.args, options);
-        if (result.code === 3) throw new SaveConflict();
-        checked(result);
-      }, Promise.resolve());
-    } catch (error) {
-      await remove(writeTemps(path), options).catch(() => {});
-      throw error;
-    }
+    const outcome = await writeSteps(platform, path, text, expected).reduce(async (done, step) => {
+      const prev = await done;
+      if (prev.error) return prev;
+      const result = await (step.script ? powershell(run, step.script(prev.dir), options) : run(step.cmd, step.args(prev.dir), options)).catch((error) => ({ thrown: error }));
+      if (result.thrown) return { dir: prev.dir, error: result.thrown, wipe: Boolean(prev.dir) };
+      if (result.code === 3) return { dir: "", error: new SaveConflict(), wipe: false };
+      if (result.code !== 0) return { dir: prev.dir, error: new Error(String(result.stderr || `Command failed (${result.code})`).trim()), wipe: Boolean(prev.dir) };
+      return { dir: step.keeps ? String(result.stdout ?? "").trim() : "", error: null, wipe: false };
+    }, Promise.resolve({ dir: "", error: null, wipe: false }));
+    if (outcome.wipe && outcome.dir) await remove([outcome.dir], { recursive: true, ...options }).catch(() => {});
+    if (outcome.error) throw outcome.error;
   };
   const migrate = (from, to) => platform === "windows"
     ? ps(`$from=${psQuote(from)}; $to=${psQuote(to)}; if (-not (Test-Path -LiteralPath (Join-Path $to 'store.json')) -and (Test-Path -LiteralPath $from -PathType Container)) { [IO.Directory]::CreateDirectory($to) | Out-Null; Get-ChildItem -LiteralPath $from -Force | Copy-Item -Destination $to -Recurse -Force; Get-ChildItem -LiteralPath $to -Filter '*.lock' -Force | Remove-Item -Force -Recurse }`)

@@ -1,12 +1,13 @@
 // Saving a text file and a Markdown note: one state machine, one draft per path, one remote write.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileApi, CHUNK, base64Chunks, writeSteps, writeTemps } from "../kanso/mods/kanso-panel/platform-files.js";
-import { DraftBook, draftKey, remember, opened, restore, seenDisk, typed, beginSave, didSave, keepMine, takeTheirs, word, needsSave, commitText, applied } from "../kanso/mods/kanso-panel/edit.js";
+import { fileApi, CHUNK, WRITE_RAW, base64Chunks, windowsCommandLength, writeSteps } from "../kanso/mods/kanso-panel/platform-files.js";
+import { DraftBook, EDIT_LIMIT, beginSave, byteLength, commitText, applied, didSave, draftKey, keepMine, needsSave, opened, overRead, remember, restore, seenDisk, takeTheirs, tooBig, tooLarge, typed, wholeText, word } from "../kanso/mods/kanso-panel/edit.js";
 import { load } from "./helpers.mjs";
 
 const read = (file) => JSON.parse(readFileSync(new URL(`../kanso/${file}`, import.meta.url), "utf8"));
@@ -92,10 +93,35 @@ test("a draft is kept per path and restored with Edited", () => {
   assert.equal(book.peek(there).text, "newer\n");
 });
 
-const scriptOf = (step) => String(step.script ?? step.args?.[1] ?? "");
+const scriptOf = (step, dir = "") => step.script ? step.script(dir) : String(step.args(dir)[1]);
+const shell = (env) => async (cmd, args) => new Promise((resolve) => {
+  execFile(cmd, args, { encoding: "utf8", maxBuffer: 12 * 1024 * 1024, env }, (error, stdout, stderr) => {
+    resolve({ code: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: stdout ?? "", stderr: stderr ?? "" });
+  });
+});
 
-test("a remote save sends base64 in the same chunks a read uses, then compares before it replaces", () => {
+test("a file over 1 MiB of bytes stays a view", () => {
+  const wide = "ü".repeat(600000);
+  assert.ok(wide.length < EDIT_LIMIT);
+  assert.ok(byteLength(wide) > EDIT_LIMIT);
+  assert.equal(tooBig(wide), true);
+  assert.equal(overRead(new Error("Text file exceeds 1 MiB")), true);
+  assert.equal(wholeText(EDIT_LIMIT + 1, "hello").big, true);
+  assert.equal(wholeText(EDIT_LIMIT, "a").text, "a");
+  assert.equal(wholeText(null, "a".repeat(EDIT_LIMIT)).big, undefined);
+  const view = opened(wide);
+  assert.equal(word(view), "Too large to edit");
+  assert.equal(needsSave(view), false);
+  assert.equal(beginSave(view), null);
+  assert.equal(beginSave(tooLarge()), null);
+  assert.equal(needsSave(tooLarge()), false);
+});
+
+test("a remote save writes in place, one call when both sides fit", () => {
   assert.equal(CHUNK % 3, 0);
+  assert.equal(WRITE_RAW.linux % 3, 0);
+  assert.equal(WRITE_RAW.macos % 3, 0);
+  assert.equal(WRITE_RAW.windows % 3, 0);
   assert.deepEqual(base64Chunks(""), [""]);
   assert.equal(base64Chunks("a".repeat(CHUNK)).length, 1);
   const parts = base64Chunks("a".repeat(CHUNK + 1));
@@ -103,76 +129,159 @@ test("a remote save sends base64 in the same chunks a read uses, then compares b
   assert.equal(parts[0].includes("="), false);
   assert.equal(Buffer.from(parts.join(""), "base64").length, CHUNK + 1);
   assert.equal(Buffer.from(base64Chunks("a\nü").join(""), "base64").toString("utf8"), "a\nü");
-  for (const platform of ["macos", "linux", "windows"]) {
+  for (const platform of ["macos", "linux"]) {
     const one = writeSteps(platform, "/repo/a.txt", "hi\n", "hi\n");
-    assert.equal(one.length, 3, platform);
-    const empty = writeSteps(platform, "/repo/a.txt", "", null);
-    assert.equal(empty.length, 3, platform);
-    const wide = writeSteps(platform, "/repo/a.txt", "a".repeat(CHUNK + 1), "b");
-    assert.equal(wide.length, 4, platform);
-    const last = scriptOf(one.at(-1));
-    if (platform === "windows") {
-      assert.match(last, /Get-FileHash -LiteralPath/);
-      assert.match(last, /Move-Item -LiteralPath/);
-      assert.ok(last.indexOf("Move-Item") > last.indexOf("Get-FileHash"));
-      assert.match(scriptOf(one[1]), /FromBase64String/);
-      assert.equal(one.some((step) => /shasum|sha256sum|\bmv\b/.test(scriptOf(step))), false);
-    } else {
-      assert.match(last, platform === "macos" ? /shasum -a 256/ : /sha256sum/);
-      assert.match(last, platform === "macos" ? /stat -f %z/ : /stat -c %s/);
-      assert.match(last, platform === "macos" ? /base64 -D/ : /base64 -d/);
-      assert.match(last, /mv -f -- "\$decoded"/);
-      assert.ok(last.indexOf("mv -f") > last.indexOf(platform === "macos" ? "shasum" : "sha256sum"));
-      assert.match(scriptOf(one[0]), /printf %s "\$1"/);
+    assert.equal(one.length, 1, platform);
+    assert.equal(one[0].args("")[7], "shot");
+    const script = scriptOf(one[0]);
+    assert.match(script, /mktemp -d/);
+    assert.match(script, /base64 -d/);
+    assert.match(script, /cat "\$dir\/new" > "\$target"/);
+    assert.match(script, /\[ -e "\$target" \] \|\| \[ -L "\$target" \]/);
+    assert.equal(/mv -f|\.kanso-|base64 -D/.test(script), false);
+    assert.match(script, platform === "macos" ? /shasum -a 256/ : /sha256sum/);
+    assert.match(script, platform === "macos" ? /stat -L -f %z/ : /stat -c %s/);
+    const raw = WRITE_RAW[platform];
+    const full = writeSteps(platform, "/repo/a.txt", "a".repeat(raw), "b".repeat(raw));
+    assert.equal(full.length, 1, platform);
+    const args = full[0].args("");
+    assert.ok(args[4].length > (platform === "linux" ? 100000 : 200000), platform);
+    assert.ok(args[4].length < 131072 || platform === "macos", platform);
+    if (platform === "linux") assert.ok(args.every((arg) => Buffer.byteLength(String(arg)) < 131072));
+    if (platform === "macos") {
+      const argv = args.reduce((n, arg) => n + Buffer.byteLength(String(arg)), 0);
+      assert.ok(argv > 400000 && argv < 1048576 - 200000);
     }
-    const temps = writeTemps("/repo/a.txt");
-    assert.equal(temps.includes("/repo/a.txt"), false);
-    assert.ok(temps.includes("/repo/a.txt.kanso-new"));
+    assert.equal(writeSteps(platform, "/repo/a.txt", "a".repeat(raw + 1), "b").length, 2, platform);
   }
+  const win = scriptOf(writeSteps("windows", "/repo/a.txt", "hi\n", "old\n")[0]);
+  assert.match(win, /\$env:TEMP/);
+  assert.match(win, /\[IO\.File\]::Open/);
+  assert.match(win, /SetLength\(0\)/);
+  assert.match(win, /Get-FileHash -LiteralPath/);
+  assert.ok(win.indexOf("Get-FileHash") < win.indexOf("SetLength"));
+  assert.equal(/Move-Item|::Replace|\.kanso-/.test(win), false);
+  const fullWin = writeSteps("windows", "/repo/a.txt", "a".repeat(WRITE_RAW.windows), "b".repeat(WRITE_RAW.windows));
+  assert.equal(fullWin.length, 1);
+  assert.ok(windowsCommandLength(fullWin[0].script("")) < 32767);
+  assert.equal(writeSteps("windows", "/repo/a.txt", "a".repeat(WRITE_RAW.windows + 1), "b").length, 2);
+  assert.equal(writeSteps("linux", "/repo/a.txt", "", null).length, 1);
+  assert.equal(writeSteps("linux", "/repo/a.txt", "a".repeat(200 * 1024), "b".repeat(200 * 1024)).length, 3);
 });
 
-test("one save of a file that fits in one chunk is 3 remote calls, and a failed step leaves the target", async () => {
-  for (const platform of ["macos", "linux", "windows"]) {
+test("one save is one remote call when it fits, and a failed step does not touch the target", async () => {
+  for (const platform of ["macos", "linux"]) {
     const calls = [];
-    const api = fileApi(platform, async (cmd, args) => { calls.push(cmd); return { code: 0, stdout: "", stderr: "" }; });
+    const api = fileApi(platform, async (cmd) => { calls.push(cmd); return { code: 0, stdout: "", stderr: "" }; });
     await api.write("/repo/a.txt", "hi\n", "old\n");
-    assert.equal(calls.length, 3, platform);
-    assert.equal(calls.filter((cmd) => cmd === "mv").length, 0);
+    assert.deepEqual(calls, ["sh"], platform);
   }
+  const winCalls = [];
+  const win = fileApi("windows", async (cmd) => { winCalls.push(cmd); return { code: 0, stdout: "", stderr: "" }; });
+  await win.write("/repo/a.txt", "hi\n", "old\n");
+  assert.deepEqual(winCalls, ["pwsh"]);
   const dir = await mkdtemp(join(tmpdir(), "kanso-write-"));
   const target = join(dir, "a.txt");
   await writeFile(target, "keep");
   const calls = [];
-  const api = fileApi("macos", async (cmd, args) => {
-    calls.push([cmd, args]);
-    const script = String(args?.[1] ?? "");
-    if (script.includes("base64 -D") && !script.includes("mv -f")) return { code: 1, stdout: "", stderr: "decode failed" };
-    return { code: 0, stdout: "", stderr: "" };
+  const api = fileApi("macos", async (cmd) => {
+    calls.push(cmd);
+    return { code: 1, stdout: "", stderr: "decode failed" };
   });
   await assert.rejects(() => api.write(target, "new\n", "keep"), /decode failed/);
   assert.equal(await readFile(target, "utf8"), "keep");
-  assert.equal(calls.some((call) => call[0] === "mv"), false);
-  const removed = calls.filter((call) => call[0] === "rm").at(-1)[1];
-  assert.ok(removed.includes(`${target}.kanso-b64`));
-  assert.ok(removed.includes(`${target}.kanso-new`));
-  assert.equal(removed.includes(target), false);
-  const clash = [];
-  const refused = fileApi("linux", async (cmd, args) => {
-    clash.push(cmd);
-    if (String(args?.[1] ?? "").includes("mv -f")) return { code: 3, stdout: "", stderr: "" };
-    return { code: 0, stdout: "", stderr: "" };
+  assert.equal(calls.includes("rm"), false);
+  assert.equal(calls.includes("mv"), false);
+  const kept = [];
+  const refused = fileApi("linux", async (cmd) => {
+    kept.push(cmd);
+    return { code: 3, stdout: "", stderr: "" };
   });
   await assert.rejects(() => refused.write("/repo/a.txt", "mine\n", "old\n"), (error) => error.conflict === true);
-  assert.equal(clash.includes("mv"), false);
-  assert.equal(clash.at(-1), "rm");
+  assert.deepEqual(kept, ["sh"]);
+  const wiped = [];
+  let step = 0;
+  const chunked = fileApi("linux", async (cmd, args) => {
+    wiped.push([cmd, args]);
+    step += 1;
+    return step === 1 ? { code: 0, stdout: "/tmp/kanso-kept", stderr: "" } : { code: 1, stdout: "", stderr: "decode failed" };
+  });
+  await assert.rejects(() => chunked.write("/repo/a.txt", "a".repeat(WRITE_RAW.linux + 1), "b"), /decode failed/);
+  const removed = wiped.filter((call) => call[0] === "rm");
+  assert.equal(removed.length, 1);
+  assert.deepEqual(removed[0][1], ["-rf", "/tmp/kanso-kept"]);
   await rm(dir, { recursive: true, force: true });
+});
+
+test("a real save keeps the inode, and a 200 KB linux save is 3 calls", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kanso-inode-"));
+  const scratch = join(root, "tmp");
+  await mkdir(scratch);
+  const macEnv = { ...process.env, PATH: "/usr/bin:/bin:/usr/sbin", TMPDIR: scratch };
+  const api = fileApi("macos", shell(macEnv));
+  try {
+    const target = join(root, "note.txt");
+    await writeFile(target, "keep");
+    await chmod(target, 0o755);
+    await api.write(target, "keep!", "keep");
+    assert.equal(await readFile(target, "utf8"), "keep!");
+    assert.equal((await stat(target)).mode & 0o777, 0o755);
+    const real = join(root, "real.txt");
+    const linked = join(root, "link.txt");
+    await writeFile(real, "body");
+    await symlink(real, linked);
+    await api.write(linked, "body!", "body");
+    assert.equal((await lstat(linked)).isSymbolicLink(), true);
+    assert.equal(await readFile(real, "utf8"), "body!");
+    const hard = join(root, "hard.txt");
+    const twin = join(root, "twin.txt");
+    await writeFile(hard, "same");
+    await link(hard, twin);
+    const inode = (await stat(hard)).ino;
+    await api.write(hard, "same!", "same");
+    const after = await stat(hard);
+    assert.equal(after.ino, inode);
+    assert.equal(after.nlink, 2);
+    assert.equal(await readFile(twin, "utf8"), "same!");
+    await writeFile(target, "now");
+    await assert.rejects(() => api.write(target, "other", "keep"), (error) => error.conflict === true);
+    assert.equal(await readFile(target, "utf8"), "now");
+    const made = join(root, "made.txt");
+    await api.write(made, "hello\n", null);
+    assert.equal(await readFile(made, "utf8"), "hello\n");
+    await assert.rejects(() => api.write(made, "nope\n", null), (error) => error.conflict === true);
+    assert.equal(await readFile(made, "utf8"), "hello\n");
+    const calls = [];
+    const once = fileApi("macos", async (cmd, args) => { calls.push(cmd); return shell(macEnv)(cmd, args); });
+    await once.write(target, "now!", "now");
+    assert.deepEqual(calls, ["sh"]);
+    assert.equal((await readdir(scratch)).length, 0);
+    const linuxRoot = join(root, "linux");
+    const linuxTmp = join(linuxRoot, "tmp");
+    await mkdir(linuxTmp, { recursive: true });
+    const body = "a".repeat(200 * 1024);
+    const wide = join(linuxRoot, "wide.txt");
+    await writeFile(wide, body);
+    const linuxCalls = [];
+    const linux = fileApi("linux", async (cmd, args) => {
+      linuxCalls.push(args);
+      assert.ok(args.every((arg) => Buffer.byteLength(String(arg)) < 131072));
+      return shell({ ...process.env, TMPDIR: linuxTmp })(cmd, args);
+    });
+    await linux.write(wide, `${body}!`, body);
+    assert.equal(linuxCalls.length, 3);
+    assert.equal(await readFile(wide, "utf8"), `${body}!`);
+    assert.equal((await readdir(linuxTmp)).length, 0);
+    assert.equal((await readdir(root)).some((name) => name.includes(".kanso")), false);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("Save is Cmd+S on macOS and Linux and Ctrl+S on Windows", async () => {
   const mac = read("keys.json"), win = read("keys.windows.json");
   assert.equal(mac["mod:kanso-panel"]["cmd-s"], "kanso-panel.save");
-  assert.equal(mac["mod:kanso-panel"]["ctrl-s"], "kanso-panel.save");
+  assert.equal(mac["mod:kanso-panel"]["ctrl-s"], undefined);
   assert.equal(win["mod:kanso-panel"]["ctrl-s"], "kanso-panel.save");
+  assert.equal(win["mod:kanso-panel"]["cmd-s"], undefined);
   assert.deepEqual(Object.keys(mac), Object.keys(win));
   const { describe } = await load("kanso-help/keymap.js", ["describe"]);
   assert.equal(describe("kanso-panel.save"), "Save the file");
