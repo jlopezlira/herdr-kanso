@@ -6,7 +6,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, terminals, machines, theme, run, window, props, shared, appHome, readTextFile } from "herdr";
 import { stateMark } from "./marks.js";
-import { afterMount, tryOrAsync } from "./pure.js";
+import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
 import { MEMORY_MS, computerOf, needsItem, questionOf, memoryLow } from "./model.js";
 import { pieces, shown } from "./pieces.js";
@@ -55,7 +55,7 @@ export default class WorkspaceStatus extends View {
     }));
     const needs = needsItem(rows, questions);
     const low = right ? memoryLow(this.memoryText) : null;
-    const computer = left ? computerOf(space, machines()) : null;
+    const computer = left ? computerOf(space, machines(), aliasText(shared("kanso.alias"), space?.machine || "")) : null;
     const working = list.filter((agent) => agent.status === "working").length;
     const chip = (icon, text) => h_flex().gap(6).items_center().min_w(0)
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(13).flex_none()).child(div().truncate().child(text));

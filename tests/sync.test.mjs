@@ -107,6 +107,7 @@ test("Spend adds each computer and leaves one computer as it was", () => {
   assert.equal(folded.hero.value, "$15.00");
   assert.equal(folded.hero.note, "");
   assert.deepEqual(folded.machines.map((row) => row.name), ["This computer", "Studio"]);
+  assert.deepEqual(foldCosts(costs, { self: SELF, rows, options: { ...options, aliases: { "": "Home", Studio: "Night" } } }).machines.map((row) => row.name), ["Home", "Night"]);
   assert.equal(folded.hero.stats.find((stat) => stat.unit === "tokens").value, "150");
   assert.equal(foldCosts(costs, { self: SELF, rows: [], options }), costs);
   assert.equal(foldCosts(costs, { self: SELF, rows, options: { cost: { project: "app", model: "all" } } }), costs);

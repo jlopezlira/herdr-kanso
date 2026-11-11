@@ -143,9 +143,7 @@ export function powerId(name) {
   return name ? `machine-power-${name}` : null;
 }
 
-export function machineTitle(name, hostName) {
-  return name || hostName || "This computer";
-}
+export { machineTitle } from "./pure.js";
 
 export function machineOf(address) {
   const text = String(address ?? "");

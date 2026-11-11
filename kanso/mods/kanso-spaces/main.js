@@ -10,7 +10,7 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
-import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, mostUrgent } from "./agents.js";
+import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, renameComputer, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
@@ -29,6 +29,7 @@ import { commandLoop, MachineRead } from "./sidebar.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed, segmented } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
+import { ALIAS_ASK, aliasOf, askedAlias, bookOf, catchUp, mergeBooks, publishNames, selfOf, takeAsks } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { readSync, saveSync } from "./sync-row.js";
 import { createAwake, keepAwake } from "./awake.js";
@@ -153,13 +154,15 @@ export function tone(t, status) {
 export default class Spaces extends View {
   init(_props, cx) {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) {
+    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
       if (props()?.newConversation || props()?.railMenu) this.convScroll = VirtualListScrollHandle.new();
       this.openPopup(cx); return;
     }
+    this.aliasBook = {};
+    this.aliasCx = cx;
     this.asleepReads = 0;
     this.asleepApplied = 0;
     this.loadAsleep().catch(() => {});
@@ -242,6 +245,7 @@ export default class Spaces extends View {
     });
     // Remote machines: every 30 s in front, every 2 min behind.
     cx.timer.every(30000, cx => {
+      this.aliasCx = cx;
       if (window().active) { this.refreshMachines(cx, true); return; }
       this.machineTicks += 1;
       if (this.machineTicks % 4 === 0) this.refreshMachines(cx, true);
@@ -252,7 +256,7 @@ export default class Spaces extends View {
     cx.timer.every(500, (cx) => this.checkNew(cx));
     cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // A sleep or wake that stopped half way shows again once old; another window's changes arrive.
-    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); });
+    cx.timer.every(30000, (cx) => { this.aliasCx = cx; this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); });
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     cx.spawn((cx) => commandLoop(
       () => nextCommand(),
@@ -531,7 +535,10 @@ export default class Spaces extends View {
     if (!due) return kept;
     try {
       const store = await this.storeOn(name);
-      const rows = await store.asleep(true, null, now);
+      const owed = (this.aliasBook ?? {})[name];
+      const write = owed?.pending ? { route: "", name: owed.name, at: owed.at, pending: 0 } : null;
+      const rows = await store.asleep(true, null, now, write);
+      this.takeRemoteAlias(name, store.kdb?.seenAlias, now);
       const published = rows.map((row) => ({ ...seenRow(shownOf(row, now), name), machine: name }));
       (this.remoteKept ??= new Map()).set(name, published);
       (this.remoteAt ??= new Map()).set(name, now);
@@ -592,6 +599,7 @@ export default class Spaces extends View {
       if (found.length) await st.kdb.adoptSpaces(found).catch(() => {});
       await this.loadProjects(st.kdb, rows).catch(() => {});
       this.settleHidden(rows);
+      this.absorbAliases(st.kdb?.seenAlias, started);
     }
     if (!(rows && seq >= this.asleepApplied && (shared("kanso.asleep.at") ?? 0) <= started)) return "drop";
     this.asleepApplied = seq;
@@ -600,6 +608,86 @@ export default class Spaces extends View {
     this.asleepKick = kick;
     this.localShown = rows.map((a) => shownOf(a, started));
     return "shown";
+  }
+
+  publishAlias() {
+    const next = publishNames(this.aliasBook);
+    if (JSON.stringify(next) === JSON.stringify(shared("kanso.alias") ?? {})) return;
+    setShared("kanso.alias", next);
+  }
+
+  absorbAliases(rows, now) {
+    const next = mergeBooks(this.aliasBook, bookOf(rows), now);
+    if (JSON.stringify(next) === JSON.stringify(this.aliasBook ?? {})) return;
+    this.aliasBook = next;
+    this.publishAlias();
+    this.aliasCx?.notify();
+  }
+
+  keepAlias(route, row) {
+    const had = (this.aliasBook ?? {})[route] ?? null;
+    const pending = row?.pending ? 1 : 0;
+    if (row && had && row.name === had.name && row.at === had.at && pending === (had.pending ? 1 : 0)) return;
+    if (!row && !had) return;
+    const book = this.aliasBook ?? {};
+    this.aliasBook = row ? { ...book, [route]: { name: row.name, at: row.at, pending } } : Object.fromEntries(Object.entries(book).filter(([key]) => key !== route));
+    if (row) this.db().saveAlias({ route, name: row.name, at: row.at, pending }).catch(() => {});
+    this.publishAlias();
+    this.aliasCx?.notify();
+  }
+
+  takeRemoteAlias(name, rows, now) {
+    this.keepAlias(name, catchUp((this.aliasBook ?? {})[name] ?? null, selfOf(rows), now).row);
+  }
+
+  finishRemote(route, got) {
+    this.keepAlias(route, { name: String(got.name ?? ""), at: Math.round(Number(got.at) || 0), pending: 0 });
+  }
+
+  deliverAlias(route, placed) {
+    const now = Date.now();
+    const due = restDue({ readAt: this.remoteAt?.get(route) ?? null, ordered: false, now, active: this.inFront(), showing: true });
+    if (due) { this.loadAsleep().catch(() => {}); return; }
+    this.storeOn(route).then((store) => store.kdb.saveAlias({ route: "", name: placed.name, at: placed.at, pending: 0 }, now)).then((rows) => {
+      const got = rows?.[0];
+      if (got) this.finishRemote(route, got);
+    }).catch(() => {});
+  }
+
+  keepAsk(book, ask) {
+    const step = askedAlias(book, ask, { hostName: this.hostName, phaseWord: ask.route ? machineState(this.phaseOf(ask.route)) : "" });
+    if (!step) return book;
+    this.aliasBook = step.book;
+    this.db().saveAlias(step.save).catch(() => {});
+    if (step.remote) this.deliverAlias(ask.route, step.remote);
+    return step.book;
+  }
+
+  takeAlias(cx) {
+    const asks = takeAsks(shared(ALIAS_ASK), this.aliasAsked ?? 0);
+    if (!asks.length) return;
+    this.aliasAsked = asks.reduce((max, ask) => (ask.at > max ? ask.at : max), 0);
+    this.aliasBook = asks.reduce((book, ask) => this.keepAsk(book, ask), this.aliasBook ?? {});
+    this.publishAlias();
+    cx.notify();
+  }
+
+  computerTitle(m) {
+    return machineTitle(m, this.hostName, aliasOf(this.aliasBook, m ?? ""));
+  }
+
+  beginRename(m) {
+    renameComputer(m ?? "", this.computerTitle(m));
+  }
+
+  openMachineMenu(m) {
+    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 220, height: 72, at: "pointer", props: { machineMenu: { route: m ?? "", shown: this.computerTitle(m) } } });
+  }
+
+  machineMenuView(t) {
+    const menu = props()?.machineMenu ?? {};
+    const item = this.items(t);
+    return this.menuFrame(t).child(item("rename", "Rename", () => renameComputer(menu.route ?? "", menu.shown ?? "")));
   }
 
   // A hide from before this load: still sleeping stays hidden, an undo or a missed write comes back, a tab left open is shown once.
@@ -909,12 +997,14 @@ export default class Spaces extends View {
   }
 
   checkNew(cx) {
+    this.aliasCx = cx;
     this.pollSleepWork(cx, false);
     const now = Date.now();
     const active = window().active;
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
     this.takeMoves();
+    this.takeAlias(cx);
     const projects = registry();
     if (!sameProjects(projects, this.projectsSeen)) { this.projectsSeen = projects; cx.notify(); }
     this.trackFocus();
@@ -2083,7 +2173,7 @@ export default class Spaces extends View {
 
   machineHead(m, phase, t, collapsed, folded) {
     const key = m ?? "local";
-    const title = machineTitle(m, this.hostName);
+    const title = this.computerTitle(m);
     const word = machineState(phase);
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
     const connected = phase === "connected";
@@ -2099,7 +2189,9 @@ export default class Spaces extends View {
       .when(collapsed, (el) => el.justify_center())
       .when(ring, (el) => el.border_1().border_color(t.accent))
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(wash)))
-      .on_click((_e, cx) => go(cx))
+      .on_click((e, cx) => { if (e.click_count === 2) return; go(cx); })
+      .on_mouse_down("left", (e, cx) => { if (e.click_count !== 2) return; cx.stop_propagation(); this.beginRename(m); })
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.openMachineMenu(m); })
       .on_hover((h, cx) => { if (h ? this.hoverMachine !== key : this.hoverMachine === key) { this.hoverMachine = h ? key : null; cx.notify(); } })
       .when(collapsed, (el) => el.tooltip(machineTip(title, phase, hint)).child(icon))
       .when(!collapsed, (el) => el.child(icon)
@@ -2677,6 +2769,7 @@ export default class Spaces extends View {
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
+    if (props()?.machineMenu) return this.machineMenuView(t);
     const collapsed = shared("sidebar.collapsed") === true;
     if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;

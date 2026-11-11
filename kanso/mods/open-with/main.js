@@ -9,6 +9,7 @@ import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, 
 import { walkLayout, commitLayout } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isText } from "./kinds.js";
+import { aliasText, machineTitle } from "./pure.js";
 
 const MOD = "open-with";
 const RECENT = `${MOD}.recent`;
@@ -145,7 +146,7 @@ export default class OpenWith extends View {
   launch(e, how, folder, machine) {
     const cli = how.cli ?? (how.app && e.bin ? paths.join(how.app, e.bin) : null);
     if (machine) {
-      if (!cli) throw new Error(`${e.name} has no command line to open a folder on ${machine}`);
+      if (!cli) throw new Error(`${e.name} has no command line to open a folder on ${machineTitle(machine, "", aliasText(shared("kanso.alias"), machine))}`);
       const args = e.family === "zed" ? [`ssh://${machine}${folder.startsWith("/") ? "" : "/"}${folder}`] : ["--remote", `ssh-remote+${machine}`, folder];
       return this.spawn(cli, args);
     }

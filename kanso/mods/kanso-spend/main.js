@@ -201,7 +201,7 @@ export default class TokenSpend extends View {
   options() {
     const d = new Date();
     const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    return { today, cost: { ...this.cost } };
+    return { today, cost: { ...this.cost }, aliases: shared("kanso.alias") ?? {} };
   }
 
   /** One presenter call at a time; later requests queue, so filters never race a refresh. */

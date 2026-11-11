@@ -11,7 +11,7 @@ import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
 import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway, homeOf, homePlace } from "./sleepwork.js";
-import { retry, tryOr, tryOrAsync, mapSeries, reduceSeries } from "./pure.js";
+import { aliasText, machineTitle, retry, tryOr, tryOrAsync, mapSeries, reduceSeries } from "./pure.js";
 import { skeleton, breathe, Armed } from "./ui.js";
 
 const settled = async (fn) => {
@@ -53,6 +53,11 @@ export function coversTab(capture, terminals) {
 export const colsOf = (list) => [{ w: 1, panes: list }];
 
 export const stateOf = (r) => (r.state === "stuck" ? `Stuck: ${r.why || "an agent could not leave"}` : r.state === "undoing" ? "Coming back" : r.state === "sleeping" ? "Going to sleep" : "Asleep");
+
+const withAlias = (machine, text) => {
+  const named = aliasText(shared("kanso.alias"), machine || "");
+  return named ? `${text} · ${machineTitle(machine || "", "", named)}` : text;
+};
 
 const since = (ms) => { const d = new Date(ms); return new Date().toDateString() === d.toDateString() ? d.toTimeString().slice(0, 5) : d.toDateString().slice(4, 10); };
 
@@ -627,7 +632,7 @@ export default class Sleep extends View {
       .child(svg("mods/kanso-chrome/icons/moon.svg").size(15).flex_none().text_color(a.state === "stuck" ? t.blocked : t.muted))
       .child(v_flex().flex_1().min_w(0).gap(2)
         .child(div().truncate().text_size(13).text_color(t.foreground).child(a.name))
-        .child(div().truncate().text_size(11.5).text_color(a.state === "stuck" ? t.blocked : t.dim).child(stateOf(a))))
+        .child(div().truncate().text_size(11.5).text_color(a.state === "stuck" ? t.blocked : t.dim).child(withAlias(a.machine, stateOf(a)))))
       .when(a.state === "stuck" || a.state === "sleeping", (el) => el.child(link(`zw-undo-${i}`, "Undo", (cx) => this.act(cx, a.id, "undo"))))
       .when(a.state === "stuck", (el) => el.child(link(`zw-retry-${i}`, "Retry", (cx) => this.act(cx, a.id, "retry"))));
     const asleep = this.asleep ?? [];
@@ -648,7 +653,7 @@ export default class Sleep extends View {
           .child(h_flex().min_w(0).gap(8).items_baseline()
             .child(div().flex_shrink_1().min_w(0).truncate().text_size(13).text_color(a.quiet ? t.dim : t.foreground).child(a.name))
             .child(div().flex_none().text_size(11.5).text_color(t.dim).child(when)))
-          .child(div().truncate().text_size(11.5).text_color(t.dim).child(a.quiet || sleepers(a))))
+          .child(div().truncate().text_size(11.5).text_color(t.dim).child(withAlias(a.machine, a.quiet || sleepers(a)))))
         .when(!this.busy && !a.quiet, (el) => el.child(div().id(`zz-wake-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(t.foreground)
           .hover((s) => s.opacity(0.8)).on_click((_e, cx) => { cx.stop_propagation(); this.wake(a, cx); }).child("Wake")))
         .when(!this.busy && !a.quiet, (el) => el.child(div().id(`zz-rm-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(armed ? t.blocked : t.dim)

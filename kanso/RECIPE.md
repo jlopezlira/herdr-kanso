@@ -165,7 +165,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     "− n +" control: fewer or more panes per view, and the number itself
     evens the columns out to 1/n.
     `kanso-status`, text 11.5 `muted`:
-    - Left: computer icon, "This computer" or its name, then the branch.
+    - Left: computer icon, "This computer" or a name you give it, then the branch.
       Unreachable: "<name> · unreachable" in `blocked`; a click retries.
     - Right, while someone waits: mark, name, question (260) and +N; a click
       runs `kanso-spaces.needs-you.next`. "Memory N% free" in `blocked` when
@@ -251,23 +251,23 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     Right-click opens the shipped space menu.
   - With another machine, each is one project-height row: monitor or server
     icon, medium name (`foreground` connected, `muted` off, unreachable,
-    or needs login; this computer's host name). Small `dim`: Off, Unreachable,
-    Needs login; a breathing line while loading. Turn on, Retry, and copy stay
-    visible; hover or keyboard shows turn off and + only when connected; a
-    chevron folds it. Copy is `hc machine login <name>`. Off stores
-    target, name, via, session and temporary, then `hc machine rm`
+    or needs login; this computer's host name, or a name you give it).
+    Right-click or double-click the name; empty brings the old name
+    back. It is kept on that computer and shows on the others. Small
+    `dim`: Off, Unreachable, Needs login; a breathing line.
+    Turn on, Retry, and copy stay visible; hover or keyboard shows turn off
+    and + only when connected; a chevron folds it. Copy is `hc machine login <name>`.
+    Off stores target, name, via, session and temporary, then `hc machine rm`
     (terminals keep running); nothing under it is listed or read. `false`
     and `null` are none, so add never sends an empty `--via`. On is
     `hc machine add` with those, never `--install`; dropped once
     `hc machine ls` shows it connected. If the save fails after the remove,
-    or add keeps failing, it stays with Retry; the hint is the state's
-    tooltip. This computer has no power. Alone, no header. On keeps it awake
-    and renews that hold after a missed answer; a closed lid still sleeps,
-    and an asleep machine is not woken. Connected, a remote row has Sync
-    (`sync-row.js`): `text` and always shown when on, `yellow` when it cannot
-    run, `dim` on hover when off; the tooltip has the words. A click saves
-    `data/kanso-sync/config.json` and bumps
-    `kanso.sync.kick`, so Spend exchanges at once.
+    or add keeps failing, it stays with Retry; the hint is its tooltip.
+    This computer has no power. Alone, no header. On keeps it awake; a closed
+    lid still sleeps, and an asleep machine is not woken. Connected, a remote
+    row has Sync: `text` and always shown when on, `yellow` when it cannot
+    run, `dim` on hover when off. A click turns Sync on, and Spend exchanges
+    at once.
     `hc machine ls`: 30 s in front, 2 min behind, and a hung one is given up.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the

@@ -16,6 +16,7 @@ release.
 
 ### Added
 
+- A computer can be given a name. Right-click its row and choose Rename, or double-click the name. The name shows on every computer, and clearing it brings back the name it had.
 - Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
 
 ### Changed

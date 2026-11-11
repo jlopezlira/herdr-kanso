@@ -1,8 +1,10 @@
 // The pull request page: the verdict, its one action, and the fold under it.
 import { div, svg } from "gpui-kit";
+import { shared } from "herdr";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { G, H, R, T, quietLink, section, toneColor } from "./ui.js";
 import { ageOf, footLine } from "./pr-poll.js";
+import { aliasText, machineTitle } from "./pure.js";
 import { verdictCard, VIEW } from "./pr-body.js";
 
 const ICON = "mods/kanso-chrome/icons/";
@@ -14,8 +16,10 @@ export function footOf(panel) {
 function scopeText(panel) {
   const repo = (panel.home ?? "").split("/").filter(Boolean).at(-1) || panel.repo()?.r || "";
   const flow = panel.pr ? `${panel.pr.headRefName} → ${panel.pr.baseRefName}` : (panel.branch || "");
-  if (!repo && !panel.on) return "";
-  return [panel.on, repo, flow].filter(Boolean).join(" · ");
+  const named = aliasText(shared("kanso.alias"), panel.on || "");
+  const computer = named ? machineTitle(panel.on || "", "", named) : (panel.on || "");
+  if (!repo && !computer) return "";
+  return [computer, repo, flow].filter(Boolean).join(" · ");
 }
 
 function scopeRow(panel, c) {

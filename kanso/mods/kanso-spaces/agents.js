@@ -9,6 +9,7 @@ import { segmentAt } from "./ui.js";
 export { segmentAt };
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
+import { ALIAS_ASK } from "./alias.js";
 
 export { NAME_LABEL };
 
@@ -86,6 +87,13 @@ export function renameTerminal(terminal, shown, thread = false) {
     title: thread ? "Rename thread" : "Rename terminal", value: shown ?? "",
     hint: thread ? "Empty: the title its agent gives it" : "Empty: the name the program gives it",
     label: { terminal, key: thread ? THREAD_LABEL : NAME_LABEL } } });
+}
+
+export function renameComputer(route, shown) {
+  openOverlay({ mod: "kanso-prompt", kind: "dialog", width: PROMPT_W, props: {
+    title: "Rename computer", value: shown ?? "",
+    hint: "Empty: the name it already has",
+    shared: ALIAS_ASK, token: route ? route : "local" } });
 }
 
 export function agentLabel(a) {

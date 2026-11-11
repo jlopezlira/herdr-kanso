@@ -11,6 +11,7 @@
 // file's own. Imports from "herdr" and the SDK are dropped (the host provides
 // them), and the outer file's own `export` keywords are stripped.
 const IMPORT = /^import\s+(?:(\{[^}]*\})\s+from\s+)?["']([^"']+)["'];\r?\n/gm;
+const EXPORT_FROM = /^export\s+\{([^}]*)\}\s+from\s+["'](\.\/[^"']+)["'];?[ \t]*\n/gm;
 const EXPORTED = /^export\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
 const EXPORT_LIST = /^export\s+\{([^}]*)\};?/gm;
 const PRELUDE = "const __pick = (mod, names) => Object.fromEntries(names.map((n) => [n, typeof globalThis[n] !== \"undefined\" ? globalThis[n] : mod[n]]));\n";
@@ -26,7 +27,8 @@ export function exportedNames(text) {
 
 // `read(name)` gives the source of a sibling file by its import name ("./x.js").
 export function inlineImports(text, read, seen = new Set()) {
-  return text.replace(/\r\n?/g, "\n").replace(IMPORT, (_m, names, from) => {
+  const lifted = text.replace(/\r\n?/g, "\n").replace(EXPORT_FROM, (_m, spec, from) => `import { ${spec.split(",").map((part) => part.trim()).filter(Boolean).join(", ")} } from "${from}";\n`);
+  return lifted.replace(IMPORT, (_m, names, from) => {
     if (!from.startsWith("./")) return "";
     if (seen.has(from)) throw new Error(`${from} imports itself by way of another file`);
     const source = read(from);

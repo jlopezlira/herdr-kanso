@@ -12,7 +12,7 @@ import { Share, postText } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
 import { tilde, pool } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
-import { range, reduceSeries } from "./pure.js";
+import { aliasText, machineTitle, range, reduceSeries } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 
 const TEMP = ["/private/tmp", "/tmp"];
@@ -647,6 +647,7 @@ export class Worktrees {
     const measured = [...live, ...this.orphans].some((w) => w.size);
     const total = [...live, ...this.orphans].reduce((n, w) => n + (w.size ?? 0), 0);
     const plan = this.plan(), freed = plan.reduce((n, w) => n + (w.size ?? 0), 0);
+    const here = aliasText(shared("kanso.alias"), "");
     const look = live.filter((w) => needsLook(w)).length;
     const gone = all.filter((w) => w.missing).length;
     const stats = [
@@ -667,7 +668,7 @@ export class Worktrees {
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().gap(G.xs)
-        .child(div().text_size(15).text_color(c.muted).child("On this computer"))
+        .child(div().text_size(15).text_color(c.muted).child(here ? `On ${machineTitle("", "", here)}` : "On this computer"))
         .child(h_flex().flex_wrap().items_end().gap_x(G.md)
           .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).child(measured ? fmtSize(total) : String(live.length)))
           .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child(measured ? "in worktrees" : "worktrees")))

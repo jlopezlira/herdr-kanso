@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { compactText, usdText } from "./core/costs.mjs";
 import { configFrom, identityFrom, identityText, mergeRows, rowFromCosts, rowsFrom, syncOn } from "./sync.js";
+import { aliasText, machineTitle } from "./pure.js";
 
 const read = (file) => readFile(file, "utf8").catch(() => "");
 
@@ -39,7 +40,7 @@ export function foldCosts(costs, { self, rows, options }) {
   const tokens = lines.reduce((sum, row) => sum + Number(row.body.tokens || 0), 0);
   const machines = lines.map((row) => ({
     id: row.machine,
-    name: row.machine === self ? "This computer" : (row.body.name || "Another computer"),
+    name: machineTitle(row.machine === self ? "" : (row.body.name || ""), row.machine === self ? "" : (row.body.name ? "" : "Another computer"), aliasText(options?.aliases, row.machine === self ? "" : (row.body.name || ""))),
     value: row.body.value ?? "",
     tokensText: row.body.tokensText ?? "",
     updated_at: row.updated_at,

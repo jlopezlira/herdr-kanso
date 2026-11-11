@@ -6,9 +6,9 @@ import { killApi } from "./platform-kill.js";
 import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
+import { hc, panes, terminals, home, run, theme, appHome, readTextFile, shared } from "herdr";
 import { tilde } from "./lib.js";
-import { tryOr } from "./pure.js";
+import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
@@ -268,6 +268,7 @@ export class Ports {
 
   hero(c, list, narrow) {
     const loose = list.filter((s) => !s.owner);
+    const here = aliasText(shared("kanso.alias"), "");
     const armedAll = this.armed.is("all");
     const held = list.reduce((t, s) => t + (typeof s.mb === "number" ? s.mb : 0), 0);
     const st = this.digest?.stats;
@@ -280,7 +281,7 @@ export class Ports {
     ].filter(Boolean);
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().gap(G.xs)
-        .child(div().text_size(15).text_color(c.muted).child("Listening on this computer"))
+        .child(div().text_size(15).text_color(c.muted).child(here ? `Listening on ${machineTitle("", "", here)}` : "Listening on this computer"))
         .child(h_flex().items_end().gap(G.md)
           .child(div().text_size(narrow ? 48 : 64).line_height(1).font_light().text_color(c.text).child(String(list.length)))
           .child(div().pb(narrow ? 6 : 9).text_size(13).text_color(c.dim).child(list.length === 1 ? "server" : "servers"))))

@@ -62,3 +62,13 @@ export function clock(ms, now = Date.now()) {
   const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   return new Date(now).toDateString() === d.toDateString() ? time : `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`;
 }
+
+// The one name a person sees for a computer. A name they typed wins; otherwise the words already in use.
+export function machineTitle(name, hostName, alias) {
+  const named = String(alias ?? "").trim();
+  return named || name || hostName || "This computer";
+}
+
+export function aliasText(names, machine) {
+  return String((names ?? {})[machine || ""] ?? "").trim();
+}
