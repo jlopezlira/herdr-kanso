@@ -9,7 +9,7 @@ for (const id of [...PANEL_IDS, "spaces", "tabs", "strip"]) {
     const result = await firstDraw(id);
     for (const [path, row] of [["open", result.open], ["switch", result.switchProject]]) {
       assert.ok(row.processes <= 3, `${id} ${path} started ${row.processes} processes before first draw; budget 3`);
-      assert.ok(row.ms < 100, `${id} ${path} took ${row.ms.toFixed(2)} ms before first draw; budget 100 ms`);
+      assert.ok(row.ms < 100, `${id} ${path} took ${row.ms.toFixed(2)} ms of CPU before first draw; budget 100 ms`);
     }
     t.diagnostic(JSON.stringify(result));
   });

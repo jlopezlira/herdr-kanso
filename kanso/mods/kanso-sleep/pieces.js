@@ -23,8 +23,8 @@ export const PIECES = [
   piece("sidebar.tasks", "Commands still running", "Sidebar", SHOW, "show", "work", "ps"),
   piece("sidebar.git", "Branch, ahead, behind", "Sidebar", SHOW, "show", "work", "git"),
   piece("sidebar.away", "While you were away", "Sidebar", THREE, "needed", "work"),
-  // The list already appears only when it has rows, so the default stays When needed.
-  piece("sidebar.needs", "Needs you", "Sidebar", THREE, "needed", "draw"),
+  // The blocked row and the status bar already say it.
+  piece("sidebar.needs", "Needs you", "Sidebar", THREE, "hide", "draw"),
   piece("sidebar.computers", "Computers", "Sidebar", SHOW, "show", "work"),
   piece("footer.machine", "Add a computer", "Sidebar", SHOW, "show", "draw"),
   piece("header.place", "Folder and branch", "Pane header", SHOW, "show", "draw"),
