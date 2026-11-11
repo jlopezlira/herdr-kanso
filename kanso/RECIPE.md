@@ -1,8 +1,9 @@
 # Kanso
 
-More agents. Less babysitting. Terminals open side by side at their own width.
-Repos, worktrees, diffs, PR checks and threads stay close; Cmd+Shift+O opens
-the folder in your editor, over SSH too. Warm greys, color for agent state.
+Agents sit side by side at their own width, and the one waiting on you comes first.
+Sleep a project and wake it on the same conversations. Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks.
+Spend adds up across computers once Sync is on. A Simulator sits beside the agent.
+It works on a space that lives on another computer, and it runs on macOS, Windows and Linux.
 
 ![Kanso](preview.png)
 
@@ -18,7 +19,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     Collapsed, the strip is empty and the mark sits lower, over the rail's
     buttons.
   - **Spaces** (`kanso-spaces`), filling the middle.
-    - Open (256 wide): a 40-tall row with a + (New space) at the left, and
+    - Open (256 wide): a 40-tall row with a + (New project) at the left, and
       Search and Hide sidebar at the right. Each is a 32 square with a 17 icon
       in `muted` that turns `foreground` on hover over a `foreground`+`12`
       wash.
@@ -36,7 +37,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       no square (else an icon), under it the most urgent state and count.
       A click lists the group in a popup (click goes; asleep: wake menu).
   - **Footer** (`kanso-chrome`, `footer: true`), 156 tall, bottom-aligned:
-    - Settings (gear) and Add machine (server icon), 34 tall, icon 17.
+    - Settings (gear) and Add computer (server icon), 34 tall, icon 17.
     - An 8 space.
     - An account chip: a 32 avatar (28 when collapsed) with the home folder
       name's first letter, then the name and "N agents".
@@ -379,11 +380,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     labels are removed then, outside render). Hovered, a row offers
     Settle (or Bring back) and Pin in the time's place. Right-click on a
     row in any view opens its menu (this mod as a 252px popup at the
-    pointer): Open, Pin to the top / Unpin, Settle / Bring back, Wake now
+    pointer): Open, Pin to the top / Unpin, Settle / Bring back, Wake
     or Snooze (In 1 hour, In 3 hours, This evening at 18:00 while ahead,
     Tomorrow 9:00, Monday 9:00, each with its time), Mark unread / read,
     Rename thread… (Threads) or Rename…, Copy folder, Copy branch, Copy
-    conversation id, and Close agent, which asks a second click ("Click
+    conversation id, and Close agent, which asks a second press ("Press
     again to close it") and runs `terminal.kill`; no conversation file is
     touched. Read only while Threads shows: on showing it, every 15 s with
     the window in front, every minute behind it, and when an agent's state

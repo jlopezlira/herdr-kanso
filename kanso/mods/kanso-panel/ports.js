@@ -292,7 +292,7 @@ export class Ports {
         .child(Button.new("pt-stop-all").h(30).px(14).flex_none().items_center().rounded(6).cursor_pointer()
           .bg(armedAll ? c.red : c.primary).hover((s) => s.opacity(0.85))
           .on_click((_e, cx) => this.armed.press("all", cx, (cx) => this.stop(loose, cx)))
-          .child(div().text_size(12).font_medium().text_color(armedAll ? "#ffffff" : c.primaryText)
+          .child(div().text_size(12).font_medium().text_color(c.primaryText)
             .child(armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} with no pane`)))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
   }
@@ -415,7 +415,6 @@ export class Ports {
           .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
             "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it.", G.sm)))
           .child(body)
-          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)))
-          .child(div().text_size(10.5).text_color(c.dim).child("Programs of yours listening on a TCP port, started in a pane or from a folder in your home. This computer only."))));
+          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)))));
   }
 }

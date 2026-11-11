@@ -4,9 +4,29 @@
 
 <h1 align="center">kansō</h1>
 
+<p align="center">
+  <a href="https://github.com/jlopezlira/herdr-kanso/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/jlopezlira/herdr-kanso?style=flat"></a>
+  <a href="https://github.com/jlopezlira/herdr-kanso/actions/workflows/ci.yml"><img alt="CI on main" src="https://img.shields.io/github/actions/workflow/status/jlopezlira/herdr-kanso/ci.yml?branch=main&style=flat"></a>
+  <a href="https://github.com/jlopezlira/herdr-kanso/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/jlopezlira/herdr-kanso?style=flat"></a>
+  <a href="https://github.com/jlopezlira/herdr-kanso/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/jlopezlira/herdr-kanso?style=flat"></a>
+</p>
+
 <p align="center"><b>More agents. Less babysitting.</b></p>
 
 <p align="center">Every agent in a readable pane, the one waiting on you first, and a machine that lasts weeks. A layout for <a href="https://herdr.dev">Herdr</a>.</p>
+
+<p align="center">
+  <a href="https://jlopezlira.github.io/herdr-kanso/">
+    <img alt="Demo: six agents on one strip, every pane at full width." src="docs/screenshots/demo.gif">
+  </a>
+</p>
+
+- Agents sit side by side, readable at their own width, and the one waiting on you comes first.
+- Sleep a project and wake it on the same conversations.
+- Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
+- A Simulator sits beside the agent. kansō works on a space that lives on another computer.
+
+For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator and the Markdown file handler are macOS only.
 
 <p align="center">
   <a href="https://jlopezlira.github.io/herdr-kanso/">Website</a> ·
@@ -14,15 +34,6 @@
   <a href="#keys">Keys</a> ·
   <a href="#privacy">Privacy</a> ·
   <a href="CHANGELOG.md">Changelog</a>
-</p>
-
-<p align="center">
-  <a href="https://jlopezlira.github.io/herdr-kanso/">
-    <picture>
-      <source media="(prefers-color-scheme: light)" srcset="site/shots/hero-light.png">
-      <img alt="kansō in the Herdr app: a sidebar of projects and their agents, and agents side by side on the strip, one asking for a decision." src="site/shots/hero.png">
-    </picture>
-  </a>
 </p>
 
 ## Install
@@ -40,6 +51,15 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 
 ## What it does
 
+<p align="center">
+  <a href="https://jlopezlira.github.io/herdr-kanso/">
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="site/shots/hero-light.png">
+      <img alt="kansō in the Herdr app: a sidebar of projects and their agents, and agents side by side on the strip, one asking for a decision." src="site/shots/hero.png">
+    </picture>
+  </a>
+</p>
+
 - **A strip, not a grid.** Terminals keep their width; a new pane opens beside
   you and the view glides to it. Pin a column, stack a server under an agent,
   1 to 8 columns per view.
@@ -47,10 +67,13 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   The sidebar shows every project, every agent's state and what it is on, and
   your conversations as threads.
 - **Sleep and wake.** An agent, a tab or a project goes to sleep: it exits with
-  its conversation kept, and wakes on it where it was.
+  its conversation kept, and wakes on it where it was. Sleep of a space on
+  another computer stays on that computer, so the same tabs are asleep
+  whichever computer you sit at, and waking from either works.
 - **Images.** The newest picture the agent in focus made, big beside it,
   and a circle for each picture. Click a circle to switch. Click a spot to
-  pin it and say what about it; ⌘↩ sends every note to the agent.
+  pin it and say what about it; ⌘↩ sends every note to the agent. Files,
+  Preview and Images work for a space on another computer, and a note still sends.
 - **Review without leaving.** Pull requests with diff, checks and threads, and
   one click to hand the feedback to an agent. Markdown files open to read and
   edit in place; `md-review plan.md` from an agent asks for your comments.
@@ -59,20 +82,25 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **What your agents leave running.** Ports: dev servers and the panes that
   run them. Containers: Docker, with Up, Rebuild and Down per project.
   Worktrees: every one agents made, what removing it would lose, the disk back.
-- **Weeks without a restart.** The memory guard recycles bloated idle Claude
-  agents on the same conversation; the Memory panel shows what it sees.
+- **Weeks without a restart.** On macOS and Windows, the memory guard recycles
+  bloated idle Claude agents on the same conversation; the Memory panel shows
+  what it sees.
 - **Spend and Shipped.** What your AI work is worth at list price, and what you
-  delivered on GitHub, with share images that carry totals only.
+  delivered on GitHub, with share images that carry totals only. Turn Sync on
+  from another computer's row and Spend adds that computer's tokens.
 - **The device beside the agent.** Simulator shows an iOS simulator or an
   Android emulator: its screen, and touch, typing, Home, Lock, volume and
-  rotate. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. On Linux and
-  Windows there is no iOS row.
+  rotate. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows.
   Nothing is downloaded until you press the button that installs serve-sim.
 - **Keys you can see.** Cmd+? draws your keys on a keyboard, layer by modifier,
   and opens the hjkl dōjō, a game for vim's moves with a pixel pet.
 - Two themes, `kanso` and `kanso-day`.
 
 ## Keys
+
+The table is the macOS keys. Windows ships its own in
+`kanso/keys.windows.json`: Ctrl and Alt, leaving the Windows key and AltGr
+alone. Help follows the bindings you have.
 
 | Keys | What they do |
 |---|---|
@@ -112,10 +140,19 @@ agent unless you press Send, and share images carry totals only.
 
 ## Development
 
-`npm test` (Node 22.15+, Git, Bash, sqlite3). A pull request that changes
-what kansō installs bumps `kanso/mods/kanso-chrome/version.json` and adds the
-version's section to [CHANGELOG.md](CHANGELOG.md); `npm run check:version`
-checks it, and merging to main releases it. How every part is built:
+`npm test` (Node 22.15+, Git, Bash, sqlite3). Pull requests target `develop`.
+A change to what kansō installs adds its entries to the next version's section
+in [CHANGELOG.md](CHANGELOG.md), and raises
+`kanso/mods/kanso-chrome/version.json` only when that category needs a bigger
+bump than the section already has. `npm run check:version` checks it. `npm test` also checks each mod's imports
+against the Herdr names in `tests/herdr-api.json` (`node scripts/herdr-api.mjs`
+rewrites that file from this machine's declarations), and `npm run check:mods`
+runs `herdr-app check` on every mod when the app is installed. A push
+to `develop` publishes `vX.Y.Z-beta.N` when what kansō installs changed since
+the last beta or the newest stable tag. Running the Release candidate workflow
+on `develop` publishes `vX.Y.Z-rc.N`. Merging `develop` into `main` publishes
+the stable `vX.Y.Z`. Docs do not bump the version. How to work on it:
+[CONTRIBUTING.md](CONTRIBUTING.md). How every part is built:
 [kanso/RECIPE.md](kanso/RECIPE.md).
 
 ## Credits and license

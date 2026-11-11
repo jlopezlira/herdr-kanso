@@ -7,7 +7,7 @@ const model = () => load("kanso-sim/model.js", [
   "parseSimctl", "parseAdbDevices", "parseAvdNames", "parseAvdConfig", "parseEmuAvdName", "parseWmSize",
   "emulatorRow", "chooseDevice", "createParser", "pushBytes", "imageAspect", "scheduleFrame", "promoteStack",
   "freshStack", "claimSlot", "releaseSlot", "freshness", "watch", "unwatch", "keyUsages", "touchEdge",
-  "frameBytes", "TAG", "nextOrientation", "lastJson", "fitScreen", "androidKeyCode", "scrollFractions", "FRAME_MS",
+  "frameBytes", "TAG", "nextOrientation", "lastJson", "streamAddress", "fitScreen", "androidKeyCode", "scrollFractions", "FRAME_MS",
 ]);
 const reg = () => load("kanso-sim/sim-register.js", [
   "applySimDefault", "sdkCandidates", "runningDirs", "hostFamily", "abiFits", "probeTools", "readNamedEnv",
@@ -127,6 +127,12 @@ test("closing one viewer never finishes a helper another viewer still holds", as
   const next = claimSlot(first.taken);
   assert.deepEqual(clone([first.id, next.id]), ["v1", "v2"]);
   assert.deepEqual(clone(releaseSlot(next.taken, "v1")), ["v2"]);
+});
+
+test("a stream address gives the host, the port and the path of the screen", async () => {
+  const { streamAddress } = await model();
+  assert.deepEqual(clone(streamAddress("http://127.0.0.1:9/stream.mjpeg")), { host: "127.0.0.1", port: 9, path: "/stream.mjpeg" });
+  assert.deepEqual(clone(streamAddress("http://127.0.0.1/stream.mjpeg?ready=1")), { host: "127.0.0.1", port: 0, path: "/stream.mjpeg" });
 });
 
 test("keys for the device keep a shifted symbol and leave a platform chord alone", async () => {
