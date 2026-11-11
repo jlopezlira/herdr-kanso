@@ -41,6 +41,20 @@ export function quietLink(id, label, onClick, c, { disabled = false, size = 12, 
     .child(div().text_size(size).text_color(disabled ? c.border : color).child(label));
 }
 
+// The sidebar's view switch: a padded track, the chosen segment raised.
+export function segments(id, items, value, onChange, c) {
+  const seg = (item) => {
+    const on = value === item.key;
+    return Button.new(`${id}-${item.key}`).h(28).px(14).items_center().justify_center().rounded(7).cursor_pointer()
+      .accessibility_label(item.label)
+      .when(on, (el) => el.bg(c.raised).border_1().border_color(c.border))
+      .when(!on, (el) => el.hover((s) => s.text_color(c.text)))
+      .on_click((_e, cx) => { if (!on) onChange(item.key, cx); })
+      .child(div().text_size(12.5).font_medium().text_color(on ? c.text : c.muted).child(item.label));
+  };
+  return h_flex().id(id).flex_none().p(3).gap(2).rounded(10).bg(c.text + "0a").children(items.map(seg));
+}
+
 export function quietTabs(id, items, value, onChange, c) {
   return h_flex().id(id).flex_wrap().gap(G.lg).items_center()
     .children(items.map((item, index) => {
