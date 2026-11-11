@@ -42,9 +42,9 @@ export const SHARED = [
   // agent there): the sidebar owns them, Sleep uses the same files.
   { source: "kanso/mods/kanso-spaces/since-left-model.js", copies: ["kanso-sleep", "kanso-panel"].map((m) => `kanso/mods/${m}/since-left-model.js`) },
   { source: "kanso/mods/kanso-spaces/since-left-store.js", copies: ["kanso/mods/kanso-panel/since-left-store.js"] },
-  { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-sleep/kdb.js", "kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js", "kanso/mods/kanso-settings/kdb.js", "kanso/mods/kanso-spend/kdb.js"] },
-  // Off is a saved row plus hc machine ls. Settings and Spend ask neither file from another mod.
-  { source: "kanso/mods/kanso-spaces/machines.js", copies: ["kanso/mods/kanso-settings/machines.js", "kanso/mods/kanso-spend/machines.js"] },
+  { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-sleep/kdb.js", "kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js", "kanso/mods/kanso-spend/kdb.js"] },
+  // Off is a saved row plus hc machine ls. Spend asks neither file from another mod.
+  { source: "kanso/mods/kanso-spaces/machines.js", copies: ["kanso/mods/kanso-spend/machines.js"] },
   // Which panel is open, and the two hooks every panel uses to keep its own state.
   { source: "kanso/mods/kanso-panel/panel-state.js", copies: ["kanso/mods/kanso-tabs/panel-state.js"] },
   { source: "kanso/mods/kanso-spaces/store.js", copies: ["kanso/mods/kanso-sleep/store.js"] },
@@ -52,9 +52,8 @@ export const SHARED = [
   { source: "kanso/mods/kanso-spaces/sleepwork.js", copies: ["kanso/mods/kanso-sleep/sleepwork.js"] },
   // No reassignment anywhere: retry, range, parseOr... in every mod.
   { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js"]) },
-  // Who this computer is, and rows exchanged with the others. Settings edits it; Spend runs it.
-  { source: "kanso/mods/kanso-settings/sync.js", copies: ["kanso/mods/kanso-spend/sync.js"] },
-  { source: "kanso/mods/kanso-settings/sync-power.js", copies: ["kanso/mods/kanso-spend/sync-power.js"] },
+  // Who this computer is, and rows exchanged with the others. Spend runs it; the sidebar turns it on per machine.
+  { source: "kanso/mods/kanso-spend/sync.js", copies: ["kanso/mods/kanso-spaces/sync.js"] },
   { source: "kanso/mods/kanso-tabs/layout.js", copies: ["kanso/mods/kanso-strip/layout.js", "kanso/mods/kanso-spaces/layout.js", "kanso/mods/kanso-panel/layout.js", "kanso/mods/open-with/layout.js"] },
   // The Markdown editor: Kanso's preview panel is the source, the standalone
   // markdown-panel mod a copy.

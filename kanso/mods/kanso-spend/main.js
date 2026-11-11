@@ -2,14 +2,14 @@
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
-import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines } from "herdr";
+import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared } from "herdr";
 import { mkdir } from "fs/promises";
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { clock, tryOr, tryOrAsync } from "./pure.js";
 import { powerOf } from "./sync-power.js";
-import { EXCHANGE_MS, configFrom, exchangeAll, holdsOf, identityFrom, joinUnder, periodKeyOf, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
+import { EXCHANGE_MS, SYNC_KICK, configFrom, exchangeAll, holdsOf, identityFrom, joinUnder, periodKeyOf, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
 
 const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
@@ -110,6 +110,7 @@ export default class TokenSpend extends View {
     this.menuOptions = null;
     this.syncHolds = [];
     this.syncStored = [];
+    this.syncKick = shared(SYNC_KICK);
 
     this.ticker = null;
     this.awake = false;
@@ -418,6 +419,14 @@ export default class TokenSpend extends View {
     cx.notify();
   }
 
+  // A machine just turned on or off in the sidebar: exchange now, outside the render pass.
+  kicked(cx) {
+    const kick = shared(SYNC_KICK);
+    if (kick === this.syncKick) return;
+    this.syncKick = kick;
+    cx.timer.after(0, (kickCx) => this.exchange(kickCx, true));
+  }
+
   render(cx) {
     // A space switch can restore the panel without a command: wake on the next tick, outside the render pass.
     if (!this.awake && !this.closed && !this.waking && !hiddenInLayout()) {
@@ -427,6 +436,7 @@ export default class TokenSpend extends View {
         if (!hiddenInLayout()) this.wake(wakeCx);
       });
     }
+    this.kicked(cx);
     const c = tokens(theme());
     const narrow = (this.width || 960) < 560;
     const top = this.stack[this.stack.length - 1];

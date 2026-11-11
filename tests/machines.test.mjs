@@ -136,7 +136,7 @@ async function sidebar(state) {
     powerBusy: new Set(), hints: state.hints ?? {}, hoverMachine: state.hover ?? null,
     kbd: state.kbd === true, navKey: state.navKey ?? null,
     handle: { is_focused: () => state.kbd === true, focus() {} },
-    hostName: state.hostName ?? "macbook", orderPicker: node,
+    hostName: state.hostName ?? "macbook", orderPicker: node, sync: state.sync ?? { config: {}, status: {} },
   });
   view.render();
   return { view, ids, texts, tips };
@@ -379,4 +379,107 @@ test("an off machine is still off after the database is opened again", async (t)
     { name: "mixed", target: "mixed.example", via: "", session: "sess", temporary: false },
     { name: "plain", target: "plain.example", via: "", session: "", temporary: false },
   ]);
+});
+
+const ACTION = /^machine-(power|retry|login|add|sync)-dark$/;
+const syncOn = { config: { version: 1, peers: { dark: { enabled: true } } }, status: {} };
+const connected = { spaces: [local, remote], layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }], live: [{ ...record, state: "connected" }] };
+
+test("a connected machine's row keeps Sync in sight when it is on or cannot run, and with its hover actions when off", async () => {
+  const off = await sidebar(connected);
+  assert.equal(off.ids.includes("machine-sync-dark"), false, "off waits for hover");
+  const offHover = await sidebar({ ...connected, hover: "dark" });
+  assert.deepEqual(offHover.ids.filter((id) => ACTION.test(id)), ["machine-power-dark", "machine-add-dark", "machine-sync-dark"]);
+  assert.equal(offHover.tips.includes("Sync dark"), true);
+
+  const on = await sidebar({ ...connected, sync: syncOn });
+  assert.equal(on.ids.includes("machine-sync-dark"), true, "on is state: no hover needed");
+  assert.equal(on.ids.includes("machine-power-dark"), false);
+  assert.equal(on.tips.includes("Sync dark"), true);
+  const synced = await sidebar({ ...connected, sync: { ...syncOn, status: { dark: { synced_at: new Date(Date.now() - 120_000).toISOString() } } } });
+  assert.equal(synced.tips.includes("Sync dark: synced 2 min ago"), true);
+  const cannot = await sidebar({ ...connected, sync: { ...syncOn, status: { dark: { reason: "update" } } } });
+  assert.equal(cannot.ids.includes("machine-sync-dark"), true);
+  assert.equal(cannot.tips.includes("Sync dark: Update kanso there"), true);
+  assert.equal(cannot.texts.includes("Update kanso there"), false, "the words stay in the tooltip");
+
+  const keys = await sidebar({ ...connected, sync: syncOn, kbd: true, navKey: "machine-sync:dark" });
+  assert.ok(keys.view.nav.some((row) => row.key === "machine-sync:dark"));
+  assert.equal(keys.ids.includes("machine-power-dark"), true, "the keyboard on Sync shows the row's actions");
+
+  const rail = await sidebar({ ...connected, sync: syncOn, collapsed: true });
+  assert.equal(rail.ids.includes("machine-sync-dark"), false);
+  const here = await sidebar({ ...connected, sync: { config: { version: 1, peers: { null: { enabled: true } } }, status: {} }, hover: "local" });
+  assert.equal(here.ids.some((id) => id.startsWith("machine-sync")), false, "this computer has none");
+});
+
+test("off, unreachable, loading and needs login keep their one action, with no Sync", async () => {
+  const states = [
+    [{ parked: [record] }, ["machine-power-dark"]],
+    [{ layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "unavailable" }], live: [{ ...record, state: "unreachable" }] }, ["machine-retry-dark"]],
+    [{ layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "loading" }], live: [{ ...record, state: "connected" }], waking: new Set(["dark"]), parked: [record] }, []],
+    [{ parked: [record], login: new Set(["dark"]) }, ["machine-login-dark"]],
+  ];
+  for (const [state, actions] of states) {
+    const drawn = await sidebar({ spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], ...state, sync: syncOn, hover: "dark" });
+    assert.deepEqual(drawn.ids.filter((id) => ACTION.test(id)), actions);
+  }
+});
+
+test("Sync on is the normal text tone, off is dim, and one that cannot run is the warning tone", async () => {
+  const theme = { foreground: "#fff", dim: "#666", ansi3: "#fc0" };
+  const tones = {};
+  for (const [state, sync] of [["on", syncOn], ["off", { config: {}, status: {} }], ["cannot", { ...syncOn, status: { dark: { reason: "unreachable" } } }]]) {
+    const view = await syncView({ sync });
+    view.machineButton = (_nav, _id, _icon, _tip, _go, _t, color) => color;
+    tones[state] = view.syncButton("dark", "connected", theme, true);
+  }
+  assert.deepEqual(tones, { on: "#fff", off: "#666", cannot: "#fc0" });
+});
+
+async function syncView({ sync = { config: {}, status: {} }, host = {} } = {}) {
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { appHome: () => "/app", setShared: () => {}, ...host });
+  return Object.assign(new Spaces(), { sync, machines: [], parked: [] });
+}
+
+test("one click saves the machine on, tells Spend, and a failed save turns the icon back and says so", async () => {
+  const files = { "/app/data/kanso-sync/config.json": JSON.stringify({ version: 1, peers: { loki: { enabled: true } } }) };
+  const kicks = [];
+  const toasts = [];
+  const host = {
+    mkdir: async () => {}, notify: (n) => toasts.push(n), setShared: (key, value) => kicks.push([key, value]),
+    readTextFile: async (file) => files[file] ?? null,
+    writeTextFile: async (file, text, expected) => { assert.equal(expected, files[file] ?? null); files[file] = text; },
+  };
+  const view = await syncView({ host });
+  const { cx, drain } = context();
+  view.toggleSync("dark", cx);
+  assert.equal(view.sync.config.peers.dark.enabled, true, "the icon turns before the write lands");
+  await drain();
+  assert.deepEqual(JSON.parse(files["/app/data/kanso-sync/config.json"]), { version: 1, peers: { loki: { enabled: true }, dark: { enabled: true } } });
+  assert.deepEqual(kicks.map(([key]) => key), ["kanso.sync.kick"]);
+  assert.equal(view.syncSaving, false);
+
+  const broken = await syncView({ host: { ...host, writeTextFile: async () => { throw new Error("stale"); } } });
+  broken.toggleSync("dark", cx);
+  await drain();
+  assert.equal(broken.sync.config.peers?.dark, undefined);
+  assert.equal(toasts.length, 1);
+  assert.equal(toasts[0].title, "Sync dark was not changed");
+  assert.equal(kicks.length, 1, "a failed save does not tell Spend");
+});
+
+test("the sidebar reads Sync only when the machine list has a remote machine", async () => {
+  const reads = [];
+  let list = [];
+  const view = await syncView({ host: {
+    hc: async () => ({ code: 0, stdout: JSON.stringify({ machines: list }) }),
+    readTextFile: async (file) => { reads.push(file); return file.endsWith("status.json") ? JSON.stringify({ peers: { dark: { reason: "update" } } }) : null; },
+  } });
+  await view.readMachines();
+  assert.equal(reads.length, 0);
+  list = [{ ...record, state: "connected" }];
+  await view.readMachines();
+  assert.deepEqual(reads, ["/app/data/kanso-sync/config.json", "/app/data/kanso-sync/status.json"]);
+  assert.equal(view.sync.status.dark.reason, "update");
 });

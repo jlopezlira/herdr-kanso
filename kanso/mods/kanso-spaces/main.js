@@ -24,6 +24,8 @@ import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout
 import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, listedMachines } from "./machines.js";
+import { syncIcon, peerOn, withPeer } from "./sync.js";
+import { readSync, saveSync } from "./sync-row.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
@@ -192,6 +194,7 @@ export default class Spaces extends View {
     this.failed = new Set();
     this.powerBusy = new Set();
     this.hints = {};
+    this.sync = { config: {}, status: {} };
     this.hostName = "";
     // The first frame uses localStorage's copy; the database's answer replaces it when it comes.
     this.panel = new Panel(PREFS, this.leftNavStore());
@@ -1062,6 +1065,7 @@ export default class Spaces extends View {
     const result = await hc(["machine", "ls", "--json"]);
     if (result.code !== 0) return;
     this.machines = listedMachines(result);
+    if (this.machines.length && !this.syncSaving) this.sync = await readSync();
     await this.settleParked();
   }
 
@@ -1863,10 +1867,10 @@ export default class Spaces extends View {
     return [null, ...remote].flatMap((m) => this.machineBlock(m, block));
   }
 
-  machineButton(nav, id, icon, tip, go, t) {
+  machineButton(nav, id, icon, tip, go, t, color = null) {
     const act = (cx) => { cx.stop_propagation?.(); go(cx); };
     const ring = this.navMark(nav, act);
-    return iconButton(id, icon, tip, act, tokens(t))
+    return iconButton(id, icon, tip, act, tokens(t), { color })
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .when(ring, (el) => el.border_1().border_color(t.accent));
   }
@@ -1884,7 +1888,35 @@ export default class Spaces extends View {
     const plus = phase === "connected"
       ? this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t)
       : null;
-    return [copy, power, retry, plus].filter(Boolean);
+    return [copy, power, retry, plus, this.syncButton(m, phase, t, true)].filter(Boolean);
+  }
+
+  // At rest a row keeps only a sync that is on or cannot run: it is state.
+  restingTools(m, phase, t, collapsed) {
+    return collapsed ? [] : [this.syncButton(m, phase, t, false)].filter(Boolean);
+  }
+
+  syncButton(m, phase, t, hot) {
+    const icon = syncIcon({ name: m, phase, hot, ...this.sync, now: Date.now() });
+    if (!icon) return null;
+    const c = tokens(t);
+    const tone = { on: c.text, off: c.dim, cannot: c.yellow }[icon.state];
+    return this.machineButton(`machine-sync:${m}`, `machine-sync-${m}`, "sync", icon.tip, (cx) => this.toggleSync(m, cx), t, tone);
+  }
+
+  // The icon turns at once; a save that fails turns it back and says so.
+  toggleSync(m, cx) {
+    if (this.syncSaving) return;
+    const before = this.sync.config;
+    const on = !peerOn(before, m);
+    this.syncSaving = true;
+    this.sync = { ...this.sync, config: withPeer(before, m, on) };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try { this.sync = { ...this.sync, config: await saveSync(m, on) }; }
+      catch { this.sync = { ...this.sync, config: before }; notify({ title: `Sync ${m} was not changed`, level: "error" }); }
+      finally { this.syncSaving = false; cx.notify(); }
+    });
   }
 
   openMachine(m, phase, folded, cx) {
@@ -1908,7 +1940,7 @@ export default class Spaces extends View {
     const go = (cx) => this.openMachine(m, phase, folded, cx);
     const ring = this.navMark(`machine:${key}`, go);
     const hot = !collapsed && machineHot(m, this.hoverMachine, this.kbd, this.navKey);
-    const tools = hot ? this.machineActions(m, phase, t) : [];
+    const tools = hot ? this.machineActions(m, phase, t) : this.restingTools(m, phase, t, collapsed);
     const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(ink);
     const wash = t.foreground + "0c";
     return h_flex().id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()

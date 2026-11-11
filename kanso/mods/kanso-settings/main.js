@@ -1,18 +1,15 @@
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, exec, run, machines } from "herdr";
-import { mkdir } from "fs/promises";
+import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, exec, run } from "herdr";
 import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe } from "./ui.js";
 import { glyphs, keycap } from "./marks.js";
 import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { parseChangelog, plain, compare } from "./changelog.js";
-import { tryOr, tryOrAsync } from "./pure.js";
-import { powerOf } from "./sync-power.js";
-import { configFrom, joinUnder, statusFrom, syncDir, syncRoster, withKind, withPeer } from "./sync.js";
+import { tryOrAsync } from "./pure.js";
 
-const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "sync", label: "Sync" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
+const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
 const PLACES = [
   { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
   { id: "kanso", name: "kansō", note: "Source, releases and issues", url: "https://github.com/jlopezlira/herdr-kanso" },
@@ -52,18 +49,7 @@ export default class Settings extends View {
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
     this.avatars = null;
-    this.syncReady = false;
-    this.syncConfig = { version: 1, peers: {} };
-    this.syncStatus = {};
-    this.syncMachines = [];
-    this.syncStored = [];
-    this.syncLive = [];
-    this.syncError = null;
-    this.syncWrite = Promise.resolve();
-    this.syncTimer = null;
-    this.syncLoad = 0;
     if (this.page === "credits") this.readAvatars(cx);
-    if (this.page === "sync") this.loadSync(cx);
     cx.spawn(async (cx) => {
       try { this.installed = JSON.parse(await readTextFile(`${appHome()}/mods/kanso-chrome/version.json`) ?? "{}").version ?? null; } catch {}
       cx.notify();
@@ -327,119 +313,9 @@ export default class Settings extends View {
         p.name, `@${p.login} on GitHub`, `https://github.com/${p.login}`)));
   }
 
-  loadSync(cx) {
-    const generation = this.syncLoad + 1;
-    this.syncLoad = generation;
-    cx.spawn(async (syncCx) => {
-      const dir = syncDir(appHome());
-      const configText = await tryOrAsync(() => readTextFile(joinUnder(dir, "config.json")));
-      const statusText = await tryOrAsync(() => readTextFile(joinUnder(dir, "status.json")));
-      const power = await powerOf(this.syncStored);
-      if (this.syncLoad !== generation) return;
-      this.syncConfig = configFrom(configText);
-      this.syncStatus = statusFrom(statusText);
-      this.syncStored = power.stored;
-      this.syncLive = power.live;
-      this.syncMachines = tryOr(() => machines(), []);
-      this.syncReady = true;
-      syncCx.notify();
-      if (this.page === "sync") this.armSync(syncCx);
-    });
-  }
-
-  stopSync() {
-    try { this.syncTimer?.cancel(); } catch { /* already gone */ }
-    this.syncTimer = null;
-  }
-
-  armSync(cx) {
-    this.stopSync();
-    if (this.page !== "sync" || !cx.timer?.after) return;
-    this.syncTimer = cx.timer.after(2000, (timerCx) => {
-      this.syncTimer = null;
-      if (this.page !== "sync") return;
-      timerCx.spawn(async (readCx) => {
-        const power = await powerOf(this.syncStored);
-        const status = statusFrom(await tryOrAsync(() => readTextFile(joinUnder(syncDir(appHome()), "status.json"))));
-        if (this.page !== "sync") return;
-        const next = tryOr(() => machines(), null);
-        const machinesChanged = Boolean(next) && JSON.stringify(next) !== JSON.stringify(this.syncMachines);
-        if (machinesChanged) this.syncMachines = next;
-        const powerChanged = JSON.stringify(power.stored) !== JSON.stringify(this.syncStored) || JSON.stringify(power.live) !== JSON.stringify(this.syncLive);
-        this.syncStored = power.stored;
-        this.syncLive = power.live;
-        const statusChanged = JSON.stringify(status) !== JSON.stringify(this.syncStatus);
-        if (statusChanged) this.syncStatus = status;
-        if (machinesChanged || statusChanged || powerChanged) readCx.notify();
-        this.armSync(readCx);
-      });
-    });
-  }
-
-  setPeer(id, enabled, cx) {
-    this.syncError = null;
-    this.syncConfig = withPeer(this.syncConfig, id, enabled);
-    this.queueSync(cx);
-  }
-
-  setKind(id, kind, enabled, cx) {
-    this.syncError = null;
-    this.syncConfig = withKind(this.syncConfig, id, kind, enabled);
-    this.queueSync(cx);
-  }
-
-  // One write at a time, so two clicks cannot pass the same previous contents.
-  queueSync(cx) {
-    const config = this.syncConfig;
-    this.syncWrite = this.syncWrite.then(() => this.persistSync(config, cx));
-  }
-
-  async persistSync(config, cx) {
-    const dir = syncDir(appHome());
-    const file = joinUnder(dir, "config.json");
-    try {
-      await mkdir(dir, { recursive: true });
-      const prev = await readTextFile(file);
-      const text = `${JSON.stringify(config)}\n`;
-      if (prev !== text) await writeTextFile(file, text, prev);
-      if (this.syncConfig === config) this.syncError = null;
-    } catch {
-      if (this.syncConfig === config) {
-        this.syncError = "Could not save";
-        this.syncConfig = configFrom(await tryOrAsync(() => readTextFile(file)));
-      }
-    }
-    cx.notify();
-  }
-
-  syncPeer(c, peer) {
-    const off = peer.state.kind === "off";
-    const state = off || peer.enabled ? peer.state : { kind: "idle", text: "" };
-    const dom = `sync-${String(peer.id).replace(/[^A-Za-z0-9_-]/g, "-")}`;
-    return v_flex().w_full()
-      .child(h_flex().w_full().py(G.sm).gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(off ? c.dim : c.text).child(peer.name))
-        .child(toggleSwitch(`${dom}-on`, peer.enabled, (next, cx) => this.setPeer(peer.id, next, cx), c, { label: peer.name })))
-      .when(peer.enabled, (el) => el.children(peer.kinds.map((kind) => h_flex().w_full().py(G.xs).pl(G.lg).gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.muted).child(kind.label))
-        .child(toggleSwitch(`${dom}-${kind.id}`, kind.on, (next, cx) => this.setKind(peer.id, kind.id, next, cx), c, { label: `${peer.name} ${kind.label}` })))))
-      .when(Boolean(state.text) && state.kind !== "loading", (el) => el.child(div().pl(G.lg).pb(G.xs).text_size(11.5)
-        .text_color(state.kind === "synced" ? c.dim : c.muted).child(state.text)));
-  }
-
-  syncPage(_t, c) {
-    if (!this.syncReady) return this.newsBones(c);
-    const roster = syncRoster(this.syncMachines, this.syncConfig, this.syncStatus, Date.now(), { stored: this.syncStored, live: this.syncLive });
-    if (roster.state === "loading") return this.newsBones(c);
-    if (roster.state === "empty") return div().py(G.sm).text_size(13).text_color(c.muted).child("No other machines");
-    return v_flex().w_full()
-      .when(Boolean(this.syncError), (el) => el.child(div().pb(G.sm).text_size(12.5).text_color(c.red).child(this.syncError)))
-      .children(roster.peers.map((peer) => this.syncPeer(c, peer)));
-  }
-
   render() {
     const t = theme(), c = tokens(t), p = props() ?? {};
-    const page = this.page === "mods" ? this.modsPage(t, c) : this.page === "sync" ? this.syncPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.keysPage(t, c);
+    const page = this.page === "mods" ? this.modsPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.keysPage(t, c);
     // The same window as kansō help, in its place: each leads to the other, so you can always go back.
     return v_flex().id("kanso-settings").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
@@ -449,7 +325,7 @@ export default class Settings extends View {
         .when(Boolean(this.installed), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.installed ?? "")))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); if (key === "sync") this.loadSync(cx); else this.stopSync(); this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
+      .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; cx.notify(); }, c)))
       .child(v_flex().id(`settings-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

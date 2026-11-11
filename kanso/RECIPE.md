@@ -255,7 +255,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `hc machine add` with those, never `--install`; dropped once
     `hc machine ls` shows it connected. If the save fails after the remove,
     or add keeps failing, it stays with Retry; the hint is the state's
-    tooltip. This computer has no power. Alone, no header.
+    tooltip. This computer has no power. Alone, no header. Connected, a
+    remote row has Sync (`sync-row.js`): `text` and always shown when on,
+    `yellow` when it cannot run, `dim` on hover when off; the tooltip has the
+    words. A click saves `data/kanso-sync/config.json` and bumps
+    `kanso.sync.kick`, so Spend exchanges at once.
     `hc machine ls`: 30 s in front, 2 min behind.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the

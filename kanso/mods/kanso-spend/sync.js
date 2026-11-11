@@ -1,14 +1,16 @@
 // Machine sync: a stable id, peers, and rows moved each way. No machine is in charge.
-import { isOff } from "./machines.js";
+import { isOff, machineState } from "./machines.js";
 import { clock, parseOr, reduceSeries } from "./pure.js";
 
-export const KINDS = [{ id: "spend", label: "Token spend" }];
+export const KINDS = ["spend"];
 export const EXCHANGE_MS = 180_000;
 export const BACKOFF_MAX_MS = 1_800_000;
 export const RETRY_FLOOR_MS = 15_000;
 export const MIN_VERSION = "3.23.0";
 export const PROTOCOL = 1;
 export const UPDATE_TEXT = "Update kanso there";
+// The sidebar bumps it after a save, so Spend exchanges at once.
+export const SYNC_KICK = "kanso.sync.kick";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const REL = {
@@ -56,29 +58,19 @@ export function configFrom(text) {
   return { version: 1, peers: peers && typeof peers === "object" && !Array.isArray(peers) ? peers : {} };
 }
 
+export const peerOn = (config, id) => Boolean(config?.peers?.[id]?.enabled);
+
+export function configText(config) {
+  return `${JSON.stringify(config)}\n`;
+}
+
 export function syncOn(config) {
-  return Object.values(config?.peers ?? {}).some((peer) => peer?.enabled && KINDS.some((kind) => peer.kinds?.[kind.id]));
+  return Object.keys(config?.peers ?? {}).some((id) => peerOn(config, id));
 }
-
-export function kindOn(config, id, kind) {
-  const peer = config?.peers?.[id];
-  return Boolean(peer?.enabled && peer.kinds?.[kind]);
-}
-
-const kindMap = (prev) => {
-  const kinds = prev?.kinds;
-  return kinds && typeof kinds === "object" && !Array.isArray(kinds) ? { ...kinds } : Object.fromEntries(KINDS.map((kind) => [kind.id, true]));
-};
 
 export function withPeer(config, id, enabled) {
   const base = configFrom(JSON.stringify(config ?? {}));
-  return { ...base, peers: { ...base.peers, [id]: { enabled: Boolean(enabled), kinds: kindMap(base.peers[id]) } } };
-}
-
-export function withKind(config, id, kind, enabled) {
-  const base = withPeer(config, id, Boolean(config?.peers?.[id]?.enabled));
-  const prev = base.peers[id];
-  return { ...base, peers: { ...base.peers, [id]: { ...prev, kinds: { ...prev.kinds, [kind]: Boolean(enabled) } } } };
+  return { ...base, peers: { ...base.peers, [id]: { enabled: Boolean(enabled) } } };
 }
 
 export function peersOf(list, stored = [], live = []) {
@@ -193,10 +185,8 @@ export function due(status, now, periodKey) {
 
 export function planExchange({ config, peers, status, now, periodKey, stored = [], live = [] }) {
   return peersOf(peers, stored, live).flatMap((peer) => {
-    if (peer.off || peer.layout !== "ready") return [];
-    const kinds = KINDS.filter((kind) => kindOn(config, peer.id, kind.id)).map((kind) => kind.id);
-    if (!kinds.length || !due(status?.[peer.id], now, periodKey)) return [];
-    return [{ id: peer.id, on: peer.id, name: peer.name, kinds }];
+    if (peer.off || peer.layout !== "ready" || !peerOn(config, peer.id) || !due(status?.[peer.id], now, periodKey)) return [];
+    return [{ id: peer.id, on: peer.id, name: peer.name, kinds: KINDS }];
   });
 }
 
@@ -248,38 +238,25 @@ export async function exchangeAll(runner, input) {
   return { ...done, ran: true };
 }
 
-function peerState(peer, status, now) {
-  if (peer.off) return { kind: "off", text: "Off" };
-  if (peer.layout === "loading") return { kind: "loading", text: "" };
-  if (status?.reason === "update") return { kind: "update", text: UPDATE_TEXT };
-  const time = clock(status?.synced_at, now);
-  if (peer.layout === "unavailable" || status?.reason === "unreachable") return { kind: "unreachable", text: time ? `${time} · Unreachable` : "Unreachable" };
-  if (time) return { kind: "synced", text: time };
-  return { kind: "idle", text: "" };
-}
+const syncedText = (at, now) => {
+  const minutes = Math.floor((now - Date.parse(at)) / 60_000);
+  if (!(minutes >= 0)) return "";
+  if (minutes < 1) return "synced just now";
+  return minutes < 60 ? `synced ${minutes} min ago` : `synced ${clock(at, now)}`;
+};
 
-export function peerView(peer, config, status, now) {
-  const stored = config?.peers?.[peer.id]?.kinds;
-  return {
-    id: peer.id,
-    name: peer.name,
-    enabled: Boolean(config?.peers?.[peer.id]?.enabled),
-    kinds: KINDS.map((kind) => ({ id: kind.id, label: kind.label, on: Boolean(stored?.[kind.id]) })),
-    state: peerState(peer, status, now),
-  };
+const CANNOT = new Map([["update", UPDATE_TEXT], ["unreachable", machineState("unavailable")]]);
+
+// A connected remote machine's sync icon in the sidebar: null when its row shows none.
+export function syncIcon({ name, phase, hot, config, status, now }) {
+  if (!name || phase !== "connected") return null;
+  const on = peerOn(config, name);
+  if (!on && !hot) return null;
+  const cannot = on ? CANNOT.get(status?.[name]?.reason) : null;
+  const note = cannot ?? (on ? syncedText(status?.[name]?.synced_at, now) : "");
+  return { state: cannot ? "cannot" : on ? "on" : "off", tip: note ? `Sync ${name}: ${note}` : `Sync ${name}` };
 }
 
 export function holdsOf(status, stored = [], live = []) {
   return Object.entries(status ?? {}).flatMap(([id, row]) => (row?.reason === "update" && !isOff(id, stored, live) ? [{ id, text: UPDATE_TEXT }] : []));
-}
-
-export function syncRoster(list, config, status, now, power = {}) {
-  const machines = Array.isArray(list) ? list : [];
-  const stored = power.stored ?? [];
-  const live = power.live ?? [];
-  const peers = peersOf(machines, stored, live);
-  const settling = machines.length === 0 || machines.some((machine) => machine?.layout === "loading");
-  if (!peers.length && settling) return { state: "loading", peers: [] };
-  if (!peers.length) return { state: "empty", peers: [] };
-  return { state: "peers", peers: peers.map((peer) => peerView(peer, config, status?.[peer.id], now)) };
 }

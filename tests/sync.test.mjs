@@ -5,13 +5,13 @@ import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { temporary } from "./helpers.mjs";
+import { load, temporary } from "./helpers.mjs";
 
 const runFile = promisify(execFile);
 const { exchange } = await import("../kanso/mods/kanso-spend/sync-probe.mjs");
 const { foldCosts } = await import("../kanso/mods/kanso-spend/sync-spend.js");
 const { clock } = await import("../kanso/mods/kanso-spaces/pure.js");
-const sync = await import("../kanso/mods/kanso-settings/sync.js");
+const sync = await import("../kanso/mods/kanso-spend/sync.js");
 const shipped = JSON.parse(await readFile(new URL("../kanso/mods/kanso-chrome/version.json", import.meta.url), "utf8")).version;
 const reply = (rows) => ({ machine: PEER, version: sync.MIN_VERSION, protocol: sync.PROTOCOL, rows });
 
@@ -23,7 +23,7 @@ const spend = (machine, usd, at, extra = {}) => ({
   body: { usd, tokens: usd, value: `$${usd}.00`, tokensText: String(usd), period: "month", offset: 0, ...extra },
 });
 const priced = (usd) => ({ costs: { hero: { usd, tokens: usd, value: `$${usd}.00`, stats: [{ unit: "tokens", value: String(usd) }] } } });
-const on = (id = "odin") => ({ version: 1, peers: { [id]: { enabled: true, kinds: { spend: true } } } });
+const on = (id = "odin") => ({ version: 1, peers: { [id]: { enabled: true } } });
 const ready = (name = "odin") => [{ name, layout: "ready" }];
 
 test("A computer keeps the same id", async (t) => {
@@ -123,7 +123,7 @@ test("Sync off, or a computer that is not connected, asks nothing", async () => 
   const runner = { exec: async () => { calls += 1; return { code: 0, stdout: "" }; } };
   const base = { peers: ready(), status: {}, rows: [], self: SELF, now: NOW, periodKey: "month:0" };
   const off = await sync.exchangeAll(runner, { ...base, config: { version: 1, peers: {} } });
-  const disabled = await sync.exchangeAll(runner, { ...base, config: { version: 1, peers: { odin: { enabled: false, kinds: { spend: true } } } } });
+  const disabled = await sync.exchangeAll(runner, { ...base, config: { version: 1, peers: { odin: { enabled: false } } } });
   const asleep = await sync.exchangeAll(runner, { ...base, config: on(), peers: [{ name: "odin", layout: "unavailable" }] });
   const recent = await sync.exchangeAll(runner, {
     ...base, config: on(), status: { odin: { at: NOW, failures: 0, reason: null, period: "month:0" } },
@@ -205,19 +205,8 @@ test("A computer on an older kansō says to update it, and nothing is written th
   const later = new Date(2026, 10, 10, 15, 4, 0);
   assert.equal(clock(day.toISOString(), later.getTime()), "09:05");
   assert.equal(clock(new Date(2026, 10, 9, 9, 5, 0).toISOString(), later.getTime()), "Nov 9 09:05");
-  const roster = sync.syncRoster(
-    [{ name: null, layout: "ready" }, { name: "odin", layout: "ready" }],
-    on(),
-    { odin: stale.status.odin },
-    later.getTime(),
-  );
-  assert.equal(roster.state, "peers");
-  assert.equal(roster.peers[0].state.text, "Update kanso there");
-  assert.equal(sync.syncRoster([{ name: null, layout: "ready" }], {}, {}, later.getTime()).state, "empty");
-  assert.equal(sync.syncRoster([], {}, {}, later.getTime()).state, "loading");
-  const enabled = sync.withPeer({ version: 1, peers: {} }, "odin", true);
-  assert.equal(enabled.peers.odin.kinds.spend, true);
-  assert.equal(sync.syncOn(sync.withKind(enabled, "odin", "spend", false)), false);
+  const icon = sync.syncIcon({ name: "odin", phase: "connected", hot: false, config: on(), status: { odin: stale.status.odin }, now: later.getTime() });
+  assert.deepEqual(icon, { state: "cannot", tip: "Sync odin: Update kanso there" });
 });
 
 test("A computer turned off from the sidebar is not asked and shows as off", async () => {
@@ -236,8 +225,8 @@ test("A computer turned off from the sidebar is not asked and shows as off", asy
   const both = {
     version: 1,
     peers: {
-      odin: { enabled: true, kinds: { spend: true } },
-      loki: { enabled: true, kinds: { spend: true } },
+      odin: { enabled: true },
+      loki: { enabled: true },
     },
   };
   const steps = sync.planExchange({
@@ -245,20 +234,39 @@ test("A computer turned off from the sidebar is not asked and shows as off", asy
     status: {}, now: NOW, periodKey: "month:0", stored, live,
   });
   assert.deepEqual(steps.map((step) => step.id), ["loki"]);
-  const roster = sync.syncRoster(ready(), on(), { odin: { reason: "update" } }, NOW, { stored, live });
-  assert.equal(roster.peers.length, 1);
-  assert.equal(roster.peers[0].state.kind, "off");
-  assert.equal(roster.peers[0].state.text, "Off");
   assert.equal(sync.holdsOf({ odin: { reason: "update" } }, stored, live).length, 0);
   assert.equal(sync.holdsOf({ odin: { reason: "update" } }, stored, connected)[0].text, sync.UPDATE_TEXT);
-  const missing = sync.syncRoster([{ name: null, layout: "ready" }], on(), { odin: { reason: "update" } }, NOW, { stored, live });
-  assert.equal(missing.state, "peers");
-  assert.equal(missing.peers[0].id, "odin");
-  assert.equal(missing.peers[0].state.text, "Off");
-  const quiet = sync.syncRoster([], {}, {}, NOW, { stored: [{ name: "tmp", temporary: true }], live });
-  assert.equal(quiet.state, "loading");
-  const awake = sync.syncRoster(ready(), on(), {}, NOW, { stored, live: connected });
-  assert.equal(awake.peers[0].state.kind, "idle");
+});
+
+test("A machine with Sync on shares every kind, and one save turns it on", () => {
+  const enabled = sync.withPeer({ version: 1, peers: { loki: { enabled: true } } }, "odin", true);
+  assert.deepEqual(enabled, { version: 1, peers: { loki: { enabled: true }, odin: { enabled: true } } });
+  assert.equal(sync.syncOn(sync.withPeer(on(), "odin", false)), false);
+  assert.equal(sync.peerOn(enabled, "odin"), true);
+  assert.equal(sync.peerOn({}, "odin"), false);
+  const steps = sync.planExchange({ config: on(), peers: ready(), status: {}, now: NOW, periodKey: "month:0" });
+  assert.deepEqual(steps.map((step) => step.kinds), [sync.KINDS]);
+  assert.equal(sync.configText(enabled), `${JSON.stringify(enabled)}\n`);
+});
+
+test("The sidebar's sync icon shows on a connected remote machine only, and its tooltip says the state", () => {
+  const at = (minutes) => new Date(NOW - minutes * 60_000).toISOString();
+  const icon = (phase, hot, config, status = {}) => sync.syncIcon({ name: "dark", phase, hot, config, status, now: NOW });
+  const dark = on("dark");
+  for (const phase of ["off", "unavailable", "loading", "login"]) {
+    assert.equal(icon(phase, true, dark), null, phase);
+    assert.equal(icon(phase, false, dark), null, phase);
+  }
+  assert.equal(sync.syncIcon({ name: null, phase: "connected", hot: true, config: dark, status: {}, now: NOW }), null, "this computer has none");
+  assert.equal(icon("connected", false, {}), null, "off waits for the hover");
+  assert.deepEqual(icon("connected", true, {}), { state: "off", tip: "Sync dark" });
+  assert.deepEqual(icon("connected", false, dark), { state: "on", tip: "Sync dark" });
+  assert.deepEqual(icon("connected", false, dark, { dark: { synced_at: at(2) } }), { state: "on", tip: "Sync dark: synced 2 min ago" });
+  assert.equal(icon("connected", false, dark, { dark: { synced_at: at(0) } }).tip, "Sync dark: synced just now");
+  assert.match(icon("connected", false, dark, { dark: { synced_at: at(90) } }).tip, /^Sync dark: synced (\w{3} \d+ )?\d\d:\d\d$/);
+  assert.deepEqual(icon("connected", false, dark, { dark: { reason: "update" } }), { state: "cannot", tip: `Sync dark: ${sync.UPDATE_TEXT}` });
+  assert.deepEqual(icon("connected", false, dark, { dark: { reason: "unreachable" } }), { state: "cannot", tip: "Sync dark: Unreachable" });
+  assert.deepEqual(icon("connected", true, {}, { dark: { reason: "update" } }), { state: "off", tip: "Sync dark" }, "a failure from before it was off is not shown");
 });
 
 test("Paths are built with the other computer's path API", async () => {
@@ -296,4 +304,20 @@ test("Paths are built with the other computer's path API", async () => {
   assert.equal(out.rows[0].machine, SELF);
   assert.equal(seen[0], "C:\\Users\\me\\.config\\herdr-app\\data\\kanso-sync");
   assert.equal(seen.find((item) => Array.isArray(item))[2], paths.store);
+});
+
+test("Spend exchanges at once when the sidebar changes Sync, and not on other renders", async () => {
+  let kick = 1;
+  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], { shared: (key) => (key === "kanso.sync.kick" ? kick : null) });
+  const view = new TokenSpend();
+  const forced = [];
+  view.syncKick = kick;
+  view.exchange = (_cx, force) => forced.push(force);
+  const cx = { timer: { after: (_ms, fn) => fn(cx) } };
+  view.kicked(cx);
+  assert.deepEqual(forced, []);
+  kick = 2;
+  view.kicked(cx);
+  view.kicked(cx);
+  assert.deepEqual(forced, [true]);
 });

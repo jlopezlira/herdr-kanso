@@ -57,9 +57,9 @@ export function quietTabs(id, items, value, onChange, c) {
 }
 
 /** `icon`: a name in kanso-chrome's icons, or a path. */
-export function iconButton(id, icon, tip, onClick, c, { spin = false, disabled = false, active = false } = {}) {
+export function iconButton(id, icon, tip, onClick, c, { spin = false, disabled = false, active = false, color = null } = {}) {
   const path = icon.includes("/") ? icon : `${ICONS}${icon}.svg`;
-  const glyph = svg(path).size(ICON).text_color(spin || active ? c.text : disabled ? c.border : c.muted);
+  const glyph = svg(path).size(ICON).text_color(color ?? (spin || active ? c.text : disabled ? c.border : c.muted));
   return Button.new(id).size(26).flex_none().items_center().justify_center().rounded(R.control)
     .accessibility_label(tip).tooltip(tip)
     .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle)).focus((s) => s.bg(c.subtle)).on_click((_e, cx) => onClick(cx)))

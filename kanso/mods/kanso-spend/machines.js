@@ -115,7 +115,7 @@ export function machineTip(title, phase, hint = "") {
   return word ? `${title}: ${note || word}` : title;
 }
 
-const HOT = ["machine", "machine-power", "machine-retry", "machine-login", "machine-add"];
+const HOT = ["machine", "machine-power", "machine-retry", "machine-login", "machine-add", "machine-sync"];
 
 export function machineHot(name, hover, kbd, navKey) {
   const key = name ?? "local";
