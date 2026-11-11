@@ -1,7 +1,10 @@
 // kansō help, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, closeOverlay, keys, openOverlay, run } from "herdr";
+import { paths } from "./platform-paths.js";
+import { localName } from "./platform-host.js";
+import { modifierLabels, guideSections } from "./guide.js";
+import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } from "herdr";
 import { G, tokens, quietTabs, quietLink } from "./ui.js";
 import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
@@ -17,8 +20,6 @@ const PAGES = [
 const U = 40, GAP = 5; // a key's unit and the space between keys
 
 const LIT_MS = 650;
-const MOD_GLYPH = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘" };
-const MOD_WORD = { ctrl: "Control", alt: "Option", shift: "Shift", cmd: "Command" };
 
 const modsOf = (m = {}) => MODIFIERS.filter((k) => (k === "cmd" ? m.platform : k === "ctrl" ? m.control : m[k]));
 
@@ -34,7 +35,7 @@ export default class Help extends View {
     // Your pet waves once when the dōjō's page shows, then is still; a redraw only when its frame changes.
     this.hello = Date.now();
     cx.timer.every(TICK_MS, (cx) => { if (this.page === "dojo" && this.pal.moved(this.petState(), this.hello)) cx.notify(); });
-    this.mods = ["cmd", "alt"]; // the layer shown first: the vim panes
+    this.mods = localName() === "windows" ? ["alt"] : ["cmd", "alt"]; // the layer shown first: the vim panes
     this.lists = false;
     this.picked = "h";
     this.lit = null;
@@ -74,7 +75,7 @@ export default class Help extends View {
     const picked = !isMod && this.picked === name;
     const fill = pressed || picked ? c.accent : held ? c.text + "26" : does ? c.accent + "24" : c.text + "08";
     const ink = pressed || picked ? (t.accent_foreground ?? c.canvas) : does || held ? c.text : c.dim;
-    const label = CAP[name] ?? (name.length === 1 ? name.toUpperCase() : name);
+    const label = (isMod ? modifierLabels(localName()).MOD_GLYPH[name] : CAP[name]) ?? (name.length === 1 ? name.toUpperCase() : name);
     return div().id(`cap-${name}-${i}`).w(width).h(U).flex_none().rounded(7)
       .border_1().border_color(pressed || picked ? c.accent : does ? c.accent + "70" : held ? c.text + "40" : c.border)
       .bg(fill).flex().items_center().justify_center()
@@ -100,12 +101,13 @@ export default class Help extends View {
   keysPage(t, c) {
     const bound = this.shown();
     const chosen = bound.get(this.picked);
-    const layerName = this.lists ? "In every list and menu" : this.mods.length ? this.mods.map((m) => MOD_GLYPH[m]).join("") : "No modifier";
+    const { MOD_GLYPH, MOD_WORD, join } = modifierLabels(localName());
+    const layerName = this.lists ? "In every list and menu" : this.mods.length ? this.mods.map((m) => MOD_GLYPH[m]).join(join) : "No modifier";
     const list = [...bound.entries()].toSorted((a, b) => describe(a[1].action).localeCompare(describe(b[1].action)));
     const chordOf = (d) => (this.lists ? d.chord.split(" ").map((x) => glyphs(x)).join(" ") : glyphs(d.chord));
     return v_flex().gap(G.lg)
       .child(h_flex().gap(G.sm).items_center().flex_wrap()
-        .children(MODIFIERS.map((m) => this.chip(c, `mod-${m}`, `${MOD_GLYPH[m]} ${MOD_WORD[m]}`, !this.lists && this.mods.includes(m),
+        .children(MODIFIERS.map((m) => this.chip(c, `mod-${m}`, join ? MOD_WORD[m] : `${MOD_GLYPH[m]} ${MOD_WORD[m]}`, !this.lists && this.mods.includes(m),
           () => { this.lists = false; this.mods = this.mods.includes(m) ? this.mods.filter((x) => x !== m) : MODIFIERS.filter((x) => x === m || this.mods.includes(x)); })))
         .child(div().w(G.sm))
         .child(this.chip(c, "mod-lists", "Lists: j k gg G", this.lists, () => { this.lists = !this.lists; this.mods = []; this.picked = "j"; }))
@@ -162,33 +164,7 @@ export default class Help extends View {
   }
 
   guidePage(t, c) {
-    return v_flex().gap(G.xl)
-      .child(this.block(c, "The strip", [
-        "Every pane sits in a row you slide along, each one wide enough to read. ⌘D opens one to the right, ⌘⇧D one below it in the same column.",
-        "⌘⌥H J K L moves between panes as vim does; with ⇧ it moves the pane itself. ⌘1 to ⌘9 jump to a pane, ⌘⇧- and ⌘⇧= show fewer or more at once.",
-        "⌘⌥P pins a pane to its side so it stays in view while you slide. New to h j k l? The hjkl dōjō is where to practice.",
-      ]))
-      .child(this.block(c, "The sidebar", [
-        "Projects lists your spaces and their agents, Status sorts them by what they need from you, Threads by conversation. ⌃⌥P, ⌃⌥S and ⌃⌥T switch.",
-        "⌘⌥H from the first pane puts the keyboard on the list: J and K move, gg and G go to the ends, Enter or L opens the row, / searches, Esc goes back.",
-        "⌘J goes to the next agent that needs you, in any space.",
-      ]))
-      .child(this.block(c, "Panels", [
-        "The icons at the top right open a panel beside the strip: Files, the PR, Ports, Memory, Spend and more. ⌃⇧1 to ⌃⇧9 open them by place.",
-      ]))
-      .child(this.block(c, "Sleep and Arrangements", [
-        "Sleep puts a tab, or a whole project, away: its agents exit and keep their conversations; Wake brings them back on the same ones. Right-click a project, or the moon in a pane's header.",
-        "Arrangements (⌘⌥T) saves a tab as it is, agents and widths included, to open again in any project.",
-      ]))
-      .child(this.block(c, "Every list and menu", [
-        "J and K (or the arrows) move, gg and G go to the first and last, Enter chooses, Esc closes.",
-      ]))
-      .child(this.block(c, "Your setup", [
-        "Your keys, the panels and what shows are in kansō settings (Settings, at the top right here): rebind a key by clicking it and pressing the new chord.",
-        "Two themes come with kansō: kanso (dark) and kanso-day (light). Pick one in Herdr's settings, under Appearance.",
-        "Your keys are in ~/.config/herdr-app/keys.json, the layout in layouts/kanso.json, kansō's data under data/. An update changes a key only where the release changed it, never one you set.",
-        "kansō checks for a new release on start and every few minutes; turn automatic checks off or check now in kansō settings, What's new. Installing an update is always your choice.",
-      ]));
+    return v_flex().gap(G.xl).children(guideSections(keys(), localName(), paths.shorten(appHome(), home())).map(([title, lines]) => this.block(c, title, lines)));
   }
 
   render() {

@@ -155,7 +155,7 @@ test("A computer out of reach keeps the last figures, then waits longer", async 
 });
 
 test("A computer on an older kansō says to update it, and nothing is written there", async (t) => {
-  assert.equal(sync.MIN_VERSION, shipped);
+  assert.equal(sync.versionBelow(shipped), false);
   const empty = await temporary(t);
   const missing = await exchange({}, { appHome: empty });
   assert.deepEqual(missing, { reason: "update", version: "", protocol: sync.PROTOCOL });

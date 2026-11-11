@@ -27,7 +27,7 @@ import { fileURLToPath } from "node:url";
 export const VERSION_FILE = "kanso/mods/kanso-chrome/version.json";
 export const CHANGELOG = "CHANGELOG.md";
 // What the updater installs; a change here is a release.
-export const INSTALLED = ["kanso/mods", "kanso/themes", "kanso/layouts", "kanso/keys.json"];
+export const INSTALLED = ["kanso/mods", "kanso/themes", "kanso/layouts", "kanso/keys.json", "kanso/keys.windows.json"];
 export const CATEGORIES = ["Breaking", "Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"];
 // Technical debt merged without a version of its own: it waits here for the next release.
 export const UNRELEASED = "Unreleased";

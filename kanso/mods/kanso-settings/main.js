@@ -1,4 +1,4 @@
-import { localService } from "./platform-host.js";
+import { localName, localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
@@ -7,9 +7,10 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
 import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe } from "./ui.js";
-import { glyphs, keycap } from "./marks.js";
-import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from "./actions.js";
+import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
+import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
+import { shippedKeymap } from "./platform-keymap.js";
 import { parseChangelog, plain, compare } from "./changelog.js";
 import { tryOrAsync } from "./pure.js";
 
@@ -67,9 +68,12 @@ export default class Settings extends View {
     const mine = list.filter((k) => k.section === section && ofRow(row, k.action)).map((k) => k.keys);
     return row.family ? [...new Set(mine.map(familyPattern))] : mine;
   }
+  shippedBindings(row, section) {
+    return Object.entries(DEFAULT_KEYS[shippedKeymap(localName())][section] ?? {}).filter(([, action]) => ofRow(row, action));
+  }
+
   shipped(row, section) {
-    const sec = DEFAULT_KEYS[section] ?? {};
-    const mine = Object.keys(sec).filter((k) => ofRow(row, sec[k]));
+    const mine = this.shippedBindings(row, section).map(([chord]) => chord);
     return row.family ? [...new Set(mine.map(familyPattern))] : mine;
   }
 
@@ -105,8 +109,7 @@ export default class Settings extends View {
   }
 
   reset(row, section, cx) {
-    const sec = DEFAULT_KEYS[section] ?? {};
-    const set = Object.fromEntries(Object.entries(sec).filter(([, a]) => ofRow(row, a)));
+    const set = Object.fromEntries(this.shippedBindings(row, section));
     this.change(cx, (doc) => {
       const drop = Object.keys(doc[section] ?? {}).filter((k) => ofRow(row, doc[section][k]));
       return rebound(doc, section, { drop, set });
@@ -127,8 +130,6 @@ export default class Settings extends View {
       cx.notify();
     });
   }
-
-  shown(chord) { return glyphs(chord).replace(/N$/, "1–9"); }
 
   // The Nth shown panel gets the family's Nth chord; a new key is taken for all of them.
   barKeys(t, c, group, list) {
@@ -181,7 +182,7 @@ export default class Settings extends View {
           .on_click((_e, cx) => this.startCapture(row, g.section, chords[0] ?? null, cx))
           .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(row.label))
           .when(changed && !capturing, (el) => el.child(quietLink(`reset-${id}`, "Reset", (cx) => this.reset(row, g.section, cx), c, { size: 11.5 })))
-          .when(!capturing, (el) => el.children(chords.length ? chords.map((k) => keycap(t, this.shown(k))) : [keycap(t, "No key", true)]))
+          .when(!capturing, (el) => el.children(chords.length ? chords.map((k) => keycap(t, shownChord(k))) : [keycap(t, "No key", true)]))
           .when(capturing, (el) => el.child(div().flex_none().text_size(12).text_color(c.accent).child(row.family ? "Press a key with a digit" : "Press the new key")));
         return capturing ? v_flex().w_full().child(line).child(this.pressNote(c, "Esc to keep, Backspace to remove.")) : line;
       })));

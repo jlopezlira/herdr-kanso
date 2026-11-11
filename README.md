@@ -33,6 +33,8 @@ Or, from a clone: `sh ./scripts/local-install.sh`. You need the Herdr app;
 `gh` for the PR and Shipped panels; Node 22.15 or newer for Spend. kansō
 updates itself: a release shows as a row above Settings, and a click installs
 it. `ctrl-shift-l` goes back to your previous layout.
+On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
+`kanso/keys.json`.
 
 ## What it does
 

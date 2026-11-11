@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.25.0] - 2026-11-11
+
+### Added
+
+- Windows gets its own shortcuts for panes, spaces, panels and search, using Ctrl and Alt without taking the Windows key or AltGr. Reset restores the shortcuts for your system, and Help follows your current bindings and shows your actual settings folder.
+
 ## [3.24.0] - 2026-11-10
 
 ### Added
