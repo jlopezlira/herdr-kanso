@@ -11,7 +11,11 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [Unreleased]
+## [3.22.4] - 2026-11-10
+
+### Fixed
+
+- ⌘B hides the sidebar to its rail, as Hide sidebar does, instead of removing it. The tab bar no longer slides under the window buttons, and ⌘J and the sidebar's keys keep working. A sidebar hidden from the command palette comes back as the rail.
 
 ### Changed
 

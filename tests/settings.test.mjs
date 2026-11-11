@@ -40,10 +40,16 @@ test("A new key says what it takes over, and keys.json comes back changed only w
 // ⌘⌥j/k/l), over Hide Others, while the Kanso layout shows.
 const ASKED = new Set(["cmd-alt-h"]);
 
+// Herdr's sidebar key on Linux and Windows (its AGENTS.md); the macOS file has cmd-b.
+const ELSEWHERE = { "ctrl-shift-b": "layout.toggle:sidebar" };
+const herdrKeys = () => {
+  const herdr = JSON.parse(readFileSync(new URL("./herdr-keys.macos.json", import.meta.url), "utf8"));
+  return new Map([...Object.values(herdr).filter((v) => v && typeof v === "object").flatMap((sec) => Object.entries(sec)), ...Object.entries(ELSEWHERE)]);
+};
+
 test("The Keys page lists Kanso's own keys only, and Reset knows them all", async () => {
   const { GROUPS, HERDRS, ofRow } = await actions();
-  const herdr = JSON.parse(readFileSync(new URL("./herdr-keys.macos.json", import.meta.url), "utf8"));
-  const herdrChords = new Set(Object.values(herdr).filter((v) => v && typeof v === "object").flatMap((sec) => Object.keys(sec)));
+  const herdrChords = herdrKeys();
   const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
   const shipped = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
   assert.deepEqual(clone(DEFAULT_KEYS), shipped, "regenerate kanso-settings/defaults.js from kanso/keys.json");
@@ -84,7 +90,7 @@ test("A chord reads as glyphs on macOS and as names elsewhere", async () => {
 // ones macOS keeps for itself: Kanso's keys never give either another
 // meaning. Where Kanso takes one of Herdr's, it is the same command done
 // the strip's way (a split, going to or swapping a pane, close, zoom as the
-// width, a space that is there), or Find in the conversation, which falls
+// width, a space that is there, the sidebar hidden to its rail), or Find in the conversation, which falls
 // back to the terminal's own. Everything else is a chord of Kanso's own.
 const SAME_AS_HERDR = {
   "pane.split": /^kanso-strip\.new-(right|down)$/,
@@ -96,13 +102,13 @@ const SAME_AS_HERDR = {
   "app.settings": /^kanso-spend\.settings$/,
   "app.help": /^mod\.open:kanso-help$/,
   "terminal.search": /^kanso-strip\.find$/,
+  "layout.toggle": /^kanso-spaces\.sidebar$/,
 };
 const MACOS = ["cmd-alt-d", "cmd-alt-h", "cmd-h", "cmd-m", "cmd-q", "cmd-tab", "cmd-space", "cmd-alt-escape", "cmd-shift-3", "cmd-shift-4", "cmd-shift-5", "ctrl-up", "ctrl-down", "ctrl-left", "ctrl-right", "cmd-`"];
 
 test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
-  const herdr = JSON.parse(readFileSync(new URL("./herdr-keys.macos.json", import.meta.url), "utf8"));
   const kanso = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
-  const theirs = new Map(Object.values(herdr).filter((v) => v && typeof v === "object").flatMap((sec) => Object.entries(sec)));
+  const theirs = herdrKeys();
   const wrong = [];
   for (const [section, keys] of Object.entries(kanso)) {
     for (const [chord, action] of Object.entries(keys)) {
