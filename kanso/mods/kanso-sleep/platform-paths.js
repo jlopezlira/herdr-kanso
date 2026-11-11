@@ -41,3 +41,10 @@ export function pathApi(platform = "macos") {
 }
 
 export const paths = pathApi();
+
+// That computer's own default app home. A custom HERDR_APP_HOME there is not followed.
+export function appHomeDir(platform, home) {
+  const api = pathApi(platform === "windows" ? "windows" : "macos");
+  const parts = platform === "windows" ? ["AppData", "Roaming", "herdr-app"] : [".config", "herdr-app"];
+  return api.join(home, ...parts);
+}

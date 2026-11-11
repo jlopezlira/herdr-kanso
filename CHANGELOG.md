@@ -11,11 +11,27 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.27.0] - 2026-11-11
+## [3.29.0] - 2026-11-11
 
 ### Added
 
 - Simulator, in the tab bar, shows an iOS simulator or an Android emulator beside the agent: the device, its screen at the device's shape, and touch, typing, Home, Lock, volume and rotate. It stays off until this computer has Xcode's simctl or an Android SDK, and it turns off like any other panel. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. On Linux and Windows there is no iOS row. Nothing is downloaded until you press the button that installs serve-sim. A space on another machine still shows this computer's devices.
+
+## [3.28.0] - 2026-11-11
+
+### Added
+
+- Sleep works for a space on another computer. The record stays on the computer that owns the agents, so the same tabs are asleep whichever computer you sit at, and waking from either works. When that computer does not answer, its asleep rows stay listed, grey, with how long ago they were read, and Wake waits until it answers. An order that cannot be saved is refused and nothing is left half written.
+
+### Fixed
+
+- A tab woken while a space of another computer was in front came back on that computer.
+
+## [3.27.0] - 2026-11-11
+
+### Added
+
+- Files, Preview and Images work for a space on another computer. Files lists that computer's folder and says when it cannot be reached or the folder cannot be read. Preview shows a picture (its name, its size in pixels when known, and Open with), and a Markdown file there includes the pictures it embeds. Images shows the pictures an agent on that computer made, and a note still sends. On a poor connection the folder or file is checked before it is read again, a picture over 2 MB waits until you load it, and a missed answer keeps the last view with its age and Retry.
 
 ## [3.26.0] - 2026-11-11
 

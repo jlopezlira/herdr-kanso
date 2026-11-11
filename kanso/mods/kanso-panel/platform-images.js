@@ -68,11 +68,20 @@ const firstPage = async (file, size, pngPath) => await quickLook(file, size, png
   const color = (file) => platform === "macos" ? run("sh", ["-c", COLOR, "sh", file]) : platform === "windows"
     ? powershell(run, `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Drawing; $image=[Drawing.Image]::FromFile(${psQuote(file)}); try { $small=$image.GetThumbnailImage(1,1,$null,[IntPtr]::Zero); try { $p=$small.GetPixel(0,0); '#{0:x2}{1:x2}{2:x2}' -f $p.R,$p.G,$p.B } finally { $small.Dispose() } } finally { $image.Dispose() }`)
     : run("magick", [file, "-scale", "1x1!", "-depth", "8", "-format", "#%[hex:p{0,0}]", "info:"]);
+  const pixels = async (file) => {
+    const r = platform === "macos" ? await run("sips", ["-g", "pixelWidth", "-g", "pixelHeight", file]).catch(() => null)
+      : platform === "windows" ? await powershell(run, `$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Drawing; $image=[Drawing.Image]::FromFile(${psQuote(file)}); try { '{0} {1}' -f $image.Width, $image.Height } finally { $image.Dispose() }`).catch(() => null)
+      : await run("magick", ["identify", "-format", "%w %h", file]).catch(() => null);
+    if (r?.code !== 0) return null;
+    const width = Number(/pixelWidth:\s*(\d+)/.exec(r.stdout)?.[1] ?? r.stdout.trim().split(/\s+/)[0]);
+    const height = Number(/pixelHeight:\s*(\d+)/.exec(r.stdout)?.[1] ?? r.stdout.trim().split(/\s+/)[1]);
+    return width > 0 && height > 0 ? { width, height } : null;
+  };
   const fresh = (dir, key) => platform === "windows"
     ? powershell(run, `$ErrorActionPreference='Stop'; [IO.Directory]::CreateDirectory(${psQuote(dir)}) | Out-Null; Get-ChildItem -LiteralPath ${psQuote(dir)} -File | Where-Object { $_.Name.StartsWith(${psQuote(key + "-")}) -or $_.LastWriteTimeUtc -lt [DateTime]::UtcNow.AddDays(-1) } | Remove-Item -Force`)
     : run("sh", ["-c", 'mkdir -p "$1" && rm -f "$1/$2"-* && find "$1" -type f -mtime +1 -exec rm -f {} + 2>/dev/null; true', "sh", dir, key]);
   const avatars = (dir, logins) => platform === "windows"
     ? powershell(run, `$dir=${psQuote(dir)}; [IO.Directory]::CreateDirectory($dir) | Out-Null; foreach ($login in @(${logins.map(psQuote).join(",")})) { $file=Join-Path $dir ($login+'.jpg'); $part=$file+'.part'; try { Invoke-WebRequest -Uri ('https://github.com/'+$login+'.png?size=96') -OutFile $part -TimeoutSec 10; Move-Item -LiteralPath $part -Destination $file -Force } catch {} finally { if (Test-Path -LiteralPath $part) { Remove-Item -LiteralPath $part -Force } }; if ((Test-Path -LiteralPath $file) -and (Get-Item -LiteralPath $file).Length -gt 0) { $login } }`)
     : run("sh", ["-c", AVATARS, "sh", dir, ...logins]);
-  return { avatars, quickLook, toPng, firstPage, chromiums: chromiumPrograms, probe, color, fresh };
+  return { avatars, quickLook, toPng, firstPage, chromiums: chromiumPrograms, probe, color, fresh, pixels };
 }

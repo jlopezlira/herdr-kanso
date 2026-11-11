@@ -1,19 +1,22 @@
-import { localService } from "./platform-host.js";
+import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
+import { systemApi } from "./platform-system.js";
+import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 // Images (the panel is "look" inside): pictures an agent made, beside it, and notes pinned to the spots
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay } from "herdr";
+import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
 import { tilde } from "./lib.js";
 import { G, H, R, T, tokens, quietLink, iconButton, skeleton, breathe } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
+import { walkLayout } from "./layout.js";
 import { lookMemory } from "./panel-state.js";
 import { transcriptPaths, MOST } from "./transcript.js";
 
@@ -25,11 +28,9 @@ const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept
 const NOTE = "kanso.look.note"; // the dialogs' answers, by token: { [token]: { text, at } }, each taken once by the pin that asked
 const EMPTY = "Pictures this agent writes show up here, from its conversation.";
 const NO_AGENT = "No agent in focus.";
-// $1 the copies' folder, $2 one file's key: its older copies go, and any left from yesterday.
-// An agent's terminal on this computer that still runs, or null: a shell would run the note, and another
-// machine's files are not here.
+// An agent's terminal that still runs, or null: a shell would run the note.
 function live(address) {
-  if (!address || String(address).includes("/")) return null;
+  if (!address) return null;
   const term = terminals().find((k) => k.address === address);
   return term && isAgent(term, panes().find((q) => q.terminal === address)) ? address : null;
 }
@@ -46,6 +47,8 @@ export class Look {
     this.kept = new Map(); // unsent pins, by agent and picture, until Send
     this.blind = new Set(); // this session: a file that will not open stays out of the row
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.watching = null;
+    this.poll = pollStart(); this.stamp = null; this.pendingStamp = null; this.fresh = null; this.held = null; this.arm = null; this.pullFailed = false;
+    this.homeOn = null; this.homeDir = null;
     this.asking = null; // { id, token, path, who }: the pin a dialog asks about, and which dialog
     this.pinId = 0; // each pin its own id: dropping one never moves the dialog's answer onto another
     this.transcript = null; // the agent's conversation on disk, as last read
@@ -59,12 +62,12 @@ export class Look {
     cx.timer.every(TICK_MS, (cx) => this.tick(cx));
   }
 
-  saveState() { return this.selected?.path ? { path: this.selected.path } : null; }
+  saveState() { return this.selected?.path ? { path: this.selected.path, on: machineOf(this.agent()) } : null; }
 
   async restoreState(state) {
     const path = typeof state?.path === "string" ? state.path : "";
     if (!path) return false;
-    const ok = await localService(fileApi).test(path).catch(() => false);
+    const ok = await (await serviceOn(fileApi, state?.on || null)).test(path).catch(() => false);
     if (!lookMemory(state, () => ok) || !shows(itemOf(path))) return false;
     this.keptPath = path;
     return true;
@@ -87,12 +90,50 @@ export class Look {
       // A note goes to the agent shown, so what another agent made is not left selected.
       this.hold();
       this.follow = now; this.items = []; this.picked = false; this.readAt = 0;
+      this.stamp = null; this.pendingStamp = null; this.poll = pollStart(); this.arm = null; this.held = null; this.fresh = null;
       if (!this.asked.some((i) => i.path === this.selected?.path)) { this.selected = null; this.shown = null; this.pins = []; }
       else if (this.selected) this.pins = (this.kept.get(this.pinKey(this.selected.path)) ?? []).map((p) => ({ ...p }));
       this.keep();
       cx.notify();
     }
-    if (Date.now() - this.readAt >= READ_MS) this.read(cx);
+    const on = machineOf(this.agent());
+    if (!on) { if (Date.now() - this.readAt >= READ_MS) this.read(cx); return; }
+    if (this.readAt === 0) { this.read(cx); return; }
+    this.armCheck(cx);
+  }
+
+  paneHidden() {
+    if (typeof layout !== "function") return false;
+    return walkLayout(layout(), "panel-body")?.hidden === true;
+  }
+
+  // No screen read on a timer: one stat of the conversation, and a read only when it changed.
+  armCheck(cx) {
+    const on = machineOf(this.agent());
+    if (!on || this.arm || !remoteDue(on, window()?.active, this.paneHidden())) return;
+    const file = this.transcript?.address === this.agent() ? this.transcript.file : null;
+    if (!file) { this.poll = pollNext(this.poll, "same"); new ArmPoll(this).start(cx, (tick) => this.read(tick)); return; }
+    new ArmPoll(this).start(cx, (tick) => this.probe(tick));
+  }
+
+  probe(cx) {
+    const address = this.agent(), on = machineOf(address);
+    const file = this.transcript?.address === address ? this.transcript.file : null;
+    if (!file || !remoteDue(on, window()?.active, this.paneHidden())) return;
+    cx.spawn(async (cx) => {
+      const { outcome, next } = await takeStamp(async () => (await serviceOn(fileApi, on)).stat(file), this.stamp);
+      if (this.agent() !== address) return;
+      if (outcome === "seen") this.stamp = next;
+      if (outcome === "changed") this.pendingStamp = next;
+      if (outcome === "failed") {
+        const view = staleView(this.items.length > 0 || Boolean(this.shown?.image || this.shown?.deferred), this.fresh, Date.now(), copyFailure(new Error("timed out"), on));
+        if (view.keep) this.held = view.hold;
+        else if (!this.note) this.note = { error: true, text: view.error };
+      }
+      if (outcome === "changed") this.read(cx);
+      else { this.poll = pollNext(this.poll, outcome); this.armCheck(cx); }
+      cx.notify();
+    });
   }
 
   async recall(file) {
@@ -105,12 +146,23 @@ export class Look {
   read(cx) {
     const address = this.agent();
     if (this.reading || !address) return;
-    this.reading = true;
+    this.reading = true; this.pullFailed = false;
     cx.spawn(async (cx) => {
       try {
         const r = await hc(["read", address, "--lines", String(LINES)]);
+        const on = machineOf(address);
+        const homeDir = await (async () => {
+          if (!on) return home();
+          if (this.homeOn === on && this.homeDir) return this.homeDir;
+          try {
+            const dir = await (await serviceOn(systemApi, on)).userHome();
+            this.homeOn = on; this.homeDir = dir;
+            return dir;
+          } catch (e) { this.note = { error: true, text: copyFailure(e, on) }; this.pullFailed = true; return null; }
+        })();
+        if (homeDir == null) return;
         const before = this.transcript?.address === address ? this.transcript : null;
-        const written = await transcriptPaths(address, home(), before, (file) => this.recall(file));
+        const written = await transcriptPaths(address, homeDir, before, (file) => this.recall(file), on);
         if (address !== this.agent()) return;
         // Another program or conversation in the same terminal: what the last one made is not this one's.
         const other = (before?.front && written.front && before.front.pid !== written.front.pid) || (before?.file && written.file && before.file !== written.file);
@@ -119,15 +171,14 @@ export class Look {
           this.kept = new Map([...this.kept].filter(([key]) => key.slice(0, address.length + 1) !== `${address}\n`));
           if (this.asking?.who === address) this.asking = null;
         }
-        if (written.failed) return;
+        if (written.failed) { this.pullFailed = true; return; }
         // No record for a moment (an agent still starting): keep the conversation already read.
         if (!written.file && before?.file && !other) { this.transcript = before; return; }
         const screen = r.code === 0 ? r.stdout : "";
         const cwd = terminals().find((k) => k.address === address)?.cwd ?? null;
-        const homeDir = home();
         const named = [...(written.paths ?? []), ...mentions(screen, MOST).toReversed()].map((m) => resolvePath(m, cwd, homeDir)).filter(Boolean);
         const resolved = [...new Set(named)];
-        const there = resolved.length ? new Set(await localService(fileApi).existing(resolved)) : new Set();
+        const there = resolved.length ? new Set(await (await serviceOn(fileApi, on)).existing(resolved)) : new Set();
         const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)));
         const prior = (written.rows ?? []).map((row) => ({ ...row, color: row.color || this.colors.get(row.path) || null }));
         const rows = indexRows(prior, pictures, { replaced: Boolean(written.replaced) });
@@ -160,9 +211,17 @@ export class Look {
           const path = cut < 0 ? key : key.slice(cut + 1);
           return agent !== address || live.has(path);
         }));
-        found.filter((i) => !i.color).forEach((i) => this.sample(i, written.file, cx));
-      } catch { /* the next tick reads again */ }
-      finally { this.reading = false; this.readAt = Date.now(); cx.notify(); }
+        if (!on) found.filter((i) => !i.color).forEach((i) => this.sample(i, written.file, cx));
+        if (this.pendingStamp && this.selected && shows(this.selected)) this.draw(this.selected, cx);
+      } catch { this.pullFailed = true; }
+      finally {
+        this.reading = false; this.readAt = Date.now();
+        if (this.pullFailed) { this.pendingStamp = null; this.poll = pollNext(this.poll, "failed"); }
+        else if (this.pendingStamp) { this.stamp = this.pendingStamp; this.pendingStamp = null; this.fresh = Date.now(); this.held = null; }
+        else { this.fresh = Date.now(); this.held = null; }
+        if (machineOf(this.agent())) this.armCheck(cx);
+        cx.notify();
+      }
     });
   }
 
@@ -207,13 +266,14 @@ export class Look {
   // A file's draws run one after another (each clears that file's older copies first, so two at once could
   // delete the one shown); one waiting is already the newest, so no other joins it. Only the last lands,
   // and one whose file you left before it started does nothing.
-  draw(item, cx) {
+  draw(item, cx, ask = false) {
     const path = item.path;
-    if (this.selected?.path === path) this.shown = { path, busy: true };
+    const kept = this.shown?.path === path && this.shown?.deferred ? this.shown : null;
+    if (this.selected?.path === path && !kept) this.shown = { path, busy: true };
     if (this.waiting.has(path)) return;
     this.waiting.add(path);
     const done = (this.chains.get(path) ?? Promise.resolve())
-      .then(() => { this.waiting.delete(path); return this.selected?.path === path ? this.copy(item) : null; })
+      .then(() => { this.waiting.delete(path); return this.selected?.path === path ? this.copy(item, ask) : null; })
       .catch(() => null);
     this.chains.set(path, done); this.draws.set(path, done);
     cx.spawn(async (cx) => {
@@ -222,6 +282,8 @@ export class Look {
       const last = this.draws.get(path) === done;
       if (last) this.draws.delete(path);
       if (!last || this.selected?.path !== path) { cx.notify(); return; }
+      if (made?.deferred) { this.shown = { path, deferred: true, size: made.size }; cx.notify(); return; }
+      if (made?.error) { this.note = { error: true, text: made.error }; this.shown = kept; cx.notify(); return; }
       if (!made) {
         const previous = this.list();
         const at = previous.findIndex((i) => i.path === path);
@@ -234,6 +296,7 @@ export class Look {
         return;
       }
       this.shown = { path, ...made };
+      if (machineOf(this.agent())) this.sample(item, this.transcript?.file, cx);
       cx.notify();
     });
   }
@@ -248,14 +311,24 @@ export class Look {
 
   // The copy image() draws: { image, picture } (the file the pins are on), or null.
   // sips exits 0 and prints pixelWidth <nil> when a raster is not a picture. A valid svg is the tag.
-  async copy(item) {
+  async copy(item, ask = false) {
+    const on = machineOf(this.agent());
     const ext = item.path.split(".").at(-1).toLowerCase();
-    const seen = await localService(imageApi).probe(item.path, item.kind, ext);
+    const source = await (async () => {
+      if (!on) return item.path;
+      try {
+        const got = await bring(item.path, on, { ask });
+        if (got.deferred) return { deferred: true, size: got.size };
+        return got.path;
+      } catch (e) { return { error: copyFailure(e, on) }; }
+    })();
+    if (source?.deferred || source?.error) return source;
+    const seen = await (await serviceOn(imageApi, on)).probe(item.path, item.kind, ext);
     if (!seen) return null;
     const key = keyOf(item.path), dir = paths.join(appHome(), DIR);
     const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = paths.join(dir, name);
     await localService(imageApi).fresh(dir, key);
-    const made = item.kind === "image" ? (await localService(fileApi).copy(item.path, out)).code === 0 : await toPng(item.path, out);
+    const made = item.kind === "image" ? (await localService(fileApi).copy(source, out)).code === 0 : await toPng(source, out);
     return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
   }
 
@@ -264,7 +337,7 @@ export class Look {
     this.sampling.add(item.path);
     cx.spawn(async (cx) => {
       try {
-        const r = await localService(imageApi).color(item.path).catch(() => null);
+        const r = await (await serviceOn(imageApi, machineOf(this.agent()))).color(item.path).catch(() => null);
         const color = colorOf(r?.code === 0 ? r.stdout : "");
         if (!color) return;
         this.colors.set(item.path, color);
@@ -281,6 +354,7 @@ export class Look {
   // A file the agent writes again shows again. One watch at a time: picking another ends this one at its next change.
   // macOS may name the folder through /private, hence endsWith.
   watch(item, cx) {
+    if (machineOf(this.agent())) return;
     const dir = paths.dirname(item.path);
     if (this.watching?.path === item.path) return;
     const mine = { path: item.path };
@@ -426,6 +500,10 @@ export class Look {
   view(c) {
     if (!this.selected) return this.empty(c);
     if (this.shown?.image) return this.picture(c);
+    if (this.shown?.deferred) return v_flex().id("look-hold").flex_1().w_full().items_center().justify_center().gap(G.md)
+      .child(div().font_semibold().text_size(T.card).child(this.selected.name))
+      .child(div().text_size(T.body).text_color(c.dim).child(bytesLabel(this.shown.size)))
+      .child(quietLink("look-load", "Load", (cx) => this.draw(this.selected, cx, true), c));
     if (this.shown?.busy) return this.drawing(c);
     return div();
   }
@@ -435,6 +513,8 @@ export class Look {
     const who = address ? this.who(address) : null;
     const list = this.list();
     this.answer();
+    const machine = machineOf(address);
+    const drawn = item ? drawablePath(machine, this.shown?.image, item.path) : null;
     const ready = Boolean(item && address && noted(this.pins).length) && !this.sending;
     const status = this.note?.text ?? (this.pins.length ? "" : item ? "Pin a spot" : "");
     return v_flex().id("kanso-look").track_focus(this.handle).size_full().min_h(0).bg(c.canvas).text_color(c.text)
@@ -443,10 +523,10 @@ export class Look {
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().text_size(T.card).child(who?.name ?? "Images"))
-          .child(div().truncate().text_size(T.small).text_color(c.dim).child(who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "")))
+          .child(div().truncate().text_size(T.small).text_color(c.dim).child([who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "", this.held ? asOf(this.held.at, Date.now()) : ""].filter(Boolean).join(" · "))))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
-        .child(iconButton("look-refresh", "refresh", "Read again", (cx) => { this.read(cx); if (item && shows(item)) this.draw(item, cx); }, c, { spin: this.reading })))
+        .child(iconButton("look-refresh", "refresh", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
       .child(v_flex().id("look-view").flex_1().min_h(0).w_full().overflow_hidden().items_center().justify_center().child(this.view(c)))
       .when(list.length > 0, (el) => el.child(this.dots(list, c)))
       .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.compact * 5 + G.xs * 4).px(G.lg).py(G.sm).gap(G.xs).overflow_y_scrollbar().border_t(1).border_color(c.border)
@@ -454,7 +534,7 @@ export class Look {
       .when(Boolean(item), (el) => el.child(h_flex().id("look-bar").flex_none().h(H.control).px(G.lg).gap(G.md).items_center().border_t(1).border_color(c.border)
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))
         .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(this.note?.error ? c.red : c.dim).child(status)))
-        .child(quietLink("look-open", "Open", () => openPath(item.path), c))
+        .when(Boolean(drawn), (bar) => bar.child(quietLink("look-open", "Open", () => openPath(machine ? paths.join(appHome(), drawn) : drawn), c)))
         .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(this.pinKey(item.path)); this.asking = null; cx.notify(); }, c)))
         .child(Button.new("look-send").h(H.compact).px(G.md).flex_none().items_center().rounded(R.control).bg(c.primary)
           .when(!ready, (b) => b.opacity(0.45))

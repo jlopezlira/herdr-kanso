@@ -185,7 +185,7 @@ for (const platform of ["macos", "linux", "windows"]) {
     await serviceOn(processApi, "remote");
     assert.equal(r.calls.length, before);
     assert.equal(r.calls.filter(({ args }) => args.at(-1).includes("OSVersion")).length, platform === "windows" ? 1 : 2);
-    assert.ok(r.calls.every(({ options }) => options.on === "remote"));
+    assert.ok(r.calls.every(({ options }) => options.on === "remote" && options.timeout === 12000));
     assert.equal(localName(), "macos");
     assert.equal((await serviceOn((_name, runner) => runner, null)), r.run);
     assert.equal(localService((name) => name), "macos");
