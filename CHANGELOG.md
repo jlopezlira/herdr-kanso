@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.24.1] - 2026-11-11
+
+### Fixed
+
+- Putting a tab to sleep no longer waits about nine seconds for an agent that has already exited; it can finish in about three seconds. The tab or project leaves the screen as soon as sleep is ordered, even when its space has no other tab, by showing the neighbouring space. A blocker, failed save or Undo brings its space back. With only one space and one tab, its panes stay until sleep finishes.
+
 ## [3.24.0] - 2026-11-10
 
 ### Added
