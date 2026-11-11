@@ -59,26 +59,30 @@ test("A switch is one compact size, knob at the left when off and at the right w
   assert.equal(SWITCH.w, SWITCH.knob * 2 + pad * 2 + 2);
   for (const [checked, end] of [[false, "justify_start"], [true, "justify_end"]]) {
     const hit = toggleSwitch("mods", checked, () => {}, night);
-    const track = hit.kids[0];
-    const knob = track.kids[0];
+    assert.equal(hit.tag, "mods");
+    assert.equal(hit.kids.length, 1);
+    const pill = hit.kids[0];
+    const knob = pill.kids[0];
     assert.equal(arg(hit, "h"), H.compact);
     assert.equal(arg(hit, "px"), G.xs);
     assert.equal(hit.calls.filter((call) => call[0] === "items_center").length, 1);
-    assert.equal(arg(track, "w"), SWITCH.w);
-    assert.equal(arg(track, "h"), SWITCH.h);
-    assert.equal(arg(track, "p"), pad);
-    assert.equal(track.calls.filter((call) => call[0] === "items_center").length, 1);
-    const justify = track.calls.filter((call) => call[0] === "justify_start" || call[0] === "justify_end").map((call) => call[0]);
+    assert.equal(hit.calls.some((call) => call[0] === "cursor_pointer"), true);
+    assert.equal(hit.calls.some((call) => call[0] === "bg" || call[0] === "on_click"), false);
+    assert.equal(pill.kids.length, 1);
+    assert.equal(arg(pill, "w"), SWITCH.w);
+    assert.equal(arg(pill, "h"), SWITCH.h);
+    assert.equal(arg(pill, "p"), pad);
+    assert.equal(pill.calls.filter((call) => call[0] === "items_center").length, 1);
+    const justify = pill.calls.filter((call) => call[0] === "justify_start" || call[0] === "justify_end").map((call) => call[0]);
     assert.equal(justify.at(-1), end);
     assert.equal(arg(knob, "size"), SWITCH.knob);
     assert.equal(knob.calls.some((call) => call[0] === "flex_none"), true);
     assert.equal(knob.calls.some((call) => call[0] === "ml" || call[0] === "mr"), false);
-    assert.equal(track.calls.filter((call) => call[0] === "bg").length, 1, "the track has one fill");
+    assert.equal(pill.calls.filter((call) => call[0] === "bg").length, 1, "the pill has one fill");
     assert.equal(knob.calls.filter((call) => call[0] === "bg").length, 1, "the knob has one fill");
     assert.equal(knob.calls.some((call) => call[0] === "border_1" || call[0] === "shadow_sm"), false);
-    const cx = { stop_propagation() { cx.stopped = true; } };
-    arg(track, "on_click")({}, cx);
-    assert.equal(cx.stopped, true);
+    assert.equal(pill.calls.some((call) => call[0] === "on_click" || call[0] === "on_change"), false);
+    assert.equal(hit.calls.filter((call) => call[0] === "on_change").length, 1);
   }
 });
 
@@ -88,26 +92,22 @@ test("A switch fills from the theme when on and marks focus, in light and in dar
     for (const checked of [false, true]) {
       let handed;
       const hit = toggleSwitch("auto", checked, (next) => { handed = next; }, c, { label: "Check for updates automatically" });
-      const track = hit.kids[0];
-      const knob = track.kids[0];
-      assert.equal(arg(track, "bg"), checked ? c.primary : c.raised);
-      assert.equal(arg(track, "border_color"), checked ? c.primary : c.input);
-      assert.equal(track.calls.filter((call) => call[0] === "border_1").length, 1);
-      assert.equal(arg(track, "pressed"), checked);
-      assert.equal(arg(track, "accessibility_label"), "Check for updates automatically");
+      const pill = hit.kids[0];
+      const knob = pill.kids[0];
+      assert.equal(arg(pill, "bg"), checked ? c.primary : c.raised);
+      assert.equal(arg(pill, "border_color"), checked ? c.primary : c.input);
+      assert.equal(pill.calls.filter((call) => call[0] === "border_1").length, 1);
+      assert.equal(arg(hit, "pressed"), checked);
+      assert.equal(arg(hit, "accessibility_label"), "Check for updates automatically");
       assert.equal(arg(knob, "bg"), checked ? c.primaryText : c.muted);
       const focus = chain();
-      arg(track, "focus")(focus);
+      arg(hit, "focus")(focus);
       assert.deepEqual(focus.calls, [["border_color", c.accent]]);
       const cx = { notify() { cx.notified = true; } };
-      arg(track, "on_change")(!checked, cx);
+      arg(hit, "on_change")(!checked, cx);
       assert.equal(handed, !checked);
       assert.equal(cx.notified, true);
-      handed = undefined;
-      cx.notified = false;
-      arg(hit, "on_click")({}, cx);
-      assert.equal(handed, !checked);
-      assert.equal(cx.notified, true);
+      assert.equal(hit.calls.some((call) => call[0] === "on_click"), false);
     }
   }
 });
@@ -165,10 +165,8 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   centered(files);
   centered(piece);
   assert.equal(arg(files, "accessibility_label"), "Files");
+  assert.equal(files.calls.some((call) => call[0] === "on_click"), false);
   arg(files, "on_change")(false, { notify() {} });
-  assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.panels.off", ["files"]]));
-  written.length = 0;
-  arg(files.parent, "on_click")({}, { notify() {} });
   assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.panels.off", ["files"]]));
 
   const news = settings.newsPage(theme, theme);
@@ -193,7 +191,5 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   arg(source, "on_change")(false, cx);
   assert.equal(spend.settings.sources[0].enabled, false);
   assert.equal(cx.notified, true);
-  spend.settings = { ...spend.settings, sources: spend.settings.sources.map((row) => ({ ...row, enabled: true })) };
-  arg(source.parent, "on_click")({}, cx);
-  assert.equal(spend.settings.sources[0].enabled, false);
+  assert.equal(source.calls.some((call) => call[0] === "on_click"), false);
 });
