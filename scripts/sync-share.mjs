@@ -63,6 +63,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/doc.js", copies: ["markdown-panel/mods/markdown-panel/doc.js"] },
   // A file on another machine, copied here so a picture can be drawn. The markdown editor uses it too.
   { source: "kanso/mods/kanso-panel/remote-file.js", copies: ["markdown-panel/mods/markdown-panel/remote-file.js"] },
+  // One wake when a panel that was behind, or hidden, is in front again.
+  { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];

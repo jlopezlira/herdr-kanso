@@ -92,7 +92,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     Date: Clock, div: element, svg: element, image: element, canvas: element, h_flex: element, v_flex: element, v_virtual_list: element,
     Button: factory, Toggle: factory, Input: factory, InputState: factory, Textarea: factory, TextareaState: factory, Editor: factory, EditorState: factory,
     VirtualListScrollHandle: factory, ScrollHandle: factory, Scrollbar: factory, Popover: factory, HoverCard: factory, TextView: factory,
-    props: () => state.props ?? {}, theme: () => colors, settings: () => ({}), window: () => ({ active: true, platform: "macos" }),
+    props: () => state.props ?? {}, theme: () => colors, settings: () => ({}), window: () => ({ active: state.active !== false, platform: "macos" }),
     spaces: () => clone(projects.map((p, i) => ({ ...p, active: i === state.project }))), panes: () => clone(ps), agents: () => clone(list), terminals: () => clone(terms),
     machines: () => clone(state.layouts), focused: () => ({ space: `s${state.project}`, tab: `tab${state.project}`, terminal: list[state.project].address, cwd: projects[state.project].folder }),
     shared: (key) => clone(shared.get(key) ?? null), setShared: (key, value) => { if (JSON.stringify(value) !== JSON.stringify(shared.get(key))) state.dirty = true; shared.set(key, clone(value)); },
@@ -100,7 +100,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     exec: counted, hc: (args) => counted("hc", args), appHome: () => dir, home: () => "/home/fixture",
     readTextFile: (file) => { state.reads.push({ file, at: state.now }); return blocked ? pending() : Promise.resolve(""); },
     watchFolder: (file) => { state.watches.push(file); return pending(); }, nextCommand: pending,
-    layout: () => ({ id: "root", children: [{ id: "sidebar" }, { id: "work-body", children: [{ id: "main", content: { tab: "active" } }, { id: "panel-body", hidden: true, children: [] }] }, { id: "strip-map" }] }),
+    layout: () => ({ id: "root", children: [{ id: "sidebar" }, { id: "work-body", children: [{ id: "main", content: { tab: "active" } }, { id: "panel-body", hidden: state.panelHidden !== false, children: [] }] }, { id: "strip-map" }] }),
     run() {}, openOverlay() {}, closeOverlay() {}, notify() {}, setAgentOrder() {}, fetch: async () => ({ ok: false, status: 503 }),
   };
   const settle = async () => {
