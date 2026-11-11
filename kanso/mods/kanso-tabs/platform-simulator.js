@@ -20,10 +20,13 @@ export function simulatorApi(platform, run, present = exists) {
     return Object.fromEntries(SDK_ENV.map((name, index) => [name, values[index] || ""]));
   };
   const probe = async (home) => {
-    const [env, apple] = await Promise.all([
+    const [env, selected] = await Promise.all([
       environment().catch(() => ({})),
-      platform === "macos" ? run("xcrun", ["simctl", "list", "devices", "--json"], { timeout: 5000 }).catch(() => null) : null,
+      platform === "macos" ? run("xcode-select", ["-p"], { timeout: 1500 }).catch(() => null) : null,
     ]);
+    const developer = selected?.code === 0 ? selected.stdout.trim() : "";
+    const simctl = developer ? api.join(developer, "usr", "bin", "simctl") : null;
+    const ios = simctl && await present(simctl).catch(() => false) ? simctl : null;
     const roots = sdkRoots(platform, home, env);
     const find = async (index) => {
       const root = roots[index];
@@ -31,7 +34,7 @@ export function simulatorApi(platform, run, present = exists) {
       const adb = api.join(root, "platform-tools", `adb${exe}`), emulator = api.join(root, "emulator", `emulator${exe}`);
       return await present(adb).catch(() => false) ? { adb, emulator: await present(emulator).catch(() => false) ? emulator : null } : find(index + 1);
     };
-    return { ios: apple?.code === 0, ...await find(0) };
+    return { ios, ...await find(0) };
   };
   const capture = (adb, serial, file) => platform === "windows"
     ? powershell(run, `$p=[Diagnostics.ProcessStartInfo]::new(); $p.FileName=${psQuote(adb)}; $p.Arguments=${psQuote(["-s", serial, "exec-out", "screencap", "-p"].map(windowsArg).join(" "))}; $p.UseShellExecute=$false; $p.RedirectStandardOutput=$true; $child=[Diagnostics.Process]::Start($p); $file=[IO.File]::Create(${psQuote(file)}); try { $child.StandardOutput.BaseStream.CopyTo($file) } finally { $file.Dispose() }; $child.WaitForExit(); exit $child.ExitCode`, { timeout: 8000 })

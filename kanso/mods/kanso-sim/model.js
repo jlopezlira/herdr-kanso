@@ -57,6 +57,8 @@ export function fitPicture(picture, box) {
   return { width: picture.width * scale, height: picture.height * scale };
 }
 
+export const sizeDue = (cached, picture) => !cached || cached.landscape !== (picture.width > picture.height);
+
 export function screenPoint(point, drawn, size, picture) {
   if (!point || !drawn?.width || !drawn.height || !size || !picture) return null;
   const landscape = picture.width > picture.height, tall = size.width < size.height;

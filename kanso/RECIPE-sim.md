@@ -20,8 +20,10 @@ sync:share. Platform services, the kit and front.js are copied the same way.
 
 ## Devices
 
-Only the platforms here appear, in one list with Booted or Off. Xcode's
-`xcrun simctl list devices --json` supplies available iOS devices on macOS.
+Only the platforms here appear, in one list with Booted or Off. On macOS,
+`xcode-select -p` finds the selected developer directory without an install
+prompt. Its `usr/bin/simctl` must exist; that path is cached and used directly
+for every iOS command, including `list devices --json`.
 Android combines `emulator -list-avds`, `adb devices`, and each connected
 emulator's `adb -s <serial> emu avd name`. Physical Android devices are also
 shown. No iOS row or message on other operating systems.
@@ -53,8 +55,9 @@ timers and inputs; no module-global pending state survives a remount.
 
 ## Controls
 
-Android reads `shell wm size` for coordinate scaling, swapping its natural
-axes when the captured picture is rotated. A click sends `shell input tap`;
+Android reads `shell wm size` once per device and again only when a picture's
+orientation changes, swapping its natural axes for coordinate scaling.
+A click sends `shell input tap`;
 a drag sends `shell input swipe`. Focus the picture to type. Text is batched
 in order with keys, escaped for Android's shell input, and literal percent-s
 is split so it does not become a space. Enter, Backspace and arrows are

@@ -9,7 +9,7 @@ import { Front } from "./front.js";
 import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
 import { iosCommand } from "./ios.js";
 import { adbCommand, readDevices, startDevice, deviceSize, captureDevice } from "./devices.js";
-import { BEAT_MS, FRAME_MS, BOOT_MS, FrameLoop, TextBatch, canStart, canRotate, bootState, age, pictureSize, fitPicture, screenPoint, gesture, keyInput, textParts, CONTROLS, panelShown } from "./model.js";
+import { BEAT_MS, FRAME_MS, BOOT_MS, FrameLoop, TextBatch, canStart, canRotate, bootState, age, pictureSize, fitPicture, sizeDue, screenPoint, gesture, keyInput, textParts, CONTROLS, panelShown } from "./model.js";
 
 const PICKED = "kanso.sim.picked";
 const failure = (error) => String(error?.message ?? error).split(/\r?\n/)[0];
@@ -25,7 +25,7 @@ export default class Simulator extends View {
     this.selected = shared(PICKED) ?? null; this.boot = null;
     this.loop = new FrameLoop(); this.batch = new TextBatch();
     this.front = new Front(() => this.inFront());
-    this.bounds = null; this.size = null; this.press = null;
+    this.bounds = null; this.sizes = new Map(); this.press = null;
     this.readAt = 0; this.reading = false; this.sending = false; this.acting = false;
     this.closed = false; this.frameNo = 0;
     this.focus = cx.focus_handle();
@@ -100,7 +100,7 @@ export default class Simulator extends View {
   }
 
   pick(device, cx) {
-    this.selected = device.id; this.size = null; this.press = null; this.error = null;
+    this.selected = device.id; this.press = null; this.error = null;
     this.loop.ready(Date.now(), this.inFront(), device.state === "Booted" ? device.id : null);
     this.batch.take(); setShared(PICKED, device.id);
     cx.notify(); this.schedule(cx, 0);
@@ -118,15 +118,15 @@ export default class Simulator extends View {
       try {
         await mkdir(this.directory, { recursive: true });
         if (!this.inFront()) { this.loop.land(key, null, Date.now()); return; }
-        if (device.platform === "android") {
-          const size = await deviceSize(exec, this.tools, device);
-          if (!size) throw new Error("Android did not give a screen size.");
-          if (this.selected === key) this.size = size;
-        }
-        if (!this.inFront()) { this.loop.land(key, null, Date.now()); return; }
         await captureDevice(exec, this.platform, this.tools, device, file);
         const size = pictureSize(await readFile(file));
         if (!size?.width || !size.height) throw new Error("No picture from the device.");
+        if (device.platform === "android" && sizeDue(this.sizes.get(key), size)) {
+          if (!this.inFront()) throw new Error("Panel is behind.");
+          const dimensions = await deviceSize(exec, this.tools, device);
+          if (!dimensions) throw new Error("Android did not give a screen size.");
+          this.sizes = new Map([...this.sizes, [key, { size: dimensions, landscape: size.width > size.height }]]);
+        }
         const older = (await readdir(this.directory)).filter((name) => name.startsWith(prefix) && name !== filename);
         await Promise.all(older.map((name) => unlink(this.paths.join(this.directory, name)).catch(() => {})));
         this.loop.land(key, { path: this.paths.join("data", "kanso-sim", filename), ...size }, Date.now());
@@ -204,7 +204,7 @@ export default class Simulator extends View {
     this.batch.add(device.target, input); this.flushSoon(cx); cx.stop_propagation();
   }
 
-  point(event) { return screenPoint(event.local_position, event.bounds, this.size, this.loop.last); }
+  point(event) { return screenPoint(event.local_position, event.bounds, this.sizes.get(this.selected)?.size, this.loop.last); }
 
   touch(event, cx, down) {
     const point = this.point(event);
@@ -219,7 +219,7 @@ export default class Simulator extends View {
   openUrl(cx) {
     const device = this.current(), url = this.url.value().trim();
     if (device?.platform !== "ios" || device.state !== "Booted" || !/^[a-z][a-z\d+.-]*:\S+$/i.test(url)) return;
-    this.act(() => iosCommand(exec, ["openurl", device.target, url]), cx);
+    this.act(() => iosCommand(exec, this.tools, ["openurl", device.target, url]), cx);
   }
 
   line(text, c, error = false) { return div().text_size(T.body).text_color(error ? c.red : c.muted).child(text); }
@@ -236,8 +236,8 @@ export default class Simulator extends View {
     return v_flex().flex_none().gap(G.xs)
       .child(h_flex().flex_wrap().gap_x(G.md)
         .child(link("Open in Simulator", (cx) => this.act(() => exec("open", ["-a", "Simulator"]).then(checked), cx)))
-        .children(["light", "dark"].map((mode) => link(`Appearance ${mode}`, (cx) => this.act(() => iosCommand(exec, ["ui", device.target, "appearance", mode]), cx))))
-        .child(link("Shut down", (cx) => this.act(() => iosCommand(exec, ["shutdown", device.target]), cx))))
+        .children(["light", "dark"].map((mode) => link(`Appearance ${mode}`, (cx) => this.act(() => iosCommand(exec, this.tools, ["ui", device.target, "appearance", mode]), cx))))
+        .child(link("Shut down", (cx) => this.act(() => iosCommand(exec, this.tools, ["shutdown", device.target]), cx))))
       .child(h_flex().gap(G.sm).items_center()
         .child(Input.new(this.url).flex_1().min_w(0).h(H.control))
         .child(link("Open a URL", (cx) => this.openUrl(cx))));

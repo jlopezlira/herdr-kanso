@@ -5,6 +5,8 @@ import { load, clone, singleUse, tape } from "./helpers.mjs";
 import * as model from "../kanso/mods/kanso-sim/model.js";
 
 const good = (stdout = "") => ({ code: 0, stdout, stderr: "" });
+const DEVELOPER = "/Applications/Xcode Test.app/Contents/Developer";
+const SIMCTL = `${DEVELOPER}/usr/bin/simctl`;
 const apple = { devices: { "com.apple.CoreSimulator.SimRuntime.iOS-18-0": [
   { udid: "one", name: "Phone", state: "Booted", isAvailable: true },
   { udid: "two", name: "Tablet", state: "Shutdown", isAvailable: true },
@@ -165,21 +167,21 @@ test("Tab availability probes once per panel-list rebuild and a deadline ignores
   const answer = new Promise((resolve) => { settle = resolve; });
   const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], {
     shared: (key) => store[key], setShared: (key, value) => { store[key] = value; }, home: () => "/home/me",
-    window: () => ({ platform: "macos" }), exists: async () => false,
-    exec: async (cmd) => { commands.push(cmd); return cmd === "xcrun" ? answer : good("\n\n\n"); },
+    window: () => ({ platform: "macos" }), exists: async (path) => path === SIMCTL,
+    exec: async (cmd) => { commands.push(cmd); return cmd === "xcode-select" ? answer : good("\n\n\n"); },
   });
   const cx = { notify() {}, timer: { after(_ms, fn) { const task = { fn, cancel() {} }; timers.push(task); return task; } }, spawn(fn) { pending.push(fn(cx)); } };
   const tabs = new Tabs();
   tabs.probeSimulator(cx); tabs.probeSimulator(cx);
-  assert.equal(commands.filter((cmd) => cmd === "xcrun").length, 1);
+  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 1);
   timers[0].fn();
   assert.deepEqual(clone(store["kanso.sim.tools"]), {});
-  settle(good(JSON.stringify(apple))); await Promise.all(pending);
+  settle(good(DEVELOPER)); await Promise.all(pending);
   assert.deepEqual(clone(store["kanso.sim.tools"]), {}, "a missed startup deadline does not publish a stale capability");
   store["kanso.panels.order"] = ["sim", "files"];
   tabs.probeSimulator(cx); await Promise.all(pending);
-  assert.equal(commands.filter((cmd) => cmd === "xcrun").length, 2);
-  assert.equal(store["kanso.sim.tools"].ios, true);
+  assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 2);
+  assert.equal(store["kanso.sim.tools"].ios, SIMCTL);
   assert.equal(store["kanso.panels.off"], undefined, "the probe never changes a person's off switch");
 });
 
@@ -192,14 +194,41 @@ test("SDK folders follow environment precedence and platform defaults", async ()
 
 test("Tool discovery ignores iOS away from macOS and finds an SDK with adb", async () => {
   const commands = [];
-  const run = async (cmd, args) => { commands.push([cmd, args]); return good(cmd === "xcrun" ? JSON.stringify(apple) : "/missing\n/sdk\n\n"); };
+  const run = async (cmd, args) => { commands.push([cmd, args]); return good(cmd === "xcode-select" ? DEVELOPER : "/missing\n/sdk\n\n"); };
   const { simulatorApi } = await load("kanso-panel/platform-simulator.js", ["simulatorApi"]);
   const present = async (path) => path === "/sdk/platform-tools/adb";
   const tools = await simulatorApi("linux", run, present).probe("/home/me");
-  assert.deepEqual(clone(tools), { ios: false, adb: "/sdk/platform-tools/adb", emulator: null });
+  assert.deepEqual(clone(tools), { ios: null, adb: "/sdk/platform-tools/adb", emulator: null });
+  assert.equal(commands.some(([cmd]) => cmd === "xcode-select"), false);
+  const mac = await simulatorApi("macos", run, async (path) => path === SIMCTL).probe("/home/me");
+  assert.equal(mac.ios, SIMCTL);
   assert.equal(commands.some(([cmd]) => cmd === "xcrun"), false);
-  const mac = await simulatorApi("macos", run, async () => false).probe("/home/me");
-  assert.equal(mac.ios, true);
+});
+
+test("A Mac without Xcode or simctl has no iOS and never invokes the install launcher", async () => {
+  const { simulatorApi } = await load("kanso-panel/platform-simulator.js", ["simulatorApi"]);
+  for (const selected of [{ code: 1, stdout: "", stderr: "No developer directory" }, good("/Library/Developer/CommandLineTools\n")]) {
+    const commands = [];
+    const run = async (cmd, args) => { commands.push([cmd, args]); return cmd === "xcode-select" ? selected : good("\n\n\n"); };
+    const tools = await simulatorApi("macos", run, async () => false).probe("/home/me");
+    assert.equal(tools.ios, null);
+    assert.deepEqual(commands.map(([cmd]) => cmd), ["sh", "xcode-select"]);
+    assert.deepEqual(clone(commands[1][1]), ["-p"]);
+  }
+});
+
+test("iOS listing, start and capture execute the discovered simctl directly", async () => {
+  const commands = [];
+  const run = async (cmd, args) => { commands.push([cmd, args]); return good(args[0] === "list" ? JSON.stringify(apple) : ""); };
+  const { readDevices, startDevice, captureDevice } = await load("kanso-sim/devices.js", ["readDevices", "startDevice", "captureDevice"]);
+  const tools = { ios: SIMCTL };
+  assert.equal((await readDevices(run, tools)).length, 2);
+  await startDevice(run, "macos", tools, ios[1]);
+  await captureDevice(run, "macos", tools, ios[0], "/data/frame.jpg");
+  assert.deepEqual(clone(commands), [
+    [SIMCTL, ["list", "devices", "--json"]], [SIMCTL, ["boot", "two"]],
+    [SIMCTL, ["io", "one", "screenshot", "--type=jpeg", "/data/frame.jpg"]],
+  ]);
 });
 
 test("Android capture writes binary output through the platform command service", async () => {
@@ -277,7 +306,11 @@ async function viewFixture({ active = true, hidden = false, capture, deviceRead,
   });
   const view = new Simulator(); view.init({}, cx);
   view.devices = [emulator]; view.selected = emulator.id; view.readAt = now;
-  return { view, cx, state, timers, commands, removed, advance(ms) { now += ms; }, async drain() { while (pending.length) await pending.shift(); } };
+  return {
+    view, cx, state, timers, commands, removed, advance(ms) { now += ms; },
+    setPicture(width, height) { const data = new DataView(png.buffer); data.setUint32(16, width); data.setUint32(20, height); },
+    async drain() { while (pending.length) await pending.shift(); },
+  };
 }
 
 test("The live view captures one file, removes the old one, and waits a beat", async () => {
@@ -292,6 +325,27 @@ test("The live view captures one file, removes the old one, and waits a beat", a
   assert.equal(f.commands.filter(([cmd]) => cmd === "sh").length, 1);
   f.advance(700); f.view.tick(f.cx); await f.drain();
   assert.equal(f.commands.filter(([cmd]) => cmd === "sh").length, 2);
+});
+
+test("Android dimensions are cached per device and reread only when its picture rotates", async () => {
+  const f = await viewFixture();
+  const sizes = () => f.commands.filter(([, args]) => args.includes("size"));
+  const frame = async () => { f.advance(700); f.view.tick(f.cx); await f.drain(); };
+  await frame(); await frame();
+  assert.equal(sizes().length, 1);
+  f.setPicture(720, 1600); await frame();
+  assert.equal(sizes().length, 1, "dimensions changing within the same orientation do not poll wm size");
+  f.setPicture(2400, 1080); await frame(); await frame();
+  assert.equal(sizes().length, 2);
+  f.view.devices = [emulator, phone];
+  f.view.pick(phone, f.cx); f.view.tick(f.cx); await f.drain();
+  assert.equal(sizes().length, 3);
+  assert.equal(sizes().at(-1)[1][1], "usb");
+  f.view.pick(emulator, f.cx); f.view.tick(f.cx); await f.drain();
+  assert.equal(sizes().length, 3, "returning to a device reuses its dimensions");
+  f.setPicture(1080, 2400); await frame();
+  assert.equal(sizes().length, 4);
+  assert.deepEqual(clone(f.view.point({ local_position: { x: 135, y: 300 }, bounds: { width: 270, height: 600 } })), { x: 540, y: 1200 });
 });
 
 test("The live view keeps its picture after a failed capture and resumes once in front", async () => {
@@ -336,6 +390,7 @@ test("Keyboard batches and emulator rotation use only the selected Android devic
 test("iOS controls act through simctl and expose touch only in Apple's Simulator", async () => {
   const screen = tape();
   const f = await viewFixture({ ui: screen.host });
+  f.view.tools = { ios: SIMCTL };
   f.view.devices = ios; f.view.selected = ios[0].id;
   f.view.controls(ios[0], {});
   assert.deepEqual([...screen.handlers.keys()], ["sim-Open in Simulator", "sim-Appearance light", "sim-Appearance dark", "sim-Shut down", "sim-Open a URL"]);
@@ -343,9 +398,9 @@ test("iOS controls act through simctl and expose touch only in Apple's Simulator
     screen.handlers.get(`sim-${label}`)({}, f.cx); await f.drain();
   }
   assert.deepEqual(clone(f.commands), [
-    ["xcrun", ["simctl", "ui", "one", "appearance", "dark"]],
-    ["xcrun", ["simctl", "openurl", "one", "app://test"]],
-    ["xcrun", ["simctl", "shutdown", "one"]], ["open", ["-a", "Simulator"]],
+    [SIMCTL, ["ui", "one", "appearance", "dark"]],
+    [SIMCTL, ["openurl", "one", "app://test"]],
+    [SIMCTL, ["shutdown", "one"]], ["open", ["-a", "Simulator"]],
   ]);
   f.view.key({ key: "x", key_char: "x" }, f.cx); f.view.flush(f.cx); await f.drain();
   assert.equal(f.commands.length, 4);
@@ -399,11 +454,11 @@ test("Every Simulator UI state renders with the shared kit and single-use elemen
   f.view.close(); assert.equal(f.view.inFront(), false);
 });
 
-test("Simulator source contains no package runner, alternate transport or server", async () => {
+test("Simulator source contains no package runner, install launcher, alternate transport or server", async () => {
   const root = new URL("../kanso/mods/kanso-sim/", import.meta.url);
   const files = (await readdir(root)).filter((name) => name.endsWith(".js"));
   for (const file of files) {
     const source = (await readFile(new URL(file, root), "utf8")).replace(/^\s*\/\/.*$/gm, "");
-    assert.doesNotMatch(source, /\b(?:npx|http|https|net|websocket|serve-sim)\b/i, file);
+    assert.doesNotMatch(source, /\b(?:npx|xcrun|http|https|net|websocket|serve-sim)\b/i, file);
   }
 });
