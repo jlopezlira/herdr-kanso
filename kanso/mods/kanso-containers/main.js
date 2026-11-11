@@ -4,6 +4,7 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared } from "herdr";
 import { G, Armed, tokens, quietLink, iconButton, ghost, breathe } from "./ui.js";
+import { afterMount } from "./pure.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
   parseContainers, parseInspect, contextOf, parseImages, parseStats, vmPids, dockerVms, dockerHeld, byProject, imageRows,
@@ -59,7 +60,7 @@ export default class Containers extends View {
     this.pull.on("change", (_e, cx) => cx.notify());
     this.pull.on("submit", () => this.pullImage());
     this.runFor = null;       // the image whose Run form is open, with its fields
-    this.refresh(cx);
+    afterMount(cx, (cx) => this.refresh(cx));
     this.ticker = cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }
 

@@ -11,7 +11,7 @@ import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_
 import { parseProcesses } from "./procs.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace } from "./kdb.js";
+import { spaceFor, inPlace } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
@@ -20,14 +20,14 @@ import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
+import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
 import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip } from "./machines.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk } from "./machines.js";
 import { createAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
   "spaces.shelvesOpen", "spaces.custom", "spaces.view", "spaces.sections", "spaces.since"];
@@ -70,26 +70,10 @@ const FALLBACK = 60000;
 // A `ps` answers in milliseconds; one still out after this is taken for hung (psRun).
 const PS_GIVE_UP_MS = 10000;
 const SIDEBAR_W = 256;
-// The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
-const collapsedW = () => (window()?.platform === "macos" ? 76 : 44);
 // Dragged narrower, rows keep one line under ONE_LINE_W, and under SNAP_W the sidebar folds to the rail as Hide sidebar does.
 const ONE_LINE_W = 240;
 const SNAP_W = 160;
-const OPEN_MIN = 120; // open, the edge drags this far, past SNAP_W, so a drag can fold it
 const HELD_MS = 400;
-
-function setRail(open, width) {
-  const min = open ? OPEN_MIN : collapsedW();
-  rememberLayout({ rail: { open, min } });
-  const tree = layout();
-  const sidebar = (tree?.children ?? []).find((n) => n.id === "sidebar");
-  if (!sidebar) return;
-  if (tree.resizable !== open || sidebar.min !== min) {
-    const painted = paintLayout(tree);
-    if (isKansoTree(painted)) run("layout.set", { layout: painted });
-  }
-  run("layout.resize", { id: "sidebar", px: width });
-}
 
 // The same avatar colors in every mod that draws them: one strong color per hue.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
@@ -276,7 +260,6 @@ export default class Spaces extends View {
   // A popup of this mod: what it shows that has to be read first is read here.
   openPopup(cx) {
     const p = props();
-    this.kdb = new Kdb();
     if (p.newProject) {
       this.projectName = InputState.new({ placeholder: "Its name" });
       this.projectName.on("submit", (_e, cx) => this.createProject(cx));
@@ -342,7 +325,7 @@ export default class Spaces extends View {
   }
 
   // The sidebar's own database handle; a popup has its own.
-  db() { return this.kdb ?? this.leftNavStore().kdb; }
+  db() { return this.leftNavStore().kdb; }
 
   // A project's name and folder, asked in a dialog; `start`: a conversation begins in it once made.
   addProject(start = false) {
@@ -368,8 +351,8 @@ export default class Spaces extends View {
     this.creating = true;
     cx.spawn(async (cx) => {
       try {
-        const { row, existed } = await this.kdb.addProject({ name: name || folderName(folder), folder, machine: "" });
-        await this.publishRegistry(this.kdb);
+        const { row, existed } = await this.db().addProject({ name: name || folderName(folder), folder, machine: "" });
+        await this.publishRegistry(this.db());
         const open = spaces().find((w) => keyOfSpace(w, home()) === keyOfProject(row));
         if (existed) notify({ title: `${row.name} is already one of your projects`, level: "info", timeout: 4000 });
         closeOverlay(props().overlay);
@@ -522,6 +505,7 @@ export default class Spaces extends View {
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
     else if (c === "needs-you.next") this.nextNeeds(cx);
+    else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "list") this.enterList(cx);
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
@@ -754,7 +738,7 @@ export default class Spaces extends View {
       return;
     }
     // Applied on every start, so older layouts are brought in line.
-    if (collapsed) setRail(false, collapsedW());
+    if (collapsed) setRail(false, railWidth());
     else setRail(true, shared("sidebar.width") ?? SIDEBAR_W);
   }
 
@@ -768,8 +752,12 @@ export default class Spaces extends View {
   // Remembers how wide you left it open (`width`, when known), to open it the same width.
   foldRail(width) {
     if (width != null) setShared("sidebar.width", Math.round(width));
-    setShared("sidebar.collapsed", true);
-    setRail(false, collapsedW());
+    foldSidebar();
+  }
+
+  toggleRail() {
+    if (shared("sidebar.collapsed") === true) this.openRail();
+    else this.foldRail(this.width >= SNAP_W ? this.width : null);
   }
 
   // Herdr sizes the sidebar as its edge is dragged. Only a drag reaches OPEN_MIN to SNAP_W (a stale tree jumps to the
@@ -1178,8 +1166,8 @@ export default class Spaces extends View {
       try {
         const result = await hc(addArgs(record)).catch((error) => ({ code: 1, stdout: "", stderr: String(error) }));
         const why = hcError(result);
-        if (!why) await this.readMachines().catch(() => {});
-        else this.markFailed(name, why);
+        if (!why) { await this.readMachines().catch(() => {}); return; }
+        this.markFailed(name, why);
       } finally {
         this.powerBusy.delete(name);
         this.holdAwake(cx);
@@ -1514,13 +1502,13 @@ export default class Spaces extends View {
 
   // A popup's write finishes before the popup closes: closed first, the write could be cut off with it.
   thenClose(write, after = () => {}) {
-    Promise.resolve(write).then(() => this.publishRegistry(this.kdb)).catch(() => {})
+    Promise.resolve(write).then(() => this.publishRegistry(this.db())).catch(() => {})
       .finally(() => { after(); closeOverlay(props().overlay); });
   }
 
   // Removing a project you have open closes its space too (asked first, with how many tabs go), so it really goes.
   removeProject(project, w) {
-    this.thenClose(project ? this.kdb.removeProject(project.id) : null, () => { if (w) run("space.close", { id: w.id }); });
+    this.thenClose(project ? this.db().removeProject(project.id) : null, () => { if (w) run("space.close", { id: w.id }); });
   }
 
   spaceMenuView(t) {
@@ -1554,10 +1542,10 @@ export default class Spaces extends View {
       .when((w?.tabs?.length ?? 0) > 1, (el) => el.child(item("sleep-project", "Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })))
       .when(Boolean(w), (el) => el.child(item("space-options", "Project options\u2026", () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } }), { icon: "settings" })))
       .when(keepable, (el) => el.child(item("keep-project", "Keep as a project", () => {
-        this.thenClose(this.kdb.addProject({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }));
+        this.thenClose(this.db().addProject({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }));
       }, { icon: "pin", keep: true })))
       .when(Boolean(project?.missing) && !project?.machine, (el) => el.child(item("locate", "Locate folder\u2026", () => {
-        pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.kdb.relocateProject(project.id, trimmed(folder)))
+        pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.db().relocateProject(project.id, trimmed(folder)))
           .catch((e) => notify({ title: "The folder was not changed", body: String(e?.message ?? e), level: "error" }))
           .finally(() => this.thenClose(null));
       }, { icon: "file", keep: true })))
@@ -1579,7 +1567,7 @@ export default class Spaces extends View {
       this.starting = true;
       if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
       else startIn(place, a?.run ?? null);
-      this.thenClose(project && a ? this.kdb.setProjectAgent(project.id, a.key) : null);
+      this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
     };
     return this.menuFrame(t)
       .child(this.menuTitle(t, `New in ${place.tree?.branch ?? place.name ?? "this project"}`))
@@ -1891,20 +1879,17 @@ export default class Spaces extends View {
       .when(ring, (el) => el.border_1().border_color(t.accent));
   }
 
-  machineActions(m, phase, t) {
+  machineActions(m, phase, hot, t) {
     const key = m ?? "local";
     const line = m ? loginLine(m) : "";
-    const copy = phase === "login" && m ? this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t) : null;
-    const power = !copy && m && (phase === "connected" || phase === "off")
-      ? this.machineButton(`machine-power:${key}`, powerId(m), "power", phase === "connected" ? "Turn off" : "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t)
-      : null;
-    const retry = phase === "unavailable" && m
-      ? this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t)
-      : null;
-    const plus = phase === "connected"
-      ? this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t)
-      : null;
-    return [copy, power, retry, plus].filter(Boolean);
+    const tip = { connected: "Turn off", off: "Turn on" };
+    const button = {
+      copy: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t),
+      power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", tip[phase] ?? "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
+      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t),
+      plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t),
+    };
+    return machineVisible(phase, hot).map((name) => button[name]()).filter(Boolean);
   }
 
   openMachine(m, phase, folded, cx) {
@@ -1924,11 +1909,11 @@ export default class Spaces extends View {
     const word = machineState(phase);
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
     const connected = phase === "connected";
-    const ink = (collapsed ? !connected : phase === "off" || phase === "unavailable") ? t.dim : t.foreground;
+    const ink = t[machineInk(phase)];
     const go = (cx) => this.openMachine(m, phase, folded, cx);
     const ring = this.navMark(`machine:${key}`, go);
     const hot = !collapsed && machineHot(m, this.hoverMachine, this.kbd, this.navKey);
-    const tools = hot ? this.machineActions(m, phase, t) : [];
+    const tools = collapsed ? [] : this.machineActions(m, phase, hot, t);
     const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(ink);
     const wash = t.foreground + "0c";
     return h_flex().id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
@@ -2543,7 +2528,6 @@ export default class Spaces extends View {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click(action)
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(17));
-    const toggle = () => (collapsed ? this.openRail() : this.foldRail(this.width >= SNAP_W ? this.width : null));
     const active = sp.find((p) => p.active);
     // Read once per draw: each read copies every record.
     const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
@@ -2566,7 +2550,7 @@ export default class Spaces extends View {
     const plus = view === "spaces"
       ? quiet("space-new", "plus", "Add project", () => this.addProject())
       : quiet("space-new", "plus", "New conversation", () => this.newConversationMenu());
-    const hide = quiet("sidebar-toggle", "sidebar", collapsed ? "Show sidebar" : "Hide sidebar", toggle);
+    const hide = quiet("sidebar-toggle", "sidebar", collapsed ? "Show sidebar" : "Hide sidebar", () => this.toggleRail());
     const search = quiet("search", "search", "Search", () => run("mod.open", { name: "picker" }));
     // Collapsed, Herdr's mark sits here; open, kanso-chrome draws it in the top bar.
     const brand = image("frame/welcome/herdr.png").size(20).rounded(6).flex_none();

@@ -113,6 +113,20 @@ export function machineHot(name, hover, kbd, navKey) {
   return HOT.some((prefix) => navKey === `${prefix}:${key}`);
 }
 
+// Parked rows keep one action. A connected row shows turn off and + only while hot.
+const PARKED_ACTION = { unavailable: ["retry"], off: ["power"], login: ["copy"] };
+
+export function machineVisible(phase, hot) {
+  const parked = PARKED_ACTION[phase];
+  if (parked) return [...parked];
+  if (phase === "connected" && hot) return ["power", "plus"];
+  return [];
+}
+
+export function machineInk(phase) {
+  return phase === "connected" || phase === "loading" ? "foreground" : "muted";
+}
+
 export function powerId(name) {
   return name ? `machine-power-${name}` : null;
 }
