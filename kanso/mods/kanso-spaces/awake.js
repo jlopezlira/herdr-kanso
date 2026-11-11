@@ -7,21 +7,18 @@ const PROBE_TIMEOUT_MS = 30_000;
 const KIND = { darwin: "darwin", macos: "darwin", linux: "linux", windows: "windows" };
 const EMPTY = { gen: 0, os: null, skip: false, arming: false, nextAt: null };
 const WIN_STATE = "[uint32]0x80000001";
-const WIN_TYPE = "Add-Type -Namespace Kanso -Name Awake -MemberDefinition '[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)] public struct S { public byte AC; public byte BatteryFlag; public byte BatteryLifePercent; public byte Reserved; public uint BatteryLifeTime; public uint BatteryFullLifeTime; } [System.Runtime.InteropServices.DllImport(\"kernel32.dll\")] public static extern bool GetSystemPowerStatus(out S s); [System.Runtime.InteropServices.DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint esFlags);'";
-const WIN_HOLD = `[void][Kanso.Awake]::SetThreadExecutionState(${WIN_STATE})`;
+const WIN_TYPE = "Add-Type -Namespace Kanso -Name Awake -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint esFlags);'";
 
-function windowsScript(seconds, working) {
-  const sleep = `Start-Sleep -Seconds ${seconds}`;
-  const hold = working ? WIN_HOLD : `$s = New-Object Kanso.Awake+S; [void][Kanso.Awake]::GetSystemPowerStatus([ref]$s); if ($s.AC -eq 1) { ${WIN_HOLD} }`;
-  return `${WIN_TYPE}; ${hold}; ${sleep}`;
+function windowsScript(seconds) {
+  return `${WIN_TYPE}; [void][Kanso.Awake]::SetThreadExecutionState(${WIN_STATE}); Start-Sleep -Seconds ${seconds}`;
 }
 
-export function holdCommand(os, seconds, working) {
+export function holdCommand(os, seconds) {
   const kind = KIND[String(os ?? "").toLowerCase()];
   const secs = Math.max(0, Math.floor(Number(seconds)) || 0);
-  if (kind === "darwin") return { command: "caffeinate", args: [working ? "-i" : "-s", "-t", String(secs)] };
+  if (kind === "darwin") return { command: "caffeinate", args: ["-i", "-t", String(secs)] };
   if (kind === "linux") return { command: "systemd-inhibit", args: ["--what=idle:sleep", "--who=kanso", "--why=awake", "sleep", String(secs)] };
-  if (kind === "windows") return { command: "powershell", args: ["-NoProfile", "-NonInteractive", "-Command", windowsScript(secs, Boolean(working))] };
+  if (kind === "windows") return { command: "powershell", args: ["-NoProfile", "-NonInteractive", "-Command", windowsScript(secs)] };
   return null;
 }
 
@@ -73,7 +70,7 @@ export function createAwake({ now = () => Date.now(), run }) {
       this.put(name, { ...slot, skip: true });
     },
     launch(item, os, gen, at) {
-      const spec = holdCommand(os, LEASE_S, Boolean(item.working));
+      const spec = holdCommand(os, LEASE_S);
       const cur = this.slot(item.name);
       if (!spec || cur.gen !== gen) {
         if (cur.gen === gen) this.put(item.name, { ...cur, os, skip: true, arming: false });

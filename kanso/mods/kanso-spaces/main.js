@@ -1097,14 +1097,10 @@ export default class Spaces extends View {
     });
   }
 
-  machineWorking(name) {
-    return terminals().some((term) => machineOf(term.address) === name && term.status === "working");
-  }
-
   // The list is read every two minutes behind; the hold still renews on time.
   holdAwake(cx) {
     if (!this.awake) return;
-    const rows = (this.machines ?? []).map((row) => ({ name: row.name, phase: this.phaseOf(row.name), working: this.machineWorking(row.name) }));
+    const rows = (this.machines ?? []).map((row) => ({ name: row.name, phase: this.phaseOf(row.name) }));
     const token = (this.awakeToken ?? 0) + 1;
     this.awakeToken = token;
     cx.spawn(async (cx) => {
