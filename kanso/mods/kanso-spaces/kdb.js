@@ -183,6 +183,14 @@ export class Kdb {
     } catch (error) { for (const call of batch) call.reject(error); }
   }
 
+  // Drops a call the host lost, so later calls start afresh instead of waiting behind it.
+  abandon() {
+    this.ready = null;
+    this.queue = [];
+    this.chain = Promise.resolve();
+    this.invalidate();
+  }
+
   invalidate() {
     this.cache.clear();
     this.cachedAt = Date.now();

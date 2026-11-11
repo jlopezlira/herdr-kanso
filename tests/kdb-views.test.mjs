@@ -46,3 +46,15 @@ test("the schema is opened once per file, whichever view opens it first", async 
   assert.equal(calls.filter(([command, args]) => command === "sqlite3" && args[0] === "-version").length, 1);
   assert.equal(calls.filter(([command]) => command === "mkdir").length, 1);
 });
+
+test("an abandoned call no longer holds up its own view's next calls", async (t) => {
+  const { Kdb, host } = await views(t);
+  const db = new Kdb();
+  await db.open();
+  host.hang = true;
+  db.read("SELECT 1;");
+  await turn();
+  host.hang = false;
+  db.abandon();
+  assert.deepEqual(clone(await within(db.read("SELECT 2 AS two;"))), [{ two: 2 }]);
+});

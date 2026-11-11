@@ -12,7 +12,8 @@ import { Ports } from "./ports.js";
 import { Look } from "./look.js";
 import { Find } from "./find-view.js";
 import { Kdb, projectKey } from "./kdb.js";
-import { takeState, giveState } from "./panel-state.js";
+import { takeState, giveState, stateWithin, LATE } from "./panel-state.js";
+import { afterMount } from "./pure.js";
 
 const PANELS = { files: Files, pr: PullRequest, preview: Preview, shipped: Shipped, worktrees: Worktrees, ports: Ports, look: Look, find: Find };
 
@@ -31,18 +32,19 @@ export default class Panel extends View {
     this.saved = undefined;
     const fresh = Boolean(p.url) || p.path != null && p.path !== "";
     // Read this project's state before the panel starts, then write it when it changes.
-    cx.spawn(async (cx) => {
+    afterMount(cx, (cx) => cx.spawn(async (cx) => {
       if (!fresh && this.project && typeof this.panel.restoreState === "function") {
         try {
-          const state = await this.db.panelState(this.project, this.id);
-          if (state && !(await giveState(this.panel, state, cx))) this.db.clearPanelState(this.project, this.id).catch(() => {});
+          const state = await stateWithin(this.db.panelState(this.project, this.id), cx.timer);
+          if (state === LATE) this.db.abandon();
+          else if (state && !(await giveState(this.panel, state, cx))) this.db.clearPanelState(this.project, this.id).catch(() => {});
         } catch { /* opens empty */ }
       }
       this.panel.init(cx, p);
       this.ready = true;
       this.saved = JSON.stringify(takeState(this.panel));
       cx.notify();
-    });
+    }));
     this.shown = false;
     cx.timer.after(16, (cx) => { this.shown = true; cx.notify(); });
   }
