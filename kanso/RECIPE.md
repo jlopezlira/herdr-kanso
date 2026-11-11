@@ -23,15 +23,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       Search and Hide sidebar at the right. Each is a 32 square with a 17 icon
       in `muted` that turns `foreground` on hover over a `foreground`+`12`
       wash.
-    - Space rows are 32 tall with radius 6, no avatar: the name, then,
-      right-aligned, the repo, branch and ahead/behind counts in 11.5.
-    - The active space has a `foreground`+`14` wash; hover shows
-      `foreground`+`0c`.
+    - Space rows are 36 tall, radius 8: name 13.5 semibold, repo, branch
+      and counts 11.5. + stays on the active project; + and … on hover.
+      ↓N arms, then `git pull --ff-only` on that computer; ↑N opens its
+      pull request panel. Active `foreground`+`14`, hover `foreground`+`0c`.
     - Worktree spaces nest under their repo on 1px `input` guide lines.
-    - A space's agents are listed under it in 28-tall rows: program icon 15,
-      title 12.5, status mark at the right. The focused agent is in full ink
-      over a `foreground`+`0c` wash; the others are `muted`, and idle ones
-      `dim`.
+    - Agents under a space: icon 15, title 12.5, status mark.
     - Collapsed (76 wide): the + and Hide buttons, stacked, then one mark
       per group (project, status, shelf): a project's initial in its color,
       no square (else an icon), under it the most urgent state and count.
@@ -187,15 +184,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
-- **Since you left**: after 5 minutes away, a "While you were away" head under
-  the project lists up to three rows: mark, name, outcome (Finished, Needs you,
-  Failed, Went to sleep, Could not sleep, a PR's state) and age; under it, dim,
-  the agent's line when it happened (`did`, kept with the event). The agent in
-  front is left out; one row per agent. +N expands inline. Enter or a click
-  goes to the agent's pane, a sleeper's Wake menu or the PR, and dismisses; a
-  gone agent's row is dim and inert. Dismissal persists in kanso.db. Events
-  expire after 7 days, capped at 500. Piece `sidebar.away`: off, no event is
-  written or read. Nothing, loading or a failed read: nothing.
+- **Since you left**: after 5 minutes away, "While you were away" sits above
+  the projects, and on Status and Threads. Up to three rows: mark, name,
+  outcome (Finished, Needs you, Failed, Went to sleep, Could not sleep, a
+  PR's state) and age; under it, dim, the line then (`did`, kept with the
+  event). The agent in front is left out; one row per agent. +N expands
+  inline. Enter or a click goes to the pane, a sleeper's Wake menu or the
+  PR, and dismisses; a gone row is dim and inert. Dismissal stays in
+  kanso.db. Events expire after 7 days, capped at 500. Piece `sidebar.away`
+  off: nothing is written or read. Nothing, loading or a failed read: nothing.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
@@ -252,9 +249,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
   - With another machine, each is one project-height row: monitor or server
-    icon, medium name (`foreground` connected, `muted` off, unreachable,
-    or needs login; this computer's host name). Small `dim`: Off, Unreachable,
-    Needs login; a breathing line while loading. Turn on, Retry, and copy stay
+    icon, medium name (`foreground` connected or loading, else `muted`;
+    this computer's host name). State 11.5: Off and Needs login `dim`,
+    Unreachable `blocked`. A breathing line while loading. Turn on, Retry and copy stay
     visible; hover or keyboard shows turn off and + only when connected; a
     chevron folds it. Copy is `hc machine login <name>`. Off stores
     target, name, via, session and temporary, then `hc machine rm`
@@ -271,7 +268,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `data/kanso-sync/config.json` and bumps
     `kanso.sync.kick`, so Spend exchanges at once.
     `hc machine ls`: 30 s in front, 2 min behind, and a hung one is given up.
-  - Click an agent row to focus its pane. Pinned agents come first (the
+  - Click an agent row to focus its pane; asleep, it wakes when it can. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
     order button (kanso.db `spaces.order`): last update, needs you, kind,
     on screen, or your own drag order (`spaces.custom`). A drag stays in
@@ -324,8 +321,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     to 3.2 s, its own pace per agent), so a glint passes over the letters
     in place; after it three dots count (`.frames`, "", ".", "..", "...",
     380 ms). Nothing in the row is laid out again. A row waiting on you sits on
-    `blocked` at 8%; the focused one on `foreground` at 7%. Projects:
-    space rows 36 tall, the name 13.5px semibold, 10px between projects.
+    `blocked` at 8%; the focused one on `foreground` at 7%. 10px between
+    projects. Asleep rows are 32 tall: dim moon and name, Wake when it
+    can, Enter wakes. Second line: full ink waiting, quiet working, dim
+    finished or idle.
   - Projects | Status | Threads: a switch under the top row (three
     segments, 28 tall, in a 3px-padded `foreground` 4% track, radius 10,
     14px of space under it;

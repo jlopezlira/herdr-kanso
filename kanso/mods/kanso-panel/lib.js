@@ -56,7 +56,14 @@ export function location() {
   return { cwd: pane?.cwd || f?.cwd || space?.folder, on, space: space?.id };
 }
 // A read's context is the folder and the machine, not the space.
-export const key = () => { const { cwd, on } = location(); return JSON.stringify({ cwd, on }); };
+export const placeKey = (place) => JSON.stringify({ cwd: place?.cwd, on: place?.on ?? null });
+export const key = () => placeKey(location());
+
+// Set when a count ahead opens the panel on that folder. Absent, the panel follows the focused pane.
+export function pinnedPlace(props) {
+  if (!props?.folder) return null;
+  return { cwd: props.folder, on: props.on ?? null, at: props.at ?? 0 };
+}
 
 // Each line is numbered once, so a frame only draws the rows on screen.
 export function diffRows(lines, { max, width } = {}) {

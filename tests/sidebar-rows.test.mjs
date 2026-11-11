@@ -1,0 +1,131 @@
+// Sidebar controls are drawn only when they can act, and a pull asks twice.
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  ASLEEP_ROW, showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
+  aheadOpen, gitControls, runPull, showAwayList, activityTone, machineWordTone, canWake, enterOpens, asleepControls,
+} from "../kanso/mods/kanso-spaces/sidebar-rows.js";
+import { clone, load } from "./helpers.mjs";
+
+const place = { cwd: "/work/app", on: "dark", key: "[dark]" };
+const git = { branch: "feat", ahead: 2, behind: 3 };
+
+test("plus stays on the active project and the menu stays on hover", () => {
+  assert.equal(showPlus(true, false), true);
+  assert.equal(showPlus(false, true), true);
+  assert.equal(showPlus(false, false), false);
+  assert.equal(showDots(true), true);
+  assert.equal(showDots(false), false);
+  assert.deepEqual(projectControls({ active: true, hovered: false, place: { folder: "/work" } }), { plus: true, dots: false });
+  assert.deepEqual(projectControls({ active: false, hovered: true, place: { folder: "/work" } }), { plus: true, dots: true });
+  assert.deepEqual(projectControls({ active: true, hovered: false, place: null }), { plus: false, dots: false });
+  assert.deepEqual(projectControls({ active: false, hovered: false, place: { folder: "/work" } }), { plus: false, dots: false });
+});
+
+test("a count behind arms Press again and the second press pulls with git on that computer", () => {
+  assert.equal(pullLabel(0, false), null);
+  assert.equal(pullLabel(3, false), "\u21933");
+  assert.equal(pullLabel(3, true), "Press again to pull 3");
+  assert.equal(pullKey("/work/app", "dark"), "pull:dark:/work/app");
+  assert.equal(pullKey("/work/app", null), "pull::/work/app");
+  assert.deepEqual(pullCommand("/work/app", "dark"), { command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], on: "dark" });
+  assert.deepEqual(pullCommand("/work/app", null), { command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], on: null });
+  assert.equal(pullCommand("", "dark"), null);
+  assert.equal(pullCommand(null, null), null);
+  const armed = gitControls(git, { folder: place.cwd, on: place.on, armed: true });
+  assert.equal(armed.find((item) => item.kind === "behind").label, "Press again to pull 3");
+  assert.deepEqual(armed.find((item) => item.kind === "behind").command, pullCommand(place.cwd, place.on));
+});
+
+test("a refusal shows git's own first line and a clean pull says nothing", async () => {
+  assert.equal(refusalLine(null), null);
+  assert.equal(refusalLine({ code: 0, stderr: "already up to date" }), null);
+  assert.equal(refusalLine({ code: 1, stderr: "\nfatal: Not possible to fast-forward\nmore", stdout: "hint" }), "fatal: Not possible to fast-forward");
+  assert.equal(refusalLine({ code: 1, stderr: "  ", stdout: "could not read\nrest" }), "could not read");
+  assert.equal(refusalLine({ code: 1, stderr: "", stdout: "" }), null);
+  const calls = [];
+  const notes = [];
+  const exec = async (command, args, options) => { calls.push({ command, args, options }); return { code: 1, stderr: "fatal: no\nmore", stdout: "" }; };
+  const notify = (note) => notes.push(note);
+  const failed = await runPull(exec, notify, { folder: "/work/app", on: "dark" });
+  assert.equal(failed.code, 1);
+  assert.deepEqual(calls, [{ command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], options: { on: "dark" } }]);
+  assert.deepEqual(notes, [{ title: "fatal: no", level: "error" }]);
+  const quiet = [];
+  const ok = await runPull(async () => ({ code: 0, stdout: "Updating" }), (note) => quiet.push(note), { folder: "/work/app", on: null });
+  assert.equal(ok.code, 0);
+  assert.deepEqual(quiet, []);
+  assert.equal(await runPull(async () => { throw new Error("ran"); }, notify, { folder: "", on: "dark" }), null);
+});
+
+test("a count ahead opens the pull request panel for that branch and that computer", () => {
+  assert.equal(aheadOpen(0, { branch: "feat", folder: "/work/app", on: "dark" }), null);
+  assert.equal(aheadOpen(2, { branch: "feat", folder: "", on: "dark" }), null);
+  assert.deepEqual(aheadOpen(2, { branch: "feat", folder: "/work/app", on: "dark" }), { panel: "pr", branch: "feat", folder: "/work/app", on: "dark" });
+  assert.deepEqual(aheadOpen(2, { branch: "", folder: "/work/app", on: null }), { panel: "pr", branch: null, folder: "/work/app", on: null });
+  const controls = gitControls(git, { folder: "/work/app", on: "dark", armed: false });
+  assert.deepEqual(controls.find((item) => item.kind === "ahead").open, { panel: "pr", branch: "feat", folder: "/work/app", on: "dark" });
+  assert.equal(controls.find((item) => item.kind === "ahead").label, "\u21912");
+});
+
+test("While you were away is drawn on Projects as well as Status and Threads", () => {
+  assert.equal(showAwayList("spaces", false), true);
+  assert.equal(showAwayList("agents", false), true);
+  assert.equal(showAwayList("threads", false), true);
+  assert.equal(showAwayList("spaces", true), false);
+  assert.equal(showAwayList("other", false), false);
+});
+
+test("an agent's second line is full ink while it waits, quiet while it works, and dim when it is finished", () => {
+  assert.equal(activityTone("blocked"), "foreground");
+  assert.equal(activityTone("working"), "muted");
+  assert.equal(activityTone("done"), "dim");
+  assert.equal(activityTone("idle"), "dim");
+  assert.equal(activityTone("asleep"), "muted");
+});
+
+test("an unreachable computer's word is blocked and every other state stays dim", () => {
+  assert.equal(machineWordTone("unavailable"), "blocked");
+  assert.equal(machineWordTone("connected"), "dim");
+  assert.equal(machineWordTone("off"), "dim");
+  assert.equal(machineWordTone("login"), "dim");
+  assert.equal(machineWordTone("loading"), "dim");
+});
+
+test("Enter on an asleep row wakes it, and a row that cannot wake does nothing", () => {
+  const asleep = { address: "a", asleep: { id: "s1" } };
+  assert.equal(ASLEEP_ROW, 32);
+  assert.equal(canWake(asleep), true);
+  assert.deepEqual(enterOpens(asleep), { wake: "s1" });
+  assert.deepEqual(asleepControls(asleep), [{ id: "wake", label: "Wake" }]);
+  for (const row of [{ address: "b", asleep: { id: "s2", busy: true } }, { address: "c", asleep: { id: "s3", quiet: "away" } }, { address: "d", asleep: {} }]) {
+    assert.equal(canWake(row), false);
+    assert.equal(enterOpens(row), null);
+    assert.deepEqual(asleepControls(row), []);
+  }
+  assert.deepEqual(enterOpens({ address: "e", pane: "p1" }), { focus: "p1" });
+  assert.deepEqual(enterOpens({ address: "f" }), { peek: "f" });
+});
+
+test("nothing is painted that cannot act", () => {
+  assert.deepEqual(gitControls({ ahead: 0, behind: 0, branch: "main" }, { folder: "/work/app", on: null }), []);
+  assert.deepEqual(gitControls({ ahead: 2, behind: 0, branch: "main" }, { folder: "", on: "dark" }), []);
+  assert.equal(gitControls({ ahead: 0, behind: 4, branch: "main" }, { folder: "/work/app", on: null }).some((item) => item.kind === "ahead"), false);
+  assert.equal(gitControls({ ahead: 4, behind: 0, branch: "main" }, { folder: "/work/app", on: null }).some((item) => item.kind === "behind"), false);
+  assert.equal(gitControls(null, { folder: "/work/app", on: null }).length, 0);
+});
+
+test("the pull request panel keeps the folder a count ahead named", async () => {
+  const { pinnedPlace, placeKey, key } = await load("kanso-panel/lib.js", ["pinnedPlace", "placeKey", "key"], {
+    spaces: () => [{ id: "here", active: true, folder: "/focused", machine: null }],
+    panes: () => [],
+    focused: () => ({ cwd: "/focused", pane: "p" }),
+  });
+  const pinned = pinnedPlace({ panel: "pr", folder: "/work/app", on: "dark", branch: "feat", at: 9 });
+  assert.deepEqual(clone(pinned), { cwd: "/work/app", on: "dark", at: 9 });
+  assert.equal(placeKey(pinned), JSON.stringify({ cwd: "/work/app", on: "dark" }));
+  assert.equal(pinnedPlace({}), null);
+  assert.equal(pinnedPlace({ on: "dark", at: 9 }), null);
+  assert.equal(key(), JSON.stringify({ cwd: "/focused", on: null }));
+  assert.notEqual(placeKey(pinned), key());
+});

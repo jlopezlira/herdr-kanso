@@ -16,6 +16,12 @@ release.
 
 ### Changed
 
+- On the project you are in, + stays visible. On the others it shows when you point at the row.
+- A count behind the branch asks Press again, then pulls on that computer. A count ahead opens that branch's pull request panel.
+- While you were away sits at the top of Projects, as it does on Status and Threads.
+- A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
+- An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
+- An asleep row shows Wake, and Enter wakes it.
 - The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
 
 ## [3.30.0] - 2026-11-11

@@ -159,7 +159,7 @@ test("The sidebar list supports click and Enter, with project, name, reason and 
   assert.deepEqual(clone(state.runs), [["agent.focus", { terminal: "b" }], ["agent.focus", { terminal: "a" }]]);
 });
 
-test("Status and Threads keep the return digest when the needs-you list opens and closes", async () => {
+test("Projects, Status and Threads keep the return digest when the needs-you list opens and closes", async () => {
   const { state, view, ui } = await controller();
   const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], ui.host);
   state.spaces = [{ id: "project", active: true, folder: "C:\\work\\project", tabs: [] }];
@@ -168,9 +168,9 @@ test("Status and Threads keep the return digest when the needs-you list opens an
   Object.assign(view, {
     sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]), custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
     listed: () => [], seen: () => new Map(), orderPicker: ui.host.div, viewSwitch: ui.host.div,
-    agentsView: () => [], threadsView: () => [],
+    agentsView: () => [], threadsView: () => [], grouped: () => [],
   });
-  for (const mode of ["agents", "threads"]) {
+  for (const mode of ["spaces", "agents", "threads"]) {
     view.view = mode;
     view.needsOpen = false;
     ui.texts.length = 0;

@@ -4,8 +4,8 @@ import { openApi } from "./platform-open.js";
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
-import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals } from "herdr";
-import { location, key, diffRows, monoFont, tilde } from "./lib.js";
+import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
+import { location, key, diffRows, monoFont, tilde, pinnedPlace, placeKey } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
 import { tryOr, tryOrAsync, bounded } from "./pure.js";
@@ -120,6 +120,8 @@ export class PullRequest {
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.jumpUrl = props.url ?? null;
+    this.pinned = null;
+    this.takePlace(props);
     this.refresh(cx);
     cx.timer.every(TICK_MS, (cx) => this.onPoll(cx));
   }
@@ -199,7 +201,7 @@ export class PullRequest {
   }
 
   takeOpen(open, context) {
-    if (open?.code !== 0 || key() !== context) return false;
+    if (open?.code !== 0 || this.contextKey() !== context) return false;
     const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
     if (sorted === null) return false;
     this.openPrs = sorted;
@@ -233,11 +235,29 @@ export class PullRequest {
     return Boolean(m && this.home && m[1].toLowerCase() === this.home.toLowerCase());
   }
 
+  placeOf() {
+    return this.pinned ? { cwd: this.pinned.cwd, on: this.pinned.on } : location();
+  }
+
+  // A pin names the folder. Otherwise the panel follows focus, on the same key as before.
+  contextKey() {
+    return this.pinned ? placeKey(this.pinned) : key();
+  }
+
+  takePlace(next) {
+    const pinned = pinnedPlace(next);
+    const prev = this.pinned ?? null;
+    if (placeKey(pinned) === placeKey(prev) && (pinned?.at ?? null) === (prev?.at ?? null)) return false;
+    this.pinned = pinned;
+    this.context = null;
+    return true;
+  }
+
   refresh(cx) {
     if (this.loading) return;
     this.away = false;
     this.bind(cx);
-    const { cwd, on } = location(), context = key();
+    const { cwd, on } = this.placeOf(), context = this.contextKey();
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
@@ -261,10 +281,10 @@ export class PullRequest {
     const want = this.selected;
     cx.spawn(async (cx) => {
       const inbox = this.syncInbox(context);
-      const failed = (e) => { if (key() === context) this.keepLast(e?.message ?? e); };
+      const failed = (e) => { if (this.contextKey() === context) this.keepLast(e?.message ?? e); };
       const read = async () => {
         const top = await this.git(["rev-parse", "--show-toplevel"], cwd, on);
-        if (key() !== context) return null;
+        if (this.contextKey() !== context) return null;
         if (top?.late) { this.keepLast(); return null; }
         // Not a repository is a place, not a failure: a quiet placeholder, no retry.
         if (top.code !== 0) {
@@ -282,7 +302,7 @@ export class PullRequest {
           this.git(["remote", "get-url", "origin"], this.root, on).catch(() => null),
           this.readPushed(this.root, on),
         ]);
-        if (key() !== context) return null;
+        if (this.contextKey() !== context) return null;
         if (!branch || branch.late || remote?.late || pushed?.state === "late") { this.keepLast(); return null; }
         this.branch = branch.stdout.trim() || null;
         this.pushed = pushed?.state === "pushed"; this.behind = pushed?.state === "behind";
@@ -292,7 +312,7 @@ export class PullRequest {
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remoteUrl)?.[1] ?? null;
         this.host = parseRemote(remoteUrl.trim())?.host ?? null;
         const waited = await this.heldByGitHub(Date.now());
-        if (key() !== context) return null;
+        if (this.contextKey() !== context) return null;
         if (waited) {
           this.wait = waited;
           if (this.pr) this.error = null;
@@ -304,20 +324,20 @@ export class PullRequest {
         const open = this.listing ? this.gh(openListArgs()).catch(() => null) : null;
         try { await this.readShown(context, want, open); }
         catch (e) { if (this.remembered) this.dropRemembered(); else failed(e); }
-        if (key() === context && !this.pr && pushed?.state === "unpushed") {
+        if (this.contextKey() === context && !this.pr && pushed?.state === "unpushed") {
           const stamp = `${this.branch ?? ""}\0${pushed.ahead ?? 0}`;
           if (this.subjectsFor !== stamp) {
             this.subjectsFor = stamp;
             const log = await this.git(["log", "-5", "--format=%s"], this.root, on).catch(() => null);
-            if (key() === context && this.subjectsFor === stamp && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
+            if (this.contextKey() === context && this.subjectsFor === stamp && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
           }
-        } else if (key() === context) { this.subjects = []; this.subjectsFor = null; }
+        } else if (this.contextKey() === context) { this.subjects = []; this.subjectsFor = null; }
         return open;
       };
       const open = await read().catch((e) => { failed(e); return null; });
       if (open) await open;
       await inbox;
-      const follow = (this.selected !== want || this.openedList) && !this.wait && key() === context;
+      const follow = (this.selected !== want || this.openedList) && !this.wait && this.contextKey() === context;
       this.openedList = false;
       this.loading = false; this.loadedAt = Date.now(); cx.notify();
       if (follow) this.refresh(cx);
@@ -346,7 +366,7 @@ export class PullRequest {
   // The account, not the focused folder. Absent unless a provider is installed and signed in here.
   async syncInbox(context) {
     const ready = await this.account(Date.now());
-    if (ready == null || key() !== context) return;
+    if (ready == null || this.contextKey() !== context) return;
     if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
     if (!this.inboxDb) {
       try { await this.db.open(); this.inboxDb = this.db; }
@@ -362,16 +382,16 @@ export class PullRequest {
       const soFar = await prev;
       return [...soFar, await refreshInbox({
         db: this.inboxDb, run: (command, args, options) => this.launch(command, args, options ?? {}), provider, session, force, shown: true, facts: keepsFacts(),
-        onCache: (cached, pending) => { if (key() === context) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
+        onCache: (cached, pending) => { if (this.contextKey() === context) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
       })];
     }, Promise.resolve([])).then(mergeInbox).catch((e) => e);
     if (model instanceof Error) {
       const e = model;
-      if (key() !== context) return;
+      if (this.contextKey() !== context) return;
       this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`;
       return;
     }
-    if (key() !== context) return;
+    if (this.contextKey() !== context) return;
     this.paintInbox(model, true);
     if (this.inboxOpen === false) await this.noteSeen(this.pr?.url);
   }
@@ -424,7 +444,7 @@ export class PullRequest {
       this.missing = null; this.error = { title: "GitHub CLI not installed", detail: null, cli: true }; this.pr = null; return;
     }
     // A click picked another one while this read was out: drop it, the finally reads again.
-    if (key() !== context || this.selected !== want) return;
+    if (this.contextKey() !== context || this.selected !== want) return;
     const missing = ghMissing(asked.view);
     if (missing) {
       if (this.remembered) { this.dropRemembered(); return; }
@@ -442,10 +462,10 @@ export class PullRequest {
     const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
     if (branchHasNone && this.branch && this.base === undefined) {
       const b = await this.gh(["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"]).catch(() => null);
-      if (b?.code === 0 && key() === context) this.base = b.stdout.trim() || null;
+      if (b?.code === 0 && this.contextKey() === context) this.base = b.stdout.trim() || null;
     }
     if (branchHasNone) {
-      if (key() !== context || this.selected !== want) return;
+      if (this.contextKey() !== context || this.selected !== want) return;
       this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null;
       this.branchUrl = null; this.threads = []; return;
     }
@@ -474,7 +494,7 @@ export class PullRequest {
     if (this.threadsFor && !String(this.threadsFor).startsWith(`${pr.url}\0`)) { this.threads = []; this.threadsFor = null; }
     if (repo && needsThreads(this.threadsFor, pr.url, pr.updatedAt)) {
       const gql = await this.gh(["api", "graphql", "-f", `query=${THREADS}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`, "-F", `n=${pr.number}`]).catch(() => null);
-      const nodes = gql?.code === 0 && key() === context && this.pr?.url === pr.url
+      const nodes = gql?.code === 0 && this.contextKey() === context && this.pr?.url === pr.url
         ? tryOr(() => JSON.parse(gql.stdout)?.data?.repository?.pullRequest?.reviewThreads?.nodes, null) : null;
       if (nodes) {
         this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
@@ -486,7 +506,7 @@ export class PullRequest {
     }
     if (!this.viewer) {
       const me = await this.gh(["api", "user", "--jq", ".login"]).catch(() => null);
-      if (me?.code === 0 && key() === context) this.viewer = me.stdout.trim();
+      if (me?.code === 0 && this.contextKey() === context) this.viewer = me.stdout.trim();
     }
     const place = this.repo();
     const repoKey = place ? `${place.o}/${place.r}` : null;
@@ -495,7 +515,7 @@ export class PullRequest {
       if (place && pr.state === "OPEN") {
         const perm = await this.gh(["repo", "view", repoKey, "--json", "viewerPermission", "--jq", ".viewerPermission"]).catch(() => null);
         const value = perm?.code === 0 ? perm.stdout.trim() : "";
-        if (value && key() === context && this.pr?.url === pr.url) this.permission = value;
+        if (value && this.contextKey() === context && this.pr?.url === pr.url) this.permission = value;
       }
     }
     const behindStamp = `${pr.url}\0${pr.updatedAt ?? ""}`;
@@ -505,9 +525,9 @@ export class PullRequest {
         const base = pr.baseRefName || "main";
         const counted = await this.git(["rev-list", "--count", `HEAD..origin/${base}`], this.root, this.on).catch(() => null);
         const n = Number(String(counted?.stdout ?? "").trim());
-        if (key() === context && this.pr?.url === pr.url && this.baseBehindFor === behindStamp) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
+        if (this.contextKey() === context && this.pr?.url === pr.url && this.baseBehindFor === behindStamp) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
       }
-    } else if (key() === context && this.pr?.url === pr.url) { this.baseBehind = null; this.baseBehindFor = null; }
+    } else if (this.contextKey() === context && this.pr?.url === pr.url) { this.baseBehind = null; this.baseBehindFor = null; }
   }
 
   loadClosed(cx) {
@@ -518,7 +538,7 @@ export class PullRequest {
     cx.spawn(async (cx) => {
       try {
         const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
-        if (r?.code === 0 && key() === context) {
+        if (r?.code === 0 && this.contextKey() === context) {
           const rows = JSON.parse(r.stdout);
           const when = (p) => Date.parse(p.mergedAt || p.closedAt || p.updatedAt) || 0;
           await this.keepPrFacts(rows);
@@ -1191,7 +1211,7 @@ export class PullRequest {
 
   render(cx) {
     this.comeForward(cx);
-    if (key() !== this.context) this.refresh(cx);
+    if (this.takePlace(props()) || this.contextKey() !== this.context) this.refresh(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
     const body = this.body(c, narrow);

@@ -7,6 +7,7 @@ import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
+import { activityTone } from "./sidebar-rows.js";
 
 export { NAME_LABEL };
 
@@ -429,7 +430,7 @@ export function agentRow(a, indent, t, row, more = {}) {
   const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
     .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
     .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))
-    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(more.faint ? t.dim : t.muted).child(more.activity)))
+    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t[activityTone(a.status)]).child(more.activity)))
     .when(Boolean(more.step), (el) => el.child(div().flex_none().pl(5).text_color(more.step.stuck ? t.blocked : t.dim).child(more.step.time)));
   const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
   return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
@@ -439,7 +440,11 @@ export function agentRow(a, indent, t, row, more = {}) {
     .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
     .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click((_e, cx) => (a.asleep ? row?.menu?.(cx) : a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })))
+    .on_click((_e, cx) => {
+      if (a.asleep) { row?.wake?.(cx); return; }
+      if (a.pane) run("pane.focus", { pane: a.pane });
+      else run("terminal.peek", { terminal: a.address });
+    })
     .on_mouse_down("left", (e) => { if (e.click_count === 2 && !a.asleep) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
     .when(Boolean(drag), (el) => el.on_mouse_up("left", (_e, cx) => drag.up(cx)))
     .when(Boolean(row?.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))
