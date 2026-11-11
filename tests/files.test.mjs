@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { load, temporary, exec, nativeWindow } from "./helpers.mjs";
+import { load, clone, temporary, exec, nativeWindow } from "./helpers.mjs";
 
 const { insideRoot } = await load("kanso-panel/lib.js", ["insideRoot"]);
 
@@ -110,4 +110,22 @@ test("Files virtual rows use list-level handlers for open, expand and context me
   list.el.handlers.on_item_secondary_click(list.key(0), {}, {});
   list.el.handlers.on_item_secondary_click(list.key(1), {}, {});
   assert.deepEqual(actions, [["toggle", "directory"], ["show", "file.txt"], ["read", "PLAN.md"], ["openWith", "file.txt"]]);
+});
+
+test("changed files are the marked paths under this folder, flat", async () => {
+  const { changedFiles, Files } = await load("kanso-panel/files.js", ["changedFiles", "Files"], { window: nativeWindow });
+  const marks = { "/repo/src/b.js": "M", "/repo/a.js": "A", "/repo-extra/c.js": "D", "/repo/src/nested/d.js": "U" };
+  const row = (path, mark) => ({ path, entry: { name: path, dir: false }, depth: 0, mark });
+  assert.deepEqual(clone(changedFiles(marks, "/repo")), [row("a.js", "A"), row("src/b.js", "M"), row("src/nested/d.js", "U")]);
+  assert.deepEqual(clone(changedFiles(marks, "/repo/")), clone(changedFiles(marks, "/repo")));
+  assert.deepEqual(clone(changedFiles(marks, "/repo/src")), [row("b.js", "M"), row("nested/d.js", "U")]);
+  assert.deepEqual(clone(changedFiles({ "C:\\repo\\a.js": "M" }, "C:\\repo")), [row("a.js", "M")]);
+  assert.deepEqual(clone(changedFiles({}, "/repo")), []);
+  assert.deepEqual(clone(changedFiles(marks, "")), []);
+  assert.deepEqual(clone(changedFiles(null, null)), []);
+  const panel = new Files();
+  Object.assign(panel, { changed: true, root: "/repo", marks, entries: new Map([["", [{ name: "other.txt", dir: false }]]]), folders: new Set(), rev: 0 });
+  assert.deepEqual(clone(panel.rows()).map((item) => item.path), ["a.js", "src/b.js", "src/nested/d.js"]);
+  panel.changed = false;
+  assert.deepEqual(clone(panel.rows()).map((item) => item.path), ["other.txt"]);
 });

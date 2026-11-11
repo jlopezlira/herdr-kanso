@@ -168,7 +168,7 @@ export function digestSegments(d, { working = false } = {}) {
   const files = d.files > 0 ? {
     kind: "files", count: words(d.files, "file", "files"), tone,
     diff: d.add > 0 || d.del > 0 ? `+${d.add ?? 0} −${d.del ?? 0}` : null, diffTone: "dim",
-    tip: `Open the diff${read}`, open: { panel: "files", page: "changes" },
+    tip: `Open the diff${read}`, open: { panel: "files", changed: true },
   } : null;
   const commits = d.ahead > 0 ? {
     kind: "commits", count: words(d.ahead, "commit", "commits"), tone,
@@ -186,7 +186,7 @@ export function digestSegments(d, { working = false } = {}) {
 export function digestOpen(segment, cwd) {
   const open = segment?.open;
   if (!open?.panel) return null;
-  if (open.panel === "files") return { panel: "files", page: "changes", cwd: cwd ?? null };
+  if (open.panel === "files") return { panel: "files", changed: true, cwd: cwd ?? null };
   return { panel: "pr", section: open.section ?? null, check: open.check ?? null };
 }
 
@@ -446,7 +446,7 @@ export default class Strip extends View {
         const open = digestOpen(seg, p.cwd);
         if (!open) return;
         run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane });
-        const stamped = open.panel === "pr" ? { ...open, at: Date.now() } : open;
+        const stamped = { ...open, at: Date.now() };
         commitLayout({ panel: { id: open.panel, type: "block", content: { mod: "kanso-panel", props: stamped } } });
       })
       .when(seg.kind !== "pr", (el) => el

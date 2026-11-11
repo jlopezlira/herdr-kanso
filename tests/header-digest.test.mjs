@@ -100,8 +100,9 @@ test("each segment's words, colour and click, and nothing that cannot act", asyn
   assert.deepEqual(clone(digestSegments({ pr: { number: 1, state: "CLOSED" } })), []);
   assert.deepEqual(clone(digestSegments(null)), []);
   for (const seg of [...idle, ...working, ...draft, ...ready]) assert.ok(seg.open?.panel);
-  assert.deepEqual(clone(digestOpen(idle[0], "/repo")), { panel: "files", page: "changes", cwd: "/repo" });
-  assert.deepEqual(clone(digestOpen(idle[0], undefined)), { panel: "files", page: "changes", cwd: null });
+  assert.deepEqual(idle[0].open, { panel: "files", changed: true });
+  assert.deepEqual(clone(digestOpen(idle[0], "/repo")), { panel: "files", changed: true, cwd: "/repo" });
+  assert.deepEqual(clone(digestOpen(idle[0], undefined)), { panel: "files", changed: true, cwd: null });
   assert.deepEqual(clone(digestOpen(idle[1], "/repo")), { panel: "pr", section: "push", check: null });
   assert.deepEqual(clone(digestOpen(idle[2], "/repo")), { panel: "pr", section: "checks", check: "test / unit" });
   assert.equal(digestOpen(null), null);

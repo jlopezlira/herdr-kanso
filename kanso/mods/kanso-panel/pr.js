@@ -144,7 +144,7 @@ export class PullRequest {
     this.check = props.check ?? null;
     this.asked = props.at ?? null;
     this.landed = null;
-    this.scroll = typeof ScrollHandle !== "undefined" ? ScrollHandle.new() : null;
+    this.scroll = ScrollHandle.new();
     this.jumpUrl = props.section === "push" ? null : (props.url ?? null);
     if (props.section) this.keptUrl = null;
     this.refresh(cx);
@@ -1214,7 +1214,6 @@ export class PullRequest {
   }
 
   noteAsk(cx) {
-    if (typeof props !== "function") return;
     const given = props() ?? {};
     if (given.at == null || given.at === this.asked) return;
     this.asked = given.at;
@@ -1238,7 +1237,7 @@ export class PullRequest {
       return;
     }
     this.landed = mark;
-    this.scroll?.scroll_to_item(at);
+    this.scroll.scroll_to_item(at);
   }
 
   render(cx) {
@@ -1256,7 +1255,7 @@ export class PullRequest {
       .child(h_flex().flex_1().min_h(0).w_full().justify_center().px(pad).overflow_hidden()
         .child(v_flex().id("pr-scroll").h_full().w_full().max_w(1080).overflow_y_scrollbar()
           .pt(narrow ? G.lg : 28).pb(narrow ? G.lg : 28).gap(narrow ? 36 : 48)
-          .when(Boolean(this.scroll), (el) => el.track_scroll(this.scroll))
+          .track_scroll(this.scroll)
           .children(body)));
   }
 }
