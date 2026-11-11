@@ -29,16 +29,15 @@ if [ "$end" -gt "$from" ]; then
 fi
 exit 0`;
 
-const SLICE = String.raw`f="$1"; from="$2"; budget="$3"; longest="$4"
-[ -f "$f" ] || exit 2
-size=$(wc -c < "$f" | tr -d '[:space:]')
-python3 - "$f" "$from" "$budget" "$longest" "$size" <<'PY'
-import sys
-path, frm_s, budget_s, longest_s, size_s = sys.argv[1:]
+const SLICE_PY = String.raw`import os, sys
+path, frm_s, budget_s, longest_s = sys.argv[1:]
+try:
+    size = os.path.getsize(path)
+except OSError:
+    sys.exit(2)
 frm = int(frm_s)
 budget = int(budget_s)
 longest = int(longest_s)
-size = int(size_s)
 if frm < 0 or frm > size:
     frm = 0
 fh = open(path, "rb")
@@ -86,7 +85,14 @@ for line in data.decode("utf-8", "replace").split("\n"):
 sys.stdout.write(str(end) + " " + str(size) + "\n")
 sys.stdout.write("\n".join(kept))
 fh.close()
-PY`;
+`;
+
+async function unixSlice(run, file, from, budget, longest) {
+  const args = ["-c", SLICE_PY, file, String(from), String(budget), String(longest)];
+  const read = (command) => Promise.resolve(run(command, args, { timeout: 60000 })).catch(() => null);
+  const first = await read("python3");
+  return first && (first.code === 0 || first.code === 2) ? first : read("python");
+}
 
 const LOCATE = String.raw`pid="$1"; kind="$2"
 if [ "$kind" = claude ]; then
@@ -243,6 +249,6 @@ export function transcriptApi(platform, run) {
     },
     size: async (file) => platform === "windows" ? Number((await ps(`(Get-Item -LiteralPath ${psQuote(file)}).Length`)).stdout.trim()) : Number((await run("sh", ["-c", 'wc -c < "$1"', "sh", file])).stdout.trim()),
     thread: (file) => platform === "windows" ? ps(`$file=${psQuote(file)}; `+WINDOWS_THREAD) : run("sh", ["-c", READ, "sh", file]),
-    slice: (file, from, budget, longest) => platform === "windows" ? ps(`$file=${psQuote(file)}; $from=${Number(from)}; $budget=${Number(budget)}; $longest=${Number(longest)}; `+WINDOWS_SLICE) : run("sh", ["-c", SLICE, "sh", file, String(from), String(budget), String(longest)], { timeout: 60000 }),
+    slice: (file, from, budget, longest) => platform === "windows" ? ps(`$file=${psQuote(file)}; $from=${Number(from)}; $budget=${Number(budget)}; $longest=${Number(longest)}; `+WINDOWS_SLICE) : unixSlice(run, file, from, budget, longest),
   };
 }

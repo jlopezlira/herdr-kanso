@@ -1,4 +1,7 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -219,7 +222,7 @@ export default class Settings extends View {
   async readNews(cx) {
     const dir = paths.join(appHome(), "data", "kanso-settings"), cache = paths.join(dir, "CHANGELOG.md");
     const fresh = await tryOrAsync(async () => { const r = await fetch(CHANGELOG_URL); return r.ok ? await r.text() : null; });
-    if (fresh) await tryOrAsync(async () => { await localPlatform().files.mkdir(dir); await writeTextFile(cache, fresh, await readTextFile(cache)); });
+    if (fresh) await tryOrAsync(async () => { await localService(fileApi).mkdir(dir); await writeTextFile(cache, fresh, await readTextFile(cache)); });
     const kept = fresh ? null : await tryOrAsync(() => readTextFile(cache));
     const text = fresh || kept, from = fresh ? "github" : kept ? "cache" : null;
     this.news = text ? { entries: parseChangelog(text), error: null, from } : { entries: [], error: "GitHub could not be reached, and nothing was kept from before.", from: null };
@@ -230,7 +233,7 @@ export default class Settings extends View {
     if (this.avatars) return;
     this.avatars = new Set();
     cx.spawn(async (cx) => {
-      const r = await tryOrAsync(() => localPlatform().images.avatars(paths.join(appHome(), AVATARS_DIR), PEOPLE.map((p) => p.login)));
+      const r = await tryOrAsync(() => localService(imageApi).avatars(paths.join(appHome(), AVATARS_DIR), PEOPLE.map((p) => p.login)));
       this.avatars = new Set((r?.stdout ?? "").split("\n").filter(Boolean));
       cx.notify();
     });

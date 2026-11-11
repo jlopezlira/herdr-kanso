@@ -1,4 +1,8 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { repositoryApi } from "./platform-repositories.js";
+import { systemApi } from "./platform-system.js";
 // Shipped's store, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Statistics only: no messages, file names or code.
 // A repository's week counts the larger of what the machines and GitHub saw.
@@ -100,15 +104,15 @@ export class Store {
     try {
       const r = await exec("sqlite3", [this.db, paths.sqliteRead(path)]);
       if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
-    } finally { await localPlatform().files.remove([path]).catch(() => {}); }
+    } finally { await localService(fileApi).remove([path]).catch(() => {}); }
   }
 
   async open() {
     const ok = await tryOrAsync(() => exec("sqlite3", ["-version"]));
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep Shipped's statistics.");
-    await localPlatform().files.mkdir(this.dir);
+    await localService(fileApi).mkdir(this.dir);
     await this.sql(SCHEMA);
-    await localPlatform().files.remove([paths.join(this.dir, "shipped.json")]).catch(() => {}); // the cache before the database
+    await localService(fileApi).remove([paths.join(this.dir, "shipped.json")]).catch(() => {}); // the cache before the database
   }
 
   async meta(k) { return (await this.sql(`SELECT v FROM meta WHERE k=${sqlText(k)};`, true))[0]?.v ?? null; }
@@ -118,7 +122,7 @@ export class Store {
     if (this.name) return this.name;
     const stored = await this.meta("machine");
     const named = async () => {
-      const r = await localPlatform().system.hostname().catch(() => null);
+      const r = await localService(systemApi).hostname().catch(() => null);
       const name = (r?.stdout ?? "").trim().replace(/[^A-Za-z0-9._-]+/g, "-") || `machine-${Date.now().toString(36)}`;
       await this.setMeta("machine", name);
       return name;
@@ -162,10 +166,10 @@ export class Store {
       ...spaces().filter((s) => !s.machine && s.folder).map((s) => s.folder),
       ...(await this.sql("SELECT path FROM scans;", true)).map((r) => r.path),
     ];
-    const found = await localPlatform().files.walk(ROOTS.map((r) => paths.join(home(), r)), { depth: 4, names: [".git"] }).catch(() => []);
+    const found = await localService(fileApi).walk(ROOTS.map((r) => paths.join(home(), r)), { depth: 4, names: [".git"] }).catch(() => []);
     const list = [...new Set([...known, ...found.map((path) => paths.dirname(path))])];
     const read = await mapSeries(range(Math.ceil(list.length / 8)), (k) => Promise.all(list.slice(k * 8, k * 8 + 8).map(async (folder) => {
-      const r = await localPlatform().repositories.fingerprint(folder).catch(() => null);
+      const r = await localService(repositoryApi).fingerprint(folder).catch(() => null);
       if (r?.code !== 0) return [];
       const [common, top, url, refs] = r.stdout.split("\n").map((s) => s.trim());
       if (!common) return [];
@@ -207,7 +211,7 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
     await writeTextFile(path, JSON.stringify(body), null);
     const send = async () => {
       try { return await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path]); }
-      finally { await localPlatform().files.remove([path]).catch(() => {}); }
+      finally { await localService(fileApi).remove([path]).catch(() => {}); }
     };
     const sent = await send();
     if (sent.code !== 0) throw new Error((sent.stderr || "the gist could not be written").trim().split("\n")[0]);

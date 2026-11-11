@@ -2,7 +2,7 @@
 // Herdr lets a mod import its own files, not another's, so the panels live in one mod.
 import { View, div } from "gpui-kit";
 import { props, spaces, home, theme } from "herdr";
-import { tokens } from "./ui.js";
+import { tokens, EASE } from "./ui.js";
 import { Files } from "./files.js";
 import { PullRequest } from "./pr.js";
 import { Preview } from "./preview.js";
@@ -29,7 +29,7 @@ export default class Panel extends View {
     this.project = projectNow();
     this.ready = false;
     this.saved = undefined;
-    const fresh = p.path != null && p.path !== "";
+    const fresh = Boolean(p.url) || p.path != null && p.path !== "";
     // Read this project's state before the panel starts, then write it when it changes.
     cx.spawn(async (cx) => {
       if (!fresh && this.project && typeof this.panel.restoreState === "function") {
@@ -61,6 +61,6 @@ export default class Panel extends View {
   render(cx) {
     this.keep();
     const body = this.ready && this.panel ? this.panel.render(cx) : this.panel ? this.panel.bones(tokens(theme()), true) : div().size_full();
-    return div().size_full().opacity(this.shown ? 1 : 0).transition("opacity", { duration: 180, easing: "ease-out" }).child(body);
+    return div().w_full().when(!this.panel?.constructor?.fits, (el) => el.size_full()).opacity(this.shown ? 1 : 0).transition("opacity", EASE).child(body);
   }
 }

@@ -1,4 +1,4 @@
-import { paths } from "./platform.js";
+import { paths } from "./platform-paths.js";
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";

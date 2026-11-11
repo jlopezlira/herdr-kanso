@@ -1,4 +1,6 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Shared "kanso.asleep" is only a copy of the database, for the other windows to draw at once.
 import { exec, appHome } from "herdr";
@@ -39,7 +41,7 @@ export function shownOf(a, now = Date.now()) {
 
 // Any other failure throws, so the migration waits for a read it can trust; "none" only when ls's message ends in ": No such file or directory", which a path can't fake.
 async function legacyRows(file, table, sql) {
-  const there = await localPlatform().files.legacyStatus(file);
+  const there = await localService(fileApi).legacyStatus(file);
   if (there === "none") return null;
   if (there !== "file") throw new Error(`${file} could not be looked at: ${there || "no answer"}`);
   const read = async (text) => {

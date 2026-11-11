@@ -1,4 +1,8 @@
-import { localPlatform } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { processApi } from "./platform-processes.js";
+import { fileApi } from "./platform-files.js";
+import { systemApi } from "./platform-system.js";
 // Containers, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Docker, simply: what runs and for which project, and everything you'd open Docker Desktop for.
 import { View, div } from "gpui-kit";
@@ -86,11 +90,11 @@ export default class Containers extends View {
         this.reads = this.reads + 1;
         const lookFiles = this.reads % FILES_EVERY === 1;
         const { deep, shallow } = lookIn(projects.flatMap((p) => p.folders).slice(0, 24), home());
-        const named = (depth, list) => localPlatform().files.walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })).catch(fail);
+        const named = (depth, list) => localService(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })).catch(fail);
         const [im, info, ps2, ins, ctx, vols, df, files] = await Promise.all([
           docker(["images", "--no-trunc", "--format", IMAGES_FORMAT]).catch(fail),
           docker(["info", "--format", "{{.MemTotal}}"]).catch(fail),
-          localPlatform().processes.memory().catch(fail),
+          localService(processApi).memory().catch(fail),
           found.length ? docker(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]).catch(fail) : { code: 0, stdout: "" },
           docker(["context", "inspect", "--format", CONTEXT_FORMAT]).catch(fail),
           docker(["volume", "ls", "--format", VOLUMES_FORMAT]).catch(fail),
@@ -98,7 +102,7 @@ export default class Containers extends View {
           lookFiles && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { stdout: "" }])
             .then(([a, b]) => ({ code: 0, stdout: `${a.stdout ?? ""}\n${b.stdout ?? ""}` })) : null]);
         const vms = vmPids(ps2.stdout);
-        const openFiles = await localPlatform().processes.openFiles(vms).catch(() => ({ state: "error", values: [] }));
+        const openFiles = await localService(processApi).openFiles(vms).catch(() => ({ state: "error", values: [] }));
         const owned = dockerVms(openFiles.values ?? []);
         const st = this.reads % STATS_EVERY === 1 ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
         if (seq !== this.seq) return;
@@ -197,7 +201,7 @@ export default class Containers extends View {
   quitDocker(cx) {
     cx.spawn(async (cx) => {
       const r = await docker(["desktop", "stop"]).catch(() => null);
-      const q = r?.code === 0 ? r : await localPlatform().system.stopDocker().catch(fail);
+      const q = r?.code === 0 ? r : await localService(systemApi).stopDocker().catch(fail);
       this.error = q.code === 0 ? null : `Docker did not quit: ${firstLine(q)}`;
       this.refresh(cx, true);
     });
@@ -205,7 +209,7 @@ export default class Containers extends View {
 
   openDocker(cx) {
     cx.spawn(async (cx) => {
-      const r = await localPlatform().system.startDocker().catch(fail);
+      const r = await localService(systemApi).startDocker().catch(fail);
       this.note = r.code === 0 ? "Starting Docker…" : null;
       this.error = r.code === 0 ? null : "Docker could not be opened from here: open it yourself.";
       cx.notify();
@@ -256,7 +260,7 @@ export default class Containers extends View {
         .child(quietLink(`ct-toggle-${k.id}`, busy ? "Working…" : on ? "Stop" : "Start", (cx) => { if (!busy) this.containers(on ? "stop" : "start", [k], cx); }, c, { color: c.text, disabled: busy }))
         .when(on, (el) => el.child(quietLink(`ct-restart-${k.id}`, "Restart", (cx) => { if (!busy) this.containers("restart", [k], cx); }, c, { disabled: busy })))
         .when(Boolean(web), (el) => el.child(quietLink(`ct-open-${k.id}`, "Open", (cx) => cx.open_url(urlOf(web)), c)))
-        .when(k.health === "running", (el) => el.child(quietLink(`ct-shell-${k.id}`, "Shell", () => inTab(`shell ${k.service ?? k.name}`, localPlatform().system.containerShell(k.name, this.details.get(k.id.slice(0, 12))?.platform)), c)))
+        .when(k.health === "running", (el) => el.child(quietLink(`ct-shell-${k.id}`, "Shell", () => inTab(`shell ${k.service ?? k.name}`, localService(systemApi).containerShell(k.name, this.details.get(k.id.slice(0, 12))?.platform)), c)))
         .child(quietLink(`ct-logs-${k.id}`, "Logs", () => inTab(`logs ${k.service ?? k.name}`, ["docker", "logs", "-f", "--tail", "200", k.name]), c))
         .child(quietLink(`ct-more-${k.id}`, open ? "Less" : "Details", (cx) => { this.opened = open ? new Set([...this.opened].filter((x) => x !== k.id)) : new Set([...this.opened, k.id]); cx.notify(); }, c))
         .when(!on, (el) => el.child(quietLink(`ct-rm-${k.id}`, armed ? "Press again to remove" : "Remove",

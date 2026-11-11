@@ -1,4 +1,6 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, appHome, readTextFile } from "herdr";
 import { parseOr, tryOrAsync } from "./pure.js";
@@ -57,7 +59,7 @@ export class Store {
     return (this.ready ??= (async () => {
       const ok = await tryOrAsync(() => exec("sqlite3", ["-version"])); // a failure is reported below
       if (ok?.code !== 0) { this.ready = null; throw new Error("Install sqlite3 to keep arrangements."); }
-      await localPlatform().files.mkdir(this.dir);
+      await localService(fileApi).mkdir(this.dir);
       await this.sql(SCHEMA);
       const done = await this.sql(`SELECT v FROM meta WHERE k='imported';`, true);
       if (!done.length) {

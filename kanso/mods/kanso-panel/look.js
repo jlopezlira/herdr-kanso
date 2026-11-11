@@ -1,4 +1,7 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 // Images (the panel is "look" inside): pictures an agent made, beside it, and notes pinned to the spots
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
@@ -61,7 +64,7 @@ export class Look {
   async restoreState(state) {
     const path = typeof state?.path === "string" ? state.path : "";
     if (!path) return false;
-    const ok = await localPlatform().files.test(path).catch(() => false);
+    const ok = await localService(fileApi).test(path).catch(() => false);
     if (!lookMemory(state, () => ok) || !shows(itemOf(path))) return false;
     this.keptPath = path;
     return true;
@@ -124,7 +127,7 @@ export class Look {
         const homeDir = home();
         const named = [...(written.paths ?? []), ...mentions(screen, MOST).toReversed()].map((m) => resolvePath(m, cwd, homeDir)).filter(Boolean);
         const resolved = [...new Set(named)];
-        const there = resolved.length ? new Set(await localPlatform().files.existing(resolved)) : new Set();
+        const there = resolved.length ? new Set(await localService(fileApi).existing(resolved)) : new Set();
         const pictures = resolved.filter((path) => there.has(path) && shows(itemOf(path)));
         const prior = (written.rows ?? []).map((row) => ({ ...row, color: row.color || this.colors.get(row.path) || null }));
         const rows = indexRows(prior, pictures, { replaced: Boolean(written.replaced) });
@@ -247,12 +250,12 @@ export class Look {
   // sips exits 0 and prints pixelWidth <nil> when a raster is not a picture. A valid svg is the tag.
   async copy(item) {
     const ext = item.path.split(".").at(-1).toLowerCase();
-    const seen = await localPlatform().images.probe(item.path, item.kind, ext);
+    const seen = await localService(imageApi).probe(item.path, item.kind, ext);
     if (!seen) return null;
     const key = keyOf(item.path), dir = paths.join(appHome(), DIR);
     const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = paths.join(dir, name);
-    await localPlatform().images.fresh(dir, key);
-    const made = item.kind === "image" ? (await localPlatform().files.copy(item.path, out)).code === 0 : await toPng(item.path, out);
+    await localService(imageApi).fresh(dir, key);
+    const made = item.kind === "image" ? (await localService(fileApi).copy(item.path, out)).code === 0 : await toPng(item.path, out);
     return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
   }
 
@@ -261,7 +264,7 @@ export class Look {
     this.sampling.add(item.path);
     cx.spawn(async (cx) => {
       try {
-        const r = await localPlatform().images.color(item.path).catch(() => null);
+        const r = await localService(imageApi).color(item.path).catch(() => null);
         const color = colorOf(r?.code === 0 ? r.stdout : "");
         if (!color) return;
         this.colors.set(item.path, color);

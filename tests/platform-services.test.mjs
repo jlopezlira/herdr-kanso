@@ -161,16 +161,32 @@ test("Windows Markdown waiting records survive inspection errors and remove only
   assert.deepEqual(markdownMentions('See "C:\\Users\\me\\a b.md" and /tmp/x.mdx'), ["C:\\Users\\me\\a b.md", "/tmp/x.mdx"]);
 });
 
-test("remote platform detection selects Windows and caches its runner without changing the local platform", async () => {
-  const r = stub((_program, args) => args.at(-1).includes("OSVersion") ? "Win32NT\n" : "[]");
-  const { platformOn, localPlatform } = await load("kanso-panel/platform.js", ["platformOn", "localPlatform"], { exec: r.run, window: () => ({ platform: "macos" }) });
-  const remote = await platformOn("win");
-  assert.equal(remote.name, "windows");
-  await remote.processes.list(); await platformOn("win");
-  assert.equal(r.calls.filter(({ args }) => args.at(-1).includes("OSVersion")).length, 1);
-  assert.ok(r.calls.every(({ options }) => options.on === "win"));
-  assert.equal(localPlatform().name, "macos");
-});
+for (const platform of ["macos", "linux", "windows"]) {
+  test(`${platform} host selection scopes remote runners and caches platform detection`, async () => {
+    const r = stub((program, args) => args.at(-1).includes("OSVersion")
+      ? platform === "windows" ? "Win32NT\n" : { code: 127, stdout: "", stderr: "command not found" }
+      : program === "uname" ? platform === "macos" ? "Darwin\n" : "Linux\n" : platform === "windows" ? "[]" : "42 1 01:00 node");
+    const { serviceOn, localName, localService } = await load("kanso-panel/platform-host.js", ["serviceOn", "localName", "localService"], { exec: r.run, window: () => ({ platform: "macos" }) });
+    const remote = await serviceOn(processApi, "remote");
+    await remote.list();
+    const before = r.calls.length;
+    await serviceOn(processApi, "remote");
+    assert.equal(r.calls.length, before);
+    assert.equal(r.calls.filter(({ args }) => args.at(-1).includes("OSVersion")).length, platform === "windows" ? 1 : 2);
+    assert.ok(r.calls.every(({ options }) => options.on === "remote"));
+    assert.equal(localName(), "macos");
+    assert.equal((await serviceOn((_name, runner) => runner, null)), r.run);
+    assert.equal(localService((name) => name), "macos");
+    assert.equal(r.calls.at(-1).program, platform === "windows" ? "pwsh" : "ps");
+  });
+  test(`${platform} host delays preserve the requested duration`, async () => {
+    const r = stub();
+    const { localSleep } = await load("kanso-panel/platform-host.js", ["localSleep"], { exec: r.run, window: () => ({ platform }) });
+    await localSleep(3);
+    assert.equal(r.calls[0].program, platform === "windows" ? "pwsh" : "sleep");
+    assert.ok(platform === "windows" ? r.calls[0].args.at(-1).includes("Start-Sleep -Milliseconds 3000") : r.calls[0].args[0] === "3");
+  });
+}
 
 test("Windows paths printed by agents retain their drive, separators and spaces", async () => {
   const { mentions, resolvePath } = await load("kanso-panel/look-model.js", ["mentions", "resolvePath"]);

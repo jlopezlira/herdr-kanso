@@ -1,14 +1,8 @@
 # Kanso
 
-More agents. Less babysitting. Kanso puts terminals on a horizontal strip:
-a new agent opens beside the one you're in, at its own width, and the view
-slides to it. Nothing gets squeezed, so you can read what each one is doing.
-Next to them: your repos and worktrees, the diff, the pull request with its CI
-and open threads, an agent started on a PR's feedback in one click, and one key
-(Cmd+Shift+O) to open the folder in Cursor, VS Code, Zed or Neovim, over SSH
-too. Warm stone greys in light and dark; color only when an agent's state
-matters. The name is the Japanese principle of simplicity, removing what is not
-needed.
+More agents. Less babysitting. Terminals open side by side at their own width.
+Repos, worktrees, diffs, PR checks and threads stay close; Cmd+Shift+O opens
+the folder in your editor, over SSH too. Warm greys, color for agent state.
 
 ![Kanso](preview.png)
 
@@ -410,8 +404,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `kanso-status`, text 11.5 `muted`:
     - At the left, the machine (monitor or server icon, "This computer") and
       the branch.
-    - At the right, "N agent(s) need you" in `blocked` with a dot (only when
-      some agent is blocked), then a dot and "X of N working" (or "N agents
+    - At the right, "N agent(s) need you" in `blocked` with a dot (blocked or unseen done), then "X of N working" (or "N agents
       idle" / "No agents"), then the palette shortcut "⌘⇧P" with the tooltip
       "Command palette".
 - **Themes**: `kanso` (dark) and `kanso-day` (light), in `themes/`.
@@ -427,10 +420,16 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
-- **Cmd+J and the digest** (`kanso-strip`): `next-needs-you` picks,
-  from `agents()`, the next blocked agent after the focused one (else
-  the next done one) and runs `agent.focus`; none posts "No agent needs
-  you". The controller checks panes every 1.5 s; one that leaves
+- **Since you left**: after 5 minutes away, up to three sidebar lines under
+  the project show blocked agents, errors, PR updates, then finishes. +N
+  expands inline; Enter/click jumps, a target seen or Dismiss clears it.
+  Focus and dismissal persist in kanso.db. Local events expire after 7 days,
+  capped at 500. No events, loading or a failed read: nothing. No extra fetches.
+- **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
+  blocked then unseen done, oldest first. Native status owns seen; no sleepers.
+  Count opens project/name/reason/age; click/Enter focuses. Empty: "Nobody is waiting";
+  loading: kit; unavailable: error. Status shares this queue.
+  Strip checks panes each 1.5 s; leaving
   `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
   commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
   (open only; checks and merge state) in shared `kanso.digest`
@@ -466,7 +465,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Keys** (keys.json `layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
-  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent finds its conversation, ignoring case and accents, and shows it.
+  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
   rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
   `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new the log, Credits who.
@@ -783,7 +782,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
     Cmd+Shift+O (`mod.open:open-with`, in `keys.json`) opens it.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
-  - `kanso-status`: status bar; "N agents need you" runs `kanso-strip.next-needs-you`.
+  - `kanso-status`: status bar; "N agents need you" runs `kanso-spaces.needs-you.next`.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: lazy file tree via
     `sh`, git status marks, a file shown in place as read-only code, a
@@ -827,8 +826,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
-  - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
-    and minimalistic forks, and all use `"place": "none"`.
+  - Mods derive from Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
   - Herdr loads a mod's files from its own folder only, so a file several
     mods need (`layout.js`, `ui.js`, `share.js`, `marks.js`, `deliver.js`,
     `kinds.js`...: `scripts/sync-share.mjs`) is copied into each by `npm run

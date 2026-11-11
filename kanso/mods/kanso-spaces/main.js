@@ -1,4 +1,6 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { processApi } from "./platform-processes.js";
 // Derived from the `spaces` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: New space button, initial tiles, nested worktrees on guide lines, ahead/behind counts.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-spaces; each space lists its agents (agents.js), folded by clicking the space. The active space is a faint wash of the text color, never a theme accent.
@@ -6,20 +8,24 @@ import { localPlatform, paths } from "./platform.js";
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
 import { findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
+import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
+import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
 import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { isKansoTree, paintLayout, rememberLayout } from "./layout.js";
+import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
-import { skeleton, breathe } from "./ui.js";
+import { skeleton, breathe, H, G } from "./ui.js";
+import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
+import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -172,6 +178,7 @@ export default class Spaces extends View {
     this.asleepApplied = 0;
     this.loadAsleep().catch(() => {});
     this.handle = cx.focus_handle(); // the list by keyboard (enterList)
+    this.needsScroll = ScrollHandle.new();
     if (shared("kanso.list")) setShared("kanso.list", null); // a reload: nothing is on the list
     this.git = {}; // place key -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {};
@@ -190,6 +197,8 @@ export default class Spaces extends View {
     // The first frame uses localStorage's copy; the database's answer replaces it when it comes.
     this.panel = new Panel(PREFS, this.leftNavStore());
     this.panelReady = false;
+    this.sinceLeft = new SinceLeft(this.leftNavStore().kdb);
+    this.prSeenAt = shared("kanso.pr.seen")?.at ?? 0;
     // Sleeps are this sidebar's work (sleepwork.js): taken up now (what a restart cut short goes on), on the dialog's
     // kick and with the 30 s look; the heartbeat keeps a long step's row this window's.
     this.sleepWork = new SleepWork(this.leftNavStore().kdb, (row) => {
@@ -460,6 +469,8 @@ export default class Spaces extends View {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (c === "needs-you.next") this.nextNeeds(cx);
+    else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "list") this.enterList(cx);
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
     else if (c === "add-project") this.addProject();
@@ -471,6 +482,65 @@ export default class Spaces extends View {
       // Not on the list any more: the flag was stale; the strip takes it.
       else { setShared("kanso.list", null); run(`kanso-strip.go-${c === "list-up" ? "up" : "down"}`); }
     }
+  }
+
+  refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
+    const list = agents(), layouts = machines();
+    const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
+    const layoutSignature = layouts.map((m) => m.layout).join(",");
+    const changed = signature !== this.needsSignature || this.threads !== this.needsThreads;
+    if (!changed && layoutSignature === this.needsLayoutSignature) return this.needsQueue;
+    this.needsSignature = signature;
+    this.needsThreads = this.threads;
+    this.needsLayoutSignature = layoutSignature;
+    const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
+    const named = () => list.map((a) => ({ ...a, name: this.nameOf({ ...a, name: names.get(a.address) }) }));
+    const previous = this.needsQueue ?? shared(NEEDS_YOU);
+    const rows = changed ? waitingQueue(named(), terms, asleep.dozing, previous?.rows) : previous.rows;
+    const next = queueState(rows, layouts);
+    this.needsQueue = previous;
+    if (sameQueue(next, previous)) return previous;
+    this.needsQueue = next;
+    setShared(NEEDS_YOU, next);
+    return this.needsQueue;
+  }
+
+  jumpNeeds(row, cx) {
+    const live = this.refreshNeeds().rows.find((a) => a.address === row.address && a.pane === row.pane);
+    if (!live) return;
+    this.needsCursor = live;
+    this.leaveList(cx, false);
+    run("agent.focus", { terminal: live.address });
+  }
+
+  nextNeeds(cx) {
+    const row = nextWaiting(this.refreshNeeds().rows, this.needsCursor);
+    if (row) { this.jumpNeeds(row, cx); return; }
+    this.needsCursor = null;
+    this.needsEmpty = true;
+    const at = (this.needsEmptyAt ?? 0) + 1;
+    this.needsEmptyAt = at;
+    cx.timer.after(EMPTY_NOTICE_MS, (cx) => { if (this.needsEmptyAt === at) { this.needsEmpty = false; cx.notify(); } });
+    cx.notify();
+  }
+
+  toggleNeeds(cx) {
+    this.needsOpen = !this.needsOpen;
+    if (this.needsOpen) {
+      if (shared("sidebar.collapsed") === true) this.openRail();
+      this.listFrom = focused()?.pane ?? null;
+      this.kbd = true;
+      this.navKey = `agent:${this.refreshNeeds().rows[0]?.address}`;
+      this.handle.focus();
+    } else this.leaveList(cx);
+    cx.notify();
+  }
+
+  needsList(t, queue, now) {
+    return queueList(t, queue, (row) => {
+      const go = (cx) => this.jumpNeeds(row, cx);
+      return { go, selected: this.navMark(`agent:${row.address}`, go) };
+    }, (row) => duration(Math.max(0, now - row.at)), this.needsScroll);
   }
 
   // Rows add themselves as they draw (navMark), in screen order; Esc goes back to the pane you came from.
@@ -528,7 +598,9 @@ export default class Spaces extends View {
       cx.notify();
       return;
     }
-    this.navKey = nav[moveTo(move, at, nav.length)]?.key ?? this.navKey;
+    const next = moveTo(move, at, nav.length);
+    this.navKey = nav[next]?.key ?? this.navKey;
+    if (this.needsOpen) this.needsScroll?.scroll_to_item(next);
     cx.notify();
   }
 
@@ -541,7 +613,7 @@ export default class Spaces extends View {
   async psRun(now, options, take) {
     this.psLook = now;
     try {
-      const r = await localPlatform().processes.list(options);
+      const r = await localService(processApi).list(options);
       if (this.psLook === now && Date.now() - now < PS_GIVE_UP_MS) take(r);
     } catch { /* the last look stands */ }
     finally { if (this.psLook === now) this.psLook = null; }
@@ -653,6 +725,7 @@ export default class Spaces extends View {
     // Read once per look: each read copies every record.
     const sp = spaces(), ps = panes();
     this.trackAgents(now, sp, cx);
+    this.trackReturn(sp, ps, active, now, cx);
     // Each agent's name is its conversation's title: read every minute, every 15 s while Threads shows in front.
     if (now - (this.threadsAt ?? 0) > (this.view === "threads" && active ? 15000 : 60000)) this.refreshThreads(cx);
     this.checkAlive(cx, now, active);
@@ -663,6 +736,52 @@ export default class Spaces extends View {
     if (due.size && this.shownView() === "spaces") this.refreshGit(due, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
     if (now - (this.prunedAt ?? 0) > 30000) { this.prunedAt = now; this.prune(sp, now); }
+  }
+
+  trackReturn(sp, ps, active, now, cx) {
+    if (this.sinceLeft.busy) return;
+    const focus = focused(), list = agents(), rawTerms = terminals();
+    const signature = returnSignature(list, rawTerms, sp, ps, this.seenNow, this.panel.agents);
+    const changed = signature !== this.returnSignature;
+    const terms = changed ? new Map(rawTerms.map((term) => [term.address, term])) : null;
+    const live = changed ? observedAgents(list, ps, sp, rawTerms) : [];
+    const snapshots = changed ? live.map((agent) => {
+      const snapshot = agentSnapshot(agent, this.seenNow?.get(agent.address), terms.get(agent.address), projectKey(sp.find((space) => space.id === agent.space)));
+      const assigned = this.panel.agents.get(parseTarget(snapshot.source).id)?.project;
+      return { ...snapshot, project: assigned ?? snapshot.project };
+    }) : undefined;
+    const targets = changed ? new Map(live.map((agent, index) => [agent.address, snapshots[index].value.target])) : this.returnTargets;
+    const project = active && focus ? sp.find((space) => space.id === focus.space) : null;
+    const pr = shared("kanso.pr.seen");
+    const seenTarget = pr && pr.at > (this.prSeenAt ?? 0) ? targetOf("pr", pr.url) : null;
+    this.sinceLeft.update({ project: project ? projectKey(project) : null, target: targets?.get(focus?.terminal) ?? null, seenTarget, snapshots, now }, cx).then(() => {
+      this.returnSignature = signature;
+      this.returnTargets = targets;
+      if (pr) this.prSeenAt = pr.at;
+    }).catch(() => {});
+  }
+
+  returnRows(t, space) {
+    if (!space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
+    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.jumpReturn(row));
+    return [item(view, this.sinceLeft.lineCount() * H.control + G.sm)];
+  }
+
+  jumpReturn(row) {
+    const { kind, id } = parseTarget(row.target);
+    const destinations = {
+      pr: () => commitLayout({ panel: { id: "pr", type: "block", content: { mod: "kanso-panel", props: { panel: "pr", url: id, at: Date.now() } } } }),
+      sleep: () => wakeRow(id),
+      agent: () => this.focusReturnAgent(row.target),
+    };
+    return Object.hasOwn(destinations, kind) ? destinations[kind]() : false;
+  }
+
+  focusReturnAgent(target) {
+    const terms = new Map(terminals().map((term) => [term.address, term]));
+    const agent = observedAgents(agents(), panes(), spaces(), [...terms.values()]).find((a) => agentTargets(a, this.seenNow?.get(a.address), terms.get(a.address)).includes(target));
+    if (!agent) return false;
+    run("agent.focus", { terminal: agent.address });
   }
 
   // `seen` goes to the database; each name goes to shared "kanso.names" (Sleep keeps it),
@@ -1491,10 +1610,11 @@ export default class Spaces extends View {
       const gap = r.tree || r === rows[0] ? [] : [item(div().h(10).flex_none(), 10)];
       // The space's row before its agents': the keyboard's path (navMark) goes in screen order.
       const head = item(this.row(r, t, whole ? [] : entries.map((e) => e.a), whole), rowHeight(r), r.w.active ? spaceMark(rowHeight(r)) : null);
+      const returned = r.w.active ? this.returnRows(t, r.w) : [];
       if (whole) {
         const agents = this.asleepAgents(whole, t, ctx, indent);
         const box = agents.els.map((el) => item(el, this.asleepOpenOf(whole.id) ? ((this.foldH ?? {})[`asleep-${whole.id}`] ?? agents.h) : 0));
-        return [...gap, head, ...box];
+        return [...gap, head, ...returned, ...box];
       }
       const show = this.unfolded(r.w.id, open, ctx.now);
       const st = show ? this.stacked(entries, split.live, indent, t, r.w.id, ctx) : null;
@@ -1505,7 +1625,7 @@ export default class Spaces extends View {
       const inner = [...(st?.out ?? []), ...tabs];
       const box = (inner.length ? this.foldBox(r.w.id, open, inner, ctx.now) : [])
         .map((el) => item(el, open ? ((this.foldH ?? {})[r.w.id] ?? st?.h ?? 0) : 0, open && st?.focus != null ? agentMark(st.focus, st.focusH) : null));
-      return [...gap, head, ...box];
+      return [...gap, head, ...returned, ...box];
     };
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name)])].toSorted();
     const loading = m => {
@@ -2119,9 +2239,10 @@ export default class Spaces extends View {
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
     const collapsed = shared("sidebar.collapsed") === true;
+    if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;
     // The keyboard left (a click on a pane, say): the ring goes too.
-    if (this.kbd && (collapsed || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
+    if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
     const sp = spaces();
     const ps = panes();
@@ -2148,6 +2269,7 @@ export default class Spaces extends View {
     const asleep = this.sleepingNow(sp, read.terms);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
+    const queue = this.refreshNeeds(sp, read.terms, asleep);
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
     // In Projects, + adds a project; in Status and Threads, it starts a conversation in a project you pick.
@@ -2174,9 +2296,11 @@ export default class Spaces extends View {
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
-      .child(this.list(t, collapsed, view,
-        view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
-          : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx)));
+      .child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)))
+      .child(this.needsOpen ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
+        ...(!collapsed && view !== "spaces" ? this.returnRows(t, active) : []),
+        ...(view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
+          : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx))]));
     this.nav = this.navNext;
     // The row the ring was on is gone: it stays at the same place in the list.
     if (this.kbd && this.nav.length && !this.nav.some((n) => n.key === this.navKey)) this.navKey = this.nav[Math.min(this.navAt ?? 0, this.nav.length - 1)].key;

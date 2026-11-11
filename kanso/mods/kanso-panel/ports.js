@@ -1,11 +1,16 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { processApi } from "./platform-processes.js";
+import { portApi } from "./platform-ports.js";
+import { killApi } from "./platform-kill.js";
+import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
 import { tilde } from "./lib.js";
 import { tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
-import { STOP_LOOP } from "./platform-system.js";
+import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
 import { G, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, breathe } from "./ui.js";
 import { Share } from "./share.js";
@@ -117,9 +122,10 @@ export class Ports {
   }
 
   async read() {
-    const host = localPlatform();
-    const listen = await host.ports.listen();
-    const [cwd, table, shells] = await Promise.all([host.processes.cwd([...listen.keys()]), host.processes.list(), this.shells()]);
+    const ports = localService(portApi);
+    const processes = localService(processApi);
+    const listen = await ports.listen();
+    const [cwd, table, shells] = await Promise.all([processes.cwd([...listen.keys()]), processes.list(), this.shells()]);
     this.attribution = cwd.state === "unavailable" ? "Some servers cannot be attributed: working directories require a Herdr API on Windows." : null;
     const ps = new Map(table.rows.map((r) => [r.pid, { ppid: r.ppid, secs: etimeSecs(r.etime), args: r.command }]));
     const list = servers(listen, cwd.values ?? new Map(), ps, shells, home());
@@ -163,8 +169,8 @@ export class Ports {
   }
 
   async guardReady() {
-    if (!this.hist?.data || !localPlatform().system.memoryGuardAvailable) return false;
-    if (this.guardFile === undefined) this.guardFile = await localPlatform().files.test(paths.join(appHome(), GUARD_FILE)).catch(() => false);
+    if (!this.hist?.data || !localService(systemApi).memoryGuardAvailable) return false;
+    if (this.guardFile === undefined) this.guardFile = await localService(fileApi).test(paths.join(appHome(), GUARD_FILE)).catch(() => false);
     return this.guardFile;
   }
 
@@ -186,9 +192,9 @@ export class Ports {
       if (viaGuard) {
         // pid@start: the guard stops it only if that pid is still the process this row showed.
         const args = items.map((s) => `${s.pid}@${Math.round(Date.now() - (s.secs ?? 0) * 1000)}${s.force ? ":force" : ""}`);
-        await localPlatform().system.guardStop(await this.node(), paths.join(appHome(), GUARD_FILE), args).catch(() => null);
+        await localService(systemApi).guardStop(await this.node(), paths.join(appHome(), GUARD_FILE), args).catch(() => null);
       } else {
-        for (const s of items) await localPlatform().kill.stop(s.pid, { force: s.force }).catch(() => null);
+        for (const s of items) await localService(killApi).stop(s.pid, { force: s.force }).catch(() => null);
       }
       this.forced = new Set([...this.forced, ...items.map((s) => s.pid)]);
       await cx.sleep(1500);
@@ -207,12 +213,12 @@ export class Ports {
   }
 
   turnOn(cx) {
-    if (!localPlatform().system.memoryGuardAvailable) { this.note = localPlatform().system.memoryGuardReason; cx.notify(); return; }
+    if (!localService(systemApi).memoryGuardAvailable) { this.note = localService(systemApi).memoryGuardReason; cx.notify(); return; }
     if (this.busy.install && Date.now() - this.busy.install < BUSY_MS) return;
     this.busy = { ...this.busy, install: Date.now() };
     cx.notify();
     cx.spawn(async (cx) => {
-      await localPlatform().system.guardRun(await this.node(), paths.join(appHome(), GUARD_FILE), ["install"]).catch(() => { this.idle(); });
+      await localService(systemApi).guardRun(await this.node(), paths.join(appHome(), GUARD_FILE), ["install"]).catch(() => { this.idle(); });
       this.guardFile = undefined;
       for (const ms of [3000, 8000, 20_000]) cx.timer.after(ms, (cx) => this.refresh(cx, { history: true }));
       cx.notify();

@@ -1,4 +1,5 @@
-import { platformFor, paths } from "./platform.js";
+import { paths } from "./platform-paths.js";
+import { openApi } from "./platform-open.js";
 // Open with: opens the focused pane's folder in a code editor installed on this computer.
 // Other mods open it with openOverlay({ mod: "open-with", kind: "popup", props: { folder, machine } }), or props.file (full path) for one file; a text file is also offered to kanso-panel's preview.
 
@@ -75,7 +76,7 @@ export default class OpenWith extends View {
     this.target = this.resolveTarget();
     cx.spawn(async (cx) => {
       try {
-        this.found = await platformFor(this.platform).opener.detectEditors(EDITORS);
+        this.found = await openApi(this.platform, exec).detectEditors(EDITORS);
         setShared(FOUND, this.found);
       } catch (err) {
         this.error = String(err?.message ?? err);
@@ -98,7 +99,7 @@ export default class OpenWith extends View {
   }
 
   async loadIcons() {
-    const ids = await platformFor(this.platform).opener.editorIcons(this.found ?? {}, paths.join(appHome(), ICONS)).catch(() => []);
+    const ids = await openApi(this.platform, exec).editorIcons(this.found ?? {}, paths.join(appHome(), ICONS)).catch(() => []);
     this.icons = Object.fromEntries(ids.map((id) => [id, `${ICONS}/${id}.png`]));
   }
 
@@ -148,13 +149,13 @@ export default class OpenWith extends View {
       const args = e.family === "zed" ? [`ssh://${machine}${folder.startsWith("/") ? "" : "/"}${folder}`] : ["--remote", `ssh-remote+${machine}`, folder];
       return this.spawn(cli, args);
     }
-    if (how.app) return platformFor(this.platform).opener.open(folder, { application: how.app });
+    if (how.app) return openApi(this.platform, exec).open(folder, { application: how.app });
     if (how.flatpak && !how.cli) return this.spawn("flatpak", ["run", how.flatpak, folder]);
     return this.spawn(cli, [folder]);
   }
 
   spawn(cli, args) {
-    return platformFor(this.platform).opener.spawn(cli, args);
+    return openApi(this.platform, exec).spawn(cli, args);
   }
 
   glyph(e, t) {

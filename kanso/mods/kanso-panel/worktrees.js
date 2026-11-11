@@ -1,4 +1,8 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { repositoryApi } from "./platform-repositories.js";
+import { systemApi } from "./platform-system.js";
 // Kanso's Worktrees panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Removing a worktree keeps its branch; only uncommitted changes and commits no branch, tag or remote holds can be lost.
 import { div } from "gpui-kit";
@@ -368,17 +372,17 @@ export class Worktrees {
     this.scan = id;
     this.phase = "Finding repositories"; this.note = null; this.picked = this.heldPick === undefined ? null : this.heldPick; this.heldPick = undefined; this.armed.clear(); this.done = false;
     cx.spawn(async (cx) => {
-      this.tempDirs = await localPlatform().system.temporary().catch(() => []);
+      this.tempDirs = await localService(systemApi).temporary().catch(() => []);
       const { roots, search } = this.roots();
       try {
-        const found = await localPlatform().repositories.discover(search);
+        const found = await localService(repositoryApi).discover(search);
         if (id !== this.scan) return;
         const { repos, orphans } = parseDiscovery(found.stdout);
         this.phase = `Reading ${repos.length} repositories`;
         const read = await pool(repos, 6, async (repo) => {
           const [list, bases] = await Promise.all([
             exec("git", ["worktree", "list", "--porcelain", "-z"], { cwd: repo }),
-            localPlatform().repositories.bases(repo),
+            localService(repositoryApi).bases(repo),
           ]);
           if (id !== this.scan || list.code !== 0) return null;
           const all = parseWorktrees(list.stdout), b = basesFrom(bases.stdout);
@@ -396,7 +400,7 @@ export class Worktrees {
         const live = groups.flatMap((g) => g.items.filter((w) => !w.missing).map((w) => [w.path, g.bases]));
         this.counted = 0;
         await pool(live, 8, async ([path, bases]) => {
-          const r = await localPlatform().repositories.probe(path, idle, bases);
+          const r = await localService(repositoryApi).probe(path, idle, bases);
           if (id !== this.scan) return;
           this.apply(path, parseProbe(r.stdout));
           this.counted = this.counted + 1;
@@ -407,7 +411,7 @@ export class Worktrees {
         const sized = [...live.map(([path]) => this.item(path)).filter((w) => w && !w.missing), ...this.orphans].map((w) => w.path);
         this.counted = 0;
         await pool(sized, 4, async (path) => {
-          const measured = await localPlatform().files.size(path);
+          const measured = await localService(fileApi).size(path);
           if (id !== this.scan) return;
           const size = Number.isFinite(measured) ? measured : 0;
           this.update(path, (w) => ({ ...w, size }));
@@ -441,7 +445,7 @@ export class Worktrees {
         const r = await exec("git", ["worktree", "repair", w.path], { cwd: w.repo });
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
         const g = this.groups.find((g) => g.repo === w.repo);
-        const p = parseProbe((await localPlatform().repositories.probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
+        const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
         this.apply(w.path, p);
         if (p.broken) throw new Error("git still can't read it");
         notify({ title: `Repaired ${name(w.path)}`, body: "It is linked to its repository again.", level: "success" });
@@ -454,13 +458,13 @@ export class Worktrees {
   async removeOne(w) {
     if (w.orphan) {
       // Checked again right before deleting: if it is a worktree again, the script exits instead.
-      const r = await localPlatform().repositories.removeOrphan(w.path).catch((error) => ({ code: 1, stderr: String(error) }));
+      const r = await localService(repositoryApi).removeOrphan(w.path).catch((error) => ({ code: 1, stderr: String(error) }));
       if (r.code !== 0) throw new Error(r.code === 4 || r.code === 5 ? "It is a worktree again; refresh" : (r.stderr || "Cannot delete it").trim());
       return { kb: w.size ?? 0, orphans: 1 };
     }
     if (w.replaced) {
       // git worktree remove refuses it and prune keeps it, so only the record is removed; the folder is not touched.
-      const r = await localPlatform().repositories.forget(w.repo, w.path);
+      const r = await localService(repositoryApi).forget(w.repo, w.path);
       if (r.code !== 0 || !r.stdout.includes("forgot")) throw new Error(r.code === 4 ? "It is a worktree again; refresh" : (r.stderr || "No record of it was found").trim());
       return { records: 1 };
     }
@@ -485,12 +489,12 @@ export class Worktrees {
     if (!w) return null;
     if (w.orphan) return w; // removeOne checks a left-behind folder itself
     if (w.missing) {
-      const exists = await localPlatform().files.test(w.replaced ? paths.join(w.path, ".git") : w.path, w.replaced ? "directory" : "any");
+      const exists = await localService(fileApi).test(w.replaced ? paths.join(w.path, ".git") : w.path, w.replaced ? "directory" : "any");
       const r = { code: (w.replaced ? exists : !exists) ? 0 : 1 };
       return r.code === 0 ? this.item(path) : null;
     }
     const g = this.groups.find((g) => g.repo === w.repo);
-    const p = parseProbe((await localPlatform().repositories.probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
+    const p = parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), g?.bases ?? [])).stdout);
     this.apply(path, p);
     this.markOpen();
     const now = this.item(path);

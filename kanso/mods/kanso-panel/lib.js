@@ -1,4 +1,4 @@
-import { paths } from "./platform.js";
+import { paths } from "./platform-paths.js";
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
 import { spaces, panes, focused, layout, theme, settings, home } from "herdr";

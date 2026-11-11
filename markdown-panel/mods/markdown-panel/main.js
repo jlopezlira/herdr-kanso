@@ -1,4 +1,9 @@
-import { localPlatform, platformOn, paths } from "./platform.js";
+import { localService, serviceOn } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { clipboardApi } from "./platform-clipboard.js";
+import { fileApi } from "./platform-files.js";
+import { systemApi } from "./platform-system.js";
+import { markdownApi } from "./platform-markdown.js";
 // Markdown panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Reviews (md-review and Done), Escape and "From this terminal" by Johannes Hund (https://github.com/h0ru5),
 // from his remix https://github.com/h0ru5/herdr-md-review.
@@ -20,7 +25,7 @@ const RECENT_MAX = 15;
 
 // Reads and removes the paths waiting in the inbox, oldest first.
 export async function takeAllOpens(dir) {
-  const r = await localPlatform().files.drain(dir);
+  const r = await localService(fileApi).drain(dir);
   return (r.stdout ?? "").split("\0").map((p) => p.trim()).filter((p) => paths.isAbsolute(p));
 }
 // The newest of them.
@@ -29,7 +34,7 @@ export async function takeOpens(dir) { return (await takeAllOpens(dir)).at(-1) ?
 // The reviews `md-review` still waits on, as [{ id, path }]: one file per waiting process,
 // named by its pid; one whose process is gone is removed.
 export async function waitingReviews(dir) {
-  const r = await localPlatform().markdown.waiting(dir);
+  const r = await localService(markdownApi).waiting(dir);
   return reviewsIn(r.stdout ?? "");
 }
 export const reviewsIn = (out) => out.split("\0").map((l) => l.split("\t")).filter(([id, path]) => /^\d+$/.test(id ?? "") && path && paths.isAbsolute(path)).map(([id, path]) => ({ id, path: path.trim() }));
@@ -72,7 +77,7 @@ export default class MarkdownPanel extends View {
   findRecent(terminal, cx) {
     if (this.on) return;
     cx.spawn(async (cx) => {
-      const r = await localPlatform().markdown.recent(terminal, home(), appHome(), localPlatform().clipboard.read(cx) ?? "").catch(() => null);
+      const r = await localService(markdownApi).recent(terminal, home(), appHome(), localService(clipboardApi).read(cx) ?? "").catch(() => null);
       this.recent = recentIn(r?.stdout ?? "");
       cx.notify();
     });
@@ -82,12 +87,12 @@ export default class MarkdownPanel extends View {
     const on = this.on;
     cx.spawn(async (cx) => {
       // A machine's home when its pane told no folder: where its commands start.
-      const host = await platformOn(on);
-      const folder = this.folder || await host.system.userHome();
+      const files = await serviceOn(fileApi, on);
+      const folder = this.folder || await (await serviceOn(systemApi, on)).userHome();
       this.folder = folder;
       const where = { cwd: folder || undefined, on };
       const git = await exec("git", ["ls-files", "--", "*.md", "*.markdown", "*.mdx"], where).catch(() => null);
-      const fallback = git?.code === 0 && git.stdout.trim() ? null : await host.files.walk([folder], { depth: 3, skip: ["node_modules"] });
+      const fallback = git?.code === 0 && git.stdout.trim() ? null : await files.walk([folder], { depth: 3, skip: ["node_modules"] });
       const out = fallback ? fallback.filter((file) => /\.(md|mdx)$/i.test(file)).map((file) => paths.relative(folder, file)).join("\n") : git.stdout;
       this.files = markdownIn(out.replace(/^\.\//gm, ""));
       cx.notify();
@@ -98,7 +103,7 @@ export default class MarkdownPanel extends View {
     const dir = paths.join(appHome(), inbox);
     cx.spawn(async (cx) => {
       try {
-        await localPlatform().files.mkdir(dir);
+        await localService(fileApi).mkdir(dir);
         for (;;) {
           const paths = (await takeAllOpens(dir)).filter(isMarkdown);
           if (paths.length) this.open(paths.at(-1), cx, null, review);
@@ -113,7 +118,7 @@ export default class MarkdownPanel extends View {
     const dir = paths.join(appHome(), WAITING_DIR);
     cx.spawn(async (cx) => {
       try {
-        await localPlatform().files.mkdir(dir);
+        await localService(fileApi).mkdir(dir);
         for (;;) {
           this.reviewing = await waitingReviews(dir);
           cx.notify();
@@ -175,7 +180,7 @@ export default class MarkdownPanel extends View {
       // Every md-review waiting on this file is answered.
       const ids = this.reviewing.filter((x) => x.path === doc.path).map((x) => x.id);
       const dir = paths.join(appHome(), DONE_DIR);
-      const r = await localPlatform().files.mkdir(dir).then(() => localPlatform().files.touch(ids.map((id) => paths.join(dir, id)))).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+      const r = await localService(fileApi).mkdir(dir).then(() => localService(fileApi).touch(ids.map((id) => paths.join(dir, id)))).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
       if (r.code !== 0) { this.notice = `md-review was not told: ${(r.stderr || "the marker could not be written").trim()}`; cx.notify(); return; }
       this.reviewing = this.reviewing.filter((x) => x.path !== doc.path); this.notice = null;
       // Another review still waits: show it rather than close.

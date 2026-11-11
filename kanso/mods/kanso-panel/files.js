@@ -1,4 +1,6 @@
-import { platformOn, paths } from "./platform.js";
+import { serviceOn } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Derived from the `files` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: root no longer draws its own rounded, bordered card.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-files.
@@ -16,7 +18,7 @@ const PER_FOLDER = 500, TOTAL = 5000;
 const RETURN = "kanso.files.return";
 
 async function directory(path, on) {
-  return (await platformOn(on)).files.directory(path);
+  return (await serviceOn(fileApi, on)).directory(path);
 }
 
 export class Files {

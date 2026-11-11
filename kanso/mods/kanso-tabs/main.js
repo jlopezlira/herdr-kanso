@@ -1,4 +1,6 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Derived from the `tabs` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: segmented tab pill, outlined Files and Changes buttons, no bar background.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-tabs; a Specs panel button with the pending count and a needs-you dot (sdd.badge).
@@ -96,7 +98,7 @@ const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chose
 
 // Reads and removes the paths waiting in the inbox; returns the newest.
 export async function takeOpens(dir) {
-  const r = await localPlatform().files.drain(dir);
+  const r = await localService(fileApi).drain(dir);
   const opened = (r.stdout ?? "").split("\0").map((p) => p.trim()).filter(paths.isAbsolute);
   return opened.at(-1) ?? null;
 }
@@ -157,7 +159,7 @@ export default class Tabs extends View {
     const dir = paths.join(appHome(), "data", "kanso-open");
     cx.spawn(async (cx) => {
       try {
-        await localPlatform().files.mkdir(dir);
+        await localService(fileApi).mkdir(dir);
         for (;;) {
           const path = await takeOpens(dir);
           if (path) this.preview(path);

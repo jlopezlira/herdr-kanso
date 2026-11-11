@@ -1,4 +1,6 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { systemApi } from "./platform-system.js";
 // Memory, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
@@ -156,7 +158,7 @@ export default class Memory extends View {
   // Detached, so exec's 30 s limit never applies to the guard.
   act(key, args, done, cx) {
     // One action at a time: two recycles never race each other.
-    if (!localPlatform().system.memoryGuardAvailable || this.closed || this.busy[key] || Object.keys(this.busy).some((k) => k !== "check")) return;
+    if (!localService(systemApi).memoryGuardAvailable || this.closed || this.busy[key] || Object.keys(this.busy).some((k) => k !== "check")) return;
     this.busy[key] = { at: Date.now(), done };
     cx.notify();
     cx.spawn(async (actCx) => {
@@ -166,7 +168,7 @@ export default class Memory extends View {
           const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
           this.node = typeof v === "string" && v.trim() ? v.trim() : "node";
         }
-        await localPlatform().system.guardRun(this.node, paths.join(appHome(), GUARD_FILE), args);
+        await localService(systemApi).guardRun(this.node, paths.join(appHome(), GUARD_FILE), args);
       } catch {
         delete this.busy[key];
       }
@@ -210,7 +212,7 @@ export default class Memory extends View {
       });
     }
     const c = tokens(theme());
-    if (!localPlatform().system.memoryGuardAvailable) return v_flex().size_full().p(G.xl).text_size(T.card).text_color(c.muted).child(localPlatform().system.memoryGuardReason);
+    if (!localService(systemApi).memoryGuardAvailable) return v_flex().size_full().p(G.xl).text_size(T.card).text_color(c.muted).child(localService(systemApi).memoryGuardReason);
     const narrow = (this.width || 960) < 560;
     const state = this.now?.state;
     const body = !this.now ? this.skeleton(c, narrow)

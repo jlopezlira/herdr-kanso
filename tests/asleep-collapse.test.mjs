@@ -46,7 +46,7 @@ async function draw({ asleep = [], spaces = () => [], agents = () => [], panes =
   const { node, handlers, ids, clear } = recorder();
   const shared = (k) => (k === "kanso.asleep" ? asleep : k === "kanso.registry" ? reg : k === "sidebar.collapsed" ? collapsed : null);
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
+    div: node, svg: node, image: node, h_flex: node, v_flex: node, Button: { new: node }, Popover: { new: node },
     theme: () => theme, shared, setShared: () => {}, spaces, panes, agents, terminals, machines: () => [],
     run: () => {}, home: () => "/Users/me", openOverlay: () => {}, props: () => ({}),
   });

@@ -1,9 +1,11 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { transcriptApi } from "./platform-transcripts.js";
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
 import { hc, home } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
 
-export const claudeFile = (home, cwd, session) => paths.join(home, ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
+export const claudeFile = (home, cwd, session) => paths.join(home, ".claude", "projects", String(cwd ?? "").replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
 
 export function parseLocated(text, home) {
   const [kind, a, b] = (text ?? "").replace(/\n$/, "").split("\t");
@@ -62,14 +64,14 @@ async function findThread({ address, app }, known, home) {
   const pid = got?.foreground?.pid;
   if (!pid) return null;
   const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
-  const located = await localPlatform().transcripts.locate(pid, kind, home);
+  const located = await localService(transcriptApi).locate(pid, kind, home);
   if (located.state === "unavailable") return { pid, unavailable: located.reason };
   const where = parseLocated(located.stdout, home);
   if (!where) return null;
-  const size = await localPlatform().transcripts.size(where.file);
+  const size = await localService(transcriptApi).size(where.file);
   if (!size) return null;
   if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return known;
-  const r = await localPlatform().transcripts.thread(where.file);
+  const r = await localService(transcriptApi).thread(where.file);
   if (r.code !== 0 && !r.stdout) return null;
   const [titleLine, head, recent, tail] = r.stdout.split("\n\u001e\n");
   return { kind, file: where.file, name: where.name, size, pid, ...readThread(kind, titleLine, head, recent, tail, where.name) };

@@ -1,4 +1,9 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { processApi } from "./platform-processes.js";
+import { killApi } from "./platform-kill.js";
+import { openApi } from "./platform-open.js";
+import { sleepEvent } from "./since-left-model.js";
 // Sleep as work the sidebar does, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // This is the source copy; `npm run sync:share` copies it into kanso-sleep, and a test fails when a copy differs.
 // The dialog only writes what is to sleep. The tab or pane leaves when sleep is ordered; this worker does the slow
@@ -8,10 +13,9 @@ import { localPlatform, paths } from "./platform.js";
 // Per row: sleeping; once every agent left, its tab closes and it is asleep. Stuck waits for retry or undo;
 // undoing brings back what left. An owner token and its heartbeat (sleeps.pending, pending_at) keep two windows
 // off one row.
-import { exec, hc, run, panes, terminals, readTextFile, home } from "herdr";
+import { hc, run, panes, terminals, readTextFile, home } from "herdr";
 import { promptEmpty, asksToExit, base } from "./resume.js";
-import { SHELLS, shq } from "./tabkit.js";
-import { etimeMs } from "./procs.js";
+import { SHELLS } from "./tabkit.js";
 import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries, parseOr } from "./pure.js";
 import { LEASE_MS } from "./kdb.js";
 
@@ -261,16 +265,16 @@ export const terminalsOf = (row) => (parseOr(row.layout, { cols: [] })?.cols ?? 
 // --- Processes and terminals. ---
 
 // true, false, or null when the check itself failed (a failed exec is no sighting of anything).
-export const alive = async (pid) => { if (!pid) return null; return localPlatform().processes.exists(pid).catch(() => null); };
+export const alive = async (pid) => { if (!pid) return null; return localService(processApi).exists(pid).catch(() => null); };
 
 // The pid still on conversation `session`, matched by start time (a reused pid is not it); throws when it can't tell: never "none" for what it could not see.
-export const runningOn = (session) => localPlatform().processes.runningSession(session, home());
+export const runningOn = (session) => localService(processApi).runningSession(session, home());
 
 // At its own shell's prompt: another shell in front (a script, say) counts as running.
 export const atPrompt = (x) => Boolean(x) && (!x.foreground?.pid || x.foreground.pid === x.pid);
 
 export async function procOf(pid, now = Date.now()) {
-  const proc = await localPlatform().processes.identity(pid, now).catch(() => null);
+  const proc = await localService(processApi).identity(pid, now).catch(() => null);
   return proc ? { ...proc, comm: base(proc.comm) } : null;
 }
 // A pid given to another process since is not it: the start time must match.
@@ -331,7 +335,7 @@ export async function stopIn(terminal, cx, only = null) {
     const pid = await front();
     if (pid === 0 || (only && pid !== only && pid != null)) return true;
     if (pid == null) return false;
-    await localPlatform().kill.stop(pid, { force: sig === "-KILL" }).catch(() => null);
+    await localService(killApi).stop(pid, { force: sig === "-KILL" }).catch(() => null);
     return (await retry(10, async () => { await cx.sleep(300); return (await front()) === 0; })) ? true : null;
   };
   return (await reduceSeries(["-TERM", "-KILL"], async (got, sig) => (got === null ? signal(sig) : got), null)) === true;
@@ -341,7 +345,7 @@ export async function stopIn(terminal, cx, only = null) {
 // "out" when nothing of it runs, "unsure" when something it started could not be stopped.
 // The terminal must be at its prompt right before the line goes, and only what that line started is ever stopped.
 export async function comeBack(p, cx, onBack = () => {}) {
-  const line = localPlatform().opener.terminalLine(p.cwd || home(), p.wake);
+  const line = localService(openApi).terminalLine(p.cwd || home(), p.wake);
   const front = async () => {
     const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
     try { const x = JSON.parse(g.stdout); return { x, idle: atPrompt(x) }; } catch { return null; }
@@ -458,7 +462,7 @@ export class SleepWork {
     if (stranded.length) {
       await Promise.all(stranded.map(async (r) => {
         const why = r.why || "The sleep stopped";
-        if ((await this.kdb.holdWork(r.id, this.me, now)) && (await this.kdb.setWorkState(r.id, this.me, r.state, "stuck", why, now))) this.changed({ ...r, state: "stuck", why });
+        if ((await this.kdb.holdWork(r.id, this.me, now)) && (await this.kdb.setWorkState(r.id, this.me, r.state, "stuck", why, now, sleepEvent(r.id, "stuck")))) this.changed({ ...r, state: "stuck", why });
       }));
     }
     const skip = new Set(stranded.map((r) => r.id));
@@ -484,7 +488,7 @@ export class SleepWork {
     const agents = agentsOf(row);
     const plan = sleepStep(row, agents);
     if (plan.state) {
-      if (await this.kdb.setWorkState(row.id, this.me, row.state, plan.state, plan.why ?? null, now)) this.changed({ ...row, state: plan.state, why: plan.why ?? null });
+      if (await this.kdb.setWorkState(row.id, this.me, row.state, plan.state, plan.why ?? null, now, sleepEvent(row.id, plan.state))) this.changed({ ...row, state: plan.state, why: plan.why ?? null });
       return;
     }
     if (plan.close) return this.close(row);
@@ -528,7 +532,7 @@ export class SleepWork {
     if (plan.closeTab) run("tab.close", { id: tab, confirmed: true });
     for (const t of plan.kill) if (!plan.closeTab || !open.has(t)) run("terminal.kill", { terminal: t });
     const why = plan.busy.length ? `${plan.busy.join(", ")} ${plan.busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${plan.busy.length === 1 ? "stays" : "stay"} open.` : null;
-    if (await this.kdb.finishSleep(row.id, this.me, why)) this.changed();
+    if (await this.kdb.finishSleep(row.id, this.me, why, Date.now(), sleepEvent(row.id, "asleep"))) this.changed();
   }
 
   // An undo is done: what came back is awake, what did not stays asleep (one unsure with its terminal looked at first).

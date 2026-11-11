@@ -1,4 +1,8 @@
-import { localPlatform, platformOn, paths } from "./platform.js";
+import { localService, serviceOn } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { repositoryApi } from "./platform-repositories.js";
+import { systemApi } from "./platform-system.js";
 // Kanso's projects, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // A project is a folder you added (kdb's projects table): it stays when its last agent closes,
 // and its space is only the part of it that is open now.
@@ -58,8 +62,8 @@ export async function addWorktree({ folder, machine = null, branch, base = "" })
   const name = String(branch ?? "").trim();
   if (!name) return { error: "Name the branch." };
   if (name.startsWith("-")) return { error: "A branch name can't start with -." };
-  const host = await platformOn(machine);
-  const r = await host.repositories.createWorktree(folder, name, base, base ? "" : machine ? await host.system.userHome() : home()).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
+  const repositories = await serviceOn(repositoryApi, machine);
+  const r = await repositories.createWorktree(folder, name, base, base ? "" : machine ? await (await serviceOn(systemApi, machine)).userHome() : home()).catch((e) => ({ code: 1, stderr: String(e?.message ?? e) }));
   const line = String(r.stdout ?? "").trim().split("\n").at(-1) ?? "";
   const [kind, path] = line.split("\t");
   if (r.code !== 0 || !path) return { error: String(r.stderr ?? "").trim().split("\n").filter(Boolean).at(-1) || "git could not make the worktree." };
@@ -74,6 +78,6 @@ export async function worktreesOf(folder, machine = null) {
 // The local folders of these that are not there any more.
 export async function missingFolders(folders) {
   if (!folders.length) return new Set();
-  const existing = new Set(await localPlatform().files.existing(folders, "directory"));
+  const existing = new Set(await localService(fileApi).existing(folders, "directory"));
   return new Set(folders.filter((folder) => !existing.has(folder)));
 }

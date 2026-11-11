@@ -1,9 +1,12 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { processApi } from "./platform-processes.js";
+import { transcriptApi } from "./platform-transcripts.js";
 // A Claude agent's conversation on disk: every path it printed, whole. Its screen abbreviates long paths
 // ("…/shot.png") and redraws, so what it made a while ago is no longer there; the transcript keeps it.
 import { hc, readTextFile } from "herdr";
 import { KINDS } from "./kinds.js";
-import { projectDir, transcriptPath, START_SLACK, sessionLive } from "./find.js";
+import { projectDir, transcriptPath, sessionPath, START_SLACK, sessionLive } from "./find.js";
 
 export { projectDir, transcriptPath, START_SLACK };
 export const MOST = 2000; // the latest distinct paths kept from a conversation: a long one names a thousand after a picture
@@ -43,16 +46,16 @@ export async function sessionOf(address, homeDir, front = null) {
   // The record is Claude Code's: another program with a pid Claude had must not read Claude's conversation.
   const pid = front?.program === "claude" ? front.pid : null;
   if (!pid) return null;
-  const record = parsed(await readTextFile(paths.join(homeDir, ".claude", "sessions", `${pid}.json`)).catch(() => null));
+  const record = parsed(await readTextFile(sessionPath(homeDir, pid)).catch(() => null));
   if (record?.pid !== pid || !record.sessionId) return null;
   // Nor is a record of an earlier Claude that had this pid: the process must have started when the record says.
-  const started = await localPlatform().processes.startTime(pid).catch(() => NaN);
+  const started = await localService(processApi).startTime(pid).catch(() => NaN);
   return sessionLive(record, pid, started) ? record : null;
 }
 
 // One transcript file from a stored offset. `code` 3: nothing new and whole. `mark` is the cksum of the bytes read.
 export async function scanFile(file, from = "0", mark = "") {
-  const r = await localPlatform().transcripts.scan(file, from ?? "0", mark ?? "", PATTERN, EXT, MOST, LONGEST).catch(() => null);
+  const r = await localService(transcriptApi).scan(file, from ?? "0", mark ?? "", PATTERN, EXT, MOST, LONGEST).catch(() => null);
   if (r?.code === 3) return { code: 3, size: String(from ?? "0"), from: String(from ?? "0"), mark: String(mark ?? ""), paths: [] };
   if (!r || r.code !== 0) return { code: r?.code ?? 1, size: null, from: null, mark: "", paths: [] };
   const [size, start, got, ...lines] = String(r.stdout).split("\n");

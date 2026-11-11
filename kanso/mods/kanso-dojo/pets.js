@@ -1,4 +1,7 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { petApi } from "./platform-pets.js";
 // The dōjō's pets, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Pets in the Codex Pets format (https://codex-pets.net): a pet.json and an atlas of
 // 8 columns by 9 rows of 192 x 208 cells, a row per state. Kanso ships none: it reads the ones
@@ -91,7 +94,7 @@ const failed = (r, what) => new Error((r.stderr || what).trim().split("\n")[0]);
 const brought = () => paths.join(appHome(), DIR, "agents");
 
 export async function installedPets() {
-  const r = await localPlatform().pets.list(paths.join(appHome(), DIR), [petsHome(), brought()]);
+  const r = await localService(petApi).list(paths.join(appHome(), DIR), [petsHome(), brought()]);
   if (r.code !== 0) throw failed(r, "Your pets could not be read.");
   // The agents' pets go by their agent's name for them, and say whose they are.
   // In the agents' order, then yours by name.
@@ -104,10 +107,10 @@ export async function installedPets() {
 
 // Brings the agents' pets you do not have yet; the ids that could not be had, if any.
 export async function bringAgentPets(have = new Set(), list = AGENT_PETS) {
-  await localPlatform().files.remove(Object.keys(RETIRED).map((id) => paths.join(brought(), id)), { recursive: true });
+  await localService(fileApi).remove(Object.keys(RETIRED).map((id) => paths.join(brought(), id)), { recursive: true });
   const want = list.filter((p) => !have.has(p.id));
   if (!want.length) return [];
-  const r = await localPlatform().pets.bring(brought(), want);
+  const r = await localService(petApi).bring(brought(), want);
   return String(r.stderr ?? "").split("\n").map((x) => x.trim()).filter((x) => want.some((p) => p.id === x));
 }
 
@@ -183,7 +186,7 @@ export class Companion {
       return { width, height: rows.length * px, svg: squares.join("") };
     }
     const file = `pet.${p.sheet.split(".").at(-1)}`;
-    const r = await localPlatform().files.mkdir(dir).then(() => localPlatform().files.copy(paths.join(appHome(), p.sheet), paths.join(dir, file)));
+    const r = await localService(fileApi).mkdir(dir).then(() => localService(fileApi).copy(paths.join(appHome(), p.sheet), paths.join(dir, file)));
     if (r.code !== 0) return null;
     const { width: cw, height: ch } = p.cell, height = Math.round((width * ch) / cw);
     return { width, height, svg: `<svg width="${width}" height="${height}" viewBox="0 0 ${cw} ${ch}"><image href="${file}" width="${cw * p.columns}" height="${ch * p.rows.length}"/></svg>` };

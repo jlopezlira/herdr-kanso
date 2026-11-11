@@ -1,240 +1,390 @@
-import { localPlatform } from "./platform.js";
-// Cmd+F on an agent: the conversation, scrolled to the match. No conversation falls back to the terminal's Find.
-import { div } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
-import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents } from "herdr";
-import { tokens, skeleton, controlInput } from "./ui.js";
+import { localService, localName } from "./platform-host.js";
+import { processApi } from "./platform-processes.js";
+import { div, list, svg } from "gpui-kit";
+import { v_flex, h_flex, InputState, Input, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
+import { tokens, skeleton, controlInput, iconButton, G, H, R, T, ICON, EASE } from "./ui.js";
+import { markdownView } from "./lib.js";
+import { tryOr } from "./pure.js";
 import {
-  locateConversation, resolveFind, readSlice, SLICE_BUDGET, LINE_MAX, freshRead, applySlice, extendIndex, searchIndex,
-  enterMatch, retarget, partsOf, whoOf, whenLabel, countLabel,
+  locateConversation, resolveFind, readSlice, freshRead, applySlice, extendIndex, searchIndex,
+  chooseMatch, layOut, partsOf, wordsByLine, whoOf, whenLabel, countLabel, blankQuery, retarget, keptQuery, withQuery, findChord, FIND, EXCERPT, DRAW,
 } from "./find.js";
 
-const ROW = 104;
 const WAIT = 120;
-const RADIUS = 80;
+const MAX = 300; // the list stops here so Find does not cover the terminal
 
 function hintOf(address) {
-  try {
-    const agent = agents().find((a) => a.address === address);
-    return [agent?.app, agent?.program?.key].filter(Boolean).join(" ");
-  } catch { return ""; }
-}
-
-function words(text, mark, t) {
-  return String(text ?? "").split(/\s+/).filter(Boolean).map((w) => {
-    const el = div().max_w_full().child(w);
-    return mark ? el.rounded(2).px(1).bg(t.accent).text_color(t.accent_foreground ?? t.background) : el;
-  });
+  const agent = tryOr(() => agents().find((a) => a.address === address));
+  return [agent?.app, agent?.program?.key].filter(Boolean).join(" ");
 }
 
 export class Find {
+  static fits = true;
+
   init(cx, p) {
+    const remembered = keptQuery({ queries: this.kept }, p?.terminal);
     this.terminal = p?.terminal ?? null;
-    this.input = InputState.new({ value: "" });
-    this.query = "";
-    this.pending = "";
+    this.input = InputState.new({ value: remembered, placeholder: "Find in conversation" });
+    this.query = remembered;
+    this.pending = remembered;
     this.hits = [];
     this.at = 0;
+    this.open = false;
     this.index = [];
     this.state = freshRead();
-    this.loading = true;
+    this.loading = false;
     this.gone = false;
+    this.leaving = false;
     this.missing = false;
-    this.caughtUp = false;
-    this.shown = -1;
-    this.cached = null;
+    this.asked = false;
+    this.begun = false;
+    this.file = null;
+    this.pendingScroll = false;
     this.gen = 0;
-    this.enterAt = 0;
+    this.rise = null;
+    this.slicing = false;
+    this.boxH = 0;
+    this.hidAt = 0;
+    this.wasShow = false;
+    this.seen = 0;
     this.scroll = VirtualListScrollHandle.new();
     this.handle = cx.focus_handle();
     this.input.on("change", (_e, cx) => this.note(cx));
     this.input.on("submit", (e, cx) => this.enter(Boolean(e?.shift), cx));
+    if (remembered) this.input.set_selected_range({ start: 0, end: remembered.length });
+    setShared(FIND, { terminal: this.terminal, select: 0 });
     this.input.focus();
     cx.timer.after(600, () => { if (!this.gone) this.input.focus(); });
-    cx.spawn(async (cx) => { await this.open(cx); });
+    if (remembered) this.arm(cx);
+    cx.spawn(async (cx) => { await this.locate(cx); });
+  }
+
+  restoreState(state) {
+    if (!state || typeof state !== "object" || Array.isArray(state)) return false;
+    if (state.queries != null && (typeof state.queries !== "object" || Array.isArray(state.queries))) return false;
+    this.kept = state.queries ?? {};
+    return true;
+  }
+
+  saveState() {
+    return { queries: withQuery(this.kept, this.terminal, this.input?.value() ?? this.query) };
+  }
+
+  snap() {
+    return { pending: this.input.value(), query: this.query, hits: this.hits, at: this.at, open: this.open };
+  }
+
+  apply(next) {
+    const scroll = next.at !== this.at || next.open !== this.open || next.query !== this.query || (!this.hits.length && next.hits.length);
+    this.query = next.query;
+    this.hits = next.hits;
+    this.at = next.at;
+    this.open = Boolean(next.open);
+    if (scroll) this.pendingScroll = true;
+  }
+
+  clear() {
+    this.query = "";
+    this.hits = [];
+    this.at = 0;
+    this.open = false;
   }
 
   note(cx) {
     this.pending = this.input.value();
     this.gen = this.gen + 1;
     const gen = this.gen;
-    cx.timer.after(WAIT, (cx) => {
-      if (this.gone || gen !== this.gen || this.pending === this.query) return;
-      this.query = this.pending;
-      this.hits = searchIndex(this.index, this.query);
-      this.at = 0;
-      this.shown = -1;
-      this.remember();
-      this.reveal();
+    if (blankQuery(this.pending)) {
+      this.clear();
       cx.notify();
-    });
+    } else {
+      this.arm(cx);
+      cx.timer.after(WAIT, (cx) => {
+        if (this.gone || gen !== this.gen || this.pending === this.query) return;
+        this.apply(chooseMatch(this.snap(), this.index, { key: "type" }));
+        cx.notify();
+      });
+    }
+  }
+
+  arm(cx) {
+    this.asked = true;
+    if (this.file) this.begin(cx);
+    else if (!this.begun) { this.loading = true; cx.notify(); }
   }
 
   enter(shift, cx) {
-    const now = Date.now();
-    if (now - this.enterAt < 40) return;
-    this.enterAt = now;
+    this.move(Boolean(shift), cx);
+  }
+
+  move(newer, cx) {
+    if (!this.input) return;
     this.gen = this.gen + 1;
     this.pending = this.input.value();
-    const next = enterMatch(this, this.index, shift);
-    this.query = next.query;
-    this.hits = next.hits;
-    this.at = next.at;
-    this.remember();
-    this.reveal();
+    if (!blankQuery(this.pending)) this.arm(cx);
+    this.apply(chooseMatch(this.snap(), this.index, { key: newer ? "up" : "down" }));
     cx.notify();
   }
 
-  remember() {
-    const hit = this.hits[this.at];
-    if (!hit) { this.cached = null; return; }
-    this.cached = { turn: hit.turn, at: hit.at, len: hit.len, parts: partsOf(this.state.turns[hit.turn]?.text ?? "", hit, RADIUS) };
+  pick(key, cx) {
+    if (String(key).startsWith("day:")) return;
+    const index = Number(String(key).split(":")[0]);
+    if (!Number.isInteger(index) || index < 0 || index >= this.hits.length) return;
+    this.apply(chooseMatch(this.snap(), this.index, { key: "click", at: index }));
+    this.input.focus();
+    cx.notify();
   }
 
-  reveal() {
-    const turn = this.hits[this.at]?.turn;
-    if (turn == null || turn === this.shown) return;
-    this.shown = turn;
-    this.pendingScroll = turn;
+  back(cx) {
+    this.apply(chooseMatch(this.snap(), this.index, { key: "back" }));
+    this.input.focus();
+    cx.notify();
+  }
+
+  selectAll() {
+    const value = this.input.value();
+    this.input.set_selected_range({ start: 0, end: value.length });
+    this.input.focus();
+  }
+
+  escape(cx) {
+    if (!blankQuery(this.pending) || !blankQuery(this.query) || this.open) {
+      this.input.set_value("");
+      this.pending = "";
+      this.clear();
+      this.gen = this.gen + 1;
+      cx.notify();
+      return;
+    }
+    this.shut(false, cx);
   }
 
   sync(applied, keep) {
     this.state = applied.state;
     this.index = extendIndex(this.index, this.state.turns, applied.from, applied.reindex);
-    if (!this.query) {
-      this.hits = [];
-      this.at = 0;
-      this.cached = null;
-      if (!keep) this.revealEnd();
+    this.loading = false;
+    if (blankQuery(this.query)) {
+      this.clear();
       return;
     }
-    const prev = this.hits[this.at];
-    const next = keep && prev ? retarget(this.index, this.query, prev) : { hits: searchIndex(this.index, this.query), at: 0 };
-    this.hits = next.hits;
-    this.at = next.at;
-    this.remember();
-    this.reveal();
-  }
-
-  revealEnd() {
-    const last = this.state.turns.length - 1;
-    if (last < 0 || this.shown === last) return;
-    this.shown = last;
-    this.pendingScroll = last;
+    const prev = keep ? this.hits[this.at] : null;
+    const found = prev ? retarget(this.index, this.query, prev) : { hits: searchIndex(this.index, this.query), at: 0 };
+    this.apply({ query: this.query, hits: found.hits, at: found.at, open: Boolean(keep && this.open && found.hits.length) });
   }
 
   restart() {
+    const query = this.query; // the file shrank; the same query is searched again
     this.state = freshRead();
     this.index = [];
-    this.hits = [];
-    this.at = 0;
-    this.cached = null;
-    this.shown = -1;
+    this.clear();
+    this.query = query;
   }
 
-  async open(cx) {
-    const where = await locateConversation({ exec, hc, readTextFile, home, platform: localPlatform() }, this.terminal, hintOf(this.terminal)).catch(() => ({ file: null }));
+  async locate(cx) {
+    const where = await locateConversation({ exec, hc, readTextFile, home, platform: { processes: localService(processApi) } }, this.terminal, hintOf(this.terminal)).catch(() => ({ file: null }));
     if (this.gone) return;
     if (where.unavailable) { this.unavailable = where.unavailable; this.loading = false; this.missing = true; cx.notify(); return; }
-    if (resolveFind(where).action !== "find") { this.giveBack(); return; }
+    if (resolveFind(where).action !== "find") { this.giveBack(cx); return; }
     this.file = where.file;
-    await this.catchUp(cx);
-    if (this.gone || this.missing) return;
-    cx.timer.every(2000, (cx) => { if (!this.gone) this.grow(cx); });
+    if (this.asked) this.begin(cx);
+  }
+
+  begin(cx) {
+    if (this.begun || !this.file) return;
+    this.begun = true;
+    this.loading = true;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      await this.catchUp(cx);
+      if (!this.gone) cx.timer.every(2000, (cx) => { if (!this.gone) this.grow(cx); });
+    });
   }
 
   async catchUp(cx) {
     while (!this.gone) {
       const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localPlatform().name);
+      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
       if (this.gone) return;
       if (!parsed) { this.missing = prev === 0 && !this.state.turns.length; break; }
-      if (parsed.end === prev) { this.loading = false; this.caughtUp = true; break; }
+      if (parsed.end === prev) break;
       const applied = applySlice(this.state, parsed);
       if (applied.reset) { this.restart(); continue; }
-      this.loading = false;
-      this.sync(applied, false);
+      this.sync(applied, this.open || this.at > 0);
       cx.notify();
-      if (parsed.end >= parsed.size) { this.caughtUp = true; return; }
+      if (parsed.end >= parsed.size) return;
     }
     this.loading = false;
     cx.notify();
   }
 
   async grow(cx) {
-    if (this.reading || this.gone || !this.file) return;
-    this.reading = true;
+    if (this.slicing || this.gone || !this.file) return;
+    this.slicing = true;
     try {
       const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localPlatform().name);
+      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
       if (this.gone || !parsed) return;
       const applied = applySlice(this.state, parsed);
       if (applied.reset) { this.restart(); await this.catchUp(cx); return; }
       if (parsed.end === prev && !applied.reindex) return;
       this.sync(applied, true);
       cx.notify();
-    } finally { this.reading = false; }
+    } finally { this.slicing = false; }
   }
 
-  close() {
+  shut(search, cx) {
     if (this.gone) return;
     this.gone = true;
-    closeOverlay(props()?.overlay);
-    if (this.terminal) run("pane.focus", { terminal: this.terminal });
-  }
-
-  giveBack() {
-    if (this.gone) return;
-    this.gone = true;
+    this.leaving = true;
     const term = this.terminal;
-    closeOverlay(props()?.overlay);
-    if (term) run("pane.focus", { terminal: term });
-    run("terminal.search");
+    const done = () => {
+      setShared(FIND, null);
+      closeOverlay(props()?.overlay);
+      if (term) run("pane.focus", { terminal: term });
+      if (search) run("terminal.search");
+    };
+    if (!cx?.timer) { done(); return; }
+    cx.notify();
+    cx.timer.after(EASE.duration, () => done());
+  }
+
+  close(cx) { this.shut(false, cx); }
+
+  giveBack(cx) { this.shut(true, cx); }
+
+  bar(c, count, field) {
+    const quiet = !count || count === "No matches";
+    return h_flex().w_full().flex_none().px(G.md).py(G.sm).gap(G.sm).items_center()
+      .child(svg("mods/kanso-chrome/icons/search.svg").size(ICON).flex_none().text_color(c.muted))
+      .child(field ? controlInput(field, c).flex_1() : div().flex_1().h(H.control))
+      .child(div().flex_none().text_size(T.value).text_color(quiet ? c.dim : c.muted).whitespace_nowrap().child(count ?? ""))
+      .child(iconButton("find-prev", "chevron-up", "Previous match", (cx) => this.move(true, cx), c, { disabled: !this.hits?.length }))
+      .child(iconButton("find-next", "chevron-down", "Next match", (cx) => this.move(false, cx), c, { disabled: !this.hits?.length }));
   }
 
   bones(c) {
-    const { header, row } = skeleton(c);
-    return v_flex().size_full().bg(c.canvas).text_color(c.text)
-      .child(h_flex().h(48).flex_none().px(14).items_center().border_b(1).border_color(c.border).child(header(48, 13)))
-      .child(v_flex().flex_1().p(8).gap(8).children([0, 1, 2, 3, 4].map((i) => row(i, 28))));
+    return v_flex().w_full().rounded(R.card).bg(c.canvas).border_1().border_color(c.border).child(this.bar(c));
   }
 
-  turnRow(i, t) {
-    const turn = this.state.turns[i];
+  excerpt(parts, c) {
+    const word = ({ w, mark }) => {
+      const el = div().text_size(T.card).child(w);
+      return mark ? el.rounded(R.control).px(G.xs).bg(c.highlight).text_color(c.accent) : el.text_color(c.muted);
+    };
+    return v_flex().w_full().children(wordsByLine(parts).map((line) => (
+      line.length
+        ? h_flex().w_full().flex_wrap().gap_x(G.xs).children(line.map(word))
+        : div().text_size(T.card).child(" ")
+    )));
+  }
+
+  partsFor(item) {
+    return partsOf(this.state.turns[item.hit.turn]?.text ?? "", item.hit, EXCERPT);
+  }
+
+  keyOf(item) {
+    if (item.kind === "day") return `day:${item.index}:${item.label}`;
+    return `${item.index}:${item.hit.turn}:${item.hit.at}`;
+  }
+
+  cell(item, c) {
+    if (item.kind === "day") {
+      return div().w_full().px(G.md).pt(G.sm).pb(G.xs).text_size(T.small).text_color(c.dim).child(item.label);
+    }
+    const turn = this.state.turns[item.hit.turn];
+    const on = item.index === this.at;
+    return v_flex().w_full().px(G.md).py(G.xs).gap(G.xs)
+      .when(on, (el) => el.bg(c.selected))
+      .hover((s) => s.bg(c.selected))
+      .child(h_flex().gap(G.sm).items_center()
+        .child(div().text_size(T.small).text_color(c.muted).child(whoOf(turn)))
+        .child(div().text_size(T.small).text_color(c.dim).child(whenLabel(turn?.at))))
+      .child(this.excerpt(this.partsFor(item), c));
+  }
+
+  reading(c, t) {
     const hit = this.hits[this.at];
-    const on = hit?.turn === i;
-    const parts = on && this.cached?.turn === i && this.cached.at === hit.at ? this.cached.parts : partsOf(turn?.text ?? "", null, RADIUS);
-    const line = parts.flatMap((part) => words(part.text, part.mark, t));
-    return v_flex().h(ROW).w_full().px(12).py(8).gap(4).overflow_hidden().rounded(6)
-      .when(on, (el) => el.bg(t.selected ?? t.hover))
-      .child(h_flex().gap(8).items_center()
-        .child(div().text_size(11).text_color(t.muted).child(whoOf(turn)))
-        .child(div().text_size(11).text_color(t.dim).child(whenLabel(turn?.at))))
-      .child(h_flex().flex_wrap().gap_x(4).gap_y(2).max_w_full().min_w(0).text_size(13).children(line));
+    const turn = this.state.turns[hit?.turn];
+    const text = String(turn?.text ?? "");
+    return v_flex().w_full().max_h(MAX)
+      .child(h_flex().px(G.sm).pt(G.xs).items_center()
+        .child(iconButton("find-back", "chevron-left", "Back", (cx) => this.back(cx), c))
+        .child(div().text_size(T.small).text_color(c.muted).child(whoOf(turn)))
+        .child(div().text_size(T.small).text_color(c.dim).child(whenLabel(turn?.at))))
+      .child(div().px(G.md).pb(G.xs).child(this.excerpt(hit ? partsOf(text, hit, EXCERPT) : [], c)))
+      .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(MAX));
+  }
+
+  listBox(c, laid) {
+    return v_flex().relative().w_full().max_h(MAX).min_h(0)
+      .child(list("kanso-find", laid.items.length, (i) => this.keyOf(laid.items[i]), (i) => this.cell(laid.items[i], c))
+        .w_full().max_h(MAX).track_scroll(this.scroll).on_item_click((key, cx) => this.pick(key, cx)))
+      .child(Scrollbar.vertical("kanso-find").absolute().inset_0());
+  }
+
+  well(show, content, cx) {
+    if (show && this.rise == null) {
+      this.rise = 0;
+      cx.timer.after(16, (cx) => { if (!this.gone && this.rise === 0) { this.rise = 1; cx.notify(); } });
+    }
+    if (!show && this.wasShow) {
+      this.hidAt = Date.now();
+      cx.timer.after(EASE.duration, (cx) => { if (!this.gone) cx.notify(); });
+    }
+    const closing = !show && this.hidAt && Date.now() - this.hidAt < EASE.duration;
+    if (!show) this.rise = null;
+    this.wasShow = show;
+    const drawn = show || closing;
+    if (!drawn) return null;
+    const start = show && this.rise === 0;
+    return div().w_full().flex_none().overflow_hidden()
+      .h(start || closing ? 0 : (this.boxH || "auto")).opacity(start || closing ? 0 : 1)
+      .transition("height", EASE).transition("opacity", EASE)
+      .child(div().w_full().flex_none().on_size_change((size, sizeCx) => {
+        const next = Math.round(size.height);
+        if (!next || next === this.boxH) return;
+        this.boxH = next;
+        sizeCx.notify();
+      }).child(content));
+  }
+
+  bodyOf(c, t, laid, showSkel) {
+    if (this.open) return this.reading(c, t);
+    if (laid.items.length) return this.listBox(c, laid);
+    if (showSkel) return v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1].map((i) => skeleton(c).row(i)));
+    return div().px(G.md).py(G.sm).text_size(T.small).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
   }
 
   render(cx) {
     const t = theme();
     const c = tokens(t);
-    const n = this.state.turns.length;
-    const key = (e, cx) => { if (e.key !== "escape") return; this.close(); cx.stop_propagation(); };
-    const root = v_flex().id("find").size_full().min_h(0).bg(t.background).text_color(t.foreground).track_focus(this.handle).on_key_down(key)
-      .child(h_flex().h(48).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-        .child(div().font_semibold().child("Find"))
-        .child(controlInput(Input.new(this.input), c).flex_1())
-        .child(div().text_size(12).text_color(t.dim).whitespace_nowrap().child(countLabel(this.query, this.at, this.hits.length)))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .when(this.loading, (el) => el.child(v_flex().flex_1().p(8).gap(8).children([0, 1, 2, 3, 4].map((i) => skeleton({ border: t.border }).row(i, 28)))))
-      .when(this.missing, (el) => el.child(div().p(12).text_size(12).text_color(t.dim).child(this.unavailable ?? "This conversation is no longer there.")))
-      .when(!this.loading && !this.missing && n > 0, (el) => el.child(v_flex().flex_1().min_h(0).relative()
-        .child(v_virtual_list("kanso-find-list", n, ROW, (i) => String(i), (range) => (
-          Array.from({ length: range.end - range.start }, (_, k) => this.turnRow(range.start + k, t))
-        )).track_scroll(this.scroll).size_full())
-        .child(Scrollbar.vertical("kanso-find-list").absolute().inset_0())));
-    if (this.pendingScroll != null && !this.loading && !this.missing && n > 0) {
-      const to = this.pendingScroll;
-      this.pendingScroll = null;
-      this.scroll.scroll_to_item(to, "center");
+    const mark = shared(FIND);
+    if (mark?.terminal === this.terminal && mark.select !== this.seen) {
+      this.seen = mark.select;
+      if (mark.select) this.selectAll();
+    }
+    const onKey = (e, cx) => {
+      if (findChord(e.modifiers) && String(e.key).toLowerCase() === "f") { this.selectAll(); cx.stop_propagation(); return; }
+      if (e.key === "escape") { this.escape(cx); cx.stop_propagation(); return; }
+      if (e.key === "up") { this.move(true, cx); cx.stop_propagation(); return; }
+      if (e.key === "down") { this.move(false, cx); cx.stop_propagation(); }
+    };
+    const showSkel = this.loading && !blankQuery(this.pending) && !this.hits.length;
+    const laid = !this.open && !blankQuery(this.query) && this.hits.length
+      ? layOut(this.hits, this.at, DRAW, (hit) => this.state.turns[hit.turn]?.at)
+      : { items: [], focus: 0 };
+    const show = this.open || laid.items.length > 0 || showSkel || (this.missing && !blankQuery(this.pending) && !this.loading);
+    const body = this.bodyOf(c, t, laid, showSkel);
+    const root = v_flex().id("find").w_full().rounded(R.card).bg(c.canvas).border_1().border_color(c.border)
+      .text_color(t.foreground).track_focus(this.handle).on_key_down(onKey)
+      .opacity(this.leaving ? 0 : 1).transition("opacity", EASE)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .child(this.bar(c, countLabel(this.query, this.at, this.hits.length), Input.new(this.input)))
+      .child(this.well(show, body, cx) ?? div());
+    if (this.pendingScroll && laid.items.length) {
+      this.pendingScroll = false;
+      this.scroll.scroll_to_item(laid.focus, "center");
     }
     return root;
   }

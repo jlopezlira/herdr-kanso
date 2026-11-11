@@ -1,11 +1,13 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { systemApi } from "./platform-system.js";
 // Derived from the `workspace-chrome` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: brand bar, solid sidebar footer with Settings, Add machine and an account chip.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), Herdr's mark beside the traffic lights; an "Update Kanso" row for Kanso's own releases (update.js).
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, exec, appHome, notify } from "herdr";
+import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 import { tryOrAsync } from "./pure.js";
 
@@ -46,7 +48,7 @@ export default class WorkspaceChrome extends View {
   // Written only when it changes: every mod draws again on a shared write.
   power(cx) {
     cx.spawn(async () => {
-      const on = await localPlatform().system.battery().catch(() => null);
+      const on = await localService(systemApi).battery().catch(() => null);
       if (on === null) return;
       if (shared("kanso.battery") !== on) setShared("kanso.battery", on);
     });
@@ -58,7 +60,7 @@ export default class WorkspaceChrome extends View {
     this.watching = true;
     cx.spawn(async (cx) => {
       const status = await tryOrAsync(async () => {
-        const r = await localPlatform().system.status(appHome());
+        const r = await localService(systemApi).status(appHome());
         return { errors: JSON.parse(r.stdout).errors ?? [] };
       });
       this.watching = false;
@@ -74,7 +76,7 @@ export default class WorkspaceChrome extends View {
 
   // Started detached, so the new window survives this one quitting.
   restart() {
-    localPlatform().system.restart(appHome()).catch(() => {});
+    localService(systemApi).restart(appHome()).catch(() => {});
     run("app.quit");
   }
 

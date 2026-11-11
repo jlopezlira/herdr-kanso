@@ -1,14 +1,12 @@
 // Files used by more than one mod. Herdr loads a mod's files from its own
 // folder only, so the source (the one you edit) is copied into every other
 // mod that uses it. `--check` fails instead when a copy differs.
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, readdir, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const root = new URL("../", import.meta.url);
 // Each shared file (relative to the repo), and where it is copied.
-export const SHARED = [
-  { source: "kanso/mods/kanso-panel/platform-paths.js", copies: ["kanso/mods/kanso-strip/platform-paths.js", "kanso/mods/kanso-send/platform-paths.js"] },
-  ...["platform-command", "platform-paths", "platform-processes", "platform-ports", "platform-kill", "platform-open", "platform-clipboard", "platform-files", "platform-transcripts", "platform-repositories", "platform-images", "platform-system", "platform-markdown", "platform-pets", "platform"].map((name) => ({ source: `kanso/mods/kanso-panel/${name}.js`, copies: ["kanso-spaces", "kanso-sleep", "kanso-arrange", "kanso-guard", "kanso-chrome", "kanso-tabs", "kanso-settings", "kanso-spend", "kanso-dojo", "kanso-help", "kanso-containers", "open-with"].map((mod) => `kanso/mods/${mod}/${name}.js`).concat([`markdown-panel/mods/markdown-panel/${name}.js`]) })),
+const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
   { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js", "kanso/mods/kanso-help/ui.js", "kanso/mods/kanso-dojo/ui.js", "kanso/mods/kanso-containers/ui.js", "kanso/mods/kanso-spaces/ui.js", "kanso/mods/kanso-sleep/ui.js", "kanso/mods/kanso-arrange/ui.js", "markdown-panel/mods/markdown-panel/ui.js"] },
@@ -24,6 +22,8 @@ export const SHARED = [
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
   // A pull request's checks, read one way in the PR panel and the header's digest.
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
+  // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
+  { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
   { source: "kanso/mods/kanso-dojo/mascot.js", copies: ["kanso/mods/kanso-help/mascot.js"] },
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.
@@ -40,6 +40,8 @@ export const SHARED = [
   { source: "kanso/mods/kanso-sleep/resume.js", copies: ["kanso/mods/kanso-guard/resume.js", "kanso/mods/kanso-arrange/resume.js", "kanso/mods/kanso-spaces/resume.js"] },
   // The left nav's one database and what sleeps in it (sleep is a state of an
   // agent there): the sidebar owns them, Sleep uses the same files.
+  { source: "kanso/mods/kanso-spaces/since-left-model.js", copies: ["kanso-sleep", "kanso-panel"].map((m) => `kanso/mods/${m}/since-left-model.js`) },
+  { source: "kanso/mods/kanso-spaces/since-left-store.js", copies: ["kanso/mods/kanso-panel/since-left-store.js"] },
   { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-sleep/kdb.js", "kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js"] },
   // Which panel is open, and the two hooks every panel uses to keep its own state.
   { source: "kanso/mods/kanso-panel/panel-state.js", copies: ["kanso/mods/kanso-tabs/panel-state.js"] },
@@ -56,9 +58,52 @@ export const SHARED = [
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];
 
+const PLATFORM = "kanso/mods/kanso-panel/";
+const platformFile = (name) => /^platform(?:-[\w-]+)?\.js$/.test(name);
+const imports = (text) => [...text.matchAll(/^import\s+(?:(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)\s+from\s+)?["']\.\/([^"']+)["'];/gm)].map((match) => match[1]);
+
+export function platformDependencies(modules, canonical) {
+  const needed = new Set();
+  const visit = (name) => {
+    if (!platformFile(name) || needed.has(name)) return;
+    if (!canonical.has(name)) throw new Error(`Unknown platform module: ${name}`);
+    needed.add(name);
+    imports(canonical.get(name)).forEach(visit);
+  };
+  modules.flatMap(imports).forEach(visit);
+  return needed;
+}
+
+async function platformShares() {
+  const canonical = new Map(await Promise.all((await readdir(new URL(PLATFORM, root))).filter(platformFile)
+    .map(async (name) => [name, await readFile(new URL(PLATFORM + name, root), "utf8")])));
+  const shared = new Map([...canonical.keys()].map((name) => [name, { source: PLATFORM + name, copies: [] }]));
+  const overrides = new Map(COMMON.flatMap(({ source, copies }) => copies.map((copy) => [copy, source])));
+  const folders = (await readdir(new URL("kanso/mods/", root), { withFileTypes: true })).filter((entry) => entry.isDirectory())
+    .map((entry) => `kanso/mods/${entry.name}/`).concat(["markdown-panel/mods/markdown-panel/"]);
+  const obsolete = [];
+  for (const folder of folders) {
+    if (folder === PLATFORM) continue;
+    const names = await readdir(new URL(folder, root));
+    const planned = [...new Set([...names, ...[...overrides.keys()].filter((copy) => copy.startsWith(folder)).map((copy) => copy.slice(folder.length))])];
+    const modules = await Promise.all(planned.filter((name) => name.endsWith(".js") && !platformFile(name))
+      .map((name) => readFile(new URL(overrides.get(folder + name) ?? folder + name, root), "utf8")));
+    const needed = platformDependencies(modules, canonical);
+    for (const name of needed) shared.get(name).copies.push(folder + name);
+    obsolete.push(...names.filter((name) => platformFile(name) && !needed.has(name)).map((name) => folder + name));
+  }
+  return { shared: [...shared.values()].filter(({ copies }) => copies.length), obsolete };
+}
+const platform = await platformShares();
+export const SHARED = [...COMMON, ...platform.shared];
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const check = process.argv.includes("--check");
   let stale = 0;
+  for (const copy of platform.obsolete) {
+    if (check) { console.error(`${copy} is unused: run npm run sync:share`); stale += 1; }
+    else { await rm(new URL(copy, root)); console.log(`removed unused ${copy}`); }
+  }
   for (const { source: from, copies } of SHARED) {
     const source = await readFile(new URL(from, root), "utf8");
     for (const copy of copies) {

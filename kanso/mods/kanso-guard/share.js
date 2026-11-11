@@ -1,9 +1,14 @@
-import { localPlatform, paths } from "./platform.js";
+import { localService, localSleep } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { openApi } from "./platform-open.js";
+import { clipboardApi } from "./platform-clipboard.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 // Kanso's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Kept byte for byte in kanso-panel/ and kanso-spend/ (`npm run sync:share`): edit kanso-panel/share.js.
 import { div } from "gpui-kit";
 import { h_flex, Button } from "gpui-base";
-import { exec, home, writeTextFile, window, notify, theme, appHome } from "herdr";
+import { exec, home, writeTextFile, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
 
 export const NETWORKS = {
@@ -174,26 +179,26 @@ ${out.join("\n")}
   return { svg, width: W, height };
 }
 
-const exists = (path) => localPlatform().files.test(path, "nonempty").catch(() => false);
-const pause = (seconds) => localPlatform().sleep(seconds);
+const exists = (path) => localService(fileApi).test(path, "nonempty").catch(() => false);
+const pause = (seconds) => localSleep(seconds);
 // The first of `tries` ([bin, args]) that runs, and after which `made()` holds; false when none does.
 const folderOf = (path) => paths.dirname(path);
 
 // QuickLook's picture of `file` (macOS), `size` px on its long side, as pngPath. It runs in the file's folder.
-export const quickLook = (file, size, pngPath) => localPlatform().images.quickLook(file, size, pngPath);
-export const toPng = (file, pngPath) => localPlatform().images.toPng(file, pngPath);
-export const firstPage = (file, size, pngPath) => localPlatform().images.firstPage(file, size, pngPath);
+export const quickLook = (file, size, pngPath) => localService(imageApi).quickLook(file, size, pngPath);
+export const toPng = (file, pngPath) => localService(imageApi).toPng(file, pngPath);
+export const firstPage = (file, size, pngPath) => localService(imageApi).firstPage(file, size, pngPath);
 
 // The card's files are made anew each time: removed first, then written as new, so nothing is read back
 // (a card with a picture can pass the 1 MiB readTextFile allows).
 export async function renderPng(card, svgPath, pngPath) {
   const html = svgPath.replace(/\.svg$/, ".html");
   const dir = folderOf(svgPath); // what the card points to by name lives beside it, and every renderer runs there
-  await localPlatform().files.remove([svgPath, html, pngPath]).catch(() => {});
+  await localService(fileApi).remove([svgPath, html, pngPath]).catch(() => {});
   await writeTextFile(svgPath, card.svg, null);
   await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, null);
   const tries = [
-    ...(await localPlatform().images.chromiums()).map((bin) => [bin, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--force-device-scale-factor=2",
+    ...(await localService(imageApi).chromiums()).map((bin) => [bin, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--force-device-scale-factor=2",
       `--window-size=${card.width},${card.height}`, `--screenshot=${pngPath}`, paths.fileUrl(html)]]),
     ["rsvg-convert", ["-z", "2", "-o", pngPath, svgPath]],
     ["magick", ["-density", "192", svgPath, pngPath]],
@@ -207,25 +212,25 @@ export async function renderPng(card, svgPath, pngPath) {
   throw new Error("Install Chrome, Chromium or rsvg-convert to make the image.");
 }
 
-export const copyImage = (pngPath) => localPlatform().clipboard.image(pngPath).catch(() => false);
-export const openPath = (target) => localPlatform().opener.open(target).catch(() => null);
-const frontApp = () => localPlatform().clipboard.frontApp().catch(() => null);
+export const copyImage = (pngPath) => localService(clipboardApi).image(pngPath).catch(() => false);
+export const openPath = (target) => localService(openApi).open(target).catch(() => null);
+const frontApp = () => localService(clipboardApi).frontApp().catch(() => null);
 
 async function pasteInto(network, before) {
-  if (localPlatform().clipboard.observesFrontApp) {
+  if (localService(clipboardApi).observesFrontApp) {
     // Wait until the app in front is no longer Herdr: the browser came up.
     const front = await retry(13, () => frontApp(), { done: (app) => !(app && app === before), between: () => pause(0.5) });
     if (front && front === before) return false; // the browser never came up
     await pause(network.wait);
     if (front && (await frontApp()) !== front) return false; // you moved on: not into another app
-    return (await localPlatform().clipboard.paste(front)).state === "ok";
+    return (await localService(clipboardApi).paste(front)).state === "ok";
   }
   await pause(network.wait);
-  return (await localPlatform().clipboard.paste()).state === "ok";
+  return (await localService(clipboardApi).paste()).state === "ok";
 }
 
 export async function outputPath(name) {
-  const downloads = await localPlatform().files.test(paths.join(home(), "Downloads"), "directory").catch(() => false);
+  const downloads = await localService(fileApi).test(paths.join(home(), "Downloads"), "directory").catch(() => false);
   const dir = downloads ? paths.join(home(), "Downloads") : home();
   const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -237,7 +242,7 @@ export async function shareImage(network, make, workDir) {
   const { spec, text: words, name, title } = await make();
   const card = cardSvg(spec, palette());
   const png = await outputPath(name);
-  await localPlatform().files.mkdir(workDir);
+  await localService(fileApi).mkdir(workDir);
   await renderPng(card, paths.join(workDir, "share.svg"), png);
   const where = png.replace(/^.*\/(Downloads\/)?/, (m, d) => (d ? "Downloads/" : ""));
   if (!network) {
@@ -247,14 +252,14 @@ export async function shareImage(network, make, workDir) {
   }
   const n = NETWORKS[network];
   const copied = await copyImage(png);
-  const before = localPlatform().clipboard.observesFrontApp ? await frontApp() : null;
+  const before = localService(clipboardApi).observesFrontApp ? await frontApp() : null;
   await openPath(n.url(words));
   const pasted = copied && await pasteInto(n, before);
-  const key = localPlatform().clipboard.pasteKey;
+  const key = localService(clipboardApi).pasteKey;
   notify(pasted
     ? { title: `Your ${n.name} post has the image and the text`, body: `Check it and post. Not there? It is on the clipboard: ${key}. Saved in ${where}.`, level: "success" }
     : copied
-      ? { title: `Paste the image into your ${n.name} post: ${key}`, body: `It is on the clipboard and in ${where}.${localPlatform().clipboard.permissionNote}`, level: "success" }
+      ? { title: `Paste the image into your ${n.name} post: ${key}`, body: `It is on the clipboard and in ${where}.${localService(clipboardApi).permissionNote}`, level: "success" }
       : { title: `Attach ${paths.basename(png)} to your ${n.name} post`, body: png, level: "success" });
   if (!copied) await openPath(png.replace(/\/[^/]+$/, ""));
 }

@@ -2,7 +2,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
 import { modScript } from "../scripts/mod-source.mjs";
@@ -29,7 +29,7 @@ export async function load(file, names, host = {}) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host });
+  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, setShared() {}, exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host });
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
