@@ -9,10 +9,10 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
-import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from "./layout.js";
+import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { FIND } from "./find-key.js";
-import { rollupState, headerHold } from "./ghchecks.js";
+import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -119,7 +119,8 @@ const PR_FIELDS = "number,state,isDraft,mergeable,mergeStateStatus,reviewDecisio
 // Open pull request for the header. `hold` is why it cannot merge. Permission is not a header fact.
 export function digestPr(view) {
   if (!view?.number || view.state !== "OPEN") return null;
-  return { number: view.number, state: view.state, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) };
+  const facts = prFacts(view);
+  return facts ? { ...facts, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) } : null;
 }
 
 // `run(cmd, args)` resolves with stdout, or null when the command fails.
@@ -143,15 +144,58 @@ export async function readDigest(cwd, run) {
   return { files, ...parseShortstat(stat), ahead, pushed, pr };
 }
 
-export function digestTip(d) {
-  if (!d) return "";
-  const n = (k, one, many) => `${d[k]} ${d[k] === 1 ? one : many}`;
-  const parts = [
-    d.files ? `${n("files", "changed file", "changed files")} (+${d.add} −${d.del})` : null,
-    d.ahead ? `${n("ahead", "commit", "commits")} ${d.pushed ? "not pushed" : "not on the default branch"}` : null,
-    d.pr ? `pull request #${d.pr.number}${d.pr.hold ? `, ${d.pr.hold[0].toLowerCase()}${d.pr.hold.slice(1)}` : d.pr.checks ? `, checks ${d.pr.checks}` : ""}` : null,
-  ].filter((x) => x !== null);
-  return parts.length ? `In its folder now: ${parts.join("; ")}.` : "";
+const words = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+export function readClock(at) {
+  if (at == null || !Number.isFinite(Number(at))) return null;
+  const date = new Date(at);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+const readNote = (working, at) => {
+  const clock = working ? readClock(at) : null;
+  return clock ? ` · read ${clock}` : "";
+};
+
+const DOTS = new Set(["blocked", "working", "done"]);
+
+export function digestSegments(d, { working = false } = {}) {
+  if (!d) return [];
+  const read = readNote(working, d.at);
+  const tone = working ? "dim" : "muted";
+  const openPr = d.pr?.number && String(d.pr.state ?? "OPEN").toUpperCase() === "OPEN" ? d.pr : null;
+  const line = openPr ? prLine(d) : null;
+  const files = d.files > 0 ? {
+    kind: "files", count: words(d.files, "file", "files"), tone,
+    diff: d.add > 0 || d.del > 0 ? `+${d.add ?? 0} −${d.del ?? 0}` : null, diffTone: "dim",
+    tip: `Open the diff${read}`, open: { panel: "files", page: "changes" },
+  } : null;
+  const commits = d.ahead > 0 ? {
+    kind: "commits", count: words(d.ahead, "commit", "commits"), tone,
+    tip: `${words(d.ahead, "commit", "commits")} not on GitHub${read}`, open: { panel: "pr", section: "push" },
+  } : null;
+  const pr = openPr ? {
+    kind: "pr", number: `#${openPr.number}`, numberTone: "muted",
+    verdict: line?.text ?? null, verdictTone: line?.tone ?? null, dot: DOTS.has(line?.tone) ? line.tone : null, tone: line?.tone ?? null,
+    tip: line?.text ?? `Pull request #${openPr.number}`,
+    open: { panel: "pr", section: line?.section ?? null, check: line?.check ?? null },
+  } : null;
+  return [files, commits, pr].filter((part) => part);
+}
+
+export function digestOpen(segment, cwd) {
+  const open = segment?.open;
+  if (!open?.panel) return null;
+  if (open.panel === "files") return { panel: "files", page: "changes", cwd: cwd ?? null };
+  return { panel: "pr", section: open.section ?? null, check: open.check ?? null };
+}
+
+export function headerTools({ focused, status, canSend, canSleep }) {
+  const rest = Boolean(focused) && (status === "done" || status === "idle");
+  return {
+    sleep: canSleep ? (rest ? "shown" : "hover") : "hidden",
+    send: canSend && status !== "blocked" ? (rest ? "shown" : "hover") : "hidden",
+  };
 }
 
 const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
@@ -385,18 +429,33 @@ export default class Strip extends View {
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(15));
   }
 
-  digestBadge(t, pane, d, on) {
-    const tone = on ? t.muted : t.dim;
-    const held = d.pr?.hold, bad = held && /failing|Conflicts|Changes requested/.test(held);
-    const ci = held ? (bad ? t.blocked : t.working) : { failing: t.blocked, running: t.working, passing: t.done }[d.pr?.checks] ?? null;
-    return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).gap(8).items_center().text_size(11.5).text_color(tone).tooltip(digestTip(d))
-      .when(d.files > 0, (el) => el.child(h_flex().flex_none().gap(4)
-        .child(`${d.files} ${d.files === 1 ? "file" : "files"}`)
-        .when(d.add > 0 || d.del > 0, (el) => el.child(div().text_color(t.dim).child(`+${d.add} −${d.del}`)))))
-      .when(d.ahead > 0, (el) => el.child(div().flex_none().child(`${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}`)))
-      .when(d.pr?.state === "OPEN", (el) => el.child(h_flex().flex_none().gap(4).items_center()
-        .when(Boolean(ci), (el) => el.child(div().size(6).rounded_full().bg(ci)))
-        .child(`#${d.pr.number}`)));
+  digestBar(t, p, segments, strip) {
+    const pane = p.pane;
+    return h_flex().id(`digest-${pane}`).flex_shrink(1).min_w(0).gap(8).items_center()
+      .children(segments.map((seg) => this.digestSegment(t, p, seg, strip)));
+  }
+
+  digestSegment(t, p, seg, strip) {
+    const pane = p.pane;
+    const ink = seg.kind === "pr" ? t.muted : t[seg.tone];
+    return h_flex().id(`digest-${seg.kind}-${pane}`).flex_none().gap(4).items_center().px(4).py(2).rounded(6)
+      .text_size(11.5).text_color(ink).whitespace_nowrap().cursor_pointer().tooltip(seg.tip)
+      .hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => {
+        cx.stop_propagation();
+        const open = digestOpen(seg, p.cwd);
+        if (!open) return;
+        run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane });
+        const stamped = open.panel === "pr" ? { ...open, at: Date.now() } : open;
+        commitLayout({ panel: { id: open.panel, type: "block", content: { mod: "kanso-panel", props: stamped } } });
+      })
+      .when(seg.kind !== "pr", (el) => el
+        .child(div().flex_none().child(seg.count))
+        .when(Boolean(seg.diff), (el) => el.child(div().flex_none().text_color(t[seg.diffTone]).child(seg.diff))))
+      .when(seg.kind === "pr", (el) => el
+        .when(Boolean(seg.dot), (el) => el.child(div().size(6).flex_none().rounded_full().bg(t[seg.dot])))
+        .child(div().flex_none().text_color(t[seg.numberTone]).child(seg.number))
+        .when(Boolean(seg.verdict), (el) => el.child(div().flex_none().text_color(t[seg.verdictTone]).child(`· ${seg.verdict}`))));
   }
 
   renderHead() {
@@ -420,8 +479,7 @@ export default class Strip extends View {
     const col = cols.findIndex((c) => c.panes?.includes(pane));
     const pinned = Boolean(cols[col]?.pin);
     const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
-    const d = st !== "working" ? shared(DIGEST)?.[pane] : null;
-    const digest = d && (d.files > 0 || d.ahead > 0 || d.pr?.state === "OPEN") ? d : null;
+    const segments = digestSegments(shared(DIGEST)?.[pane], { working: st === "working" });
     const canSend = Boolean(p.terminal) && all.some((q) => q.pane !== pane && q.terminal && (q.program?.agent || q.status));
     return h_flex().id(`pane-head-${pane}`).size_full().pl(14).pr(6).gap(10).items_center().text_size(12.5).relative()
       .rounded_t(RADIUS)
@@ -460,10 +518,10 @@ export default class Strip extends View {
       .child(div().flex_none().truncate().max_w(260).text_size(12.5).when(ink, (el) => el.font_medium()).text_color(ink ? t.foreground : t.muted).child(name))
       .when(Boolean(p.cwd), (el) => el.child(this.badge(t, folder(p.cwd), null, ink)))
       .when(Boolean(p.branch), (el) => el.child(this.badge(t, p.branch, "mods/kanso-chrome/icons/branch.svg", ink)))
-      .when(Boolean(digest), (el) => el.child(this.digestBadge(t, pane, digest, ink)))
+      .when(segments.length > 0, (el) => el.child(this.digestBar(t, p, segments, strip)))
       .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
       .child(div().flex_1())
-      .child(this.tools(t, p, { strip, pinned, canSend, pin, shown: this.hovered && !drag }))
+      .child(this.tools(t, p, { strip, pinned, canSend, pin, shown: this.hovered && !drag, status: st, focused: on }))
       .when(st === "working", (el) => el.child(stateMark(t, "working")))
       .when(st === "blocked", (el) => el.child(h_flex().flex_none().gap(6).items_center().text_size(11.5).font_medium().text_color(t.foreground)
         .child(stateMark(t, "blocked")).child("Needs you")))
@@ -472,25 +530,33 @@ export default class Strip extends View {
   }
 
   // The tools group is always in the row, 0 wide and clear until hovered, so it eases open natively and the state mark never moves.
-  tools(t, p, { strip, pinned, canSend, pin, shown }) {
+  tools(t, p, { strip, pinned, canSend, pin, shown, status, focused }) {
     const pane = p.pane;
-    const list = [
+    const canSleep = Boolean(p.terminal && p.tab && agents().some((x) => x.address === p.terminal));
+    const place = headerTools({ focused, status, canSend, canSleep });
+    const sleep = place.sleep === "hidden" ? null : this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this agent");
+    const send = place.send === "hidden" ? null : this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent");
+    const hover = [
       strip ? this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground)) : null,
-      p.terminal && p.tab && agents().some((x) => x.address === p.terminal) ? this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this agent") : null,
-      canSend ? this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent") : null,
+      place.sleep === "hover" ? sleep : null,
+      place.send === "hover" ? send : null,
       p.cwd ? this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p)) : null,
       this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }),
       this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }),
       this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }),
       this.button(t, `ph-x-${pane}`, "close", "pane.close", { pane }),
     ].filter(Boolean);
-    const wide = list.length * TOOL + (list.length - 1) * TOOL_GAP;
-    return h_flex().id(`ph-tools-${pane}`).flex_none().h_full().items_center().gap(TOOL_GAP).overflow_hidden()
+    const pinnedTools = [place.sleep === "shown" ? sleep : null, place.send === "shown" ? send : null].filter(Boolean);
+    const wide = hover.length * TOOL + Math.max(0, hover.length - 1) * TOOL_GAP;
+    const group = h_flex().id(`ph-tools-${pane}`).flex_none().h_full().items_center().gap(TOOL_GAP).overflow_hidden()
       .w(shown ? wide : 0).opacity(shown ? 1 : 0)
       .transition("width", TOOLS_EASE).transition("opacity", TOOLS_EASE)
       // The row puts its gap on both sides of the group; closed, one of them is taken back.
-      .ml(-TOOL_GAP)
-      .children(list);
+      .when(!pinnedTools.length || !shown, (el) => el.ml(-TOOL_GAP))
+      .children(hover);
+    return pinnedTools.length
+      ? h_flex().id(`ph-rest-${pane}`).flex_none().h_full().items_center().gap(TOOL_GAP).children([...pinnedTools, group])
+      : group;
   }
 
   tab() {
@@ -610,19 +676,18 @@ export default class Strip extends View {
   }
 
 
-  // A digest is read once when an agent stops working, and goes when it starts again or its pane does.
+  // A digest is read once when an agent stops working, and stays until the pane closes.
   watchDigests(cx) {
     const store = shared(DIGEST) ?? {};
     const all = panes();
-    const working = all.filter((p) => p.terminal && p.cwd && p.status).flatMap((p) => {
+    for (const p of all) {
+      if (!p.terminal || !p.cwd || !p.status) continue;
       const was = this.lastStatus.get(p.pane);
       this.lastStatus.set(p.pane, p.status);
-      if (p.status === "working") return p.pane in store ? [p.pane] : [];
-      if ((was === "working" || (was === undefined && !(p.pane in store))) && !this.digesting.has(p.pane)) this.digest(p, cx);
-      return [];
-    });
+      if (p.status !== "working" && (was === "working" || (was === undefined && !(p.pane in store))) && !this.digesting.has(p.pane)) this.digest(p, cx);
+    }
     const live = new Set(all.map((p) => p.pane));
-    const gone = new Set([...working, ...Object.keys(store).filter((id) => !live.has(id))]);
+    const gone = new Set(Object.keys(store).filter((id) => !live.has(id)));
     for (const id of [...this.lastStatus.keys()]) if (!live.has(id)) this.lastStatus.delete(id);
     if (gone.size) setShared(DIGEST, Object.fromEntries(Object.entries(store).filter(([id]) => !gone.has(id))));
   }
@@ -634,8 +699,7 @@ export default class Strip extends View {
     cx.spawn(async () => {
       try {
         const d = await readDigest(p.cwd, run);
-        // It went back to work meanwhile: what it left is no longer the news.
-        if (panes().find((q) => q.pane === p.pane)?.status === "working") return;
+        if (!panes().some((q) => q.pane === p.pane)) return;
         setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: d ? { ...d, at: Date.now() } : null });
       } finally { this.digesting.delete(p.pane); }
     });

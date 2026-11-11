@@ -15,6 +15,7 @@ release.
 
 ### Changed
 
+- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
 - Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
 - Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
 - A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.

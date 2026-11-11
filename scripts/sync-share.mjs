@@ -22,8 +22,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
   // Order of a beta, a release candidate and a stable tag, shared with that updater.
   { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js"] },
-  // A pull request's checks, read one way in the PR panel and the header's digest.
-  { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
+  // A pull request's checks, read one way in the PR panel, the header and the sidebar.
+  { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js", "kanso/mods/kanso-spaces/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
   { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.

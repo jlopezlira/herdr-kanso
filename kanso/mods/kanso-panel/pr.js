@@ -3,8 +3,8 @@ import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
-import { exec, knownAgents, notify, openOverlay, run, theme, setShared, shared, window, layout } from "herdr";
+import { v_flex, h_flex, Button, Popover, Input, InputState, TextView, ScrollHandle } from "gpui-base";
+import { exec, knownAgents, notify, openOverlay, run, theme, setShared, shared, window, layout, props } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
@@ -111,6 +111,20 @@ const PROMPTS = {
   conflicts: (pr) => `Resolve the conflicts of pull request #${pr.number} (${pr.url}) with its base branch ${pr.baseRefName}. First confirm this checkout is on ${pr.headRefName}; if it isn't, prepare the branch in its own worktree. Bring it up to date using this repository's convention, preserve the intent of both sides, and run the relevant checks before pushing.`,
 };
 const TASK_NAMES = { explain: "Explain", feedback: "Feedback", conflicts: "Conflicts" };
+const PLACED = { draft: "hero", behind: "hero", review: "review", threads: "threads", checks: "checks", conflicts: "conflicts" };
+
+export function sectionIndex(section, ids) {
+  const id = PLACED[section];
+  if (!id) return null;
+  const at = (ids ?? []).indexOf(id);
+  return at < 0 ? null : at;
+}
+
+export function checksFirst(checks, name) {
+  if (!name) return checks;
+  const named = checks.filter((c) => c.name === name);
+  return named.length ? [...named, ...checks.filter((c) => c.name !== name)] : checks;
+}
 
 export class PullRequest {
   constructor(db) { this.armed = new Armed(); this.db = db; } // Merge asks for a second press
@@ -126,7 +140,13 @@ export class PullRequest {
     this.picker = null; this.candidates = null; this.query = "";
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
-    this.jumpUrl = props.url ?? null;
+    this.section = props.section ?? null;
+    this.check = props.check ?? null;
+    this.asked = props.at ?? null;
+    this.landed = null;
+    this.scroll = typeof ScrollHandle !== "undefined" ? ScrollHandle.new() : null;
+    this.jumpUrl = props.section === "push" ? null : (props.url ?? null);
+    if (props.section) this.keptUrl = null;
     this.refresh(cx);
     cx.timer.every(TICK_MS, (cx) => this.onPoll(cx));
   }
@@ -240,7 +260,7 @@ export class PullRequest {
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
-      this.openPrs = []; this.selected = this.jumpUrl ?? this.keptUrl ?? null; this.remembered = !this.jumpUrl && Boolean(this.keptUrl);
+      this.openPrs = []; this.selected = this.jumpUrl ?? (this.section === "push" ? null : this.keptUrl) ?? null; this.remembered = !this.jumpUrl && this.section !== "push" && Boolean(this.keptUrl);
       this.home = null; this.branchUrl = null; this.outside = false;
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
@@ -1012,7 +1032,7 @@ export class PullRequest {
 
   checksList(c) {
     const checks = this.checks();
-    const sorted = checks.toSorted((a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state));
+    const sorted = checksFirst(checks.toSorted((a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state)), this.check);
     const open = this.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
     const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
@@ -1164,17 +1184,6 @@ export class PullRequest {
   body(c, narrow) {
     if (this.inboxOn && this.inboxOpen) return this.inboxPage(c);
     if (this.listing) return this.listPage(c);
-    if (this.pr) {
-      return v_flex().w_full().gap(narrow ? 36 : 48)
-        .child(this.hero(c, narrow))
-        .child(this.description(c))
-        .child(this.people(c))
-        .when(this.checks().length > 0, (el) => el.child(this.checksList(c)))
-        .when(this.threads.length > 0, (el) => el.child(this.discussion(c)))
-        .child(this.agent(c))
-        .child(this.files(c))
-        .child(this.footnote(c));
-    }
     if (this.outside) return this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
     if (this.missing) return this.waiting(c, this.missing.title, this.missing.detail);
     if (this.error) return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => this.again(cx), c));
@@ -1189,18 +1198,65 @@ export class PullRequest {
     return this.loading || !this.context ? this.skeleton(c, narrow) : this.waiting(c, "No folder", "Focus a pane inside a repository.");
   }
 
+  prNodes(c, narrow) {
+    const checks = this.checks();
+    return [
+      ["header", this.header(c, narrow).id("header")],
+      ["hero", this.hero(c, narrow).id("hero")],
+      ["description", this.description(c).id("description")],
+      ["review", this.people(c).id("review")],
+      checks.length ? ["checks", this.checksList(c).id("checks")] : null,
+      this.threads.length ? ["threads", this.discussion(c).id("threads")] : null,
+      ["conflicts", this.agent(c).id("conflicts")],
+      ["files", this.files(c).id("files")],
+      ["note", this.footnote(c).id("note")],
+    ].filter((part) => part);
+  }
+
+  noteAsk(cx) {
+    if (typeof props !== "function") return;
+    const given = props() ?? {};
+    if (given.at == null || given.at === this.asked) return;
+    this.asked = given.at;
+    this.section = given.section ?? null;
+    this.check = given.check ?? null;
+    this.landed = null;
+    if (given.section !== "push") return;
+    this.selected = null;
+    this.jumpUrl = null;
+    this.keptUrl = null;
+    this.refresh(cx);
+  }
+
+  land(ids) {
+    if (!this.pr) return;
+    const mark = `${this.pr.number}:${this.section ?? ""}:${this.check ?? ""}`;
+    if (this.landed === mark) return;
+    const at = sectionIndex(this.section, ids);
+    if (at == null) {
+      if (!this.loading) this.landed = mark;
+      return;
+    }
+    this.landed = mark;
+    this.scroll?.scroll_to_item(at);
+  }
+
   render(cx) {
     this.comeForward(cx);
+    this.noteAsk(cx);
     if (key() !== this.context) this.refresh(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
-    const body = this.body(c, narrow);
-
-    return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
+    const nodes = this.pr && !(this.inboxOn && this.inboxOpen) && !this.listing ? this.prNodes(c, narrow) : null;
+    if (nodes) this.land(nodes.map(([id]) => id));
+    const body = nodes ? nodes.map(([, el]) => el) : [this.header(c, narrow), this.body(c, narrow)];
+    const pad = narrow ? G.lg : 32;
+    return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_hidden()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(this.header(c, narrow))
-          .child(body)));
+      .child(h_flex().flex_1().min_h(0).w_full().justify_center().px(pad).overflow_hidden()
+        .child(v_flex().id("pr-scroll").h_full().w_full().max_w(1080).overflow_y_scrollbar()
+          .pt(narrow ? G.lg : 28).pb(narrow ? G.lg : 28).gap(narrow ? 36 : 48)
+          .when(Boolean(this.scroll), (el) => el.track_scroll(this.scroll))
+          .children(body)));
   }
 }
