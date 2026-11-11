@@ -185,22 +185,24 @@ test("a wake already coming back says so", async () => {
   assert.equal(s.error, "Coming back");
 });
 
-test("a tab with an agent and two child terminals sleeps the panes only", async () => {
+test("readTab drops an agent's hc-run children on purpose, both reads match, and the tab sleeps", async () => {
   const asked = [];
   const saved = [];
   const closed = [];
+  const reads = [];
   const state = new Map();
   const panes = () => [
     { pane: "pNacho", tab: "tb", terminal: "t7q", cwd: "/Users/jj/Documents/Agile" },
     { pane: "pShell", tab: "tb", terminal: "tsh", cwd: "/Users/jj/Documents/Agile" },
   ];
+  // Four terminals: the agent, the shell, and two the agent started (parent set, no pane).
   const terminals = () => [
     { address: "t7q" },
     { address: "tsh" },
     { address: "cx1", parent: "t7q" },
     { address: "cx2", parent: "t7q" },
   ];
-  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host({
+  const { Sleep, sameTabs } = await load("kanso-sleep/main.js", ["Sleep", "sameTabs"], host({
     closed,
     panes,
     terminals,
@@ -219,18 +221,28 @@ test("a tab with an agent and two child terminals sleeps the panes only", async 
   s.space = space;
   s.refresh = async () => {};
   s.store = { asleep: async () => [], sleep: async (_project, intent) => { saved.push(intent); return "as1"; } };
+  const readTabs = s.readTabs.bind(s);
+  s.readTabs = async (tabs) => {
+    const list = await readTabs(tabs);
+    reads.push(list);
+    return list;
+  };
   const { cx, drain } = context();
   s.startSleep(cx, false, "tb", null);
   await drain();
-  assert.deepEqual(closed, ["close"]);
+  const rows = (list) => list[0].capture.cols.flatMap((c) => c.panes);
+  assert.equal(reads.length, 2);
+  assert.equal(rows(reads[0]).length, 2, "the dialog's two rows are the panes; the children have no pane and are dropped");
+  assert.deepEqual(rows(reads[0]).map((p) => p.terminal), ["t7q", "tsh"]);
+  assert.equal(sameTabs(reads[0], reads[1]), true, "dropping the children on both reads leaves them equal");
+  assert.deepEqual(closed, ["close"], "the tab sleeps");
   assert.equal(s.error, null);
-  const panesOf = saved[0].cols.flatMap((c) => c.panes);
-  assert.deepEqual(panesOf.map((p) => p.terminal), ["t7q", "tsh"]);
-  assert.equal(panesOf[0].name, "Nacho");
-  assert.equal(panesOf[0].pid, 10);
-  assert.equal(panesOf[1].argv, null);
-  assert.equal(asked.includes("cx1"), false);
-  assert.equal(asked.includes("cx2"), false);
+  const kept = saved[0].cols.flatMap((c) => c.panes);
+  assert.deepEqual(kept.map((p) => p.terminal), ["t7q", "tsh"]);
+  assert.equal(kept[0].name, "Nacho");
+  assert.equal(kept[0].pid, 10);
+  assert.equal(kept[1].argv, null);
+  assert.deepEqual(asked.filter((address) => address === "cx1" || address === "cx2"), []);
   assert.equal(asked.includes("t7q"), true);
   assert.equal(asked.includes("tsh"), true);
 });

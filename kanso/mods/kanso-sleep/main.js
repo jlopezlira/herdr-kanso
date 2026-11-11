@@ -41,14 +41,17 @@ const shapeOf = (list) => JSON.stringify(list.map((r) => [r.tab.id, r.capture.co
 export const sameTabs = (a, b) => shapeOf(a) === shapeOf(b);
 const STEP_MS = 15_000;
 const GOING = "Going to sleep";
+const NOTHING = "Nothing runs here to put to sleep.";
+const TAB_LATE = "This tab did not answer.";
+const cantSleepNow = (why) => `It can't sleep now: ${why}.`;
 
 // null: the order may go on. Any other string is the sentence a silent return would hide.
 export function sleepRefusal({ view, busy, ordering, shown }) {
   if (view !== "sleep") return "Sleep is not open.";
   if (busy || ordering) return busy || GOING;
-  if (!shown?.length) return "Nothing runs here to put to sleep.";
+  if (!shown?.length) return NOTHING;
   const stop = shown.find((r) => r.blocker || r.error);
-  return stop ? `It can't sleep now: ${stop.blocker || stop.error}.` : null;
+  return stop ? cantSleepNow(stop.blocker || stop.error) : null;
 }
 
 export function freeName(name, taken) {
@@ -297,18 +300,18 @@ export default class Sleep extends View {
       this.busy = GOING;
       cx.notify();
       const read = await this.take(cx, () => this.readTabs(this.sleepTabs ?? []));
-      if (this.halt(read, "This tab did not answer.")) return;
+      if (this.halt(read, TAB_LATE)) return;
       const list = read.value;
       const stop = list.find((r) => r.blocker || r.error);
       if (stop || !sameTabs(shown, list)) {
         this.reveal();
         this.sleepers = list; this.view = "sleep"; this.busy = null;
-        this.error = stop ? `It can't sleep now: ${stop.blocker || stop.error}.` : "The tabs changed since this opened; here they are as they are now.";
+        this.error = stop ? cantSleepNow(stop.blocker || stop.error) : "The tabs changed since this opened; here they are as they are now.";
         return;
       }
       const machine = this.space?.machine ?? null;
       const down = machine && machines().find((m) => m.name === machine)?.layout === "unavailable" ? "Unreachable" : null;
-      if (down) { this.reveal(); this.view = "sleep"; this.busy = null; this.error = `It can't sleep now: ${down}.`; return; }
+      if (down) { this.reveal(); this.view = "sleep"; this.busy = null; this.error = cantSleepNow(down); return; }
       const placed = await this.take(cx, () => this.storeFor(machine));
       if (this.halt(placed, "That computer did not answer.")) return;
       const store = placed.value;
@@ -357,7 +360,7 @@ export default class Sleep extends View {
     cx.spawn(async (cx) => {
       try {
         const read = await this.take(cx, () => this.readTabs(tabs));
-        if (this.halt(read, "This tab did not answer.")) return;
+        if (this.halt(read, TAB_LATE)) return;
         this.sleepers = read.value;
         const blocked = !this.sleepers.length || this.sleepers.some((r) => r.blocker || r.error);
         if (!whole && blocked) { this.reveal(); this.busy = null; }
@@ -679,9 +682,9 @@ export default class Sleep extends View {
         .children(list.map((r, k) => v_flex().pt(14).gap(4)
           .when(whole, (el) => el.child(div().pb(3).text_size(11.5).text_color(t.dim).child(r.name)))
           .children(panesOf(r).map((q, j) => line(q, starts[k] + j)))))
-        .when(this.sleepers !== null && !list.length && !this.error, (el) => el.child(note("Nothing runs here to put to sleep.")))
+        .when(this.sleepers !== null && !list.length && !this.error, (el) => el.child(note(NOTHING)))
         .when(others.length > 0, (el) => el.child(note(`${others.join(", ")} will stop now and start fresh on wake.`)))
-        .when(Boolean(stop) && !this.error, (el) => el.child(note(`It can't sleep now: ${stop?.blocker || stop?.error}.`, t.blocked)))
+        .when(Boolean(stop) && !this.error, (el) => el.child(note(cantSleepNow(stop.blocker || stop.error), t.blocked)))
         .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
         .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
         .child(h_flex().pt(18).gap(8).justify_end()

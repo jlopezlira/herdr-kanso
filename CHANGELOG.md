@@ -22,6 +22,10 @@ release.
 
 - The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
 
+### Fixed
+
+- Putting a tab to sleep no longer stays on the dialog with only Cancel. While it goes to sleep the dialog says so. If a step does not answer, the tab comes back and one sentence says what did not answer.
+
 ## [3.30.0] - 2026-11-11
 
 ### Added
@@ -48,7 +52,6 @@ release.
 
 ### Fixed
 
-- Putting a tab to sleep no longer stays on the dialog with only Cancel. While it goes to sleep the dialog says so. If a step does not answer, the tab comes back and one sentence says what did not answer.
 - A computer that never answers no longer freezes the machine list, the sidebar keys, or keeping that computer awake. The first look cannot hold up the sidebar's first draw.
 - The pull request panel stays on this branch. Reviews waiting on you stay on the "N to review" pill.
 - Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
