@@ -5,7 +5,9 @@ import { load, clone, temporary, exec } from "./helpers.mjs";
 
 const never = () => new Promise(() => {});
 const turn = () => new Promise((resolve) => setImmediate(resolve));
-function within(promise, ms = 2000) {
+// Only a guard against hanging: opening the schema alone takes about 4 s on Windows CI.
+const SETTLE_LIMIT_MS = 20000;
+function within(promise, ms = SETTLE_LIMIT_MS) {
   let timer;
   return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("never settled")), ms); })]).finally(() => clearTimeout(timer));
 }
