@@ -7,20 +7,21 @@ import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gp
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals } from "herdr";
 import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
+import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
-import { STATES, checkState, onePerJob, checkSummary, runIdOf } from "./ghchecks.js";
+import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
-import { verdictCard } from "./pr-body.js";
+import { VIEW } from "./pr-body.js";
+import { drawHero, drawEmpty, footOf, listedRow } from "./pr-view.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
 import { awayShown } from "./since-left-model.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
-import { CALL_MS, TICK_MS, ageOf, authFresh, bounded, footLine, heldView, logDue, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
+import { CALL_MS, TICK_MS, ageOf, authFresh, bounded, heldView, logDue, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
 const keepsFacts = () => awayShown(shared("kanso.hidden"));
 
@@ -64,9 +65,17 @@ const openUrl = (url) => localService(openApi).open(url).catch(() => { });
 function checkOf(c) {
   const state = checkState(c);
   const workflowName = c.workflowName || "";
-  const times = { runId: c.__typename === "StatusContext" ? null : runIdOf(c), startedAt: c.startedAt ?? null, completedAt: c.completedAt ?? null, workflowName };
-  if (c.__typename === "StatusContext") return { name: c.context, url: c.targetUrl, state, workflow: "", ...times, runId: null };
-  return { name: c.name, workflow: workflowName && workflowName !== c.name ? workflowName : "", url: c.detailsUrl, state, ...times };
+  const status = c.__typename === "StatusContext";
+  return {
+    name: status ? c.context : c.name,
+    url: status ? c.targetUrl : c.detailsUrl,
+    state,
+    workflow: !status && workflowName && workflowName !== c.name ? workflowName : "",
+    runId: status ? null : runIdOf(c),
+    startedAt: c.startedAt ?? null,
+    completedAt: c.completedAt ?? null,
+    workflowName,
+  };
 }
 const checksIn = (rollup) => onePerJob(rollup).map(checkOf);
 const summaryOf = (checks) => checkSummary(checks.map((x) => x.state));
@@ -103,8 +112,7 @@ export class PullRequest {
   init(cx, props = {}) {
     this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
     this.expanded = { checks: false, files: false, body: false }; this.width = 368;
-    this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own, else the newest
-    this.fallback = false;
+    this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own
     this.listing = false; // the page of pull requests instead of the one shown
     this.tab = "open"; // that page's tab: "open", or "closed" (merged or closed, newest first)
     this.closedPrs = null; this.closedLoading = false;
@@ -209,9 +217,13 @@ export class PullRequest {
     } catch { return null; }
   }
 
+  forgetLog(next = null) {
+    this.logFor = next; this.failedLog = null; this.logParsed = null; this.logParsedFor = null;
+  }
+
   again(cx) {
     this.loadedAt = 0; this.inboxForce = true;
-    this.logFor = null; this.failedLog = null; this.logParsed = null; this.logParsedFor = null;
+    this.forgetLog();
     this.refresh(cx);
   }
   repo() { const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(this.pr?.url ?? ""); return m ? { o: m[1], r: m[2] } : null; }
@@ -232,14 +244,14 @@ export class PullRequest {
       this.openPrs = []; this.selected = this.jumpUrl ?? this.keptUrl ?? null; this.remembered = !this.jumpUrl && Boolean(this.keptUrl);
       this.home = null; this.branchUrl = null; this.outside = false;
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
-      this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
+      this.listing = false; this.tab = "open"; this.closedPrs = null;
       this.inboxOn = false; this.inbox = null; this.inboxOpen = this.jumpUrl ? false : null; this.inboxTab = "needs"; this.inboxForce = false;
       this.jumpUrl = null;
       this.permission = null; this.permissionRepo = null;
       this.threadsFor = null; this.stale = null; this.wait = null; this.freshAt = null;
       this.listed = false; this.openedList = false; this.host = null;
-      this.aheadCount = 0; this.behindCount = 0; this.subjects = []; this.baseBehind = null;
-      this.logFor = null; this.failedLog = null; this.logParsed = null; this.logParsedFor = null;
+      this.aheadCount = 0; this.behindCount = 0; this.subjects = []; this.subjectsFor = null; this.baseBehind = null; this.baseBehindFor = null;
+      this.forgetLog();
       this.sendShown = false; this.sendFor = null; this.listingOthers = false;
     }
     if (!cwd) return;
@@ -293,13 +305,13 @@ export class PullRequest {
         try { await this.readShown(context, want, open); }
         catch (e) { if (this.remembered) this.dropRemembered(); else failed(e); }
         if (key() === context && !this.pr && pushed?.state === "unpushed") {
-          if (!(pushed.ahead > 0)) {
-            const n = await this.commitCount(this.root, on);
-            if (key() === context) this.aheadCount = n;
+          const stamp = `${this.branch ?? ""}\0${pushed.ahead ?? 0}`;
+          if (this.subjectsFor !== stamp) {
+            this.subjectsFor = stamp;
+            const log = await this.git(["log", "-5", "--format=%s"], this.root, on).catch(() => null);
+            if (key() === context && this.subjectsFor === stamp && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
           }
-          const log = await this.git(["log", "-5", "--format=%s"], this.root, on).catch(() => null);
-          if (key() === context && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
-        } else if (key() === context) this.subjects = [];
+        } else if (key() === context) { this.subjects = []; this.subjectsFor = null; }
         return open;
       };
       const open = await read().catch((e) => { failed(e); return null; });
@@ -314,21 +326,17 @@ export class PullRequest {
   }
 
   facing() {
-    const active = typeof window === "function" ? window()?.active : undefined;
-    const node = typeof layout === "function" ? layout() : null;
-    return pollFacing(active, walkLayout(node, "panel-body")?.hidden);
+    return pollFacing(window()?.active, walkLayout(layout(), "panel-body")?.hidden);
   }
 
   readLog(cx) {
     if (!this.pr) return;
-    const view = this.view();
-    const stamp = view.logKey;
+    const stamp = this.view().logKey;
     if (!logDue({ facing: this.facing(), key: stamp, have: this.logFor ?? null })) return;
-    this.logFor = stamp; this.failedLog = null; this.logParsed = null; this.logParsedFor = null;
-    const runId = view.runId;
+    this.forgetLog(stamp);
     this.bind(cx);
     cx.spawn(async (cx) => {
-      const r = await this.gh(["run", "view", runId, "--log-failed"]).catch(() => null);
+      const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
       if (this.logFor !== stamp) return;
       if (r?.code === 0) this.failedLog = r.stdout ?? "";
       cx.notify();
@@ -386,13 +394,6 @@ export class PullRequest {
     if (this.inbox) this.inbox = { ...this.inbox, needs, yours: (this.inbox.yours ?? []).map(stamp), unseen: needs.filter(isNew).length };
   }
 
-  // gh pr create --web refuses a branch unless it sits exactly on a remote upstream.
-  async commitCount(cwd, on) {
-    const local = await this.git(["rev-list", "--count", "HEAD"], cwd, on).catch(() => null);
-    const n = Number(String(local?.stdout ?? "").trim());
-    return Number.isInteger(n) ? n : 0;
-  }
-
   async readPushed(cwd, on) {
     const [up, counts] = await Promise.all([
       this.git(["rev-parse", "--symbolic-full-name", "@{u}"], cwd, on).catch(() => null),
@@ -446,7 +447,7 @@ export class PullRequest {
     if (branchHasNone) {
       if (key() !== context || this.selected !== want) return;
       this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null;
-      this.branchUrl = null; this.fallback = false; this.threads = []; return;
+      this.branchUrl = null; this.threads = []; return;
     }
     const view = asked.view;
     if (view.code !== 0) {
@@ -461,10 +462,10 @@ export class PullRequest {
     this.remembered = false;
     if (this.pr?.url !== pr.url) {
       this.diffs = null; this.openFile = null; this.expanded = { ...this.expanded, body: false };
-      this.logFor = null; this.failedLog = null; this.logParsed = null; this.logParsedFor = null;
-      this.sendShown = false; this.sendFor = null; this.baseBehind = null;
+      this.forgetLog();
+      this.sendShown = false; this.sendFor = null; this.baseBehind = null; this.baseBehindFor = null;
     }
-    this.pr = pr; this.none = false; this.error = null; this.fallback = false;
+    this.pr = pr; this.none = false; this.error = null;
     this.freshAt = Date.now(); this.stale = null; this.wait = null;
     if (!want) this.branchUrl = pr.url;
     if (!this.home && !want) this.home = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(pr.url)?.[1] ?? null;
@@ -497,12 +498,16 @@ export class PullRequest {
         if (value && key() === context && this.pr?.url === pr.url) this.permission = value;
       }
     }
+    const behindStamp = `${pr.url}\0${pr.updatedAt ?? ""}`;
     if (String(pr.mergeStateStatus ?? "").toUpperCase() === "BEHIND" && this.root) {
-      const base = pr.baseRefName || "main";
-      const counted = await this.git(["rev-list", "--count", `HEAD..origin/${base}`], this.root, this.on).catch(() => null);
-      const n = Number(String(counted?.stdout ?? "").trim());
-      if (key() === context && this.pr?.url === pr.url) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
-    } else if (key() === context && this.pr?.url === pr.url) this.baseBehind = null;
+      if (this.baseBehindFor !== behindStamp) {
+        this.baseBehindFor = behindStamp;
+        const base = pr.baseRefName || "main";
+        const counted = await this.git(["rev-list", "--count", `HEAD..origin/${base}`], this.root, this.on).catch(() => null);
+        const n = Number(String(counted?.stdout ?? "").trim());
+        if (key() === context && this.pr?.url === pr.url && this.baseBehindFor === behindStamp) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
+      }
+    } else if (key() === context && this.pr?.url === pr.url) { this.baseBehind = null; this.baseBehindFor = null; }
   }
 
   loadClosed(cx) {
@@ -712,11 +717,11 @@ export class PullRequest {
   }
 
   rowState(p, c) {
-    const verdict = verdictOf({
-      kind: "pr", pr: p, checks: checksIn(p.statusCheckRollup), threads: [], permission: this.rowPermission(p),
-      agent: null, stale: false, baseBehind: null, log: null, now: Date.now(),
-    });
-    return { text: verdict.text, color: this.toneColor(c, verdict.tone) };
+    const sum = summaryOf(checksIn(p.statusCheckRollup));
+    const gate = p.mergeStateStatus || p.mergeable === "CONFLICTING" || p.isDraft
+      ? mergeReadiness(p, { permission: this.rowPermission(p), checks: sum }) : null;
+    const shown = gate && !gate.awaitingPermission ? gate : listHold(p, sum);
+    return { text: shown.text, color: toneColor(c, shown.tone) };
   }
 
   canSwitch() {
@@ -775,7 +780,7 @@ export class PullRequest {
 
   openPage(c, rows = null) {
     const finished = rows !== null;
-    const list = finished ? rows : this.openList(), shown = this.pr?.url, me = this.viewer;
+    const list = finished ? rows : this.openList(), me = this.viewer;
     const here = (p) => p.url === this.branchUrl || p.headRefName === this.branch;
     const mine = (p) => Boolean(me) && p.author?.login === me;
     const groups = [
@@ -783,36 +788,13 @@ export class PullRequest {
       ["Yours", list.filter((p) => !here(p) && mine(p))],
       [me ? "Others" : "Open", list.filter((p) => !here(p) && !mine(p))],
     ].filter(([, rows]) => rows.length);
-    const create = !finished && (this.fallback || this.none) && Boolean(this.branch) && !this.isBase();
+    const create = !finished && this.none && Boolean(this.branch) && !this.isBase();
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
-    const row = (p, i) => {
-      const on = p.url === shown;
-      const state = !finished ? this.rowState(p, c)
-        : p.state === "MERGED" ? { text: "Merged", color: c.violet } : { text: "Closed without merging", color: c.red };
-      const when = !finished ? `updated ${ago(p.updatedAt)}`
-        : p.state === "MERGED" ? `merged ${ago(p.mergedAt || p.updatedAt)}` : `closed ${ago(p.closedAt || p.updatedAt)}`;
-      const meta = [`#${p.number}`, mine(p) ? "you" : p.author?.login, when].filter(Boolean).join(" · ");
-      return Button.new(`pr-${finished ? "done" : "open"}-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
-        .selected(on)
-        .when(on, (el) => el.bg(c.selected))
-        .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-        .accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`)
-        .on_click((_e, cx) => this.choose(p, cx))
-        .child(v_flex().w_full().min_w(0).gap(4)
-          .child(h_flex().w_full().items_start().gap(G.md)
-            .child(div().flex_1().min_w(0).text_size(14).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
-            .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown"))))
-          .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
-          .child(h_flex().w_full().gap(G.sm).items_center()
-            .child(div().size(6).flex_none().rounded_full().bg(state.color))
-            .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
-            .when(p.additions !== undefined, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
-    };
     return v_flex().w_full().gap(G.xl)
       .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
         .child(section(c, title, String(rows.length)))
-        .children(rows.map((p, k) => row(p, firsts[g] + k)))))
+        .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
       .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
@@ -836,24 +818,14 @@ export class PullRequest {
       .child(div().text_size(12).text_color(c.text).child(label));
   }
 
-  readNote() {
-    return footLine({ wait: this.wait, stale: Boolean(this.stale), at: this.stale?.at, now: Date.now() }).text;
-  }
-
-  footnote(c) {
-    const line = footLine({ wait: this.wait, stale: Boolean(this.stale), at: this.stale?.at, now: Date.now() });
-    if (!line.text) return null;
-    return h_flex().gap(G.sm).items_center()
-      .child(div().text_size(T.small).text_color(c.dim).child(line.text))
-      .when(line.retry, (el) => el.child(quietLink("pr-retry", "Retry", (cx) => this.again(cx), c)));
-  }
+  readNote() { return footOf(this).text; }
 
   header(c, narrow) {
     const pr = this.pr, here = this.inboxOn && this.inboxOpen, pill = (this.listing || this.canSwitch()) && !here;
     const limited = this.inbox?.limitedUntil;
     const refreshed = this.readNote() ?? (limited ? `limited until ${limitLine(limited).match(/\d{2}:\d{2}/)?.[0]}` : null);
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
+      .child(div().truncate().text_size(narrow ? VIEW.title : T.page).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
@@ -887,7 +859,7 @@ export class PullRequest {
   bones(c, narrow = true) {
     const { header } = ghost(c);
     const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.background ?? c.canvas).text_color(c.text)
+    return v_flex().size_full().min_h(0).bg(c.background).text_color(c.text)
       .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(G.lg)
           .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
@@ -910,15 +882,6 @@ export class PullRequest {
       .when(Boolean(action), (el) => el.child(h_flex().pt(G.xs).child(action)));
   }
 
-  toneColor(c, tone) {
-    if (tone === "blocked") return c.blocked || c.red;
-    if (tone === "working") return c.working || c.yellow;
-    if (tone === "done") return c.done || c.green;
-    if (tone === "violet") return c.violet;
-    if (tone === "muted") return c.muted || c.dim;
-    return c[tone] || c.dim;
-  }
-
   place() {
     return tilde(this.cwd) || "~";
   }
@@ -931,7 +894,6 @@ export class PullRequest {
   }
 
   frontAgent() {
-    if (typeof focused !== "function" || typeof panes !== "function" || typeof terminals !== "function") return null;
     const address = focused()?.terminal;
     if (!address) return null;
     const term = terminals().find((item) => item.address === address) ?? null;
@@ -968,66 +930,32 @@ export class PullRequest {
 
   view() { return verdictOf(this.scene()); }
 
-  verdict(c) {
-    const v = this.view();
-    return { text: v.text, color: this.toneColor(c, v.tone) };
+  openLink(url) { openUrl(url); }
+
+  hero(c) { return drawHero(this, c); }
+
+  send(cx) {
+    if (this.busy) return;
+    const scene = this.scene(), verdict = verdictOf(scene), text = sendText(scene, verdict);
+    const step = sendStep(Boolean(this.sendShown) && this.sendFor === text, text);
+    if (step.show) { this.sendShown = true; this.sendFor = text; cx.notify(); return; }
+    if (!step.deliver) return;
+    const address = this.frontAgent()?.address;
+    if (!address) { this.note = "Not sent: no agent in front"; cx.notify(); return; }
+    this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
+    cx.spawn(async (cx) => {
+      try {
+        const sent = await deliver(address, text, "you");
+        if (sent?.code !== 0) this.note = `Not sent: ${String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]}`;
+      } catch (e) { this.note = `Not sent: ${String(e?.message ?? e)}`; }
+      finally { this.busy = null; cx.notify(); }
+    });
+    cx.notify();
   }
 
-  canMerge() {
-    const action = this.view().primary;
-    return action?.id === "pr-merge" && action.acts !== false && !action.disabled;
-  }
+  openChecks(cx) { this.expanded = { ...this.expanded, checks: true }; this.setDetails(cx, true); }
 
-  scopeText() {
-    const repo = (this.home ?? "").split("/").filter(Boolean).at(-1) || this.repo()?.r || "";
-    const flow = this.pr ? `${this.pr.headRefName} → ${this.pr.baseRefName}` : (this.branch || "");
-    if (!repo && !this.on) return "";
-    return [this.on, repo, flow].filter(Boolean).join(" · ");
-  }
-
-  scopeRow(c) {
-    const text = this.scopeText();
-    if (!text && !this.pr) return null;
-    return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().min_w(0).truncate().text_size(12).text_color(c.dim).child(text))
-      .when(Boolean(this.pr), (el) => el.child(div().flex_none().text_size(12).text_color(c.dim).child(`#${this.pr.number}`)));
-  }
-
-  actionLabel(action) {
-    if (this.busy === action.busy) return action.busyLabel || action.label;
-    if (action.armed && this.armed.is(action.target)) return action.press;
-    return action.label;
-  }
-
-  actionButton(c, action) {
-    const disabled = !action?.acts || Boolean(this.busy);
-    const hot = Boolean(action?.armed) && this.armed.is(action.target) && !disabled;
-    const fill = hot ? c.accent : c.primary;
-    const ink = hot ? (c.accentText ?? c.canvas) : c.primaryText;
-    return Button.new(action.id).h(H.control).px(G.md).flex_none().items_center().rounded(R.control)
-      .disabled(disabled)
-      .accessibility_label(this.actionLabel(action))
-      .when(disabled, (el) => el.border_1().border_color(c.input))
-      .when(!disabled, (el) => el.bg(fill).cursor_pointer().hover((s) => s.opacity(0.85)))
-      .on_click((_e, cx) => { if (!disabled) this.onAction(action, cx); })
-      .child(div().text_size(T.value).font_medium().text_color(disabled ? c.dim : ink).child(this.actionLabel(action)));
-  }
-
-  quietAction(c, action) {
-    return quietLink(action.id, this.actionLabel(action), (cx) => this.onAction(action, cx), c, { disabled: !action.acts || Boolean(this.busy), size: T.value, color: c.muted });
-  }
-
-  onAction(action, cx) {
-    if (!action?.acts || this.busy) return;
-    if (action.target === "send") return this.send(cx);
-    if (action.target === "failures") { this.expanded = { ...this.expanded, checks: true }; return this.openDetails(cx); }
-    if (action.target === "details") return this.openDetails(cx);
-    if (action.target === "log" || action.target === "reply" || action.target === "github" || action.target === "cli") return openUrl(action.url);
-    if (action.target === "sign-in") return this.signIn();
-    const go = (next) => this.runWrite(action, next);
-    if (action.armed) return this.armed.press(action.target, cx, go);
-    return go(cx);
-  }
+  showOthers(cx) { this.listing = true; if (this.loading) this.openedList = true; else this.refresh(cx); cx.notify(); }
 
   runWrite(action, cx) {
     const url = this.pr?.url;
@@ -1046,27 +974,6 @@ export class PullRequest {
     if (action.target === "reopen") return this.act("Reopen", ["pr", "reopen", url], cx);
   }
 
-  send(cx) {
-    if (this.busy) return;
-    const scene = this.scene();
-    const verdict = verdictOf(scene);
-    const text = sendText(scene, verdict);
-    const step = sendStep(Boolean(this.sendShown) && this.sendFor === text, text);
-    if (step.show) { this.sendShown = true; this.sendFor = text; cx.notify(); return; }
-    if (!step.deliver) return;
-    const address = this.frontAgent()?.address;
-    if (!address) { this.note = "Not sent: no agent in front"; cx.notify(); return; }
-    this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
-    cx.spawn(async (cx) => {
-      try {
-        const sent = await deliver(address, text, "you");
-        if (sent?.code !== 0) this.note = `Not sent: ${String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]}`;
-      } catch (e) { this.note = `Not sent: ${String(e?.message ?? e)}`; }
-      finally { this.busy = null; cx.notify(); }
-    });
-    cx.notify();
-  }
-
   detailsKey() { return this.root || this.cwd || ""; }
 
   detailsOn() {
@@ -1074,20 +981,12 @@ export class PullRequest {
     return Boolean(all && all[this.detailsKey()]);
   }
 
-  toggleDetails(cx) {
+  setDetails(cx, open) {
     const all = shared("kanso.pr.details") ?? {};
     const id = this.detailsKey();
-    const on = !all[id];
-    setShared("kanso.pr.details", { ...all, [id]: on });
+    const on = open ?? !all[id];
+    if (Boolean(all[id]) !== on) setShared("kanso.pr.details", { ...all, [id]: on });
     if (on) this.loadOthers(cx);
-    cx.notify();
-  }
-
-  openDetails(cx) {
-    const all = shared("kanso.pr.details") ?? {};
-    const id = this.detailsKey();
-    if (!all[id]) setShared("kanso.pr.details", { ...all, [id]: true });
-    this.loadOthers(cx);
     cx.notify();
   }
 
@@ -1099,67 +998,6 @@ export class PullRequest {
       try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context); }
       finally { this.listingOthers = false; cx.notify(); }
     });
-  }
-
-  otherPrs(c) {
-    const rows = (this.openPrs ?? []).filter((pr) => pr.url !== this.pr?.url);
-    const shown = rows.slice(0, 8);
-    return v_flex().w_full().gap(G.xs)
-      .child(section(c, "Other open pull requests", rows.length ? String(rows.length) : ""))
-      .when(!rows.length && !this.listingOthers, (el) => el.child(div().text_size(T.value).text_color(c.dim).child("Nothing else open.")))
-      .children(shown.map((pr) => div().py(G.sm).text_size(T.card).text_color(c.text).child(`#${pr.number}  ${pr.title}`)))
-      .when(rows.length > shown.length, (el) => el.child(quietLink("pr-others", "Open the list", (cx) => { this.listing = true; if (!this.loading) this.refresh(cx); else this.openedList = true; cx.notify(); }, c)));
-  }
-
-  writeRow(c, writes) {
-    return h_flex().w_full().gap(G.lg).flex_wrap().children((writes ?? []).map((action) => this.quietAction(c, action)));
-  }
-
-  fold(c, v) {
-    const on = this.detailsOn();
-    const label = v.id === "none" || v.id === "base" ? "Other open pull requests" : "Details";
-    return v_flex().w_full().gap(G.lg)
-      .child(Button.new("pr-details").w_full().h(H.compact).gap(G.sm).items_center().cursor_pointer()
-        .accessibility_label(label)
-        .on_click((_e, cx) => this.toggleDetails(cx))
-        .child(svg(`${ICON}chevron-${on ? "down" : "right"}.svg`).size(12).text_color(c.muted))
-        .child(div().flex_none().text_size(T.value).text_color(c.muted).child(label))
-        .child(div().flex_1())
-        .child(div().min_w(0).truncate().text_size(T.value).text_color(c.dim).child(v.detailsNote ?? "")))
-      .when(on && this.pr, (el) => el.child(this.description(c)).child(this.people(c))
-        .when(this.checks().length > 0, (row) => row.child(this.checksList(c)))
-        .when(this.threads.length > 0, (row) => row.child(this.discussion(c)))
-        .child(this.files(c)).child(this.otherPrs(c))
-        .when(Boolean(v.writes?.length), (row) => row.child(this.writeRow(c, v.writes))))
-      .when(on && !this.pr, (el) => el.child(this.otherPrs(c)));
-  }
-
-  hero(c) {
-    const v = this.view();
-    const scope = this.scopeRow(c);
-    const card = verdictCard(c, v.body);
-    const preview = this.sendShown && this.sendFor ? String(this.sendFor).split("\n") : null;
-    const foot = this.footnote(c);
-    const body = v_flex().w_full().gap(G.lg)
-      .when(Boolean(v.facts), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(v.facts)))
-      .when(Boolean(card), (el) => el.child(card))
-      .when(Boolean(v.more?.acts), (el) => el.child(this.quietAction(c, v.more)))
-      .when(Boolean(preview), (el) => el.child(v_flex().w_full().p(G.md).gap(G.xs).rounded(R.card).border_1().border_color(c.border)
-        .children(preview.map((line) => div().text_size(T.body).text_color(c.text).child(line || " ")))))
-      .child(h_flex().w_full().gap(G.lg).items_center().flex_wrap()
-        .when(Boolean(v.primary), (row) => row.child(this.actionButton(c, v.primary)))
-        .when(Boolean(v.quiet), (row) => row.child(this.quietAction(c, v.quiet))))
-      .when(v.details, (el) => el.child(this.fold(c, v)))
-      .when(Boolean(this.note), (el) => el.child(div().text_size(T.value).text_color(c.red).child(this.note)));
-    return v_flex().w_full().gap(G.lg)
-      .when(Boolean(scope), (el) => el.child(scope))
-      .when(Boolean(this.pr?.title), (el) => el.child(div().w_full().max_h(44).overflow_hidden().text_size(17).line_height(1.3).font_medium().text_color(c.text).child(this.pr.title)))
-      .child(h_flex().gap(G.sm).items_center()
-        .child(div().size(8).flex_none().rounded_full().bg(this.toneColor(c, v.tone)))
-        .child(div().text_size(T.card).font_medium().text_color(this.toneColor(c, v.tone)).child(v.text)))
-      .when(Boolean(v.note), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(v.note)))
-      .child(v.dimmed ? body.opacity(0.55) : body)
-      .when(Boolean(foot), (el) => el.child(foot));
   }
 
   description(c) {
@@ -1340,21 +1178,6 @@ export class PullRequest {
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
-  empty(c) {
-    const v = this.view();
-    const action = v.primary ? this.actionButton(c, v.primary) : v.quiet ? this.quietAction(c, v.quiet) : null;
-    const scope = this.scopeRow(c);
-    const card = verdictCard(c, v.body);
-    const foot = this.footnote(c);
-    return v_flex().w_full().gap(G.lg)
-      .when(Boolean(scope), (el) => el.child(scope))
-      .child(this.waiting(c, v.text, null, action))
-      .when(Boolean(card), (el) => el.child(card))
-      .when(v.details, (el) => el.child(this.fold(c, v)))
-      .when(Boolean(this.note), (el) => el.child(div().text_size(T.value).text_color(c.red).child(this.note)))
-      .when(Boolean(foot), (el) => el.child(foot));
-  }
-
   body(c, narrow) {
     if (this.inboxOn && this.inboxOpen) return this.inboxPage(c);
     if (this.listing) return this.listPage(c);
@@ -1363,7 +1186,7 @@ export class PullRequest {
     if (kind === "loading") return this.skeleton(c, narrow);
     if (kind === "wait") return this.waiting(c, this.wait);
     if (kind === "error") return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => this.again(cx), c));
-    return this.empty(c);
+    return drawEmpty(this, c);
   }
 
   render(cx) {
@@ -1373,7 +1196,7 @@ export class PullRequest {
     const narrow = (this.width || 368) < 560;
     const body = this.body(c, narrow);
 
-    return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background ?? c.canvas).text_color(c.text).overflow_y_scrollbar()
+    return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
       .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
         .child(v_flex().w_full().max_w(1080).gap(G.lg)

@@ -1,13 +1,13 @@
 // The card under the pull request verdict: the log, the comment, or the rows that state is about.
-import { div, svg } from "gpui-kit";
+import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { settings } from "herdr";
-import { G, R, T } from "./ui.js";
+import { G, R, T, toneColor } from "./ui.js";
 import { monoFont } from "./lib.js";
 import { stateMark } from "./marks.js";
 
-const mono = () => (typeof settings === "function" ? monoFont() : "");
-const ink = (c, tone) => (tone === "blocked" ? (c.blocked ?? c.red) : c.muted);
+export const VIEW = { title: 17, titleMax: 44, dot: 8, stale: 0.55, meta: 12 };
+
+const mono = () => monoFont();
 const WORD = { fail: "failed", pending: "running", unknown: "unknown", pass: "passed", skipped: "skipped" };
 
 function faced(el) {
@@ -31,7 +31,7 @@ function logCard(c, body) {
       .when(Boolean(body.step), (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child("›")).child(div().min_w(0).truncate().text_size(T.value).text_color(c.muted).child(body.step)))
       .child(div().flex_1())
       .when(Boolean(took), (el) => el.child(took)))
-    .when(Boolean(body.lines?.length), (el) => el.child(faced(v_flex().w_full().gap(G.xs).children(body.lines.map((line) => div().text_size(T.body).text_color(ink(c, line.tone)).child(line.text || " ")))))));
+    .when(Boolean(body.lines?.length), (el) => el.child(faced(v_flex().w_full().gap(G.xs).children(body.lines.map((line) => div().text_size(T.body).text_color(toneColor(c, line.tone)).child(line.text || " ")))))));
 }
 
 function commentCard(c, body) {
@@ -44,7 +44,7 @@ function commentCard(c, body) {
     .when(Boolean(body.text), (el) => el.child(div().w_full().text_size(T.card).line_height(1.45).text_color(c.text).child(body.text))));
 }
 
-const runningMark = (c) => (typeof svg === "function" ? stateMark(c, "working", 12) : div().size(12).flex_none().rounded_full().bg(c.working ?? c.yellow));
+const runningMark = (c) => stateMark(c, "working", VIEW.meta);
 
 function runningCard(c, body) {
   return shell(c, v_flex().w_full().gap(G.sm).children((body.rows ?? []).map((row) => h_flex().w_full().items_center().gap(G.sm)

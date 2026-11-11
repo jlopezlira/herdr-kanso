@@ -1,17 +1,17 @@
 // What the pull request panel says, and the one action that state can take.
-import { checkSummary, isWriter, jobLabel, mergeReadiness, runIdOf } from "./ghchecks.js";
+import { plural } from "./pure.js";
+import { checkLine, checkSummary, isWriter, jobLabel, mergeReadiness, runIdOf } from "./ghchecks.js";
 
 export const LOG_LINES = 12;
 export const COMMENT_LINES = 8;
 export const COMMIT_LINES = 5;
 export const CLI_URL = "https://cli.github.com";
 
-const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-const commitLine = (n, tail) => (n > 0 ? `${count(n, "commit", "commits")} ${tail}` : `Commits ${tail}`);
+const commitLine = (n, tail) => (n > 0 ? `${plural(n, "commit", "commits")} ${tail}` : `Commits ${tail}`);
 
 const blank = (partial) => ({
   facts: null, details: false, detailsNote: null, body: null, primary: null, quiet: null,
-  more: null, note: null, writes: [], logKey: null, runId: null, ...partial,
+  more: null, note: null, writes: [], logKey: null, ...partial,
 });
 
 const push = { id: "pr-push", label: "Push", press: "Press again to push", target: "push", armed: true, write: true, busy: "Push", busyLabel: "Pushing…" };
@@ -96,17 +96,17 @@ function peopleOf(pr) {
 function factLine(pr, threads) {
   const commits = Array.isArray(pr.commits) ? pr.commits.length : null;
   return [
-    pr.changedFiles != null ? `${count(pr.changedFiles, "file", "files")}  +${pr.additions ?? 0} −${pr.deletions ?? 0}` : null,
-    commits != null ? count(commits, "commit", "commits") : null,
-    threads > 0 ? count(threads, "thread", "threads") : null,
+    pr.changedFiles != null ? `${plural(pr.changedFiles, "file", "files")}  +${pr.additions ?? 0} −${pr.deletions ?? 0}` : null,
+    commits != null ? plural(commits, "commit", "commits") : null,
+    threads > 0 ? plural(threads, "thread", "threads") : null,
   ].filter(Boolean).join(" · ");
 }
 
 function noteLine(pr, checks) {
   return [
-    count(checks.length, "check", "checks"),
-    count(peopleOf(pr), "person", "people"),
-    pr.changedFiles != null ? count(pr.changedFiles, "file", "files") : null,
+    plural(checks.length, "check", "checks"),
+    plural(peopleOf(pr), "person", "people"),
+    pr.changedFiles != null ? plural(pr.changedFiles, "file", "files") : null,
   ].filter(Boolean).join(" · ");
 }
 
@@ -122,28 +122,25 @@ function writesFor(pr) {
   return [draftBack, close];
 }
 
-function failedView(scene, failing) {
+function failedShape(scene) {
+  const failing = (scene.checks ?? []).filter((c) => c.state === "fail");
   const first = failing[0];
+  if (!first) return {};
   const group = logGroup(scene.log, first);
   const lines = (group?.lines ?? []).map((text) => ({ text, tone: logLineTone(text) }));
   const extra = failing.length - 1;
   const runId = first.runId || runIdOf(first);
-  return blank({
-    id: "failed",
-    text: `${jobLabel(first)} failed`,
-    tone: "blocked",
-    details: true,
-    writes: writesFor(scene.pr),
+  return {
     logKey: runId ? String(runId) : null,
-    runId: runId ? String(runId) : null,
     body: { kind: "log", job: jobLabel(first), step: group?.step || "", elapsed: elapsed(first.startedAt, first.completedAt, scene.now), lines },
     primary: send,
     quiet: link("pr-log", "Open log on GitHub", "log", first.url || scene.pr.url),
     more: extra > 0 ? link("pr-more-fail", extra === 1 ? "+1 more" : `+${extra} more`, "failures") : null,
-  });
+  };
 }
 
-function commentView(scene, threads) {
+function commentShape(scene) {
+  const threads = scene.threads ?? [];
   const th = threads[0];
   const extra = threads.length - 1;
   const card = th ? {
@@ -154,115 +151,82 @@ function commentView(scene, threads) {
     line: th.line || "",
     text: firstLines(th.body, COMMENT_LINES),
   } : null;
-  return blank({
-    id: "changes",
-    text: "Changes requested",
-    tone: "blocked",
-    details: true,
-    writes: writesFor(scene.pr),
+  return {
     body: card,
     primary: send,
     quiet: link("pr-reply", "Reply on GitHub", "reply", th?.url || scene.pr.url),
     more: extra > 0 ? link("pr-more-thread", extra === 1 ? "+1 more thread" : `+${extra} more threads`, "details") : null,
-  });
+  };
 }
 
-function heldRows(checks) {
-  return checks.filter((c) => c.state === "fail" || c.state === "pending" || c.state === "unknown");
+function draftShape(scene, sum) {
+  const note = checkLine(sum);
+  const held = (scene.checks ?? []).filter((c) => c.state === "fail" || c.state === "pending" || c.state === "unknown");
+  return {
+    primary: ready,
+    note,
+    body: held.length ? { kind: "checks", rows: held.map((c) => ({ name: jobLabel(c), state: c.state })) } : null,
+  };
 }
 
-function draftNote(checks) {
-  const sum = checkSummary(checks.map((c) => c.state));
-  if (!sum.state || sum.state === "pass") return null;
-  const word = { fail: "failing", pending: "running", unknown: "unknown" }[sum.state];
-  return word ? `${count(sum[sum.state], "check", "checks")} ${word}` : null;
+function conflictShape(scene) {
+  return { primary: send, quiet: link("pr-github", "Open on GitHub", "github", scene.pr.url) };
 }
+
+function behindShape(scene) {
+  const n = scene.baseBehind;
+  return {
+    primary: isWriter(scene.permission) ? update : null,
+    body: n > 0 ? { kind: "note", text: plural(n, "commit", "commits") } : null,
+  };
+}
+
+function runningShape(scene) {
+  const pending = (scene.checks ?? []).filter((c) => c.state === "pending");
+  return { body: { kind: "running", rows: pending.map((c) => ({ name: c.name, workflow: c.workflow || "", elapsed: elapsed(c.startedAt, null, scene.now) })) } };
+}
+
+function unknownShape(scene) {
+  const rows = (scene.checks ?? []).filter((c) => c.state === "unknown");
+  return { body: { kind: "checks", rows: rows.map((c) => ({ name: jobLabel(c), state: c.state })) } };
+}
+
+function reviewShape(scene) {
+  const asked = (scene.pr.reviewRequests ?? []).map((r) => r.login || r.name).filter(Boolean);
+  return { body: asked.length ? { kind: "lines", lines: asked } : null };
+}
+
+function readyShape(scene, sum) {
+  const approvals = (scene.pr.latestReviews ?? []).filter((r) => r.state === "APPROVED").length;
+  const passed = (sum.pass || 0) + (sum.skipped || 0);
+  return { primary: merge, body: { kind: "note", text: `${plural(approvals, "approval", "approvals")} · ${plural(passed, "check", "checks")} passed` } };
+}
+
+function mergedShape(scene) {
+  const when = clockOf(scene.pr.mergedAt || scene.pr.closedAt || scene.pr.updatedAt);
+  return when ? { note: when } : {};
+}
+
+const SHAPE = {
+  merged: mergedShape,
+  closed: () => ({ quiet: reopen }),
+  draft: draftShape,
+  conflicts: conflictShape,
+  failed: failedShape,
+  changes: commentShape,
+  behind: behindShape,
+  running: runningShape,
+  unknown: unknownShape,
+  review: reviewShape,
+  ready: readyShape,
+};
 
 function prVerdict(scene) {
-  const pr = scene.pr;
-  const state = String(pr.state ?? "OPEN").toUpperCase();
-  const status = String(pr.mergeStateStatus ?? "").toUpperCase();
   const checks = scene.checks ?? [];
-  const threads = scene.threads ?? [];
-  const failing = checks.filter((c) => c.state === "fail");
-  const pending = checks.filter((c) => c.state === "pending");
-  const unknown = checks.filter((c) => c.state === "unknown");
-  const base = pr.baseRefName || "main";
-  const head = pr.headRefName || scene.branch || "the branch";
-  const gate = mergeReadiness(pr, { permission: scene.permission ?? null, checks: checkSummary(checks.map((c) => c.state)) });
-  const writes = writesFor(pr);
-  if (state === "MERGED") {
-    const when = clockOf(pr.mergedAt || pr.closedAt || pr.updatedAt);
-    return blank({ id: "merged", text: when ? `Merged ${when}` : "Merged", tone: "violet", details: true });
-  }
-  if (state === "CLOSED") return blank({ id: "closed", text: "Closed without merging", tone: "dim", details: true, quiet: reopen });
-  if (pr.isDraft || status === "DRAFT") {
-    const held = heldRows(checks);
-    return blank({
-      id: "draft", text: "Draft", tone: "dim", details: true, writes, primary: ready, note: draftNote(checks),
-      body: held.length ? { kind: "checks", summary: draftNote(checks), rows: held.map((c) => ({ name: jobLabel(c), state: c.state })) } : null,
-    });
-  }
-  if (pr.mergeable === "CONFLICTING" || status === "DIRTY") {
-    return blank({
-      id: "conflicts", text: `Conflicts with ${base}`, tone: "blocked", details: true, writes, primary: send,
-      quiet: link("pr-github", "Open on GitHub", "github", pr.url), head, base,
-    });
-  }
-  if (failing.length) return failedView(scene, failing);
-  if (pr.reviewDecision === "CHANGES_REQUESTED") return commentView(scene, threads);
-  if (status === "BEHIND") {
-    const n = scene.baseBehind;
-    return blank({
-      id: "behind-base",
-      text: n > 0 ? `Behind ${base} by ${n}` : `Behind ${base}`,
-      tone: "working",
-      details: true,
-      writes,
-      primary: isWriter(scene.permission) ? update : null,
-    });
-  }
-  if (pending.length) {
-    return blank({
-      id: "running",
-      text: `Checks running · ${pending.length} of ${checks.length}`,
-      tone: "working",
-      details: true,
-      writes,
-      body: { kind: "running", rows: pending.map((c) => ({ name: c.name, workflow: c.workflow || "", elapsed: elapsed(c.startedAt, null, scene.now) })) },
-    });
-  }
-  if (unknown.length) {
-    return blank({
-      id: "unknown",
-      text: `${count(unknown.length, "check", "checks")} unknown`,
-      tone: "working",
-      details: true,
-      writes,
-      body: { kind: "checks", rows: unknown.map((c) => ({ name: jobLabel(c), state: c.state })) },
-    });
-  }
-  if (pr.reviewDecision === "REVIEW_REQUIRED") {
-    const asked = (pr.reviewRequests ?? []).map((r) => r.login || r.name).filter(Boolean);
-    return blank({ id: "review", text: "Review required", tone: "working", details: true, writes, body: asked.length ? { kind: "lines", lines: asked } : null });
-  }
-  if (status === "BLOCKED") return blank({ id: "blocked", text: "Blocked by branch rules", tone: "working", details: true, writes });
-  if (!status || status === "UNKNOWN") return blank({ id: "computing", text: "Checking whether it can merge…", tone: "dim", details: true, writes });
-  if (!isWriter(scene.permission)) {
-    return scene.permission
-      ? blank({ id: "permission", text: "No permission to merge", tone: "muted", details: true, writes })
-      : blank({ id: "computing", text: "Checking whether it can merge…", tone: "dim", details: true, writes });
-  }
-  if (gate.offer) {
-    const sum = checkSummary(checks.map((c) => c.state));
-    const approvals = (pr.latestReviews ?? []).filter((r) => r.state === "APPROVED").length;
-    const passed = (sum.pass || 0) + (sum.skipped || 0);
-    return blank({
-      id: "ready", text: "Ready to merge", tone: "done", details: true, writes, primary: merge,
-      body: { kind: "note", text: `${count(approvals, "approval", "approvals")} · ${count(passed, "check", "checks")} passed` },
-    });
-  }
-  return blank({ id: "blocked", text: gate.text || "Blocked by branch rules", tone: "working", details: true, writes, head, base });
+  const sum = checkSummary(checks.map((c) => c.state));
+  const gate = mergeReadiness(scene.pr, { permission: scene.permission ?? null, checks: sum });
+  const extra = (SHAPE[gate.id] ?? (() => ({})))(scene, sum);
+  return blank({ id: gate.id, text: gate.text, tone: gate.tone, details: true, writes: writesFor(scene.pr), ...extra });
 }
 
 function emptyVerdict(scene) {

@@ -51,27 +51,27 @@ test("each pull request state names what stops it, in that colour, with one acti
   const { verdictOf, clockOf } = await load("kanso-panel/pr-verdict.js", ["verdictOf", "clockOf"], {});
   const mergedAt = "2026-11-11T15:04:00Z";
   const cases = [
-    { scene: scene({ pr: open({ state: "MERGED", mergedAt }) }), text: `Merged ${clockOf(mergedAt)}`, tone: "violet", target: null, writes: [] },
-    { scene: scene({ pr: open({ state: "CLOSED" }) }), text: "Closed without merging", tone: "dim", target: null, quiet: "reopen", writes: [] },
+    { scene: scene({ pr: open({ state: "MERGED", mergedAt }) }), text: "Merged", tone: "violet", target: null, writes: [], note: clockOf(mergedAt) },
+    { scene: scene({ pr: open({ state: "CLOSED" }) }), text: "Closed without merging", tone: "red", target: null, quiet: "reopen", writes: [] },
     { scene: scene({ pr: open({ isDraft: true, mergeStateStatus: "CLEAN" }) }), text: "Draft", tone: "dim", target: "ready", id: "pr-ready", writes: ["pr-close"] },
     { scene: scene({ pr: open({ isDraft: true }), checks: [failing] }), text: "Draft", tone: "dim", target: "ready", note: "1 check failing", writes: ["pr-close"] },
-    { scene: scene({ pr: open({ mergeable: "CONFLICTING", mergeStateStatus: "DIRTY" }), checks: [failing] }), text: "Conflicts with main", tone: "blocked", target: "send", id: "pr-send", quiet: "github" },
-    { scene: scene({ pr: open({ mergeStateStatus: "UNSTABLE" }), checks: [failing, job()], log: [{ job: "CI / test", step: "Run", lines: ["ok", "FAIL no"] }] }), text: "CI / test failed", tone: "blocked", target: "send", id: "pr-send", quiet: "log" },
-    { scene: scene({ pr: open({ reviewDecision: "CHANGES_REQUESTED", mergeStateStatus: "BLOCKED" }), checks: [failing] }), text: "CI / test failed", tone: "blocked", target: "send" },
-    { scene: scene({ pr: open({ reviewDecision: "CHANGES_REQUESTED", mergeStateStatus: "BLOCKED" }) }), text: "Changes requested", tone: "blocked", target: "send", quiet: "reply" },
-    { scene: scene({ pr: open({ mergeStateStatus: "BEHIND" }), baseBehind: 4, checks: [job({ state: "pending", name: "ci" }), job()] }), text: "Behind main by 4", tone: "working", target: "update", id: "pr-update" },
-    { scene: scene({ pr: open({ mergeStateStatus: "BEHIND" }) }), text: "Behind main", tone: "working", target: "update" },
-    { scene: scene({ pr: open({ mergeStateStatus: "BEHIND" }), permission: "READ" }), text: "Behind main", tone: "working", target: null },
-    { scene: scene({ checks: [job({ state: "pending" }), job({ state: "pending", name: "lint" }), job(), job({ name: "docs" }), job({ name: "e2e" })] }), text: "Checks running · 2 of 5", tone: "working", target: null },
-    { scene: scene({ checks: [job({ state: "unknown" }), job({ state: "unknown", name: "lint" })] }), text: "2 checks unknown", tone: "working", target: null },
-    { scene: scene({ pr: open({ reviewDecision: "REVIEW_REQUIRED", mergeStateStatus: "BLOCKED", reviewRequests: [{ login: "bea" }] }) }), text: "Review required", tone: "working", target: null },
-    { scene: scene({ pr: open({ mergeStateStatus: "BLOCKED", reviewDecision: "APPROVED" }) }), text: "Blocked by branch rules", tone: "working", target: null },
-    { scene: scene({ pr: open({ mergeStateStatus: "UNSTABLE", reviewDecision: "APPROVED" }) }), text: "Blocked by branch rules", tone: "working", target: null },
+    { scene: scene({ pr: open({ mergeable: "CONFLICTING", mergeStateStatus: "DIRTY" }), checks: [failing] }), text: "Conflicts with main", tone: "red", target: "send", id: "pr-send", quiet: "github" },
+    { scene: scene({ pr: open({ mergeStateStatus: "UNSTABLE" }), checks: [failing, job()], log: [{ job: "CI / test", step: "Run", lines: ["ok", "FAIL no"] }] }), text: "1 check failing", tone: "red", target: "send", id: "pr-send", quiet: "log" },
+    { scene: scene({ pr: open({ reviewDecision: "CHANGES_REQUESTED", mergeStateStatus: "BLOCKED" }), checks: [failing] }), text: "Changes requested", tone: "red", target: "send" },
+    { scene: scene({ pr: open({ reviewDecision: "CHANGES_REQUESTED", mergeStateStatus: "BLOCKED" }) }), text: "Changes requested", tone: "red", target: "send", quiet: "reply" },
+    { scene: scene({ pr: open({ mergeStateStatus: "BEHIND" }), baseBehind: 4, checks: [job({ state: "pending", name: "ci" }), job()] }), text: "Behind main", tone: "yellow", target: "update", id: "pr-update", body: "4 commits" },
+    { scene: scene({ pr: open({ mergeStateStatus: "BEHIND" }) }), text: "Behind main", tone: "yellow", target: "update" },
+    { scene: scene({ pr: open({ mergeStateStatus: "BEHIND" }), permission: "READ" }), text: "Behind main", tone: "yellow", target: null },
+    { scene: scene({ pr: open({ mergeStateStatus: "BLOCKED" }), checks: [job({ state: "pending" }), job({ state: "pending", name: "lint" }), job(), job({ name: "docs" }), job({ name: "e2e" })] }), text: "2 checks running", tone: "yellow", target: null },
+    { scene: scene({ pr: open({ mergeStateStatus: "BLOCKED" }), checks: [job({ state: "unknown" }), job({ state: "unknown", name: "lint" })] }), text: "2 checks unknown", tone: "yellow", target: null },
+    { scene: scene({ pr: open({ reviewDecision: "REVIEW_REQUIRED", mergeStateStatus: "BLOCKED", reviewRequests: [{ login: "bea" }] }) }), text: "Review required", tone: "yellow", target: null },
+    { scene: scene({ pr: open({ mergeStateStatus: "BLOCKED", reviewDecision: "APPROVED" }) }), text: "Blocked by branch rules", tone: "yellow", target: null },
+    { scene: scene({ pr: open({ mergeStateStatus: "UNSTABLE", reviewDecision: "APPROVED" }) }), text: "Blocked by branch rules", tone: "yellow", target: null },
     { scene: scene({ pr: open({ mergeStateStatus: "UNKNOWN", mergeable: "UNKNOWN" }) }), text: "Checking whether it can merge…", tone: "dim", target: null },
     { scene: scene({ permission: "" }), text: "Checking whether it can merge…", tone: "dim", target: null },
-    { scene: scene({ permission: "READ" }), text: "No permission to merge", tone: "muted", target: null },
-    { scene: scene({ pr: open({ mergeStateStatus: "HAS_HOOKS", reviewDecision: "APPROVED" }) }), text: "Ready to merge", tone: "done", target: "merge", id: "pr-merge", label: "Squash and merge" },
-    { scene: scene(), text: "Ready to merge", tone: "done", target: "merge", id: "pr-merge", label: "Squash and merge", writes: ["pr-draft", "pr-close"] },
+    { scene: scene({ permission: "READ" }), text: "No permission to merge", tone: "dim", target: null },
+    { scene: scene({ pr: open({ mergeStateStatus: "HAS_HOOKS", reviewDecision: "APPROVED" }) }), text: "Ready to merge", tone: "green", target: "merge", id: "pr-merge", label: "Squash and merge" },
+    { scene: scene(), text: "Ready to merge", tone: "green", target: "merge", id: "pr-merge", label: "Squash and merge", writes: ["pr-draft", "pr-close"] },
   ];
   for (const item of cases) {
     const view = verdictOf(item.scene);
@@ -82,6 +82,7 @@ test("each pull request state names what stops it, in that colour, with one acti
     if (item.label) assert.equal(view.primary.label, item.label, item.text);
     if (item.quiet) assert.equal(view.quiet?.target, item.quiet, item.text);
     if (item.note) assert.equal(view.note, item.note, item.text);
+    if (item.body) assert.equal(view.body?.text, item.body, item.text);
     if (item.writes) assert.deepEqual(host(view.writes.map((action) => action.id)), item.writes, item.text);
     if (item.target === null) assert.equal(view.primary, null, item.text);
     painted(view);
@@ -116,7 +117,7 @@ test("a failed check shows the step and its last lines, and one more opens the r
   assert.equal(view.more.target, "failures");
   assert.equal(view.logKey, "99");
   const waiting = verdictOf(scene({ pr: open({ mergeStateStatus: "UNSTABLE" }), checks: [job({ state: "fail", name: "ci" })], log: null }));
-  assert.equal(waiting.text, "ci failed");
+  assert.equal(waiting.text, "1 check failing");
   assert.deepEqual(host(waiting.body.lines), []);
   assert.equal(waiting.logKey, null);
   const three = verdictOf(scene({
@@ -165,7 +166,7 @@ test("Send is the agent in front, and a write stays quiet until GitHub has answe
   assert.equal(fresh.primary.armed, false);
   assert.equal(fresh.primary.write, false);
   const blocked = verdictOf(scene({ ...failed, agent: { ...agent, blocked: true } }));
-  assert.equal(blocked.text, "CI / test failed · checkout needs you first");
+  assert.equal(blocked.text, "1 check failing · checkout needs you first");
   assert.equal(blocked.primary, null);
   const reader = verdictOf(scene({ ...failed, agent: null }));
   assert.equal(reader.primary.id, "pr-log");

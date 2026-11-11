@@ -16,21 +16,23 @@ verdict (13.5, medium) in that state's tone. One card under it. One primary
 action, and one quiet link. Description, people, labels, files and checks
 sit behind Details, closed until opened, and that choice is kept per project.
 
-The verdict, in order, and its one action:
+The verdict, in order, and its one action. The words are the header's.
 
-- Merged at the local time (violet). Closed without merging (dim), with Reopen.
+- Merged (violet), with the local time beside it. Closed without merging (red), with Reopen.
 - Draft (dim), even when checks fail. Ready for review.
-- Conflicts with the base (blocked). Send, or open it on GitHub.
-- A failed check (blocked): the job and the step, then the last lines of that
-  step. Send, or open the log. `+N more` opens the checks.
-- Changes requested (blocked): the first unresolved comment, author and
+- Conflicts with the base (red). Send, or open it on GitHub.
+- A failed check (red): the same words as the header, such as "1 check failing".
+  The card still shows the job, the step and the last lines. Send, or open the log.
+  `+N more` opens the checks.
+- Changes requested (red): the first unresolved comment, author and
   path:line. Send, or reply on GitHub.
-- Behind the base (working). Update branch, for someone who can push.
-- Checks running (working): the running rows. No action.
-- Review required (working). No action.
+- Behind the base (yellow). The count, when known, sits under the line.
+  Update branch, for someone who can push.
+- Checks running (yellow): the running rows, under the same words as the header. No action.
+- Review required (yellow). No action.
 - Blocked by branch rules, or still computing. No action.
-- No permission to merge (muted). No action.
-- Ready to merge (done). Squash and merge. The method still follows the repo.
+- No permission to merge (dim). No action.
+- Ready to merge (green). Squash and merge. The method still follows the repo.
 
 Send goes to the agent of the pane in front. The first press shows the log
 or the comment. The second sends it. A blocked agent is named on the verdict
@@ -46,10 +48,10 @@ default branch. No remote and no GitHub remote stay one line with no action.
 Details holds what the page used to lead with: the description (Markdown,
 folded when long), people and labels, every check, unresolved threads, files
 and their diffs, other open pull requests, and Close or Back to draft.
-Other pull requests in that fold are not rows you open; Open the list does.
+Those other pull requests are the same rows as the list: a click shows that one.
+The fold does not repeat its title. Open the list stays when there are more than 8.
 
-The list and the Closed tab stay. A row uses the same verdict words. The
-header keeps "N open" and "N to review". The inbox is not this page.
+The list and the Closed tab stay. A row uses those words. While permission is still unread it keeps the check or review words, never "Checking…" and never "Ready". The header keeps "N open" and "N to review". The inbox is not this page.
 
 A missed answer keeps the last pull request, dimmed, with "as of <age>" and
 Retry. Writes wait until a read succeeds. When GitHub asks to wait, the line

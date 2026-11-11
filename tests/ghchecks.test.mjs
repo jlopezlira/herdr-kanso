@@ -96,10 +96,7 @@ test("The header's digest and the PR panel agree on the same checks", async () =
   // The panel's row says it in words; the header in one of four.
   const panelSays = (rollup) => {
     const text = panel.rowState({ state: "OPEN", statusCheckRollup: rollup }, colors).text;
-    if (/failed$/.test(text)) return "failing";
-    if (text.startsWith("Checks running")) return "running";
-    if (/unknown$/.test(text)) return "unknown";
-    return null;
+    return /failing$/.test(text) ? "failing" : /running$/.test(text) ? "running" : /unknown$/.test(text) ? "unknown" : text === "Checks passed" ? "passing" : null;
   };
   const cases = [
     [],
@@ -117,7 +114,28 @@ test("The header's digest and the PR panel agree on the same checks", async () =
     [job("CI", "test", "SUCCESS", "2026-11-08T10:00:00Z"), { ...run("QUEUED", "", "test"), workflowName: "CI", startedAt: "0001-01-01T00:00:00Z" }],
   ];
   for (const rollup of cases) {
-    const header = checksOf(rollup);
-    assert.equal(header === "passing" ? null : header, panelSays(rollup), JSON.stringify(rollup));
+    assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
   }
+});
+
+test("A list row keeps the check words while permission is unread", async () => {
+  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {});
+  const panel = Object.create(PullRequest.prototype);
+  panel.permission = null;
+  panel.permissionRepo = "o/r";
+  const colors = { dim: "dim", muted: "muted", red: "red", yellow: "yellow", green: "green", violet: "violet", blocked: "red", working: "yellow", done: "green" };
+  const pass = [run("COMPLETED", "SUCCESS", "ci")];
+  const fail = [run("COMPLETED", "FAILURE", "ci")];
+  const row = (over, rollup = pass) => panel.rowState({
+    state: "OPEN", url: "https://github.com/o/r/pull/1", mergeable: "MERGEABLE", statusCheckRollup: rollup, ...over,
+  }, colors).text;
+  assert.equal(row({ mergeStateStatus: "CLEAN" }), "Checks passed");
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved");
+  assert.equal(row({ mergeStateStatus: "CLEAN" }, fail), "1 check failing");
+  panel.permission = "WRITE";
+  assert.equal(row({ mergeStateStatus: "CLEAN" }), "Ready to merge");
+  panel.permission = null;
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "REVIEW_REQUIRED" }), "Review required");
+  assert.equal(row({ mergeStateStatus: "CLEAN" }).includes("Checking"), false);
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved");
 });

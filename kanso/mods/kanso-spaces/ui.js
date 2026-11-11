@@ -34,6 +34,14 @@ export function tokens(t = {}) {
   };
 }
 
+const TONE = {
+  red: "blocked", blocked: "blocked",
+  yellow: "working", working: "working",
+  green: "done", done: "done",
+  violet: "violet", dim: "dim", muted: "muted",
+};
+export const toneColor = (c, tone) => c[TONE[tone] ?? "dim"];
+
 /** A text-only action, so a choice never competes with the numbers. */
 export function quietLink(id, label, onClick, c, { disabled = false, size = 12, color = c.muted, label: spoken = label } = {}) {
   return Button.new(id).h(H.compact).items_center().cursor_pointer()
