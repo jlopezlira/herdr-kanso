@@ -1,7 +1,7 @@
 // Real mod code with a fake clock, inert native elements and counted host boundaries.
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { load, exec as runFile, clone } from "./helpers.mjs";
+import { load, exec as runFile, clone, until } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
@@ -19,7 +19,7 @@ function element() {
 }
 
 export function fixture({ dir = "/fixture", blocked = false, quiet = null, working = 10 } = {}) {
-  const state = { now: 1_000_000, project: 0, processes: [], reads: [], watches: [], timers: [], errors: [], inFlight: 0, layouts: [{ name: null, layout: "ready" }] };
+  const state = { now: 1_000_000, project: 0, processes: [], reads: [], watches: [], timers: [], errors: [], inFlight: 0, flights: [], layouts: [{ name: null, layout: "ready" }] };
   const shared = new Map();
   const projects = Array.from({ length: 4 }, (_, i) => ({ id: `s${i}`, name: `Project ${i}`, folder: `/projects/p${i}`, machine: null,
     tabs: [{ id: `tab${i}`, name: "Main", active: true }] }));
@@ -51,6 +51,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
   const counted = async (command, args = [], options = {}) => {
     state.processes.push({ command, args, options, at: state.now });
     if (blocked) return pending();
+    state.flights.push(command);
     state.inFlight += 1;
     try {
       if (command === "sqlite3" || command === "mkdir") return await runFile(command, args, options);
@@ -75,7 +76,11 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
         return { code: 0, stdout: transcripts.find((row) => row.file === args[3])?.text ?? "", stderr: "" };
       }
       return { code: 0, stdout: "", stderr: "" };
-    } finally { state.inFlight -= 1; }
+    } finally {
+      state.inFlight -= 1;
+      const at = state.flights.indexOf(command);
+      if (at >= 0) state.flights.splice(at, 1);
+    }
   };
   const cx = {
     notify() { state.dirty = true; }, stop_propagation() {}, focus_handle: element,
@@ -103,13 +108,16 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     layout: () => ({ id: "root", children: [{ id: "sidebar" }, { id: "work-body", children: [{ id: "main", content: { tab: "active" } }, { id: "panel-body", hidden: state.panelHidden !== false, children: [] }] }, { id: "strip-map" }] }),
     run() {}, openOverlay() {}, closeOverlay() {}, notify() {}, setAgentOrder() {}, fetch: async () => ({ ok: false, status: 503 }),
   };
+  const unfinished = () => `performance harness has ${state.inFlight} unfinished host calls (${state.flights.join(", ")})`;
   const settle = async () => {
     for (let idle = 0, turns = 0; idle < 4 && turns < 3000; turns += 1) {
+      // sqlite3 and mkdir are real processes: a turn count expires while one is still running.
+      if (state.inFlight) { try { await until(() => state.inFlight === 0); } catch { if (state.inFlight) throw new Error(unfinished()); } }
       await new Promise((resolve) => setTimeout(resolve, 1));
       if (state.dirty && state.draw) { state.dirty = false; state.draw(); }
       idle = state.inFlight || state.dirty && state.draw ? 0 : idle + 1;
     }
-    if (state.inFlight) throw new Error(`performance harness has ${state.inFlight} unfinished host calls`);
+    if (state.inFlight) throw new Error(unfinished());
     if (state.errors.length) throw state.errors[0];
   };
   const advance = async (ms) => {
@@ -137,12 +145,14 @@ export async function firstDraw(id) {
   const mod = await loadMod(file, [name], f.host);
   const moduleMs = performance.now() - start;
   const draw = () => {
-    const opened = performance.now();
+    // CPU, not wall time: other test files preempt this one and move performance.now().
+    const opened = process.cpuUsage();
     const view = new (isPanel ? mod.PANELS[id] : mod[name])();
     f.state.props = isPanel ? { panel: id, ...(id === "preview" ? { path: "/projects/p0/README.md" } : {}) } : {};
     if (isPanel) view.init(f.cx, f.state.props); else view.init(f.state.props, f.cx);
     view.render(f.cx);
-    return { ms: performance.now() - opened, processes: f.state.processes.length, database: f.state.processes.filter((p) => p.command === "sqlite3").length, files: f.state.reads.length, timers: f.state.timers.length };
+    const used = process.cpuUsage(opened);
+    return { ms: (used.user + used.system) / 1000, processes: f.state.processes.length, database: f.state.processes.filter((p) => p.command === "sqlite3").length, files: f.state.reads.length, timers: f.state.timers.length };
   };
   const open = draw();
   f.state.project = 1;

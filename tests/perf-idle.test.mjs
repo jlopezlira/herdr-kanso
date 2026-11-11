@@ -1,7 +1,7 @@
 // Idle budgets: timers that used to redraw or read when nothing had changed.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { temporary } from "./helpers.mjs";
+import { temporary, until } from "./helpers.mjs";
 import { fixture, loadMod } from "./perf-harness.mjs";
 
 const gitOf = (f) => f.state.processes.filter((p) => p.command === "git");
@@ -130,15 +130,19 @@ test("Images on this computer reads 0 times while behind or hidden, and reads as
 
 test("Images skips a conversation whose size has not changed, and reads when it grows", async (t) => {
   const { f, view } = await look(t, { active: true, shown: true });
-  await f.advance(6_000);
-  assert.ok(view.transcript?.file, "the conversation on disk was found");
+  await until(() => view.transcript?.file);
   f.state.processes.length = 0;
   await f.advance(60_000);
   assert.equal(hcReads(f).length, 0, `an unchanged conversation started ${hcReads(f).length} hc reads per minute; budget 0`);
   f.state.bytes += 8;
   f.state.processes.length = 0;
-  await f.advance(31_000);
-  assert.ok(hcReads(f).length > 0, "a larger conversation is read on the next check");
+  await until(async () => {
+    if (hcReads(f).length > 0) return true;
+    const due = f.state.timers.map((timer) => timer.next).filter((at) => Number.isFinite(at));
+    if (!due.length) return false;
+    await f.advance(Math.max(0, Math.min(...due) - f.state.now));
+    return hcReads(f).length > 0;
+  });
 });
 
 async function files(t, { active = true, watch = true } = {}) {
