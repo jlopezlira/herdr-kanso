@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [Unreleased]
+
+### Changed
+
+- A beta and a release candidate can be published before a version is the one everyone gets.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added

@@ -1,0 +1,38 @@
+name: Release candidate
+
+# A manual run publishes vX.Y.Z-rc.N for the version develop is preparing.
+# Any other branch, and a version that is already stable, fails instead of tagging.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-candidate
+  cancel-in-progress: false
+
+jobs:
+  rc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the versioning
+        env:
+          KANSO_BRANCH: ${{ github.ref_name }}
+        run: npm run check:version
+      - name: Plan the release candidate
+        id: plan
+        env:
+          KANSO_BRANCH: ${{ github.ref_name }}
+        run: node scripts/release-plan.mjs rc
+      - name: Publish the release candidate
+        if: steps.plan.outputs.action == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.plan.outputs.tag }}" --target "$GITHUB_SHA" --title "${{ steps.plan.outputs.title }}" --notes-file "${{ steps.plan.outputs.notes }}" --prerelease

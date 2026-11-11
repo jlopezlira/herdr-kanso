@@ -112,11 +112,15 @@ agent unless you press Send, and share images carry totals only.
 
 ## Development
 
-`npm test` (Node 22.15+, Git, Bash, sqlite3). A pull request that changes
-what kansō installs bumps `kanso/mods/kanso-chrome/version.json` and adds the
-version's section to [CHANGELOG.md](CHANGELOG.md); `npm run check:version`
-checks it, and merging to main releases it. How every part is built:
-[kanso/RECIPE.md](kanso/RECIPE.md).
+`npm test` (Node 22.15+, Git, Bash, sqlite3). Pull requests target `develop`.
+A change to what kansō installs adds its entries to the next version's section
+in [CHANGELOG.md](CHANGELOG.md), and raises
+`kanso/mods/kanso-chrome/version.json` only when that category needs a bigger
+bump than the section already has. `npm run check:version` checks it. A push
+to `develop` publishes `vX.Y.Z-beta.N` when what kansō installs changed since
+the last beta or the newest stable tag. Running the Release candidate workflow
+on `develop` publishes `vX.Y.Z-rc.N`. Merging `develop` into `main` publishes
+the stable `vX.Y.Z`. How every part is built: [kanso/RECIPE.md](kanso/RECIPE.md).
 
 ## Credits and license
 
