@@ -4,6 +4,7 @@
 // gh's statusCheckRollup holds check runs (status, then a conclusion once
 // completed) and commit statuses (a state). A value not listed below is
 // "unknown", never a pass: GitHub adds values, and a new one must not read as green.
+import { plural } from "./pure.js";
 
 const PASSED = new Set(["SUCCESS", "NEUTRAL"]);
 // STALE: GitHub gave up on a run left incomplete; only a rerun passes it.
@@ -56,16 +57,41 @@ export const rollupState = (rollup) => checkSummary(onePerJob(rollup).map(checkS
 
 const CAN_MERGE = new Set(["CLEAN", "HAS_HOOKS"]);
 const WRITERS = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+export const isWriter = (permission) => WRITERS.has(String(permission ?? "").toUpperCase());
 export const READY_TEXT = "Ready to merge";
-const NO_PERMISSION = "No permission to merge";
 
-const checkLine = (checks) => {
+export function jobLabel(check) {
+  const name = check?.name || "";
+  const workflow = check?.workflowName || "";
+  if (!name) return "Check";
+  if (!workflow || workflow === name) return name;
+  return `${workflow} / ${name}`;
+}
+
+export function runIdOf(check) {
+  if (!check || typeof check !== "object") return null;
+  const fromUrl = /\/actions\/runs\/(\d+)/.exec(String(check.detailsUrl || check.url || ""));
+  if (fromUrl) return fromUrl[1];
+  const id = check.checkSuite?.workflowRun?.databaseId;
+  return id != null && id !== "" ? String(id) : null;
+}
+const NO_PERMISSION = "No permission to merge";
+const CHANGES = "Changes requested";
+const REVIEW = "Review required";
+const DRAFT = "Draft";
+const BLOCKED = "Blocked by branch rules";
+const CHECKING = "Checking whether it can merge…";
+const CLOSED = "Closed without merging";
+
+export function checkLine(checks) {
   if (!checks?.state || checks.state === "pass") return null;
   const verb = { fail: "failing", pending: "running", unknown: "unknown" }[checks.state];
   if (!verb) return null;
   const n = checks[checks.state] || 1;
-  return `${n} check${n > 1 ? "s" : ""} ${verb}`;
-};
+  return `${plural(n, "check", "checks")} ${verb}`;
+}
+
+const say = (id, text, tone, extra = {}) => ({ offer: false, text, tone, id, ...extra });
 
 // Whether GitHub would merge this, and the few words for why not. UNKNOWN is still computing.
 export function mergeReadiness(pr, { permission = null, checks = null } = {}) {
@@ -74,25 +100,38 @@ export function mergeReadiness(pr, { permission = null, checks = null } = {}) {
   const state = String(pr?.state ?? "OPEN").toUpperCase();
   const base = pr?.baseRefName || "base";
   const blocked = () => {
-    if (review === "CHANGES_REQUESTED") return { offer: false, text: "Changes requested", tone: "red" };
-    if (review === "REVIEW_REQUIRED") return { offer: false, text: "Review required", tone: "yellow" };
+    if (review === "CHANGES_REQUESTED") return say("changes", CHANGES, "red");
+    if (review === "REVIEW_REQUIRED") return say("review", REVIEW, "yellow");
     const line = checkLine(checks);
-    if (line) return { offer: false, text: line, tone: checks.state === "fail" ? "red" : "yellow" };
-    return { offer: false, text: "Blocked by branch rules", tone: "yellow" };
+    if (line) return say(checks.state === "fail" ? "failed" : checks.state === "pending" ? "running" : "unknown", line, checks.state === "fail" ? "red" : "yellow");
+    return say("blocked", BLOCKED, "yellow");
   };
-  if (state === "MERGED") return { offer: false, text: "Merged", tone: "violet" };
-  if (state === "CLOSED") return { offer: false, text: "Closed without merging", tone: "red" };
-  if (pr?.isDraft || status === "DRAFT") return { offer: false, text: "Draft", tone: "dim" };
-  if (pr?.mergeable === "CONFLICTING" || status === "DIRTY") return { offer: false, text: `Conflicts with ${base}`, tone: "red" };
-  if (!status || status === "UNKNOWN") return { offer: false, text: "Checking whether it can merge…", tone: "dim" };
-  if (status === "BEHIND") return { offer: false, text: `Behind ${base}`, tone: "yellow" };
+  if (state === "MERGED") return say("merged", "Merged", "violet");
+  if (state === "CLOSED") return say("closed", CLOSED, "red");
+  if (pr?.isDraft || status === "DRAFT") return say("draft", DRAFT, "dim");
+  if (pr?.mergeable === "CONFLICTING" || status === "DIRTY") return say("conflicts", `Conflicts with ${base}`, "red");
+  if (!status || status === "UNKNOWN") return say("computing", CHECKING, "dim");
+  if (status === "BEHIND") return say("behind", `Behind ${base}`, "yellow");
   if (status === "BLOCKED" || !CAN_MERGE.has(status)) return blocked();
-  if (!WRITERS.has(String(permission ?? "").toUpperCase())) {
+  if (!isWriter(permission)) {
     return permission
-      ? { offer: false, text: NO_PERMISSION, tone: "dim" }
-      : { offer: false, text: "Checking whether it can merge…", tone: "dim", awaitingPermission: true };
+      ? say("permission", NO_PERMISSION, "dim")
+      : say("computing", CHECKING, "dim", { awaitingPermission: true });
   }
-  return { offer: true, text: READY_TEXT, tone: "green" };
+  return { offer: true, text: READY_TEXT, tone: "green", id: "ready" };
+}
+
+// A list row never waits on permission: the check or review line, never "ready".
+export function listHold(pr, checks) {
+  const line = checkLine(checks);
+  if (checks?.state === "fail" && line) return say("failed", line, "red");
+  if (pr?.reviewDecision === "CHANGES_REQUESTED") return say("changes", CHANGES, "red");
+  if (line) return say(checks.state === "pending" ? "running" : "unknown", line, "yellow");
+  if (pr?.isDraft) return say("draft", DRAFT, "dim");
+  if (pr?.reviewDecision === "APPROVED") return say("approved", "Approved", "green");
+  if (pr?.reviewDecision === "REVIEW_REQUIRED") return say("review", REVIEW, "yellow");
+  if (checks?.state === "pass") return say("passed", "Checks passed", "green");
+  return say("open", "Open", "dim");
 }
 
 // The strip never reads permission, so the header claims nothing about it.

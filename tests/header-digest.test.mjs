@@ -48,7 +48,7 @@ test("one verdict for every pull request state, and ready is never said", async 
   assert.equal(two.failed, null);
   assert.equal(prLine({ pr: two }).text, "2 checks failing");
   assert.equal(prLine({ pr: two }).check, null);
-  const placed = ["hero", "review", "threads", "checks", "conflicts"];
+  const placed = ["hero", "people", "threads", "checks"];
   const { sectionIndex } = await panel();
   for (const [input] of cases) {
     const line = prLine(input);
@@ -107,6 +107,8 @@ test("each segment's words, colour and click, and nothing that cannot act", asyn
   assert.deepEqual(clone(digestOpen(idle[2], "/repo")), { panel: "pr", section: "checks", check: "test / unit" });
   assert.equal(digestOpen(null), null);
   assert.equal(digestOpen({}), null);
+  const hidden = { "header.digest": "hide", "header.pr": "hide" };
+  assert.deepEqual(clone(digestSegments({ files: 2, add: 1, del: 0, ahead: 1, pr: { number: 41, state: "OPEN", mergeStateStatus: "UNSTABLE", fail: 1, failed: "test / unit", pending: 0 } }, { map: hidden })), []);
   const stored = digestPr(view({ reviewDecision: "REVIEW_REQUIRED" }, [run("ci", "SUCCESS")]));
   assert.equal(stored.hold, "Review required");
   assert.equal(stored.fail, 0);
@@ -129,16 +131,16 @@ test("Sleep and Send stay on a finished focused pane, and a blocked pane has no 
 
 test("the pull request panel lands on the named section and shows the failed check first", async () => {
   const { sectionIndex, checksFirst } = await panel();
-  const ids = ["header", "hero", "description", "review", "checks", "threads", "conflicts", "files", "note"];
+  const ids = ["header", "hero", "details", "description", "people", "checks", "threads", "files", "others"];
   assert.equal(sectionIndex("draft", ids), 1);
   assert.equal(sectionIndex("behind", ids), 1);
-  assert.equal(sectionIndex("review", ids), 3);
-  assert.equal(sectionIndex("checks", ids), 4);
-  assert.equal(sectionIndex("threads", ids), 5);
-  assert.equal(sectionIndex("conflicts", ids), 6);
+  assert.equal(sectionIndex("conflicts", ids), 1);
+  assert.equal(sectionIndex("review", ids), 4);
+  assert.equal(sectionIndex("checks", ids), 5);
+  assert.equal(sectionIndex("threads", ids), 6);
   assert.equal(sectionIndex("push", ids), null);
   assert.equal(sectionIndex(null, ids), null);
-  assert.equal(sectionIndex("checks", ["header", "hero"]), null);
+  assert.equal(sectionIndex("checks", ["header", "hero", "details"]), null);
   const checks = [{ name: "a", state: "fail" }, { name: "b", state: "pass" }, { name: "c", state: "fail" }];
   assert.deepEqual(clone(checksFirst(checks, "c")).map((c) => c.name), ["c", "a", "b"]);
   assert.deepEqual(clone(checksFirst(checks, "missing")), checks);

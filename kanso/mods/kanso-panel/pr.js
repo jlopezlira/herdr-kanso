@@ -4,24 +4,30 @@ import { openApi } from "./platform-open.js";
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView, ScrollHandle } from "gpui-base";
-import { exec, knownAgents, notify, openOverlay, run, theme, setShared, shared, window, layout, props } from "herdr";
-import { location, key, diffRows, monoFont } from "./lib.js";
+import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
+import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
+import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
 import { tryOr, tryOrAsync, bounded } from "./pure.js";
-import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./ghchecks.js";
+import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
+import { deliver, isAgent } from "./deliver.js";
+import { nameOf, givenNames } from "./marks.js";
+import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
+import { VIEW } from "./pr-body.js";
+import { drawHero, drawEmpty, footOf, listedRow, heroPieces } from "./pr-view.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
 import { awayShown } from "./since-left-model.js";
+import { pieces } from "./pieces.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
-import { CALL_MS, TICK_MS, ageOf, asOfAge, authFresh, heldView, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
+import { CALL_MS, TICK_MS, ageOf, authFresh, heldView, logDue, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
-const keepsFacts = () => awayShown(shared("kanso.hidden"));
+const keepsFacts = () => awayShown(pieces(shared));
 
 const ICON = "mods/kanso-chrome/icons/";
-const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
+const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,commits,files,updatedAt,mergedAt,closedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
 // assignableUsers is GitHub's own picker list and, unlike `collaborators`, needs no push access to read.
 const PEOPLE = "query($o:String!,$r:String!){viewer{login} repository(owner:$o,name:$r){assignableUsers(first:100){pageInfo{hasNextPage} nodes{login name}}}}";
@@ -47,12 +53,11 @@ export function ghMissing(r) {
   const why = `${r.stderr ?? ""}\n${r.stdout ?? ""}`;
   if (/no git remotes found/i.test(why)) return { title: "No remote", detail: null };
   if (/known GitHub host/i.test(why)) return { title: "No GitHub remote", detail: null };
-  if (/gh auth login|not logged in|HTTP 401|bad credentials/i.test(why)) return { title: "Not signed in to GitHub", detail: "Run gh auth login in a terminal." };
+  if (/gh auth login|not logged in|HTTP 401|bad credentials/i.test(why)) return { title: "Not signed in to GitHub", detail: null };
   return null;
 }
 
 const ago = (iso) => ageOf(iso, Date.now());
-const clock = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); return /^[0-9a-fA-F]{6}$/.test(h) ? `#${h}` : null; };
 const openUrl = (url) => localService(openApi).open(url).catch(() => { });
 
@@ -60,8 +65,18 @@ const openUrl = (url) => localService(openApi).open(url).catch(() => { });
 // Its state, counts and what they say together come from ghchecks.js, which the pane strip reads too.
 function checkOf(c) {
   const state = checkState(c);
-  if (c.__typename === "StatusContext") return { name: c.context, url: c.targetUrl, state };
-  return { name: c.name, workflow: c.workflowName && c.workflowName !== c.name ? c.workflowName : "", url: c.detailsUrl, state };
+  const workflowName = c.workflowName || "";
+  const status = c.__typename === "StatusContext";
+  return {
+    name: status ? c.context : c.name,
+    url: status ? c.targetUrl : c.detailsUrl,
+    state,
+    workflow: !status && workflowName && workflowName !== c.name ? workflowName : "",
+    runId: status ? null : runIdOf(c),
+    startedAt: c.startedAt ?? null,
+    completedAt: c.completedAt ?? null,
+    workflowName,
+  };
 }
 const checksIn = (rollup) => onePerJob(rollup).map(checkOf);
 const summaryOf = (checks) => checkSummary(checks.map((x) => x.state));
@@ -73,19 +88,6 @@ const CHECK_WORDS = {
   skipped: { label: "skipped", color: "dim", verb: "passed" },
   pass: { label: "passed", color: "dim", verb: "passed" },
 };
-// What the checks hold against a pull request, as one line; null when they all passed.
-function checksLine(sum, c) {
-  if (!sum.state || sum.state === "pass") return null;
-  const n = sum[sum.state], words = CHECK_WORDS[sum.state];
-  return { text: `${n} check${n > 1 ? "s" : ""} ${words.verb}`, color: c[words.color] };
-}
-// Failing checks, then changes asked for, then checks still running or unknown. Null when nothing does.
-function holdUp(sum, review, c) {
-  const line = checksLine(sum, c);
-  if (sum.state === "fail") return line;
-  if (review === "CHANGES_REQUESTED") return { text: "Changes requested", color: c.red };
-  return line;
-}
 // The counts by verb, worst first: "1 failing · 3 passed" (skipped ones count as passed).
 const checksNote = (sum) => [...new Set(STATES.map((s) => CHECK_WORDS[s].verb))]
   .map((verb) => ({ verb, n: STATES.filter((s) => CHECK_WORDS[s].verb === verb).reduce((k, s) => k + sum[s], 0) }))
@@ -105,13 +107,7 @@ function splitDiff(text) {
   }));
 }
 
-const PROMPTS = {
-  explain: (pr) => `Explain pull request #${pr.number} (${pr.url}). Read the diff (\`gh pr diff ${pr.url}\`) and walk through its purpose, the changes, the risks, and what I should read closely before approving. Do not change any code.`,
-  feedback: (pr) => `Address the actionable feedback and failing checks on pull request #${pr.number} (${pr.url}). Fetch the latest review threads and check results with \`gh\`, skip resolved feedback, and verify each finding before changing code. First confirm this checkout is on ${pr.headRefName}; if it isn't, prepare the branch in its own worktree. Keep the fixes focused and run the relevant checks.`,
-  conflicts: (pr) => `Resolve the conflicts of pull request #${pr.number} (${pr.url}) with its base branch ${pr.baseRefName}. First confirm this checkout is on ${pr.headRefName}; if it isn't, prepare the branch in its own worktree. Bring it up to date using this repository's convention, preserve the intent of both sides, and run the relevant checks before pushing.`,
-};
-const TASK_NAMES = { explain: "Explain", feedback: "Feedback", conflicts: "Conflicts" };
-const PLACED = { draft: "hero", behind: "hero", review: "review", threads: "threads", checks: "checks", conflicts: "conflicts" };
+const PLACED = { draft: "hero", behind: "hero", conflicts: "hero", review: "people", threads: "threads", checks: "checks" };
 
 export function sectionIndex(section, ids) {
   const id = PLACED[section];
@@ -132,8 +128,7 @@ export class PullRequest {
   init(cx, props = {}) {
     this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
     this.expanded = { checks: false, files: false, body: false }; this.width = 368;
-    this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own, else the newest
-    this.fallback = false; // shown: the newest, as the branch has none
+    this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own
     this.listing = false; // the page of pull requests instead of the one shown
     this.tab = "open"; // that page's tab: "open", or "closed" (merged or closed, newest first)
     this.closedPrs = null; this.closedLoading = false;
@@ -143,6 +138,7 @@ export class PullRequest {
     this.section = props.section ?? null;
     this.check = props.check ?? null;
     this.asked = props.at ?? null;
+    this.placed = null;
     this.landed = null;
     this.scroll = ScrollHandle.new();
     this.jumpUrl = props.section === "push" ? null : (props.url ?? null);
@@ -244,7 +240,15 @@ export class PullRequest {
     } catch { return null; }
   }
 
-  again(cx) { this.loadedAt = 0; this.inboxForce = true; this.refresh(cx); }
+  forgetLog(next = null) {
+    this.logFor = next; this.failedLog = null; this.logParsed = null; this.logParsedFor = null;
+  }
+
+  again(cx) {
+    this.loadedAt = 0; this.inboxForce = true;
+    this.forgetLog();
+    this.refresh(cx);
+  }
   repo() { const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(this.pr?.url ?? ""); return m ? { o: m[1], r: m[2] } : null; }
   local(url) {
     if (url && url === this.branchUrl) return true; // the branch's own, even from a fork's checkout
@@ -263,12 +267,15 @@ export class PullRequest {
       this.openPrs = []; this.selected = this.jumpUrl ?? (this.section === "push" ? null : this.keptUrl) ?? null; this.remembered = !this.jumpUrl && this.section !== "push" && Boolean(this.keptUrl);
       this.home = null; this.branchUrl = null; this.outside = false;
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
-      this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
+      this.listing = false; this.tab = "open"; this.closedPrs = null;
       this.inboxOn = false; this.inbox = null; this.inboxOpen = this.jumpUrl ? false : null; this.inboxTab = "needs"; this.inboxForce = false;
       this.jumpUrl = null;
       this.permission = null; this.permissionRepo = null;
       this.threadsFor = null; this.stale = null; this.wait = null; this.freshAt = null;
       this.listed = false; this.openedList = false; this.host = null;
+      this.aheadCount = 0; this.behindCount = 0; this.subjects = []; this.subjectsFor = null; this.baseBehind = null; this.baseBehindFor = null;
+      this.forgetLog();
+      this.sendShown = false; this.sendFor = null; this.listingOthers = false;
     }
     if (!cwd) return;
     this.keptUrl = null;
@@ -299,9 +306,11 @@ export class PullRequest {
           this.readPushed(this.root, on),
         ]);
         if (key() !== context) return null;
-        if (!branch || branch.late || remote?.late || pushed === "late") { this.keepLast(); return null; }
+        if (!branch || branch.late || remote?.late || pushed?.state === "late") { this.keepLast(); return null; }
         this.branch = branch.stdout.trim() || null;
-        this.pushed = pushed === "pushed"; this.behind = pushed === "behind";
+        this.pushed = pushed?.state === "pushed"; this.behind = pushed?.state === "behind";
+        this.aheadCount = Number.isInteger(pushed?.ahead) ? pushed.ahead : 0;
+        this.behindCount = Number.isInteger(pushed?.behind) ? pushed.behind : 0;
         const remoteUrl = String(remote?.stdout ?? "");
         this.home = /github\.com[:/]([^/]+\/[^/\s]+?)(?:\.git)?\s*$/.exec(remoteUrl)?.[1] ?? null;
         this.host = parseRemote(remoteUrl.trim())?.host ?? null;
@@ -318,6 +327,14 @@ export class PullRequest {
         const open = this.listing ? this.gh(openListArgs()).catch(() => null) : null;
         try { await this.readShown(context, want, open); }
         catch (e) { if (this.remembered) this.dropRemembered(); else failed(e); }
+        if (key() === context && !this.pr && pushed?.state === "unpushed") {
+          const stamp = `${this.branch ?? ""}\0${pushed.ahead ?? 0}`;
+          if (this.subjectsFor !== stamp) {
+            this.subjectsFor = stamp;
+            const log = await this.git(["log", "-5", "--format=%s"], this.root, on).catch(() => null);
+            if (key() === context && this.subjectsFor === stamp && log?.code === 0) this.subjects = String(log.stdout ?? "").split("\n").filter(Boolean);
+          }
+        } else if (key() === context) { this.subjects = []; this.subjectsFor = null; }
         return open;
       };
       const open = await read().catch((e) => { failed(e); return null; });
@@ -327,6 +344,25 @@ export class PullRequest {
       this.openedList = false;
       this.loading = false; this.loadedAt = Date.now(); cx.notify();
       if (follow) this.refresh(cx);
+      else if (!this.wait) this.readLog(cx);
+    });
+  }
+
+  facing() {
+    return pollFacing(window()?.active, walkLayout(layout(), "panel-body")?.hidden);
+  }
+
+  readLog(cx) {
+    if (!this.pr) return;
+    const stamp = this.view().logKey;
+    if (!logDue({ facing: this.facing(), key: stamp, have: this.logFor ?? null })) return;
+    this.forgetLog(stamp);
+    this.bind(cx);
+    cx.spawn(async (cx) => {
+      const r = await this.gh(["run", "view", stamp, "--log-failed"]).catch(() => null);
+      if (this.logFor !== stamp) return;
+      if (r?.code === 0) this.failedLog = r.stdout ?? "";
+      cx.notify();
     });
   }
 
@@ -381,16 +417,21 @@ export class PullRequest {
     if (this.inbox) this.inbox = { ...this.inbox, needs, yours: (this.inbox.yours ?? []).map(stamp), unseen: needs.filter(isNew).length };
   }
 
-  // gh pr create --web refuses a branch unless it sits exactly on a remote upstream.
   async readPushed(cwd, on) {
     const [up, counts] = await Promise.all([
       this.git(["rev-parse", "--symbolic-full-name", "@{u}"], cwd, on).catch(() => null),
       this.git(["rev-list", "--left-right", "--count", "@{u}...HEAD"], cwd, on).catch(() => null),
     ]);
-    if (up?.late || counts?.late) return "late";
-    if (up?.code !== 0 || !up.stdout.trim().startsWith("refs/remotes/") || counts?.code !== 0) return "unpushed";
-    const [behind, ahead] = String(counts.stdout).trim().split(/\s+/).map(Number);
-    return ahead !== 0 || Number.isNaN(ahead) ? "unpushed" : behind !== 0 ? "behind" : "pushed";
+    if (up?.late || counts?.late) return { state: "late", ahead: 0, behind: 0 };
+    const upstream = up?.code === 0 && String(up.stdout ?? "").trim().startsWith("refs/remotes/");
+    if (!upstream) return { state: "unpushed", ahead: 0, behind: 0 };
+    if (counts?.code !== 0) return { state: "unpushed", ahead: 0, behind: 0 };
+    const [behind, ahead] = String(counts.stdout ?? "").trim().split(/\s+/).map(Number);
+    const back = Number.isInteger(behind) ? behind : 0;
+    const fore = Number.isInteger(ahead) ? ahead : 0;
+    if (fore !== 0) return { state: "unpushed", ahead: fore, behind: back };
+    if (back !== 0) return { state: "behind", ahead: 0, behind: back };
+    return { state: "pushed", ahead: 0, behind: 0 };
   }
 
   async keepPrFacts(items) {
@@ -403,7 +444,7 @@ export class PullRequest {
     if (!asked) {
       if (this.remembered) { this.dropRemembered(); return; }
       if (this.pr) { this.keepLast("The GitHub CLI is not installed."); return; }
-      this.missing = null; this.error = { title: "The GitHub CLI is not installed.", detail: "Install gh and run `gh auth login`." }; this.pr = null; return;
+      this.missing = null; this.error = { title: "GitHub CLI not installed", detail: null, cli: true }; this.pr = null; return;
     }
     // A click picked another one while this read was out: drop it, the finally reads again.
     if (key() !== context || this.selected !== want) return;
@@ -414,7 +455,7 @@ export class PullRequest {
       this.stale = null; this.freshAt = null; return;
     }
     this.missing = null;
-    const opened = list ? this.takeOpen(await list, context) : false;
+    if (list) this.takeOpen(await list, context);
     await this.keepPrFacts([
       ...(asked.view.code === 0 ? [JSON.parse(asked.view.stdout)] : []),
       ...(this.openPrs ?? []).map((pr) => ({ ...pr, state: "OPEN" })),
@@ -426,18 +467,12 @@ export class PullRequest {
       const b = await this.gh(["repo", "view", "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name"]).catch(() => null);
       if (b?.code === 0 && key() === context) this.base = b.stdout.trim() || null;
     }
-    const listedOk = branchHasNone && !list
-      ? this.takeOpen(await this.gh(openListArgs()).catch(() => null), context) || opened
-      : opened;
-    if (branchHasNone && !this.openPrs.length) {
-      if (!listedOk) { this.keepLast(); return; }
-      this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null; this.branchUrl = null; return;
+    if (branchHasNone) {
+      if (key() !== context || this.selected !== want) return;
+      this.none = true; this.pr = null; this.error = null; this.stale = null; this.freshAt = null;
+      this.branchUrl = null; this.threads = []; return;
     }
-    const fallback = branchHasNone;
-    const view = branchHasNone
-      ? await this.gh(["pr", "view", this.openPrs[0].url, "--json", FIELDS]).catch(() => ({ code: 1, stdout: "", stderr: "GitHub could not be read." }))
-      : asked.view;
-    if (branchHasNone && (key() !== context || this.selected !== want)) return;
+    const view = asked.view;
     if (view.code !== 0) {
       if (this.remembered) { this.dropRemembered(); return; }
       const why = (view.stderr || view.stdout).trim();
@@ -446,13 +481,16 @@ export class PullRequest {
       return;
     }
     const pr = JSON.parse(view.stdout);
-    if (view !== asked.view) await this.keepPrFacts([pr]);
     if (this.remembered && !prMemory({ url: pr.url }, () => (pr.state === "OPEN" ? "open" : "closed"))) { this.dropRemembered(); return; }
     this.remembered = false;
-    if (this.pr?.url !== pr.url) { this.diffs = null; this.openFile = null; this.expanded = { ...this.expanded, body: false }; }
-    this.pr = pr; this.none = false; this.error = null; this.fallback = fallback;
+    if (this.pr?.url !== pr.url) {
+      this.diffs = null; this.openFile = null; this.expanded = { ...this.expanded, body: false };
+      this.forgetLog();
+      this.sendShown = false; this.sendFor = null; this.baseBehind = null; this.baseBehindFor = null;
+    }
+    this.pr = pr; this.none = false; this.error = null;
     this.freshAt = Date.now(); this.stale = null; this.wait = null;
-    if (!want) this.branchUrl = fallback ? null : pr.url;
+    if (!want) this.branchUrl = pr.url;
     if (!this.home && !want) this.home = /github\.com\/([^/]+\/[^/]+)\/pull\//.exec(pr.url)?.[1] ?? null;
     await this.noteSeen(pr.url);
     const repo = this.repo();
@@ -464,7 +502,7 @@ export class PullRequest {
       if (nodes) {
         this.threads = nodes.filter((n) => !n.isResolved).map((n) => {
           const first = n.comments?.nodes?.[0];
-          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\s+/g, " ").trim(), url: first?.url, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
+          return { path: n.path, line: n.line, outdated: n.isOutdated, author: first?.author?.login ?? "", body: (first?.body ?? "").replace(/\r\n?/g, "\n").trim(), url: first?.url, replies: Math.max(0, (n.comments?.totalCount ?? 1) - 1) };
         });
         this.threadsFor = threadKey(pr.url, pr.updatedAt);
       }
@@ -483,6 +521,16 @@ export class PullRequest {
         if (value && key() === context && this.pr?.url === pr.url) this.permission = value;
       }
     }
+    const behindStamp = `${pr.url}\0${pr.updatedAt ?? ""}`;
+    if (String(pr.mergeStateStatus ?? "").toUpperCase() === "BEHIND" && this.root) {
+      if (this.baseBehindFor !== behindStamp) {
+        this.baseBehindFor = behindStamp;
+        const base = pr.baseRefName || "main";
+        const counted = await this.git(["rev-list", "--count", `HEAD..origin/${base}`], this.root, this.on).catch(() => null);
+        const n = Number(String(counted?.stdout ?? "").trim());
+        if (key() === context && this.pr?.url === pr.url && this.baseBehindFor === behindStamp) this.baseBehind = counted?.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
+      }
+    } else if (key() === context && this.pr?.url === pr.url) { this.baseBehind = null; this.baseBehindFor = null; }
   }
 
   loadClosed(cx) {
@@ -518,22 +566,18 @@ export class PullRequest {
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
 
-  act(label, args, cx) {
+  act(label, args, cx, run = (a) => this.gh(a)) {
     if (this.busy) return;
     this.bind(cx);
     this.busy = label; this.note = null; this.armed.clear();
     cx.spawn(async (cx) => {
       try {
-        const r = await this.gh(args);
+        const r = await run(args);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
       } catch (e) { this.note = `${label} failed: ${String(e?.message ?? e)}`; }
       finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
     });
     cx.notify();
-  }
-
-  merge(cx) {
-    this.armed.press("merge", cx, (cx) => this.mergeNow(cx));
   }
 
   mergeNow(cx) {
@@ -562,8 +606,8 @@ export class PullRequest {
     cx.spawn(async (cx) => {
       try {
         const now = await this.readPushed(this.root, this.on);
-        if (now === "late") throw new Error("It took too long to answer.");
-        if (now !== "pushed") throw new Error(`${now === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
+        if (!now || now.state === "late") throw new Error("It took too long to answer.");
+        if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
       } catch (e) { this.note = `Could not create it: ${String(e?.message ?? e)}`; }
@@ -572,36 +616,9 @@ export class PullRequest {
     cx.notify();
   }
 
-  agentTask(task, useEditor) {
-    const pr = this.pr, root = this.root, on = this.on, space = location().space;
-    knownAgents({ on }).then((list) => {
-      const agent = list.find((a) => a.installed);
-      if (!agent) throw new Error("no agent is installed");
-      if (useEditor) {
-        openOverlay({
-          mod: "kanso-prompt-editor", kind: "dialog", width: 680, height: 500, props: {
-            title: `${TASK_NAMES[task]} prompt for #${pr.number}`,
-            name: `#${pr.number} ${TASK_NAMES[task]}`,
-            value: PROMPTS[task](pr),
-            multiline: true,
-            submit_button_title: "Run in new tab",
-            command: {
-              name: "tab.new",
-              args: {
-                name: `#${pr.number} ${TASK_NAMES[task]}`,
-                space,
-                folder: root ?? this.cwd,
-                argv: agent.run,
-              },
-              key: "task"
-            }
-          }
-        });
-      }
-      else {
-        run("tab.new", { name: `#${pr.number} ${TASK_NAMES[task]}`, space, folder: root ?? this.cwd, argv: agent.run, task: PROMPTS[task](pr) });
-      }
-    }).catch((e) => notify({ title: "Could not start the agent", body: String(e?.message ?? e), level: "error" }));
+  // terminal.open cannot name a machine; the pane opens in the space already on screen.
+  signIn() {
+    run("terminal.open", { argv: ["gh", "auth", "login"], folder: this.root || this.cwd, place: "right" });
   }
 
   openPicker(kind, open, cx) {
@@ -726,15 +743,8 @@ export class PullRequest {
     const sum = summaryOf(checksIn(p.statusCheckRollup));
     const gate = p.mergeStateStatus || p.mergeable === "CONFLICTING" || p.isDraft
       ? mergeReadiness(p, { permission: this.rowPermission(p), checks: sum }) : null;
-    // Permission for this repo is still unread: keep the check words, never "ready".
-    if (gate && !gate.awaitingPermission) return { text: gate.text, color: c[gate.tone] };
-    const held = holdUp(sum, p.reviewDecision, c);
-    if (p.isDraft) return { text: "Draft", color: c.dim };
-    if (held) return held;
-    if (p.reviewDecision === "APPROVED") return { text: "Approved", color: c.green };
-    if (p.reviewDecision === "REVIEW_REQUIRED") return { text: "Review required", color: c.yellow };
-    if (sum.state === "pass") return { text: "Checks passed", color: c.green };
-    return { text: "Open", color: c.dim };
+    const shown = gate && !gate.awaitingPermission ? gate : listHold(p, sum);
+    return { text: shown.text, color: toneColor(c, shown.tone) };
   }
 
   canSwitch() {
@@ -793,7 +803,7 @@ export class PullRequest {
 
   openPage(c, rows = null) {
     const finished = rows !== null;
-    const list = finished ? rows : this.openList(), shown = this.pr?.url, me = this.viewer;
+    const list = finished ? rows : this.openList(), me = this.viewer;
     const here = (p) => p.url === this.branchUrl || p.headRefName === this.branch;
     const mine = (p) => Boolean(me) && p.author?.login === me;
     const groups = [
@@ -801,39 +811,14 @@ export class PullRequest {
       ["Yours", list.filter((p) => !here(p) && mine(p))],
       [me ? "Others" : "Open", list.filter((p) => !here(p) && !mine(p))],
     ].filter(([, rows]) => rows.length);
-    const create = !finished && (this.fallback || this.none) && Boolean(this.branch) && !this.isBase();
+    const create = !finished && this.none && Boolean(this.branch) && !this.isBase();
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
-    const row = (p, i) => {
-      const on = p.url === shown;
-      const state = !finished ? this.rowState(p, c)
-        : p.state === "MERGED" ? { text: "Merged", color: c.violet } : { text: "Closed without merging", color: c.red };
-      const when = !finished ? `updated ${ago(p.updatedAt)}`
-        : p.state === "MERGED" ? `merged ${ago(p.mergedAt || p.updatedAt)}` : `closed ${ago(p.closedAt || p.updatedAt)}`;
-      const meta = [`#${p.number}`, mine(p) ? "you" : p.author?.login, when].filter(Boolean).join(" · ");
-      return Button.new(`pr-${finished ? "done" : "open"}-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
-        .selected(on)
-        .when(on, (el) => el.bg(c.selected))
-        .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-        .accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`)
-        .on_click((_e, cx) => this.choose(p, cx))
-        .child(v_flex().w_full().min_w(0).gap(4)
-          .child(h_flex().w_full().items_start().gap(G.md)
-            .child(div().flex_1().min_w(0).text_size(14).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
-            .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown"))))
-          .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
-          .child(h_flex().w_full().gap(G.sm).items_center()
-            .child(div().size(6).flex_none().rounded_full().bg(state.color))
-            .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
-            .when(p.additions !== undefined, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
-    };
     return v_flex().w_full().gap(G.xl)
       .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
         .child(section(c, title, String(rows.length)))
-        .children(rows.map((p, k) => row(p, firsts[g] + k)))))
-      .when(create, (el) => el.child(v_flex().w_full().gap(G.xs)
-        .child(div().text_size(12).text_color(c.dim).child(this.pushed ? `${this.branch} has no pull request yet.` : `${this.behind ? "Pull" : "Push"} ${this.branch} ${this.behind ? "from" : "to"} GitHub to open one.`))
-        .when(this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : `Create one for ${this.branch}`, (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }))))))
+        .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
+      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
@@ -856,27 +841,14 @@ export class PullRequest {
       .child(div().text_size(12).text_color(c.text).child(label));
   }
 
-  readNote() {
-    if (this.wait) return this.wait;
-    if (this.stale) return asOfAge(this.stale.at, Date.now());
-    return this.freshAt ? `updated ${clock(this.freshAt)}` : null;
-  }
-
-  footnote(c) {
-    const note = this.readNote();
-    const line = note ? `Read from GitHub with gh · ${note}.` : "Read from GitHub with gh.";
-    const cadence = !this.wait && !this.stale;
-    return h_flex().gap(G.sm).items_center()
-      .child(div().text_size(10.5).text_color(c.dim).child(cadence && this.freshAt ? `${line} It rereads every minute while shown, every 20 s while a check runs.` : line))
-      .when(Boolean(this.stale) && !this.wait, (el) => el.child(quietLink("pr-retry", "Retry", (cx) => this.again(cx), c)));
-  }
+  readNote() { return footOf(this).text; }
 
   header(c, narrow) {
     const pr = this.pr, here = this.inboxOn && this.inboxOpen, pill = (this.listing || this.canSwitch()) && !here;
     const limited = this.inbox?.limitedUntil;
     const refreshed = this.readNote() ?? (limited ? `limited until ${limitLine(limited).match(/\d{2}:\d{2}/)?.[0]}` : null);
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
+      .child(div().truncate().text_size(narrow ? VIEW.title : T.page).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
@@ -910,9 +882,9 @@ export class PullRequest {
   bones(c, narrow = true) {
     const { header } = ghost(c);
     const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
+    return v_flex().size_full().min_h(0).bg(c.background).text_color(c.text)
       .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+        .child(v_flex().w_full().max_w(1080).gap(G.lg)
           .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
           .child(this.skeleton(c, narrow))));
   }
@@ -928,60 +900,127 @@ export class PullRequest {
 
   waiting(c, title, detail, action) {
     return v_flex().w_full().gap(G.sm)
-      .child(div().text_size(15).text_color(this.error ? c.red : c.muted).child(title))
+      .child(div().text_size(T.card).text_color(this.error ? c.red : c.muted).child(title))
       .when(Boolean(detail), (el) => el.child(div().text_size(12).text_color(c.dim).child(detail)))
       .when(Boolean(action), (el) => el.child(h_flex().pt(G.xs).child(action)));
   }
 
-  verdict(c) {
-    const gate = mergeReadiness(this.pr, { permission: this.permission, checks: summaryOf(this.checks()) });
-    return { text: gate.text, color: c[gate.tone] };
+  place() {
+    return tilde(this.cwd) || "~";
   }
 
-  canMerge() {
-    return Boolean(this.pr) && mergeReadiness(this.pr, { permission: this.permission, checks: summaryOf(this.checks()) }).offer;
+  parsedLog() {
+    if (this.logParsedFor === this.failedLog) return this.logParsed ?? null;
+    this.logParsedFor = this.failedLog ?? null;
+    this.logParsed = this.failedLog ? failedLog(this.failedLog) : null;
+    return this.logParsed;
   }
 
-  hero(c, narrow) {
-    const pr = this.pr, v = this.verdict(c), open = pr.state === "OPEN";
-    const canMerge = this.canMerge();
-    const arming = this.armed.is("merge");
-    const checks = this.checks();
-    const stats = [
-      { value: String(pr.changedFiles), unit: pr.changedFiles === 1 ? "file" : "files" },
-      { value: `+${pr.additions}`, unit: "added" },
-      { value: `−${pr.deletions}`, unit: "removed" },
-      { value: String(this.threads.length), unit: this.threads.length === 1 ? "thread" : "threads" },
-      { value: String(checks.length), unit: checks.length === 1 ? "check" : "checks" },
-    ];
-    const showMerge = canMerge || this.busy === "Merge";
-    const primary = () => Button.new("pr-merge").h(30).px(14).flex_none().items_center().rounded(6)
-      .disabled(!canMerge || Boolean(this.busy))
-      .bg(canMerge ? (arming ? c.red : c.primary) : c.subtle)
-      .when(canMerge && !this.busy, (el) => el.cursor_pointer().hover((s) => s.opacity(0.85)))
-      .on_click((_e, cx) => { if (canMerge && !this.busy) this.merge(cx); })
-      .child(div().text_size(12).font_medium().text_color(canMerge ? (arming ? "#ffffff" : c.primaryText) : c.dim)
-        .child(this.busy === "Merge" ? "Merging…" : arming ? "Press again to merge" : "Merge"));
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
-        .child(div().text_size(15).text_color(c.muted).child(`${this.local(pr.url) ? "" : `${this.repo()?.o}/${this.repo()?.r} `}#${pr.number} · ${pr.headRefName} → ${pr.baseRefName}`))
-        .child(div().w_full().text_size(narrow ? 22 : 28).line_height(1.25).font_light().text_color(c.text).child(pr.title))
-        .child(h_flex().pt(G.xs).gap(G.sm).items_center()
-          .child(div().size(6).flex_none().rounded_full().bg(v.color).when(v.color === c.yellow, (el) => breathe(el, PULSE)))
-          .child(div().text_size(15).text_color(c.text).child(v.text)))
-        .child(div().text_size(12).text_color(c.dim).child([pr.author?.login, `updated ${ago(pr.updatedAt)}`, this.fallback && `the newest open; ${this.branch ?? "this branch"} has none`].filter(Boolean).join(" · "))))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
-      .when(open, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center()
-        .when(showMerge, (row) => row.child(primary()))
-        .child(pr.isDraft
-          ? quietLink("pr-ready", this.busy === "Ready" ? "Marking ready…" : "Ready for review", (cx) => this.act("Ready", ["pr", "ready", pr.url], cx), c, { disabled: Boolean(this.busy) })
-          : quietLink("pr-draft", "Back to draft", (cx) => this.act("Draft", ["pr", "ready", pr.url, "--undo"], cx), c, { disabled: Boolean(this.busy) }))
-        .child(quietLink("pr-close", "Close", (cx) => this.act("Close", ["pr", "close", pr.url], cx), c, { disabled: Boolean(this.busy) }))))
-      .when(pr.state === "CLOSED", (el) => el.child(h_flex().child(quietLink("pr-reopen", "Reopen", (cx) => this.act("Reopen", ["pr", "reopen", pr.url], cx), c, { disabled: Boolean(this.busy) }))))
-      .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
+  frontAgent() {
+    const address = focused()?.terminal;
+    if (!address) return null;
+    const term = terminals().find((item) => item.address === address) ?? null;
+    const pane = panes().find((item) => item.terminal === address) ?? null;
+    const info = pane || term || { terminal: address };
+    const agent = isAgent(term, pane);
+    return { isAgent: agent, name: nameOf(info, givenNames()), address, blocked: agent && (term?.status === "blocked" || pane?.status === "blocked") };
+  }
+
+  sceneKind() {
+    if (this.pr) return "pr";
+    if (this.outside) return "outside";
+    if (this.error?.cli) return "absent";
+    if (this.missing) return String(this.missing.title ?? "").startsWith("Not signed in") ? "auth" : "missing";
+    if (this.error) return "error";
+    if (this.wait) return "wait";
+    if (this.none && !this.branch) return "detached";
+    if (this.none && this.isBase()) return "base";
+    if (this.none && this.behind) return "behind";
+    if (this.none && !this.pushed) return "unpushed";
+    if (this.none) return "none";
+    if (this.loading || !this.context) return "loading";
+    return "folder";
+  }
+
+  scene() {
+    return {
+      kind: this.sceneKind(), pr: this.pr, checks: this.pr ? this.checks() : [], threads: this.threads ?? [],
+      permission: this.permission ?? null, agent: this.frontAgent(), stale: Boolean(this.stale), baseBehind: this.baseBehind ?? null,
+      log: this.parsedLog(), now: Date.now(), branch: this.branch, place: this.pr ? "" : this.place(), computer: this.on || "",
+      title: this.missing?.title, canCreate: this.canCreate(), ahead: this.aheadCount ?? 0, behindCount: this.behindCount ?? 0, subjects: this.subjects ?? [],
+    };
+  }
+
+  view() { return verdictOf(this.scene()); }
+
+  openLink(url) { openUrl(url); }
+
+  hero(c) { return drawHero(this, c); }
+
+  send(cx) {
+    if (this.busy) return;
+    const scene = this.scene(), verdict = verdictOf(scene), text = sendText(scene, verdict);
+    const step = sendStep(Boolean(this.sendShown) && this.sendFor === text, text);
+    if (step.show) { this.sendShown = true; this.sendFor = text; cx.notify(); return; }
+    if (!step.deliver) return;
+    const address = this.frontAgent()?.address;
+    if (!address) { this.note = "Not sent: no agent in front"; cx.notify(); return; }
+    this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
+    cx.spawn(async (cx) => {
+      try {
+        const sent = await deliver(address, text, "you");
+        if (sent?.code !== 0) this.note = `Not sent: ${String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]}`;
+      } catch (e) { this.note = `Not sent: ${String(e?.message ?? e)}`; }
+      finally { this.busy = null; cx.notify(); }
+    });
+    cx.notify();
+  }
+
+  openChecks(cx) { this.expanded = { ...this.expanded, checks: true }; this.setDetails(cx, true); }
+
+  showOthers(cx) { this.listing = true; if (this.loading) this.openedList = true; else this.refresh(cx); cx.notify(); }
+
+  runWrite(action, cx) {
+    const url = this.pr?.url;
+    if (action.target === "merge") return this.mergeNow(cx);
+    if (action.target === "push") return this.act("Push", ["push", "-u", "origin", "HEAD"], cx, (args) => this.git(args));
+    if (action.target === "pull") return this.act("Pull", ["pull", "--ff-only"], cx, (args) => this.git(args));
+    if (action.target === "update") {
+      const place = this.repo();
+      if (!place || !this.pr) return;
+      return this.act("Update", ["api", "-X", "PUT", `repos/${place.o}/${place.r}/pulls/${this.pr.number}/update-branch`], cx);
+    }
+    if (action.target === "create") return this.createPr(cx);
+    if (action.target === "ready") return this.act("Ready", ["pr", "ready", url], cx);
+    if (action.target === "draft") return this.act("Draft", ["pr", "ready", url, "--undo"], cx);
+    if (action.target === "close") return this.act("Close", ["pr", "close", url], cx);
+    if (action.target === "reopen") return this.act("Reopen", ["pr", "reopen", url], cx);
+  }
+
+  detailsKey() { return this.root || this.cwd || ""; }
+
+  detailsOn() {
+    const all = shared("kanso.pr.details");
+    return Boolean(all && all[this.detailsKey()]);
+  }
+
+  setDetails(cx, open) {
+    const all = shared("kanso.pr.details") ?? {};
+    const id = this.detailsKey();
+    const on = open ?? !all[id];
+    if (Boolean(all[id]) !== on) setShared("kanso.pr.details", { ...all, [id]: on });
+    if (on) this.loadOthers(cx);
+    cx.notify();
+  }
+
+  loadOthers(cx) {
+    if (this.listingOthers || this.listed || this.wait || !this.root) return;
+    this.listingOthers = true; this.bind(cx);
+    const context = this.context;
+    cx.spawn(async (cx) => {
+      try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context); }
+      finally { this.listingOthers = false; cx.notify(); }
+    });
   }
 
   description(c) {
@@ -1063,25 +1102,6 @@ export class PullRequest {
             .child(div().text_size(11).text_color(c.dim).child(th.author))
             .when(th.replies > 0, (el) => el.child(div().text_size(11).text_color(c.dim).child(`${th.replies} repl${th.replies > 1 ? "ies" : "y"}`)))
             .when(th.outdated, (el) => el.child(div().text_size(11).text_color(c.dim).child("outdated")))))));
-  }
-
-  agent(c) {
-    const pr = this.pr, open = pr.state === "OPEN";
-    const conflicting = pr.mergeable === "CONFLICTING" || pr.mergeStateStatus === "DIRTY";
-    // Fixing code needs a checkout of its repository; explaining reads it from GitHub.
-    const here = this.local(pr.url);
-    return v_flex().w_full()
-      .child(section(c, "Ask your agent", here ? "in a new tab" : "another repository: explain only"))
-      .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm)
-        .child(h_flex().items_center().gap(G.sm)
-          .child(quietLink("pr-explain", "Explain it", () => this.agentTask("explain"), c, { size: 13, color: c.text }))
-          .child(iconButton("pr-explain-edit", "edit", "Edit Explain prompt", () => this.agentTask("explain", true), c)))
-        .child(h_flex().items_center().gap(G.sm)
-          .child(quietLink("pr-feedback", "Address feedback", () => this.agentTask("feedback"), c, { size: 13, color: c.text, disabled: !open || !here }))
-          .child(iconButton("pr-feedback-edit", "edit", "Edit Feedback prompt", () => this.agentTask("feedback", true), c, { disabled: !open || !here })))
-        .child(h_flex().items_center().gap(G.sm)
-          .child(quietLink("pr-conflicts", "Resolve conflicts", () => this.agentTask("conflicts"), c, { size: 13, color: c.text, disabled: !(open && conflicting && here) }))
-          .child(iconButton("pr-conflicts-edit", "edit", "Edit Conflicts prompt", () => this.agentTask("conflicts", true), c, { disabled: !(open && conflicting && here) }))));
   }
 
   diffView(c, path) {
@@ -1184,33 +1204,18 @@ export class PullRequest {
   body(c, narrow) {
     if (this.inboxOn && this.inboxOpen) return this.inboxPage(c);
     if (this.listing) return this.listPage(c);
-    if (this.outside) return this.waiting(c, "No repository here", "Focus a pane inside a git repository to see its pull requests.");
-    if (this.missing) return this.waiting(c, this.missing.title, this.missing.detail);
-    if (this.error) return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => this.again(cx), c));
-    if (this.wait) return this.waiting(c, this.wait);
-    if (this.none) {
-      if (!this.branch) return this.waiting(c, "No branch checked out", this.note);
-      if (this.isBase()) return this.waiting(c, `No pull request for ${this.branch}.`, "It is the default branch; open one from another.");
-      if (!this.pushed) return this.waiting(c, `No pull request for ${this.branch}.`, this.note ?? (this.behind ? "Pull it from GitHub to open one." : "Push it to GitHub to open one."));
-      return this.waiting(c, `No pull request for ${this.branch}.`, this.note,
-        quietLink("pr-create", this.busy === "Create" ? "Opening GitHub…" : "Create it on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }));
-    }
-    return this.loading || !this.context ? this.skeleton(c, narrow) : this.waiting(c, "No folder", "Focus a pane inside a repository.");
+    const kind = this.sceneKind();
+    if (kind === "pr") return this.hero(c);
+    if (kind === "loading") return this.skeleton(c, narrow);
+    if (kind === "wait") return this.waiting(c, this.wait);
+    if (kind === "error") return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => this.again(cx), c));
+    return drawEmpty(this, c);
   }
 
-  prNodes(c, narrow) {
-    const checks = this.checks();
-    return [
-      ["header", this.header(c, narrow).id("header")],
-      ["hero", this.hero(c, narrow).id("hero")],
-      ["description", this.description(c).id("description")],
-      ["review", this.people(c).id("review")],
-      checks.length ? ["checks", this.checksList(c).id("checks")] : null,
-      this.threads.length ? ["threads", this.discussion(c).id("threads")] : null,
-      ["conflicts", this.agent(c).id("conflicts")],
-      ["files", this.files(c).id("files")],
-      ["note", this.footnote(c).id("note")],
-    ].filter((part) => part);
+  nodes(c, narrow) {
+    const header = ["header", this.header(c, narrow).id("header")];
+    if ((this.inboxOn && this.inboxOpen) || this.listing || this.sceneKind() !== "pr") return [header, ["body", this.body(c, narrow)]];
+    return [header, ...heroPieces(this, c)];
   }
 
   noteAsk(cx) {
@@ -1220,11 +1225,29 @@ export class PullRequest {
     this.section = given.section ?? null;
     this.check = given.check ?? null;
     this.landed = null;
+    this.placed = null;
     if (given.section !== "push") return;
     this.selected = null;
     this.jumpUrl = null;
     this.keptUrl = null;
     this.refresh(cx);
+  }
+
+  // The named check sits inside Details, so the fold is open before this render builds it.
+  openAsked(cx) {
+    const section = this.section;
+    const needs = section === "checks" || section === "review" || section === "threads";
+    const id = this.detailsKey();
+    if (!needs || !id) return;
+    const mark = `${this.asked ?? ""}:${section}:${id}`;
+    if (this.placed === mark) return;
+    this.placed = mark;
+    if (section === "checks") this.expanded = { ...this.expanded, checks: true };
+    if (this.detailsOn()) return;
+    const all = shared("kanso.pr.details") ?? {};
+    setShared("kanso.pr.details", { ...all, [id]: true });
+    if (cx.timer?.after) cx.timer.after(0, (next) => this.loadOthers(next));
+    else this.loadOthers(cx);
   }
 
   land(ids) {
@@ -1244,18 +1267,17 @@ export class PullRequest {
     this.comeForward(cx);
     this.noteAsk(cx);
     if (key() !== this.context) this.refresh(cx);
+    this.openAsked(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
-    const nodes = this.pr && !(this.inboxOn && this.inboxOpen) && !this.listing ? this.prNodes(c, narrow) : null;
-    if (nodes) this.land(nodes.map(([id]) => id));
-    const body = nodes ? nodes.map(([, el]) => el) : [this.header(c, narrow), this.body(c, narrow)];
-    const pad = narrow ? G.lg : 32;
-    return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_hidden()
+    const nodes = this.nodes(c, narrow);
+    if (this.pr && !(this.inboxOn && this.inboxOpen) && !this.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
+    const padX = narrow ? G.lg : 32;
+    const padY = narrow ? G.lg : 28;
+    return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_1().min_h(0).w_full().justify_center().px(pad).overflow_hidden()
-        .child(v_flex().id("pr-scroll").h_full().w_full().max_w(1080).overflow_y_scrollbar()
-          .pt(narrow ? G.lg : 28).pb(narrow ? G.lg : 28).gap(narrow ? 36 : 48)
-          .track_scroll(this.scroll)
-          .children(body)));
+      .pt(padY).pb(padY).gap(G.lg).track_scroll(this.scroll)
+      .children(nodes.map(([, el]) => h_flex().flex_none().w_full().justify_center().px(padX)
+        .child(v_flex().w_full().max_w(1080).child(el))));
   }
 }

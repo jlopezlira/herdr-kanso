@@ -5,6 +5,8 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { segmentAt } from "./ui.js";
+export { segmentAt };
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { prLine } from "./ghchecks.js";
@@ -31,10 +33,6 @@ export function agentRowH(a, more = {}) {
   return two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
 }
 
-export function segmentAt(width, i, n, pad = 3, gap = 2) {
-  const w = (width - 2 * pad - gap * (n - 1)) / n;
-  return { left: pad + i * (w + gap), width: w };
-}
 // A row flush with the list's 10px inset (the Status and Threads views).
 export const FLUSH = 10 - AGENT_PAD;
 // A row nested under its project's name: the Threads view's conversations, indented as a Projects view's agents are.

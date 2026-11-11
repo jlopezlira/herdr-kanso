@@ -4,7 +4,7 @@ import { execFile, spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { load, context, exec, temporary, clone } from "./helpers.mjs";
+import { load, context, exec, temporary, clone, until } from "./helpers.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER"];
 const unixTest = (name, fn) => test(name, { skip: process.platform === "win32" && "Unix updater; PowerShell updater belongs to piece 3" }, fn);
@@ -194,7 +194,6 @@ const staged = async (home) => [
   ...(await readdir(home)).filter((x) => x.startsWith(".") && x !== ".kanso-updates"),
   ...(await readdir(updates(home)).catch(() => [])).filter((x) => x !== "lock").map((x) => `.kanso-updates/${x}`),
 ].toSorted();
-const until = async (ok) => { while (!(await ok())) await new Promise((r) => setTimeout(r, 20)); };
 const pending = (f) => Object.keys(f.store["kanso.update"]?.installs ?? {});
 // Another install holding the lock: a real process, asleep, whose life is the lock's.
 async function holder(t, f) {
@@ -791,7 +790,7 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
 });
 
 test("With automatic checks off neither copy polls, and a Check from settings still looks once", async () => {
-  const store = { "kanso.update": { autoCheck: false } }, timers = [];
+  const store = { "kanso.pieces": { "update.check": "hide" }, "kanso.update": { autoCheck: false } }, timers = [];
   let asked = 0;
   const host = {
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
@@ -849,7 +848,7 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
 });
 
 test("Automatic update checks can be disabled while manual checks still work", async () => {
-  const store = { "kanso.update": { autoCheck: false } };
+  const store = { "kanso.pieces": { "update.check": "hide" }, "kanso.update": { autoCheck: false } };
   let asked = 0, tick = null;
   const host = {
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
@@ -875,7 +874,7 @@ test("Automatic update checks can be disabled while manual checks still work", a
 
 test("The footer is as tall as the rows it shows: one switched off in Kanso's settings gives its place back", async (t) => {
   const f = await fixture(t);
-  f.store["kanso.hidden"] = ["footer.machine"];
+  f.store["kanso.pieces"] = { "footer.machine": "hide" };
   f.footer.size = { px: 228 }; // as 3.9.1 sized it
   const { cx, drain } = context();
   cx.timer = { every() {} };

@@ -12,6 +12,17 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.31.0] - 2026-11-11
+
+### Added
+
+- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
+
+### Changed
+
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
+- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
+
 ## [3.30.0] - 2026-11-11
 
 ### Added
@@ -35,7 +46,6 @@ release.
 - The footer measures its height from one timer. Battery and the memory warning are read every 2 minutes.
 - Conversations that have left and were never moved to a project are forgotten, and a project gone for 7 days is forgotten. Picture copies on this computer are kept for a day, the same as copies from another computer.
 - Sleeping or waking a tab on another computer asks that computer less often, so a slow connection waits less. What it promises is the same: one owner, no second copy of an agent, and nothing saved when that computer does not answer.
-- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
 
 ### Fixed
 
