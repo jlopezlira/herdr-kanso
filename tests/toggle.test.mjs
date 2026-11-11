@@ -28,9 +28,9 @@ function chain(tag) {
 }
 
 const host = () => ({
-  div: () => chain(),
-  h_flex: () => chain(),
-  v_flex: () => chain(),
+  div: () => chain("div"),
+  h_flex: () => chain("h_flex"),
+  v_flex: () => chain("v_flex"),
   svg: () => chain(),
   image: () => chain(),
   Button: { new: (id) => chain(id) },
@@ -38,7 +38,7 @@ const host = () => ({
   Toggle: { new: (id) => { const el = chain(id); el.calls.push(["new", id]); return el; } },
 });
 
-const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "SWITCH", "H", "G"], host());
+const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "SWITCH", "H", "G", "R"], host());
 
 const arg = (el, name) => {
   const found = el.calls.filter((call) => call[0] === name);
@@ -63,6 +63,8 @@ test("A switch is one compact size, knob at the left when off and at the right w
     assert.equal(hit.kids.length, 1);
     const pill = hit.kids[0];
     const knob = pill.kids[0];
+    assert.equal(pill.tag, "h_flex", "the pill is a flex row");
+    assert.equal(knob.tag, "div");
     assert.equal(arg(hit, "h"), H.compact);
     assert.equal(arg(hit, "px"), G.xs);
     assert.equal(hit.calls.filter((call) => call[0] === "items_center").length, 1);
@@ -75,6 +77,7 @@ test("A switch is one compact size, knob at the left when off and at the right w
     assert.equal(pill.calls.filter((call) => call[0] === "items_center").length, 1);
     const justify = pill.calls.filter((call) => call[0] === "justify_start" || call[0] === "justify_end").map((call) => call[0]);
     assert.equal(justify.at(-1), end);
+    assert.equal(pill.calls.some((call) => call[0] === "justify_end"), checked, "on carries justify_end");
     assert.equal(arg(knob, "size"), SWITCH.knob);
     assert.equal(knob.calls.some((call) => call[0] === "flex_none"), true);
     assert.equal(knob.calls.some((call) => call[0] === "ml" || call[0] === "mr"), false);
@@ -87,7 +90,7 @@ test("A switch is one compact size, knob at the left when off and at the right w
 });
 
 test("A switch fills from the theme when on and marks focus, in light and in dark", async () => {
-  const { toggleSwitch } = await kit();
+  const { toggleSwitch, R } = await kit();
   for (const c of [day, night]) {
     for (const checked of [false, true]) {
       let handed;
@@ -97,6 +100,9 @@ test("A switch fills from the theme when on and marks focus, in light and in dar
       assert.equal(arg(pill, "bg"), checked ? c.primary : c.raised);
       assert.equal(arg(pill, "border_color"), checked ? c.primary : c.input);
       assert.equal(pill.calls.filter((call) => call[0] === "border_1").length, 1);
+      assert.equal(arg(hit, "rounded"), R.control);
+      assert.equal(hit.calls.filter((call) => call[0] === "border_1").length, 1);
+      assert.equal(arg(hit, "border_color"), "#00000000");
       assert.equal(arg(hit, "pressed"), checked);
       assert.equal(arg(hit, "accessibility_label"), "Check for updates automatically");
       assert.equal(arg(knob, "bg"), checked ? c.primaryText : c.muted);

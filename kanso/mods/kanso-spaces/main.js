@@ -1871,20 +1871,17 @@ export default class Spaces extends View {
       .when(ring, (el) => el.border_1().border_color(t.accent));
   }
 
-  machineActions(m, phase, t) {
+  machineActions(m, phase, hot, t) {
     const key = m ?? "local";
     const line = m ? loginLine(m) : "";
-    const copy = phase === "login" && m ? this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t) : null;
-    const power = !copy && m && (phase === "connected" || phase === "off")
-      ? this.machineButton(`machine-power:${key}`, powerId(m), "power", phase === "connected" ? "Turn off" : "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t)
-      : null;
-    const retry = phase === "unavailable" && m
-      ? this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t)
-      : null;
-    const plus = phase === "connected"
-      ? this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t)
-      : null;
-    return [copy, power, retry, plus].filter(Boolean);
+    const tip = { connected: "Turn off", off: "Turn on" };
+    const button = {
+      copy: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t),
+      power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", tip[phase] ?? "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
+      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t),
+      plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t),
+    };
+    return machineVisible(phase, hot).map((name) => button[name]()).filter(Boolean);
   }
 
   openMachine(m, phase, folded, cx) {
@@ -1908,7 +1905,7 @@ export default class Spaces extends View {
     const go = (cx) => this.openMachine(m, phase, folded, cx);
     const ring = this.navMark(`machine:${key}`, go);
     const hot = !collapsed && machineHot(m, this.hoverMachine, this.kbd, this.navKey);
-    const tools = !collapsed && machineVisible(phase, hot).length ? this.machineActions(m, phase, t) : [];
+    const tools = collapsed ? [] : this.machineActions(m, phase, hot, t);
     const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(ink);
     const wash = t.foreground + "0c";
     return h_flex().id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()

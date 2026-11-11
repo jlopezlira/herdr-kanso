@@ -110,11 +110,13 @@ export const SWITCH = { w: 28, h: 16, knob: 12 };
 export function toggleSwitch(id, checked, onChange, c, { label = "Toggle" } = {}) {
   // The 1px border sits inside the pill, so the knob meets its edge.
   const pad = (SWITCH.h - SWITCH.knob - 2) / 2;
-  const pill = div().w(SWITCH.w).h(SWITCH.h).p(pad).items_center()
+  const pill = h_flex().w(SWITCH.w).h(SWITCH.h).p(pad).items_center()
     .justify_start().when(checked, (el) => el.justify_end())
     .rounded_full().bg(checked ? c.primary : c.raised).border_1().border_color(checked ? c.primary : c.input)
     .child(div().size(SWITCH.knob).flex_none().rounded_full().bg(checked ? c.primaryText : c.muted));
+  // Focus recolours this border; it stays clear until then.
   return Toggle.new(id).h(H.compact).px(G.xs).items_center().cursor_pointer()
+    .rounded(R.control).border_1().border_color("#00000000")
     .pressed(checked)
     .accessibility_label(label)
     .on_change((next, cx) => { onChange(next, cx); cx.notify(); })
