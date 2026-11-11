@@ -1,16 +1,25 @@
-import { div, svg } from "gpui-kit";
+import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
-import { readTextFile, watchFolder, theme, openOverlay } from "herdr";
+import { readTextFile, watchFolder, theme, openOverlay, window, layout, appHome } from "herdr";
+import { localService, serviceOn } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 import { codeState, isMarkdown, showPanel } from "./lib.js";
+import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines } from "./doc.js";
-import { skeleton } from "./ui.js";
-import { tryOrAsync } from "./pure.js";
+import { skeleton, quietLink, tokens } from "./ui.js";
+import { tryOrAsync, extOf } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
+import { walkLayout } from "./layout.js";
+import { bring, appRelative, svgPixels, copyFailure, remoteDue, fileId, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
+const PREVIEW_DIR = "data/kanso-panel/preview";
 // The panels that send a file here, and get it back.
 const BACK = { files: "Back to Files", look: "Back to Look" };
+export const previewKind = (path) => isMarkdown(path) ? "markdown" : kindOf(path) === "image" ? "picture" : "text";
 
 export class Preview {
   init(cx, p) {
@@ -19,6 +28,7 @@ export class Preview {
     this.on = p.on ?? kept?.on ?? null;
     this.back = BACK[p.back] ? p.back : (kept?.back && BACK[kept.back] ? kept.back : null);
     this.handle = cx.focus_handle();
+    this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
     this.open(p.path || kept?.path || "", cx);
   }
 
@@ -31,6 +41,13 @@ export class Preview {
   async restoreState(state) {
     const path = typeof state?.path === "string" ? state.path : "";
     if (!path) return false;
+    if (previewKind(path) === "picture") {
+      const ok = await (await serviceOn(fileApi, state.on ?? null)).test(path).catch(() => false);
+      const next = ok ? fileMemory(state, () => true) : null;
+      if (!next) return false;
+      this.kept = next;
+      return true;
+    }
     const text = await tryOrAsync(() => readTextFile(path, { on: state.on ?? null }));
     if (text == null || String(text).includes("\0")) return false;
     const next = fileMemory(state, () => true);
@@ -42,11 +59,14 @@ export class Preview {
   open(path, cx) {
     this.path = path;
     this.doc?.release(); this.doc = null;
-    this.code?.release(); this.code = null; this.error = null;
+    this.code?.release(); this.code = null; this.error = null; this.picture = null; this.pixels = null;
+    this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
     if (!path) { cx.notify(); return; }
-    if (isMarkdown(path)) this.doc = new MarkdownDoc(path, this.on, (to) => this.follow(to, cx));
+    if (previewKind(path) === "markdown") this.doc = new MarkdownDoc(path, this.on, (to) => this.follow(to, cx));
+    else if (previewKind(path) === "picture") this.picture = { busy: true };
     this.load(cx);
     this.watch(cx);
+    if (this.on) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     cx.notify();
   }
 
@@ -64,17 +84,84 @@ export class Preview {
 
   load(cx) {
     if (this.doc) { this.doc.load(cx); return; }
-    const path = this.path;
+    if (this.picture || previewKind(this.path) === "picture") { this.loadPicture(cx); return; }
+    const path = this.path, on = this.on;
     cx.spawn(async (cx) => {
       try {
-        const text = await readTextFile(path, { on: this.on });
+        const text = on ? await (await serviceOn(fileApi, on)).read(path) : await readTextFile(path);
         if (this.path !== path) return;
-        if (text === null) this.error = "This file is no longer available";
-        else if (text.includes("\0")) this.error = "Binary file: no text preview";
-        else { this.error = null; this.code?.release(); this.code = codeState(path, text); }
-      } catch (e) { this.error = `Cannot read this file: ${e?.message ?? e}`; }
+        if (text === null || text === undefined) this.miss(on, "This file is no longer available");
+        else if (String(text).includes("\0")) this.miss(on, "Binary file: no text preview");
+        else { this.error = null; this.held = null; this.fresh = Date.now(); this.code?.release(); this.code = codeState(path, text); }
+      } catch (e) { if (this.path === path) this.miss(on, on ? copyFailure(e, on) : `Cannot read this file: ${e?.message ?? e}`); }
       finally { cx.notify(); }
     });
+  }
+
+  miss(on, error) {
+    const view = on ? staleView(Boolean(this.code), this.fresh, Date.now(), error) : null;
+    if (view?.keep) { this.held = view.hold; return; }
+    this.error = error;
+  }
+
+  loadPicture(cx, ask = false) {
+    const path = this.path, on = this.on;
+    const kept = this.picture?.image || this.picture?.deferred ? this.picture : null;
+    if (!kept) this.picture = { busy: true };
+    this.error = null;
+    cx.spawn(async (cx) => {
+      try {
+        const got = on ? await bring(path, on, { ask }) : { path: await this.stage(path) };
+        if (this.path !== path) return;
+        if (got.deferred) {
+          this.picture = { deferred: true, size: got.size };
+          this.pixels = null; this.error = null; this.held = null; this.fresh = Date.now();
+          if (got.mtime != null) this.stamp = { size: got.size, mtime: got.mtime };
+          return;
+        }
+        const rel = appRelative(got.path, appHome());
+        if (!rel) throw new Error("Cannot read this file");
+        const pixels = extOf(path) === "svg" ? svgPixels(await readTextFile(got.path)) : await localService(imageApi).pixels(got.path).catch(() => null);
+        if (this.path !== path) return;
+        this.picture = { image: rel }; this.pixels = pixels; this.error = null; this.held = null; this.fresh = Date.now();
+        if (got.mtime != null) this.stamp = { size: got.size, mtime: got.mtime };
+      } catch (e) {
+        if (this.path !== path) return;
+        const view = on ? staleView(Boolean(kept?.image || kept?.deferred), this.fresh, Date.now(), copyFailure(e, on)) : null;
+        if (view?.keep) { this.picture = kept; this.held = view.hold; }
+        else { this.picture = null; this.error = on ? copyFailure(e, on) : `Cannot read this file: ${e?.message ?? e}`; }
+      } finally { cx.notify(); }
+    });
+  }
+
+  probe(cx) {
+    const path = this.path, on = this.on;
+    if (!path || !remoteDue(on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) return;
+    cx.spawn(async (cx) => {
+      const { outcome, next } = await takeStamp(async () => (await serviceOn(fileApi, on)).stat(path), this.stamp);
+      if (this.path !== path) return;
+      if (outcome === "seen") this.stamp = next;
+      if (outcome === "changed") { this.stamp = next; this.load(cx); }
+      if (outcome === "failed") {
+        const had = Boolean(this.code || this.picture?.image || this.picture?.deferred || this.doc?.saved != null);
+        const view = staleView(had, this.fresh ?? this.doc?.fresh, Date.now(), copyFailure(new Error("timed out"), on));
+        if (view.keep) this.held = view.hold;
+        else if (!this.error) this.error = view.error;
+      }
+      this.poll = pollNext(this.poll, outcome);
+      new ArmPoll(this).start(cx, (tick) => this.probe(tick));
+      cx.notify();
+    });
+  }
+
+  async stage(file) {
+    const dir = paths.join(appHome(), PREVIEW_DIR);
+    const id = fileId("here", file);
+    await localService(imageApi).fresh(dir, id);
+    const out = paths.join(dir, `${id}-${Date.now()}.${extOf(file) || "img"}`);
+    const made = await localService(fileApi).copy(file, out);
+    if (made.code !== 0) throw new Error(made.stderr || "Cannot read this file");
+    return out;
   }
 
   // Watched via the folder (this computer only): any change there re-reads the file.
@@ -102,7 +189,8 @@ export class Preview {
       .child(readingLines(c));
   }
 
-  render() {
+  render(cx) {
+    if (this.on && this.path && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     const t = theme();
     const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { action(cx); })
@@ -113,13 +201,18 @@ export class Preview {
         .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx))))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
           .child(div().truncate().font_semibold().text_size(13).child(nameOf(this.path)))
-          .child(div().truncate().text_size(11).text_color(t.dim).child(tildePath(folderOf(this.path), this.on))))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}${(this.held ?? this.doc?.held) ? ` · ${asOf((this.held ?? this.doc.held).at, Date.now())}` : ""}`)))
         .children(this.doc ? this.doc.controls(t, "preview") : [])
         .child(button("preview-open-with", "open-with", "Open with…", () => this.openWith()))
-        .when(!this.doc?.editing, (el) => el.child(button("preview-refresh", "refresh", "Read again", (cx) => this.load(cx))))
+        .when(!this.doc?.editing, (el) => el.child(button("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.load(cx))))
         .child(button("preview-close", "close", "Close", (cx) => this.leave(cx, () => showPanel(null)))))
       .child(this.doc ? this.doc.body(t, "preview-md")
         : this.error ? div().p(12).text_color(t.dim).child(this.error)
+        : this.picture?.deferred ? v_flex().id("preview-hold").flex_1().min_h(0).items_center().justify_center().gap(8)
+          .child(div().font_semibold().child(nameOf(this.path)))
+          .child(div().text_size(12).text_color(t.dim).child(bytesLabel(this.picture.size)))
+          .child(quietLink("preview-load", "Load", (cx) => this.loadPicture(cx, true), tokens(t)))
+        : this.picture?.image ? v_flex().id("preview-picture").flex_1().min_h(0).p(16).items_center().justify_center().child(image(this.picture.image).w_full())
         : this.code ? Editor.new(this.code).flex_1().min_h(0)
         : this.path ? readingLines(t) : div().flex_1());
   }
