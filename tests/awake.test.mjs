@@ -60,10 +60,13 @@ test("a hold is only for a machine that is connected", async () => {
   assert.equal(shouldHold(), false);
   assert.equal(osOf({ code: 0, stdout: "Darwin\n" }), "darwin");
   assert.equal(osOf({ code: 0, stdout: "Linux\n" }), "linux");
-  assert.equal(osOf({ threw: true }), "windows");
+  assert.equal(osOf({ threw: true }), null);
+  assert.equal(osOf({ threw: true, code: 1 }), null);
   assert.equal(osOf({ missing: true, code: "ENOENT" }), "windows");
+  assert.equal(osOf({ threw: true, missing: true }), "windows");
   assert.equal(osOf({ code: 1, stdout: "FreeBSD\n" }), null);
   assert.equal(osOf({ code: 0, stdout: "FreeBSD\n" }), null);
+  assert.equal(osOf(null), null);
 });
 
 test("a lease renews at 270s and overlaps the one still running", async () => {
@@ -118,6 +121,17 @@ test("a failed lease waits until the renew time, and a missing command waits for
   await failed.awake.sync([row("dark", "connected")]);
   assert.equal(holds(failed.calls).length, 2);
 
+  const said = world({ hold: () => Promise.resolve({ code: 1, stdout: "", stderr: "idle inhibitor not found" }) });
+  await said.awake.sync([row("dark", "connected")]);
+  await tick();
+  assert.equal(said.awake.nextWait(0), 270_000);
+  said.at(269_000);
+  await said.awake.sync([row("dark", "connected")]);
+  assert.equal(holds(said.calls).length, 1);
+  said.at(270_000);
+  await said.awake.sync([row("dark", "connected")]);
+  assert.equal(holds(said.calls).length, 2);
+
   const missing = world({ hold: () => Promise.reject(Object.assign(new Error("caffeinate: not found"), { code: "ENOENT" })) });
   await missing.awake.sync([row("dark", "connected")]);
   await tick();
@@ -171,13 +185,39 @@ test("the system is probed once per connection, and a probe that cannot start is
   assert.equal(holds(windows.calls)[0].command, "powershell");
   assert.match(holds(windows.calls)[0].args[3], /SetThreadExecutionState\(\[uint32\]0x80000001\)/);
   assert.equal(holds(windows.calls)[0].args[3].includes("GetSystemPowerStatus"), false);
+
+  const shell = world({ uname: { code: 127, stdout: "", stderr: "uname: not found" }, hold: () => Promise.resolve({ code: 0, stdout: "", stderr: "" }) });
+  await shell.awake.sync([row("win", "connected")]);
+  assert.equal(holds(shell.calls)[0].command, "powershell");
+
   const odd = world({ uname: { code: 0, stdout: "FreeBSD\n", stderr: "" } });
   await odd.awake.sync([row("bsd", "connected")]);
-  odd.at(1_000_000);
+  assert.equal(holds(odd.calls).length, 0);
+  odd.at(269_000);
   await odd.awake.sync([row("bsd", "connected")]);
   assert.equal(odd.calls.length, 1);
+  odd.at(270_000);
+  await odd.awake.sync([row("bsd", "connected")]);
+  assert.equal(odd.calls.length, 2);
   await odd.awake.sync([row("bsd", "unavailable")]);
   await odd.awake.sync([row("bsd", "connected")]);
-  assert.equal(odd.calls.filter((call) => call.command === "uname").length, 2);
+  assert.equal(odd.calls.filter((call) => call.command === "uname").length, 3);
   assert.equal(holds(odd.calls).length, 0);
+});
+
+test("a probe that throws without a missing command is tried again at the renew time", async () => {
+  await loadApi();
+  const hiccup = world({ uname: Object.assign(new Error("the machine is unreachable"), { code: "ETIMEDOUT" }) });
+  await hiccup.awake.sync([row("dark", "connected")]);
+  assert.equal(hiccup.calls.filter((call) => call.command === "uname").length, 1);
+  assert.equal(holds(hiccup.calls).length, 0);
+  assert.equal(hiccup.awake.nextWait(0), 270_000);
+  hiccup.at(269_000);
+  await hiccup.awake.sync([row("dark", "connected")]);
+  assert.equal(hiccup.calls.length, 1);
+  hiccup.at(270_000);
+  await hiccup.awake.sync([row("dark", "connected")]);
+  assert.equal(hiccup.calls.filter((call) => call.command === "uname").length, 2);
+  assert.equal(holds(hiccup.calls).length, 0);
+  assert.equal(hiccup.awake.nextWait(270_000), 270_000);
 });

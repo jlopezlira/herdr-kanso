@@ -27,7 +27,8 @@ export function shouldHold({ phase } = {}) {
 }
 
 export function osOf(result) {
-  if (!result || result.threw || result.missing) return "windows";
+  if (result?.missing) return "windows";
+  if (!result || result.threw) return null;
   const text = String(result.stdout ?? "").trim();
   if (!(result.ok === true || result.code === 0)) return null;
   if (text === "Darwin") return "darwin";
@@ -36,8 +37,8 @@ export function osOf(result) {
 }
 
 function missingOf(error, code) {
-  return error?.code === "ENOENT" || code === 127 || code === 9009 || code === "ENOENT"
-    || /not found|no such file|cannot find|could not find|not installed|enoent/i.test(String(error?.message ?? error ?? ""));
+  const which = code ?? error?.code;
+  return which === "ENOENT" || which === 127 || which === 9009;
 }
 
 export function createAwake({ now = () => Date.now(), run }) {
@@ -88,7 +89,7 @@ export function createAwake({ now = () => Date.now(), run }) {
       const os = prev.os ?? await this.probe(item.name);
       const cur = this.slot(item.name);
       if (cur.gen !== gen) return;
-      if (!os) { this.put(item.name, { ...cur, skip: true, arming: false }); return; }
+      if (!os) { this.put(item.name, { ...cur, os: null, skip: false, arming: false, nextAt: this.now() + RENEW_MS }); return; }
       this.launch(item, os, gen, this.now());
     },
     async sync(list) {
