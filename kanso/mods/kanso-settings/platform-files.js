@@ -41,10 +41,13 @@ export class SaveConflict extends Error {
   constructor() { super("changed on disk"); this.conflict = true; }
 }
 
+// GNU stat and base64 on a Mac PATH do not speak the system flags.
+const bin = (platform, name) => platform === "macos" ? `/usr/bin/${name}` : name;
+
 const unixScript = (platform) => {
-  const stat = platform === "macos" ? "stat -L -f %z" : "stat -c %s";
-  const hash = platform === "macos" ? "shasum -a 256" : "sha256sum";
-  const b64 = platform === "macos" ? "base64 -D" : "base64 -d";
+  const stat = `${bin(platform, "stat")} ${platform === "macos" ? "-L -f %z" : "-L -c %s"}`;
+  const hash = platform === "macos" ? `${bin(platform, "shasum")} -a 256` : "sha256sum";
+  const b64 = `${bin(platform, "base64")} ${platform === "macos" ? "-D" : "-d"}`;
   return [
     "target=$1",
     "textb64=$2",
@@ -132,7 +135,7 @@ export const pairEntries = (raw) => {
 };
 
 const unixTree = (platform) => {
-  const stat = platform === "macos" ? "stat -f '%z %m'" : "stat -c '%s %Y'";
+  const stat = `${bin(platform, "stat")} ${platform === "macos" ? "-L -f '%z %m'" : "-L -c '%s %Y'"}`;
   return [
     "root=$1",
     "shift",
@@ -261,7 +264,7 @@ test -d "$1"`;
   const stat = async (path, options) => {
     const r = platform === "windows"
       ? checked(await ps(`$i=Get-Item -LiteralPath ${psQuote(path)}; '{0} {1}' -f $i.Length, ([DateTimeOffset]$i.LastWriteTimeUtc).ToUnixTimeSeconds()`, options))
-      : checked(await run("stat", platform === "macos" ? ["-f", "%z %m", path] : ["-c", "%s %Y", path], options));
+      : checked(await run(bin(platform, "stat"), platform === "macos" ? ["-L", "-f", "%z %m", path] : ["-L", "-c", "%s %Y", path], options));
     const [size, mtime] = r.stdout.trim().split(/\s+/).map(Number);
     return { size, mtime };
   };
@@ -270,8 +273,9 @@ test -d "$1"`;
     if (platform === "windows") return whole
       ? ps(`[Convert]::ToBase64String([IO.File]::ReadAllBytes(${psQuote(path)}))`, options)
       : ps(`$s=[IO.File]::OpenRead(${psQuote(path)}); try { [void]$s.Seek(${Number(range.offset)}, 'Begin'); $b=New-Object byte[] ${Number(range.length)}; $n=$s.Read($b,0,$b.Length); [Convert]::ToBase64String($b,0,$n) } finally { $s.Dispose() }`, options);
-    if (!whole) return run("sh", ["-c", "tail -c +\"$2\" \"$1\" | head -c \"$3\" | base64", "slice", path, String(Number(range.offset) + 1), String(Number(range.length))], options);
-    return platform === "macos" ? run("base64", ["-i", path], options) : run("base64", [path], options);
+    const b64 = bin(platform, "base64");
+    if (!whole) return run("sh", ["-c", `tail -c +"$2" "$1" | head -c "$3" | ${b64}`, "slice", path, String(Number(range.offset) + 1), String(Number(range.length))], options);
+    return platform === "macos" ? run(b64, ["-i", path], options) : run(b64, [path], options);
   };
   const decodeBase64File = async (from, to, options = {}) => {
     const { append: extra, ...rest } = options;
@@ -285,7 +289,7 @@ test -d "$1"`;
     const decoded = platform === "windows"
       ? await ps(`[IO.File]::WriteAllBytes(${psQuote(to)}, [Convert]::FromBase64String(([IO.File]::ReadAllText(${psQuote(from)}) -replace '\\s','')))`, rest)
       : platform === "macos"
-        ? await run("base64", ["-D", "-i", from, "-o", to], rest)
+        ? await run(bin(platform, "base64"), ["-D", "-i", from, "-o", to], rest)
         : await run("sh", ["-c", "base64 -d \"$1\" > \"$2\"", "b64", from, to], rest);
     checked(decoded);
   };

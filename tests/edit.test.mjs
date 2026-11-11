@@ -1,14 +1,14 @@
 // Saving a text file and a Markdown note: one state machine, one draft per path, one remote write.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileApi, CHUNK, WRITE_RAW, base64Chunks, windowsCommandLength, writeSteps } from "../kanso/mods/kanso-panel/platform-files.js";
 import { DraftBook, EDIT_LIMIT, beginSave, byteLength, commitText, applied, didSave, draftKey, keepMine, needsSave, opened, overRead, remember, restore, seenDisk, takeTheirs, tooBig, tooLarge, typed, wholeText, word } from "../kanso/mods/kanso-panel/edit.js";
-import { load } from "./helpers.mjs";
+import { exec, load, nativePlatform } from "./helpers.mjs";
 
 const read = (file) => JSON.parse(readFileSync(new URL(`../kanso/${file}`, import.meta.url), "utf8"));
 
@@ -94,10 +94,11 @@ test("a draft is kept per path and restored with Edited", () => {
 });
 
 const scriptOf = (step, dir = "") => step.script ? step.script(dir) : String(step.args(dir)[1]);
-const shell = (env) => async (cmd, args) => new Promise((resolve) => {
-  execFile(cmd, args, { encoding: "utf8", maxBuffer: 12 * 1024 * 1024, env }, (error, stdout, stderr) => {
-    resolve({ code: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: stdout ?? "", stderr: stderr ?? "" });
-  });
+const shMissing = (() => {
+  try { execFileSync("sh", ["-c", ":"], { stdio: "pipe" }); return false; } catch { return true; }
+})();
+const powershellHere = ["pwsh", "powershell"].some((name) => {
+  try { execFileSync(name, ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], { stdio: "pipe" }); return true; } catch { return false; }
 });
 
 test("a file over 1 MiB of bytes stays a view", () => {
@@ -135,13 +136,14 @@ test("a remote save writes in place, one call when both sides fit", () => {
     assert.equal(one[0].args("")[7], "shot");
     const script = scriptOf(one[0]);
     assert.match(script, /mktemp -d/);
-    assert.match(script, platform === "macos" ? /base64 -D/ : /base64 -d/);
-    assert.equal(platform === "macos" ? /base64 -d/.test(script) : /base64 -D/.test(script), false);
+    assert.match(script, platform === "macos" ? /\/usr\/bin\/base64 -D/ : /base64 -d/);
+    assert.equal(platform === "macos" ? /base64 -d/.test(script) : /\/usr\/bin\/base64 -D/.test(script), false);
     assert.match(script, /cat "\$dir\/new" > "\$target"/);
     assert.match(script, /\[ -e "\$target" \] \|\| \[ -L "\$target" \]/);
     assert.equal(/mv -f|\.kanso-/.test(script), false);
-    assert.match(script, platform === "macos" ? /shasum -a 256/ : /sha256sum/);
-    assert.match(script, platform === "macos" ? /stat -L -f %z/ : /stat -c %s/);
+    assert.match(script, platform === "macos" ? /\/usr\/bin\/shasum -a 256/ : /sha256sum/);
+    assert.match(script, platform === "macos" ? /\/usr\/bin\/stat -L -f %z/ : /stat -L -c %s/);
+    if (platform === "linux") assert.equal(script.includes("/usr/bin/"), false);
     const raw = WRITE_RAW[platform];
     const full = writeSteps(platform, "/repo/a.txt", "a".repeat(raw), "b".repeat(raw));
     assert.equal(full.length, 1, platform);
@@ -215,25 +217,41 @@ test("one save is one remote call when it fits, and a failed step does not touch
 });
 
 test("a real save keeps the inode, and a 200 KB linux save is 3 calls", async () => {
+  const body = "a".repeat(200 * 1024);
+  const linuxCalls = [];
+  const linux = fileApi("linux", async (_cmd, args) => {
+    linuxCalls.push(args);
+    assert.ok(args.every((arg) => Buffer.byteLength(String(arg)) < 131072));
+    return { code: 0, stdout: "", stderr: "" };
+  });
+  await linux.write("/repo/wide.txt", `${body}!`, body);
+  assert.equal(linuxCalls.length, 3);
+  assert.deepEqual(linuxCalls.map((args) => args[7]), ["begin", "more", "end"]);
+  assert.match(linuxCalls[0][1], /stat -L -c %s/);
+  assert.equal(linuxCalls[0][1].includes("/usr/bin/"), false);
+  if (nativePlatform === "windows" ? !powershellHere : shMissing) return;
   const root = await mkdtemp(join(tmpdir(), "kanso-inode-"));
   const scratch = join(root, "tmp");
   await mkdir(scratch);
-  const macEnv = { ...process.env, PATH: "/usr/bin:/bin:/usr/sbin", TMPDIR: scratch };
-  const api = fileApi("macos", shell(macEnv));
+  const env = { ...process.env, TMPDIR: scratch, TEMP: scratch, TMP: scratch };
+  const run = (cmd, args, options) => exec(cmd, args, { ...options, env });
+  const api = fileApi(nativePlatform, run);
   try {
     const target = join(root, "note.txt");
     await writeFile(target, "keep");
-    await chmod(target, 0o755);
+    if (nativePlatform !== "windows") await chmod(target, 0o755);
     await api.write(target, "keep!", "keep");
     assert.equal(await readFile(target, "utf8"), "keep!");
-    assert.equal((await stat(target)).mode & 0o777, 0o755);
-    const real = join(root, "real.txt");
-    const linked = join(root, "link.txt");
-    await writeFile(real, "body");
-    await symlink(real, linked);
-    await api.write(linked, "body!", "body");
-    assert.equal((await lstat(linked)).isSymbolicLink(), true);
-    assert.equal(await readFile(real, "utf8"), "body!");
+    if (nativePlatform !== "windows") assert.equal((await stat(target)).mode & 0o777, 0o755);
+    if (nativePlatform !== "windows") {
+      const real = join(root, "real.txt");
+      const linked = join(root, "link.txt");
+      await writeFile(real, "body");
+      await symlink(real, linked);
+      await api.write(linked, "body!", "body");
+      assert.equal((await lstat(linked)).isSymbolicLink(), true);
+      assert.equal(await readFile(real, "utf8"), "body!");
+    }
     const hard = join(root, "hard.txt");
     const twin = join(root, "twin.txt");
     await writeFile(hard, "same");
@@ -253,26 +271,22 @@ test("a real save keeps the inode, and a 200 KB linux save is 3 calls", async ()
     await assert.rejects(() => api.write(made, "nope\n", null), (error) => error.conflict === true);
     assert.equal(await readFile(made, "utf8"), "hello\n");
     const calls = [];
-    const once = fileApi("macos", async (cmd, args) => { calls.push(cmd); return shell(macEnv)(cmd, args); });
+    const once = fileApi(nativePlatform, async (cmd, args, options) => { calls.push([cmd, args]); return run(cmd, args, options); });
     await once.write(target, "now!", "now");
-    assert.deepEqual(calls, ["sh"]);
+    if (nativePlatform === "windows") assert.ok(calls.every((call) => call[0] === "pwsh" || call[0] === "powershell"));
+    else {
+      assert.deepEqual(calls.map((call) => call[0]), ["sh"]);
+      const script = String(calls[0][1][1]);
+      if (nativePlatform === "macos") {
+        assert.match(script, /\/usr\/bin\/stat -L -f %z/);
+        assert.match(script, /\/usr\/bin\/base64 -D/);
+        assert.match(script, /\/usr\/bin\/shasum -a 256/);
+      } else {
+        assert.match(script, /stat -L -c %s/);
+        assert.equal(script.includes("/usr/bin/"), false);
+      }
+    }
     assert.equal((await readdir(scratch)).length, 0);
-    const linuxRoot = join(root, "linux");
-    const linuxTmp = join(linuxRoot, "tmp");
-    await mkdir(linuxTmp, { recursive: true });
-    const body = "a".repeat(200 * 1024);
-    const wide = join(linuxRoot, "wide.txt");
-    await writeFile(wide, body);
-    const linuxCalls = [];
-    const linux = fileApi("linux", async (cmd, args) => {
-      linuxCalls.push(args);
-      assert.ok(args.every((arg) => Buffer.byteLength(String(arg)) < 131072));
-      return shell({ ...process.env, TMPDIR: linuxTmp })(cmd, args);
-    });
-    await linux.write(wide, `${body}!`, body);
-    assert.equal(linuxCalls.length, 3);
-    assert.equal(await readFile(wide, "utf8"), `${body}!`);
-    assert.equal((await readdir(linuxTmp)).length, 0);
     assert.equal((await readdir(root)).some((name) => name.includes(".kanso")), false);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

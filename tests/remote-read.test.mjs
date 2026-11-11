@@ -167,7 +167,7 @@ for (const platform of ["macos", "linux", "windows"]) {
       assert.equal(script.includes("sh "), false);
     } else {
       assert.equal(calls[0][0], "sh");
-      assert.match(script, platform === "macos" ? /stat -f '%z %m'/ : /stat -c '%s %Y'/);
+      assert.match(script, platform === "macos" ? /\/usr\/bin\/stat -L -f '%z %m'/ : /stat -L -c '%s %Y'/);
       assert.match(script, /find -H/);
       assert.match(script, /status --porcelain=v1 -z/);
       assert.match(script, /tr '\\000' '\\n'/);
@@ -181,8 +181,8 @@ for (const platform of ["macos", "linux", "windows"]) {
     const run = async (cmd, args) => {
       calls.push([cmd, args]);
       const script = String(args?.at?.(-1) ?? "");
-      if (cmd === "stat") return { code: 0, stdout: "4 1700000000\n", stderr: "" };
-      if (cmd === "base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
+      if (cmd === "stat" || cmd === "/usr/bin/stat") return { code: 0, stdout: "4 1700000000\n", stderr: "" };
+      if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
       if (cmd === "sh" && String(args?.[1] ?? "").includes("tail -c")) return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
       if (cmd === "sh" && String(args?.[1] ?? "").includes("base64 -d")) return { code: 0, stdout: "", stderr: "" };
       if (cmd === "pwsh") return { code: 0, stdout: script.includes("ToBase64String") || script.includes("WriteAllBytes") ? "AQIDBA==\n" : "4 1700000000\n", stderr: "" };
@@ -192,12 +192,12 @@ for (const platform of ["macos", "linux", "windows"]) {
     assert.deepEqual(await api.stat("/tmp/a.png"), { size: 4, mtime: 1700000000 });
     await api.encode("/tmp/a.png");
     await api.encode("/tmp/a.png", { offset: 2, length: 2 });
-    if (platform === "macos") assert.deepEqual(calls.filter((c) => c[0] === "base64").map((c) => c[1]), [["-i", "/tmp/a.png"]]);
+    if (platform === "macos") assert.deepEqual(calls.filter((c) => c[0] === "/usr/bin/base64").map((c) => c[1]), [["-i", "/tmp/a.png"]]);
     if (platform === "linux") assert.deepEqual(calls.filter((c) => c[0] === "base64").map((c) => c[1]), [["/tmp/a.png"]]);
     if (platform === "macos" || platform === "linux") {
-      assert.deepEqual(calls.find((c) => c[0] === "stat")[1], platform === "macos" ? ["-f", "%z %m", "/tmp/a.png"] : ["-c", "%s %Y", "/tmp/a.png"]);
+      assert.deepEqual(calls.find((c) => c[0] === (platform === "macos" ? "/usr/bin/stat" : "stat"))[1], platform === "macos" ? ["-L", "-f", "%z %m", "/tmp/a.png"] : ["-L", "-c", "%s %Y", "/tmp/a.png"]);
       const range = calls.find((c) => c[0] === "sh" && String(c[1][1]).includes("tail -c"));
-      assert.deepEqual(range[1], ["-c", "tail -c +\"$2\" \"$1\" | head -c \"$3\" | base64", "slice", "/tmp/a.png", "3", "2"]);
+      assert.deepEqual(range[1], ["-c", `tail -c +"$2" "$1" | head -c "$3" | ${platform === "macos" ? "/usr/bin/base64" : "base64"}`, "slice", "/tmp/a.png", "3", "2"]);
       assert.equal(calls.some((c) => c[0] === "python3"), false);
     }
     if (platform === "windows") {
@@ -208,7 +208,7 @@ for (const platform of ["macos", "linux", "windows"]) {
       assert.equal(calls.some((c) => c[0] === "sh" || c[0] === "base64" || c[0] === "python3"), false);
     }
     await api.decodeBase64File("/tmp/in.b64", "/tmp/out.bin");
-    if (platform === "macos") assert.deepEqual(calls.filter((c) => c[0] === "base64" && c[1][0] === "-D").map((c) => c[1]), [["-D", "-i", "/tmp/in.b64", "-o", "/tmp/out.bin"]]);
+    if (platform === "macos") assert.deepEqual(calls.filter((c) => c[0] === "/usr/bin/base64" && c[1][0] === "-D").map((c) => c[1]), [["-D", "-i", "/tmp/in.b64", "-o", "/tmp/out.bin"]]);
     if (platform === "linux") {
       const decode = calls.find((c) => c[0] === "sh" && String(c[1][1]).includes("base64 -d"));
       assert.deepEqual(decode[1], ["-c", "base64 -d \"$1\" > \"$2\"", "b64", "/tmp/in.b64", "/tmp/out.bin"]);
@@ -229,7 +229,7 @@ async function remoteBring(platform) {
   const note = async (path, data, ...rest) => { writes.push(typeof data); return writeFile(path, data, ...rest); };
   const exec = async (cmd, args = [], options = {}) => {
     calls.push([cmd, args, options.on ?? null]);
-    if (cmd === "base64" && args[0] === "-D") {
+    if ((cmd === "base64" || cmd === "/usr/bin/base64") && args[0] === "-D") {
       const text = await readFile(args[2], "utf8");
       await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));
       return { code: 0, stdout: "", stderr: "" };
@@ -240,7 +240,7 @@ async function remoteBring(platform) {
       await writeFile(args[4], Buffer.concat([prior, extra]));
       return { code: 0, stdout: "", stderr: "" };
     }
-    if (cmd === "stat" && !options.on) {
+    if ((cmd === "stat" || cmd === "/usr/bin/stat") && !options.on) {
       const info = await stat(args.at(-1)).catch(() => null);
       return info ? { code: 0, stdout: `${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "missing" };
     }
@@ -258,9 +258,9 @@ async function remoteBring(platform) {
       return { code: 1, stdout: "", stderr: script.slice(0, 40) };
     }
     if (cmd === "uname") return { code: 0, stdout: platform === "macos" ? "Darwin\n" : "Linux\n", stderr: "" };
-    if (cmd === "stat") return { code: 0, stdout: state.stat, stderr: "" };
+    if (cmd === "stat" || cmd === "/usr/bin/stat") return { code: 0, stdout: state.stat, stderr: "" };
     if (cmd === "sh" && String(args[1] ?? "").includes("tail -c")) return { code: 0, stdout: state.stdout, stderr: "" };
-    if (cmd === "base64") return { code: 0, stdout: state.stdout, stderr: "" };
+    if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: state.stdout, stderr: "" };
     return { code: 1, stdout: "", stderr: cmd };
   };
   const loaded = await load("kanso-panel/remote-file.js", ["bring"], {
@@ -274,10 +274,10 @@ test("a file here is not copied, and one elsewhere is kept until its mtime chang
   try {
     assert.deepEqual(clone(await box.bring("/here/a.png", null)), { path: "/here/a.png" });
     const first = await box.bring("/remote/a.png", "light");
-    const encodes = () => box.calls.filter((call) => call[0] === "base64" && call[2] === "light").length;
+    const encodes = () => box.calls.filter((call) => call[0] === "/usr/bin/base64" && call[2] === "light").length;
     assert.equal(encodes(), 1);
     assert.equal(box.writes.every((kind) => kind === "string"), true);
-    assert.ok(box.calls.some((call) => call[0] === "base64" && call[1][0] === "-D" && call[2] == null));
+    assert.ok(box.calls.some((call) => call[0] === "/usr/bin/base64" && call[1][0] === "-D" && call[2] == null));
     assert.deepEqual([...(await readFile(first.path))], [1, 2, 3, 4]);
     assert.equal((await box.bring("/remote/a.png", "light")).path, first.path);
     assert.equal(encodes(), 1);
@@ -331,25 +331,25 @@ test("a picture over 2 MB is not copied until it is asked for", async () => {
     const big = pure.ASK_BYTES + 1;
     box.state.stat = `${big} 9\n`;
     assert.deepEqual(clone(await box.bring("/remote/big.png", "light")), { deferred: true, size: big, mtime: 9 });
-    assert.equal(box.calls.some((call) => call[0] === "base64" || call[0] === "python3" || String(call[1]?.[1] ?? "").includes("tail -c")), false);
+    assert.equal(box.calls.some((call) => call[0] === "/usr/bin/base64" || call[0] === "base64" || call[0] === "python3" || String(call[1]?.[1] ?? "").includes("tail -c")), false);
     await assert.rejects(box.bring("/remote/big.png", "light", { ask: true }), /cut short/);
     assert.ok(box.calls.some((call) => call[2] === "light" && String(call[1]?.[1] ?? "").includes("tail -c")));
     assert.equal(box.calls.some((call) => call[0] === "python3"), false);
     assert.ok(box.calls.some((call) => call[0] === "sh" && String(call[1][1]).includes(">>")));
-    assert.ok(box.calls.some((call) => call[0] === "base64" && call[1][0] === "-D"));
+    assert.ok(box.calls.some((call) => call[0] === "/usr/bin/base64" && call[1][0] === "-D"));
     assert.equal((await readdir(join(box.dir, "data/kanso-panel/remote"))).some((name) => name.includes(".b64") || name.endsWith(".part")), false);
     box.state.stat = `${pure.ASK_BYTES} 8\n`;
-    const before = box.calls.filter((call) => call[0] === "base64").length;
+    const before = box.calls.filter((call) => call[0] === "/usr/bin/base64").length;
     await assert.rejects(box.bring("/remote/exact.png", "light"), /cut short/);
-    assert.ok(box.calls.filter((call) => call[0] === "base64").length > before);
+    assert.ok(box.calls.filter((call) => call[0] === "/usr/bin/base64").length > before);
     const name = pure.copyName("light", "/remote/kept.png", 9, big, "png");
     const root = join(box.dir, "data/kanso-panel/remote");
     await mkdir(root, { recursive: true });
     await writeFile(join(root, name), Buffer.alloc(big));
-    const encoded = box.calls.filter((call) => call[0] === "base64").length;
+    const encoded = box.calls.filter((call) => call[0] === "/usr/bin/base64").length;
     box.state.stat = `${big} 9\n`;
     assert.equal((await box.bring("/remote/kept.png", "light")).path, join(root, name));
-    assert.equal(box.calls.filter((call) => call[0] === "base64").length, encoded);
+    assert.equal(box.calls.filter((call) => call[0] === "/usr/bin/base64").length, encoded);
     box.state.stat = `${pure.BYTE_CAP + 1} 1\n`;
     await assert.rejects(box.bring("/remote/huge.png", "light", { ask: true }), /over 20 MB/);
   } finally { await box.done(); }
@@ -364,7 +364,7 @@ test("linux and windows copies use that computer's encoder and never a shell on 
     assert.equal(linux.calls.filter((call) => call[2] === "light").some((call) => call[0] === "sh"), false);
     const got = await windows.bring("C:\\pics\\a.png", "light");
     assert.ok(windows.calls.filter((call) => call[2] === "light").every((call) => call[0] === "pwsh" || call[0] === "powershell"));
-    assert.ok(windows.calls.some((call) => call[2] == null && call[0] === "base64" && call[1][0] === "-D"));
+    assert.ok(windows.calls.some((call) => call[2] == null && call[0] === "/usr/bin/base64" && call[1][0] === "-D"));
     assert.ok(windows.calls.some((call) => String(call[1].at(-1)).includes("ReadAllBytes")));
     assert.equal((await readFile(got.path)).length, 4);
   } finally { await linux.done(); await windows.done(); }
@@ -398,8 +398,8 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
         calls.push(cmd);
         if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
         if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
-        if (cmd === "stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
-        if (cmd === "base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
+        if (cmd === "stat" || cmd === "/usr/bin/stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
+        if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
         if (cmd === "sips") return { code: 0, stdout: "pixelWidth: 12\npixelHeight: 8\n", stderr: "" };
         if (cmd === "head") return { code: 0, stdout: "hello", stderr: "" };
         return { code: 0, stdout: "", stderr: "" };
@@ -485,7 +485,7 @@ test("a remote folder says why it failed and is listed again only while shown", 
       if (!listed) throw new Error("light is unreachable");
       if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
       if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
-      if (cmd === "stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
+      if (cmd === "stat" || cmd === "/usr/bin/stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
       if (cmd === "sh") return { code: 0, stdout: tree, stderr: "" };
       return { code: 1, stdout: "", stderr: cmd };
     },
@@ -593,15 +593,15 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
           await rename(args.at(-2), args.at(-1));
           return { code: 0, stdout: "", stderr: "" };
         }
-        if (cmd === "base64" && args[0] === "-D") {
+        if ((cmd === "base64" || cmd === "/usr/bin/base64") && args[0] === "-D") {
           const text = await readFile(args[2], "utf8");
           await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));
           return { code: 0, stdout: "", stderr: "" };
         }
         if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
         if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
-        if (cmd === "stat") return { code: 0, stdout: "4 3\n", stderr: "" };
-        if (cmd === "base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
+        if (cmd === "stat" || cmd === "/usr/bin/stat") return { code: 0, stdout: "4 3\n", stderr: "" };
+        if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
         if (cmd === "head") return { code: 0, stdout: "Hello\n\n![shot](./shot.png)\n", stderr: "" };
         return { code: 1, stdout: "", stderr: cmd };
       },
