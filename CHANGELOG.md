@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.27.0] - 2026-11-11
+
+### Added
+
+- Files, Preview and Images work for a space on another computer. Files lists that computer's folder and says when it cannot be reached or the folder cannot be read. Preview shows a picture (its name, its size in pixels when known, and Open with), and a Markdown file there includes the pictures it embeds. Images shows the pictures an agent on that computer made, and a note still sends. On a poor connection the folder or file is checked before it is read again, a picture over 2 MB waits until you load it, and a missed answer keeps the last view with its age and Retry.
+
 ## [3.26.0] - 2026-11-11
 
 ### Added

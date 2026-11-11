@@ -15,12 +15,12 @@ import { v_flex, h_flex } from "gpui-base";
 import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
 import { MarkdownDoc, tildePath } from "./doc.js";
 import { afterMount } from "./pure.js";
+import { pollStart, pollNext, takeStamp, ArmPoll, asOf } from "./remote-file.js";
 
 const ICONS = "mods/markdown-panel/icons";
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
 const folderOf = (path) => paths.dirname(path);
 const nameOf = (path) => paths.basename(path);
-const REMOTE_READ_MS = 3000;
 const OPEN_DIR = "data/kanso-open", REVIEW_DIR = "data/markdown-review", WAITING_DIR = "data/markdown-review-waiting", DONE_DIR = "data/markdown-review-done";
 const RECENT_MAX = 15;
 
@@ -151,12 +151,31 @@ export default class MarkdownPanel extends View {
     });
   }
 
-  // Another machine's folder can't be watched from here: read it every few seconds.
+  // Another machine's folder can't be watched from here: one stat, and a read only when it changed.
   watch(path, cx) {
     const doc = this.doc, dir = folderOf(path);
-    const next = () => (doc.on ? cx.sleep(REMOTE_READ_MS) : watchFolder(dir));
+    if (!doc?.on) {
+      cx.spawn(async (cx) => {
+        try { while (this.doc === doc) { await watchFolder(dir); if (this.doc === doc) doc.load(cx); } } catch {}
+      });
+      return;
+    }
+    this.poll = pollStart(); this.stamp = null; this.arm = null;
+    new ArmPoll(this).start(cx, (tick) => this.probeDoc(doc, path, tick));
+  }
+
+  probeDoc(doc, path, cx) {
+    if (this.doc !== doc) return;
     cx.spawn(async (cx) => {
-      try { while (this.doc === doc) { await next(); if (this.doc === doc) doc.load(cx); } } catch {}
+      const { outcome, next } = await takeStamp(async () => (await serviceOn(fileApi, doc.on)).stat(path), this.stamp);
+      if (this.doc !== doc) return;
+      if (outcome === "seen") this.stamp = next;
+      if (outcome === "changed") { this.stamp = next; doc.load(cx); }
+      if (outcome === "failed" && this.doc?.saved != null) this.doc.held = { at: this.doc.fresh ?? Date.now() };
+      this.poll = pollNext(this.poll, outcome);
+      this.arm = null;
+      if (this.doc === doc) new ArmPoll(this).start(cx, (tick) => this.probeDoc(doc, path, tick));
+      cx.notify();
     });
   }
 
@@ -213,9 +232,9 @@ export default class MarkdownPanel extends View {
         .when(Boolean(doc), (el) => el.child(button("md-back", "chevron-left", "Markdown in this folder", (cx) => this.back(cx))))
         .child(v_flex().flex_1().min_w(0).pl(doc ? 0 : 4)
           .child(div().truncate().font_semibold().child(doc ? nameOf(doc.path) : "Markdown"))
-          .child(div().truncate().text_size(11).text_color(t.dim).child(tildePath(doc ? folderOf(doc.path) : this.folder, doc ? doc.on : this.on))))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(doc ? folderOf(doc.path) : this.folder, doc ? doc.on : this.on)}${doc?.held ? ` · ${asOf(doc.held.at, Date.now())}` : ""}`)))
         .children(doc ? doc.controls(t, "md") : [])
-        .when(Boolean(doc) && !doc.editing, (el) => el.child(button("md-refresh", "refresh", "Read again", (cx) => doc.load(cx))))
+        .when(Boolean(doc) && !doc.editing, (el) => el.child(button("md-refresh", "refresh", doc.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); doc.load(cx); })))
         .when(reviewing, (el) => el.child(div().id("md-done").flex_none().px(8).py(3).rounded(6).cursor_pointer().text_size(12)
           .bg(t.raised).border_1().border_color(t.border).tooltip("Review done: tell the agent").hover((s) => s.bg(t.hover))
           .on_click((_e, cx) => this.done(cx)).child("Done")))

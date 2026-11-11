@@ -1,6 +1,6 @@
 // Shared by the tests: load a mod's real source into a fake Herdr host.
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rmdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -8,16 +8,68 @@ import vm from "node:vm";
 import { modScript } from "../scripts/mod-source.mjs";
 
 const runFile = promisify(execFile);
+const fileExists = (path) => access(path).then(() => true, () => false);
+// What gpui-kit.d.ts declares. An import of anything else fails the way Herdr fails it.
+const HERDR_MODULES = {
+  "fs/promises": ["readFile", "writeFile", "readdir", "exists", "unlink", "rmdir", "mkdir"],
+  net: ["connect"],
+  websocket: ["WebSocket"],
+};
+export function bindHerdrModules(text) {
+  return text.replace(/^import\s+(?:(\*\s+as\s+\w+|\{[^}]*\}|\w+)\s+from\s+)?["']([^"']+)["'];[ \t]*(?:\r?\n|$)/gm, (full, clause, from) => {
+    const allowed = HERDR_MODULES[from];
+    if (!allowed) return full;
+    if (!clause) return "";
+    if (clause.startsWith("*")) return `const ${clause.match(/\*\s+as\s+(\w+)/)[1]} = __herdrModule(${JSON.stringify(from)});\n`;
+    if (!clause.startsWith("{")) {
+      if (from !== "net") throw new Error(`Could not find export 'default' in module '${from}'`);
+      return `const ${clause} = __herdrModule(${JSON.stringify(from)});\n`;
+    }
+    const specs = clause.slice(1, -1).split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
+      const [orig, alias] = part.split(/\s+as\s+/).map((name) => name.trim());
+      if (!allowed.includes(orig)) throw new Error(`Could not find export '${orig}' in module '${from}'`);
+      return alias ? `${orig}: ${alias}` : orig;
+    });
+    return `const { ${specs.join(", ")} } = __herdrModule(${JSON.stringify(from)});\n`;
+  });
+}
+
+const herdrModules = (host) => {
+  const overlay = (name, base) => Object.freeze({
+    ...base,
+    ...Object.fromEntries(HERDR_MODULES[name].filter((key) => host[key] !== undefined).map((key) => [key, host[key]])),
+  });
+  return {
+    "fs/promises": overlay("fs/promises", { readFile, writeFile, readdir, exists: fileExists, unlink, rmdir, mkdir }),
+    net: overlay("net", { connect() { throw new Error("net.connect is not available to a mod"); } }),
+    websocket: overlay("websocket", { WebSocket: { connect() { throw new Error("WebSocket.connect is not available to a mod"); } } }),
+  };
+};
+
 export const clone = (value) => JSON.parse(JSON.stringify(value));
 export const nativePlatform = ({ darwin: "macos", win32: "windows" })[process.platform] ?? "linux";
 export const nativeWindow = () => ({ platform: nativePlatform });
 const mods = new URL("../kanso/mods/", import.meta.url);
+const ban = (name) => {
+  const fail = () => { throw new Error(`${name} is not available to a mod`); };
+  return new Proxy(function banned() { fail(); }, { get: fail, apply: fail, construct: fail });
+};
+
+// The mod runtime has none of these. Using one throws, even when a fixture passed the real one in.
+export function modSandbox(host = {}) {
+  const sandbox = vm.createContext({ ...host });
+  sandbox.TextDecoder = ban("TextDecoder");
+  sandbox.atob = ban("atob");
+  sandbox.Buffer = ban("Buffer");
+  return sandbox;
+}
 
 // Load the actual mod logic (its own-folder imports included) with the
 // desktop host supplied by each fixture.
 export async function load(file, names, host = {}, root = mods) {
   const dir = file.slice(0, file.lastIndexOf("/") + 1);
-  const read = async (name) => readFile(new URL(name, root), "utf8");
+  const modules = herdrModules(host);
+  const read = async (name) => bindHerdrModules(await readFile(new URL(name, root), "utf8"));
   // Siblings are read up front: the inliner is synchronous.
   const sources = new Map([[file, await read(file)]]);
   const pending = [file];
@@ -29,7 +81,7 @@ export async function load(file, names, host = {}, root = mods) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host });
+  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host, __herdrModule: (name) => modules[name] }));
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
@@ -47,7 +99,7 @@ export async function temporary(t) {
 // limit (30 s; `limit` in ms makes it shorter for a test).
 export async function exec(command, args, options = {}) {
   try {
-    const result = await runFile(command, args, { cwd: options.cwd, maxBuffer: 4 * 1024 * 1024, timeout: options.limit ?? 30000, killSignal: "SIGKILL" });
+    const result = await runFile(command, args, { cwd: options.cwd, ...(options.env ? { env: options.env } : {}), maxBuffer: 4 * 1024 * 1024, timeout: options.limit ?? 30000, killSignal: "SIGKILL" });
     return { code: 0, ...result };
   } catch (error) {
     return { code: error.killed ? 137 : error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? String(error) };

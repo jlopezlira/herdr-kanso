@@ -547,9 +547,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `{file}` (a full path, from the Files panel) the editors open that file,
     and a text file is offered first to "Preview in the panel":
     `kanso-panel` with `{panel: "preview", path, on}` mounted in
-    `panel-body` the way kanso-tabs mounts its panels. It lists the editors
-    found here (app folders, `command -v`, Flatpak), the last one used first
-    (shared `open-with.recent`), with each app's own icon on macOS. Terminal
+    `panel-body`. It lists the editors found here, last used first
+    (`open-with.recent`), with each app's icon on macOS. Terminal
     editors open with `terminal.open {place: "right"}`. A folder on another
     machine opens over SSH in the VS Code family (`--remote ssh-remote+<machine>`)
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
@@ -557,13 +556,14 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
   - `kanso-status`: status bar; "N agents need you" runs `kanso-spaces.needs-you.next`.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
-    each is a plain class in its own file (`files.js`: lazy file tree via
-    `sh`, git status marks, a file shown in place as read-only code, a
-    Markdown file sent to `preview.js` with `back: "files"`; `changes.js`:
+    each is a plain class in its own file (`files.js`: that computer's folder
+    (a failure says why), git marks, code in place, Markdown or a picture to
+    `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
-    again whenever its folder changes, with Open with, read-again and close
-    buttons: code read-only, Markdown as `doc.js` `MarkdownDoc`, formatted
+    again only when that file changed, with Open with, read-again and close:
+    code read-only, a picture (png jpg jpeg gif webp svg, name and pixel size when known), Markdown as `doc.js` `MarkdownDoc`
+    (embedded pictures on another computer), formatted
     and edited in place (a double-click opens one block, a table as cells;
     saved after 700 ms, only when the file on disk is still what was read,
     else a conflict you resolve; "Source" edits the whole file; links to
@@ -572,12 +572,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     left there (`markdown-handler.sh install`, macOS: makes a small app
     the `.md` handler). The markdown-panel mod is its copy in a window, by
     sync:share); `lib.js` holds what they share (where the focused pane is,
-    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState` in the
-    terminal's font with the theme's ANSI hues, `markdownView` is the
-    SDK's `TextView.markdown`, selectable, in a scrolling column with 16 px
-    sides; and `showPanel`, which mounts a block in `panel-body`). A panel
-    exists only while `kanso-tabs` shows it, so it never polls the layout
-    to learn whether it is visible.
+    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState`,
+    `markdownView` is `TextView.markdown`; and `showPanel`, which mounts a block in `panel-body`). A panel
+    exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
@@ -585,15 +582,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     while shown; Stop: SIGTERM on a second press, then SIGKILL.
     `look.js` (Images, panel id `look`, `eye.svg`): no mod hears a click on
     a terminal's link, so it reads the terminal in focus (`hc read --lines
-    400`, every 4 s while shown; pinnable) and a session's transcript
-    (`transcript.js`). Pictures already found are rows in `kanso.db`
+    400` when that file changes; pinnable) and a session's transcript
+    (`transcript.js`). Elsewhere it is checked before a read, drawn from a copy here. Over 2 MB waits, and a note still sends. Pictures already found are rows in `kanso.db`
     (path, first-seen order, color, there) with the offset of the last whole
     line; the next read greps only new whole lines, and a rewritten file is
     read once and replaces its rows. A missing file, or one that will not
     open, is dropped; none yet is one line.
     Copies in `data/kanso-panel/look` draw the newest big (`image()` reads
     the app folder; HEIC/TIFF via `sips`/`magick`); each picture is a circle,
-    the active one filled with its color. A click drops a numbered pin, kept for that agent and picture until Send, and
+    the active one filled with its color. A click drops a numbered pin, kept until Send, and
     opens `kanso-prompt` with `shared: "kanso.look.note"` (`{[token]: {text,
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).

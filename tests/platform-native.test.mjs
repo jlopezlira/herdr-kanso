@@ -1,14 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { writeFile, appendFile, readFile, realpath } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { writeFile, appendFile, readFile, realpath, unlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { transcriptApi } from "../kanso/mods/kanso-panel/platform-transcripts.js";
 import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
 import { portApi } from "../kanso/mods/kanso-panel/platform-ports.js";
 import { repositoryApi } from "../kanso/mods/kanso-panel/platform-repositories.js";
-import { exec, nativePlatform, temporary } from "./helpers.mjs";
+import { exec, nativePlatform, temporary, load } from "./helpers.mjs";
 
 test("native filesystem services preserve Unicode names, literal quotes and recursion boundaries", async (t) => {
   const root = await temporary(t), files = fileApi(nativePlatform, exec);
@@ -101,4 +102,43 @@ test("native repository service creates, discovers and probes a worktree without
   assert.match((await api.probe(path, 60, ["main"])).stdout, /^recent$/m);
   assert.match((await api.probe(path, 0, ["main"])).stdout, /^merged$/m);
   assert.match((await api.bases(folder)).stdout, /^main$/m);
+});
+
+test("a file copied in slices matches its bytes, including an empty file and one slice", async (t) => {
+  const { CHUNK, slices } = await load("kanso-panel/remote-file.js", ["CHUNK", "slices"], { appHome: () => "/app" });
+  const root = await temporary(t);
+  // macOS calls base64 -D. /usr/bin is that program; a GNU base64 earlier on PATH is not.
+  const run = nativePlatform === "macos"
+    ? (cmd, args, options) => exec(cmd, args, { ...options, env: { ...process.env, PATH: `/usr/bin:/bin:/usr/sbin:/sbin:${process.env.PATH ?? ""}` } })
+    : exec;
+  const files = fileApi(nativePlatform, run);
+  const copy = async (name, bytes) => {
+    const source = join(root, name), dest = join(root, `${name}.out`);
+    await writeFile(source, bytes);
+    const parts = slices(bytes.length);
+    const temp = `${dest}.b64`;
+    if (!parts.length) await writeFile(dest, "");
+    else {
+      for (let index = 0; index < parts.length; index += 1) {
+        const encoded = await files.encode(source, parts.length === 1 ? undefined : parts[index]);
+        assert.equal(encoded.code, 0, encoded.stderr);
+        const text = String(encoded.stdout ?? "");
+        if (index < parts.length - 1) assert.equal(text.includes("="), false);
+        if (index === 0) await writeFile(temp, text);
+        else {
+          const part = `${temp}.${index}`;
+          await writeFile(part, text);
+          await files.decodeBase64File(temp, null, { append: part });
+          await unlink(part);
+        }
+      }
+      await files.decodeBase64File(temp, dest);
+      await unlink(temp);
+    }
+    assert.ok((await readFile(dest)).equals(bytes));
+  };
+  assert.ok(slices(5 * 1024 * 1024).length > 1);
+  await copy("empty.bin", Buffer.alloc(0));
+  await copy("one.bin", randomBytes(CHUNK));
+  await copy("O'Brien picture.bin", randomBytes(5 * 1024 * 1024));
 });
