@@ -56,7 +56,24 @@ export const rollupState = (rollup) => checkSummary(onePerJob(rollup).map(checkS
 
 const CAN_MERGE = new Set(["CLEAN", "HAS_HOOKS"]);
 const WRITERS = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+export const isWriter = (permission) => WRITERS.has(String(permission ?? "").toUpperCase());
 export const READY_TEXT = "Ready to merge";
+
+export function jobLabel(check) {
+  const name = check?.name || "";
+  const workflow = check?.workflowName || "";
+  if (!name) return "Check";
+  if (!workflow || workflow === name) return name;
+  return `${workflow} / ${name}`;
+}
+
+export function runIdOf(check) {
+  if (!check || typeof check !== "object") return null;
+  const fromUrl = /\/actions\/runs\/(\d+)/.exec(String(check.detailsUrl || check.url || ""));
+  if (fromUrl) return fromUrl[1];
+  const id = check.checkSuite?.workflowRun?.databaseId;
+  return id != null && id !== "" ? String(id) : null;
+}
 const NO_PERMISSION = "No permission to merge";
 
 const checkLine = (checks) => {
@@ -87,7 +104,7 @@ export function mergeReadiness(pr, { permission = null, checks = null } = {}) {
   if (!status || status === "UNKNOWN") return { offer: false, text: "Checking whether it can merge…", tone: "dim" };
   if (status === "BEHIND") return { offer: false, text: `Behind ${base}`, tone: "yellow" };
   if (status === "BLOCKED" || !CAN_MERGE.has(status)) return blocked();
-  if (!WRITERS.has(String(permission ?? "").toUpperCase())) {
+  if (!isWriter(permission)) {
     return permission
       ? { offer: false, text: NO_PERMISSION, tone: "dim" }
       : { offer: false, text: "Checking whether it can merge…", tone: "dim", awaitingPermission: true };

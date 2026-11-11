@@ -15,6 +15,7 @@ release.
 
 ### Changed
 
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action (Send to the agent in front, Merge, Push, or Update branch). Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
 - Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
 - Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
 - A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.

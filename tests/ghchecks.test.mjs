@@ -96,7 +96,10 @@ test("The header's digest and the PR panel agree on the same checks", async () =
   // The panel's row says it in words; the header in one of four.
   const panelSays = (rollup) => {
     const text = panel.rowState({ state: "OPEN", statusCheckRollup: rollup }, colors).text;
-    return /failing$/.test(text) ? "failing" : /running$/.test(text) ? "running" : /unknown$/.test(text) ? "unknown" : text === "Checks passed" ? "passing" : null;
+    if (/failed$/.test(text)) return "failing";
+    if (text.startsWith("Checks running")) return "running";
+    if (/unknown$/.test(text)) return "unknown";
+    return null;
   };
   const cases = [
     [],
@@ -113,5 +116,8 @@ test("The header's digest and the PR panel agree on the same checks", async () =
     [run("COMPLETED", "SKIPPED", "a"), run("COMPLETED", "NEUTRAL", "b")],
     [job("CI", "test", "SUCCESS", "2026-11-08T10:00:00Z"), { ...run("QUEUED", "", "test"), workflowName: "CI", startedAt: "0001-01-01T00:00:00Z" }],
   ];
-  for (const rollup of cases) assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
+  for (const rollup of cases) {
+    const header = checksOf(rollup);
+    assert.equal(header === "passing" ? null : header, panelSays(rollup), JSON.stringify(rollup));
+  }
 });

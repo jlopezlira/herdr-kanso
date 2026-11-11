@@ -255,7 +255,9 @@ test("a missed answer keeps the last pull request, with its age and Retry", asyn
   assert.equal(panel.loading, false);
   assert.match(panel.readNote(), /^as of /);
   panel.footnote(TONE);
+  panel.hero(TONE);
   assert.ok(shown.texts.includes("Retry"));
+  assert.equal(shown.texts.some((text) => /rereads|Read from GitHub/.test(String(text))), false);
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {

@@ -466,7 +466,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     pull request, picture), on return and after a restart. Nothing open
     stays shut. A missing file or a closed pull request leaves it empty.
   - Files and PR are idle whenever they aren't the shown panel.
-    PR rereads every minute while shown, every 20 s while a check runs.
+    PR rereads while shown, and stays quiet when the window is behind.
 - **Background**:
   - Git runs only while Spaces shows (0.5 s in front, 5 s behind); the
     `ps` under agents skips Threads. A machine that is off is not read.
@@ -703,9 +703,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 - Right-click a terminal, "Open with…": the popup names that pane's folder
   and lists the installed editors; picking one opens that folder in it.
-- In a repository whose branch has an open PR, the PR panel shows its title,
-  checks, review, mergeability, unresolved threads and files; clicking a file
-  shows its diff, and Explain opens an agent tab with the task.
+- In a repository whose branch has an open PR, the panel opens on what stops it, with one action. Send hands that to the agent in front. Details holds the description, people, checks and files.
 - `herdr-app check` passes for all eight `kanso-*` mods and `open-with`, and
   `herdr-app status` shows no errors after `layout.switch {name: "kanso"}`.
 - With no panel open, `panel-body` in the layout file has no children. After
