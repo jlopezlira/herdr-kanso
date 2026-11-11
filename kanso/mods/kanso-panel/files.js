@@ -16,6 +16,7 @@ import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { readingLines } from "./doc.js";
 import { skeleton, breathe, quietLink, tokens } from "./ui.js";
+import { Front } from "./front.js";
 
 const PER_FOLDER = 500, TOTAL = 5000, WATCHED_MS = 60_000;
 const RETURN = "kanso.files.return";
@@ -39,17 +40,16 @@ export class Files {
       if (back.context === key()) { this.context = back.context; ({ cwd: this.root, on: this.on } = location()); this.folders = new Set(back.folders ?? []); }
     }
     this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
-    if (window()?.active === false) this.filesQuiet = true;
+    this.front = new Front();
+    if (this.front.behind()) this.front.rest();
     else this.refresh(cx);
     cx.timer.every(10000, (cx) => this.laterLocal(cx));
   }
 
   laterLocal(cx) {
     if (this.on) return;
-    if (window()?.active === false) { this.filesQuiet = true; return; }
-    const woke = this.filesQuiet === true;
-    this.filesQuiet = false;
-    if (woke || !(this.watched && Date.now() - (this.listedAt ?? 0) < WATCHED_MS)) this.refresh(cx);
+    if (this.front.behind()) { this.front.rest(); return; }
+    if (this.front.woke() || !(this.watched && Date.now() - (this.listedAt ?? 0) < WATCHED_MS)) this.refresh(cx);
   }
 
   saveState() {
@@ -97,6 +97,7 @@ export class Files {
   }
 
   refresh(cx) {
+    this.front.woke();
     if (this.loading) { this.later(cx); return; }
     const { cwd, on } = location(), context = key();
     // No folder yet: keep the remembered tree until the place is known.
@@ -288,12 +289,9 @@ export class Files {
   }
 
   render(cx) {
-    if (!this.on && this.filesQuiet && window()?.active !== false && !this.waking) {
-      this.waking = true;
-      cx.timer.after(0, (wakeCx) => { this.waking = false; if (window()?.active !== false) { this.filesQuiet = false; this.refresh(wakeCx); } });
-    }
+    if (!this.on) this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
     if (key() !== this.context) {
-      if (!this.on && window()?.active === false) this.filesQuiet = true;
+      if (!this.on && this.front.behind()) this.front.rest();
       else this.refresh(cx);
     }
     if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));

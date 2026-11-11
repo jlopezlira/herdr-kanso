@@ -68,6 +68,15 @@ export class Panel {
   dropUnlisted(ids) {
     for (const id of [...this.agents.keys()]) if (!ids.has(id)) { this.agents.delete(id); this.sent.delete(id); }
   }
+  forgetUnseen(seen) {
+    const ids = new Set([...seen.values()].map((a) => a.conversation).filter(Boolean));
+    for (const id of [...this.agents.keys()]) {
+      const row = this.agents.get(id);
+      if (ids.has(id) || row?.projectAt || row?.restore) continue;
+      this.agents.delete(id);
+      this.sent.delete(id);
+    }
+  }
   async reloadAgents() {
     const rows = await this.kdb.agents(), ids = new Set(rows.map((r) => r.id));
     for (const r of rows) { const was = this.agents.get(r.id); this.agents.set(r.id, { ...was, restore: r.restore, name: was?.name ?? r.name, project: r.project ?? null, projectAt: r.project_at ?? null }); }
@@ -78,6 +87,7 @@ export class Panel {
     return this.write(() => this.kdb.setProject(id, project ?? null, at));
   }
   remember(seen, at = Date.now()) {
+    this.forgetUnseen(seen);
     const list = [...seen.values()].filter((a) => a.conversation);
     const due = list.filter((a) => { const was = this.sent.get(a.conversation); return !was || !same(was.a, a) || at - was.at >= REFRESH_MS; });
     if (!due.length && at - (this.observedAt ?? 0) < REFRESH_MS) return this.chain;
@@ -89,6 +99,6 @@ export class Panel {
       this.agents.set(a.conversation, { ...was, name: keep ? was.name : a.given ?? null, restore: a.given ? null : was?.restore ?? null, title: a.title ?? was?.title ?? null, said: a.said ?? was?.said ?? null, space: a.space, pos: a.pos, program: a.program, status: a.status });
     }
     // Freed from its sleep first, so this sighting is what the row shows.
-    return this.write(async () => { await this.kdb.awake(list, at); await this.kdb.observe(due, at); await this.reloadAgents(); });
+    return this.write(async () => { await this.kdb.awake(list, at); await this.kdb.observe(due, at); });
   }
 }

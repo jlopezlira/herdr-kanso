@@ -7,9 +7,10 @@ import { systemApi } from "./platform-system.js";
 // Docker, simply: what runs and for which project, and everything you'd open Docker Desktop for.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { exec, run, spaces, panes, home, theme, shared, setShared, window } from "herdr";
+import { exec, run, spaces, panes, home, theme, shared, setShared } from "herdr";
 import { G, Armed, tokens, quietLink, iconButton, ghost, breathe } from "./ui.js";
 import { afterMount } from "./pure.js";
+import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
   parseContainers, parseInspect, contextOf, parseImages, parseStats, vmPids, dockerVms, dockerHeld, byProject, imageRows,
@@ -20,10 +21,9 @@ import {
 const EVERY_MS = 5000;
 // `docker stats` takes a second or two: every third read. Compose files are looked for once a minute.
 const STATS_EVERY = 3, FILES_EVERY = 12;
-// Stats and the file walk take different beats; the first read still does both.
 export function readPlan(reads) {
-  const files = reads % FILES_EVERY === 1, stats = reads % STATS_EVERY === 1, shift = files && stats && reads !== 1;
-  return { files: (files && !shift) || (reads % FILES_EVERY === 2 && reads !== 2), stats };
+  const stats = reads % STATS_EVERY === 1;
+  return { stats, files: reads === 1 || (reads % FILES_EVERY === 2 && !stats) };
 }
 // Compose project names and files seen per folder, kept across panels and restarts.
 // Kept per Docker context: another engine's projects are not this one's.
@@ -63,6 +63,7 @@ export default class Containers extends View {
     this.mem = new Map(); this.details = new Map();
     this.held = null; this.limit = null; this.context = null;
     this.reads = 0;
+    this.front = new Front();
     this.names = new Map();   // compose folder -> [{ name, files }] seen there, so Up after Down uses them
     this.namesKey = null;     // the Docker context they belong to
     this.pull = InputState.new({ placeholder: "postgres:17, redis, nginx:alpine…" });
@@ -74,7 +75,7 @@ export default class Containers extends View {
   }
 
   armTicker(cx) {
-    if (this.ticker || window()?.active === false) return;
+    if (this.ticker || this.front.behind()) return;
     this.ticker = cx.timer.every(EVERY_MS, (tick) => this.refresh(tick));
   }
 
@@ -85,13 +86,13 @@ export default class Containers extends View {
 
   // `now`: after an action, a read that overtakes any still going; the timer's waits its turn.
   refresh(cx, now = false) {
-    if (window()?.active === false) {
-      this.asleep = true;
+    if (this.front.behind()) {
+      this.front.rest();
       try { this.ticker?.cancel(); } catch { /* already gone */ }
       this.ticker = null;
       return;
     }
-    this.asleep = false;
+    this.front.woke();
     this.armTicker(cx);
     if (this.reading && !now) return;
     this.reading = true;
@@ -430,10 +431,7 @@ export default class Containers extends View {
   }
 
   render(cx) {
-    if (cx && this.asleep && window()?.active !== false && !this.waking) {
-      this.waking = true;
-      cx.timer.after(0, (wakeCx) => { this.waking = false; if (window()?.active !== false) this.refresh(wakeCx); });
-    }
+    this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))

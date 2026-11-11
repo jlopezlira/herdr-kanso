@@ -185,7 +185,7 @@ test("Containers does nothing while behind, reads at once in front, and splits u
   const { readPlan } = await loadMod("kanso-containers/main.js", ["Containers", "readPlan"], fixture().host);
   const plan = (reads) => { const row = readPlan(reads); return [Boolean(row.files), Boolean(row.stats)]; };
   assert.deepEqual(plan(1), [true, true]);
-  assert.deepEqual(plan(2), [false, false]);
+  assert.deepEqual(plan(2), [true, false]);
   assert.deepEqual(plan(13), [false, true]);
   assert.deepEqual(plan(14), [true, false]);
   assert.deepEqual(plan(25), [false, true]);

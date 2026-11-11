@@ -18,6 +18,7 @@ import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
 import { walkLayout } from "./layout.js";
 import { lookMemory } from "./panel-state.js";
+import { Front } from "./front.js";
 import { transcriptPaths, MOST } from "./transcript.js";
 
 const LINES = 400;
@@ -45,7 +46,8 @@ export class Look {
     this.selected = null; this.picked = false; this.shown = null; this.pins = [];
     this.kept = new Map(); // unsent pins, by agent and picture, until Send
     this.blind = new Set(); // this session: a file that will not open stays out of the row
-    this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.watching = null; this.screenQuiet = false;
+    this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.watching = null;
+    this.front = new Front(() => this.screenDue());
     this.poll = pollStart(); this.stamp = null; this.pendingStamp = null; this.fresh = null; this.held = null; this.arm = null; this.pullFailed = false;
     this.homeOn = null; this.homeDir = null;
     this.asking = null; // { id, token, path, who }: the pin a dialog asks about, and which dialog
@@ -97,9 +99,8 @@ export class Look {
     }
     const on = machineOf(this.agent());
     if (!on) {
-      if (!this.screenDue()) { this.screenQuiet = true; return; }
-      const woke = this.screenQuiet === true;
-      this.screenQuiet = false;
+      if (!this.screenDue()) { this.front.rest(); return; }
+      const woke = this.front.woke();
       if (this.readAt === 0) { this.read(cx); return; }
       if (woke) { this.probeLocal(cx); return; }
       this.armLocal(cx);
@@ -544,10 +545,7 @@ export class Look {
   }
 
   render(cx) {
-    if (cx && this.screenQuiet && this.screenDue() && !this.waking) {
-      this.waking = true;
-      cx.timer.after(0, (wakeCx) => { this.waking = false; if (this.screenDue()) this.tick(wakeCx); });
-    }
+    if (!machineOf(this.agent())) this.front?.wake(cx, (wakeCx) => this.tick(wakeCx));
     const c = tokens(theme()), item = this.selected, address = this.agent();
     const who = address ? this.who(address) : null;
     const list = this.list();
