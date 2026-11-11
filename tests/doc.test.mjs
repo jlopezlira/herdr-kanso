@@ -161,11 +161,85 @@ test("a change on disk while you edit is never overwritten: you choose", async (
   assert.equal(doc.dirty, false);
 });
 
-test("another machine's file is read only", async () => {
+test("a file on another computer can be edited", async () => {
   const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"]);
   const doc = new MarkdownDoc("/x.md", "server");
   doc.saved = doc.text = "x";
-  assert.equal(doc.canEdit, false);
+  assert.equal(doc.canEdit, true);
+  assert.equal(doc.big, false);
+});
+
+test("a file over 1 MiB stays a view and a remote note does not save while you type", async () => {
+  let huge = false;
+  let writes = 0;
+  const timers = [];
+  const state = (o) => {
+    let v = o?.value ?? ""; const on = {};
+    return { value: () => v, set_value: (x) => { v = x; }, on: (n, f) => { on[n] = f; }, type(x, cx) { v = x; on.change?.({}, cx); }, set_auto_grow() {}, focus() {}, release() {} };
+  };
+  const { MarkdownDoc, readWhole, textIo } = await load("kanso-panel/doc.js", ["MarkdownDoc", "readWhole", "textIo"], {
+    readTextFile: async () => { if (huge) throw new Error("Text file exceeds 1 MiB"); return "One.\n"; },
+    writeTextFile: async () => { writes += 1; },
+    TextareaState: { new: state }, EditorState: { new: state },
+    theme: () => ({}), settings: () => ({}), home: () => "/Users/me",
+  });
+  assert.equal((await readWhole("/repo/PLAN.md", null)).text, "One.\n");
+  huge = true;
+  assert.equal((await readWhole("/repo/PLAN.md", null)).big, true);
+  await assert.rejects(() => textIo("/repo/PLAN.md", null).read(), /Text file exceeds 1 MiB/);
+  huge = false;
+  const { cx, drain } = context();
+  cx.timer = { after(_ms, fn) { timers.push(fn); } };
+  const doc = new MarkdownDoc("/repo/PLAN.md", null);
+  doc.load(cx); await drain();
+  doc.open(0, cx);
+  doc.box.type("Changed.", cx);
+  assert.equal(timers.length, 1);
+  huge = true;
+  const again = new MarkdownDoc("/repo/PLAN.md", null);
+  again.load(cx); await drain();
+  assert.equal(again.big, true);
+  assert.equal(again.canEdit, false);
+  assert.equal(again.text, null);
+  again.save(cx); await drain();
+  assert.equal(writes, 0);
+  huge = false;
+  const back = new MarkdownDoc("/repo/PLAN.md", null);
+  back.load(cx); await drain();
+  assert.equal(back.text, "Changed.\n");
+  assert.equal(back.dirty, true);
+  const remote = new MarkdownDoc("/repo/PLAN.md", "light");
+  remote.saved = "One.\n";
+  remote.text = "Two.\n";
+  remote.phase = "edited";
+  remote.later(cx);
+  assert.equal(timers.length, 1);
+  assert.equal(remote.phase, "edited");
+});
+
+test("an edit you leave comes back when you open the file again", async () => {
+  const disk = { text: "One.\n" };
+  const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"], {
+    readTextFile: async () => disk.text,
+    writeTextFile: async (_p, text, expected) => { if (expected !== disk.text) throw new Error("stale"); disk.text = text; return null; },
+    TextareaState: { new: (o) => { let v = o?.value ?? ""; const on = {}; return { value: () => v, set_value: (x) => { v = x; }, on: (n, f) => { on[n] = f; }, type(x, cx) { v = x; on.change?.({}, cx); }, set_auto_grow() {}, focus() {}, release() {} }; } },
+    EditorState: { new: () => ({}) },
+    theme: () => ({}), settings: () => ({}), home: () => "/Users/me",
+  });
+  const { cx, drain } = context();
+  cx.timer = { after() {} };
+  const doc = new MarkdownDoc("/repo/PLAN.md", null);
+  doc.load(cx); await drain();
+  doc.open(0, cx);
+  doc.box.type("Changed.", cx);
+  const again = new MarkdownDoc("/repo/PLAN.md", null);
+  again.load(cx); await drain();
+  assert.equal(again.text, "Changed.\n");
+  assert.equal(again.dirty, true);
+  assert.equal(again.conflict, false);
+  const other = new MarkdownDoc("/repo/OTHER.md", null);
+  other.load(cx); await drain();
+  assert.equal(other.text, "One.\n");
 });
 
 test("the standalone panel lists a folder's Markdown, shallowest first", async () => {

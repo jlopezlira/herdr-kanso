@@ -8,6 +8,7 @@ import { hc, readTextFile } from "herdr";
 import { KINDS } from "./kinds.js";
 import { isAgent } from "./deliver.js";
 import { resolvePath } from "./look-model.js";
+import { shown } from "./pieces.js";
 import { projectDir, transcriptPath, sessionPath, START_SLACK, sessionLive } from "./find.js";
 
 export { projectDir, transcriptPath, START_SLACK };
@@ -16,9 +17,8 @@ const LONGEST = 100000; // a line longer than this is a pasted picture in base64
 export const PICTURES = "pictures";
 export const NAMED = "files";
 export const NAMED_CAP = 8;
-export const NAMED_PIECE = "files.named";
+export const NAMED_BATCH = 24;
 const FILE_EXT = "[A-Za-z0-9]{1,12}";
-const PATH_CHAR = /[A-Za-z0-9@+._~/-]/;
 // What was appended since the last look (`$2`, the offset after the last whole line; `$5` the cksum of those
 // bytes). A line not finished is left for the next read, so a path cut at the offset is not skipped. A prefix
 // that no longer matches, or a shorter file, is read from the start. Prints that offset, where it read from,
@@ -34,7 +34,7 @@ export function patternFor(kind = PICTURES) {
   return `(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(${kind === NAMED ? FILE_EXT : EXT})([^A-Za-z0-9]|$)`;
 }
 export const PATTERN = patternFor(PICTURES);
-export const namedShown = (hidden) => !(Array.isArray(hidden) && hidden.includes(NAMED_PIECE));
+export const namedShown = (map) => shown("files.named", true, map);
 
 export function agentAddress(focus, terms, paneList) {
   const address = focus?.terminal;
@@ -94,33 +94,42 @@ export async function transcriptPaths(address, homeDir, before = null, recall = 
   const known = before?.file === file ? before : (await recall?.(file)) ?? { paths: [], size: "0", rows: [], mark: "" };
   const r = await scanFile(file, known.size ?? "0", known.mark ?? "", on, kind);
   const rows = known.rows ?? [];
-  if (r.code === 3) return { front, file, size: known.size, from: String(known.size ?? "0"), mark: known.mark ?? "", paths: known.paths ?? [], rows, replaced: false, failed: false };
+  if (r.code === 3) return { front, file, size: known.size, from: String(known.size ?? "0"), mark: known.mark ?? "", paths: known.paths ?? [], rows, replaced: false, failed: false, same: true };
   if (r.code !== 0) return { front, file, size: known.size ?? null, from: null, mark: known.mark ?? "", paths: known.paths ?? [], rows, replaced: false, failed: true };
-  // Appended to what was read before (none when the file was read whole again); each once, where it was last said.
-  const all = [...(r.from === "0" ? [] : (known.paths ?? [])), ...r.paths];
+  const paths = keptPaths(known, r);
   const replaced = r.from === "0" && String(known.size ?? "0") !== "0";
-  return { front, file, size: r.size, from: r.from, mark: r.mark, paths: [...new Set(all.toReversed())].toReversed().slice(-MOST), rows, replaced, failed: false };
+  return { front, file, size: r.size, from: r.from, mark: r.mark, paths, rows, replaced, failed: false };
 }
 
-const doubled = (text) => [...String(text ?? "").replace(/\\[ntr"]/g, " ")].map((ch) => (PATH_CHAR.test(ch) ? ch : ch + ch)).join("");
-
-// Oldest first, each path once, at its last mention. The same read the shell scan prints.
-export function pathsIn(text, kind = PICTURES) {
-  const found = [...doubled(text).matchAll(new RegExp(patternFor(kind), "g"))].map((m) => pathOf(m[0])).filter(Boolean);
-  const last = found.reduce((acc, path, i) => new Map([...acc, [path, i]]), new Map());
-  return [...last.entries()].toSorted((a, b) => a[1] - b[1]).map(([path]) => path).slice(-MOST);
+// Appended to what was read before (none when the file was read whole again); each once, where it was last said.
+export function keptPaths(known, scan) {
+  const all = [...(scan?.from === "0" ? [] : (known?.paths ?? [])), ...(scan?.paths ?? [])];
+  return [...new Set(all.toReversed())].toReversed().slice(-MOST);
 }
 
-// Newest first, inside the project, each once, at most NAMED_CAP. `files` is the ones that exist.
-export function namedList(found, { root, cwd, homeDir, files } = {}) {
-  const there = new Set(files ?? []);
+export function namedCandidates(found, { root, cwd, homeDir } = {}) {
   const abs = (found ?? []).map((raw) => resolvePath(raw, cwd, homeDir)).filter(Boolean);
-  return [...new Set(abs.toReversed())].flatMap((path) => {
+  return [...new Set(abs.toReversed())].filter((path) => paths.relative(root, path));
+}
+
+export async function namedFound(candidates, ask) {
+  const walk = async (start, got) => {
+    if (got.length >= NAMED_CAP || start >= (candidates ?? []).length) return got.slice(0, NAMED_CAP);
+    const batch = candidates.slice(start, start + NAMED_BATCH);
+    const answered = await ask(batch);
+    if (answered == null) return null;
+    const there = new Set(answered);
+    const next = [...got, ...batch.filter((path) => there.has(path))].slice(0, NAMED_CAP);
+    return walk(start + batch.length, next);
+  };
+  return walk(0, []);
+}
+
+export function namedRowsFrom(abs, root) {
+  return (abs ?? []).flatMap((path) => {
     const rel = paths.relative(root, path);
-    if (!rel || !there.has(path)) return [];
+    if (!rel) return [];
     const folder = paths.dirname(rel);
     return [{ path: rel, name: paths.basename(rel), folder: folder === "." ? "" : folder }];
-  }).slice(0, NAMED_CAP);
+  });
 }
-
-export const namedIn = (text, opts) => namedList(pathsIn(text, NAMED), opts);

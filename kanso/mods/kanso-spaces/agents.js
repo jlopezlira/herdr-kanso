@@ -5,8 +5,11 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { segmentAt } from "./ui.js";
+export { segmentAt };
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
+import { prLine } from "./ghchecks.js";
 
 export { NAME_LABEL };
 
@@ -30,10 +33,6 @@ export function agentRowH(a, more = {}) {
   return two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
 }
 
-export function segmentAt(width, i, n, pad = 3, gap = 2) {
-  const w = (width - 2 * pad - gap * (n - 1)) / n;
-  return { left: pad + i * (w + gap), width: w };
-}
 // A row flush with the list's 10px inset (the Status and Threads views).
 export const FLUSH = 10 - AGENT_PAD;
 // A row nested under its project's name: the Threads view's conversations, indented as a Projects view's agents are.
@@ -144,10 +143,12 @@ export function elapsed(a, since, now) {
 
 export function digestLine(d) {
   if (!d) return null;
+  const open = d.pr?.number && String(d.pr.state ?? "OPEN").toUpperCase() === "OPEN";
+  const line = open ? prLine(d) : null;
   const parts = [
     d.files ? (d.add || d.del ? `+${d.add ?? 0} −${d.del ?? 0}` : `${d.files} ${d.files === 1 ? "file" : "files"}`) : null,
     d.ahead ? `${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}` : null,
-    d.pr?.number ? `PR #${d.pr.number}${d.pr.hold ? `, ${d.pr.hold[0].toLowerCase()}${d.pr.hold.slice(1)}` : d.pr.checks === "failing" ? " failing" : ""}` : null,
+    open ? `PR #${d.pr.number}${line ? ` · ${line.text}` : ""}` : null,
   ].filter((x) => x !== null);
   return parts.length ? parts.join(" · ") : null;
 }

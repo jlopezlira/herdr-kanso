@@ -124,7 +124,7 @@ test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
 
 test("Settings has no Sync page", async () => {
   const { PAGES } = await load("kanso-settings/main.js", ["PAGES"]);
-  assert.deepEqual(clone(PAGES.map((page) => page.key)), ["keys", "mods", "news", "credits"]);
+  assert.deepEqual(clone(PAGES.map((page) => page.key)), ["pieces", "keys", "news", "credits"]);
 });
 
 const TAKEN_OVER_ON_PURPOSE = {

@@ -10,6 +10,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
   { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js", "kanso/mods/kanso-help/ui.js", "kanso/mods/kanso-dojo/ui.js", "kanso/mods/kanso-containers/ui.js", "kanso/mods/kanso-spaces/ui.js", "kanso/mods/kanso-sleep/ui.js", "kanso/mods/kanso-arrange/ui.js", "kanso/mods/kanso-sim/ui.js", "markdown-panel/mods/markdown-panel/ui.js"] },
+  // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
+  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sleep"].map((m) => `kanso/mods/${m}/pieces.js`) },
   // An agent's state mark, program icon and name, the same in the tabs, headers, status bar, sidebar and Send.
   { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-tabs/marks.js", "kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js"] },
   // Text for an agent, delivered the same from Send and from Look.
@@ -22,8 +24,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
   // Order of a beta, a release candidate and a stable tag, shared with that updater.
   { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js"] },
-  // A pull request's checks, read one way in the PR panel and the header's digest.
-  { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
+  // A pull request's checks, read one way in the PR panel, the header and the sidebar.
+  { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js", "kanso/mods/kanso-spaces/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.
   { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
@@ -53,6 +55,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-spaces/store.js", copies: ["kanso/mods/kanso-sleep/store.js"] },
   // Sleep as the sidebar's work: the dialog writes what is to sleep, the sidebar moves it step by step.
   { source: "kanso/mods/kanso-spaces/sleepwork.js", copies: ["kanso/mods/kanso-sleep/sleepwork.js"] },
+  // One key waiter: the sidebar's commands, and Preview's Save, each while that view is up.
+  { source: "kanso/mods/kanso-spaces/sidebar.js", copies: ["kanso/mods/kanso-panel/sidebar.js"] },
   // No reassignment anywhere: retry, range, parseOr... in every mod.
   { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js"]) },
   // Who this computer is, and rows exchanged with the others. Spend runs it; the sidebar turns it on per machine.
@@ -61,6 +65,7 @@ const COMMON = [
   // The Markdown editor: Kanso's preview panel is the source, the standalone
   // markdown-panel mod a copy.
   { source: "kanso/mods/kanso-panel/doc.js", copies: ["markdown-panel/mods/markdown-panel/doc.js"] },
+  { source: "kanso/mods/kanso-panel/edit.js", copies: ["markdown-panel/mods/markdown-panel/edit.js"] },
   // A file on another machine, copied here so a picture can be drawn. The markdown editor uses it too.
   { source: "kanso/mods/kanso-panel/remote-file.js", copies: ["markdown-panel/mods/markdown-panel/remote-file.js"] },
   // One wake when a panel that was behind, or hidden, is in front again.
