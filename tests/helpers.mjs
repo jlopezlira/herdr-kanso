@@ -105,6 +105,16 @@ export async function temporary(t) {
   return dir;
 }
 
+// Waits for a state real processes or files bring, never longer than exec's own limit.
+export async function until(ready, limit = 30000) {
+  const deadline = Date.now() + limit;
+  do {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    if (await ready()) return;
+  } while (Date.now() < deadline);
+  throw new Error(`Still not true after ${limit} ms: ${ready}`);
+}
+
 // Herdr's exec, backed by the real programs, and like Herdr's it kills one that runs past its
 // limit (30 s; `limit` in ms makes it shorter for a test).
 export async function exec(command, args, options = {}) {
