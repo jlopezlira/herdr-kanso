@@ -535,13 +535,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `data/kanso-arrange/arrange.db`, by project and name; another
     project's opens in this space's folder). Save reads each pane's `hc
     get --json` foreground argv (session flags dropped) and cwd and the
-    strip's columns; opening (tabkit.js, shared with kanso-sleep) runs
+    strip's columns; opening (tabkit.js) runs
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
-  - `kanso-sleep`: a dialog (520 wide); asleep is a status in that computer's
-    `kanso.db`. Sleep hides it; a last tab selects a neighbour (Undo returns),
-    or stays shown when alone. One owner (20 s). Another computer's space
-    sleeps there; while it is silent its rows stay grey and Wake waits.
+  - `kanso-sleep`: a dialog (520 wide); asleep is in that computer's `kanso.db`.
+    Sleep hides it; a last tab selects a neighbour (Undo returns) or stays alone.
+    One owner (20 s). Another computer's space sleeps there; each step asks
+    once, then not again until its timer. Silent rows stay grey and Wake waits.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

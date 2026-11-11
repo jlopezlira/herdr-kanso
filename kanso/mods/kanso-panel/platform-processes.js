@@ -24,6 +24,63 @@ export const lsofFields = (text) => {
   return starts.map((at, i) => ({ pid: Number(lines[at].slice(1)), fields: lines.slice(at + 1, starts[i + 1] ?? lines.length) }));
 };
 
+const LOOK_END = "kanso-look-end";
+// One command: home, and for each pid whether it is alive and its session record. Alive is empty when the check itself failed.
+const LOOK = String.raw`home=$(printf %s "$HOME")
+printf '%s\n' "home=$home"
+for pid in "$@"; do
+  err=$(kill -0 "$pid" 2>&1)
+  rc=$?
+  alive=
+  if [ "$rc" -eq 0 ]; then alive=1
+  elif [ "$rc" -eq 1 ]; then
+    case "$err" in
+      *[Pp]ermission*|*[Nn]ot\ permitted*|*[Aa]ccess\ denied*) ;;
+      *) alive=0 ;;
+    esac
+  fi
+  printf '%s\n' "pid=$pid" "alive=$alive" record
+  f="$home/.claude/sessions/$pid.json"
+  if [ -f "$f" ]; then cat "$f" || true; fi
+  printf '\n%s\n' "${LOOK_END}"
+done`;
+const windowsLook = (ids) => `$home = $env:USERPROFILE
+Write-Output ('home=' + $home)
+foreach ($id in @(${ids.join(",")})) {
+  $alive = ''
+  try { Get-Process -Id $id -ErrorAction Stop | Out-Null; $alive = '1' } catch {
+    if ($_.Exception.Message -match 'permission|not permitted|access denied') { throw }
+    $alive = '0'
+  }
+  Write-Output ('pid=' + $id)
+  Write-Output ('alive=' + $alive)
+  Write-Output 'record'
+  $file = Join-Path (Join-Path $home '.claude\\sessions') ([string]$id + '.json')
+  if (Test-Path -LiteralPath $file) { [IO.File]::ReadAllText($file) }
+  Write-Output '${LOOK_END}'
+}`;
+const readRecord = (body) => {
+  if (!body) return null;
+  try { return JSON.parse(body); } catch { return null; }
+};
+export function parseLook(text) {
+  const lines = String(text ?? "").replace(/^\uFEFF/, "").split(/\r?\n/);
+  const home = lines.find((line) => line.startsWith("home="))?.slice(5) ?? "";
+  const scan = lines.reduce((state, line, i) => {
+    if (i <= state.skip) return state;
+    if (!line.startsWith("pid=")) return state;
+    const pid = Number(line.slice(4));
+    const aliveText = (lines[i + 1] ?? "").startsWith("alive=") ? lines[i + 1].slice(6) : "";
+    const alive = aliveText === "1" ? true : aliveText === "0" ? false : null;
+    const start = lines[i + 2] === "record" ? i + 3 : i + 2;
+    const end = lines.findIndex((row, at) => at >= start && row === LOOK_END);
+    const stop = end < 0 ? lines.length : end;
+    const record = readRecord(lines.slice(start, stop).join("\n").trim());
+    const pair = pid > 0 ? [[pid, { alive, record }]] : [];
+    return { skip: stop, pairs: [...state.pairs, ...pair] };
+  }, { skip: -1, pairs: [] });
+  return { home, found: new Map(scan.pairs) };
+}
 const RUNNING = String.raw`d="$2"/.claude/sessions
 if ! out=$(LC_ALL=C ls -d "$d" 2>&1); then case "$out" in *": No such file or directory") exit 0;; *) echo "can't look at $d: $out" >&2; exit 2;; esac; fi
 if [ ! -r "$d" ] || [ ! -x "$d" ]; then echo "can't read $d" >&2; exit 2; fi
@@ -93,6 +150,11 @@ export function processApi(platform, run) {
     const rows = jsonRows(checked(await powershell(run, "$ErrorActionPreference='Stop'; @(Get-CimInstance Win32_Process | ForEach-Object { @{pid=$_.ProcessId;kb=[Math]::Ceiling([double]$_.WorkingSetSize/1024);comm=$_.Name} }) | ConvertTo-Json -Compress")).stdout);
     return { code: 0, stdout: rows.map((row) => `${row.pid} ${row.kb} ${row.comm}`).join("\n") };
   };
+  const look = async (pids = []) => {
+    const ids = pids.map((pid) => validPid(pid));
+    if (platform === "windows") return parseLook(checked(await powershell(run, windowsLook(ids))).stdout);
+    return parseLook(checked(await run("sh", ["-c", LOOK, "sh", ...ids])).stdout);
+  };
   const runningSession = async (session, home) => {
     if (platform !== "windows") {
       const result = checked(await run("sh", ["-c", RUNNING, "sh", session, home]));
@@ -117,5 +179,5 @@ export function processApi(platform, run) {
     }));
     return found.find(Boolean) ?? null;
   };
-  return { list, exists, cwd, openFiles, startTime, identity, memory, runningSession };
+  return { list, exists, cwd, openFiles, startTime, identity, memory, runningSession, look };
 }

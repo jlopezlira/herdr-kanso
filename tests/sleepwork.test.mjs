@@ -57,7 +57,17 @@ function herdr(dir, exits = {}) {
       return { ...api, exists: (pid, options) => unreadable.has(pid) ? Promise.reject(new Error("Process access denied")) : api.exists(pid, options) };
     },
     window: nativeWindow, hc, home: () => "/nonexistent-home", appHome: () => dir,
-    exec: async (c, a, o) => (c === "pwsh" && a.at(-1).includes("Get-CimInstance") ? { code: 0, stdout: JSON.stringify([...alive].map((pid) => ({ pid, ppid: 1, name: "claude.exe", created: "2026-01-01T00:00:00Z" }))) } : c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : exec(c, a, o)),
+    exec: async (c, a, o) => {
+      if (c === "sh" && String(a?.[1] ?? "").includes("kanso-look-end")) {
+        const lines = ["home=/nonexistent-home", ...(a ?? []).slice(3).map(Number).flatMap((pid) => {
+          const record = records.has(pid) ? JSON.stringify(records.get(pid)) : "";
+          const mark = unreadable.has(pid) ? "" : alive.has(pid) ? "1" : "0";
+          return [`pid=${pid}`, `alive=${mark}`, "record", record, "kanso-look-end"];
+        })];
+        return { code: 0, stdout: lines.join("\n"), stderr: "" };
+      }
+      return c === "pwsh" && a.at(-1).includes("Get-CimInstance") ? { code: 0, stdout: JSON.stringify([...alive].map((pid) => ({ pid, ppid: 1, name: "claude.exe", created: "2026-01-01T00:00:00Z" }))) } : c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : exec(c, a, o);
+    },
     terminals: () => Object.keys(terms).map((address) => ({ address })),
     panes: () => Object.keys(terms).map((t, i) => ({ pane: `p${i}`, terminal: t, tab: "tb1" })),
     run: (cmd, args) => {
@@ -247,12 +257,15 @@ test("a step the database can't write is not acted on, and is taken again on the
   const { world, kdb, worker, steps } = await setup(t);
   const w = worker("w-a");
   await w.tick(cx); // requested -> saving
-  const real = kdb.stepAgent.bind(kdb);
-  kdb.stepAgent = async () => { throw new Error("database is locked"); };
+  const real = kdb.stage.bind(kdb);
+  kdb.stage = async (texts) => {
+    if (texts.some((text) => String(text).includes("step='clearing'"))) throw new Error("database is locked");
+    return real(texts);
+  };
   await w.tick(cx);
   assert.deepEqual(world.sent("keys"), [], "no ctrl+c without its step written");
   assert.equal((await steps()).Alice, "saving");
-  kdb.stepAgent = real;
+  kdb.stage = real;
   await w.tick(cx);
   assert.deepEqual(world.sent("keys", "ctrl+c"), ["t1"]);
   assert.equal((await steps()).Alice, "clearing");
@@ -330,10 +343,9 @@ test("an Enter decided by a window that lost the row meanwhile is never sent", a
   const { world, kdb, id, worker, steps } = await setup(t, { t1: "asks" });
   const a = worker("w-a");
   await drive(a, 40, async () => (await steps()).Alice === "exiting");
-  const stale = clone((await kdb.sleeps()).find((r) => r.id === id));
   // b took it over while a was looking (a's heartbeat stopped for a while), and answered the question itself.
   await kdb.run(`UPDATE sleeps SET pending='w-b', pending_at=${Date.now()} WHERE id='${id}';`);
-  await a.advance(stale, cx);
+  await a.tick(cx);
   assert.deepEqual(world.sent("keys", "enter"), [], "a sends nothing on what it read before");
 });
 
@@ -494,6 +506,7 @@ test("two sleeps move at once: one terminal's slow read does not hold the other"
   };
   const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], world.host);
   const w = new SleepWork(kdb, () => {}, "w-a");
+  await w.tick(cx);
   const tickP = w.tick(cx);
   try {
     const [other] = await Promise.race([otherRead, tickP.then(() => { throw new Error("The other terminal was never read"); })]);
