@@ -392,7 +392,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     folder when the title says nothing) and no status mark.
 - **Sidebar**:
   - Hide sidebar collapses it to a fixed 76 rail whose edge cannot be
-    dragged.
+    dragged. `kanso-spaces.sidebar` (⌘B, Herdr's sidebar key) does the same,
+    and a sidebar hidden any other way comes back as the rail (`kanso-tabs`).
   - Open, the edge drags to 480; under 240 rows keep one line, under 160
     it folds to the rail. The width you leave opens it next time.
 - **Tabs**:

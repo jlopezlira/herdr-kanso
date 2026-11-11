@@ -17,6 +17,12 @@ release.
 
 - Panels load again after switching project or restarting. A side panel, Files or any other, no longer stays on its placeholder until Herdr restarts.
 
+## [3.22.4] - 2026-11-10
+
+### Fixed
+
+- ⌘B hides the sidebar to its rail, as Hide sidebar does, instead of removing it. The tab bar no longer slides under the window buttons, and ⌘J and the sidebar's keys keep working. A sidebar hidden from the command palette comes back as the rail.
+
 ### Changed
 
 - The recipe keeps complete panel briefs in separate linked parts, with size checks that leave room for future changes and keep it in the gallery.
