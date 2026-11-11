@@ -403,7 +403,7 @@ test("The dōjō keeps its rounds in its own SQLite: bests per level, totals, th
   assert.deepEqual(tot.bests, { 1: 55, 3: 30 });
   assert.deepEqual([tot.rounds, tot.rings, tot.fewest, tot.longest, tot.first], [3, 12, 9, 3, day - 86400000]);
   assert.deepEqual(tot.days, ["2026-11-05", "2026-11-06"]);
-  assert.match(store.db, /data\/kanso-dojo\/dojo\.db$/);
+  assert.equal(store.db, join(dir, "data", "kanso-dojo", "dojo.db"));
 });
 
 

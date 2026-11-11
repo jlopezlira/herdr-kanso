@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { writeFile, appendFile, readFile } from "node:fs/promises";
+import { writeFile, appendFile, readFile, realpath } from "node:fs/promises";
 import { createServer } from "node:net";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { transcriptApi } from "../kanso/mods/kanso-panel/platform-transcripts.js";
@@ -22,7 +22,9 @@ test("native filesystem services preserve Unicode names, literal quotes and recu
   assert.deepEqual((await files.existing([source, copied, moved])).sort(), [source, moved].sort());
   await files.mkdir(join(folder, "node_modules"));
   await writeFile(join(folder, "node_modules", "hidden.txt"), "hidden");
-  assert.deepEqual((await files.walk([folder], { skip: ["node_modules"] })).filter((path) => path.endsWith(".txt")).sort(), [source, moved].sort());
+  const found = (await files.walk([folder], { skip: ["node_modules"] })).filter((path) => path.endsWith(".txt"));
+  const resolved = async (paths) => (await Promise.all(paths.map((path) => realpath(path)))).sort();
+  assert.deepEqual(await resolved(found), await resolved([source, moved]));
   assert.equal(await files.recent([source], Date.now() - 60000), true);
   await files.remove([moved]);
   assert.equal(await files.test(moved), false);
@@ -87,6 +89,7 @@ test("native repository service creates, discovers and probes a worktree without
     return result.stdout;
   };
   await git("init", "-b", "main");
+  await git("config", "core.autocrlf", "false");
   await writeFile(join(folder, "one.txt"), "one\n");
   await git("add", "."); await git("commit", "-m", "Initial");
   const made = await api.createWorktree(folder, "feature", join(root, "trees"), root);

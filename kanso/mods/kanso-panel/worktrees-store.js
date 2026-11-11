@@ -1,3 +1,4 @@
+import { sqliteApi } from "./platform-sqlite.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -71,8 +72,7 @@ export class WorktreeStore {
   }
 
   async sql(text, json = false) {
-    const r = await exec("sqlite3", [...BUSY, ...(json ? ["-json"] : []), this.db, text]);
-    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
+    const r = await localService(sqliteApi).execute(this.db, text, { json, busy: 10000 });
     return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
   }
 

@@ -1,8 +1,8 @@
-import { exec, window } from "herdr";
+import { exec, window, writeTextFile } from "herdr";
 import { platformName, powershell, checked } from "./platform-command.js";
 
 export const localName = () => platformName(window()?.platform ?? "macos");
-export const localService = (factory) => factory(localName(), exec);
+export const localService = (factory) => factory(localName(), exec, writeTextFile);
 export const sleepFor = (platform, runner, seconds) => platform === "windows"
   ? powershell(runner, `Start-Sleep -Milliseconds ${Math.max(0, Math.round(Number(seconds) * 1000))}`)
   : runner("sleep", [String(seconds)]);

@@ -248,7 +248,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   ];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, svg: node, image: node, h_flex: node, v_flex: node,
-    Button: { new: node }, Popover: { new: node },
+    Popover: { new: node }, Toggle: { new: node }, Button: { new: node },
     ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
     orderSessions: (l) => l, withTerminals: () => [], terminals: () => [], nest: () => [], bySection: () => [],
     track: () => null, elapsed: () => null, activityOf: () => null, agentLabel: () => "", duration: () => "", findThreads: async () => ({}),
@@ -262,7 +262,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   const view = new Spaces();
   Object.assign(view, {
     git: {}, shown: new Set(["odin/sp1"]), born: {}, custom: {}, order: "updated",
-    machines: [{ name: "odin", state: "connected" }], folded: new Set(), agentsFolded: new Set(),
+    machines: [{ name: "odin", state: "connected", target: "odin.example" }], folded: new Set(), agentsFolded: new Set(),
     orderPicker: node,
   });
   view.render();

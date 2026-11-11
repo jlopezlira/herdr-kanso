@@ -78,7 +78,8 @@ for (const platform of ["macos", "linux", "windows"]) {
     const r = stub(() => windows ? "C:\\Temp" : "/tmp"), api = systemApi(platform, r.run);
     assert.ok((await api.temporary()).length > 0);
     assert.equal(await api.userHome(), windows ? "C:\\Temp" : "/tmp");
-    await api.hostname(); await api.status("app"); await api.restart("app");
+    await api.hostname(); await api.hostname({ short: false }); await api.status("app"); await api.restart("app");
+    if (!windows) assert.deepEqual(r.calls.filter(({ program }) => program === "hostname").map(({ args }) => args), [["-s"], []]);
     await api.startDocker(); await api.stopDocker();
     assert.deepEqual(api.containerShell("container", "windows"), ["docker", "exec", "-it", "container", "cmd.exe"]);
     assert.equal(api.containerShell("container", "linux").at(-2), "-c");
@@ -231,13 +232,14 @@ test("Windows repository operations cover discovery, safety probes and metadata 
     if (script.includes("UTF8.GetString")) return "C:/tree/.git\n";
     if (script.includes("ConvertTo-Json")) return "[]";
     if (script.includes("Test-Path")) {
-      const exists = script.includes("'C:\\worktree'") || script.includes("'C:\\repo\\.git'") || script.includes("'C:\\repo\\.git\\worktrees'") || script.includes("'C:\\tree\\.git'") || script.includes("'C:\\repo\\.git\\worktrees\\feature\\gitdir'");
+      const exists = script.includes("'C:\\repo'") || script.includes("'C:\\worktree'") || script.includes("'C:\\repo\\.git'") || script.includes("'C:\\repo\\.git\\worktrees'") || script.includes("'C:\\tree\\.git'") || script.includes("'C:\\repo\\.git\\worktrees\\feature\\gitdir'");
       return { code: exists ? 0 : 1, stdout: "", stderr: "" };
     }
     return "";
   });
   const api = repositoryApi("windows", r.run);
   assert.match((await api.createWorktree("C:\\repo", "feature", "C:\\trees", "C:\\Users\\me")).stdout, /^made\tC:\\trees\\repo-[a-f0-9]+\\feature-[a-f0-9]+/);
+  await assert.rejects(api.createWorktree("C:\\missing", "feature", "C:\\trees", "C:\\Users\\me"), /folder is not there/);
   assert.equal((await api.discover(["C:\\repo"])).stdout, "R\tC:\\repo");
   assert.match((await api.bases("C:\\repo")).stdout, /^main$/m);
   assert.equal((await api.probe("C:\\missing", 0, ["main"])).stdout, "gone");

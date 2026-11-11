@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
+import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import test from "node:test";
-import { load, clone, context, singleUse, exec as run, nativeWindow } from "./helpers.mjs";
+import { load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -97,10 +98,11 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: world.session ? { pid: world.session.pid, argv: world.session.argv ?? ["claude"] } : null }) };
       return { code: 0, stdout: "" };
     },
-    readTextFile: async (path) => (world.session && path === join("/home/me", ".claude", "sessions", `${world.session.pid}.json`) ? JSON.stringify(world.session) : null),
+    readTextFile: async (path) => (world.session && path === posix.join("/home/me", ".claude", "sessions", `${world.session.pid}.json`) ? JSON.stringify(world.session) : null),
     exec: async (cmd, args, options) => {
       calls.push([cmd, ...args]);
-      if (cmd === "sqlite3" || cmd === "mkdir") return run(cmd, args, options);
+      if (cmd === "sqlite3") return run(cmd, args, options);
+      if (cmd === "mkdir") return fileApi(nativePlatform, run).mkdir(args.at(-1), options);
       if (cmd === "ps") return { code: 0, stdout: world.session?.etime ?? "00:05" };
       if (cmd === "sh" && args[1].startsWith('f="$1"')) {
         const from = args[4];
@@ -151,7 +153,7 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   const emoji = `/repo/${"nested/".repeat(32)}art-\u{1f680}`;
   const claude = (cwd) => { const slug = cwd.replace(/[^a-zA-Z0-9]/g, "-"); let h = 0; for (let i = 0; i < cwd.length; i++) h = (h << 5) - h + cwd.charCodeAt(i) | 0; return slug.length > 200 ? `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}` : slug; };
   assert.equal(projectDir(emoji), claude(emoji), "hashed over UTF-16 units, as Claude Code does");
-  assert.equal(transcriptPath({ sessionId: "s1", cwd: "/repo" }, "/home/me"), join("/home/me", ".claude", "projects", "-repo", "s1.jsonl"));
+  assert.equal(transcriptPath({ sessionId: "s1", cwd: "/repo" }, "/home/me"), posix.join("/home/me", ".claude", "projects", "-repo", "s1.jsonl"));
   assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null, "a record without a conversation: nothing to read");
   const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
   // What grep hands back: the paths in the file, oldest first.
@@ -161,7 +163,7 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   const { look, cx, drain, calls } = await panel({ screen, files, session, transcript });
   assert.deepEqual(clone(calls.filter((c) => c[0] === "hc" && c[1] === "get").map((c) => c[2])), ["t1"], "the agent's process, for its session record");
   const scan = calls.find((c) => c[0] === "sh" && c[2].startsWith('f="$1"'));
-  assert.deepEqual(clone(scan.slice(4)), [join("/home/me", ".claude", "projects", "-repo", "07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl"), "0", PATTERN, "2000", ""], "the whole file, first time");
+  assert.deepEqual(clone(scan.slice(4)), [posix.join("/home/me", ".claude", "projects", "-repo", "07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl"), "0", PATTERN, "2000", ""], "the whole file, first time");
   assert.deepEqual(clone(look.list().map((i) => i.path)), ["/repo/shots/u-desk-tasks.png", "/repo/shots/u-desk-ideas.png"], "whole, newest first, only those that exist; the screen's stubs resolve to nothing");
   assert.equal(look.selected.path, "/repo/shots/u-desk-tasks.png");
   assert.equal(look.transcript.size, String(transcript.length));
@@ -188,7 +190,7 @@ test("A Claude agent's conversation on disk gives Look the whole paths its scree
   gap.look.select(gap.look.list()[1], gap.cx, true); await gap.drain();
   gap.world.session = null;
   gap.look.readAt = 0; gap.look.read(gap.cx); await gap.drain();
-  assert.deepEqual([gap.look.selected.path, gap.look.picked, gap.look.transcript.file], ["/repo/shots/u-desk-ideas.png", true, join("/home/me", ".claude", "projects", "-repo", "07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl")], "no record for a moment: your pick stays, and the conversation read is remembered");
+  assert.deepEqual([gap.look.selected.path, gap.look.picked, gap.look.transcript.file], ["/repo/shots/u-desk-ideas.png", true, posix.join("/home/me", ".claude", "projects", "-repo", "07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl")], "no record for a moment: your pick stays, and the conversation read is remembered");
   gap.world.session = { ...session, sessionId: "11111111-2222-4333-8444-555555555555" };
   gap.look.readAt = 0; gap.look.read(gap.cx); await gap.drain();
   assert.equal(gap.look.picked, false, "the conversation changed: the pick is let go");

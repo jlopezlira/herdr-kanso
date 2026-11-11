@@ -23,7 +23,7 @@ export function systemApi(platform, run) {
     if (r.code !== 0 || !r.stdout.trim() || /Unknown/.test(r.stdout)) return null;
     return platform === "windows" ? r.stdout.trim() === "Offline" : !r.stdout.split(/\s+/).includes("1");
   };
-  const hostname = () => platform === "windows" ? powershell(run, "[Environment]::MachineName") : run("hostname", ["-s"]);
+  const hostname = ({ short = true } = {}) => platform === "windows" ? powershell(run, "[Environment]::MachineName") : run("hostname", short ? ["-s"] : []);
   const temporary = async () => {
     if (platform === "windows") return [(await powershell(run, "[IO.Path]::GetTempPath()")).stdout.trim()].filter(Boolean);
     const r = await run("sh", ["-c", 'printf %s "${TMPDIR:-/tmp}"']);

@@ -98,6 +98,7 @@ export function repositoryApi(platform, run) {
   };
   const add = async (folder, branch, base, home) => {
     if (platform !== "windows") return run("sh", ["-c", ADD_WORKTREE, "sh", folder, branch, base]);
+    if (!await files.test(folder, "directory")) throw new Error("The project's folder is not there.");
     checked(await git(folder, ["rev-parse", "--show-toplevel"]));
     checked(await git(folder, ["check-ref-format", "--branch", branch]));
     const listing = checked(await git(folder, ["worktree", "list", "--porcelain"])).stdout;
