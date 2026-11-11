@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { waitingQueue, nextWaiting, queueState, waitingSignature, sameQueue, waitingReason, queueMessage, NEEDS_YOU, EMPTY_NOTICE_MS } from "../kanso/mods/kanso-spaces/needs-you.js";
 import { modScript } from "../scripts/mod-source.mjs";
-import { load, clone, singleUse } from "./helpers.mjs";
+import { load, clone, singleUse, tape } from "./helpers.mjs";
 
 const agent = (address, status = "blocked", extra = {}) => ({ address, status, pane: `pane-${address}`, space: "project", space_name: "Project", tab: "tab", title: address, seq: 1, ...extra });
 const terminal = (address, status_ms = 1, extra = {}) => ({ address, status_ms, state: "live", ...extra });
@@ -80,23 +80,6 @@ test("Only changed queue rows or availability need to be published", () => {
   assert.equal(sameQueue({ ...queue, state: "unavailable" }, queue), false);
   assert.equal(sameQueue({ ...queue, rows: [{ ...queue.rows[0], name: "Renamed" }] }, queue), false);
 });
-
-function tape() {
-  const texts = [], handlers = new Map();
-  const node = (initial = null) => {
-    let id = initial;
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "id") return (value) => { id = value; return el; };
-      if (key === "child") return (value) => { if (typeof value === "string") texts.push(value); return el; };
-      if (key === "when") return (on, apply) => on ? apply(el) : el;
-      if (key === "on_click") return (fn) => { handlers.set(id, fn); return el; };
-      return () => el;
-    } });
-    return el;
-  };
-  return { texts, handlers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
-}
 
 async function controller() {
   const state = { list: [agent("a"), agent("b", "done")], terms: [terminal("a", 1), terminal("b", 2)], spaces: [], layouts: [], runs: [], timers: [], writes: 0, builds: 0 };
@@ -183,7 +166,7 @@ test("Status and Threads keep the return digest when the needs-you list opens an
   const returned = new SinceLeft(null);
   Object.assign(returned, { project: `:${state.spaces[0].folder}`, rows: [{ id: 7, target: "agent:a", text: "Finished while you were away" }] });
   Object.assign(view, {
-    sinceLeft: returned, custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
+    sinceLeft: returned, returnPlaces: new Map([["agent:a", "a"]]), custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
     listed: () => [], seen: () => new Map(), orderPicker: ui.host.div, viewSwitch: ui.host.div,
     agentsView: () => [], threadsView: () => [],
   });

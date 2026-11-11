@@ -4,7 +4,7 @@ import { openApi } from "./platform-open.js";
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
-import { exec, knownAgents, notify, openOverlay, run, theme, setShared } from "herdr";
+import { exec, knownAgents, notify, openOverlay, run, theme, setShared, shared } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
@@ -12,6 +12,9 @@ import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./g
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
+import { awayShown } from "./since-left-model.js";
+
+const keepsFacts = () => awayShown(shared("kanso.hidden"));
 
 const ICON = "mods/kanso-chrome/icons/";
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,files,updatedAt";
@@ -239,7 +242,7 @@ export class PullRequest {
     const model = await ready.reduce(async (prev, { provider, session }) => {
       const soFar = await prev;
       return [...soFar, await refreshInbox({
-        db: this.inboxDb, run: exec, provider, session, force, shown: true,
+        db: this.inboxDb, run: exec, provider, session, force, shown: true, facts: keepsFacts(),
         onCache: (cached, pending) => { if (key() === context) this.paintInbox(cached, !pending || cached.needs.length > 0 || cached.yours.length > 0); },
       })];
     }, Promise.resolve([])).then(mergeInbox).catch((e) => e);
@@ -287,6 +290,7 @@ export class PullRequest {
   }
 
   async keepPrFacts(items) {
+    if (!keepsFacts()) return;
     return tryOrAsync(() => recordPrFacts(this.inboxDb ??= this.db, items));
   }
 
