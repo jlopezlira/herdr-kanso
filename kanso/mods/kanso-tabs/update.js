@@ -1,11 +1,13 @@
 import { localName } from "./platform-host.js";
-import { shippedKeymap } from "./platform-keymap.js";
+import { missingKeys, shippedKeymap } from "./platform-keymap.js";
 import { paths } from "./platform-paths.js";
+import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript } from "./platform-update.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { exec, readTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
+import { exec, readTextFile, appHome, shared, setShared, notify, layout, run, writeTextFile } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { pieces, runs, shown, hiddenSet } from "./pieces.js";
 import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease } from "./release.js";
+export { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript, newestTag };
 
 export const SOURCE = {
   remote: "https://github.com/jlopezlira/herdr-kanso.git",
@@ -264,6 +266,7 @@ export class Updater {
     this.following = {};
     this.recovering = null;
     this.pauseS = source.pauseS ?? 2;
+    this.host = source.host ?? updateHost(localName(), exec, writeTextFile, { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH });
   }
 
   // The tab bar and the footer each hold an Updater: an install either started shows on both.
@@ -389,15 +392,18 @@ export class Updater {
     const spec = hostInstall(v, this.installed);
     this.mark(id, { version: v, from: this.installed, notes: "", at: Date.now(), phase: "preparing" });
     cx.notify();
-    const home = appHome(), dir = `${home}/${UPDATES}`;
+    const home = appHome(), dir = paths.join(home, UPDATES);
     const started = await tryOrAsync(async () => {
       // Planned on what recovery leaves, never on a swap a dead install left half done (its keys.json
       // would read as yours). Busy, another install holds the lock: this one would be told so too.
       if ((await this.recover())?.code === BUSY) return { code: BUSY };
       const plan = await this.plan(v, home);
       this.mark(id, { notes: plan.notes });
-      return exec("sh", ["-c", LAUNCH, "sh", dir, id, INSTALL_SCRIPT, this.source.tarball(spec.tag), home, dir, id,
-        spec.want, spec.from, this.source.checker ?? SOURCE.checker, stamp(), plan.keys, plan.layout ? "1" : "", plan.base]);
+      return this.host.launch({
+        dir, id, url: this.source.tarball(spec.tag), home, want: spec.want, from: spec.from,
+        checker: this.source.checker ?? SOURCE.checker, stamp: stamp(),
+        keys: plan.keys, layout: plan.layout ? "1" : "", base: plan.base,
+      });
     });
     this.working = false;
     if (started?.code !== 0) {
@@ -409,14 +415,14 @@ export class Updater {
     return this.follow(cx, id);
   }
 
-  pause() { return tryOrAsync(() => exec("sleep", [String(this.pauseS)])); }
+  pause() { return tryOrAsync(() => this.host.pause(this.pauseS)); }
 
   // RECOVER, once. Its code is 0 once every dead install's stage is settled (or there was none),
   // BUSY while the lock is another's; anything else (killed, or a stage that could not be undone)
   // is not done either.
   recover() {
     const home = appHome();
-    return tryOrAsync(() => exec("sh", ["-c", RECOVER, "sh", home, `${home}/${UPDATES}`]));
+    return tryOrAsync(() => this.host.recover(home, paths.join(home, UPDATES)));
   }
 
   // RECOVER, tried again after a pause while busy or cut short, for about RECOVER_MS (a count of
@@ -443,8 +449,9 @@ export class Updater {
     if (this.following[id]) return;
     this.following = { ...this.following, [id]: true };
     const dir = paths.join(appHome(), UPDATES);
+    const slot = (suffix) => paths.join(dir, `${id}.${suffix}`);
     const read = async () => {
-      const [state, why] = String(await readTextFile(`${dir}/${id}.status`) ?? "running").split("\n");
+      const [state, why] = String(await readTextFile(slot("status")) ?? "running").split("\n");
       return { state, why: why ?? "" };
     };
     const end = async () => {
@@ -458,8 +465,10 @@ export class Updater {
         }
         const now = await read();
         if (now.state !== "running") return now;
-        const alive = await tryOrAsync(() => exec("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", `${dir}/${id}.pid`]));
+        const alive = await tryOrAsync(() => this.host.alive(slot("pid")));
         if (alive?.code !== 0) {
+          // The probe was killed or never ran. That is not the worker dying.
+          if (alive?.code !== 1) { await this.pause(); continue; }
           const last = await read(); // it may have said so just before it ended
           if (last.state !== "running") return last;
           // Until recovery has ended with 0, the version on disk may be a half swap's: it says
@@ -481,10 +490,10 @@ export class Updater {
     this.following = Object.fromEntries(Object.entries(this.following).filter(([k]) => k !== id));
     const mark = this.installs()[id];
     if (!outcome || !mark) return;
-    const claimed = await tryOrAsync(() => exec("mv", [`${dir}/${id}.pid`, `${dir}/${id}.reported`]));
+    const claimed = await tryOrAsync(() => this.host.claim(slot("pid"), slot("reported")));
     if (claimed?.code !== 0) return; // another copy reports it
     this.unmark(id);
-    await tryOrAsync(() => exec("rm", ["-f", `${dir}/${id}.status`, `${dir}/${id}.reported`, `${dir}/${id}.log`]));
+    await tryOrAsync(() => this.host.clear([slot("status"), slot("reported"), slot("log"), slot("ps1")]));
     return this.report(cx, outcome.state, outcome.why, mark);
   }
 
@@ -515,7 +524,7 @@ export class Updater {
   async plan(v, home) {
     const shipped = async (version, path) => {
       try {
-        const r = await exec("curl", ["-fsSL", "--max-time", "15", this.source.file(version, path)]);
+        const r = await this.host.fetch(this.source.file(version, path));
         return r.code === 0 ? r.stdout : null;
       } catch { return null; }
     };
@@ -527,9 +536,9 @@ export class Updater {
       shipped(had, keymap), shipped(had, "kanso/layouts/kanso.json"),
       shipped(next, keymap), shipped(next, "kanso/layouts/kanso.json"),
     ]);
-    const oldKeys = beforeKeys ?? (localName() === "windows" ? "{}" : null);
+    const oldKeys = beforeKeys ?? missingKeys(localName());
     const layout = oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout);
-    const userKeys = await readTextFile(`${home}/keys.json`);
+    const userKeys = await readTextFile(paths.join(home, "keys.json"));
     const differ = oldKeys !== null && newKeys !== null && userKeys !== null && !sameJson(oldKeys, newKeys);
     const merged = differ ? tryOr(() => mergeKeys(JSON.parse(userKeys), JSON.parse(oldKeys), JSON.parse(newKeys)), "unread") : null;
     const keyNotes = merged === "unread" ? ["Your keys.json could not be read, so kansō's keys were left as they are."]
