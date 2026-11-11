@@ -71,6 +71,7 @@ const WORDS = {
   "agent.next": "Next agent", "agent.prev": "Previous agent", "app.palette": "Command palette", "app.settings": "Herdr settings",
   "app.quit": "Quit", "app.hide": "Hide Herdr", "app.hide_others": "Hide the other apps", "app.help": "Herdr's help",
   "mod.open:picker": "Search projects, tabs and agents", "mod.open:open-with": "Open the folder in an editor", "layout.switch": "Switch layout",
+  "kanso-panel.save": "Save the file",
   "pane.zoom": "Zoom the pane", "pane.close": "Close the pane", "pane.split": "Split the pane",
   "list:down": "Down the list", "list:up": "Up the list", "list:first": "First row (press g twice)", "list:last": "Last row", "list:open": "Open the row", "list:search": "Search",
 };

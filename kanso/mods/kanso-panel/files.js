@@ -9,7 +9,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
 import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
-import { kindOf } from "./kinds.js";
+import { isText, kindOf } from "./kinds.js";
 import { walkLayout } from "./layout.js";
 import { listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeStamp, staleView, asOf } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
@@ -146,7 +146,7 @@ export class Files {
     if (key() !== context) return;
     this.marks = status?.code === 0 ? marksFrom(top.stdout.trim(), status.stdout.split("\0")) : {};
     this.rev = this.rev + 1; this.error = null; this.listedAt = Date.now(); this.watch(cwd, cx);
-    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
+    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.openSaved(file, cx); }
   }
 
   async loadRemote(cwd, context, cx) {
@@ -167,7 +167,7 @@ export class Files {
     this.fresh = Date.now(); this.held = null; this.error = null;
     this.poll = pollNext(this.poll, "changed");
     this.rev = this.rev + 1;
-    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
+    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.openSaved(file, cx); }
   }
 
   probe(cx) {
@@ -224,6 +224,11 @@ export class Files {
   }
 
   // The open folders are kept so returning from the preview restores them.
+  openSaved(file, cx) {
+    if (isText(file) || kindOf(file) === "image") this.read(file);
+    else this.show(file, cx, true);
+  }
+
   read(path) {
     if (!insideRoot(path)) return;
     setShared(RETURN, { context: this.context, folders: [...this.folders] });
@@ -313,7 +318,7 @@ export class Files {
               const item = items.find((item) => item.path === path);
               if (!item) return;
               if (item.entry.dir) this.toggle(path, cx);
-              else if (isMarkdown(path) || kindOf(path) === "image") this.read(path);
+              else if (isText(path) || kindOf(path) === "image") this.read(path);
               else this.show(path, cx);
             })
             .on_item_secondary_click((path) => {

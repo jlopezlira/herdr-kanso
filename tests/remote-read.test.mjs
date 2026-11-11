@@ -569,7 +569,7 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
   panel.render({});
   listed.el.handlers.on_item_click(listed.key(0), {});
   listed.el.handlers.on_item_click(listed.key(1), {});
-  assert.deepEqual(actions, [["read", "shot.png"], ["show", "notes.txt"]]);
+  assert.deepEqual(actions, [["read", "shot.png"], ["read", "notes.txt"]]);
 
   const dir = await mkdtemp(join(tmpdir(), "kanso-doc-"));
   try {

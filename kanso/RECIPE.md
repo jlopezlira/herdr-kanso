@@ -562,19 +562,16 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
-    again only when that file changed, with Open with, read-again and close:
-    code read-only, a picture (png jpg jpeg gif webp svg, name and pixel size when known), Markdown as `doc.js` `MarkdownDoc`
-    (embedded pictures on another computer), formatted
-    and edited in place (a double-click opens one block, a table as cells;
-    saved after 700 ms, only when the file on disk is still what was read,
-    else a conflict you resolve; "Source" edits the whole file; links to
-    other Markdown files open here). `blocks.js` splits and joins the
-    blocks. kanso-tabs watches `data/kanso-open` and shows the newest path
-    left there (`markdown-handler.sh install`, macOS: makes a small app
-    the `.md` handler). The markdown-panel mod is its copy in a window, by
-    sync:share); `lib.js` holds what they share (where the focused pane is,
-    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState`,
-    `markdownView` is `TextView.markdown`; and `showPanel`, which mounts a block in `panel-body`). A panel
+    again when that file changed, with Open with and close:
+    a text file edited in place (Save, Cmd+S; Ctrl+S on Windows and Linux), on this computer or another,
+    a picture (png jpg jpeg gif webp svg), Markdown as `doc.js` `MarkdownDoc`
+    (a double-click opens one block, a table as cells; saved after 700 ms;
+    a conflict when the file on disk changed; "Source" edits the whole file).
+    Over 2 MB stays a view. `blocks.js` splits and joins the blocks.
+    kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
+    The markdown-panel mod is that copy, by sync:share); `lib.js` shares
+    `codeState` (an `EditorState`, read-only over 2 MB or when the file is not text)
+    and `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a

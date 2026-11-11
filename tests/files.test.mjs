@@ -109,5 +109,5 @@ test("Files virtual rows use list-level handlers for open, expand and context me
   list.el.handlers.on_item_click(list.key(2), {});
   list.el.handlers.on_item_secondary_click(list.key(0), {}, {});
   list.el.handlers.on_item_secondary_click(list.key(1), {}, {});
-  assert.deepEqual(actions, [["toggle", "directory"], ["show", "file.txt"], ["read", "PLAN.md"], ["openWith", "file.txt"]]);
+  assert.deepEqual(actions, [["toggle", "directory"], ["read", "file.txt"], ["read", "PLAN.md"], ["openWith", "file.txt"]]);
 });

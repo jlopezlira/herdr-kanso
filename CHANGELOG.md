@@ -13,6 +13,10 @@ release.
 
 ## [3.29.1] - 2026-11-11
 
+### Added
+
+- Any text file opened from Files can be edited in Preview, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows and Linux). A file over 2 MB stays a view. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
+
 ### Changed
 
 - The status bar names the agent that is waiting and what it asks. When more wait, it shows how many more. A click goes to that agent. An unreachable computer says so, and a click retries it. When memory is low it says how much is free, and a click opens Memory.

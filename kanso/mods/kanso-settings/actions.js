@@ -44,6 +44,9 @@ export const GROUPS = [
     { action: "kanso-spend.settings", label: "Spend's settings" },
     { action: "kanso-spend.back", label: "Back" },
   ] },
+  { name: "Preview, while it has the keyboard", section: "mod:kanso-panel", actions: [
+    { action: "kanso-panel.save", label: "Save the file" },
+  ] },
   { name: "Memory, while its panel has the keyboard", section: "mod:kanso-guard", actions: [
     { action: "kanso-guard.refresh", label: "Check now" },
     { action: "kanso-guard.back", label: "Show fewer" },

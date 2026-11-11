@@ -61,6 +61,7 @@ const COMMON = [
   // The Markdown editor: Kanso's preview panel is the source, the standalone
   // markdown-panel mod a copy.
   { source: "kanso/mods/kanso-panel/doc.js", copies: ["markdown-panel/mods/markdown-panel/doc.js"] },
+  { source: "kanso/mods/kanso-panel/edit.js", copies: ["markdown-panel/mods/markdown-panel/edit.js"] },
   // A file on another machine, copied here so a picture can be drawn. The markdown editor uses it too.
   { source: "kanso/mods/kanso-panel/remote-file.js", copies: ["markdown-panel/mods/markdown-panel/remote-file.js"] },
   // One wake when a panel that was behind, or hidden, is in front again.

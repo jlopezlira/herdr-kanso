@@ -80,6 +80,10 @@ export const DEFAULT_KEYS = {
       "cmd-r": "kanso-guard.refresh",
       "escape": "kanso-guard.back"
     },
+    "mod:kanso-panel": {
+      "cmd-s": "kanso-panel.save",
+      "ctrl-s": "kanso-panel.save"
+    },
     "terminal": {
       "cmd-f": "kanso-strip.find"
     }
@@ -163,6 +167,9 @@ export const DEFAULT_KEYS = {
     "mod:kanso-guard": {
       "f5": "kanso-guard.refresh",
       "escape": "kanso-guard.back"
+    },
+    "mod:kanso-panel": {
+      "ctrl-s": "kanso-panel.save"
     },
     "terminal": {
       "ctrl-shift-f": "kanso-strip.find"

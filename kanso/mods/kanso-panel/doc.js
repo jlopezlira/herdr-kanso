@@ -6,7 +6,8 @@ import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState 
 import { readTextFile, writeTextFile, theme, settings, home, appHome } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
 import { skeleton, breathe, quietLink, tokens } from "./ui.js";
-import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure } from "./remote-file.js";
+import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
+import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs } from "./edit.js";
 
 export function readingLines(t) {
   const { line } = skeleton({ border: t.border });
@@ -14,7 +15,6 @@ export function readingLines(t) {
     .children([280, 200, 240, 120, 220, 160, 190].map((w) => line(w, 12)));
 }
 
-const MAX_TEXT = 400000;
 const AUTOSAVE_MS = 700;
 const HEADING_SIZE = [0, 22, 18, 16, 15, 14, 13.5];
 
@@ -22,7 +22,7 @@ const HEADING_SIZE = [0, 22, 18, 16, 15, 14, 13.5];
 export function readable(text) {
   const m = /^-{3}\r?\n([\s\S]*?)\r?\n-{3}[ \t]*(\r?\n|$)/.exec(text);
   const body = m ? "```yaml\n" + m[1] + "\n```\n\n" + text.slice(m[0].length) : text;
-  return body.length > MAX_TEXT ? body.slice(0, MAX_TEXT) + "\n\n… (file truncated)" : body;
+  return body.length > EDIT_LIMIT ? body.slice(0, EDIT_LIMIT) + "\n\n… (file truncated)" : body;
 }
 
 export function linkTarget(url, docPath) {
@@ -45,35 +45,69 @@ export class MarkdownDoc {
     this.box = null;     // its text, or a table's cells
     this.cells = null;
     this.source = null;  // the whole file as Markdown, while "Source" is on
-    this.conflict = false; this.saving = false; this.seq = 0;
+    this.phase = "clean"; this.disk = null; this.note = null; this.seq = 0;
     this.error = null; this.big = false; this.shots = new Map(); this.shotSeq = 0;
   }
 
-  get canEdit() { return !this.on && this.saved !== null && !this.big; }
+  get canEdit() { return this.saved !== null && !this.big; }
   get dirty() { return this.text !== null && this.text !== this.saved; }
+  get conflict() { return this.phase === "conflict"; }
+  get saving() { return this.phase === "saving"; }
   get editing() { return this.active !== null || Boolean(this.source); }
+
+  snapshot() {
+    return { saved: this.saved, text: this.text, phase: this.phase, disk: this.disk ?? null, note: this.note ?? null, big: Boolean(this.big) };
+  }
+
+  apply(next) {
+    if (!next) return;
+    this.saved = next.saved; this.text = next.text; this.phase = next.phase;
+    this.disk = next.disk; this.note = next.note; this.big = next.big;
+  }
+
+  remember() { remember(drafts, draftKey(this.path, this.on), this.snapshot()); }
+
+  dropDraft() {
+    drafts.drop(draftKey(this.path, this.on));
+    if (this.saved == null) return;
+    this.apply(opened(this.saved));
+    this.setText(this.saved);
+  }
 
   load(cx) {
     const path = this.path;
     cx.spawn(async (cx) => {
+      const draft = this.saved === null && this.text === null ? drafts.peek(draftKey(path, this.on)) : null;
       try {
         const text = this.on
           ? await (await serviceOn(fileApi, this.on)).read(path)
           : await readTextFile(path);
         if (this.path !== path) return;
-        if (text == null) { this.miss("This file is no longer available"); return; }
+        if (text == null) {
+          if (draft) { this.keep(didFail(restore(draft), "This file is no longer available")); return; }
+          this.miss("This file is no longer available"); return;
+        }
         if (String(text).includes("\0")) { this.miss("Binary file: nothing to show"); return; }
         this.error = null; this.held = null; this.fresh = Date.now();
-        if (text === this.saved) { if (this.on) this.pictures(cx); return; }
-        // Yours, not saved yet, and the file moved on: you choose which stays.
-        if (this.dirty) { this.conflict = true; this.disk = text; return; }
-        this.saved = text; this.big = text.length > MAX_TEXT;
-        this.setText(text);
-        if (this.on) this.pictures(cx);
+        const base = this.text !== null || this.saved !== null ? this.snapshot() : (draft ? restore(draft) : null);
+        const next = base ? seenDisk(base, text) : opened(text);
+        this.keep(next);
+        if (this.on && next.phase !== "conflict") this.pictures(cx);
       } catch (e) {
-        if (this.path === path) this.miss(this.on ? copyFailure(e, this.on) : `Cannot read this file: ${e?.message ?? e}`);
+        if (this.path !== path) return;
+        const note = this.on ? copyFailure(e, this.on) : `Cannot read this file: ${e?.message ?? e}`;
+        const held = draft ?? (this.dirty ? { text: this.text, saved: this.saved } : null);
+        if (held) this.keep(didFail(restore(held), note));
+        else this.miss(note);
       } finally { cx.notify(); }
     });
+  }
+
+  keep(next) {
+    const same = next.text === this.text && this.blocks.length > 0;
+    this.apply(next);
+    if (!same) this.setText(next.text);
+    this.remember();
   }
 
   // A later miss keeps the document; the panel shows its age.
@@ -176,60 +210,64 @@ export class MarkdownDoc {
   }
 
   changed(cx) {
-    this.text = joinBlocks(this.blocks);
+    this.apply(typed(this.snapshot(), joinBlocks(this.blocks)));
+    this.remember();
     this.later(cx);
     cx.notify();
   }
 
   later(cx) {
+    if (this.phase === "failed" || this.phase === "conflict" || this.phase === "saving" || this.big || this.text === this.saved) return;
     const seq = this.seq + 1;
     this.seq = seq;
-    cx.timer.after(AUTOSAVE_MS, (cx) => { if (seq === this.seq) this.save(cx); });
+    cx.timer.after(AUTOSAVE_MS, (cx) => { if (seq === this.seq && this.phase !== "failed" && this.phase !== "conflict") this.save(cx); });
   }
 
   save(cx) {
-    if (!this.dirty || this.saving || this.conflict || this.on) return;
-    const text = this.text, expected = this.saved;
-    this.saving = true; cx.notify();
+    const saving = beginSave(this.snapshot());
+    if (!saving) return;
+    this.seq = this.seq + 1;
+    this.apply(saving);
+    cx.notify();
+    const path = this.path;
     cx.spawn(async (cx) => {
-      try {
-        await writeTextFile(this.path, text, expected);
-        this.saved = text; this.savedAt = Date.now();
-      } catch {
-        // The file changed on disk after it was read: read it to show the choice.
-        const disk = await readTextFile(this.path, { on: this.on }).catch(() => null);
-        if (disk !== null && disk !== expected) { this.conflict = true; this.disk = disk; }
-      } finally {
-        this.saving = false;
-        if (this.dirty && !this.conflict) this.later(cx);
-        cx.notify();
-      }
+      const outcome = await commitText(saving, textIo(path, this.on));
+      if (this.path !== path) { remember(drafts, draftKey(path, this.on), applied(saving, outcome.written, outcome.result)); return; }
+      this.apply(applied(this.snapshot(), outcome.written, outcome.result));
+      if (this.phase === "saved") this.savedAt = Date.now();
+      this.remember();
+      if (this.dirty && this.phase !== "conflict" && this.phase !== "failed") this.later(cx);
+      cx.notify();
     });
   }
 
-  // False when it could not save: the file changed on disk and the choice is shown.
+  // The draft stays when the write cannot finish, and the panel may move on.
   async flush() {
     this.seq = this.seq + 1;
-    if (!this.dirty || this.on) return !this.conflict;
-    if (this.conflict) return false;
-    try { await writeTextFile(this.path, this.text, this.saved); this.saved = this.text; return true; }
-    catch {
-      const disk = await readTextFile(this.path, { on: this.on }).catch(() => null);
-      if (disk !== null) { this.conflict = true; this.disk = disk; }
-      return false;
-    }
+    this.remember();
+    const saving = beginSave(this.snapshot());
+    if (!saving) return true;
+    this.apply(saving);
+    const outcome = await commitText(saving, textIo(this.path, this.on));
+    this.apply(applied(this.snapshot(), outcome.written, outcome.result));
+    if (this.phase === "saved") this.savedAt = Date.now();
+    this.remember();
+    return true;
   }
 
   keepMine(cx) {
-    if (!this.conflict) return;
-    this.saved = this.disk; this.conflict = false; this.disk = null;
+    const next = keepMine(this.snapshot());
+    if (next.phase === "conflict") return;
+    this.apply(next);
     this.save(cx);
   }
 
   takeTheirs(cx) {
     if (!this.conflict) return;
-    this.saved = this.disk; this.conflict = false; this.disk = null;
-    this.setText(this.saved);
+    const next = takeTheirs(this.snapshot());
+    this.apply(next);
+    this.setText(next.text);
+    this.remember();
     cx.notify();
   }
 
@@ -244,7 +282,7 @@ export class MarkdownDoc {
       this.source = EditorState.new({ language: "markdown", value: this.text, soft_wrap: true, line_numbers: false, folding: false,
         font_family: settings().font_family, font_size: 12.5,
         syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6, punctuation: t.dim } });
-      this.source.on("change", (_e, cx) => { this.text = this.source.value(); this.later(cx); cx.notify(); });
+      this.source.on("change", (_e, cx) => { this.apply(typed(this.snapshot(), this.source.value())); this.remember(); this.later(cx); cx.notify(); });
     }
     cx.notify();
   }
@@ -262,7 +300,7 @@ export class MarkdownDoc {
   }
 
   controls(t, prefix) {
-    const state = this.on ? "Read only" : this.big ? "Too large to edit" : this.conflict ? "" : this.saving ? "Saving…" : this.dirty ? "Edited" : this.savedAt ? "Saved" : "";
+    const state = word(this.snapshot());
     return [
       ...(state ? [div().text_size(11.5).text_color(t.dim).child(state)] : []),
       ...(this.canEdit ? [div().id(`${prefix}-source`).h(24).px(9).flex().items_center().rounded(6).cursor_pointer().text_size(12).font_medium()
@@ -277,10 +315,7 @@ export class MarkdownDoc {
   body(t, id) {
     if (this.error) return div().p(16).text_color(t.dim).child(this.error);
     if (this.text === null) return readingLines(t);
-    const conflict = this.conflict ? h_flex().flex_none().px(16).py(8).gap(8).items_center().border_b(1).border_color(t.border)
-      .child(div().flex_1().min_w(0).text_size(12).text_color(t.blocked).child("The file changed on disk while you edited it."))
-      .child(this.pill(`${id}-mine`, "Keep mine", t, (cx) => this.keepMine(cx), true))
-      .child(this.pill(`${id}-theirs`, "Take the file's", t, (cx) => this.takeTheirs(cx))) : null;
+    const conflict = this.conflict ? conflictBar(id, t, (cx) => this.keepMine(cx), (cx) => this.takeTheirs(cx)) : null;
     const main = this.source
       ? div().flex_1().min_h(0).px(6).py(4).child(Editor.new(this.source).size_full())
       : div().id(`${id}-scroll`).flex_1().min_h(0).overflow_y_scrollbar()
@@ -291,12 +326,7 @@ export class MarkdownDoc {
     return v_flex().flex_1().min_h(0).when(Boolean(conflict), (el) => el.child(conflict)).child(main);
   }
 
-  pill(id, label, t, action, strong) {
-    return div().id(id).h(24).px(9).flex().items_center().rounded(6).cursor_pointer().text_size(12).font_medium()
-      .when(strong, (el) => el.bg(t.solid).text_color(t.solid_foreground).hover((s) => s.opacity(0.88)))
-      .when(!strong, (el) => el.text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground)))
-      .on_click((_e, cx) => action(cx)).child(label);
-  }
+  pill(id, label, t, action, strong) { return pillButton(id, label, t, action, strong); }
 
   block(b, i, t, id) {
     if (b.kind === "blank") return null;
@@ -391,6 +421,27 @@ export class MarkdownDoc {
   }
 
   release() { this.close(); this.source?.release(); this.source = null; }
+}
+
+export const textIo = (path, on) => ({
+  put: async (text, expected) => on ? (await serviceOn(fileApi, on)).write(path, text, expected) : writeTextFile(path, text, expected),
+  read: async () => on ? (await serviceOn(fileApi, on)).read(path) : readTextFile(path),
+  quiet: quietError,
+  note: (error) => on ? copyFailure(error, on) : (quietError(error) ? "This computer did not answer" : "Could not save"),
+});
+
+export function pillButton(id, label, t, action, strong) {
+  return div().id(id).h(24).px(9).flex().items_center().rounded(6).cursor_pointer().text_size(12).font_medium()
+    .when(strong, (el) => el.bg(t.solid).text_color(t.solid_foreground).hover((s) => s.opacity(0.88)))
+    .when(!strong, (el) => el.text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground)))
+    .on_click((_e, cx) => action(cx)).child(label);
+}
+
+export function conflictBar(id, t, onMine, onTheirs) {
+  return h_flex().flex_none().px(16).py(8).gap(8).items_center().border_b(1).border_color(t.border)
+    .child(div().flex_1().min_w(0).text_size(12).text_color(t.blocked).child("The file changed on disk while you edited it."))
+    .child(pillButton(`${id}-mine`, "Keep mine", t, onMine, true))
+    .child(pillButton(`${id}-theirs`, "Take the file's", t, onTheirs));
 }
 
 export const tildePath = (dir, on) => {
