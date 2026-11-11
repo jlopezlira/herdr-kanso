@@ -101,7 +101,7 @@ export const psMissing = (() => {
 
 export async function temporary(t) {
   const dir = await mkdtemp(join(tmpdir(), "kanso-test-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
   return dir;
 }
 
@@ -119,7 +119,7 @@ export async function until(ready, limit = 30000) {
 // limit (30 s; `limit` in ms makes it shorter for a test).
 export async function exec(command, args, options = {}) {
   try {
-    const result = await runFile(command, args, { cwd: options.cwd, ...(options.env ? { env: options.env } : {}), maxBuffer: 4 * 1024 * 1024, timeout: options.limit ?? 30000, killSignal: "SIGKILL" });
+    const result = await runFile(command, args, { cwd: options.cwd, ...(options.env ? { env: options.env } : {}), maxBuffer: 4 * 1024 * 1024, timeout: options.limit ?? 30000, killSignal: "SIGKILL", windowsHide: true });
     return { code: 0, ...result };
   } catch (error) {
     return { code: error.killed ? 137 : error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? String(error) };

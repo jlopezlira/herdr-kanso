@@ -40,12 +40,14 @@ For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS 
 
 Tell your agent: **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 
-Or, from a clone: `sh ./scripts/local-install.sh`. You need the Herdr app;
+Or, from a clone: `sh ./scripts/local-install.sh`. On Windows:
+`powershell -NoProfile -File ./scripts/local-install.ps1`. You need the Herdr app;
 `gh` for the PR and Shipped panels; Node 22.15 or newer for Spend, Memory and
 Simulator. Memory supports macOS and Windows; Windows uses its built-in
 PowerShell and Task Scheduler without administrator rights. kansō updates
-itself: a release shows as a row above Settings, and a click installs
-it. Stable is what you get. Early, under What's new, also follows a beta
+itself the same way on Windows, with Windows PowerShell and the curl and tar
+that ship with Windows: a release shows as a row above Settings, and a click
+installs it. Stable is what you get. Early, under What's new, also follows a beta
 or a release candidate, and going back to Stable never installs an older
 version. `ctrl-shift-l` goes back to your previous layout.
 On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of

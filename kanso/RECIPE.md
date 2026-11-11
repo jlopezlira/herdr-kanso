@@ -50,10 +50,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       `kanso-tabs.check`; one 30 s toast names the tag and runs
       `kanso-tabs.update`. Keys merge three-way; the
       layout is replaced only when the release changed it
-      (`kanso.json.old-<time>`). A detached shell holds a kernel lock,
-      downloads into `.kanso-updates/<id>/`, checks `version.json` and
-      `herdr-app check`, swaps each mod, `kanso-chrome` last (put back if
-      it fails or dies), writes `<id>.status`.
+      (`kanso.json.old-<time>`). A detached shell, or Windows PowerShell,
+      holds the lock and downloads with the system's curl and tar into
+      `.kanso-updates/<id>/`, checks `version.json` and `herdr-app check`,
+      swaps each file and mod in turn, `kanso-chrome` last (put back if it
+      fails, dies, or a file is in use or read-only), writes `<id>.status`;
+      the tab bar toasts "Kanso updated to X".
 - **Corners**: two radii and nothing else. Surfaces (panes, cards, popovers,
   menus) are 8; controls and rows (buttons, tabs, list rows, tiles, chips,
   fields) are 6; dots are circles.
