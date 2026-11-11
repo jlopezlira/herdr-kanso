@@ -13,17 +13,34 @@ export function keycap(t, text, faint = false) {
     .text_size(10.5).font_medium().text_color(faint ? t.dim : t.foreground).whitespace_nowrap().child(text);
 }
 
-const MAC = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘", fn: "fn" };
-const OTHER = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Win", fn: "Fn" };
+export const MAC = { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘", fn: "fn" };
+export const OTHER = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Win", fn: "Fn" };
+export const LINUX = { ...OTHER, cmd: "Super" };
+export const modifierGlyphs = (platform) => platform === "macos" ? MAC : platform === "linux" ? LINUX : OTHER;
 const NAMES = { space: "Space", left: "←", right: "→", up: "↑", down: "↓", enter: "↩", escape: "Esc", tab: "⇥", backspace: "⌫", delete: "⌦", home: "Home", end: "End", pageup: "PgUp", pagedown: "PgDn" };
 const ORDER = ["ctrl", "alt", "shift", "cmd", "fn"];
-export function glyphs(chord, mac = window()?.platform !== "linux" && window()?.platform !== "windows") {
+const chordParts = (chord) => {
   const all = String(chord).split("-");
-  const parts = all.slice(0, -1);
-  const key = all.at(-1) === "" ? "-" : parts.length && chord.endsWith("--") ? "-" : chord.split("-").at(-1);
-  const mods = ORDER.filter((m) => parts.includes(m));
+  return { mods: ORDER.filter((m) => all.slice(0, -1).includes(m)), key: all.at(-1) || "-" };
+};
+export function glyphs(chord, platform = window()?.platform ?? "macos") {
+  const { mods, key } = chordParts(chord), labels = modifierGlyphs(platform);
   const name = NAMES[key] ?? (key.length === 1 ? key.toUpperCase() : key);
-  return mac ? `${mods.map((m) => MAC[m]).join("")}${name}` : [...mods.map((m) => OTHER[m]), name].join("+");
+  return labels === MAC ? `${mods.map((m) => labels[m]).join("")}${name}` : [...mods.map((m) => labels[m]), name].join("+");
+}
+
+export const familyPattern = (chord) => chord.replace(/[1-9]$/, "N");
+export const shownChord = (chord, platform) => glyphs(chord, platform).replace(/N$/, "1–9");
+
+export function chordRun(chords, platform) {
+  const runs = [...new Set(chords)].map((chord) => {
+    const { mods, key } = chordParts(chord);
+    return { chord, key, held: mods.join("-") };
+  });
+  return runs.map(({ chord, key, held }, i) => {
+    const continued = i > 0 && held === runs[i - 1].held;
+    return `${continued ? " " : i ? ", " : ""}${shownChord(continued ? key : chord, platform)}`;
+  }).join("");
 }
 
 export function stateMark(t, status, size = 13, { idle = false } = {}) {

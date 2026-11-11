@@ -54,8 +54,6 @@ export const HERDRS = /^(kanso-strip\.(new-right|new-down|close|go-(left|right|u
 
 export const ofRow = (row, action) => (row.family ? new RegExp(`^${row.family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[1-9]$`).test(action) : action === row.action);
 
-export const familyPattern = (chord) => chord.replace(/[1-9]$/, "N");
-
 export function familyChords(chord) {
   if (!/[1-9]$/.test(chord)) return null;
   return [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => chord.replace(/[1-9]$/, String(n)));

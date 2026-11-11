@@ -9,7 +9,7 @@ import { G, T, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, 
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { memorySpec, memoryText } from "./memory-card.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords } from "./model.js";
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError } from "./model.js";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -61,6 +61,7 @@ export default class Memory extends View {
     this.showAll = false;
     this.armed = new Armed();
     this.busy = {};
+    this.actionError = null;
     this.timers = [];
     this.ticker = null;
 
@@ -131,11 +132,14 @@ export default class Memory extends View {
         : null;
       const digest = fresh ? fresh.read : last;
       const batch = await tryOrAsync(async () => parseBatch(await readTextFile(paths.join(dir, "batch.json"))), null);
+      const installing = this.busy.install;
+      const installFailure = installing ? installError(await tryOrAsync(() => readTextFile(paths.join(dir, "install.json"))), installing.at) : null;
       this.reading = false;
       if (this.closed || !this.awake) return;
       this.now = now;
       this.digest = digest;
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
+      if (installFailure) { this.actionError = installFailure; delete this.busy.install; }
       this.settle();
       // One follow-up timer at most, never a chain per read.
       try { this.batchTimer?.cancel(); } catch { /* already gone */ }
@@ -159,6 +163,7 @@ export default class Memory extends View {
   act(key, args, done, cx) {
     // One action at a time: two recycles never race each other.
     if (!localService(systemApi).memoryGuardAvailable || this.closed || this.busy[key] || Object.keys(this.busy).some((k) => k !== "check")) return;
+    this.actionError = null;
     this.busy[key] = { at: Date.now(), done };
     cx.notify();
     cx.spawn(async (actCx) => {
@@ -168,8 +173,10 @@ export default class Memory extends View {
           const v = tryOr(() => JSON.parse(raw ?? "{}")?.node);
           this.node = typeof v === "string" && v.trim() ? v.trim() : "node";
         }
-        await localService(systemApi).guardRun(this.node, paths.join(appHome(), GUARD_FILE), args);
-      } catch {
+        const result = await localService(systemApi).guardRun(this.node, paths.join(appHome(), GUARD_FILE), args, appHome());
+        if (result.code !== 0) throw new Error(result.stderr || "Memory could not start");
+      } catch (error) {
+        this.actionError = String(error.message || error);
         delete this.busy[key];
       }
       if (this.closed || !this.awake) return;
@@ -230,6 +237,7 @@ export default class Memory extends View {
           .child(this.header(c, narrow))
           .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
             "Only counts and sizes: no agent names, folders or sessions. The post opens with the image in it.", G.sm)))
+          .when(Boolean(this.actionError), (el) => el.child(div().text_size(T.body).text_color(c.red).child(this.actionError)))
           .child(body)));
   }
 
@@ -244,7 +252,7 @@ export default class Memory extends View {
     const at = this.now?.data?.at;
     const tip = busy ? "Checking…" : at ? `Check now · checked ${clock(at)}` : "Check now";
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Memory"))
+      .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child(this.now?.data?.metric === "working set" ? "Memory · working set" : "Memory"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.canShare(), (el) => el.child(iconButton("guard-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
         .child(iconButton("guard-refresh", "refresh", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
@@ -277,6 +285,7 @@ export default class Memory extends View {
   mainView(c, narrow) {
     const data = this.now.data;
     const stale = this.now.state === "stale";
+    const events = data.events.filter((e) => e.text !== data.window?.reason);
     return v_flex().w_full().gap(narrow ? 36 : 48)
       .when(stale, (el) => el.child(h_flex().w_full().gap(G.lg).items_center()
         .child(div().text_size(12).text_color(c.red).child(`Stopped at ${clock(data.at)}`))
@@ -286,7 +295,7 @@ export default class Memory extends View {
         .child(this.chart(c))
         .child(this.agents(c, data))
         .when(data.heaviest.length > 0, (el) => el.child(this.heaviest(c, data)))
-        .when(data.events.length > 0, (el) => el.child(this.events(c, data)))
+        .when(events.length > 0, (el) => el.child(this.events(c, { ...data, events })))
         .child(div().text_size(10.5).text_color(c.dim).child(limitsNote(data.limits))));
   }
 
@@ -294,11 +303,11 @@ export default class Memory extends View {
     const m = data.machine, w = data.window, l = data.limits;
     const free = typeof m.freePct === "number" ? Math.round(m.freePct) : null;
     const low = free !== null && typeof l.lowFreePct === "number" && free < l.lowFreePct;
-    const swap = typeof m.swapMB === "number" ? `${size(m.swapMB)} swap${m.swapTotalMB ? ` of ${size(m.swapTotalMB)}` : ""}` : null;
+    const swap = typeof m.swapMB === "number" ? `${size(m.swapMB)} ${data.swapLabel || "swap"}${m.swapTotalMB ? ` of ${size(m.swapTotalMB)}` : ""}` : null;
     const totals = this.digest?.totals;
     const windowHot = Boolean(w.oom) || (typeof w.mb === "number" && typeof l.windowMB === "number" && w.mb > l.windowMB);
     const stats = [
-      { value: size(w.mb), unit: "window", tip: w.oom ? "Its mod runtime ran out of memory" : null, hot: windowHot },
+      { value: size(w.pid ? w.mb : undefined), unit: "window", tip: w.oom ? "Its mod runtime ran out of memory" : null, hot: windowHot },
       { value: size(data.core.mb), unit: "core" },
       { value: size(agentsMB(data)), unit: `${data.agents.length} ${data.agents.length === 1 ? "agent" : "agents"}` },
       totals ? { value: String(totals.recycles), unit: totals.recycles === 1 ? "recycle" : "recycles" } : null,
@@ -319,11 +328,12 @@ export default class Memory extends View {
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.red : c.text).child(s.value))
           .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).items_center()
-        .child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : armedRestart ? "Press again to restart the window" : "Restart window",
-          (cx) => { if (!this.busy.restart) this.armed.press("restart", cx, (cx) => this.restartWindow(cx)); }, c, { color: armedRestart ? c.red : c.muted }))
+        .when(Boolean(w.pid), (el) => el.child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : armedRestart ? "Press again to restart the window" : "Restart window",
+          (cx) => { if (!this.busy.restart) this.armed.press("restart", cx, (cx) => this.restartWindow(cx)); }, c, { color: armedRestart ? c.red : c.muted })))
         .when(data.helpers > 0 || Boolean(this.busy.reap), (el) => el.child(quietLink("guard-reap",
           this.busy.reap ? "Cleaning up…" : armedReap ? `Press again to end ${data.helpers}` : `Clean up ${data.helpers} hung ${data.helpers === 1 ? "helper" : "helpers"}`,
-          (cx) => { if (!this.busy.reap) this.armed.press("reap", cx, (cx) => this.reap(cx)); }, c, { color: armedReap ? c.red : c.muted }))));
+          (cx) => { if (!this.busy.reap) this.armed.press("reap", cx, (cx) => this.reap(cx)); }, c, { color: armedReap ? c.red : c.muted }))))
+      .when(Boolean(w.reason), (el) => el.child(div().text_size(T.body).text_color(c.muted).child(w.reason)));
   }
 
   chart(c) {
@@ -428,7 +438,7 @@ export default class Memory extends View {
   agentRow(c, a, index, { limit, action, reason }) {
     const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
     const closeKey = `close:${a.pid}`, armedClose = this.armed.is(closeKey), closing = Boolean(this.busy[closeKey]);
-    const closable = a.kind === "claude" && Boolean(a.session) && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
+    const closable = a.closeable !== false && a.kind === "claude" && Boolean(a.session) && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
     const spark = sparkFor(this.digest?.sparks, a);
     const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;
     return h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)

@@ -83,10 +83,12 @@ for (const platform of ["macos", "linux", "windows"]) {
     await api.startDocker(); await api.stopDocker();
     assert.deepEqual(api.containerShell("container", "windows"), ["docker", "exec", "-it", "container", "cmd.exe"]);
     assert.equal(api.containerShell("container", "linux").at(-2), "-c");
-    assert.equal(api.memoryGuardAvailable, !windows);
+    assert.equal(api.memoryGuardAvailable, platform !== "linux");
     if (windows) {
-      assert.equal((await api.guardRun("node", "guard.mjs", [])).state, "unavailable");
-      assert.equal((await api.guardStop("node", "guard.mjs", [])).state, "unavailable");
+      await api.guardRun("node", "guard.mjs", ["install"], "C:\\App");
+      assert.match(r.calls.at(-1).args.at(-1), /Start-Process.*Hidden.*installerPid/s);
+      await api.guardStop("node", "guard.mjs", ["123", "456:force"]);
+      assert.match(r.calls.at(-1).args.at(-1), /stop-server.*123.*456.*force/s);
     }
     const battery = (text) => systemApi(platform, stub(() => text).run).battery();
     assert.equal(await battery(windows ? "Offline" : platform === "macos" ? "Battery Power" : "0\n"), true);

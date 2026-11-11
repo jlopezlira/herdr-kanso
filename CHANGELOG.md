@@ -17,6 +17,18 @@ release.
 
 - Files, Preview and Images work for a space on another computer. Files lists that computer's folder and says when it cannot be reached or the folder cannot be read. Preview shows a picture (its name, its size in pixels when known, and Open with), and a Markdown file there includes the pictures it embeds. Images shows the pictures an agent on that computer made, and a note still sends. A folder on another computer is read again while the panel is on screen.
 
+## [3.26.0] - 2026-11-11
+
+### Added
+
+- Memory can be turned on in Windows. It checks every minute in the background without opening a console and starts again when you sign in. Windows reports each process's working set instead of macOS's physical footprint, and page-file usage instead of macOS swap pressure. Window restarts are available only when the recorded window program identifies exactly one process; with no match or several windows, Memory explains why and leaves them alone.
+
+## [3.25.0] - 2026-11-11
+
+### Added
+
+- Windows gets its own shortcuts for panes, spaces, panels and search, using Ctrl and Alt without taking the Windows key or AltGr. Reset restores the shortcuts for your system, and Help follows your current bindings and shows your actual settings folder.
+
 ## [3.24.1] - 2026-11-11
 
 ### Fixed

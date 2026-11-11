@@ -5,10 +5,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, clone } from "./helpers.mjs";
 
-const actions = () => load("kanso-settings/actions.js", ["GROUPS", "HERDRS", "ofRow", "familyPattern", "familyChords", "conflictsOf", "rebound"]);
+const actions = () => load("kanso-settings/actions.js", ["GROUPS", "HERDRS", "ofRow", "familyChords", "conflictsOf", "rebound"]);
 
 test("A family row owns its nine actions and shows one pattern", async () => {
-  const { ofRow, familyPattern, familyChords } = await actions();
+  const { ofRow, familyChords } = await actions();
+  const { familyPattern } = await load("kanso-spaces/marks.js", ["familyPattern"]);
   const row = { family: "kanso-strip.col-" };
   assert.ok(ofRow(row, "kanso-strip.col-3"));
   assert.ok(!ofRow(row, "kanso-strip.col-10"));
@@ -52,7 +53,7 @@ test("The Keys page lists Kanso's own keys only, and Reset knows them all", asyn
   const herdrChords = herdrKeys();
   const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
   const shipped = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
-  assert.deepEqual(clone(DEFAULT_KEYS), shipped, "regenerate kanso-settings/defaults.js from kanso/keys.json");
+  assert.deepEqual(clone(DEFAULT_KEYS["kanso/keys.json"]), shipped, "regenerate kanso-settings/defaults.js from kanso/keys.json");
   for (const [section, map] of Object.entries(shipped)) {
     for (const [chord, action] of Object.entries(map)) {
       if (action === "terminal") continue;
@@ -83,7 +84,7 @@ test("A chord reads as glyphs on macOS and as names elsewhere", async () => {
   assert.equal(glyphs("ctrl-shift-space"), "⌃⇧Space");
   assert.equal(glyphs("cmd-alt-left"), "⌥⌘←");
   assert.equal(glyphs("cmd-shift--"), "⇧⌘-");
-  assert.equal(glyphs("cmd-shift-s", false), "Shift+Win+S");
+  assert.equal(glyphs("cmd-shift-s", "windows"), "Shift+Win+S");
 });
 
 // Herdr's own keys (herdr-app defaults/keys.macos.json, Apache-2.0) and the
@@ -95,8 +96,8 @@ test("A chord reads as glyphs on macOS and as names elsewhere", async () => {
 const SAME_AS_HERDR = {
   "pane.split": /^kanso-strip\.new-(right|down)$/,
   "pane.close": /^kanso-strip\.close$/,
-  "pane.go": /^kanso-strip\.go-/,
-  "pane.swap": /^(kanso-strip\.move-|terminal$)/,
+  "pane.go": /^kanso-strip\.(go|vim)-(left|right|up|down)$/,
+  "pane.swap": /^(kanso-strip\.(move|vim-move)-(left|right|up|down)|terminal)$/,
   "pane.zoom": /^kanso-strip\.width$/,
   "space.select": /^kanso-spaces\.space-\d$/,
   "app.settings": /^kanso-spend\.settings$/,
@@ -124,4 +125,51 @@ test("Kanso's keys never give Herdr's or macOS's keys another meaning", () => {
 test("Settings has no Sync page", async () => {
   const { PAGES } = await load("kanso-settings/main.js", ["PAGES"]);
   assert.deepEqual(clone(PAGES.map((page) => page.key)), ["keys", "mods", "news", "credits"]);
+});
+
+const TAKEN_OVER_ON_PURPOSE = {
+  "layout:kanso alt-up": ["agent.prev", "kanso-strip.go-up"],
+  "layout:kanso alt-down": ["agent.next", "kanso-strip.go-down"],
+};
+
+test("Windows takes Herdr keys for the same intent, except the named agent navigation takeovers", (t) => {
+  const kanso = JSON.parse(readFileSync(new URL("../kanso/keys.windows.json", import.meta.url), "utf8"));
+  const herdr = JSON.parse(readFileSync(new URL("./herdr-keys.json", import.meta.url), "utf8"));
+  const seen = [];
+  for (const [section, bindings] of Object.entries(kanso)) {
+    for (const [chord, action] of Object.entries(bindings)) {
+      const original = herdr[section]?.[chord] ?? herdr.global[chord];
+      if (!original) continue;
+      const key = `${section} ${chord}`;
+      t.diagnostic(`${key}: ${original} -> ${action}${key in TAKEN_OVER_ON_PURPOSE ? " (taken over on purpose)" : " (same intent)"}`);
+      if (key in TAKEN_OVER_ON_PURPOSE) {
+        assert.deepEqual([original, action], TAKEN_OVER_ON_PURPOSE[key]);
+        seen.push(key);
+      } else {
+        assert.match(action, SAME_AS_HERDR[original.split(":")[0]] ?? /^$/, key);
+        const direction = original.split(":")[1];
+        if (direction && /^(pane\.go|pane\.swap|pane\.split|space\.select)/.test(original)) assert.ok(action.endsWith(`-${direction}`), `${key}: same direction or space`);
+      }
+    }
+  }
+  assert.deepEqual(seen.toSorted(), Object.keys(TAKEN_OVER_ON_PURPOSE).toSorted());
+});
+
+test("Settings compares and resets to this platform's shipped bindings", async () => {
+  const { DEFAULT_KEYS } = await load("kanso-settings/defaults.js", ["DEFAULT_KEYS"]);
+  const windows = JSON.parse(readFileSync(new URL("../kanso/keys.windows.json", import.meta.url), "utf8"));
+  assert.deepEqual(clone(DEFAULT_KEYS["kanso/keys.windows.json"]), windows, "regenerate defaults with node scripts/sync-keys.mjs");
+  for (const platform of ["macos", "linux", "windows"]) {
+    const { Settings } = await load("kanso-settings/main.js", ["Settings"], { window: () => ({ platform }) });
+    const settings = new Settings(), row = { action: "kanso-strip.new-right" }, section = "layout:kanso";
+    const chord = platform === "windows" ? "ctrl-shift-o" : "cmd-d";
+    assert.deepEqual(clone(settings.shipped(row, section)), [chord]);
+    const user = { [section]: { "shift-f1": row.action, "ctrl-9": "mine" }, global: { f1: "mine.help" } };
+    settings.change = (_cx, apply) => {
+      const next = apply(user);
+      assert.deepEqual(clone(next), { [section]: { "ctrl-9": "mine", [chord]: row.action }, global: user.global });
+    };
+    settings.reset(row, section, {});
+    assert.deepEqual(clone(settings.shipped({ family: "kanso-spaces.space-" }, section)), [platform === "windows" ? "alt-N" : "ctrl-N"]);
+  }
 });

@@ -15,7 +15,7 @@ export function windowsProcesses(text, now = Date.now()) {
   return jsonRows(text).map((row) => {
     const started = Date.parse(row.created);
     const seconds = Number.isFinite(started) ? Math.max(0, Math.floor((now - started) / 1000)) : 0;
-    return { pid: Number(row.pid), ppid: Number(row.ppid), etime: `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`, command: row.command || row.name || "", name: row.name || "", started: Number.isFinite(started) ? started : null };
+    return { pid: Number(row.pid), ppid: Number(row.ppid), etime: `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`, command: row.command || row.name || "", name: row.name || "", started: Number.isFinite(started) ? started : null, ...(row.executable ? { executable: row.executable } : {}), ...(row.bytes != null ? { bytes: Number(row.bytes) } : {}) };
   }).filter((row) => row.pid > 0);
 }
 
@@ -45,7 +45,7 @@ export function processApi(platform, run) {
     if (pids) pids.forEach(validPid);
     const options = on ? { on } : undefined;
     const rows = platform === "windows"
-      ? windowsProcesses(checked(await powershell(run, "$ErrorActionPreference='Stop'; @(Get-CimInstance Win32_Process | ForEach-Object { @{pid=$_.ProcessId;ppid=$_.ParentProcessId;command=$_.CommandLine;name=$_.Name;created=$(if ($_.CreationDate) {$_.CreationDate.ToUniversalTime().ToString('o')} else {$null})} }) | ConvertTo-Json -Compress", options)).stdout)
+      ? windowsProcesses(checked(await powershell(run, "$ErrorActionPreference='Stop'; @(Get-CimInstance Win32_Process | ForEach-Object { @{pid=$_.ProcessId;ppid=$_.ParentProcessId;command=$_.CommandLine;name=$_.Name;executable=$_.ExecutablePath;bytes=$_.WorkingSetSize;created=$(if ($_.CreationDate) {$_.CreationDate.ToUniversalTime().ToString('o')} else {$null})} }) | ConvertTo-Json -Compress", options)).stdout)
       : unixProcesses(checked(await run("ps", ["-axo", "pid=,ppid=,etime=,command="], options)).stdout);
     return processTable(pids ? rows.filter((row) => pids.map(Number).includes(row.pid)) : rows);
   };
