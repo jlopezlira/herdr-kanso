@@ -13,7 +13,7 @@ const windows = process.platform === "win32";
 const test = (name, options, fn) => typeof options === "function"
   ? nodeTest(name, { timeout: 60_000 }, options)
   : nodeTest(name, { timeout: 60_000, ...options }, fn);
-const livePids = new Set();
+const livePids = new Map();
 function endTree(pid) {
   if (!pid) return;
   if (windows) {
@@ -23,13 +23,33 @@ function endTree(pid) {
   }
   try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
 }
-function trackedSpawn(...args) {
-  const child = spawn(...args);
-  if (child.pid) livePids.add(child.pid);
+// A pipe to a child that is still running keeps the test process from exiting.
+function dropChild(child) {
+  if (windows) {
+    try { child.kill("SIGKILL"); } catch { /* already gone */ }
+  }
+  endTree(child.pid);
+  if (!windows) return;
+  for (const stream of [child.stdin, child.stdout, child.stderr]) stream?.destroy();
+  child.unref();
+}
+function trackedSpawn(t, command, args, options) {
+  const child = spawn(command, args, options);
+  if (child.pid) livePids.set(child.pid, t.name);
   child.once("exit", () => livePids.delete(child.pid));
   return child;
 }
-afterAll(() => { for (const pid of livePids) endTree(pid); });
+afterAll(() => {
+  const left = [...livePids];
+  if (!windows) {
+    for (const [pid] of left) endTree(pid);
+    return;
+  }
+  for (const [pid, name] of left) {
+    console.error(`update tests left pid ${pid} started by ${name}`);
+    try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { /* already gone */ }
+  }
+});
 async function stopInstalls(root) {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
@@ -301,13 +321,17 @@ async function holder(t, f) {
   await mkdir(updates(f.home), { recursive: true });
   const spec = f.updater.host.holdArgs(join(updates(f.home), "lock"));
   // Detached on Windows drops the stdout handle, so the holder exits before it says it holds the lock.
-  const child = trackedSpawn(pickCommand(spec.commands), spec.args, { detached: !windows, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  const child = trackedSpawn(t, pickCommand(spec.commands), spec.args, { detached: !windows, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   let note = "";
   child.stderr.on("data", (chunk) => { note = `${note}${chunk}`.slice(-400); });
   child.once("error", (error) => { note = `${note} ${error.message}`.trim(); });
   const ended = new Promise((resolve) => child.once("close", resolve));
-  const kill = async () => { endTree(child.pid); await ended; };
-  t.after(() => endTree(child.pid));
+  const kill = async () => {
+    endTree(child.pid);
+    const stopped = await Promise.race([ended.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), windows ? 2000 : 10000))]);
+    if (!stopped) dropChild(child);
+  };
+  t.after(() => dropChild(child));
   const got = await Promise.race([new Promise((resolve) => child.stdout.once("data", () => resolve(true))), ended.then(() => false)]);
   return { got, pid: child.pid, kill, note: note.replace(/^\uFEFF/, "").trim() };
 }
@@ -1063,8 +1087,8 @@ test("A pid file names a live process or a dead one", async (t) => {
   const dir = await temporary(t);
   const { host } = await hostFor(nativePlatform);
   const live = join(dir, "live.pid");
-  const child = trackedSpawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
-  t.after(() => endTree(child.pid));
+  const child = trackedSpawn(t, process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
+  t.after(() => dropChild(child));
   await writeFile(live, `${child.pid}\n`);
   assert.equal((await host.alive(live)).code, 0, `step alive, file ${live}`);
   child.kill("SIGKILL");
@@ -1140,7 +1164,7 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
   const home = await s.fresh("in-use");
   const locked = join(home, "mods", "kanso-chrome", "main.js");
   const release = join(s.root, "release-lock");
-  const child = trackedSpawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
+  const child = trackedSpawn(t, "powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
     "$ErrorActionPreference = 'Stop'",
     `$s = [IO.File]::Open(${quote(locked)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)`,
     "[Console]::Out.WriteLine('held')",
@@ -1152,11 +1176,9 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
   const releaseLock = async () => {
     try { writeFileSync(release, "go"); } catch { /* the tree is already gone */ }
     const finished = await Promise.race([ended.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 2000))]);
-    if (!finished) {
-      try { child.kill("SIGKILL"); } catch { /* already gone */ }
-      endTree(child.pid);
-    }
+    if (!finished) dropChild(child);
     await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 2000))]);
+    dropChild(child);
   };
   t.after(releaseLock);
   await new Promise((resolve, reject) => {
