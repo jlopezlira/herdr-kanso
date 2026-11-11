@@ -7,23 +7,24 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
-import { findThreads, pidsOf, pidsListed, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
+import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { parseProcesses } from "./procs.js";
-import { Panel } from "./panel.js";
+import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
-import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed } from "./projects.js";
+import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
+import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
-import { tryOrAsync, parseOr } from "./pure.js";
+import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, HEADER_ICON, toggleSwitch, tokens, quietLink } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineMarks } from "./machines.js";
-import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
+import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
@@ -104,7 +105,7 @@ const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: space
 const wakeRow = (id) => arrange({ wake: { id } });
 const sleepAgent = (spaceId, tab, pane) => arrange({ sleep: { scope: "agent", space: spaceId, tab, pane } });
 const sleepProject = (spaceId) => arrange({ sleep: { scope: "project", space: spaceId } });
-// Read at start (shared state outlives a restart) and every 30 s; a read a newer "kanso.asleep.at" stamp overtook is dropped.
+// Reload sleeps after shared changes or two minutes; drop a read overtaken by a newer stamp.
 // The Store holds live handles, so it stays the sidebar view's own state, never shared.
 const since = (ms) => { const d = new Date(ms); return new Date().toDateString() === d.toDateString() ? d.toTimeString().slice(0, 5) : d.toDateString().slice(4, 10); };
 
@@ -116,15 +117,7 @@ const fromOf = (a) => (isUnread(a.labels) ? a.labels?.[FROM_LABEL] || null : nul
 const label = (address, key, value) => hc(["label", address, `${key}=${value ?? ""}`]).catch(() => {});
 
 // The projects, as every view of the sidebar draws them (the database read last, which local folders are gone).
-const registry = () => (Array.isArray(shared(REGISTRY)) ? shared(REGISTRY) : []);
-async function publishRegistry(kdb) {
-  const list = await kdb.projects();
-  const missing = await missingFolders(list.filter((p) => !p.machine).map((p) => p.folder));
-  // Only this computer's folders are looked at: another machine's project is never called gone from here.
-  const shown = list.map((p) => ({ id: p.id, name: p.name, folder: p.folder, machine: p.machine ?? "", agent: p.agent ?? null, missing: !p.machine && missing.has(p.folder) }));
-  if (JSON.stringify(shown) !== JSON.stringify(registry())) setShared(REGISTRY, shown);
-  return shown;
-}
+const registry = () => { const rows = shared(REGISTRY); return Array.isArray(rows) ? rows : []; };
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
@@ -210,8 +203,7 @@ export default class Spaces extends View {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
     });
-    this.sleepWork.start(cx);
-    cx.timer.every(1000, (cx) => { if ((shared("kanso.sleep.kick") ?? 0) > this.sleepWork.kicked) this.sleepWork.start(cx); });
+    this.pollSleepWork(cx);
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
     cx.spawn(async (cx) => {
@@ -251,20 +243,19 @@ export default class Spaces extends View {
         if (result?.code === 0 && name) { this.hostName = name; cx.notify(); }
       } catch { /* the header says This computer */ }
     });
-    // `hc machine ls` is a process: every 30 s in front, every 2 min behind.
+    // Remote machines: every 30 s in front, every 2 min behind.
     cx.timer.every(30000, cx => {
-      if (window().active) { this.refreshMachines(cx); return; }
+      if (window().active) { this.refreshMachines(cx, true); return; }
       this.machineTicks += 1;
-      if (this.machineTicks % 4 === 0) this.refreshMachines(cx);
+      if (this.machineTicks % 4 === 0) this.refreshMachines(cx, true);
     });
     this.machineTicks = 0;
     // `git status` walks the whole tree: only when its answer could have changed (see `due`);
     // behind other windows every 5 s instead of 0.5 s, nothing is missed.
     cx.timer.every(500, (cx) => this.checkNew(cx));
-    // One `ps` every 5 s in front, 30 s behind.
-    cx.timer.every(5000, (cx) => this.checkTasks(cx));
+    cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // A sleep or wake that stopped half way shows again once old; another window's changes arrive.
-    cx.timer.every(30000, (cx) => { this.loadAsleep().catch(() => {}); this.sleepWork.start(cx); cx.notify(); });
+    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); cx.notify(); });
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -324,7 +315,27 @@ export default class Spaces extends View {
       await kdb.migrateProjects(startingProjects(spaces(), [...new Set(rows.map((a) => a.from).filter(Boolean))], home()));
       this.projectsIn = true;
     }
-    await publishRegistry(kdb);
+    await this.publishRegistry(kdb);
+  }
+
+  async publishRegistry(kdb) {
+    const list = await kdb.projects();
+    const sleeping = new Set((shared("kanso.asleep") ?? []).filter((s) => s.state !== "undoing").map((s) => s.from));
+    const awake = new Set(spaces().map((s) => keyOfSpace(s, home())));
+    const quiet = (p) => sleeping.has(keyOfProject(p)) && !awake.has(keyOfProject(p));
+    const folders = list.filter((p) => !p.machine && !quiet(p)).map((p) => p.folder);
+    const signature = JSON.stringify([list, folders]), now = Date.now();
+    if (signature !== this.folderSignature || now - this.foldersAt >= 300000) {
+      this.folderMissing = await missingFolders(folders);
+      this.folderSignature = signature;
+      this.foldersAt = now;
+    }
+    const missing = this.folderMissing;
+    const previous = new Map(registry().map((p) => [p.id, p.missing]));
+    // Only this computer's folders are looked at: another machine's project is never called gone from here.
+    const shown = list.map((p) => ({ id: p.id, name: p.name, folder: p.folder, machine: p.machine ?? "", agent: p.agent ?? null, missing: quiet(p) ? (previous.get(p.id) ?? false) : !p.machine && missing.has(p.folder) }));
+    if (JSON.stringify(shown) !== JSON.stringify(registry())) setShared(REGISTRY, shown);
+    return shown;
   }
 
   // The sidebar's own database handle; a popup has its own.
@@ -355,7 +366,7 @@ export default class Spaces extends View {
     cx.spawn(async (cx) => {
       try {
         const { row, existed } = await this.kdb.addProject({ name: name || folderName(folder), folder, machine: "" });
-        await publishRegistry(this.kdb);
+        await this.publishRegistry(this.kdb);
         const open = spaces().find((w) => keyOfSpace(w, home()) === keyOfProject(row));
         if (existed) notify({ title: `${row.name} is already one of your projects`, level: "info", timeout: 4000 });
         closeOverlay(props().overlay);
@@ -449,12 +460,24 @@ export default class Spaces extends View {
 
 
 
-  async loadAsleep() {
+  pollSleepWork(cx, fallback = true) {
+    if (!this.sleepWork) return;
+    const now = Date.now(), stamp = shared("kanso.asleep.at") ?? 0, kick = shared("kanso.sleep.kick") ?? 0;
+    if (stamp === this.workStamp && kick === this.workKick && (!fallback || now - this.workPolledAt < 120000)) return;
+    this.workStamp = stamp;
+    this.workKick = kick;
+    this.workPolledAt = now;
+    this.sleepWork.start(cx);
+  }
+
+  async loadAsleep(force = true) {
+    const started = Date.now(), stamp = shared("kanso.asleep.at") ?? 0, kick = shared("kanso.sleep.kick") ?? 0;
+    if (!force && stamp === this.asleepStamp && kick === this.asleepKick && started - this.asleepLoaded < 120000) return;
     this.asleepReads += 1;
-    const started = Date.now(), seq = this.asleepReads;
+    const seq = this.asleepReads;
     // A sleep from before space ids adopts the one space it now fits.
     const st = this.leftNavStore(), sp = spaces();
-    const rows = await st.kdb.syncSpaces(sp, started).then(() => st.asleep(true)).catch(() => null);
+    const rows = await st.asleep(true, sp, started).catch(() => null);
     if (rows) {
       const found = rows.filter((a) => !a.spaceId).map((a) => ({ sleep: a.id, space: spaceFor({ spaceName: a.space, project: a.from }, sp, home())?.id })).filter((x) => x.space);
       if (found.length) await st.kdb.adoptSpaces(found).catch(() => {});
@@ -463,8 +486,12 @@ export default class Spaces extends View {
     if (rows) this.settleHidden(rows);
     if (!rows || seq < this.asleepApplied || (shared("kanso.asleep.at") ?? 0) > started) return;
     this.asleepApplied = seq;
+    this.asleepLoaded = started;
+    this.asleepStamp = stamp;
+    this.asleepKick = kick;
     const list = rows.map((a) => shownOf(a, started));
     if (JSON.stringify(list) === JSON.stringify(shared("kanso.asleep") ?? [])) return;
+    this.asleepStamp = started;
     setShared("kanso.asleep.at", started);
     setShared("kanso.asleep", list);
   }
@@ -506,6 +533,17 @@ export default class Spaces extends View {
     }
   }
 
+  background() {
+    const sleeps = withAway(shared("kanso.asleep") ?? [], shared("kanso.sleep.away")), layouts = machines();
+    return { sleeps, layouts, allows: (address, thread = null) => pollable(address, sleeps, layouts, thread) };
+  }
+
+  pollingPlaces(sp = spaces(), ps = panes(), places = placesOf(sp, ps)) {
+    const background = this.background();
+    const allowed = activePlaces(sp, ps, background.sleeps, background.layouts, home());
+    return new Map([...places].filter(([id]) => allowed.has(id)));
+  }
+
   refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
     const list = agents(), layouts = machines();
     const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
@@ -515,8 +553,10 @@ export default class Spaces extends View {
     this.needsSignature = signature;
     this.needsThreads = this.threads;
     this.needsLayoutSignature = layoutSignature;
-    const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
-    const named = () => list.map((a) => ({ ...a, name: this.nameOf({ ...a, name: names.get(a.address) }) }));
+    const named = () => {
+      const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
+      return list.map((a) => ({ ...a, name: this.nameOf({ ...a, name: names.get(a.address) }) }));
+    };
     const previous = this.needsQueue ?? shared(NEEDS_YOU);
     const rows = changed ? waitingQueue(named(), terms, asleep.dozing, previous?.rows) : previous.rows;
     const next = queueState(rows, layouts);
@@ -641,20 +681,29 @@ export default class Spaces extends View {
     finally { if (this.psLook === now) this.psLook = null; }
   }
 
-  // Each task keeps the start it was first seen with, so a look that finds the same ones changes nothing.
-  // The whole table, read once, also says which conversations still run, so checkAlive needs no `ps` of its own meanwhile.
-  checkTasks(cx) {
-    const now = Date.now();
-    if (!this.psFree(now) || window().platform === "windows" || this.shownView() === "threads") return;
-    if (!window().active && now - (this.psAt ?? 0) < 30000) return;
-    const mine = terminals().filter((k) => k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
-    if (!mine.length) { if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); } return; }
+  // One process table serves tasks and conversation liveness.
+  checkTasks(cx, now = Date.now(), active = window().active) {
+    if (!this.psFree(now) || window().platform === "windows") return;
+    const background = this.background();
+    const local = terminals().filter((k) => background.allows(k.address) && !k.address.includes("/"));
+    const mine = local.filter((k) => k.state === "live" && k.status && (k.foreground?.pid ?? k.pid));
+    const pids = pidsOf(Object.fromEntries(Object.entries(this.threads ?? {}).filter(([address, thread]) => !address.includes("/") && background.allows(address, thread))));
+    const foreground = new Set(local.filter((k) => k.state === "live").map((k) => k.foreground?.pid));
+    const confirmed = aliveIn(foreground, pids), pending = pids.filter((pid) => !foreground.has(pid));
+    const sig = pids.join(","), every = active ? ALIVE_MS : ALIVE_BEHIND_MS;
+    if (pids.length && !pending.length) this.sawAlive(confirmed, sig, now, cx);
+    const due = pending.length && aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every);
+    if (!mine.some((k) => k.status === "working") && !due) {
+      if (!mine.length && Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
+      return;
+    }
+    if (now - (this.psAt ?? -Infinity) < every) return;
     this.psAt = now;
-    const pids = pidsOf(this.threads);
+    if (pids.length) { this.aliveSig = sig; this.aliveAt = now; }
     cx.spawn((cx) => this.psRun(now, ["-axo", "pid=,ppid=,etime=,command="], (r) => {
       if (r.code !== 0) return;
       const table = parseProcesses(r.stdout);
-      if (pids.length) this.sawAlive(aliveIn(table.byPid, pids), pids.join(","), now, cx);
+      if (pids.length) this.sawAlive(new Set([...confirmed, ...aliveIn(table.byPid, pending)]), sig, now, cx);
       const next = Object.fromEntries(mine.flatMap((k) => {
         const had = this.tasks[k.address] ?? [];
         const list = tasksOf(table, k.foreground?.pid ?? k.pid, Boolean(k.foreground?.pid))
@@ -739,33 +788,39 @@ export default class Spaces extends View {
   }
 
   checkNew(cx) {
+    this.pollSleepWork(cx, false);
     const now = Date.now();
     const active = window().active;
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
     this.takeMoves();
-    const projects = JSON.stringify(registry());
-    if (projects !== this.projectsSeen) { this.projectsSeen = projects; cx.notify(); }
-    // Read once per look: each read copies every record.
-    const sp = visibleSpaces(spaces(), this.offNames()), ps = panes();
+    const projects = registry();
+    if (!sameProjects(projects, this.projectsSeen)) { this.projectsSeen = projects; cx.notify(); }
+    this.trackFocus();
+    const sp = visibleSpaces(spaces(), this.offNames());
+    for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
+    if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
+    if (now - (this.trackedAt ?? -Infinity) < 2000) return;
+    this.trackedAt = now;
+    const ps = panes();
     this.trackAgents(now, sp, cx);
     this.trackReturn(sp, ps, active, now, cx);
     // Each agent's name is its conversation's title: read every minute, every 15 s while Threads shows in front.
     if (now - (this.threadsAt ?? 0) > (this.view === "threads" && active ? 15000 : 60000)) this.refreshThreads(cx);
     this.checkAlive(cx, now, active);
     this.keepSeen(now);
-    for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     // Git shows on space rows only: the Agents and Threads views don't ask.
     const due = this.due(now, sp, ps, placesOf(sp, ps), active);
     if (due.size && this.shownView() === "spaces") this.refreshGit(due, cx);
-    if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
     if (now - (this.prunedAt ?? 0) > 30000) { this.prunedAt = now; this.prune(sp, now); }
   }
 
   trackReturn(sp, ps, active, now, cx) {
     if (this.sinceLeft.busy) return;
+    const background = this.background();
+    const allowed = activePlaces(sp, ps, background.sleeps, background.layouts, home());
     const off = this.offNames();
-    const focus = focused(), list = visibleAgents(agents(), off), rawTerms = visibleAgents(terminals(), off);
+    const focus = focused(), list = visibleAgents(agents(), off).filter((a) => allowed.has(a.space)), rawTerms = visibleAgents(terminals(), off).filter((k) => background.allows(k.address));
     const signature = returnSignature(list, rawTerms, sp, ps, this.seenNow, this.panel.agents);
     const changed = signature !== this.returnSignature;
     const terms = changed ? new Map(rawTerms.map((term) => [term.address, term])) : null;
@@ -776,7 +831,7 @@ export default class Spaces extends View {
       return { ...snapshot, project: assigned ?? snapshot.project };
     }) : undefined;
     const targets = changed ? new Map(live.map((agent, index) => [agent.address, snapshots[index].value.target])) : this.returnTargets;
-    const project = active && focus ? sp.find((space) => space.id === focus.space) : null;
+    const project = active && focus ? sp.find((space) => space.id === focus.space && allowed.has(space.id)) : null;
     const pr = shared("kanso.pr.seen");
     const seenTarget = pr && pr.at > (this.prSeenAt ?? 0) ? targetOf("pr", pr.url) : null;
     this.sinceLeft.update({ project: project ? projectKey(project) : null, target: targets?.get(focus?.terminal) ?? null, seenTarget, snapshots, now }, cx).then(() => {
@@ -815,9 +870,13 @@ export default class Spaces extends View {
     const seen = this.seenNow;
     if (!seen) return;
     if (this.panelReady) {
-      this.panel.remember(seen, this.seenAt ?? now);
+      if (!sameSeen(this.remembered, seen) && now - (this.rememberedAt ?? -Infinity) >= 10000) {
+        this.remembered = seen;
+        this.rememberedAt = now;
+        this.panel.remember(seen, this.seenAt ?? now);
+      }
       // A name a wake could not put back on its new terminal: put back now, every 30 s until it is.
-      if (now - (this.restoredAt ?? 0) > 30000) {
+      if (this.panel.toRestore(seen).length && now - (this.restoredAt ?? 0) > 30000) {
         this.restoredAt = now;
         // Checked again just before: the same conversation still runs there, still without a name.
         this.panel.reloadAgents().then(() => {
@@ -890,12 +949,12 @@ export default class Spaces extends View {
       return missing && JSON.stringify(sent.get(address)?.want) !== JSON.stringify(want);
     });
     this.labelsSent = new Map([...sent, ...due.map(([address, want]) => [address, { want, at: now }])]);
-    for (const [address, want] of due) this.labelTerminal(address, want, byAddress.get(address)?.labels?.[ID_LABEL]);
+    for (const [address, want] of due) this.labelTerminal(address, want, byAddress.get(address));
   }
 
   // Its own id is derived (address + when Herdr made it), so every window writes the same one and a reused address gets another.
-  async labelTerminal(address, want, id) {
-    const made = id ? null : await hc(["get", address, "--json"]).then((r) => parseOr(r.stdout)?.created_ms ?? null).catch(() => null);
+  async labelTerminal(address, want, terminal) {
+    const id = terminal?.labels?.[ID_LABEL], made = terminal?.created_ms;
     const own = id ?? (made ? `${address}-${made}` : null);
     const pairs = Object.entries({ ...want, ...(own && !id ? { [ID_LABEL]: own } : {}) }).map(([key, value]) => `${key}=${value}`);
     await hc(["label", address, ...pairs]).catch(() => {});
@@ -913,17 +972,22 @@ export default class Spaces extends View {
   }
 
   // The done agent you are looking at stays in Done until you leave it.
+  trackFocus(list = null) {
+    const address = list ? list.find((a) => a.focused)?.address : focused()?.terminal;
+    if ((address ?? null) === (this.held?.address ?? null)) return;
+    const cur = (list ?? agents()).find((a) => a.address === address);
+    this.held = cur ? { address, done: cur.status === "done" || this.lastSeen?.[address] === "done" } : null;
+  }
+
   trackAgents(now, sp, cx) {
-    const list = visibleAgents(agents(), this.offNames());
+    const background = this.background();
+    const list = visibleAgents(agents(), this.offNames()).filter((a) => background.allows(a.address, this.threads?.[a.address]));
     const tabs = new Map(sp.flatMap((s) => s.tabs ?? []).map((tb) => [tb.id, tb]));
     const next = track(this.since, list, now, (id) => tabs.get(id));
     // An agent came or went: read the conversations now, so it shows by its name at once rather than in a minute.
     const sig = list.map((a) => a.address).toSorted().join(" ");
     if (sig !== this.agentSig) { this.agentSig = sig; this.threadsAt = 0; }
-    const cur = list.find((a) => a.focused);
-    // Looking turns done into idle at once: what it was a moment ago counts.
-    const was = this.lastSeen ?? {};
-    if (cur?.address !== this.held?.address) this.held = cur ? { address: cur.address, done: cur.status === "done" || was[cur.address] === "done" } : null;
+    this.trackFocus(list);
     this.lastSeen = Object.fromEntries(list.map((a) => [a.address, a.status]));
     const terms = new Map(terminals().map((k) => [k.address, k]));
     this.tidyLabels(list, now, terms);
@@ -952,7 +1016,7 @@ export default class Spaces extends View {
 
   due(now, sp, ps, places, active) {
     // Moved there: what it knew of that place may be old.
-    const all = [...places];
+    const all = [...this.pollingPlaces(sp, ps, places)];
     const at = Object.fromEntries(all.map(([id, { key }]) => [id, key]));
     const found = all.filter(([, { cwd }]) => cwd);
     const keys = new Set(found.map(([, { key }]) => key)), onOf = new Map(found.map(([, { key, on }]) => [key, on]));
@@ -1018,8 +1082,8 @@ export default class Spaces extends View {
   }
 
   // One look at a time: a herdr-core that hangs must not stack them up.
-  refreshMachines(cx) {
-    if (this.machinesBusy) return;
+  refreshMachines(cx, repeat = false) {
+    if (this.machinesBusy || repeat && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
     this.machinesBusy = true;
     cx.spawn(async (cx) => {
       try { await this.readMachines(); } catch { /* the last list stands */ }
@@ -1113,7 +1177,8 @@ export default class Spaces extends View {
         this.pending.clear();
         for (const key of keys) await this.check(key, cx);
       }
-      const used = new Set(Object.values(this.git).filter(Boolean).map((g) => JSON.parse(g.repo)).filter(([on]) => !on).map(([, repo]) => repo));
+      const keys = new Set([...this.pollingPlaces().values()].map((place) => place.key));
+      const used = new Set(Object.entries(this.git).filter(([key, value]) => keys.has(key) && value).map(([, value]) => value).map((g) => JSON.parse(g.repo)).filter(([on]) => !on).map(([, repo]) => repo));
       for (const repo of this.watching) if (!used.has(repo)) this.watching.delete(repo);
       this.refreshing = false;
       cx.notify();
@@ -1123,6 +1188,7 @@ export default class Spaces extends View {
   async check(key, cx) {
     const [on, cwd] = JSON.parse(key);
     if (on && this.offNames().has(on)) return;
+    if (![...this.pollingPlaces().values()].some((place) => place.key === key)) return;
     this.checked[key] = Date.now();
     this.unsure.delete(key);
     try {
@@ -1164,7 +1230,9 @@ export default class Spaces extends View {
         while (this.watching.has(repo)) {
           await watchFolder(repo);
           const mine = JSON.stringify([null, repo]);
-          if (this.watching.has(repo)) this.refreshGit(Object.keys(this.git).filter((k) => this.git[k]?.repo === mine), cx);
+          const keys = [...this.pollingPlaces().values()].filter((place) => this.git[place.key]?.repo === mine).map((place) => place.key);
+          if (!keys.length) this.watching.delete(repo);
+          else if (this.watching.has(repo)) this.refreshGit(keys, cx);
         }
       } catch { this.watching.delete(repo); }
     });
@@ -1315,7 +1383,15 @@ export default class Spaces extends View {
     return { name: a.asleep.spaceName || key.slice(key.indexOf(":") + 1).split("/").at(-1) || "~", fill: t.muted };
   }
 
-  sleepingNow(sp, terms) { return sleepingNow(sp, terms, withAway(shared("kanso.asleep") ?? [], shared("kanso.sleep.away")), () => home()); }
+  sleepingNow(sp, terms) {
+    const asleep = shared("kanso.asleep") ?? [], away = shared("kanso.sleep.away"), here = home();
+    const signature = sleepingSignature(sp, terms, asleep, away, here);
+    if (signature !== this.sleepingSignature) {
+      this.sleepingRows = sleepingNow(sp, terms, withAway(asleep, away), () => here);
+      this.sleepingSignature = signature;
+    }
+    return this.sleepingRows;
+  }
 
   // Each sleeping row goes back at the place it had, so it stays where it was.
   spaceRows(id, ctx) {
@@ -1409,7 +1485,7 @@ export default class Spaces extends View {
 
   // A popup's write finishes before the popup closes: closed first, the write could be cut off with it.
   thenClose(write, after = () => {}) {
-    Promise.resolve(write).then(() => publishRegistry(this.kdb)).catch(() => {})
+    Promise.resolve(write).then(() => this.publishRegistry(this.kdb)).catch(() => {})
       .finally(() => { after(); closeOverlay(props().overlay); });
   }
 
@@ -1669,17 +1745,8 @@ export default class Spaces extends View {
     if (view === "threads" && cx) this.refreshThreads(cx);
   }
 
-  // Its own `ps` only when checkTasks' table has not answered lately (threads.js ALIVE_MS).
-  // A look is stamped when it starts, so one that fails waits its turn instead of trying every half second.
   checkAlive(cx, now = Date.now(), active = window().active) {
-    const pids = pidsOf(this.threads);
-    if (!this.psFree(now) || !pids.length) return;
-    const sig = pids.join(","), every = active && shared("sidebar.collapsed") !== true ? ALIVE_MS : ALIVE_BEHIND_MS;
-    if (!aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every)) return;
-    this.aliveSig = sig;
-    this.aliveAt = now;
-    // `ps -p` exits 1 when none runs: an empty answer, every one of them gone.
-    cx.spawn((cx) => this.psRun(now, ["-o", "pid=", "-p", sig], (r) => this.sawAlive(aliveIn(pidsListed(r.stdout), pids), sig, now, cx)));
+    this.checkTasks(cx, now, active);
   }
 
   sawAlive(next, sig, at, cx) {
@@ -1696,9 +1763,12 @@ export default class Spaces extends View {
     if (this.readingThreads) return;
     this.readingThreads = true;
     // Agents on this computer (another machine's files are not here).
-    const list = agents().filter((a) => !a.address.includes("/")).map((a) => ({ address: a.address, app: a.app }));
+    const background = this.background();
+    const list = agents().filter((a) => !a.address.includes("/") && background.allows(a.address, this.threads?.[a.address])).map((a) => ({ address: a.address, app: a.app }));
+    if (!list.length) { this.readingThreads = false; return; }
+    this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {
-      try { this.threads = await findThreads(list, this.threads ?? {}); } catch { this.threads ??= {}; }
+      try { this.threads = await findThreads(list, this.threads ?? {}, terminals(), this.threadLocator); } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }
       cx.notify();
     });

@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.22.1] - 2026-11-10
+
+### Changed
+
+- The sidebar reuses thread locations and live terminal PIDs, checks transcript sizes on status or turn changes with a five-minute fallback, backs off failed thread discovery, and checks folders less often. Unchanged sleeping rows are reused; sleeping projects and unavailable machines skip background reads. Database maintenance waits for changes or a slower fallback; calls share processes and cache preferences. The strip reads divider sizes less often at rest.
+
 ## [3.22.0] - 2026-11-10
 
 ### Added

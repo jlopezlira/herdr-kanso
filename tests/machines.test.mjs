@@ -189,7 +189,7 @@ test("turning a machine off stops reading it at once, and turning it on adds the
       if (args[1] === "add") return { code: 1, stdout: JSON.stringify({ error: { kind: "login_needed", message: "needs a login" } }) };
       return { code: 0, stdout: "" };
     },
-    machines: () => [], exec: async () => ({ code: 0, stdout: "" }),
+    machines: () => [], shared: () => null, home: () => "/home", exec: async () => ({ code: 0, stdout: "" }),
   });
   const view = Object.assign(new Spaces(), {
     parked: [], machines: [{ ...record, state: "connected" }], waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(),

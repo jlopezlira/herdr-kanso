@@ -314,7 +314,7 @@ test("unchanged return polling skips snapshots and sleeping projects never read 
   const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
   const view = new SinceLeft(null), calls = [];
   view.store = { async observe(rows) { if (rows.length) calls.push("observe"); }, async prune() { calls.push("prune"); }, async touchSources() { calls.push("heartbeat"); } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { agents: () => [], terminals: () => [], focused: () => null, shared: () => null });
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { agents: () => [], terminals: () => [], focused: () => null, shared: () => null, machines: () => [], home: () => "" });
   const spaces = new Spaces();
   spaces.panel = { agents: new Map() };
   const updates = [];
