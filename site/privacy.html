@@ -29,7 +29,7 @@
 
 <h1>Privacy</h1>
 <p class="lede">kansō runs on your computer, inside Herdr. It has no account, no analytics and no telemetry: nothing you do in it is sent to the people who make it.</p>
-<p class="meta">Last updated November 6, 2026</p>
+<p class="meta">Last updated November 11, 2026</p>
 
 <h2>What stays on your computer</h2>
 <p>Everything kansō keeps is in <code>~/.config/herdr-app/data/</code>, in files you can open or delete: the sidebar&#39;s state and the tabs you put to sleep (<code>kanso/kanso.db</code>), your arrangements, your hjkl dōjō rounds (<code>kanso-dojo/dojo.db</code>), Spend's totals, Shipped's statistics, Worktrees' list and what the memory guard records about your agents.</p>
@@ -40,6 +40,7 @@
   <li><strong>Updates.</strong> kansō asks GitHub for its newest release tag every few minutes, and downloads a release from GitHub when you update.</li>
   <li><strong>The pull request panel and Shipped</strong>, only while they are shown, talk to GitHub through your own GitHub CLI (<code>gh</code>). Shipped keeps a private gist in your account, "Kanso Shipped stats", with commit counts and sizes: no messages, file names or code.</li>
   <li><strong>Spend</strong> downloads OpenRouter's public model price list once a day.</li>
+  <li><strong>Simulator</strong> shows this computer's iOS simulators and Android emulators. The picture and your touches stay on this computer. The one download is <code>serve-sim</code>, and only when you press the button that installs it.</li>
   <li><strong>Share</strong> opens X, LinkedIn or Bluesky only when you press it, with the image and text you see first. The cards hold counts and sizes, never a project, a path or a conversation.</li>
 </ul>
 <p>Your AI agents talk to their own providers as they always do; kansō doesn't change or read that traffic.</p>

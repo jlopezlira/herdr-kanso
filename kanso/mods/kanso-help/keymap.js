@@ -65,7 +65,7 @@ const WORDS = {
   "kanso-strip.center": "Bring the pane into view", "kanso-strip.fewer": "Fewer panes in view", "kanso-strip.more": "More panes in view", "kanso-strip.fit": "Even the columns out",
   "kanso-spaces.needs-you.next": "Next agent that needs you", "kanso-strip.send": "Send the pane's work to an agent", "kanso-strip.arrange": "Arrangements",
   "kanso-spaces.view-spaces": "Sidebar: Projects", "kanso-spaces.view-agents": "Sidebar: Status", "kanso-spaces.view-threads": "Sidebar: Threads", "kanso-spaces.sidebar": "Hide or show the sidebar",
-  "kanso-tabs.settings": "kansō settings", "mod.open:kanso-help": "This help",
+  "kanso-tabs.settings": "kansō settings", "kanso-tabs.sim": "Simulator", "mod.open:kanso-help": "This help",
   "tab.new": "New tab", "tab.close": "Close the tab", "tab.next": "Next tab", "tab.prev": "Previous tab",
   "space.new": "New space", "space.next": "Next space", "space.prev": "Previous space",
   "agent.next": "Next agent", "agent.prev": "Previous agent", "app.palette": "Command palette", "app.settings": "Herdr settings",

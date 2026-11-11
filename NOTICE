@@ -10,3 +10,12 @@ Each file's header lists who changed what.
 The markdown panel's reviews (md-review and Done), its Escape key and its
 "From this terminal" list come from herdr-md-review by Johannes Hund
 (https://github.com/h0ru5/herdr-md-review, Apache License 2.0).
+
+The Simulator panel includes code from herdr-sim by Robert Soriano
+(https://github.com/wobsoriano/herdr-sim, MIT License). The copyright and
+permission notice are in kanso/mods/kanso-sim/LICENSE-herdr-sim.txt and in
+each file that carries that code.
+
+Toolbar icons in the Simulator are from Lucide (https://lucide.dev, ISC
+License), except android.svg, drawn for herdr-sim. The ISC notice is in
+kanso/mods/kanso-sim/icons/LICENSE-lucide.txt.

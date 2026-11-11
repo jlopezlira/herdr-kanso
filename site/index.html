@@ -27,6 +27,7 @@
       <a href="#sleep">Sleep</a>
       <a href="#keys">Keys</a>
       <a href="#memory">Memory</a>
+      <a href="#simulator">Simulator</a>
       <a href="#install">Install</a>
       <a href="changelog.html">Changelog</a>
     </nav>
@@ -188,6 +189,15 @@
     <figure class="window window-wide"><img src="shots/memory.png" loading="lazy" width="1920" height="1200" alt="Memory open beside an agent: 31 percent free of 16 GB, 11 agents, 18 recycles, 24 GB given back, and agents grouped into ready to recycle and working."></figure>
   </section>
 
+  <section class="block spotlight" id="simulator">
+    <h2>The device, beside the agent that writes it</h2>
+    <p class="sub">Simulator, in the tab bar, shows an iOS simulator or an Android emulator on this computer: its screen, at the device's shape, and touch, typing, Home, Lock, volume and rotate. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. It stays off until this computer has Xcode's simctl or an Android SDK.</p>
+    <ul class="facts">
+      <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Boot, then the screen</strong>Pick a device by its name and OS. Boot starts one that is off. The picture is live while frames arrive, and Reconnect brings a stalled stream back.</div></li>
+      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>This computer only</strong>A space on another machine still shows the devices here. On Linux and Windows there is no iOS row. Closing the panel, or leaving the window behind, stops the stream.</div></li>
+      <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>Nothing downloaded until you say so</strong>iOS needs serve-sim. The panel names the missing tool, and one button runs <code>npx --yes serve-sim@0.1.49 --version</code>. Nothing is fetched before that press.</div></li>
+    </ul>
+  </section>
 
   <section class="block share" id="share">
     <h2>Show what your agents did</h2>

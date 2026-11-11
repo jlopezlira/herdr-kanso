@@ -68,6 +68,7 @@ export const DEFAULT_KEYS = {
       "cmd-b": "kanso-spaces.sidebar",
       "ctrl-shift-b": "kanso-spaces.sidebar",
       "ctrl-shift-,": "kanso-tabs.settings",
+      "cmd-shift-s": "kanso-tabs.sim",
       "cmd-shift-/": "mod.open:kanso-help"
     },
     "mod:kanso-spend": {
@@ -150,6 +151,7 @@ export const DEFAULT_KEYS = {
       "ctrl-shift-h": "kanso-spaces.view-threads",
       "ctrl-shift-b": "kanso-spaces.sidebar",
       "ctrl-shift-,": "kanso-tabs.settings",
+      "ctrl-shift-m": "kanso-tabs.sim",
       "ctrl-shift-/": "mod.open:kanso-help",
       "ctrl-shift-?": "mod.open:kanso-help"
     },

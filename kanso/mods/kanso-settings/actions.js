@@ -3,6 +3,7 @@ export const GROUPS = [
   // bar: drawn as the tab bar itself (main.js `barKeys`).
   { name: "Panels", section: "layout:kanso", bar: true, actions: [
     { family: "kanso-tabs.panel-", label: "Open or close a panel" },
+    { action: "kanso-tabs.sim", label: "Simulator" },
     { action: "kanso-tabs.settings", label: "kansō settings" },
   ] },
   { name: "Sidebar", section: "layout:kanso", actions: [

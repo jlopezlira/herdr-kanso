@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.29.0] - 2026-11-11
+
+### Added
+
+- Simulator, in the tab bar, shows an iOS simulator or an Android emulator beside the agent: the device, its screen at the device's shape, and touch, typing, Home, Lock, volume and rotate. It stays off until this computer has Xcode's simctl or an Android SDK, and it turns off like any other panel. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. On Linux and Windows there is no iOS row. Nothing is downloaded until you press the button that installs serve-sim. A space on another machine still shows this computer's devices.
+
 ## [3.28.0] - 2026-11-11
 
 ### Added
