@@ -6,18 +6,22 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe, Armed } from "./ui.js";
+import { G, tokens, quietTabs, segments, toggleSwitch, quietLink, skeleton, breathe, Armed } from "./ui.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
 import { shippedKeymap } from "./platform-keymap.js";
-import { parseChangelog, plain, compare } from "./changelog.js";
+import { parseChangelog, plain } from "./changelog.js";
+import { channelOf, compareReleases, installedRelease, offerRelease, stableStay } from "./release.js";
 import { tryOrAsync } from "./pure.js";
+
+const REPO = "https://github.com/jlopezlira/herdr-kanso";
+const UPDATE_CHOICES = [{ key: "stable", label: "Stable" }, { key: "beta", label: "Early" }];
 
 const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
 const PLACES = [
   { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
-  { id: "kanso", name: "kansō", note: "Source, releases and issues", url: "https://github.com/jlopezlira/herdr-kanso" },
+  { id: "kanso", name: "kansō", note: "Source, releases and issues", url: REPO },
   { id: "herdr-sim", name: "herdr-sim", note: "The simulator, by Robert Soriano (MIT)", url: "https://github.com/wobsoriano/herdr-sim" },
   { id: "lucide", name: "Lucide", note: "Toolbar icons (ISC)", url: "https://lucide.dev" },
 ];
@@ -64,6 +68,8 @@ export default class Settings extends View {
       await this.readNews(cx);
     });
   }
+
+  shown() { return installedRelease(this.installed, shared("kanso.update")?.tag); }
 
   bound() { return keys().filter((k) => GROUPS.some((g) => g.section === k.section)); }
 
@@ -262,11 +268,13 @@ export default class Settings extends View {
 
   newsPage(t, c) {
     const { entries, error, from } = this.news;
-    const have = this.installed;
     const updateState = shared("kanso.update") ?? {};
     const autoCheck = updateState.autoCheck !== false;
+    const channel = channelOf(updateState.channel);
+    const have = installedRelease(this.installed, updateState.tag);
+    const stay = channel === "stable" ? stableStay(this.installed, updateState.tag, updateState.latest) : null;
     const entry = (e) => {
-      const rel = have ? compare(e.version, have) : null;
+      const rel = have ? compareReleases(e.version, have) : null;
       const tag = rel === 0 ? "installed" : rel > 0 ? "newer than yours" : null;
       return v_flex().id(`news-${e.version}`).w_full().pt(G.lg).gap(G.xs)
         .child(h_flex().w_full().gap(G.sm).items_baseline()
@@ -280,10 +288,18 @@ export default class Settings extends View {
             .child(div().flex_none().w(6).pt(7).child(div().size(4).rounded_full().bg(c.dim)))
             .child(div().flex_1().min_w(0).text_size(12.5).line_height(1.5).text_color(c.muted).child(plain(item)))))));
     };
-    const latest = shared("kanso.update")?.latest ?? null;
-    const waiting = have && latest && compare(latest, have) > 0 ? latest : null;
+    const waiting = offerRelease(updateState.latest, have, channel);
+    const setChannel = (key, cx) => { setShared("kanso.update", { ...(shared("kanso.update") ?? {}), channel: key }); cx.notify(); };
     return v_flex().w_full()
       .child(h_flex().w_full().gap(G.md).items_center()
+        .child(div().flex_1().text_size(13).text_color(c.text).child("Updates"))
+        .child(segments("updates-channel", UPDATE_CHOICES, channel, setChannel, c)))
+      .when(channel === "beta", (el) => el.child(h_flex().id("updates-early").w_full().pt(G.xs).gap(G.xs).items_center().flex_wrap()
+        .child(div().text_size(11.5).text_color(c.dim).child("Early gets changes before they are tested by everyone. If kansō is useful to you, "))
+        .child(quietLink("updates-star", "Star on GitHub", (cx) => cx.open_url(REPO), c))
+        .child(div().text_size(11.5).text_color(c.dim).child(" helps others find it."))))
+      .when(Boolean(stay), (el) => el.child(div().id("updates-stay").pt(G.xs).text_size(11.5).text_color(c.dim).child(stay)))
+      .child(h_flex().w_full().pt(G.lg).gap(G.md).items_center()
         .child(v_flex().flex_1().min_w(0).gap(2)
           .child(div().text_size(13).text_color(c.text).child("Check for updates automatically"))
           .child(div().text_size(11.5).text_color(c.dim).child("Checks on start and every few minutes; updates are only installed when you choose.")))
@@ -339,7 +355,7 @@ export default class Settings extends View {
       .child(h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/settings.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō settings"))
-        .when(Boolean(this.installed), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.installed ?? "")))
+        .when(Boolean(this.shown()), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.shown())))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))

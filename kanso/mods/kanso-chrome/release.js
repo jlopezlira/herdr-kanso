@@ -24,3 +24,47 @@ export function compareReleases(a, b) {
   if (xr !== yr) return xr - yr;
   return (x.n ?? 0) - (y.n ?? 0);
 }
+
+const coreOf = (rel) => `${rel.major}.${rel.minor}.${rel.patch}`;
+
+export const channelOf = (value) => (value === "beta" ? "beta" : "stable");
+
+// Downloaded by its tag. version.json is only X.Y.Z, and that is what both hosts check.
+export function hostInstall(tag, from = null) {
+  const rel = parseRelease(tag);
+  if (!rel) return null;
+  return { tag: bareRelease(tag), want: coreOf(rel), from };
+}
+
+export function installedRelease(version, tag) {
+  const disk = parseRelease(version);
+  if (!disk || disk.channel) return null;
+  const bare = coreOf(disk);
+  const recorded = hostInstall(tag);
+  return recorded && recorded.want === bare ? recorded.tag : bare;
+}
+
+export function newestTag(stdout, channel = "stable") {
+  const beta = channelOf(channel) === "beta";
+  const tags = String(stdout ?? "").split("\n").flatMap((line) => {
+    const tag = line.split("refs/tags/")[1]?.trim();
+    const rel = parseRelease(tag);
+    return rel && (beta || !rel.channel) ? [tag] : [];
+  });
+  const best = tags.reduce((have, tag) => (!have || compareReleases(tag, have) > 0 ? tag : have), null);
+  return best ? bareRelease(best) : null;
+}
+
+export function offerRelease(latest, have, channel = "stable") {
+  const rel = parseRelease(latest);
+  if (!rel || !parseRelease(have)) return null;
+  if (channelOf(channel) !== "beta" && rel.channel) return null;
+  return compareReleases(latest, have) > 0 ? bareRelease(latest) : null;
+}
+
+export function stableStay(version, tag, latest) {
+  const have = installedRelease(version, tag);
+  const rel = parseRelease(have);
+  if (!rel?.channel || offerRelease(latest, have, "stable")) return null;
+  return `You stay on ${bareRelease(have)} until Stable reaches it`;
+}
