@@ -36,9 +36,8 @@ export function osOf(result) {
   return null;
 }
 
-function missingOf(error, code) {
-  const which = code ?? error?.code;
-  return which === "ENOENT" || which === 127 || which === 9009;
+function missingOf(code) {
+  return code === "ENOENT" || code === 127 || code === 9009;
 }
 
 export function createAwake({ now = () => Date.now(), run }) {
@@ -58,10 +57,9 @@ export function createAwake({ now = () => Date.now(), run }) {
         const result = await this.run({ command: spec.command, args: spec.args, on, timeout });
         const code = result?.code ?? (result?.ok === false ? 1 : 0);
         const ok = result?.ok === true || code === 0;
-        const stderr = ok ? "" : String(result?.stderr ?? "");
-        return { ok, code, stdout: String(result?.stdout ?? ""), missing: Boolean(result?.missing) || missingOf({ message: stderr }, code), threw: false };
+        return { ok, code, stdout: String(result?.stdout ?? ""), missing: Boolean(result?.missing) || missingOf(code), threw: false };
       } catch (error) {
-        return { ok: false, code: error?.code ?? 1, stdout: "", missing: missingOf(error, error?.code), threw: true };
+        return { ok: false, code: error?.code ?? 1, stdout: "", missing: missingOf(error?.code), threw: true };
       }
     },
     probe(name) { return this.call({ command: "uname", args: ["-s"] }, name, PROBE_TIMEOUT_MS).then(osOf); },
