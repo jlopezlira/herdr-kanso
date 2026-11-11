@@ -432,7 +432,7 @@ export default class Sleep extends View {
     };
     const { space, replacing } = await where();
     const folder = folderOfKey(a.from);
-    const create = space ? null : { name: a.space || base(folder) || "~", folder, key: a.from, ...(machine ? { machine } : {}) };
+    const create = space ? null : { name: a.space || base(folder) || "~", folder, key: a.from, machine: machine ?? "" };
     const intoTab = a.into && space ? (space.tabs ?? []).find((x) => own(x.id) === a.into.tabId) ?? (a.into.tab ? (space.tabs ?? []).find((x) => x.name === a.into.tab) : null) : null;
     // Renew the hold last, so it still holds when the pane opens; the first throw stops the whole opening.
     const ahead = (lost) => async (p) => {

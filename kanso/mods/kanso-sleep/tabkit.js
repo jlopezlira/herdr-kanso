@@ -61,6 +61,7 @@ export function spaceBeside(id, list) {
 
 export const projectOf = (space) => `${space?.machine ?? ""}:${space?.folder || home()}`;
 export const folderOfKey = (key) => String(key ?? "").slice(String(key ?? "").indexOf(":") + 1);
+const machineOfKey = (key) => { const text = String(key ?? ""); const at = text.indexOf(":"); return at < 0 ? "" : text.slice(0, at); };
 
 // [value] tells a JSON null apart from a failed read.
 const parsed = (g) => tryOr(() => [JSON.parse(g.stdout)]);
@@ -118,9 +119,10 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
   if (!flat.length) throw new Error("nothing to open");
   const opts = (p) => ({ folder: p.cwd || undefined, ...(p.argv ? { argv: p.argv } : {}) });
   const fresh = !given && create ? await (async () => {
-    const { key: _key, ...args } = create;
+    const { key, ...args } = create;
     const had = new Set(spaces().map((sp) => sp.id)), mine = opening(args.name);
-    run("space.new", { ...args, name: mine });
+    // With no machine, Herdr puts the space on the focused terminal's machine.
+    run("space.new", { ...args, machine: args.machine ?? machineOfKey(key), name: mine });
     // Matched by the temp name only it has, so another window's new space is never taken.
     const found = await retry(50, async () => {
       await cx.sleep(100);

@@ -17,6 +17,10 @@ release.
 
 - Sleep works for a space on another computer. The record stays on the computer that owns the agents, so the same tabs are asleep whichever computer you sit at, and waking from either works. When that computer does not answer, its asleep rows stay listed, grey, with how long ago they were read, and Wake waits until it answers. An order that cannot be saved is refused and nothing is left half written.
 
+### Fixed
+
+- A tab woken while a space of another computer was in front came back on that computer.
+
 ## [3.27.0] - 2026-11-11
 
 ### Added
