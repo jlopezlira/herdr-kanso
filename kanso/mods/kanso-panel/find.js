@@ -1,10 +1,18 @@
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
+import { join } from "path";
 import { etimeMs } from "./procs.js";
+import { FIND } from "./find-key.js";
+export { FIND };
 
 export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
 export const LINE_MAX = 100000;
 export const SLICE_BUDGET = 2000000;
+export const DRAW = 50;
+export const EXCERPT = 64;
+const WORDS = 22;
 const MARK = /\p{M}/u;
+// A tool's delivery note is not a turn: the words are already in what was said.
+const DELIVERY = /^(?:message\s+)?(?:successfully\s+)?(?:delivered|sent)(?:\s+to(?:\s+the)?\s+user)?\.?$/i;
 
 // Claude Code names the folder after the working folder: anything not a letter or digit becomes "-", and a
 // folder over 200 characters is cut there with a hash of the whole (Claude Code 2.1).
@@ -15,8 +23,11 @@ export function projectDir(cwd) {
   const h = Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).reduce((n, c) => ((n << 5) - n + c) | 0, 0);
   return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
 }
+export const sessionPath = (homeDir, pid) => join(homeDir, ".claude", "sessions", `${pid}.json`);
 export const transcriptPath = (session, homeDir) =>
-  session?.sessionId && session.cwd ? `${homeDir}/.claude/projects/${projectDir(session.cwd)}/${session.sessionId}.jsonl` : null;
+  session?.sessionId && session.cwd && homeDir
+    ? join(homeDir, ".claude", "projects", projectDir(session.cwd), `${session.sessionId}.jsonl`)
+    : null;
 
 export function sessionLive(record, pid, started) {
   if (!record || record.pid !== pid || !record.sessionId) return false;
@@ -42,6 +53,7 @@ export function foldSpan(s) {
   return { text: walked.text, map: walked.map.concat([src.length]) };
 }
 export const fold = (s) => [...String(s ?? "")].reduce((out, ch) => out + foldPoint(ch), "");
+export const blankQuery = (query) => !fold(String(query ?? "").trim());
 
 export const indexTurns = (turns, from = 0) => turns.slice(from).map((turn, k) => ({ i: from + k, text: fold(turn.text ?? "") }));
 
@@ -63,36 +75,115 @@ export function matchSpan(text, hit) {
   return { start: map[hit.at] ?? 0, end: map[hit.at + hit.len] ?? src.length };
 }
 
-export function excerpt(text, start, end, radius = 160) {
-  const s = String(text ?? "");
-  const a = Math.max(0, Math.min(start ?? 0, s.length));
-  const b = Math.max(a, Math.min(end ?? a, s.length));
-  const left = Math.max(0, a - radius);
-  const right = Math.min(s.length, b + radius);
-  return {
-    before: s.slice(left, a).replace(/\s+/g, " ").trim(),
-    match: s.slice(a, b),
-    after: s.slice(b, right).replace(/\s+/g, " ").trim(),
-    lead: left > 0,
-    tail: right < s.length,
-  };
-}
-export function preview(text, radius = 160) {
-  const flat = String(text ?? "").replace(/\s+/g, " ").trim();
-  return flat.length > radius ? flat.slice(0, radius) : flat;
+function takeWords(words, budget) {
+  return words.reduce((acc, w) => {
+    if (acc.stop) return acc;
+    const cost = w.length + (acc.words.length ? 1 : 0);
+    if (acc.words.length && acc.used + cost > budget) return { ...acc, stop: true };
+    return { words: acc.words.concat([w]), used: acc.used + cost, stop: false };
+  }, { words: [], used: 0, stop: false }).words;
 }
 
-export function partsOf(text, hit, radius = 80) {
-  if (!hit) return [{ text: preview(text, radius), mark: false }];
-  const { start, end } = matchSpan(text, hit);
-  const ex = excerpt(text, start, end, radius);
+function sideWords(text, budget, fromEnd) {
+  const words = String(text ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  if (!words.length || budget <= 0) return { words: [], more: words.length > 0 };
+  const kept = takeWords(fromEnd ? words.toReversed() : words, budget);
+  return { words: fromEnd ? kept.toReversed() : kept, more: kept.length < words.length };
+}
+
+function shrinkTo(left, right, cap) {
+  if (left.length + right.length <= cap) return { left, right };
+  if (left.length >= right.length && left.length) return shrinkTo(left.slice(1), right, cap);
+  return right.length ? shrinkTo(left, right.slice(0, -1), cap) : { left, right };
+}
+
+export function partsOf(text, hit, radius = EXCERPT) {
+  if (!hit) return [];
+  const src = String(text ?? "");
+  const { start, end } = matchSpan(src, hit);
+  const match = src.slice(start, end).replace(/\s+/g, " ").trim();
+  const left = sideWords(src.slice(0, start), radius, true);
+  const right = sideWords(src.slice(end), radius, false);
+  const cut = shrinkTo(left.words, right.words, WORDS);
   return [
-    ex.lead ? { text: "\u2026", mark: false } : null,
-    ex.before ? { text: ex.before, mark: false } : null,
-    ex.match ? { text: ex.match, mark: true } : null,
-    ex.after ? { text: ex.after, mark: false } : null,
-    ex.tail ? { text: "\u2026", mark: false } : null,
+    left.more || cut.left.length < left.words.length ? { text: "\u2026", mark: false } : null,
+    cut.left.length ? { text: cut.left.join(" "), mark: false } : null,
+    match ? { text: match, mark: true } : null,
+    cut.right.length ? { text: cut.right.join(" "), mark: false } : null,
+    right.more || cut.right.length < right.words.length ? { text: "\u2026", mark: false } : null,
   ].filter(Boolean);
+}
+
+const markedWord = (w, mark) => ({ w, mark: Boolean(mark) });
+
+function takeLine(text, mark) {
+  return String(text ?? "").split(/\s+/).filter(Boolean).map((w) => markedWord(w, mark));
+}
+
+function addLine(lines, text, mark, fresh) {
+  const words = takeLine(text, mark);
+  if (!fresh && lines.length) return lines.slice(0, -1).concat([lines.at(-1).concat(words)]);
+  return lines.concat([words]);
+}
+
+function piecesOf(parts) {
+  const list = Array.isArray(parts) ? parts : [];
+  return list.flatMap((part) => String(part?.text ?? "").split("\n").map((bit, i) => ({ bit, mark: part?.mark, fresh: i > 0 })));
+}
+
+export function wordsByLine(parts) {
+  const lines = piecesOf(parts).reduce((state, piece) => addLine(state, piece.bit, piece.mark, piece.fresh), []);
+  return lines.length ? lines : [[]];
+}
+
+export function drawWindow(count, at, cap = DRAW) {
+  const n = Math.max(0, count | 0);
+  if (!n) return { start: 0, end: 0 };
+  const a = Math.max(0, Math.min(at | 0, n - 1));
+  const span = Math.min(Math.max(1, cap), n);
+  const start = Math.max(0, Math.min(a - Math.floor(span / 2), n - span));
+  return { start, end: start + span };
+}
+
+function placeFocus(acc, row) {
+  if (acc.found) return acc;
+  if (row.focus === null) return { at: acc.at + row.items.length, found: false };
+  return { at: acc.at + row.focus, found: true };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export function dayKey(ms) {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+export function dayLabel(ms, now = Date.now()) {
+  const key = dayKey(ms);
+  if (!key) return "";
+  if (key === dayKey(now)) return "Today";
+  const clock = new Date(now);
+  const prev = new Date(clock.getFullYear(), clock.getMonth(), clock.getDate() - 1);
+  if (key === dayKey(prev.getTime())) return "Yesterday";
+  const day = new Date(ms);
+  const month = MONTHS[day.getMonth()];
+  return day.getFullYear() === clock.getFullYear() ? `${month} ${day.getDate()}` : `${month} ${day.getDate()}, ${day.getFullYear()}`;
+}
+
+export function layOut(hits, at, cap = DRAW, whenOf = () => null, now = Date.now()) {
+  const list = Array.isArray(hits) ? hits : [];
+  const win = drawWindow(list.length, at, cap);
+  const slice = list.slice(win.start, win.end);
+  const rows = slice.map((hit, k) => {
+    const i = win.start + k;
+    const label = dayLabel(whenOf(hit), now);
+    const prev = k ? dayLabel(whenOf(slice[k - 1]), now) : "";
+    const day = label && label !== prev ? [{ kind: "day", label, index: i }] : [];
+    return { focus: i === at ? day.length : null, items: day.concat([{ kind: "hit", hit, index: i, head: true }]) };
+  });
+  return { items: rows.flatMap((row) => row.items), focus: rows.reduce(placeFocus, { at: 0, found: false }).at, start: win.start, end: win.end };
 }
 
 export const whoOf = (turn) => turn?.role === "user" ? "You" : turn?.role === "tool" ? String(turn.name || "tool").slice(0, 24) : "Agent";
@@ -111,9 +202,25 @@ export function placeOf(at, n) {
   return `${i + 1} of ${n}`;
 }
 export function countLabel(query, at, n) {
-  if (!fold(String(query ?? "").trim())) return "";
-  if (!n) return "0";
+  if (blankQuery(query)) return "";
+  if (!n) return "No matches";
   return placeOf(at, n);
+}
+
+export function findChord(modifiers) {
+  const m = modifiers ?? {};
+  return Boolean(m.platform || m.meta || m.control);
+}
+
+export function keptQuery(state, terminal) {
+  const q = state?.queries?.[terminal];
+  return typeof q === "string" && !blankQuery(q) ? q : "";
+}
+
+export function withQuery(queries, terminal, query) {
+  const base = queries && typeof queries === "object" && !Array.isArray(queries) ? queries : {};
+  const rest = Object.fromEntries(Object.entries(base).filter(([key]) => key !== terminal));
+  return !terminal || blankQuery(query) ? rest : { ...rest, [terminal]: String(query) };
 }
 export const stepMatch = (at, n, dir) => (n ? (at + dir + n) % n : 0);
 
@@ -123,6 +230,27 @@ export function enterMatch(box, index, shift) {
   if (pending !== box.query) return { ...box, query: pending, hits: searchIndex(index, pending), at: 0, moved: "query" };
   if (!box.hits.length) return { ...box, moved: "none" };
   return { ...box, at: stepMatch(box.at, box.hits.length, shift ? -1 : 1), moved: "move" };
+}
+
+export function chooseMatch(state, index, action) {
+  const pending = String(state.pending ?? "");
+  const key = action?.key;
+  if (key === "type") return { query: pending, hits: searchIndex(index, pending), at: 0, open: false, moved: "type" };
+  if (key === "click") {
+    const at = action.at ?? -1;
+    if (!state.hits?.length || at < 0 || at >= state.hits.length) return { ...state, open: false, moved: "none" };
+    return { ...state, at, open: true, moved: "click" };
+  }
+  if (key === "back") return { ...state, open: false, moved: "back" };
+  const newer = key === "up" || key === "shift";
+  if (!(newer || key === "down" || key === "enter")) return { ...state, moved: "none" };
+  if (pending !== state.query) {
+    const next = enterMatch({ ...state, pending }, index, newer);
+    return { ...next, open: false };
+  }
+  if (!state.hits?.length) return { ...state, open: false, moved: "none" };
+  const next = enterMatch({ ...state, pending }, index, newer);
+  return { ...next, open: Boolean(state.open) && next.hits.length > 0 };
 }
 
 export function retarget(index, query, prev) {
@@ -158,7 +286,12 @@ function toolName(command) {
   return base.slice(0, 24);
 }
 
-const keep = (turn) => Boolean(turn && String(turn.text ?? "").trim());
+export function readable(turn) {
+  const text = String(turn?.text ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  return turn?.role !== "tool" || !DELIVERY.test(text);
+}
+const keep = (turn) => readable(turn);
 const add = (state, turn) => (keep(turn) ? { ...state, turns: state.turns.concat([turn]) } : state);
 
 function claudeLine(tools, obj) {
@@ -296,16 +429,15 @@ export function applySlice(state, parsed) {
 }
 
 // The next read starts at `end`. A line over the limit is a pasted picture and is left out; a chunk with none is too.
-export const SLICE = String.raw`f="$1"; from="$2"; budget="$3"; longest="$4"
-[ -f "$f" ] || exit 2
-size=$(wc -c < "$f" | tr -d '[:space:]')
-python3 - "$f" "$from" "$budget" "$longest" "$size" <<'PY'
-import sys
-path, frm_s, budget_s, longest_s, size_s = sys.argv[1:]
+export const SLICE_PY = String.raw`import os, sys
+path, frm_s, budget_s, longest_s = sys.argv[1:]
+try:
+    size = os.path.getsize(path)
+except OSError:
+    sys.exit(2)
 frm = int(frm_s)
 budget = int(budget_s)
 longest = int(longest_s)
-size = int(size_s)
 if frm < 0 or frm > size:
     frm = 0
 fh = open(path, "rb")
@@ -353,10 +485,13 @@ for line in data.decode("utf-8", "replace").split("\n"):
 sys.stdout.write(str(end) + " " + str(size) + "\n")
 sys.stdout.write("\n".join(kept))
 fh.close()
-PY`;
+`;
 
 export async function readSlice(exec, file, from = 0, budget = SLICE_BUDGET, longest = LINE_MAX) {
-  const r = await Promise.resolve(exec("sh", ["-c", SLICE, "sh", file, String(from), String(budget), String(longest)], { timeout: 60000 })).catch(() => null);
+  const args = ["-c", SLICE_PY, file, String(from), String(budget), String(longest)];
+  const run = (cmd) => Promise.resolve(exec(cmd, args, { timeout: 60000 })).catch(() => null);
+  const first = await run("python3");
+  const r = first && (first.code === 0 || first.code === 2) ? first : await run("python");
   if (!r || r.code !== 0 || typeof r.stdout !== "string") return null;
   return parseSlice(r.stdout);
 }
@@ -388,10 +523,9 @@ export async function locateConversation(host, address, hint = "") {
   const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
   const pid = front?.pid;
   if (!pid) return { kind: null, file: null };
-  const program = String(front.argv?.[0] ?? "").split("/").at(-1);
-  const kind = kindOf(program, hint);
+  const kind = kindOf(front.argv?.[0], hint);
   if (kind === "claude") {
-    const record = parsed(await host.readTextFile(`${host.home()}/.claude/sessions/${pid}.json`).catch(() => null));
+    const record = parsed(await host.readTextFile(sessionPath(host.home(), pid)).catch(() => null));
     const up = record?.sessionId ? await host.exec("ps", ["-o", "etime=", "-p", String(pid)]).catch(() => null) : null;
     const started = up?.code === 0 ? Date.now() - etimeMs(String(up.stdout).trim()) : NaN;
     if (!sessionLive(record, pid, started)) return { kind: null, file: null };

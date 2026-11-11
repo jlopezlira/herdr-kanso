@@ -17,6 +17,12 @@ release.
 
 - Sync in settings is off until you turn a computer on. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then, Settings and Spend say Update kanso there. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
 
+## [3.21.1] - 2026-11-10
+
+### Fixed
+
+- Find is a quiet bar. It lists nothing until you type, then only the matching turns, newest first and grouped by day, and leaves out a tool's delivery note. Arrows, Enter and Shift+Enter move; a click opens that turn as the same markdown a file shows; Escape clears the query and the next Escape closes. The last query for each agent comes back selected.
+
 ## [3.21.0] - 2026-11-10
 
 ### Added

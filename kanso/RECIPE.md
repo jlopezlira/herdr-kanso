@@ -465,10 +465,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Keys** (keys.json `layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
-  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent finds its conversation, ignoring case and accents, and shows it.
-- **Kanso settings** (kanso-settings, the gear): Keys rebinds Kanso-only keys,
-  Mods orders and hides panels and pieces, Sync shares token spend when both
-  computers are on this version, What's new, Credits.
+  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
+- **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
+  rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
+  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), Sync shares token spend when both are on this version, What's new the log, Credits who.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.

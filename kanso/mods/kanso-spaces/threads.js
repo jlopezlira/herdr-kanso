@@ -1,4 +1,5 @@
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
+import { join } from "path";
 import { exec, hc } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
 
@@ -30,7 +31,7 @@ head -c 4000000 "$f" | said | head -n 60; printf '\n\036\n'
 tail -c 4000000 "$f" | said | tail -n 40; printf '\n\036\n'
 tail -c ${TAIL} "$f"`;
 
-export const claudeFile = (home, cwd, session) => `${home}/.claude/projects/${cwd.replace(/[^A-Za-z0-9]/g, "-")}/${session}.jsonl`;
+export const claudeFile = (home, cwd, session) => join(home, ".claude", "projects", String(cwd ?? "").replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
 
 export function parseLocated(text, home) {
   const [kind, a, b] = (text ?? "").replace(/\n$/, "").split("\t");

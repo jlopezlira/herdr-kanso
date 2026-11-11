@@ -9,6 +9,8 @@ export const H = { control: 30, compact: 24 };
 /** Radii: controls stay tighter than cards. */
 export const R = { control: 6, card: 8 };
 export const T = { page: 20, card: 13.5, metric: 22, value: 12.5, body: 11.5, small: 10.5, label: 9.5 };
+export const ICON = 15;
+export const EASE = { duration: 180, easing: "ease-out" };
 /** A second press within this long confirms a removal. */
 export const ARM_MS = 4000;
 export const BREATH = { from: 0.35, to: 0.8, period: 1800 };
@@ -24,7 +26,8 @@ export function tokens(t = {}) {
     border: t.border ?? t.input, input: t.input ?? t.border, subtle: t.hover ?? t.raised, raised: t.raised ?? canvas,
     selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface ?? canvas,
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
-    accent: t.accent ?? t.foreground, red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
+    accent: t.accent ?? t.foreground, highlight: t.selection ?? t.selected ?? t.hover,
+    red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
   };
 }
 
@@ -56,7 +59,7 @@ export function quietTabs(id, items, value, onChange, c) {
 /** `icon`: a name in kanso-chrome's icons, or a path. */
 export function iconButton(id, icon, tip, onClick, c, { spin = false, disabled = false, active = false } = {}) {
   const path = icon.includes("/") ? icon : `${ICONS}${icon}.svg`;
-  const glyph = svg(path).size(15).text_color(spin || active ? c.text : disabled ? c.border : c.muted);
+  const glyph = svg(path).size(ICON).text_color(spin || active ? c.text : disabled ? c.border : c.muted);
   return Button.new(id).size(26).flex_none().items_center().justify_center().rounded(R.control)
     .accessibility_label(tip).tooltip(tip)
     .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle)).focus((s) => s.bg(c.subtle)).on_click((_e, cx) => onClick(cx)))
