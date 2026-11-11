@@ -113,5 +113,29 @@ test("The header's digest and the PR panel agree on the same checks", async () =
     [run("COMPLETED", "SKIPPED", "a"), run("COMPLETED", "NEUTRAL", "b")],
     [job("CI", "test", "SUCCESS", "2026-11-08T10:00:00Z"), { ...run("QUEUED", "", "test"), workflowName: "CI", startedAt: "0001-01-01T00:00:00Z" }],
   ];
-  for (const rollup of cases) assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
+  for (const rollup of cases) {
+    assert.equal(checksOf(rollup), panelSays(rollup), JSON.stringify(rollup));
+  }
+});
+
+test("A list row keeps the check words while permission is unread", async () => {
+  const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {});
+  const panel = Object.create(PullRequest.prototype);
+  panel.permission = null;
+  panel.permissionRepo = "o/r";
+  const colors = { dim: "dim", muted: "muted", red: "red", yellow: "yellow", green: "green", violet: "violet", blocked: "red", working: "yellow", done: "green" };
+  const pass = [run("COMPLETED", "SUCCESS", "ci")];
+  const fail = [run("COMPLETED", "FAILURE", "ci")];
+  const row = (over, rollup = pass) => panel.rowState({
+    state: "OPEN", url: "https://github.com/o/r/pull/1", mergeable: "MERGEABLE", statusCheckRollup: rollup, ...over,
+  }, colors).text;
+  assert.equal(row({ mergeStateStatus: "CLEAN" }), "Checks passed");
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved");
+  assert.equal(row({ mergeStateStatus: "CLEAN" }, fail), "1 check failing");
+  panel.permission = "WRITE";
+  assert.equal(row({ mergeStateStatus: "CLEAN" }), "Ready to merge");
+  panel.permission = null;
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "REVIEW_REQUIRED" }), "Review required");
+  assert.equal(row({ mergeStateStatus: "CLEAN" }).includes("Checking"), false);
+  assert.equal(row({ mergeStateStatus: "CLEAN", reviewDecision: "APPROVED" }), "Approved");
 });

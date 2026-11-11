@@ -254,8 +254,9 @@ test("a missed answer keeps the last pull request, with its age and Retry", asyn
   assert.equal(panel.error, null);
   assert.equal(panel.loading, false);
   assert.match(panel.readNote(), /^as of /);
-  panel.footnote(TONE);
+  panel.hero(TONE);
   assert.ok(shown.texts.includes("Retry"));
+  assert.equal(shown.texts.some((text) => /rereads|Read from GitHub/.test(String(text))), false);
 });
 
 test("a read that never answers still finishes, and the last pull request stays", async () => {
@@ -385,4 +386,68 @@ test("unseen reviews do not replace the branch's pull request", async () => {
   panel.inboxOpen = true;
   panel.paintInbox({ unseen: 0, needs: [], yours: [] }, true);
   assert.equal(panel.inboxOpen, true);
+});
+
+test("the unpushed log and the behind count are each read once", async () => {
+  const behindPr = {
+    number: 7, title: "Branch", url: "https://github.com/o/here/pull/7", state: "OPEN",
+    author: { login: "me" }, headRefName: "feat", baseRefName: "main", updatedAt: "2026-11-11T00:00:00Z",
+    files: [], additions: 1, deletions: 0, changedFiles: 1, mergeable: "MERGEABLE", mergeStateStatus: "BEHIND",
+    statusCheckRollup: [],
+  };
+  const tally = (calls) => ({
+    log: calls.filter((call) => call.command === "git" && call.args.join(" ").startsWith("log ")).length,
+    behind: calls.filter((call) => call.command === "git" && call.args.join(" ").startsWith("rev-list --count HEAD..origin/")).length,
+  });
+  const twice = async (exec) => {
+    const calls = [];
+    const { panel, cx, drain } = await openPanel(async (command, args, options) => {
+      calls.push({ command, args: [...(args ?? [])] });
+      return exec(command, args, options);
+    });
+    panel.refresh(cx); await drain();
+    const first = tally(calls);
+    calls.length = 0;
+    panel.loading = false;
+    panel.refresh(cx); await drain();
+    return { panel, first, second: tally(calls) };
+  };
+  const unpushed = await twice(async (command, args) => {
+    if (command === "git") {
+      const line = args.join(" ");
+      if (line.includes("--show-toplevel")) return { code: 0, stdout: "/repo\n", stderr: "" };
+      if (line.startsWith("branch")) return { code: 0, stdout: "feat\n", stderr: "" };
+      if (line.startsWith("remote")) return { code: 0, stdout: "https://github.com/o/here.git\n", stderr: "" };
+      if (line.startsWith("rev-parse")) return { code: 1, stdout: "", stderr: "no upstream" };
+      if (line.startsWith("log ")) return { code: 0, stdout: "one\n", stderr: "" };
+      return { code: 0, stdout: "", stderr: "" };
+    }
+    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
+    if (args[1] === "view") return { code: 1, stdout: "", stderr: 'no pull requests found for branch "feat"' };
+    return { code: 1, stdout: "", stderr: "offline" };
+  });
+  assert.deepEqual(unpushed.first, { log: 1, behind: 0 });
+  assert.deepEqual(unpushed.second, { log: 0, behind: 0 });
+  assert.equal(unpushed.panel.pr, null);
+  const behind = await twice(async (command, args) => {
+    if (command === "git") {
+      const line = args.join(" ");
+      if (line.includes("--show-toplevel")) return { code: 0, stdout: "/repo\n", stderr: "" };
+      if (line.startsWith("branch")) return { code: 0, stdout: "feat\n", stderr: "" };
+      if (line.startsWith("remote")) return { code: 0, stdout: "https://github.com/o/here.git\n", stderr: "" };
+      if (line.includes("symbolic-full-name")) return { code: 0, stdout: "refs/remotes/origin/feat\n", stderr: "" };
+      if (line.includes("--left-right")) return { code: 0, stdout: "0\t0\n", stderr: "" };
+      if (line.startsWith("rev-list --count")) return { code: 0, stdout: "4\n", stderr: "" };
+      return { code: 0, stdout: "", stderr: "" };
+    }
+    if (args[0] === "auth") return { code: 1, stdout: "", stderr: "You are not logged into any GitHub hosts. To log in, run: gh auth login" };
+    if (args[1] === "view") return { code: 0, stdout: JSON.stringify(behindPr), stderr: "" };
+    if (args[1] === "graphql") return { code: 0, stdout: THREADS, stderr: "" };
+    if (args[1] === "user") return { code: 0, stdout: "me\n", stderr: "" };
+    if (args.includes("viewerPermission")) return { code: 0, stdout: "WRITE\n", stderr: "" };
+    return { code: 1, stdout: "", stderr: "offline" };
+  });
+  assert.deepEqual(behind.first, { log: 0, behind: 1 });
+  assert.deepEqual(behind.second, { log: 0, behind: 0 });
+  assert.equal(behind.panel.baseBehind, 4);
 });

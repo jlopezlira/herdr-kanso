@@ -80,12 +80,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         (`transition("width")` and `transition("opacity")`, ease-out, run
         natively), and closes the same way. The open panel's button keeps
         its name showing. No tooltip. Pressing one and letting go on another moves it there.
-        Right-click opens the Panels popup (`kanso-tabs` again, as an
-        overlay with `props().arrange`): one 30 tall row per panel with a
-        grip, its icon, its name and a switch, dragged the same way into
-        order. The order is in shared `kanso.panels.order` and the panels
-        turned off in `kanso.panels.off`; a panel turned off while open
-        closes. Custom panels from `kanso.panels` join the list.
+        Right-click opens Pieces. Drag writes `kanso.panels.order`. A hidden
+        panel is not mounted, and one hidden while open closes. Custom panels
+        from `kanso.panels` join the list.
     - **Panes**: an endless canvas (`kanso-strip`). Panes sit side by side
       in columns. You choose how many fit in the view at once, 1 to 8
       (default 2): a new column takes 1/n of it, so on a wide screen you can
@@ -236,9 +233,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
-- **Kanso settings** (kanso-settings, the gear): Keys rebinds Kanso-only keys
-  (never Herdr's), Mods orders and hides panels and pieces, What's new the
-  log (Updates: Stable or Early), Credits who.
+- **Kanso settings** (kanso-settings, the fixed gear after the panels): Pieces
+  shows, shows when it has something to say, or hides each piece (`kanso.pieces`;
+  hiding stops its work). Keys rebinds Kanso-only keys (never Herdr's). What's new
+  is the log (Updates: Stable or Early). Credits who. Panel order stays `kanso.panels.order`.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
@@ -467,7 +465,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     pull request, picture), on return and after a restart. Nothing open
     stays shut. A missing file or a closed pull request leaves it empty.
   - Files and PR are idle whenever they aren't the shown panel.
-    PR rereads every minute while shown, every 20 s while a check runs.
+    PR rereads while shown, and stays quiet when the window is behind.
 - **Background**:
   - Git runs only while Spaces shows (0.5 s in front, 5 s behind); the
     `ps` under agents skips Threads. A machine that is off is not read.
@@ -704,9 +702,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 - Right-click a terminal, "Open with…": the popup names that pane's folder
   and lists the installed editors; picking one opens that folder in it.
-- In a repository whose branch has an open PR, the PR panel shows its title,
-  checks, review, mergeability, unresolved threads and files; clicking a file
-  shows its diff, and Explain opens an agent tab with the task.
+- In a repository whose branch has an open PR, the panel opens on what stops it, with one action. Send hands that to the agent in front. Details holds the description, people, checks and files.
 - `herdr-app check` passes for all eight `kanso-*` mods and `open-with`, and
   `herdr-app status` shows no errors after `layout.switch {name: "kanso"}`.
 - With no panel open, `panel-body` in the layout file has no children. After
