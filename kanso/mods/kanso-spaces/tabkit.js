@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Arrangements and Sleep, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Shared source: npm run sync:share copies it, and a test fails when a copy differs.
 import { spaces, panes, shared, setShared, run, home, hc } from "herdr";
@@ -8,7 +9,7 @@ export { base };
 export const tilde = (cwd) => {
   if (!cwd) return "~";
   const h = home();
-  return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
+  return paths.shorten(cwd, h);
 };
 export const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : "'" + String(s).replaceAll("'", "'\\''") + "'");
 
@@ -29,7 +30,7 @@ export function cleanArgv(argv) {
   }, { out: [cmd], skip: false }).out;
 }
 
-export const SHELLS = new Set(["zsh", "bash", "fish", "sh", "dash", "ksh", "tcsh", "csh", "nu", "pwsh", "elvish", "xonsh"]);
+export const SHELLS = new Set(["zsh", "bash", "fish", "sh", "dash", "ksh", "tcsh", "csh", "nu", "pwsh", "powershell", "cmd", "elvish", "xonsh"]);
 export function commandOf(rec) {
   const fg = rec?.foreground;
   if (!fg?.argv?.length || SHELLS.has(base(fg.argv[0]))) return null;

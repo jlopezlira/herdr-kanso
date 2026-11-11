@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, readTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
@@ -297,7 +298,7 @@ export class Updater {
   // Not cached: mid-update a copy can start before version.json lands and would re-offer what is installed.
   async readInstalled() {
     try {
-      const v = JSON.parse(await readTextFile(`${appHome()}/mods/kanso-chrome/version.json`) ?? "{}").version;
+      const v = JSON.parse(await readTextFile(paths.join(appHome(), "mods", "kanso-chrome", "version.json")) ?? "{}").version;
       if (parseVersion(v)) this.installed = v;
     } catch {}
   }
@@ -444,7 +445,7 @@ export class Updater {
   async follow(cx, id) {
     if (this.following[id]) return;
     this.following = { ...this.following, [id]: true };
-    const dir = `${appHome()}/${UPDATES}`;
+    const dir = paths.join(appHome(), UPDATES);
     const read = async () => {
       const [state, why] = String(await readTextFile(`${dir}/${id}.status`) ?? "running").split("\n");
       return { state, why: why ?? "" };

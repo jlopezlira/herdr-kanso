@@ -1,3 +1,7 @@
+import { sqliteApi } from "./platform-sqlite.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // hjkl dōjō, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, appHome } from "herdr";
 import { tryOrAsync } from "./pure.js";
@@ -27,13 +31,12 @@ export function totalsOf(rows, days) {
 
 export class Store {
   constructor() {
-    this.db = `${appHome()}/${STORE_DIR}/dojo.db`;
+    this.db = paths.join(appHome(), STORE_DIR, "dojo.db");
     this.ready = null;
   }
 
   async sql(text, json = false) {
-    const r = await exec("sqlite3", ["-cmd", ".timeout 5000", ...(json ? ["-json"] : []), this.db, text]);
-    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
+    const r = await localService(sqliteApi).execute(this.db, text, { json });
     return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
   }
 
@@ -41,7 +44,7 @@ export class Store {
     return (this.ready ??= (async () => {
       const ok = await tryOrAsync(() => exec("sqlite3", ["-version"])); // null: no sqlite3, below
       if (ok?.code !== 0) { this.ready = null; throw new Error("Install sqlite3 to keep your rounds."); }
-      await exec("mkdir", ["-p", `${appHome()}/${STORE_DIR}`]);
+      await localService(fileApi).mkdir(paths.join(appHome(), STORE_DIR));
       await this.sql(SCHEMA);
     })());
   }

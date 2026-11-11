@@ -1,6 +1,7 @@
+import { transcriptApi } from "./platform-transcripts.js";
+import { processApi } from "./platform-processes.js";
+import { paths } from "./platform-paths.js";
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
-import { join } from "path";
-import { etimeMs } from "./procs.js";
 import { FIND } from "./find-key.js";
 export { FIND };
 
@@ -23,10 +24,10 @@ export function projectDir(cwd) {
   const h = Array.from({ length: path.length }, (_, i) => path.charCodeAt(i)).reduce((n, c) => ((n << 5) - n + c) | 0, 0);
   return `${slug.slice(0, 200)}-${Math.abs(h).toString(36)}`;
 }
-export const sessionPath = (homeDir, pid) => join(homeDir, ".claude", "sessions", `${pid}.json`);
+export const sessionPath = (homeDir, pid) => paths.join(homeDir, ".claude", "sessions", `${pid}.json`);
 export const transcriptPath = (session, homeDir) =>
   session?.sessionId && session.cwd && homeDir
-    ? join(homeDir, ".claude", "projects", projectDir(session.cwd), `${session.sessionId}.jsonl`)
+    ? paths.join(homeDir, ".claude", "projects", projectDir(session.cwd), `${session.sessionId}.jsonl`)
     : null;
 
 export function sessionLive(record, pid, started) {
@@ -428,70 +429,9 @@ export function applySlice(state, parsed) {
   return { ok: true, reset: false, reindex: read.rebuild, from: read.rebuild ? 0 : from, state: { ...read.state, from: parsed.end, size: parsed.size } };
 }
 
-// The next read starts at `end`. A line over the limit is a pasted picture and is left out; a chunk with none is too.
-export const SLICE_PY = String.raw`import os, sys
-path, frm_s, budget_s, longest_s = sys.argv[1:]
-try:
-    size = os.path.getsize(path)
-except OSError:
-    sys.exit(2)
-frm = int(frm_s)
-budget = int(budget_s)
-longest = int(longest_s)
-if frm < 0 or frm > size:
-    frm = 0
-fh = open(path, "rb")
-start = frm
-data = b""
-end = start
-while start < size:
-    fh.seek(start)
-    data = fh.read(min(budget, size - start))
-    end = start + len(data)
-    if b"\n" not in data and end < size:
-        fh.seek(start)
-        skipped = 0
-        while True:
-            block = fh.read(1048576)
-            if not block:
-                start = size
-                data = b""
-                end = size
-                break
-            i = block.find(b"\n")
-            if i >= 0:
-                start = start + skipped + i + 1
-                break
-            skipped += len(block)
-        if start >= size:
-            break
-        continue
-    if end < size or not data.endswith(b"\n"):
-        i = data.rfind(b"\n")
-        if i >= 0:
-            data = data[:i + 1]
-            end = start + i + 1
-        else:
-            data = b""
-            end = start
-    break
-kept = []
-for line in data.decode("utf-8", "replace").split("\n"):
-    if line.endswith("\r"):
-        line = line[:-1]
-    if len(line) >= longest:
-        continue
-    kept.append(line)
-sys.stdout.write(str(end) + " " + str(size) + "\n")
-sys.stdout.write("\n".join(kept))
-fh.close()
-`;
-
-export async function readSlice(exec, file, from = 0, budget = SLICE_BUDGET, longest = LINE_MAX) {
-  const args = ["-c", SLICE_PY, file, String(from), String(budget), String(longest)];
-  const run = (cmd) => Promise.resolve(exec(cmd, args, { timeout: 60000 })).catch(() => null);
-  const first = await run("python3");
-  const r = first && (first.code === 0 || first.code === 2) ? first : await run("python");
+// The next read starts at `end`; pasted pictures over the limit are left out.
+export async function readSlice(exec, file, from = 0, budget = SLICE_BUDGET, longest = LINE_MAX, platform = "linux") {
+  const r = await Promise.resolve(transcriptApi(platform, exec).slice(file, from, budget, longest)).catch(() => null);
   if (!r || r.code !== 0 || typeof r.stdout !== "string") return null;
   return parseSlice(r.stdout);
 }
@@ -503,13 +443,6 @@ export function kindOf(program, hint = "") {
   if (/(^|[^a-z])claude/.test(text)) return "claude";
   return null;
 }
-
-const CODEX_LSOF = String.raw`pid="$1"
-for p in "$pid" $(pgrep -P "$pid" 2>/dev/null); do
-  f=$(lsof -a -p "$p" -d 0-999 -Fn 2>/dev/null | sed -n 's/^n\(.*rollout-.*\.jsonl\)$/\1/p' | head -1)
-  if [ -n "$f" ]; then printf '%s\n' "$f"; exit 0; fi
-done
-exit 1`;
 
 const parsed = (text) => { try { return JSON.parse(text); } catch { return null; } };
 
@@ -523,18 +456,23 @@ export async function locateConversation(host, address, hint = "") {
   const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
   const pid = front?.pid;
   if (!pid) return { kind: null, file: null };
-  const kind = kindOf(front.argv?.[0], hint);
+  const program = paths.basename(front.argv?.[0] ?? "").replace(/\.(exe|cmd|bat)$/i, "");
+  const kind = kindOf(program, hint);
+  const processes = host.platform?.processes ?? processApi("linux", host.exec);
   if (kind === "claude") {
     const record = parsed(await host.readTextFile(sessionPath(host.home(), pid)).catch(() => null));
-    const up = record?.sessionId ? await host.exec("ps", ["-o", "etime=", "-p", String(pid)]).catch(() => null) : null;
-    const started = up?.code === 0 ? Date.now() - etimeMs(String(up.stdout).trim()) : NaN;
+    const started = record?.sessionId ? await processes.startTime(pid).catch(() => NaN) : NaN;
     if (!sessionLive(record, pid, started)) return { kind: null, file: null };
     const file = transcriptPath(record, host.home());
     return file ? { kind: "claude", file } : { kind: null, file: null };
   }
   if (kind === "codex") {
-    const r = await host.exec("sh", ["-c", CODEX_LSOF, "sh", String(pid)]).catch(() => null);
-    const file = r?.code === 0 ? String(r.stdout).split("\n").map((l) => l.trim()).find(Boolean) : null;
+    const ownFiles = await processes.openFiles([pid]);
+    if (ownFiles.state === "unavailable") return { kind: null, file: null, unavailable: ownFiles.reason };
+    const table = await processes.list();
+    const children = (table.byParent.get(pid) ?? []).map((row) => row.pid);
+    const childFiles = children.length ? await processes.openFiles(children) : { values: [] };
+    const file = [...ownFiles.values, ...childFiles.values].find((row) => /rollout-.*\.jsonl$/.test(row.path))?.path ?? null;
     return file ? { kind: "codex", file } : { kind: null, file: null };
   }
   return { kind: null, file: null };

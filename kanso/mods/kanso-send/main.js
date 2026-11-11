@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Send to an agent, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // props.pane: the pane whose work the draft is about.
 import { View, div } from "gpui-kit";
@@ -10,8 +11,7 @@ const LAST = "kanso.send.last";
 
 const tilde = (cwd) => {
   if (!cwd) return "";
-  const h = home();
-  return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
+  return paths.shorten(cwd, home());
 };
 
 export function targetsOf(all, from, last) {

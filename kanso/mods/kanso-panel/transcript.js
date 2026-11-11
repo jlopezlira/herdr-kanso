@@ -1,9 +1,11 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { processApi } from "./platform-processes.js";
+import { transcriptApi } from "./platform-transcripts.js";
 // A Claude agent's conversation on disk: every path it printed, whole. Its screen abbreviates long paths
 // ("…/shot.png") and redraws, so what it made a while ago is no longer there; the transcript keeps it.
-import { exec, hc, readTextFile } from "herdr";
+import { hc, readTextFile } from "herdr";
 import { KINDS } from "./kinds.js";
-import { etimeMs } from "./procs.js";
-import { basename } from "path";
 import { projectDir, transcriptPath, sessionPath, START_SLACK, sessionLive } from "./find.js";
 
 export { projectDir, transcriptPath, START_SLACK };
@@ -13,31 +15,6 @@ const LONGEST = 100000; // a line longer than this is a pasted picture in base64
 // bytes). A line not finished is left for the next read, so a path cut at the offset is not skipped. A prefix
 // that no longer matches, or a shorter file, is read from the start. Prints that offset, where it read from,
 // the prefix's cksum, then the last `$4` distinct matches; exit 3 when no new whole line was appended.
-const SCAN = `f="$1"; from="$2"; mark="$5"; [ -f "$f" ] || exit 2; s=$(wc -c < "$f" | tr -d " "); reset=0
-if [ "$s" -lt "$from" ]; then from=0; reset=1
-elif [ "$from" != 0 ]; then
-  now=$(head -c "$from" "$f" | cksum | cut -d " " -f 1)
-  if [ -z "$mark" ] || [ "$now" != "$mark" ]; then from=0; reset=1; fi
-fi
-end=$(python3 - "$f" <<'PY'
-import sys
-fh=open(sys.argv[1],"rb"); fh.seek(0,2); pos=fh.tell(); found=None
-while pos>0 and found is None:
-    take=min(1048576,pos); pos-=take; fh.seek(pos); i=fh.read(take).rfind(b"\\n")
-    if i>=0: found=pos+i+1
-fh.close(); sys.stdout.write("0" if found is None else str(found))
-PY
-) || exit 1
-[ "$reset" = 0 ] && [ "$end" = "$from" ] && exit 3
-if [ "$end" = 0 ]; then sum=""
-else sum=$(head -c "$end" "$f" | cksum | cut -d " " -f 1); fi
-echo "$end"; echo "$from"; echo "$sum"
-if [ "$end" -gt "$from" ]; then
-  LC_ALL=C tail -c "+$((from + 1))" "$f" | head -c "$((end - from))" | LC_ALL=C awk 'length($0) < ${LONGEST}' | LC_ALL=C sed -E 's/\\\\[ntr"]/ /g; s/([^A-Za-z0-9@+._~\\/-])/\\1\\1/g' | LC_ALL=C grep -oE "$3" \\
-    | LC_ALL=C sed -E 's/^[^A-Za-z0-9@+._~\\/-]//; s/[^A-Za-z0-9]$//' \\
-    | LC_ALL=C awk '{ at[$0] = NR } END { for (m in at) print at[m], m }' | sort -n | tail -n "$4" | cut -d " " -f 2-
-fi
-exit 0`;
 const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
 // A path up to one of Look's extensions, whole (not "linkedin.c" out of a URL), after something that is not part
 // of one. grep prints that something and the character after (a byte each, maybe half of a "…"): sed takes them
@@ -49,6 +26,7 @@ export const PATTERN = `(^|[^A-Za-z0-9@+._~/-])[A-Za-z0-9@+._~/-]*\\.(${EXT})([^
 // One match as a path: the delimiters grep printed with it go, and the "\n" a JSON string starts it with
 // ("\n./docs/a.md" is "./docs/a.md"); a URL's tail (":" before "//host.com") is no path.
 export function pathOf(match) {
+  if (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(String(match))) return paths.normalize(String(match).trim());
   const p = String(match).replace(/^(?:\\[nrt])+/, "").replace(/^[^A-Za-z0-9@+._~/-]/, "").replace(/[^A-Za-z0-9]$/, "");
   return p.includes("//") || !p ? null : p;
 }
@@ -61,7 +39,7 @@ const parsed = (text) => { try { return JSON.parse(text); } catch { return null;
 export async function frontOf(address) {
   const got = await hc(["get", address, "--json"]).catch(() => null);
   const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
-  return front?.pid ? { pid: front.pid, program: basename(String(front.argv?.[0] ?? "")) } : null;
+  return front?.pid ? { pid: front.pid, program: paths.basename(String(front.argv?.[0] ?? "")).replace(/\.(?:exe|cmd|bat)$/i, "") } : null;
 }
 
 export async function sessionOf(address, homeDir, front = null) {
@@ -71,14 +49,13 @@ export async function sessionOf(address, homeDir, front = null) {
   const record = parsed(await readTextFile(sessionPath(homeDir, pid)).catch(() => null));
   if (record?.pid !== pid || !record.sessionId) return null;
   // Nor is a record of an earlier Claude that had this pid: the process must have started when the record says.
-  const up = await exec("ps", ["-o", "etime=", "-p", String(pid)]).catch(() => null);
-  const started = up?.code === 0 ? Date.now() - etimeMs(up.stdout.trim()) : NaN;
+  const started = await localService(processApi).startTime(pid).catch(() => NaN);
   return sessionLive(record, pid, started) ? record : null;
 }
 
 // One transcript file from a stored offset. `code` 3: nothing new and whole. `mark` is the cksum of the bytes read.
 export async function scanFile(file, from = "0", mark = "") {
-  const r = await exec("sh", ["-c", SCAN, "sh", file, String(from ?? "0"), PATTERN, String(MOST), String(mark ?? "")], { timeout: 60000 }).catch(() => null);
+  const r = await localService(transcriptApi).scan(file, from ?? "0", mark ?? "", PATTERN, EXT, MOST, LONGEST).catch(() => null);
   if (r?.code === 3) return { code: 3, size: String(from ?? "0"), from: String(from ?? "0"), mark: String(mark ?? ""), paths: [] };
   if (!r || r.code !== 0) return { code: r?.code ?? 1, size: null, from: null, mark: "", paths: [] };
   const [size, start, got, ...lines] = String(r.stdout).split("\n");

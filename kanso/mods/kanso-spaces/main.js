@@ -1,3 +1,7 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { processApi } from "./platform-processes.js";
+import { systemApi } from "./platform-system.js";
 // Derived from the `spaces` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: New space button, initial tiles, nested worktrees on guide lines, ahead/behind counts.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-spaces; each space lists its agents (agents.js), folded by clicking the space. The active space is a faint wash of the text color, never a theme accent.
@@ -8,7 +12,6 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
-import { parseProcesses } from "./procs.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { spaceFor, inPlace } from "./kdb.js";
@@ -24,6 +27,7 @@ import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layou
 import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk } from "./machines.js";
+import { createAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
@@ -63,7 +67,7 @@ function laidOut(items, gap) {
   };
   return { els: items.map((it) => it.el), space: last("space"), agent: last("agent") };
 }
-const base = (path) => path.replace(/\/+$/, "").split("/").at(-1);
+const base = (path) => paths.basename(path);
 // Changes made outside Herdr (an editor's save, a commit in another app) are found this often, while the window is in front.
 const FALLBACK = 60000;
 // A `ps` answers in milliseconds; one still out after this is taken for hung (psRun).
@@ -106,7 +110,7 @@ const registry = () => { const rows = shared(REGISTRY); return Array.isArray(row
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
 // Kanso's worktrees: beside its database here; on another machine, ~/.kanso/worktrees (the script's default).
-const kansoWorktrees = (machine) => (machine ? "" : `${appHome()}/${WORKTREES}`);
+const kansoWorktrees = (machine) => (machine ? "" : paths.join(appHome(), WORKTREES));
 // Where a new agent of a project goes. Plain data, so a menu can be given it.
 const placeOfSpace = (w) => {
   const project = registry().find((p) => keyOfProject(p) === keyOfSpace(w, home())) ?? null;
@@ -210,6 +214,7 @@ export default class Spaces extends View {
     this.folding = null;
     this.foldH = {};
     this.migrate();
+    this.awake = createAwake({ now: () => Date.now(), run: (call) => exec(call.command, call.args, { on: call.on, timeout: call.timeout }) });
     this.refreshMachines(cx);
     cx.spawn(async (cx) => {
       const rev = this.parkRev ?? 0;
@@ -223,7 +228,7 @@ export default class Spaces extends View {
     });
     cx.spawn(async (cx) => {
       try {
-        const result = await exec("hostname", []);
+        const result = await localService(systemApi).hostname({ short: false });
         const name = String(result?.stdout ?? "").replace(/\r/g, "").trim();
         if (result?.code === 0 && name) { this.hostName = name; cx.notify(); }
       } catch { /* the header says This computer */ }
@@ -657,10 +662,10 @@ export default class Spaces extends View {
   psFree(now) {
     return this.psLook == null || now - this.psLook >= PS_GIVE_UP_MS;
   }
-  async psRun(now, args, take) {
+  async psRun(now, take) {
     this.psLook = now;
     try {
-      const r = await exec("ps", args);
+      const r = await localService(processApi).list();
       if (this.psLook === now && Date.now() - now < PS_GIVE_UP_MS) take(r);
     } catch { /* the last look stands */ }
     finally { if (this.psLook === now) this.psLook = null; }
@@ -668,7 +673,7 @@ export default class Spaces extends View {
 
   // One process table serves tasks and conversation liveness.
   checkTasks(cx, now = Date.now(), active = window().active) {
-    if (!this.psFree(now) || window().platform === "windows") return;
+    if (!this.psFree(now)) return;
     const background = this.background();
     const local = terminals().filter((k) => background.allows(k.address) && !k.address.includes("/"));
     const mine = local.filter((k) => k.state === "live" && k.status && (k.foreground?.pid ?? k.pid));
@@ -685,9 +690,7 @@ export default class Spaces extends View {
     if (now - (this.psAt ?? -Infinity) < every) return;
     this.psAt = now;
     if (pids.length) { this.aliveSig = sig; this.aliveAt = now; }
-    cx.spawn((cx) => this.psRun(now, ["-axo", "pid=,ppid=,etime=,command="], (r) => {
-      if (r.code !== 0) return;
-      const table = parseProcesses(r.stdout);
+    cx.spawn((cx) => this.psRun(now, (table) => {
       if (pids.length) this.sawAlive(new Set([...confirmed, ...aliveIn(table.byPid, pending)]), sig, now, cx);
       const next = Object.fromEntries(mine.flatMap((k) => {
         const had = this.tasks[k.address] ?? [];
@@ -1074,7 +1077,22 @@ export default class Spaces extends View {
     cx.spawn(async (cx) => {
       try { await this.readMachines(); } catch { /* the last list stands */ }
       finally { this.machinesBusy = false; }
+      this.holdAwake(cx);
       cx.notify();
+    });
+  }
+
+  // The list is read every two minutes behind; the hold still renews on time.
+  holdAwake(cx) {
+    if (!this.awake) return;
+    const rows = (this.machines ?? []).map((row) => ({ name: row.name, phase: this.phaseOf(row.name) }));
+    const token = (this.awakeToken ?? 0) + 1;
+    this.awakeToken = token;
+    cx.spawn(async (cx) => {
+      await this.awake.sync(rows);
+      const wait = this.awake.nextWait();
+      if (wait == null || this.awakeToken !== token) return;
+      cx.timer.after(wait, (cx) => { if (this.awakeToken === token) this.holdAwake(cx); });
     });
   }
 
@@ -1125,10 +1143,11 @@ export default class Spaces extends View {
     this.powerBusy.add(name);
     this.clearFlags(name);
     this.parked = [...(this.parked ?? []).filter((row) => row.name !== name), record];
+    this.holdAwake(cx);
     cx.notify();
     cx.spawn(async (cx) => {
       try { await this.settleOff(name, record, live, rev); }
-      finally { this.powerBusy.delete(name); cx.notify(); }
+      finally { this.powerBusy.delete(name); this.holdAwake(cx); cx.notify(); }
     });
   }
 
@@ -1138,6 +1157,7 @@ export default class Spaces extends View {
     this.powerBusy.add(name);
     this.clearFlags(name);
     this.waking.add(name);
+    this.holdAwake(cx);
     cx.notify();
     cx.spawn(async (cx) => {
       try {
@@ -1147,6 +1167,7 @@ export default class Spaces extends View {
         this.markFailed(name, why);
       } finally {
         this.powerBusy.delete(name);
+        this.holdAwake(cx);
         cx.notify();
       }
     });
@@ -1373,7 +1394,7 @@ export default class Spaces extends View {
 
   zzProject(a, t) {
     const key = a.asleep.from;
-    return { name: a.asleep.spaceName || key.slice(key.indexOf(":") + 1).split("/").at(-1) || "~", fill: t.muted };
+    return { name: a.asleep.spaceName || paths.basename(key.slice(key.indexOf(":") + 1)) || "~", fill: t.muted };
   }
 
   sleepingNow(sp, terms) {
@@ -1466,7 +1487,7 @@ export default class Spaces extends View {
   openTree(place, x) {
     // A pane's machine is its space's (panes don't name one).
     const machineOf = new Map(spaces().flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, w.machine ?? ""])));
-    const p = panes().find((k) => k.cwd && (k.cwd === x.path || k.cwd.startsWith(`${x.path}/`)) && (machineOf.get(k.tab) ?? "") === (place.machine ?? ""));
+    const p = panes().find((k) => k.cwd && paths.within(k.cwd, x.path) && (machineOf.get(k.tab) ?? "") === (place.machine ?? ""));
     if (p) run("pane.focus", { pane: p.pane });
     else openAt(place, x.path, null, x.branch);
   }
@@ -1500,7 +1521,7 @@ export default class Spaces extends View {
     const tabs = w?.tabs?.length ?? 0;
     const trees = this.trees ?? [];
     const home_ = trimmed(home()), base = trimmed(kansoWorktrees(place?.machine));
-    const where = (path) => (base && path.startsWith(`${base}/`) ? "kans\u014d" : path.startsWith(`${home_}/`) ? `~/${path.slice(home_.length + 1).split("/").slice(-2).join("/")}` : path.split("/").slice(-2).join("/"));
+    const where = (path) => base && paths.within(path, base) ? "kans\u014d" : paths.within(path, home_) ? `~/${paths.relative(home_, path).split(/[\\/]/).slice(-2).join("/")}` : path.split(/[\\/]/).slice(-2).join("/");
     // Keeping it: a space's folder (not home) can be a project of yours.
     const keepable = Boolean(w && !project && w.folder && trimmed(w.folder) !== home_);
     return this.menuFrame(t)
@@ -2330,7 +2351,7 @@ export default class Spaces extends View {
         strong: unread || up,
         project: nested ? null : project(a.space),
         // What the agent says it is on, or said last; else the last thing you wrote.
-        activity: a.asleep ? (a.asleep.stuck ? `Stuck: ${a.asleep.stuck}` : a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`) : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
+        activity: a.asleep ? (a.asleep.stuck ? `Stuck: ${a.asleep.stuck}` : a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`) : this.threads[a.address]?.unavailable ?? said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         roomy: true,
         oneLine: this.narrow,
         ...this.extras(a, ctx),
@@ -2415,7 +2436,7 @@ export default class Spaces extends View {
     const item = this.items(t);
     const rule = () => div().mx(8).my(4).h(1).bg(t.border);
     const copy = (text) => (cx) => cx.write_to_clipboard?.(text);
-    const session = m.session ? m.session.split("/").at(-1).replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
+    const session = m.session ? paths.basename(m.session).replace(/\.jsonl$/, "").replace(/^rollout-.*?-(?=[0-9a-f]{8}-)/, "") : null;
     const title = m.title ?? l[THREAD_LABEL] ?? null;
     // Its project is kept with the agent (conversation key, else its terminal's id); the sidebar holds the database.
     const conversation = session && /^[0-9a-f]{8}-/.test(session) ? session : null;

@@ -1,3 +1,7 @@
+import { sqliteApi } from "./platform-sqlite.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Kanso's one database, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
@@ -118,9 +122,9 @@ class Schemas {
 const schemas = new Schemas();
 
 export class Kdb {
-  constructor(dir = `${appHome()}/${DIR}`) {
+  constructor(dir = paths.join(appHome(), DIR)) {
     this.dir = dir;
-    this.file = `${dir}/kanso.db`;
+    this.file = paths.join(dir, "kanso.db");
     this.ready = null;
     this.chain = Promise.resolve();
     this.queue = [];
@@ -128,9 +132,8 @@ export class Kdb {
     this.cachedAt = Date.now();
   }
 
-  // Each statement its own argument: -bail then stops at the first failure; in one argument, statements would run on past an error up to the COMMIT.
   execute(text) {
-    return exec("sqlite3", ["-bail", "-cmd", ".timeout 5000", "-json", this.file, ...statements(text)]);
+    return localService(sqliteApi).unchecked(this.file, statements(text), { json: true });
   }
 
   async sql(text) {
@@ -147,7 +150,7 @@ export class Kdb {
   async create() {
     const ok = await exec("sqlite3", ["-version"]).catch(() => null);
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-    await exec("mkdir", ["-p", this.dir]);
+    await localService(fileApi).mkdir(this.dir);
     await this.sql([...statements(SCHEMA), ONE_SLEEP]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));

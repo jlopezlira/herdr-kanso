@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Sleep, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Props: sleep { scope: "agent" | "tab" | "project", space, tab, pane }, wake { id } or { from, name }, wakeAll { from, space }.
 // Asleep is a status of an agent in the left nav's database (the sidebar owns it); shared "kanso.asleep" is a copy of what it read.
@@ -114,7 +115,7 @@ export default class Sleep extends View {
     const claudes = [...recs].filter(([, r]) => { const fg = r.foreground; return fg?.pid && isClaude(fg.argv); });
     const agents = await mapSeries(claudes, async ([term, r]) => {
       const fg = r.foreground;
-      const ses = await tryOrAsync(async () => JSON.parse(await readTextFile(`${home()}/.claude/sessions/${fg.pid}.json`))); // null: reported below
+      const ses = await tryOrAsync(async () => JSON.parse(await readTextFile(paths.join(home(), ".claude", "sessions", `${fg.pid}.json`)))); // null: reported below
       // It sleeps under the name the sidebar shows it by.
       const who = shared("kanso.names")?.[term] || r.labels?.["kanso.name"] || ses?.name || r.title || term;
       const again = ses?.sessionId ? resumeArgv(fg.argv, ses.sessionId) : null;

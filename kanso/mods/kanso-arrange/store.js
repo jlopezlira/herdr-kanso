@@ -1,3 +1,6 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, appHome, readTextFile } from "herdr";
 import { parseOr, tryOrAsync } from "./pure.js";
@@ -41,8 +44,8 @@ export function importSql(text) {
 
 export class Store {
   constructor() {
-    this.dir = `${appHome()}/${STORE_DIR}`;
-    this.db = `${this.dir}/arrange.db`;
+    this.dir = paths.join(appHome(), STORE_DIR);
+    this.db = paths.join(this.dir, "arrange.db");
     this.ready = null;
   }
 
@@ -56,11 +59,11 @@ export class Store {
     return (this.ready ??= (async () => {
       const ok = await tryOrAsync(() => exec("sqlite3", ["-version"])); // a failure is reported below
       if (ok?.code !== 0) { this.ready = null; throw new Error("Install sqlite3 to keep arrangements."); }
-      await exec("mkdir", ["-p", this.dir]);
+      await localService(fileApi).mkdir(this.dir);
       await this.sql(SCHEMA);
       const done = await this.sql(`SELECT v FROM meta WHERE k='imported';`, true);
       if (!done.length) {
-        const old = importSql(await readTextFile(`${appHome()}/${OLD_FILE}`).catch(() => null));
+        const old = importSql(await readTextFile(paths.join(appHome(), OLD_FILE)).catch(() => null));
         await this.sql(`BEGIN;\n${old}\nINSERT OR REPLACE INTO meta(k,v) VALUES('imported','${Date.now()}');\nCOMMIT;`);
       }
     })());

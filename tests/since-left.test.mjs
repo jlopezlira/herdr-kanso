@@ -18,7 +18,7 @@ async function database(t) {
   return { db, store: new SinceStore(db), rowsOfOutput };
 }
 
-const saveEvents = (db, events) => db.run(events.map((row) => `INSERT INTO since_events(id,project,target,kind,text,at) VALUES(${row.id},'${project}','${row.target}','${row.kind}','${row.text}',${row.at});`));
+const saveEvents = (db, events) => db.run(["BEGIN;", ...events.map((row) => `INSERT INTO since_events(id,project,target,kind,text,at) VALUES(${row.id},'${project}','${row.target}','${row.kind}','${row.text}',${row.at});`), "COMMIT;"]);
 
 test("return events put blocked, errors, PRs, and finishes first, newest within each priority", () => {
   const events = [event(1), event(3, "pr"), event(2, "blocked"), event(4, "error"), event(5, "blocked"), event(6, "sleep_failed"), event(7, "sleep_finished")];

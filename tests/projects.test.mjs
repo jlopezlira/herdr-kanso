@@ -1,8 +1,8 @@
 // Projects: folders you added stay when their last agent closes; worktrees go in Kanso's folder.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, writeFile, stat, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile, stat, realpath, rm } from "node:fs/promises";
+import { join, relative } from "node:path";
 import { load, clone, temporary, exec } from "./helpers.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
@@ -13,7 +13,7 @@ const database = async (t) => {
   return new Kdb(join(dir, "kanso"));
 };
 const git = async (cwd, ...args) => {
-  const r = await exec("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
+  const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
   assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
   return r.stdout.trim();
 };
@@ -88,7 +88,7 @@ test("a worktree is made in Kanso's folder, and a branch that has one already is
 
   const made = await addWorktree({ folder: repo, branch: "feat/x", base });
   assert.equal(made.made, true, made.error);
-  assert.match(made.path, new RegExp(`^${base}/acme-\\d+/feat-x-\\d+$`));
+  assert.match(relative(base, made.path).replace(/\\/g, "/"), /^acme-[0-9a-f]+\/feat-x-[0-9a-f]+$/);
   const dash = await addWorktree({ folder: repo, branch: "feat-x", base });
   assert.equal(dash.made, true, "feat-x is another branch: another folder");
   assert.notEqual(dash.path, made.path);
@@ -97,7 +97,7 @@ test("a worktree is made in Kanso's folder, and a branch that has one already is
 
   const same = await addWorktree({ folder: repo, branch: "feat/x", base });
   assert.deepEqual(clone(same), { path: made.path, made: false }, "found, not made twice");
-  await exec("rm", ["-rf", made.path]);
+  await rm(made.path, { recursive: true, force: true });
   const again = await addWorktree({ folder: repo, branch: "feat/x", base });
   assert.equal(again.made, true, "its folder was deleted: made again, not reported as there");
   assert.ok(await exists(again.path));
@@ -181,7 +181,7 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
 
 test("a local folder that is gone marks only this computer's project, never another machine's at the same path", async () => {
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    spaces: () => [], home: () => "", shared: () => [], setShared: () => {}, exec: async () => ({ code: 0, stdout: "/srv/api\n" }),
+    spaces: () => [], home: () => "", shared: () => [], setShared: () => {}, fileApi: () => ({ existing: async () => [] }),
   });
   const list = [{ id: "here", name: "api", folder: "/srv/api", machine: "" }, { id: "odin", name: "api", folder: "/srv/api", machine: "odin" }];
   assert.deepEqual(clone((await new Spaces().publishRegistry({ projects: async () => list })).map((p) => [p.id, p.missing])), [["here", true], ["odin", false]]);

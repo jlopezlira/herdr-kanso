@@ -1,3 +1,5 @@
+import { localService } from "./platform-host.js";
+import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
@@ -53,7 +55,7 @@ function ago(iso) {
 }
 const clock = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); return /^[0-9a-fA-F]{6}$/.test(h) ? `#${h}` : null; };
-const openUrl = (url) => exec("open", [url]).catch(() => exec("xdg-open", [url])).catch(() => { });
+const openUrl = (url) => localService(openApi).open(url).catch(() => { });
 
 // One check to show, as either kind GitHub reports: a check run or a commit status.
 // Its state, counts and what they say together come from ghchecks.js, which the pane strip reads too.

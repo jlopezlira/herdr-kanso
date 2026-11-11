@@ -1,8 +1,14 @@
+import { localService, localSleep } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { openApi } from "./platform-open.js";
+import { clipboardApi } from "./platform-clipboard.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 // Kanso's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Kept byte for byte in kanso-panel/ and kanso-spend/ (`npm run sync:share`): edit kanso-panel/share.js.
 import { div } from "gpui-kit";
 import { h_flex, Button } from "gpui-base";
-import { exec, home, writeTextFile, window, notify, theme, appHome } from "herdr";
+import { exec, home, writeTextFile, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
 
 export const NETWORKS = {
@@ -173,49 +179,27 @@ ${out.join("\n")}
   return { svg, width: W, height };
 }
 
-const CHROMIUMS = [
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium",
-  "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser", "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-  "chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "brave", "brave-browser", "microsoft-edge",
-];
-
-const exists = async (path) => (await exec("sh", ["-c", 'test -s "$1"', "sh", path]).catch(() => null))?.code === 0;
-const macos = () => window()?.platform === "macos";
-const pause = (seconds) => exec("sleep", [String(seconds)]).catch(() => null);
+const exists = (path) => localService(fileApi).test(path, "nonempty").catch(() => false);
+const pause = (seconds) => localSleep(seconds);
 // The first of `tries` ([bin, args]) that runs, and after which `made()` holds; false when none does.
-const firstRuns = async (tries, made = async () => true) =>
-  (await findAsync(tries, async ([bin, args]) => (await exec(bin, args).catch(() => null))?.code === 0 && await made())) !== null;
-const folderOf = (path) => path.replace(/\/[^/]+$/, "");
+const folderOf = (path) => paths.dirname(path);
 
 // QuickLook's picture of `file` (macOS), `size` px on its long side, as pngPath. It runs in the file's folder.
-export async function quickLook(file, size, pngPath) {
-  const made = `${folderOf(pngPath)}/${file.split("/").at(-1)}.png`;
-  if (!macos()) return false;
-  const r = await exec("qlmanage", ["-t", "-s", String(size), "-o", folderOf(pngPath), file], { cwd: folderOf(file) }).catch(() => null);
-  if (!(r?.code === 0 && await exists(made))) return false;
-  if (made !== pngPath) await exec("mv", ["-f", made, pngPath]);
-  return true;
-}
-
-// A picture GPUI can't draw (HEIC, TIFF) as a PNG: sips on macOS, ImageMagick elsewhere.
-export const toPng = (file, pngPath) =>
-  firstRuns(macos() ? [["sips", ["-s", "format", "png", file, "--out", pngPath]]] : [["magick", [file, pngPath]]], () => exists(pngPath));
-
-// A PDF's first page, `size` px on its long side: QuickLook, else Poppler's pdftoppm.
-export const firstPage = async (file, size, pngPath) => await quickLook(file, size, pngPath)
-  || firstRuns([["pdftoppm", ["-png", "-singlefile", "-f", "1", "-scale-to", String(size), file, pngPath.replace(/\.png$/, "")]]], () => exists(pngPath));
+export const quickLook = (file, size, pngPath) => localService(imageApi).quickLook(file, size, pngPath);
+export const toPng = (file, pngPath) => localService(imageApi).toPng(file, pngPath);
+export const firstPage = (file, size, pngPath) => localService(imageApi).firstPage(file, size, pngPath);
 
 // The card's files are made anew each time: removed first, then written as new, so nothing is read back
 // (a card with a picture can pass the 1 MiB readTextFile allows).
 export async function renderPng(card, svgPath, pngPath) {
   const html = svgPath.replace(/\.svg$/, ".html");
   const dir = folderOf(svgPath); // what the card points to by name lives beside it, and every renderer runs there
-  await exec("rm", ["-f", svgPath, html, pngPath]).catch(() => {});
+  await localService(fileApi).remove([svgPath, html, pngPath]).catch(() => {});
   await writeTextFile(svgPath, card.svg, null);
   await writeTextFile(html, `<!doctype html><html><head><style>html,body{margin:0;background:transparent}</style></head><body>${card.svg}</body></html>`, null);
   const tries = [
-    ...CHROMIUMS.map((bin) => [bin, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--force-device-scale-factor=2",
-      `--window-size=${card.width},${card.height}`, `--screenshot=${pngPath}`, `file://${html}`]]),
+    ...(await localService(imageApi).chromiums()).map((bin) => [bin, ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--force-device-scale-factor=2",
+      `--window-size=${card.width},${card.height}`, `--screenshot=${pngPath}`, paths.fileUrl(html)]]),
     ["rsvg-convert", ["-z", "2", "-o", pngPath, svgPath]],
     ["magick", ["-density", "192", svgPath, pngPath]],
   ];
@@ -223,46 +207,34 @@ export async function renderPng(card, svgPath, pngPath) {
     const tried = await tryOrAsync(async () => ({ r: await exec(bin, args, { cwd: dir }) })); // null: not installed here
     return tried !== null && tried.r.code === 0 && await exists(pngPath);
   });
-  if (made) return made[0].split("/").at(-1);
+  if (made) return paths.basename(made[0]);
   if (await quickLook(svgPath, card.width * 2, pngPath)) return "QuickLook";
   throw new Error("Install Chrome, Chromium or rsvg-convert to make the image.");
 }
 
-export async function copyImage(pngPath) {
-  const tries = macos()
-    ? [["osascript", ["-e", `set the clipboard to (read (POSIX file "${pngPath.replace(/"/g, '\\"')}") as «class PNGf»)`]]]
-    : [["sh", ["-c", 'wl-copy --type image/png < "$1"', "sh", pngPath]], ["xclip", ["-selection", "clipboard", "-t", "image/png", "-i", pngPath]]];
-  return firstRuns(tries);
-}
-
-export const openPath = (target) => exec(macos() ? "open" : "xdg-open", [target]).catch(() => null);
-
-async function frontApp() {
-  const r = await exec("osascript", ["-l", "JavaScript", "-e",
-    'ObjC.import("AppKit"); var a = $.NSWorkspace.sharedWorkspace.frontmostApplication; a ? ObjC.unwrap(a.bundleIdentifier) : ""']).catch(() => null);
-  return r?.code === 0 && r.stdout.trim() ? r.stdout.trim() : null;
-}
+export const copyImage = (pngPath) => localService(clipboardApi).image(pngPath).catch(() => false);
+export const openPath = (target) => localService(openApi).open(target).catch(() => null);
+const frontApp = () => localService(clipboardApi).frontApp().catch(() => null);
 
 async function pasteInto(network, before) {
-  if (macos()) {
+  if (localService(clipboardApi).observesFrontApp) {
     // Wait until the app in front is no longer Herdr: the browser came up.
     const front = await retry(13, () => frontApp(), { done: (app) => !(app && app === before), between: () => pause(0.5) });
     if (front && front === before) return false; // the browser never came up
     await pause(network.wait);
     if (front && (await frontApp()) !== front) return false; // you moved on: not into another app
-    const r = await exec("osascript", ["-e", 'tell application "System Events" to keystroke "v" using command down']).catch(() => null);
-    return r?.code === 0;
+    return (await localService(clipboardApi).paste(front)).state === "ok";
   }
   await pause(network.wait);
-  return firstRuns([["wtype", ["-M", "ctrl", "-k", "v", "-m", "ctrl"]], ["xdotool", ["key", "--clearmodifiers", "ctrl+v"]]]);
+  return (await localService(clipboardApi).paste()).state === "ok";
 }
 
 export async function outputPath(name) {
-  const downloads = (await exec("test", ["-d", `${home()}/Downloads`]).catch(() => null))?.code === 0;
-  const dir = downloads ? `${home()}/Downloads` : home();
+  const downloads = await localService(fileApi).test(paths.join(home(), "Downloads"), "directory").catch(() => false);
+  const dir = downloads ? paths.join(home(), "Downloads") : home();
   const d = new Date(), day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `${dir}/kanso-${slug(name)}-${day}.png`;
+  return paths.join(dir, `kanso-${slug(name)}-${day}.png`);
 }
 
 // `make` gives the card's spec, text, name and title, or a promise of them.
@@ -270,8 +242,8 @@ export async function shareImage(network, make, workDir) {
   const { spec, text: words, name, title } = await make();
   const card = cardSvg(spec, palette());
   const png = await outputPath(name);
-  await exec("mkdir", ["-p", workDir]);
-  await renderPng(card, `${workDir}/share.svg`, png);
+  await localService(fileApi).mkdir(workDir);
+  await renderPng(card, paths.join(workDir, "share.svg"), png);
   const where = png.replace(/^.*\/(Downloads\/)?/, (m, d) => (d ? "Downloads/" : ""));
   if (!network) {
     await openPath(png);
@@ -280,20 +252,20 @@ export async function shareImage(network, make, workDir) {
   }
   const n = NETWORKS[network];
   const copied = await copyImage(png);
-  const before = macos() ? await frontApp() : null;
+  const before = localService(clipboardApi).observesFrontApp ? await frontApp() : null;
   await openPath(n.url(words));
   const pasted = copied && await pasteInto(n, before);
-  const key = macos() ? "Cmd-V" : "Ctrl-V";
+  const key = localService(clipboardApi).pasteKey;
   notify(pasted
     ? { title: `Your ${n.name} post has the image and the text`, body: `Check it and post. Not there? It is on the clipboard: ${key}. Saved in ${where}.`, level: "success" }
     : copied
-      ? { title: `Paste the image into your ${n.name} post: ${key}`, body: macos() ? `It is on the clipboard and in ${where}. To have it pasted for you, allow Herdr in System Settings > Privacy & Security > Accessibility.` : `It is on the clipboard and in ${where}.`, level: "success" }
-      : { title: `Attach ${png.split("/").at(-1)} to your ${n.name} post`, body: png, level: "success" });
+      ? { title: `Paste the image into your ${n.name} post: ${key}`, body: `It is on the clipboard and in ${where}.${localService(clipboardApi).permissionNote}`, level: "success" }
+      : { title: `Attach ${paths.basename(png)} to your ${n.name} post`, body: png, level: "success" });
   if (!copied) await openPath(png.replace(/\/[^/]+$/, ""));
 }
 
 export class Share {
-  constructor(id, workDir) { this.id = id; this.workDir = workDir ?? `${appHome()}/data/${id}`; this.open = false; this.busy = null; }
+  constructor(id, workDir) { this.id = id; this.workDir = workDir ?? paths.join(appHome(), "data", id); this.open = false; this.busy = null; }
 
   toggle(cx) { this.open = !this.open; cx.notify(); }
 

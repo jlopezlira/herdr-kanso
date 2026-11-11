@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { load, temporary, exec } from "./helpers.mjs";
+import { load, temporary, exec, nativeWindow } from "./helpers.mjs";
 
 const { insideRoot } = await load("kanso-panel/lib.js", ["insideRoot"]);
 
-test("Files preserves newline names, dotfiles and symlinks", async (t) => {
+test("Files preserves newline names, dotfiles and symlinks", { skip: process.platform === "win32" && "Unix names and symlink semantics" }, async (t) => {
   const parent = await temporary(t), root = join(parent, "folder\nwith spaces");
   await mkdir(root);
   for (const name of ["first\nsecond.txt", "tabs\tand\\slashes.txt", ".hidden", "O’Brien.txt"]) {
@@ -15,7 +15,7 @@ test("Files preserves newline names, dotfiles and symlinks", async (t) => {
   await mkdir(join(root, "directory")); await mkdir(join(root, ".git"));
   await symlink("directory", join(root, "link"));
   await symlink("missing", join(root, "dangling"));
-  const { directory } = await load("kanso-panel/files.js", ["directory"], { exec, window: () => ({ platform: "macos" }) });
+  const { directory } = await load("kanso-panel/files.js", ["directory"], { exec, window: nativeWindow });
   const entries = Object.fromEntries((await directory(root, null)).map(({ name, dir }) => [name, dir]));
   assert.deepEqual(entries, {
     "first\nsecond.txt": false, "tabs\tand\\slashes.txt": false, ".hidden": false,
@@ -25,7 +25,7 @@ test("Files preserves newline names, dotfiles and symlinks", async (t) => {
   assert.equal((await directory(join(parent, "root-link"), null)).length, 7);
 });
 
-test("Files falls back to the shell listing when find cannot run", async (t) => {
+test("Files falls back to the shell listing when find cannot run", { skip: process.platform === "win32" && "Unix find fallback" }, async (t) => {
   const root = await temporary(t);
   await writeFile(join(root, "file.txt"), ""); await mkdir(join(root, "directory"));
   const calls = [];
@@ -39,7 +39,7 @@ test("Files falls back to the shell listing when find cannot run", async (t) => 
 test("Files marks the entry past the cap as a folder when it is one", async (t) => {
   const root = await temporary(t);
   for (let i = 0; i < 600; i++) await mkdir(join(root, `dir-${i}`));
-  const { directory } = await load("kanso-panel/files.js", ["directory"], { exec, window: () => ({ platform: "macos" }) });
+  const { directory } = await load("kanso-panel/files.js", ["directory"], { exec, window: nativeWindow });
   const entries = await directory(root, null);
   assert.equal(entries.length, 501);
   assert.ok(entries.every((entry) => entry.dir));
@@ -49,7 +49,7 @@ test("Files reports truncation only above 500 entries", async (t) => {
   const root = await temporary(t);
   for (let i = 0; i < 500; i++) await writeFile(join(root, `file-${i}`), "");
   const { directory, Files } = await load("kanso-panel/files.js", ["directory", "Files"], {
-    exec, insideRoot, window: () => ({ platform: "macos" }), key: () => root,
+    exec, insideRoot, window: nativeWindow, key: () => root,
   });
   const panel = new Files();
   Object.assign(panel, { root, entries: new Map(), folders: new Set(), limited: false });

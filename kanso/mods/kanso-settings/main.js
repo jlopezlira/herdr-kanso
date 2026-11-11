@@ -1,7 +1,11 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, exec, run } from "herdr";
+import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
 import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe } from "./ui.js";
 import { glyphs, keycap } from "./marks.js";
 import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from "./actions.js";
@@ -22,7 +26,6 @@ const PEOPLE = [
 ];
 // image() reads only the app's folder: GitHub avatars are downloaded there; prints the logins that have one.
 const AVATARS_DIR = "data/kanso-settings/avatars";
-const AVATARS = 'mkdir -p "$1" && cd "$1" || exit 0; shift; for l; do (curl -fsL --max-time 10 -o "$l.part" "https://github.com/$l.png?size=96" && mv -f "$l.part" "$l.jpg"; rm -f "$l.part") & done; wait; for l; do [ -s "$l.jpg" ] && printf "%s\\n" "$l"; done; true';
 export const HIDDEN = "kanso.hidden";
 // The pieces of Kanso a switch can hide; each mod reads `kanso.hidden`.
 export const PIECES = [
@@ -52,7 +55,7 @@ export default class Settings extends View {
     this.avatars = null;
     if (this.page === "credits") this.readAvatars(cx);
     cx.spawn(async (cx) => {
-      try { this.installed = JSON.parse(await readTextFile(`${appHome()}/mods/kanso-chrome/version.json`) ?? "{}").version ?? null; } catch {}
+      try { this.installed = JSON.parse(await readTextFile(paths.join(appHome(), "mods", "kanso-chrome", "version.json")) ?? "{}").version ?? null; } catch {}
       cx.notify();
       await this.readNews(cx);
     });
@@ -112,7 +115,7 @@ export default class Settings extends View {
 
   // Herdr applies keys.json as it lands.
   change(cx, change) {
-    const path = `${appHome()}/keys.json`;
+    const path = paths.join(appHome(), "keys.json");
     cx.spawn(async (cx) => {
       try {
         const text = await readTextFile(path);
@@ -218,9 +221,9 @@ export default class Settings extends View {
   }
 
   async readNews(cx) {
-    const dir = `${appHome()}/data/kanso-settings`, cache = `${dir}/CHANGELOG.md`;
+    const dir = paths.join(appHome(), "data", "kanso-settings"), cache = paths.join(dir, "CHANGELOG.md");
     const fresh = await tryOrAsync(async () => { const r = await fetch(CHANGELOG_URL); return r.ok ? await r.text() : null; });
-    if (fresh) await tryOrAsync(async () => { await exec("mkdir", ["-p", dir]); await writeTextFile(cache, fresh, await readTextFile(cache)); });
+    if (fresh) await tryOrAsync(async () => { await localService(fileApi).mkdir(dir); await writeTextFile(cache, fresh, await readTextFile(cache)); });
     const kept = fresh ? null : await tryOrAsync(() => readTextFile(cache));
     const text = fresh || kept, from = fresh ? "github" : kept ? "cache" : null;
     this.news = text ? { entries: parseChangelog(text), error: null, from } : { entries: [], error: "GitHub could not be reached, and nothing was kept from before.", from: null };
@@ -231,7 +234,7 @@ export default class Settings extends View {
     if (this.avatars) return;
     this.avatars = new Set();
     cx.spawn(async (cx) => {
-      const r = await tryOrAsync(() => exec("sh", ["-c", AVATARS, "sh", `${appHome()}/${AVATARS_DIR}`, ...PEOPLE.map((p) => p.login)]));
+      const r = await tryOrAsync(() => localService(imageApi).avatars(paths.join(appHome(), AVATARS_DIR), PEOPLE.map((p) => p.login)));
       this.avatars = new Set((r?.stdout ?? "").split("\n").filter(Boolean));
       cx.notify();
     });

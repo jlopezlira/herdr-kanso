@@ -1,3 +1,6 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
@@ -80,7 +83,7 @@ export default class TokenSpend extends View {
     this.runtimeTask = null;
     this.scan = null;
     this.costs = null;
-    this.share = new Share(MOD, `${appHome()}/${DATA_DIR}`);
+    this.share = new Share(MOD, paths.join(appHome(), DATA_DIR));
     this.error = null;
     this.running = null;
     this.queued = { snapshot: false, prepare: false };
@@ -141,9 +144,8 @@ export default class TokenSpend extends View {
       this.runtimeTask = cx.spawn(async (runtimeCx) => {
         try {
           // One-time migration of the old token-spend mod's data, so its history carries over.
-          await exec("sh", ["-c", 'if [ ! -e "$2/store.json" ] && [ -d "$1" ]; then mkdir -p "$2" && cp -R "$1/." "$2/" && rm -rf "$2"/*.lock; fi', "sh",
-            `${appHome()}/data/token-spend`, `${appHome()}/${DATA_DIR}`]).catch(() => null);
-          this.nodeBinary = parseRuntimeNode(await readTextFile(`${appHome()}/${RUNTIME_FILE}`));
+          await localService(fileApi).migrate(paths.join(appHome(), "data", "token-spend"), paths.join(appHome(), DATA_DIR)).catch(() => null);
+          this.nodeBinary = parseRuntimeNode(await readTextFile(paths.join(appHome(), RUNTIME_FILE)));
         } catch (error) {
           this.runtimeError = `Spend needs ${RUNTIME_FILE} with the path to Node 22: ${sanitizeError(error)}`;
         }
@@ -234,8 +236,8 @@ export default class TokenSpend extends View {
   async ask(command, sent, extra) {
     const result = await exec(this.nodeBinary, [
       "--disable-warning=ExperimentalWarning",
-      `${appHome()}/${PRESENTER_FILE}`, command,
-      "--store", `${appHome()}/${DATA_DIR}/store.json`,
+      paths.join(appHome(), PRESENTER_FILE), command,
+      "--store", paths.join(appHome(), DATA_DIR, "store.json"),
       "--home", home(),
       "--options", JSON.stringify(sent),
       ...(command === "configure" ? ["--sources", JSON.stringify(extra ?? {})] : []),
@@ -329,7 +331,7 @@ export default class TokenSpend extends View {
 
   /** Plans live in prices.json next to the store; other keys there are kept. */
   savePlans(cx) {
-    const file = this.settings?.pricesPath ?? `${appHome()}/${DATA_DIR}/prices.json`;
+    const file = this.settings?.pricesPath ?? paths.join(appHome(), DATA_DIR, "prices.json");
     const plans = this.planInputs
       .map((input) => ({ name: input.name.value().trim(), usdPerMonth: Number(String(input.amount.value()).replace(/[^0-9.]/g, "")) }))
       .filter((plan) => plan.name && Number.isFinite(plan.usdPerMonth) && plan.usdPerMonth > 0);

@@ -1,3 +1,4 @@
+import { paths } from "./platform-paths.js";
 // Added by José Gutiérrez (minimalistic): agents nested under their space. Pure drawing helpers; the
 // fold state lives in main.js.
 import { div, svg } from "gpui-kit";
@@ -94,7 +95,7 @@ export function agentLabel(a) {
   const live = liveTitle(a);
   if (live) return live;
   // A shell says nothing about itself: name it after its folder.
-  const dir = a.program?.shell && a.cwd ? a.cwd.replace(/\/+$/, "").split("/").at(-1) : null;
+  const dir = a.program?.shell && a.cwd ? paths.basename(a.cwd) : null;
   if (dir) return dir;
   return /^\d+$/.test(a.tab_name ?? "") ? a.program?.name || a.tab_name : a.tab_name || a.program?.name || a.address;
 }

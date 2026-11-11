@@ -1,3 +1,5 @@
+import { paths } from "./platform-paths.js";
+import { openApi } from "./platform-open.js";
 // Open with: opens the focused pane's folder in a code editor installed on this computer.
 // Other mods open it with openOverlay({ mod: "open-with", kind: "popup", props: { folder, machine } }), or props.file (full path) for one file; a text file is also offered to kanso-panel's preview.
 
@@ -7,19 +9,6 @@ import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, 
 import { walkLayout, commitLayout } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isText } from "./kinds.js";
-
-// PowerShell treats U+2018..U+201B as single quotes too: double every one so paths stay data inside -Command.
-function psQuote(s) {
-  const v = String(s);
-  if (/[\r\n\0]/.test(v)) throw new Error("Invalid path");
-  return `'${v.replace(/['\u2018-\u201b]/g, (quote) => quote + quote)}'`;
-}
-
-// Start-Process rejoins ArgumentList into a command line: quote again, doubling backslashes before a quote or the closing one.
-function windowsArg(s) {
-  return '"' + String(s).replace(/(\\*)"/g, (_match, slashes) => slashes + slashes + '\\"')
-    .replace(/\\+$/g, (slashes) => slashes + slashes) + '"';
-}
 
 const MOD = "open-with";
 const RECENT = `${MOD}.recent`;
@@ -62,54 +51,6 @@ const BY_ID = Object.fromEntries(EDITORS.map((e) => [e.id, e]));
 const TILES = ["#5b8def", "#22a99a", "#8b7cf6", "#e3814f", "#3fae6a", "#d9649a"];
 
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
-const DETECT = `
-for a in "$@"; do
-  case "$a" in
-    app:*) n=\${a#app:}
-      for d in /Applications "$HOME/Applications" /Applications/Setapp "$HOME/Applications/JetBrains Toolbox"; do
-        if [ -d "$d/$n" ]; then printf 'app\\t%s\\t%s\\n' "$n" "$d/$n"; break; fi
-      done;;
-    cli:*) n=\${a#cli:}
-      p=$(command -v "$n" 2>/dev/null) && case "$p" in /*) printf 'cli\\t%s\\t%s\\n' "$n" "$p";; esac;;
-  esac
-done
-if command -v flatpak >/dev/null 2>&1; then
-  flatpak list --app --columns=application 2>/dev/null | awk '{ printf "flatpak\\t%s\\t\\n", $1 }'
-fi`;
-
-// macOS: each app's own icon as a 64 px PNG, made once.
-const ICON = `
-out=$1; shift; mkdir -p "$out"
-while [ $# -gt 1 ]; do
-  id=$1; app=$2; shift 2
-  [ -f "$out/$id.png" ] && continue
-  f=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist" 2>/dev/null) || continue
-  case "$f" in *.icns) ;; *) f="$f.icns";; esac
-  [ -f "$app/Contents/Resources/$f" ] && sips -s format png -Z 64 "$app/Contents/Resources/$f" --out "$out/$id.png" >/dev/null 2>&1
-done
-exit 0`;
-
-// Starts a GUI program and returns at once (Linux CLIs may stay attached).
-const DETACH = `if command -v setsid >/dev/null 2>&1; then setsid -f "$@" >/dev/null 2>&1; else nohup "$@" >/dev/null 2>&1 & fi`;
-
-async function detect(platform) {
-  if (platform === "windows") {
-    const tries = EDITORS.flatMap((e) => (e.cli ?? []).map((c) => [e, c]));
-    const hits = (await Promise.all(tries.map(([e, c]) =>
-      exec("where", [c]).then((r) => (r.code === 0 ? [e, r.stdout.split(/\r?\n/)[0].trim()] : null)).catch(() => null)))).filter(Boolean);
-    return Object.fromEntries(hits.filter((h, i) => hits.findIndex((x) => x[0].id === h[0].id) === i).map((h) => [h[0].id, { cli: h[1] }]));
-  }
-  const args = EDITORS.flatMap((e) => [...(platform === "macos" ? (e.mac ?? []).map((m) => `app:${m}`) : []), ...(e.cli ?? []).map((c) => `cli:${c}`)]);
-  const r = await exec("sh", ["-c", DETECT, "sh", ...args]);
-  const hits = r.stdout.split("\n").filter(Boolean).map((l) => l.split("\t"));
-  return Object.fromEntries(EDITORS.flatMap((e) => {
-    const app = hits.find(([k, n]) => k === "app" && e.mac?.includes(n));
-    const cli = hits.find(([k, n]) => k === "cli" && e.cli?.includes(n));
-    const fp = hits.find(([k, n]) => k === "flatpak" && e.flatpak?.includes(n));
-    return app || cli || fp ? [[e.id, { app: app?.[2], cli: cli?.[2], flatpak: fp?.[1] }]] : [];
-  }));
-}
-
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file-text.svg", builtin: true };
 
 function showPreview(file, machine) {
@@ -135,20 +76,20 @@ export default class OpenWith extends View {
     this.target = this.resolveTarget();
     cx.spawn(async (cx) => {
       try {
-        this.found = await detect(this.platform);
+        this.found = await openApi(this.platform, exec).detectEditors(EDITORS);
         setShared(FOUND, this.found);
       } catch (err) {
         this.error = String(err?.message ?? err);
       }
       cx.notify();
-      if (this.platform === "macos") await this.loadIcons();
+      await this.loadIcons();
       cx.notify();
     });
   }
 
   resolveTarget() {
     const p = props() ?? {};
-    if (p.file) return { folder: p.folder ?? (p.file.replace(/[\\/][^\\/]*$/, "") || "/"), machine: p.machine ?? null, file: p.file };
+    if (p.file) return { folder: p.folder ?? paths.dirname(p.file), machine: p.machine ?? null, file: p.file };
     if (p.folder) return { folder: p.folder, machine: p.machine ?? null };
     const f = focused();
     const space = spaces().find((s) => s.id === f?.space) ?? spaces().find((s) => s.active);
@@ -158,22 +99,8 @@ export default class OpenWith extends View {
   }
 
   async loadIcons() {
-    const pairs = Object.entries(this.found ?? {}).filter(([, how]) => how.app).flatMap(([id, how]) => [id, how.app]);
-    if (pairs.length) {
-      try { await exec("sh", ["-c", ICON, "sh", `${appHome()}/${ICONS}`, ...pairs]); } catch {}
-    }
-    const ids = Object.keys(this.found ?? {});
-    if (ids.length) {
-      try {
-        const script = `
-out=$1; shift
-for id in "$@"; do
-  [ -f "$out/$id.png" ] && printf '%s\\n' "$id"
-done`;
-        const r = await exec("sh", ["-c", script, "sh", `${appHome()}/${ICONS}`, ...ids]);
-        for (const id of r.stdout.split("\n").filter((id) => ids.includes(id))) this.icons[id] = `${ICONS}/${id}.png`;
-      } catch {}
-    }
+    const ids = await openApi(this.platform, exec).editorIcons(this.found ?? {}, paths.join(appHome(), ICONS)).catch(() => []);
+    this.icons = Object.fromEntries(ids.map((id) => [id, `${ICONS}/${id}.png`]));
   }
 
   list() {
@@ -216,24 +143,19 @@ done`;
   }
 
   launch(e, how, folder, machine) {
-    const cli = how.cli ?? (how.app && e.bin ? `${how.app}/${e.bin}` : null);
+    const cli = how.cli ?? (how.app && e.bin ? paths.join(how.app, e.bin) : null);
     if (machine) {
       if (!cli) throw new Error(`${e.name} has no command line to open a folder on ${machine}`);
       const args = e.family === "zed" ? [`ssh://${machine}${folder.startsWith("/") ? "" : "/"}${folder}`] : ["--remote", `ssh-remote+${machine}`, folder];
       return this.spawn(cli, args);
     }
-    if (this.platform === "macos" && how.app) return exec("open", ["-a", how.app, folder]);
-    if (how.flatpak && !how.cli) return exec("sh", ["-c", DETACH, "sh", "flatpak", "run", how.flatpak, folder]);
+    if (how.app) return openApi(this.platform, exec).open(folder, { application: how.app });
+    if (how.flatpak && !how.cli) return this.spawn("flatpak", ["run", how.flatpak, folder]);
     return this.spawn(cli, [folder]);
   }
 
   spawn(cli, args) {
-    if (this.platform === "windows") {
-      const commandLine = args.map(windowsArg).join(" ");
-      const script = `Start-Process -FilePath ${psQuote(cli)} -ArgumentList ${psQuote(commandLine)} -ErrorAction Stop`;
-      return exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", script]);
-    }
-    return exec("sh", ["-c", DETACH, "sh", cli, ...args]);
+    return openApi(this.platform, exec).spawn(cli, args);
   }
 
   glyph(e, t) {

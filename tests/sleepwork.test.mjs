@@ -4,7 +4,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
+import { EventEmitter, once } from "node:events";
+import { load, clone, temporary, exec, nativeWindow } from "./helpers.mjs";
 
 const C1 = "00000000-0000-4000-8000-000000000001";
 const C2 = "00000000-0000-4000-8000-000000000002";
@@ -17,7 +19,7 @@ const NAMES = ["leaveStep", "undoStep", "sleepStep", "mayTake", "closePlan", "ag
 // Herdr as far as a sleep needs it: Alice (t1, pid 11, a draft in her prompt) and Bob (t2, pid 12) on their
 // conversations, and a dev server (t3, pid 55), in tab tb1. `exits[t]`: how /exit goes there ("now", "asks", "never").
 function herdr(dir, exits = {}) {
-  const alive = new Set([11, 12, 55]);
+  const alive = new Set([11, 12, 55]), unreadable = new Set();
   const terms = {
     t1: { shell: 101, fg: { pid: 11, argv: ["claude"], cwd: "/w" }, screen: DRAFT },
     t2: { shell: 102, fg: { pid: 12, argv: ["claude"], cwd: "/w" }, screen: EMPTY },
@@ -41,7 +43,7 @@ function herdr(dir, exits = {}) {
       if (how === "now") leave(t); else if (how === "asks") x.screen = ASK; else x.screen = "Claude is finishing a turn\n";
       return ok;
     }
-    const resume = /--resume (\S+)/.exec(arg ?? "")?.[1];
+    const resume = /--resume['"]?\s+['"]?([0-9a-f-]{36})/.exec(arg ?? "")?.[1];
     if (verb === "send" && resume) {
       const pid = 20 + Number(t.slice(1));
       x.fg = { pid, argv: ["claude", "--resume", resume], cwd: "/w" };
@@ -50,8 +52,12 @@ function herdr(dir, exits = {}) {
     return ok;
   };
   const host = {
-    hc, home: () => "/nonexistent-home", appHome: () => dir,
-    exec: async (c, a, o) => (c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : exec(c, a, o)),
+    processApi: (platform, run) => {
+      const api = processApi(platform, run);
+      return { ...api, exists: (pid, options) => unreadable.has(pid) ? Promise.reject(new Error("Process access denied")) : api.exists(pid, options) };
+    },
+    window: nativeWindow, hc, home: () => "/nonexistent-home", appHome: () => dir,
+    exec: async (c, a, o) => (c === "pwsh" && a.at(-1).includes("Get-CimInstance") ? { code: 0, stdout: JSON.stringify([...alive].map((pid) => ({ pid, ppid: 1, name: "claude.exe", created: "2026-01-01T00:00:00Z" }))) } : c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : exec(c, a, o)),
     terminals: () => Object.keys(terms).map((address) => ({ address })),
     panes: () => Object.keys(terms).map((t, i) => ({ pane: `p${i}`, terminal: t, tab: "tb1" })),
     run: (cmd, args) => {
@@ -66,7 +72,7 @@ function herdr(dir, exits = {}) {
     },
   };
   const sent = (verb, arg) => log.filter((l) => l[0] === verb && (arg == null || l[2] === arg)).map((l) => l[1]);
-  return { host, terms, alive, log, ran, leave, sent };
+  return { host, terms, alive, unreadable, log, ran, leave, sent };
 }
 
 const pane = (terminal, resume, pid, name) => ({ argv: ["claude"], cwd: "/w", resume, wake: ["claude", "--resume", resume], name, terminal, tab: "tb1", front: pid, pid });
@@ -382,12 +388,8 @@ const keptForBob = async ({ kdb, id, row }) => {
 };
 
 test("an undo that can't check whether the agent told to exit still runs, and finds it in front, keeps it asleep", async (t) => {
-  let blind = false;
-  const ctx = await stuckAfterExit(t, (world) => {
-    const exec0 = world.host.exec;
-    world.host.exec = (c, a, o) => (blind && c === "kill" && a[1] === "12" ? Promise.reject(new Error("exec failed")) : exec0(c, a, o));
-  });
-  blind = true;
+  const ctx = await stuckAfterExit(t);
+  ctx.world.unreadable.add(12);
   assert.equal(await ctx.kdb.undo(ctx.id), true);
   await drive(ctx.w);
   await keptForBob(ctx);
@@ -407,14 +409,11 @@ test("retry keeps that an /exit went: an undo after it still keeps the agent whi
 });
 
 test("an undo cut short by a restart, with the agent told to exit still in front on its conversation, keeps it asleep", async (t) => {
-  let blind = false;
   const ctx = await stuckAfterExit(t, (world) => {
     // Bob was itself started on his conversation: his argv and record both name it.
     world.terms.t2.fg = { ...world.terms.t2.fg, argv: ["claude", "--resume", C2] };
-    const exec0 = world.host.exec;
-    world.host.exec = (c, a, o) => (blind && c === "kill" && a[1] === "12" ? Promise.reject(new Error("exec failed")) : exec0(c, a, o));
   });
-  blind = true;
+  ctx.world.unreadable.add(12);
   assert.equal(await ctx.kdb.undo(ctx.id), true);
   // The step the return wrote before the restart; the return itself never went.
   await ctx.kdb.run(`UPDATE agents SET step='returning' WHERE id='${C2}';`);
@@ -471,7 +470,7 @@ test("an undo while an agent is still saving brings it back and never closes the
   assert.deepEqual(world.ran, [], "the tab was never closed");
 });
 
-test("two sleeps move at once: one terminal's slow read does not hold the other", async (t) => {
+test("two sleeps move at once: one terminal's slow read does not hold the other", { timeout: 30000 }, async (t) => {
   const { world, kdb } = await setup(t);
   const C3 = "00000000-0000-4000-8000-000000000003";
   world.terms.t4 = { shell: 104, fg: { pid: 14, argv: ["claude"], cwd: "/w" }, screen: EMPTY };
@@ -480,25 +479,29 @@ test("two sleeps move at once: one terminal's slow read does not hold the other"
     layout: { per: null, tab: "tb2", cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w", resume: C3, wake: ["claude", "--resume", C3], name: "Cara", terminal: "t4", tab: "tb2", front: 14, pid: 14 }] }] },
     agents: [{ conversation: C3, tab: "tb2", pos: 0 }] });
   const hc = world.host.hc;
-  const started = [];
+  const reads = new EventEmitter();
+  const otherRead = once(reads, "other", { signal: t.signal });
   let first = null;
   let release;
   const gate = new Promise((r) => { release = r; });
   world.host.hc = async (args) => {
     if (args[0] === "get") {
-      started.push(args[1]);
       if (!first) first = args[1];
       if (args[1] === first) await gate;
+      else reads.emit("other", args[1]);
     }
     return hc(args);
   };
   const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], world.host);
   const w = new SleepWork(kdb, () => {}, "w-a");
   const tickP = w.tick(cx);
-  await new Promise((r) => setTimeout(r, 40));
-  assert.ok(started.filter((term) => term !== first).length > 0, "the other sleep is read while the first read waits");
-  release();
-  await tickP;
+  try {
+    const [other] = await Promise.race([otherRead, tickP.then(() => { throw new Error("The other terminal was never read"); })]);
+    assert.notEqual(other, first, "the other sleep is read while the first read waits");
+  } finally {
+    release();
+    await tickP;
+  }
 });
 
 test("a reload that cannot see the terminals, once the owner's lease has run out, marks the sleep stuck", async (t) => {

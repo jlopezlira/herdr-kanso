@@ -1,6 +1,6 @@
 // Shared by the tests: load a mod's real source into a fake Herdr host.
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +9,8 @@ import { modScript } from "../scripts/mod-source.mjs";
 
 const runFile = promisify(execFile);
 export const clone = (value) => JSON.parse(JSON.stringify(value));
+export const nativePlatform = ({ darwin: "macos", win32: "windows" })[process.platform] ?? "linux";
+export const nativeWindow = () => ({ platform: nativePlatform });
 const mods = new URL("../kanso/mods/", import.meta.url);
 
 // Load the actual mod logic (its own-folder imports included) with the
@@ -27,7 +29,7 @@ export async function load(file, names, host = {}, root = mods) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, shared() {}, setShared() {}, ...host });
+  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host });
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.
