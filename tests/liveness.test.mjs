@@ -144,21 +144,21 @@ test("a slow process table never overlaps another reader", async () => {
 });
 
 test("the shared table is parsed once for all terminals and preserves child task starts", async () => {
-  const real = { ...await load("kanso-spaces/procs.js", ["parseProcesses"]), ...await load("kanso-spaces/agents.js", ["tasksOf"]) };
-  const parsed = [], given = [];
+  const real = await load("kanso-spaces/agents.js", ["tasksOf"]);
+  const given = [], tables = [];
   const terms = [101, 202, 303, 404].map((pid, i) => ({ address: `t${i + 1}`, state: "live", status: "working", pid: 50 + i, foreground: { pid } }));
   const rows = [303, 404].flatMap((pid) => [`${pid} 1 00:10 claude`, `${pid}1 ${pid} 00:05 npm test`]);
   const { h, v } = await sidebar({
     terms, rows: [...rows, "1011 101 00:05 npm run dev", "1012 101 00:05 caffeinate -i"],
     host: {
-      parseProcesses: (text) => { parsed.push(h.clock); return real.parseProcesses(text); },
-      tasksOf: (table, ...rest) => { given.push(typeof table); return real.tasksOf(table, ...rest); },
+      tasksOf: (table, ...rest) => { given.push(typeof table); tables.push(table); return real.tasksOf(table, ...rest); },
     },
   });
   await h.run(15000);
-  assert.deepEqual(parsed, [0, 10000]);
+  assert.deepEqual(h.ps.map((x) => x.at), [0, 10000]);
+  assert.equal(new Set(tables).size, h.ps.length);
   assert.deepEqual([...new Set(given)], ["object"]);
-  assert.equal(given.length, parsed.length * terms.length);
+  assert.equal(given.length, h.ps.length * terms.length);
   assert.deepEqual(clone(Object.fromEntries(Object.entries(v.tasks).map(([a, l]) => [a, l.map((x) => x.command)]))),
     { t1: ["npm run dev"], t3: ["npm test"], t4: ["npm test"] });
   assert.equal(v.tasks.t1[0].start, -5000);

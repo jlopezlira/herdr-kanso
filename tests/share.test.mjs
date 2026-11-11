@@ -119,7 +119,7 @@ test("The image comes from the first renderer this machine has", async (t) => {
   assert.equal(used, "rsvg-convert");
   assert.ok(m.tried.indexOf("rsvg-convert") > m.tried.indexOf("chromium"), "browsers first");
   assert.equal(await m.copyImage(join(m.dir, "card.png")), true, "copied (xclip here)");
-  assert.match(await m.outputPath("spend-November 2026"), /\/kanso-spend-november-2026-\d{4}-\d{2}-\d{2}\.png$/);
+  assert.match((await m.outputPath("spend-November 2026")).replace(/\\/g, "/"), /\/kanso-spend-november-2026-\d{4}-\d{2}-\d{2}\.png$/);
 });
 
 test("A share opens the composer with the text and pastes the image into it", async (t) => {

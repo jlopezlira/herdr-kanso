@@ -1,3 +1,9 @@
+import { sqliteApi } from "./platform-sqlite.js";
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { repositoryApi } from "./platform-repositories.js";
+import { systemApi } from "./platform-system.js";
 // Shipped's store, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Statistics only: no messages, file names or code.
 // A repository's week counts the larger of what the machines and GitHub saw.
@@ -28,7 +34,7 @@ export function repoName(url, folder) {
   if (gh) return gh[1];
   const other = /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)[:/]+(.+)$/i.exec(u);
   if (other) return `${other[1]}/${other[2]}`;
-  return `local/${String(folder ?? "").replace(/\/+$/, "").split("/").at(-1) || "repository"}`;
+  return `local/${paths.basename(folder) || "repository"}`;
 }
 
 // `git log --format='%x1e%H %at' --shortstat` as [{ hash, at (s), add, del }].
@@ -78,14 +84,13 @@ export function weeklyStats(rows) {
 
 export class Store {
   constructor() {
-    this.dir = `${appHome()}/${STORE_DIR}`;
-    this.db = `${this.dir}/shipped.db`;
+    this.dir = paths.join(appHome(), STORE_DIR);
+    this.db = paths.join(this.dir, "shipped.db");
     this.batches = 0;
   }
 
   async sql(text, json = false) {
-    const r = await exec("sqlite3", [...(json ? ["-json"] : []), this.db, text]);
-    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
+    const r = await localService(sqliteApi).execute(this.db, text, { json });
     return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
   }
 
@@ -94,20 +99,20 @@ export class Store {
     if (!text.trim()) return;
     const n = this.batches;
     this.batches = n + 1;
-    const path = `${this.dir}/.batch-${Date.now()}-${n}.sql`;
+    const path = paths.join(this.dir, `.batch-${Date.now()}-${n}.sql`);
     await writeTextFile(path, `BEGIN;\n${text}\nCOMMIT;\n`, null);
     try {
-      const r = await exec("sqlite3", [this.db, `.read '${path}'`]);
+      const r = await exec("sqlite3", [this.db, paths.sqliteRead(path)]);
       if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
-    } finally { await exec("rm", ["-f", path]).catch(() => {}); }
+    } finally { await localService(fileApi).remove([path]).catch(() => {}); }
   }
 
   async open() {
     const ok = await tryOrAsync(() => exec("sqlite3", ["-version"]));
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep Shipped's statistics.");
-    await exec("mkdir", ["-p", this.dir]);
+    await localService(fileApi).mkdir(this.dir);
     await this.sql(SCHEMA);
-    await exec("rm", ["-f", `${this.dir}/shipped.json`]).catch(() => {}); // the cache before the database
+    await localService(fileApi).remove([paths.join(this.dir, "shipped.json")]).catch(() => {}); // the cache before the database
   }
 
   async meta(k) { return (await this.sql(`SELECT v FROM meta WHERE k=${sqlText(k)};`, true))[0]?.v ?? null; }
@@ -117,7 +122,7 @@ export class Store {
     if (this.name) return this.name;
     const stored = await this.meta("machine");
     const named = async () => {
-      const r = await exec("hostname", ["-s"]).catch(() => null);
+      const r = await localService(systemApi).hostname().catch(() => null);
       const name = (r?.stdout ?? "").trim().replace(/[^A-Za-z0-9._-]+/g, "-") || `machine-${Date.now().toString(36)}`;
       await this.setMeta("machine", name);
       return name;
@@ -161,14 +166,14 @@ export class Store {
       ...spaces().filter((s) => !s.machine && s.folder).map((s) => s.folder),
       ...(await this.sql("SELECT path FROM scans;", true)).map((r) => r.path),
     ];
-    const found = await exec("sh", ["-c", 'for d in "$@"; do [ -d "$d" ] && find "$d" -maxdepth 4 -name .git -prune 2>/dev/null; done', "sh", ...ROOTS.map((r) => `${home()}/${r}`)]).catch(() => null);
-    const list = [...new Set([...known, ...(found?.stdout ?? "").split("\n").filter((line) => line.trim()).map((line) => line.trim().replace(/\/\.git$/, ""))])];
+    const found = await localService(fileApi).walk(ROOTS.map((r) => paths.join(home(), r)), { depth: 4, names: [".git"] }).catch(() => []);
+    const list = [...new Set([...known, ...found.map((path) => paths.dirname(path))])];
     const read = await mapSeries(range(Math.ceil(list.length / 8)), (k) => Promise.all(list.slice(k * 8, k * 8 + 8).map(async (folder) => {
-      const r = await exec("sh", ["-c", 'cd "$1" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir --show-toplevel && (git config --get remote.origin.url || echo) && git for-each-ref --format="%(objectname)" | cksum', "sh", folder]).catch(() => null);
+      const r = await localService(repositoryApi).fingerprint(folder).catch(() => null);
       if (r?.code !== 0) return [];
       const [common, top, url, refs] = r.stdout.split("\n").map((s) => s.trim());
       if (!common) return [];
-      const main = common.endsWith("/.git") ? common.slice(0, -5) : top;
+      const main = paths.basename(common) === ".git" ? paths.dirname(common) : top;
       return [{ common, path: main, repo: repoName(url, main), refs: refs ?? "" }];
     })));
     // A repository reached from several folders (its worktrees) counts once, as first read.
@@ -202,11 +207,11 @@ INSERT OR REPLACE INTO scans(path,repo,refs,scanned) VALUES(${sqlText(r.path)},$
     const mine = machineFile(machine, identities, await this.sql(`SELECT repo, hash, at, adds, dels FROM commits WHERE machine=${sqlText(machine)};`, true));
     const name = `shipped-${machine}.json`;
     const body = id ? { files: { [name]: { content: JSON.stringify(mine) } } } : { description: GIST_DESCRIPTION, public: false, files: { [name]: { content: JSON.stringify(mine) } } };
-    const path = `${this.dir}/.gist-${Date.now()}.json`;
+    const path = paths.join(this.dir, `.gist-${Date.now()}.json`);
     await writeTextFile(path, JSON.stringify(body), null);
     const send = async () => {
       try { return await exec("gh", ["api", ...(id ? ["-X", "PATCH", `gists/${id}`] : ["-X", "POST", "gists"]), "--input", path]); }
-      finally { await exec("rm", ["-f", path]).catch(() => {}); }
+      finally { await localService(fileApi).remove([path]).catch(() => {}); }
     };
     const sent = await send();
     if (sent.code !== 0) throw new Error((sent.stderr || "the gist could not be written").trim().split("\n")[0]);

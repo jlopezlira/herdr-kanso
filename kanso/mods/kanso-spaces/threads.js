@@ -1,37 +1,11 @@
+import { localService } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { transcriptApi } from "./platform-transcripts.js";
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
-import { join } from "path";
-import { exec, home } from "herdr";
+import { home } from "herdr";
 import { tryOr } from "./pure.js";
 
-const TAIL = 8192;
-const RS = "\u001e";
-
-// Codex may run under a launcher, so its children are asked too.
-const LOCATE = String.raw`pid="$1"; kind="$2"
-if [ "$kind" = claude ]; then
-  f="$HOME/.claude/sessions/$pid.json"; [ -f "$f" ] && printf 'claude\t%s\n' "$(tr -d '\n' < "$f")"
-  exit 0
-fi
-for p in "$pid" $(pgrep -P "$pid" 2>/dev/null); do
-  f=$(lsof -a -p "$p" -d 0-999 -Fn 2>/dev/null | sed -n 's/^n\(.*rollout-.*\.jsonl\)$/\1/p' | head -1)
-  [ -n "$f" ] || continue
-  id=$(basename "$f" .jsonl | grep -o '[0-9a-f]\{8\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{4\}-[0-9a-f]\{12\}$')
-  name=$(grep -h "\"id\":\"$id\"" "$HOME/.codex/session_index.jsonl" 2>/dev/null | tail -1)
-  printf 'codex\t%s\t%s\n' "$f" "$name"
-  exit 0
-done`;
-
-// Files grow to tens of MB: only the first and last 4 MB are searched, and lines over 16 KB (a pasted image) are left out to spare the heap.
-// Claude Code writes the title again every few turns, so the whole file is searched only when the end has none.
-const READ = String.raw`f="$1"; said() { grep -h -e '"type":"user"' -e '"user_message"' | grep -v '"tool_result"' | awk 'length($0) < 16000'; }
-t=$(tail -c 4000000 "$f" | grep -h '"type":"ai-title"' | awk 'length($0) < 16000' | tail -1)
-[ -n "$t" ] || t=$(grep -h '"type":"ai-title"' "$f" | awk 'length($0) < 16000' | tail -1)
-printf '%s\n\036\n' "$t"
-head -c 4000000 "$f" | said | head -n 60; printf '\n\036\n'
-tail -c 4000000 "$f" | said | tail -n 40; printf '\n\036\n'
-tail -c ${TAIL} "$f"`;
-
-export const claudeFile = (home, cwd, session) => join(home, ".claude", "projects", String(cwd ?? "").replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
+export const claudeFile = (home, cwd, session) => paths.join(home, ".claude", "projects", String(cwd ?? "").replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
 
 export function parseLocated(text, home) {
   const [kind, a, b] = (text ?? "").replace(/\n$/, "").split("\t");
@@ -93,7 +67,9 @@ export class ThreadLocator {
     if (!pid || known?.pid === pid) { this.missing.delete(address); return pid ? known : null; }
     const previous = this.missing.get(address), now = Date.now();
     if (previous?.pid === pid && now < previous.next) return null;
-    const where = parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
+    const located = await localService(transcriptApi).locate(pid, kind, home);
+    if (located.state === "unavailable") return { pid, unavailable: located.reason };
+    const where = parseLocated(located.stdout, home);
     if (where) { this.missing.delete(address); return where; }
     const wait = Math.min(previous?.pid === pid ? previous.wait * 2 : 60000, 600000);
     this.missing.set(address, { pid, wait, next: now + wait });
@@ -108,13 +84,13 @@ async function findThread({ address, app }, known, home, got, locator) {
   if (pid && known?.pid === pid && known.checked?.status === checked.status && known.checked?.turn === checked.turn && checked.at - (known.checked?.at ?? -Infinity) < 300000) return known;
   const kind = app === "codex" || /codex/.test(got?.foreground?.argv?.[0] ?? "") ? "codex" : "claude";
   const where = await locator.locate({ address, pid, kind, home }, known);
-  if (!where) return null;
-  const size = Number((await exec("wc", ["-c", where.file])).stdout.trim().split(/\s+/)[0]);
+  if (!where?.file) return where?.unavailable ? where : null;
+  const size = await localService(transcriptApi).size(where.file);
   if (!size) return null;
   if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return { ...known, checked };
-  const r = await exec("sh", ["-c", READ, "sh", where.file]);
+  const r = await localService(transcriptApi).thread(where.file);
   if (r.code !== 0 && !r.stdout) return null;
-  const [titleLine, head, recent, tail] = r.stdout.split(`\n${RS}\n`);
+  const [titleLine, head, recent, tail] = r.stdout.split("\n\u001e\n");
   return { kind, file: where.file, name: where.name, size, pid, checked, ...readThread(kind, titleLine, head, recent, tail, where.name) };
 }
 

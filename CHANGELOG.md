@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.23.1] - 2026-11-10
+
+### Changed
+
+- System operations share macOS, Linux and Windows implementations. Windows reports when Herdr cannot supply a process's working directory or open files.
+
 ## [3.23.0] - 2026-11-10
 
 ### Added
