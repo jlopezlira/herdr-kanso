@@ -37,7 +37,7 @@ release.
 - The pane header does not call a pull request ready before it knows you can merge it.
 - A missed answer from GitHub keeps the pull request on screen, with how long ago it was read and Retry, instead of a blank error or a spinner that never ends.
 - Opening an iOS simulator reads the stream's address without a function Herdr does not promise to have.
-- Asleep tabs on a computer with no space open stay in the list and can be woken.
+- Asleep tabs on another computer stay in the list and can be woken when no project is open there.
 
 ## [3.29.0] - 2026-11-11
 
