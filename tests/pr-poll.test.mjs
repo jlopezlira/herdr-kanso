@@ -49,7 +49,7 @@ test("a limit from GitHub names the time to wait, and a review does not take the
 });
 
 test("a timed-out sign-in check is not kept", async () => {
-  const { LATE } = await load("kanso-panel/pr-poll.js", ["LATE"], {});
+  const { LATE } = await load("kanso-panel/pure.js", ["LATE"], {});
   const { readyProviders } = await load("kanso-panel/pr-providers.js", ["readyProviders"], {});
   assert.equal(await readyProviders(async () => LATE), null);
   const signedOut = await readyProviders(async () => ({

@@ -8,7 +8,7 @@ import { exec, notify, run, theme, setShared, shared, window, layout, focused, p
 import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
@@ -21,7 +21,7 @@ import { prMemory } from "./panel-state.js";
 import { awayShown } from "./since-left-model.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
-import { CALL_MS, TICK_MS, ageOf, authFresh, bounded, heldView, logDue, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
+import { CALL_MS, TICK_MS, ageOf, authFresh, heldView, logDue, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
 const keepsFacts = () => awayShown(shared("kanso.hidden"));
 

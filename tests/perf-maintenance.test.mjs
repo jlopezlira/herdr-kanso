@@ -41,7 +41,7 @@ test("name restoration reloads agents only while a name is pending", async () =>
 test("sleep reloads wait for a changed stamp, a kick, or two minutes", async () => {
   let now = 100000, stamp = 0, kick = 0, reads = 0;
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    Date: { now: () => now }, spaces: () => [], home: () => "/home",
+    Date: { now: () => now }, spaces: () => [], machines: () => [], home: () => "/home",
     shared: (key) => key === "kanso.asleep.at" ? stamp : key === "kanso.sleep.kick" ? kick : null,
   });
   const view = Object.assign(new Spaces(), {
@@ -85,7 +85,7 @@ test("project folders are checked only after registry changes or five minutes", 
 test("sleep work waits for a shared change, a kick, or its two-minute fallback", async () => {
   let now = 0, stamp = 0, kick = 0, starts = 0;
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    Date: { now: () => now }, shared: (key) => key === "kanso.asleep.at" ? stamp : kick,
+    Date: { now: () => now }, spaces: () => [], machines: () => [], shared: (key) => key === "kanso.asleep.at" ? stamp : kick,
   });
   const view = Object.assign(new Spaces(), { sleepWork: { start() { starts += 1; } } });
   view.pollSleepWork({});
