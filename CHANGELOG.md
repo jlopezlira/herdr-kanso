@@ -12,12 +12,17 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.31.0] - 2026-11-11
+
+### Added
+
+- Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
+
 ## [3.30.0] - 2026-11-11
 
 ### Added
 
 - What's new lets you choose Stable or Early. Stable is the release everyone gets. Early gets changes before they are tested by everyone, and nothing is required. Going back to Stable keeps the version you have until Stable reaches it.
-- Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
 
 ### Changed
 
