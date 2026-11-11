@@ -160,7 +160,14 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   return { look, cx, drain, calls, ons, say, store, world };
 }
 
-const settle = () => new Promise((r) => setImmediate(r));
+// A draw ends in a directory read, so wait for the state under test. One tick first, so a copy that should not start has a chance to.
+const until = async (ready) => {
+  const deadline = Date.now() + 2000;
+  do {
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    if (await ready()) return;
+  } while (Date.now() < deadline);
+};
 
 test("The Look panel reads the agent in focus and shows its newest picture, copied where Herdr can draw it", async () => {
   const { look, calls } = await panel();
@@ -320,16 +327,21 @@ test("A, B, then A again while A still draws: A's draws run in turn and the show
   const [a, b] = ["/repo/a.png", "/repo/b.png"].map((path) => ({ path, name: path.split("/").at(-1), kind: "image" }));
   const cleared = () => calls.flatMap((c, i) => (c[0] === "sh" && c[2].startsWith("mkdir") && c[5] === keyOf(a.path) ? [i] : []));
   const copied = () => calls.flatMap((c, i) => (c[0] === "cp" && c[2] === a.path ? [i] : []));
-  look.select(a, cx, true); await settle();
-  look.select(b, cx, true); await settle();
-  look.select(a, cx, true); await settle();
+  look.select(a, cx, true);
+  await until(() => held.length >= 1);
+  look.select(b, cx, true);
+  await until(() => held.length >= 2);
+  look.select(a, cx, true);
+  await until(() => held.length === 2);
   assert.equal(held.length, 2, "the second A waits for the first");
   assert.equal(cleared().length, 1);
-  held[0](); await settle(); await settle();
+  held[0]();
+  await until(() => held.length >= 3);
   assert.equal(look.shown.busy, true, "the first A's copy, about to be replaced, never shows");
   assert.equal(held.length, 3, "the second A starts once the first is done");
   assert.ok(cleared()[1] > copied()[0], "its cleanup runs after the first copy, never during it");
-  held[2](); await settle(); await settle();
+  held[2]();
+  await until(() => look.shown?.image);
   const shown = look.shown.image;
   assert.equal(`/app/${shown}`, calls[copied()[1]][3], "the second A's copy shows");
   held[1]();
@@ -346,12 +358,12 @@ test("Only the latest drawing of a picture lands, and one file is never drawn tw
   look.select(a, cx, true);
   look.draw(a, cx);
   look.draw(a, cx);
-  await new Promise((r) => setImmediate(r));
+  await until(() => held.length >= 1);
   assert.equal(held.length, 1, "asked again while drawing: waits for the one running");
   look.select(b, cx, true);
-  await new Promise((r) => setImmediate(r));
+  await until(() => held.length >= 2);
   held[1]();
-  await new Promise((r) => setImmediate(r));
+  await until(() => look.shown?.image);
   assert.match(look.shown.image, /\.png$/);
   const bShown = look.shown.image;
   held[0]();

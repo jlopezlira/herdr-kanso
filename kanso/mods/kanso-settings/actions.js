@@ -46,7 +46,7 @@ export const GROUPS = [
   ] },
   { name: "Memory, while its panel has the keyboard", section: "mod:kanso-guard", actions: [
     { action: "kanso-guard.refresh", label: "Check now" },
-    { action: "kanso-guard.back", label: "Back" },
+    { action: "kanso-guard.back", label: "Show fewer" },
   ] },
 ];
 

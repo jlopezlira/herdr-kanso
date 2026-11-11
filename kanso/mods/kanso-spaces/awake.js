@@ -1,9 +1,12 @@
 // Keeps a connected remote machine from idle sleep while this window holds the lease.
+import { bounded } from "./pure.js";
 
 export const LEASE_S = 300;
 export const RENEW_MS = 270_000;
 export const EXEC_TIMEOUT_MS = 310_000;
 const PROBE_TIMEOUT_MS = 30_000;
+// Past the probe's own limit, so a slow answer still lands and a lost one does not stick.
+export const AWAKE_BOUND_MS = 45_000;
 const KIND = { darwin: "darwin", macos: "darwin", linux: "linux", windows: "windows" };
 const EMPTY = { gen: 0, os: null, skip: false, arming: false, nextAt: null };
 const WIN_STATE = "[uint32]0x80000001";
@@ -78,17 +81,32 @@ export function createAwake({ now = () => Date.now(), run }) {
       this.put(item.name, { ...cur, os, arming: false, nextAt: at + RENEW_MS });
       this.call(spec, item.name, EXEC_TIMEOUT_MS).then((result) => this.finish(item.name, gen, result));
     },
+    // Still arming means this attempt never landed, so the next one waits out the renew.
+    dropArm(name, gen) {
+      const cur = this.slots.get(name);
+      if (!cur || cur.gen !== gen || !cur.arming) return;
+      this.put(name, { ...cur, arming: false, nextAt: this.now() + RENEW_MS });
+    },
+    release() {
+      for (const [name, row] of this.slots) if (row.arming) this.dropArm(name, row.gen);
+    },
+    follow() {
+      this.release();
+      return this.nextWait();
+    },
     async hold(item) {
       const at = this.now();
       const prev = this.slot(item.name);
       if (!this.due(prev, at)) return;
       const gen = prev.gen;
       this.put(item.name, { ...prev, arming: true });
-      const os = prev.os ?? await this.probe(item.name);
-      const cur = this.slot(item.name);
-      if (cur.gen !== gen) return;
-      if (!os) { this.put(item.name, { ...cur, os: null, skip: false, arming: false, nextAt: this.now() + RENEW_MS }); return; }
-      this.launch(item, os, gen, this.now());
+      try {
+        const os = prev.os ?? await this.probe(item.name);
+        const cur = this.slot(item.name);
+        if (cur.gen !== gen) return;
+        if (!os) { this.put(item.name, { ...cur, os: null, skip: false, arming: false, nextAt: this.now() + RENEW_MS }); return; }
+        this.launch(item, os, gen, this.now());
+      } finally { this.dropArm(item.name, gen); }
     },
     async sync(list) {
       const rows = (list ?? []).filter((item) => item?.name);
@@ -107,4 +125,11 @@ export function createAwake({ now = () => Date.now(), run }) {
       }, null);
     },
   };
+}
+
+// A failed or lost probe still returns when to try again.
+export async function keepAwake(awake, rows, timer, ms = AWAKE_BOUND_MS) {
+  try { await bounded(awake.sync(rows), timer, ms); }
+  catch { /* the next wait still runs */ }
+  return awake.follow();
 }

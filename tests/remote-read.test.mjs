@@ -7,7 +7,7 @@ import { basename, join } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { bindHerdrModules, load, context, clone, modSandbox } from "./helpers.mjs";
 
-const NAMES = ["bring", "copyName", "fileId", "dropCopies", "tooBig", "BYTE_CAP", "ASK_BYTES", "CHECK_MS", "SLOW_MS", "CHUNK", "slices", "cutShort", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts", "pollStart", "pollNext", "checkOutcome", "asOf", "staleView", "askPicture", "bytesLabel", "parseTree"];
+const NAMES = ["bring", "copyName", "fileId", "dropCopies", "lookStamp", "sweepLook", "tooBig", "BYTE_CAP", "ASK_BYTES", "CHECK_MS", "SLOW_MS", "CHUNK", "slices", "cutShort", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts", "pollStart", "pollNext", "checkOutcome", "asOf", "staleView", "askPicture", "bytesLabel", "parseTree"];
 const pure = await load("kanso-panel/remote-file.js", NAMES, { appHome: () => "/app", window: () => ({ platform: "macos" }) });
 
 test("a remote copy is named by machine, path and mtime, and old copies go", () => {
@@ -22,6 +22,30 @@ test("a remote copy is named by machine, path and mtime, and old copies go", () 
     { name: "stale.png", mtime: now - 86_400_000 - 1 },
     { name: "kept.png", mtime: now },
   ], { id, keep: `${id}-2-4.png`, now, maxAge: 86_400_000 }), [`${id}-1-4.png`, "stale.png"]);
+});
+
+test("a picture copy on this computer is kept for a day, and an older copy of the same picture goes", async () => {
+  const now = Date.now();
+  const keep = `pic-${now}.png`;
+  const older = `pic-${now - 1000}.png`;
+  const stale = `other-${now - 86_400_000 - 5}.jpg`;
+  const fresh = `other-${now - 1000}.jpg`;
+  assert.equal(pure.lookStamp(keep), now);
+  assert.equal(pure.lookStamp("notes.txt"), 0);
+  assert.deepEqual(pure.dropCopies([
+    { name: keep, mtime: pure.lookStamp(keep) },
+    { name: older, mtime: pure.lookStamp(older) },
+    { name: stale, mtime: pure.lookStamp(stale) },
+    { name: fresh, mtime: pure.lookStamp(fresh) },
+    { name: "notes.txt", mtime: pure.lookStamp("notes.txt") },
+  ], { id: "pic", keep, now }), [older, stale, "notes.txt"]);
+  const dir = await mkdtemp(join(tmpdir(), "kanso-look-"));
+  await writeFile(join(dir, keep), "a");
+  await writeFile(join(dir, older), "b");
+  await writeFile(join(dir, fresh), "c");
+  await pure.sweepLook(dir, "pic", keep);
+  assert.deepEqual((await readdir(dir)).toSorted(), [fresh, keep]);
+  await rm(dir, { recursive: true, force: true });
 });
 
 test("a copy stops at 20 MB and rejects a cut-short read", () => {
@@ -67,7 +91,7 @@ test("a failure says whether the computer is quiet or the folder cannot be read"
   assert.equal(pure.copyFailure("The copy was cut short", "light"), "The copy was cut short");
   assert.equal(pure.listFailure(new Error("Error: Access is denied"), "light"), "Cannot list this folder: permission denied");
   assert.equal(pure.listFailure("timed out", "dark"), "dark did not answer");
-  assert.equal(pure.listFailure("", null), "This machine did not answer");
+  assert.equal(pure.listFailure("", null), "This computer did not answer");
   assert.equal(pure.remoteDue(null, true, false), false);
   assert.equal(pure.remoteDue("light", false, false), false);
   assert.equal(pure.remoteDue("light", true, true), false);

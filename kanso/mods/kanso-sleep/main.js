@@ -6,15 +6,13 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, machines, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile } from "herdr";
 import { Store, idle, done, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText } from "./kdb.js";
+import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText, machinesToAsk } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
 import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway, homeOf, homePlace } from "./sleepwork.js";
 import { retry, tryOr, tryOrAsync, mapSeries, reduceSeries } from "./pure.js";
-import { skeleton, breathe } from "./ui.js";
-
-const ARM_MS = 4000;
+import { skeleton, breathe, Armed } from "./ui.js";
 
 const settled = async (fn) => {
   try { return { ok: true, value: await fn() }; } catch (error) { return { ok: false, error }; }
@@ -64,7 +62,7 @@ export default class Sleep extends View {
     this.handle.focus();
     this.view = "list";
     this.asleep = null;
-    this.armed = null;
+    this.armed = new Armed();
     this.busy = null;
     this.error = null;
     const ask = props() ?? {};
@@ -128,7 +126,7 @@ export default class Sleep extends View {
   }
 
   async asleepNow(now) {
-    const names = [...new Set(spaces().map((s) => s.machine).filter(Boolean))];
+    const names = machinesToAsk(machines(), spaces());
     const local = await this.store.asleep(true, null, now);
     const remote = await names.reduce(async (acc, machine) => [...(await acc), await this.remotePart(machine, now)], Promise.resolve([]));
     const parts = [{ machine: null, rows: local, quiet: null, asOf: null }, ...remote];
@@ -539,12 +537,6 @@ export default class Sleep extends View {
     return true;
   }
 
-  arm(key, cx, act) {
-    if (this.armed === key && Date.now() - this.armedAt <= ARM_MS) { this.armed = null; act(cx); return; }
-    this.armed = key; this.armedAt = Date.now(); cx.notify();
-    cx.timer.after(ARM_MS + 50, (cx) => { if (this.armed === key) { this.armed = null; cx.notify(); } });
-  }
-
   listed(e) {
     const { move, gAt } = listKey(e, this.listG);
     this.listG = gAt;
@@ -645,7 +637,7 @@ export default class Sleep extends View {
     const spaceName = (from, list) => spaces().find((sp) => projectOf(sp) === from)?.name ?? list[0]?.space ?? (base(folderOfKey(from)) || "~");
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
     const row = (a) => {
-      const id = `${a.from}:${a.name}`, key = `forget:${id}`, armed = this.armed === key;
+      const id = `${a.from}:${a.name}`, key = `forget:${id}`, armed = this.armed.is(key);
       const when = a.quiet ? (a.asOf ?? "") : `since ${since(a.saved)}`;
       return h_flex().id(`zz-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
         .when(a.quiet, (el) => el.opacity(0.55))
@@ -661,7 +653,7 @@ export default class Sleep extends View {
           .hover((s) => s.opacity(0.8)).on_click((_e, cx) => { cx.stop_propagation(); this.wake(a, cx); }).child("Wake")))
         .when(!this.busy && !a.quiet, (el) => el.child(div().id(`zz-rm-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(armed ? t.blocked : t.dim)
           .hover((s) => s.text_color(armed ? t.blocked : t.foreground))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.arm(key, cx, (cx) => cx.spawn(async (cx) => { try { await (await this.storeFor(a.machine ?? null)).forget(a.id); } catch (e) { this.error = String(e?.message ?? e); } await this.refresh(); cx.notify(); })); })
+          .on_click((_e, cx) => { cx.stop_propagation(); this.armed.press(key, cx, (cx) => cx.spawn(async (cx) => { try { await (await this.storeFor(a.machine ?? null)).forget(a.id); } catch (e) { this.error = String(e?.message ?? e); } await this.refresh(); cx.notify(); })); })
           .child(armed ? "Press again to forget it" : "Forget")));
     };
     return shell

@@ -9,7 +9,7 @@ import { G, T, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, 
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { memorySpec, memoryText } from "./memory-card.js";
-import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError } from "./model.js";
+import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords, installError, leaveShowAll } from "./model.js";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
@@ -79,7 +79,12 @@ export default class Memory extends View {
         const name = String(next.command).replace(new RegExp(`^${MOD}\\.`), "");
         if (name === "refresh") this.check(commandCx);
         else if (name === "open") this.wake(commandCx);
-        else if (name === "back") { this.armed.clear(); this.showAll = false; commandCx.notify(); }
+        else if (name === "back") {
+          const next = leaveShowAll(this.showAll);
+          if (next === null) return;
+          this.showAll = next;
+          commandCx.notify();
+        }
       }
     });
   }
@@ -136,6 +141,7 @@ export default class Memory extends View {
       const installFailure = installing ? installError(await tryOrAsync(() => readTextFile(paths.join(dir, "install.json"))), installing.at) : null;
       this.reading = false;
       if (this.closed || !this.awake) return;
+      const before = this.picture();
       this.now = now;
       this.digest = digest;
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
@@ -144,8 +150,12 @@ export default class Memory extends View {
       // One follow-up timer at most, never a chain per read.
       try { this.batchTimer?.cancel(); } catch { /* already gone */ }
       this.batchTimer = this.batch && !this.batch.finished ? readCx.timer.after(4000, (timerCx) => { this.batchTimer = null; this.read(timerCx); }) : null;
-      readCx.notify();
+      if (this.picture() !== before) readCx.notify();
     });
+  }
+
+  picture() {
+    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy]);
   }
 
   settle() {

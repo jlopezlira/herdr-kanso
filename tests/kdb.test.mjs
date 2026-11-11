@@ -18,7 +18,7 @@ const layout = (...resumes) => ({ per: null, cols: [{ w: 1, panes: resumes.map((
 
 async function database(t, dir = null) {
   dir ??= await temporary(t);
-  const mod = await load("kanso-spaces/kdb.js", ["Kdb", "spaceFor", "inPlace", "conversationOf", "STALE_MS", "ABANDON_MS", "GONE_MS"], { exec, appHome: () => dir });
+  const mod = await load("kanso-spaces/kdb.js", ["Kdb", "spaceFor", "inPlace", "conversationOf", "STALE_MS", "ABANDON_MS", "GONE_MS", "SPACE_KEEP_MS"], { exec, appHome: () => dir });
   return { ...mod, db: new mod.Kdb(join(dir, "kanso")), dir };
 }
 const sh = (file, sql) => exec("sqlite3", ["-bail", file, sql]);
@@ -72,7 +72,7 @@ test("a terminal address given to another agent never carries a name over", asyn
   assert.equal((await db.read("SELECT id FROM agents")).length, 2, "without a conversation an agent is not kept: no row by terminal");
 });
 
-test("an older sighting never overwrites a newer one; one not seen for a while is gone, one asleep never", async (t) => {
+test("an older sighting never overwrites a newer one; one not seen for a while and never moved is forgotten, one asleep stays", async (t) => {
   const { db, GONE_MS } = await database(t);
   await db.observe([seen("c1", "new", "sp-kanso", 1, "working")], 200);
   await db.observe([seen("c1", "old", "sp-shield", 0, "idle")], 100);
@@ -80,7 +80,22 @@ test("an older sighting never overwrites a newer one; one not seen for a while i
   const { id, token } = await db.sleepTab({ name: "z", space: spaces[0], project, layout: layout("c2"), agents: [{ conversation: "c2" }], saved: 200, now: 200 });
   await db.settle(id, token);
   await db.observe([], 200 + GONE_MS + 1);
-  assert.deepEqual(clone(await db.read("SELECT id, status FROM agents ORDER BY id")), [{ id: "c1", status: "gone" }, { id: "c2", status: "asleep" }]);
+  assert.deepEqual(clone(await db.read("SELECT id, status FROM agents ORDER BY id")), [{ id: "c2", status: "asleep" }]);
+});
+
+test("a conversation moved to a project stays after it leaves, and a project gone for 7 days is forgotten", async (t) => {
+  const { db, GONE_MS, SPACE_KEEP_MS } = await database(t);
+  const { KEEP_MS } = await load("kanso-spaces/since-left-model.js", ["KEEP_MS"]);
+  assert.equal(SPACE_KEEP_MS, KEEP_MS);
+  await db.setProject("c-kept", "sp-kanso", 1);
+  await db.observe([seen("c-kept", "kept", "sp-kanso", 0), seen("c-free", "free", "sp-kanso", 1)], 1);
+  await db.observe([], GONE_MS + 2);
+  assert.deepEqual(clone(await db.read("SELECT id, status FROM agents ORDER BY id")), [{ id: "c-kept", status: "gone" }]);
+  const now = SPACE_KEEP_MS + 5000;
+  await db.syncSpaces([{ id: "young", name: "young", folder: "/young", machine: null }, { id: "old", name: "old", folder: "/old", machine: null }], now);
+  await db.run(`UPDATE spaces SET gone=${now - 1000} WHERE id='young'; UPDATE spaces SET gone=${now - SPACE_KEEP_MS - 1} WHERE id='old';`);
+  await db.syncSpaces([{ id: "young", name: "young", folder: "/young", machine: null }], now);
+  assert.deepEqual(clone(await db.read("SELECT id FROM spaces ORDER BY id")), [{ id: "young" }]);
 });
 
 test("one sleep holds its row: an undo from a sleep that lost it never deletes another window's wake", async (t) => {

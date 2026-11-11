@@ -52,7 +52,7 @@
         Star on GitHub<span class="count" data-stars hidden></span>
       </a>
     </div>
-    <p class="fine">Free and open source. A layout for <a href="https://herdr.dev">Herdr</a> on macOS.</p>
+    <p class="fine">Free and open source. A layout for the <a href="https://herdr.dev">Herdr</a> desktop app, not the Herdr TUI, on macOS, Windows and Linux.</p>
 
     <figure class="window window-hero">
       <picture>
@@ -71,7 +71,7 @@
 
   <section class="block" id="install">
     <h2>Installed in one sentence</h2>
-    <p class="sub">No config files to write. Your agent does it, and kansō tells you when an update is ready.</p>
+    <p class="sub">No config files to write. Your agent does it, and kansō tells you when a stable update is ready. Early, in settings, is there for what is still being tested.</p>
     <ol class="steps">
       <li>
         <span class="step-n">1</span>
@@ -111,7 +111,7 @@
       <article class="tile">
         <figure class="window window-panel"><a href="shots/memory-panel.png" aria-label="Open the full-size screenshot"><img src="shots/memory-panel.png" loading="lazy" width="760" height="1150" alt="The Memory panel: memory free, the window and agents' size, recycles and memory given back."></a></figure>
         <h3>Memory</h3>
-        <p>Every agent's size and history. Recycle or close the idle ones from the panel.</p>
+        <p>Every agent's size and history, and a line in the status bar when little is free. Recycle or close the idle ones from the panel.</p>
       </article>
 
       <article class="tile" id="ports">
@@ -141,6 +141,7 @@
       <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>One agent, a tab or a project</strong>The moon in a pane's header sleeps that agent and leaves the rest of the tab; the project's menu sleeps a tab or all of it.</div></li>
       <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>The same conversation</strong>Wake brings each agent back on its conversation, in its tab, with its folder and options, and checks it is really there.</div></li>
       <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>Careful with your work</strong>A draft in the prompt is cleared, never sent. An agent at work or waiting on you doesn't sleep.</div></li>
+      <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>On another computer</strong>The record stays on the computer that owns the agents, so the same tabs are asleep wherever you sit, and waking from either works. When that computer does not answer, its rows stay listed and Wake waits.</div></li>
     </ul>
   </section>
 
@@ -156,7 +157,7 @@
 
   <section class="block spotlight" id="projects">
     <h2>Projects you keep, containers you can see</h2>
-    <p class="sub">A project is a folder you added. It stays in the sidebar when its last agent closes, and its + starts the agent you used there last, in the folder or in a new worktree on a branch you name. A remote machine's header turns its connection off and back on without setting it up again; what was running there keeps running.</p>
+    <p class="sub">A project is a folder you added. It stays in the sidebar when its last agent closes, and its + starts the agent you used there last, in the folder or in a new worktree on a branch you name. A remote machine's header turns its connection off and back on without setting it up again; what was running there keeps running. Files, Preview and Images work for a space on that computer, and a note on a picture still sends.</p>
     <ul class="facts">
       <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Threads by project</strong>Conversations grouped under the project they belong to, each with a + for a new one. Remove a project and its space closes; files are never touched.</div></li>
       <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>Containers</strong>What you would open Docker Desktop for: a project's compose files with Up, Rebuild and Down, every container's memory, and Quit Docker to get the VM's memory back.</div></li>
@@ -168,6 +169,7 @@
     <h2>Keys you can see, moves you can learn</h2>
     <p class="sub">Needs you in the sidebar lists waiting agents across projects. Cmd+J cycles through blocked agents first, then unseen finished turns, oldest first. Click the count to choose one.</p>
     <p class="sub">⌘⌥ h j k l move between panes as vim does, and every list answers j, k, gg and G. ⌘? draws your own keys on a keyboard, layer by modifier.</p>
+    <p class="sub">Windows has its own shortcuts for panes, spaces, panels and search. They use Ctrl and Alt, and they leave the Windows key and AltGr alone. Reset restores the shortcuts for your system, and Help follows the bindings you have.</p>
     <div class="duo">
       <figure class="window"><img src="shots/help-keys.png" loading="lazy" width="860" height="680" alt="kansō help: a keyboard with ⌘⌥ held, H J K L lit for moving between panes, and what each key does."></figure>
       <figure class="window" id="dojo"><img src="shots/dojo.png" loading="lazy" width="940" height="720" alt="The hjkl dōjō: Hachi the pixel shiba, nine levels, a board with a target to reach with h and l."></figure>
@@ -180,7 +182,7 @@
 
   <section class="block spotlight" id="memory">
     <h2>Agent sessions that last weeks</h2>
-    <p class="sub">Agents that stay open for weeks grow. kansō's guard checks every minute and cleans up without losing a conversation.</p>
+    <p class="sub">Agents that stay open for weeks grow. On macOS and Windows, kansō's guard checks every minute and cleans up without losing a conversation. On Windows the check runs in the background, without a console, and starts again when you sign in.</p>
     <ul class="facts">
       <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Recycles bloated agents</strong>A Claude agent idle for 20 minutes and past 900 MB exits and comes back on the same conversation, in a fresh process.</div></li>
       <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>Never under your hands</strong>Not the agent you are on, not while you type, never one that is working.</div></li>

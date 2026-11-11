@@ -10,6 +10,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared } from "herdr";
 import { G, Armed, tokens, quietLink, iconButton, ghost, breathe } from "./ui.js";
 import { afterMount } from "./pure.js";
+import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
   parseContainers, parseInspect, contextOf, parseImages, parseStats, vmPids, dockerVms, dockerHeld, byProject, imageRows,
@@ -20,6 +21,10 @@ import {
 const EVERY_MS = 5000;
 // `docker stats` takes a second or two: every third read. Compose files are looked for once a minute.
 const STATS_EVERY = 3, FILES_EVERY = 12;
+export function readPlan(reads) {
+  const stats = reads % STATS_EVERY === 1;
+  return { stats, files: reads === 1 || (reads % FILES_EVERY === 2 && !stats) };
+}
 // Compose project names and files seen per folder, kept across panels and restarts.
 // Kept per Docker context: another engine's projects are not this one's.
 const namesKey = (context) => `kanso.containers.names.${context?.name ?? "default"}`;
@@ -58,6 +63,7 @@ export default class Containers extends View {
     this.mem = new Map(); this.details = new Map();
     this.held = null; this.limit = null; this.context = null;
     this.reads = 0;
+    this.front = new Front();
     this.names = new Map();   // compose folder -> [{ name, files }] seen there, so Up after Down uses them
     this.namesKey = null;     // the Docker context they belong to
     this.pull = InputState.new({ placeholder: "postgres:17, redis, nginx:alpine…" });
@@ -65,7 +71,12 @@ export default class Containers extends View {
     this.pull.on("submit", () => this.pullImage());
     this.runFor = null;       // the image whose Run form is open, with its fields
     afterMount(cx, (cx) => this.refresh(cx));
-    this.ticker = cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
+    this.armTicker(cx);
+  }
+
+  armTicker(cx) {
+    if (this.ticker || this.front.behind()) return;
+    this.ticker = cx.timer.every(EVERY_MS, (tick) => this.refresh(tick));
   }
 
   close() {
@@ -75,6 +86,14 @@ export default class Containers extends View {
 
   // `now`: after an action, a read that overtakes any still going; the timer's waits its turn.
   refresh(cx, now = false) {
+    if (this.front.behind()) {
+      this.front.rest();
+      try { this.ticker?.cancel(); } catch { /* already gone */ }
+      this.ticker = null;
+      return;
+    }
+    this.front.woke();
+    this.armTicker(cx);
     if (this.reading && !now) return;
     this.reading = true;
     this.seq = this.seq + 1;
@@ -89,7 +108,8 @@ export default class Containers extends View {
         const found = parseContainers(ps.stdout);
         const projects = kansoProjects();
         this.reads = this.reads + 1;
-        const lookFiles = this.reads % FILES_EVERY === 1;
+        const plan = readPlan(this.reads);
+        const lookFiles = plan.files;
         const { deep, shallow } = lookIn(projects.flatMap((p) => p.folders).slice(0, 24), home());
         const named = (depth, list) => localService(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })).catch(fail);
         const [im, info, ps2, ins, ctx, vols, df, files] = await Promise.all([
@@ -105,7 +125,7 @@ export default class Containers extends View {
         const vms = vmPids(ps2.stdout);
         const openFiles = await localService(processApi).openFiles(vms).catch(() => ({ state: "error", values: [] }));
         const owned = dockerVms(openFiles.values ?? []);
-        const st = this.reads % STATS_EVERY === 1 ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
+        const st = plan.stats ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
         if (seq !== this.seq) return;
         // Docker quit while this read went on: say so rather than show what ran before.
         if ([im, info, st, vols].some(daemonDown)) { down(); return; }
@@ -388,7 +408,7 @@ export default class Containers extends View {
     // What Docker costs this computer comes first: its VM keeps memory even with nothing running.
     const hero = v_flex().gap(G.md)
       .when(!remote, (el) => el.child(v_flex().gap(4)
-        .child(div().text_size(12.5).text_color(c.dim).child("Docker uses of this Mac's memory"))
+        .child(div().text_size(12.5).text_color(c.dim).child("Docker uses of this computer's memory"))
         .child(h_flex().items_end().gap(G.md).flex_wrap()
           .child(div().text_size(48).line_height(1).font_light().text_color(c.text).child(typeof this.held === "number" ? size(this.held) : "–"))
           .when(Boolean(this.limit), (el2) => el2.child(div().pb(6).text_size(13).text_color(c.dim).child(`can grow to ${size(this.limit)}`))))))
@@ -410,7 +430,8 @@ export default class Containers extends View {
       .when(Boolean(space), (el) => el.child(space));
   }
 
-  render() {
+  render(cx) {
+    this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))
@@ -422,7 +443,6 @@ export default class Containers extends View {
           .child(header)
           .child(this.body(c))
           .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(c.red).child(this.error ?? "")))
-          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))
-          .child(div().text_size(10.5).text_color(c.dim).child("Docker on this computer, grouped by the Kanso project each container is for: its compose folder, else its name. Pulls, compose, shells and logs open in a tab."))));
+          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
   }
 }

@@ -1,8 +1,7 @@
 name: Release
 
-# Merging to main releases the version in kanso/mods/kanso-chrome/version.json
-# when it has no tag yet. The tag is what Kanso's updater offers, so a merged
-# change reaches people without anyone tagging it by hand.
+# Merging develop into main releases the version in version.json when that
+# tag does not exist yet. Nothing else creates a plain vX.Y.Z tag.
 on:
   push:
     branches: [main]
@@ -25,15 +24,16 @@ jobs:
         with:
           node-version: 22
       - name: Check the versioning
+        env:
+          KANSO_BRANCH: ${{ github.ref_name }}
         run: npm run check:version
-      - name: Release the version if it is new
+      - name: Plan the stable release
+        id: plan
+        env:
+          KANSO_BRANCH: ${{ github.ref_name }}
+        run: node scripts/release-plan.mjs stable
+      - name: Publish the stable release
+        if: steps.plan.outputs.action == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          version=$(node -p 'require("./kanso/mods/kanso-chrome/version.json").version')
-          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
-            echo "v$version is already released."
-            exit 0
-          fi
-          node scripts/check-version.mjs --notes > "$RUNNER_TEMP/notes.md"
-          gh release create "v$version" --target "$GITHUB_SHA" --title "Kanso $version" --notes-file "$RUNNER_TEMP/notes.md"
+        run: gh release create "${{ steps.plan.outputs.tag }}" --target "$GITHUB_SHA" --title "${{ steps.plan.outputs.title }}" --notes-file "${{ steps.plan.outputs.notes }}"

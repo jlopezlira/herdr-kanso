@@ -356,10 +356,10 @@ export class Shipped {
     const ids = await this.identities(databaseId);
     const idKey = JSON.stringify(ids.all.toSorted());
     if ((await this.store.meta("scanned-identities")) !== idKey) { await this.store.sql("DELETE FROM scans;"); await this.store.setMeta("scanned-identities", idKey); }
-    this.phase = "this machine's repositories"; cx.notify();
-    await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this machine's repositories, ${fmt(total - done)} to go`; cx.notify(); });
+    this.phase = "this computer's repositories"; cx.notify();
+    await this.store.scanLocal(ids.all, (done, total) => { this.phase = `this computer's repositories, ${fmt(total - done)} to go`; cx.notify(); });
 
-    this.phase = "your other machines"; cx.notify();
+    this.phase = "your other computers"; cx.notify();
     try {
       const synced = await this.store.syncMachines(ids.mine);
       const before = JSON.parse((await this.store.meta("identities")) ?? "[]");
@@ -602,8 +602,7 @@ export class Shipped {
         .when(Boolean(this.days), (el) => el.child(this.streak(c, inner)))
         .when(Object.keys(this.records).length > 0, (el) => el.child(this.recordsList(c)))
         .when(Boolean(rhythm), (el) => el.child(rhythm))
-        .child(this.byRepo(c))
-        .child(div().text_size(10.5).text_color(c.dim).child("Statistics only, kept in data/kanso-panel/shipped.db: your commits as every machine of yours read them (repository, hash, time, lines; no messages or code), shared between machines through a private gist, and GitHub's weekly sums for the rest. A repository's week counts the larger of the two. Contributions count the way your profile does, private ones included."));
+        .child(this.byRepo(c));
     return v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
       .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
@@ -614,7 +613,7 @@ export class Shipped {
               .child(iconButton("shipped-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: !this.days }))
               .child(iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
           .when(Boolean(this.share.open), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only the totals, streak, records and hours: no repository or machine names. The post opens with the image in it.", G.sm)))
+            "Only the totals, streak, records and hours: no repository or computer names. The post opens with the image in it.", G.sm)))
           .child(this.periods(c))
           .child(body)));
   }

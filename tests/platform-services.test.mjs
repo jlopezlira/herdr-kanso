@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
+import { processApi, parseLook } from "../kanso/mods/kanso-panel/platform-processes.js";
 import { transcriptApi } from "../kanso/mods/kanso-panel/platform-transcripts.js";
 import { repositoryApi } from "../kanso/mods/kanso-panel/platform-repositories.js";
 import { imageApi } from "../kanso/mods/kanso-panel/platform-images.js";
@@ -158,6 +158,29 @@ test("Windows session lookup keeps directory access failures distinct from an ab
   }
   const missing = stub(() => ({ code: 1, stdout: "", stderr: "" }));
   assert.equal(await processApi("windows", missing.run).runningSession("session", "C:\\Users\\me"), null);
+});
+
+test("one look reads home, liveness and the session, and Windows does not use sh", async () => {
+  const body = "{\n  \"sessionId\": \"abc\"\n}";
+  const parsed = parseLook(`home=/Users/me\npid=11\nalive=1\nrecord\n${body}\nkanso-look-end\npid=12\nalive=\nrecord\nkanso-look-end\npid=13\nalive=0\nrecord\nkanso-look-end\n`);
+  assert.equal(parsed.home, "/Users/me");
+  assert.equal(parsed.found.get(11).alive, true);
+  assert.equal(parsed.found.get(11).record.sessionId, "abc");
+  assert.equal(parsed.found.get(12).alive, null);
+  assert.equal(parsed.found.get(13).alive, false);
+  assert.equal(parsed.found.get(13).record, null);
+  const unix = stub(() => "home=/Users/me\n");
+  await processApi("macos", unix.run).look([11]);
+  assert.equal(unix.calls.length, 1);
+  assert.equal(unix.calls[0].program, "sh");
+  assert.equal(unix.calls[0].args.at(-1), "11");
+  assert.match(unix.calls[0].args[1], /kanso-look-end/);
+  const windows = stub(() => "home=C:\\Users\\me\npid=11\nalive=1\nrecord\n{\"sessionId\":\"abc\"}\nkanso-look-end\n");
+  const seen = await processApi("windows", windows.run).look([11]);
+  assert.equal(windows.calls.length, 1);
+  assert.equal(windows.calls[0].program, "pwsh");
+  assert.ok(windows.calls[0].args.every((arg) => !/\bsh\b/.test(arg)));
+  assert.equal(seen.found.get(11).record.sessionId, "abc");
 });
 
 test("Windows Markdown waiting records survive inspection errors and remove only departed owners", async () => {

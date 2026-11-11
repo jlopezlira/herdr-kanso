@@ -6,10 +6,45 @@ Removed changes is a major version, one that lists Added or Deprecated is a
 minor version, anything else is a patch. The format follows
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version`
 checks all of this, and merging to main releases the version in
-`kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
+`kanso/mods/kanso-chrome/version.json`, the stable release the updater
+offers unless Early is on.
 Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
+
+## [3.30.0] - 2026-11-11
+
+### Added
+
+- What's new lets you choose Stable or Early. Stable is the release everyone gets. Early gets changes before they are tested by everyone, and nothing is required. Going back to Stable keeps the version you have until Stable reaches it.
+
+### Changed
+
+- The status bar names the agent that is waiting and what it asks. When more wait, it shows how many more. A click goes to that agent. An unreachable computer says so, and a click retries it. When memory is low it says how much is free, and a click opens Memory.
+- Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
+- Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
+- A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.
+- Memory's Esc leaves the full list when that list is open, and otherwise does nothing.
+- The lines under Ports, Containers, Shipped and Worktrees that only explained the panel are gone. A scan time, a count and an error stay.
+- A beta and a release candidate can be published before a version is the one everyone gets.
+- Docs: the README, the gallery card and the site say what kansō does on macOS, Windows and Linux.
+- While the panel is open it asks GitHub only for the pull request in front. The list of every open one is read when you open that list. A limit from GitHub pauses the panel until the time it gives, including when you press refresh. While the window is behind others, or the panel is hidden, it does not ask, and it reads again as soon as you come back to it.
+- A mod that imports a name Herdr does not provide fails the test run, so it cannot ship with its panels dead.
+- An idle window redraws only when something on screen changed. A collapsed sidebar and a window behind others do not ask git for a project's status; opening the sidebar reads it at once.
+- Images on this computer skips a conversation whose size has not changed, and does not read while the window is behind or the panel is hidden. Files, with a folder watch, asks git once a minute instead of every 10 seconds. Ports and Containers do nothing while the window is behind, and read as soon as it is in front. Containers no longer asks for usage and compose files in the same moment.
+- The footer measures its height from one timer. Battery and the memory warning are read every 2 minutes.
+- Conversations that have left and were never moved to a project are forgotten, and a project gone for 7 days is forgotten. Picture copies on this computer are kept for a day, the same as copies from another computer.
+- Sleeping or waking a tab on another computer asks that computer less often, so a slow connection waits less. What it promises is the same: one owner, no second copy of an agent, and nothing saved when that computer does not answer.
+
+### Fixed
+
+- A computer that never answers no longer freezes the machine list, the sidebar keys, or keeping that computer awake. The first look cannot hold up the sidebar's first draw.
+- The pull request panel stays on this branch. Reviews waiting on you stay on the "N to review" pill.
+- Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
+- The pane header does not call a pull request ready before it knows you can merge it.
+- A missed answer from GitHub keeps the pull request on screen, with how long ago it was read and Retry, instead of a blank error or a spinner that never ends.
+- Opening an iOS simulator reads the stream's address without a function Herdr does not promise to have.
+- Asleep tabs on another computer stay in the list and can be woken when no project is open there.
 
 ## [3.29.0] - 2026-11-11
 

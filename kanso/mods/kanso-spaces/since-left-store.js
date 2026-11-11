@@ -1,4 +1,4 @@
-import { q, pruneSinceSql } from "./kdb.js";
+import { q, pruneSinceSql, forgetAgentsSql, forgetSpacesSql } from "./kdb.js";
 import { changes, digest, LOG_LIMITS } from "./since-left-model.js";
 
 export class SinceStore {
@@ -55,5 +55,5 @@ export class SinceStore {
     return this.db.run(`UPDATE since_focus SET pending_json=NULL,dismissed_to=MAX(dismissed_to,${through}) WHERE project=${q(project)};`);
   }
 
-  prune(now = Date.now()) { return this.db.run(pruneSinceSql(now, LOG_LIMITS)); }
+  prune(now = Date.now()) { return this.db.run(`${pruneSinceSql(now, LOG_LIMITS)}${forgetAgentsSql()}${forgetSpacesSql(now)}`); }
 }
