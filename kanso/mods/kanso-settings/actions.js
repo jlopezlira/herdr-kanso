@@ -12,7 +12,7 @@ export const GROUPS = [
   ] },
   { name: "Panes", section: "layout:kanso", actions: [
     { action: "kanso-strip.new-left", label: "New pane to the left" },
-    { action: "kanso-strip.next-needs-you", label: "Next agent that needs you" },
+    { action: "kanso-spaces.needs-you.next", label: "Next agent that needs you" },
     { action: "kanso-strip.send", label: "Send the pane's work to an agent" },
     { action: "kanso-strip.pin", label: "Pin the pane to its side" },
     { action: "kanso-strip.arrange", label: "Arrangements" },

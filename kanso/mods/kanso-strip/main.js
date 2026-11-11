@@ -101,18 +101,6 @@ const folder = (cwd) => {
   return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
 };
 
-// Blocked on a question before done; from the focused agent, the next in Herdr's order, wrapping round.
-// The focused one is never its own next, so pressing again moves on.
-export function nextNeedsYou(list, current) {
-  const rank = (a) => (a.status === "blocked" ? 0 : a.status === "done" ? 1 : 2);
-  const others = list.filter((a) => a.address !== current && rank(a) < 2);
-  if (!others.length) return null;
-  const best = Math.min(...others.map(rank));
-  const pool = others.filter((a) => rank(a) === best);
-  const at = list.findIndex((a) => a.address === current);
-  return pool.find((a) => list.indexOf(a) > at) ?? pool[0];
-}
-
 // When an agent stops working: what is in its folder, read from git and gh (never from the conversation).
 // Shared by pane, so every header copy agrees.
 const DIGEST = "kanso.digest";
@@ -660,15 +648,6 @@ export default class Strip extends View {
     });
   }
 
-  // agent.focus brings the agent's space, tab and pane in; the strip then slides to it.
-  goNeedsYou() {
-    const list = agents();
-    const current = list.find((a) => a.focused)?.address ?? focused()?.agent ?? focused()?.terminal ?? null;
-    const a = nextNeedsYou(list, current);
-    if (a) run("agent.focus", { terminal: a.address });
-    else notify({ title: "No agent needs you", level: "info", timeout: 1800 });
-  }
-
   openFind() {
     const term = focused()?.terminal;
     if (!term || String(term).includes("/")) { run("terminal.search"); return; }
@@ -694,7 +673,7 @@ export default class Strip extends View {
       else run(`kanso-spaces.list-${name === "go-up" ? "up" : "down"}`);
       return;
     }
-    if (name === "next-needs-you") { this.goNeedsYou(); return; }
+    if (name === "next-needs-you") { run("kanso-spaces.needs-you.next"); return; }
     if (name === "send") { const p = this.focusedPane(); if (p?.terminal) openSend(p); return; }
     if (name === "arrange") { openArrange(); return; }
     if (name === "find") { this.openFind(); return; }

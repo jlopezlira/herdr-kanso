@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.21.0] - 2026-11-10
+
+### Added
+
+- Needs you in the sidebar lists waiting agents across projects, with their name, reason and waiting time. Cmd+J cycles through blocked agents first, then unseen finished turns, oldest first. Click a row or press Enter to focus its pane. Sleeping agents stay out.
+
 ## [3.20.0] - 2026-11-10
 
 ### Added
