@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { check, parseChangelog, requiredBump, notes } from "../scripts/check-version.mjs";
+import { check, parseChangelog, requiredBump, notes, versionBranch } from "../scripts/check-version.mjs";
 
 const log = (...sections) => `# Changelog\n\n${sections.join("\n")}`;
 const section = (v, date, body) => `## [${v}] - ${date}\n\n${body}\n`;
@@ -60,6 +60,28 @@ test("The changelog keeps every release, newest first, in the agreed shape", () 
   assert.match(check({ version: "1.0", changelog: log("## [1.0] - 2026-11-01\n\n### Added\n\n- x\n"), ...ok }).join(), /not a semantic version/);
   assert.match(check({ version: "1.0.0", changelog: log("## 1.0.0\n"), ...ok }).join(), /a version heading reads/);
   assert.match(check({ version: "1.0.0", changelog: log(one), tags: ["1.1.0"], installedChangedSince: () => false }).join(), /older than the released v1\.1\.0/);
+});
+
+test("A prerelease tag is not a release, and develop prepares one next version", () => {
+  const base = section("1.0.0", "2026-11-01", "### Added\n\n- First.");
+  const same = { tags: ["1.0.0", "v2.0.0-beta.1", "2.0.0-rc.1"], installedChangedSince: () => false };
+  assert.deepEqual(check({ version: "1.0.0", changelog: log(base), ...same }), [], "a beta or rc tag needs no section and is not the newest release");
+  assert.deepEqual(check({ version: "1.0.0", changelog: log(base), tags: ["v1.0.0", "2.0.0-beta.1"], installedChangedSince: () => false, branch: "develop" }), []);
+  assert.match(check({ version: "1.0.0", changelog: log(base), tags: ["1.0.0", "1.1.0", "1.1.0-beta.1"], installedChangedSince: () => false }).join(), /tag v1\.1\.0 has no CHANGELOG\.md section/);
+  const next = section("1.1.0", "2026-11-02", "### Added\n\n- Second.");
+  assert.deepEqual(check({ version: "1.1.0", changelog: log(next, base), tags: ["1.0.0", "1.1.0-beta.2", "1.1.0-rc.1"], installedChangedSince: () => true, branch: "develop" }), []);
+  assert.match(check({ version: "1.2.0", changelog: log(section("1.2.0", "2026-11-02", "### Added\n\n- Second."), base), tags: ["1.0.0", "1.2.0-beta.1"], installedChangedSince: () => true, branch: "develop" }).join(), /minor bump: 1\.1\.0, not 1\.2\.0/);
+  const patch = section("1.0.1", "2026-11-02", "### Fixed\n\n- A bug.");
+  const minor = section("1.1.0", "2026-11-03", "### Added\n\n- Second.");
+  const two = { version: "1.1.0", changelog: log(minor, patch, base), tags: ["1.0.0"], installedChangedSince: () => true };
+  assert.deepEqual(check({ ...two, branch: "main" }), [], "main still allows every successor, tagged or not");
+  assert.deepEqual(check({ ...two, branch: "develop" }), ["CHANGELOG.md: develop prepares one version after v1.0.0; found 1.1.0, 1.0.1"]);
+});
+
+test("The version rules follow the pull request's base branch, and otherwise stay on main", () => {
+  assert.equal(versionBranch({ KANSO_BRANCH: "develop" }, ["node", "check-version.mjs"]), "develop");
+  assert.equal(versionBranch({ KANSO_BRANCH: "main" }, ["node", "check-version.mjs", "--branch", "develop"]), "develop");
+  assert.equal(versionBranch({}, ["node", "check-version.mjs"]), "main");
 });
 
 test("Release notes are the version's section", () => {

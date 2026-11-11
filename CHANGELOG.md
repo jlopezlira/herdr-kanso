@@ -20,6 +20,8 @@ release.
 - A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.
 - Memory's Esc leaves the full list when that list is open, and otherwise does nothing.
 - The lines under Ports, Containers, Shipped and Worktrees that only explained the panel are gone. A scan time, a count and an error stay.
+- A beta and a release candidate can be published before a version is the one everyone gets.
+- Docs: the README, the gallery card and the site say what kansō does on macOS, Windows and Linux.
 
 ## [3.29.0] - 2026-11-11
 
