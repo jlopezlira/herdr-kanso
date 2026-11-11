@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.22.0] - 2026-11-10
+
+### Added
+
+- Each remote machine in the sidebar has a switch that turns its connection off and back on with the setup already saved. Off leaves one dim row and is remembered; work already running on that machine keeps running. This computer has no switch. When another machine is present, each machine has a header with its name. A mark shows only while it is loading, unavailable, or waiting for a login. Unavailable can be retried, and a login Herdr asks for can be copied. With only this computer, the list is unchanged.
+
 ## [3.21.1] - 2026-11-10
 
 ### Fixed
