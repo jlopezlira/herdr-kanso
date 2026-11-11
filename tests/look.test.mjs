@@ -6,7 +6,7 @@ import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
-import { load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform } from "./helpers.mjs";
+import { load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -159,15 +159,6 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   await drain();
   return { look, cx, drain, calls, ons, say, store, world };
 }
-
-// A draw ends in a directory read, so wait for the state under test. One tick first, so a copy that should not start has a chance to.
-const until = async (ready) => {
-  const deadline = Date.now() + 2000;
-  do {
-    await new Promise((resolve) => setTimeout(resolve, 1));
-    if (await ready()) return;
-  } while (Date.now() < deadline);
-};
 
 test("The Look panel reads the agent in focus and shows its newest picture, copied where Herdr can draw it", async () => {
   const { look, calls } = await panel();

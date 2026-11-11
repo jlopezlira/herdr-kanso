@@ -27,10 +27,21 @@ export function tokens(t = {}) {
     border: t.border ?? t.input, input: t.input ?? t.border, subtle: t.hover ?? t.raised, raised: t.raised ?? canvas,
     selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface ?? canvas,
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
-    accent: t.accent ?? t.foreground, highlight: t.selection ?? t.selected ?? t.hover,
+    accent: t.accent ?? t.foreground, accentText: t.accent_foreground ?? t.background,
+    background: t.background ?? canvas,
+    blocked: t.blocked ?? t.ansi1, working: t.working ?? t.ansi3, done: t.done ?? t.ansi2,
+    highlight: t.selection ?? t.selected ?? t.hover,
     red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
   };
 }
+
+const TONE = {
+  red: "blocked", blocked: "blocked",
+  yellow: "working", working: "working",
+  green: "done", done: "done",
+  violet: "violet", dim: "dim", muted: "muted",
+};
+export const toneColor = (c, tone) => c[TONE[tone] ?? "dim"];
 
 /** A text-only action, so a choice never competes with the numbers. */
 export function quietLink(id, label, onClick, c, { disabled = false, size = 12, color = c.muted, label: spoken = label } = {}) {

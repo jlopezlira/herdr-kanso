@@ -4,7 +4,7 @@ import { execFile, spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { load, context, exec, temporary, clone } from "./helpers.mjs";
+import { load, context, exec, temporary, clone, until } from "./helpers.mjs";
 
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER"];
 const unixTest = (name, fn) => test(name, { skip: process.platform === "win32" && "Unix updater; PowerShell updater belongs to piece 3" }, fn);
@@ -194,7 +194,6 @@ const staged = async (home) => [
   ...(await readdir(home)).filter((x) => x.startsWith(".") && x !== ".kanso-updates"),
   ...(await readdir(updates(home)).catch(() => [])).filter((x) => x !== "lock").map((x) => `.kanso-updates/${x}`),
 ].toSorted();
-const until = async (ok) => { while (!(await ok())) await new Promise((r) => setTimeout(r, 20)); };
 const pending = (f) => Object.keys(f.store["kanso.update"]?.installs ?? {});
 // Another install holding the lock: a real process, asleep, whose life is the lock's.
 async function holder(t, f) {

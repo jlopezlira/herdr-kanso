@@ -14,6 +14,8 @@ export const tryOrAsync = async (fn, fallback = null) => {
 
 export const parseOr = (text, fallback = null) => tryOr(() => JSON.parse(text), fallback);
 
+export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
 // A panel's first command waits one timer turn: Herdr can lose one started in a remounted view's init turn.
 export const afterMount = (cx, start) => cx.timer.after(0, start);
 
