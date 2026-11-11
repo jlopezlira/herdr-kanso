@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS since_events(id INTEGER PRIMARY KEY AUTOINCREMENT, pr
 CREATE INDEX IF NOT EXISTS since_events_project ON since_events(project, id);
 CREATE TABLE IF NOT EXISTS since_observed(source TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
+CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
 export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents
@@ -194,6 +195,19 @@ export class Kdb {
     }
     return (await this.connection.cache.get(text)).map((row) => ({ ...row }));
   }
+
+  // Enough to add a remote machine back. hc machine rm forgets it here; its terminals keep running there.
+  machinesOff() {
+    return this.read("SELECT name, target, via, session, temporary FROM machines_off ORDER BY name;").then((rows) => rows.map((row) => ({
+      name: row.name, target: row.target ?? "", via: row.via ?? "", session: row.session ?? "", temporary: Boolean(row.temporary),
+    })));
+  }
+  parkMachine(row) {
+    const temporary = row.temporary ? 1 : 0;
+    return this.run(`INSERT INTO machines_off(name,target,via,session,temporary) VALUES(${q(row.name)},${q(row.target ?? "")},${q(row.via ?? "")},${q(row.session ?? "")},${temporary})
+      ON CONFLICT(name) DO UPDATE SET target=excluded.target,via=excluded.via,session=excluded.session,temporary=excluded.temporary;`);
+  }
+  forgetMachine(name) { return this.run(`DELETE FROM machines_off WHERE name=${q(name)};`); }
 
   // The migrated marker is checked inside the write lock by every statement, so two windows never both take the old data in.
   migrate({ sleeps = [], prefs = [] } = {}) {
@@ -417,9 +431,11 @@ export class Kdb {
     return this.held(`BEGIN;${end}COMMIT;`);
   }
 
-  async sleeps() {
-    await this.open();
-    const [rows, agents] = [await this.sql("SELECT * FROM sleeps;"), await this.sql("SELECT * FROM agents WHERE sleep_id IS NOT NULL;")];
+  async sleeps(spaces = null, now = Date.now()) {
+    const [, rows, agents] = await Promise.all([
+      spaces ? this.syncSpaces(spaces, now) : Promise.resolve(),
+      this.read("SELECT * FROM sleeps;"), this.read("SELECT * FROM agents WHERE sleep_id IS NOT NULL;"),
+    ]);
     return rows.map((r) => ({ ...r, agents: agents.filter((a) => a.sleep_id === r.id) }));
   }
 

@@ -1,7 +1,7 @@
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
 import { join } from "path";
-import { exec, hc } from "herdr";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { exec, home } from "herdr";
+import { tryOr } from "./pure.js";
 
 const TAIL = 8192;
 const RS = "\u001e";
@@ -82,17 +82,13 @@ export function readThread(kind, titleLine, head, recent, tail, name = null) {
 }
 
 // `pid` ties the reading to the process it came from, so a program started later in the same terminal is never taken for it.
-async function findThread({ address, app }, known, home) {
-  const got = await tryOrAsync(async () => {
-    const r = await hc(["get", address, "--json"]);
-    return r.code === 0 ? JSON.parse(r.stdout) : null;
-  });
+async function findThread({ app }, known, home, got) {
   const pid = got?.foreground?.pid;
   if (!pid) return null;
   const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
   const where = parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
   if (!where) return null;
-  const size = Number((await exec("sh", ["-c", "wc -c < \"$1\"", "sh", where.file])).stdout.trim());
+  const size = Number((await exec("wc", ["-c", where.file])).stdout.trim().split(/\s+/)[0]);
   if (!size) return null;
   if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return known;
   const r = await exec("sh", ["-c", READ, "sh", where.file]);
@@ -101,32 +97,30 @@ async function findThread({ address, app }, known, home) {
   return { kind, file: where.file, name: where.name, size, pid, ...readThread(kind, titleLine, head, recent, tail, where.name) };
 }
 
-// How many terminals are looked at at once: each takes three or four processes.
+// Read up to four terminals concurrently.
 const AT_ONCE = 4;
 
-export async function findThreads(list, known = {}) {
-  const home = (await exec("sh", ["-c", "printf %s \"$HOME\""])).stdout;
+export async function findThreads(list, known = {}, terms = []) {
+  const byAddress = new Map(terms.map((term) => [term.address, term]));
+  const here = home();
   const queue = list.values();
   const lane = async (got = []) => {
     const { value: item, done } = queue.next();
     if (done) return got;
-    return lane([...got, [item.address, await findThread(item, known[item.address], home)]]);
+    return lane([...got, [item.address, await findThread(item, known[item.address], here, byAddress.get(item.address))]]);
   };
   const found = await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
   return Object.fromEntries(found.flat().filter(([, thread]) => thread));
 }
 
-// Whether each conversation's process still runs. Conversations are found every 15-60 s, so asking every 10 s
-// (every minute behind other windows or with the sidebar collapsed) misses nothing; a new set of pids is asked at once.
+// Conversation liveness shares the task process table.
 export const ALIVE_MS = 10000;
-export const ALIVE_BEHIND_MS = 60000;
+export const ALIVE_BEHIND_MS = 30000;
 
 // Sorted, so the same processes always give the same signature.
 export const pidsOf = (threads) => [...new Set(Object.values(threads ?? {}).map((th) => th?.pid).filter((p) => Number.isInteger(p) && p > 0))]
   .toSorted((a, b) => a - b);
 
-// What `ps -o pid= -p` lists: one pid a line.
-export const pidsListed = (text) => new Set(String(text ?? "").split("\n").map((line) => Number(line.trim())).filter((p) => p > 0));
 // `listed`: anything with has(pid), that Set or checkTasks' table by pid, so neither is read twice.
 export const aliveIn = (listed, pids) => new Set(pids.filter((p) => listed.has(p)));
 

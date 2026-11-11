@@ -18,14 +18,14 @@ function element() {
   return proxy;
 }
 
-export function fixture({ dir = "/fixture", blocked = false, quiet = null } = {}) {
+export function fixture({ dir = "/fixture", blocked = false, quiet = null, working = 10 } = {}) {
   const state = { now: 1_000_000, project: 0, processes: [], reads: [], watches: [], timers: [], errors: [], inFlight: 0, layouts: [{ name: null, layout: "ready" }] };
   const shared = new Map();
   const projects = Array.from({ length: 4 }, (_, i) => ({ id: `s${i}`, name: `Project ${i}`, folder: `/projects/p${i}`, machine: null,
     tabs: [{ id: `tab${i}`, name: "Main", active: true }] }));
   const list = Array.from({ length: 10 }, (_, i) => ({ address: `t${i}`, pane: `p${i}`, space: `s${i % 4}`, tab: `tab${i % 4}`, space_name: `Project ${i % 4}`,
-    name: `Agent ${i}`, status: "working", app: "agent", seq: i, program: { agent: true, name: "Agent" }, focused: i === 0 }));
-  const terms = list.map((a, i) => ({ address: a.address, state: "live", status: a.status, status_ms: state.now - 1000, pid: 100 + i, foreground: { pid: 200 + i },
+    name: `Agent ${i}`, status: i < working ? "working" : "idle", app: "agent", seq: i, program: { agent: true, name: "Agent" }, focused: i === 0 }));
+  const terms = list.map((a, i) => ({ address: a.address, state: "live", status: a.status, status_ms: state.now - 1000, created_ms: state.now - 2000 + i, pid: 100 + i, foreground: { pid: 200 + i, argv: ["claude"] },
     labels: { "kanso.id": `id${i}`, "kanso.shown": a.name, "kanso.project": a.space_name, "herdr.space": a.space }, program: a.program, title: a.name }));
   const ps = list.map((a, i) => ({ pane: a.pane, terminal: a.address, tab: a.tab, cwd: projects[i % 4].folder, status: a.status, program: a.program }));
   if (quiet === "sleeping") {
@@ -54,7 +54,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null } = {}
           const term = terms.find((t) => t.address === args[1]);
           for (const pair of args.slice(2)) { const at = pair.indexOf("="); if (term) term.labels[pair.slice(0, at)] = pair.slice(at + 1); }
         }
-        return { code: 0, stdout: JSON.stringify(args[0] === "get" ? { created_ms: 1 } : { machines: [] }), stderr: "" };
+        return { code: 0, stdout: JSON.stringify(args[0] === "get" ? terms.find((term) => term.address === args[1]) ?? {} : { machines: [] }), stderr: "" };
       }
       if (command === "git") return { code: 128, stdout: "", stderr: "not a git repository" };
       return { code: 0, stdout: "", stderr: "" };

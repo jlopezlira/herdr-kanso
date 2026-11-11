@@ -92,10 +92,9 @@ export class Store {
     })().catch((e) => { this.ready = null; throw e; }));
   }
 
-  async asleep(all = false) {
+  async asleep(all = false, spaces = null, now = Date.now()) {
     await this.open();
-    const now = Date.now();
-    return rowsOf(await this.kdb.sleeps()).filter((a) => all || idle(a, now));
+    return rowsOf(await this.kdb.sleeps(spaces, now)).filter((a) => all || idle(a, now));
   }
   // What is to sleep, and nothing more: the sidebar does the rest (sleepwork.js). `a.tab`: the tab that closes once all left.
   async sleep(project, a) {

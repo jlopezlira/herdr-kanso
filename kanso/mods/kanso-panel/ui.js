@@ -8,8 +8,10 @@ export const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 export const H = { control: 30, compact: 24 };
 /** Radii: controls stay tighter than cards. */
 export const R = { control: 6, card: 8 };
-export const T = { page: 20, card: 13.5, metric: 22, value: 12.5, body: 11.5, small: 10.5, label: 9.5 };
+export const T = { page: 20, card: 13.5, title: 15, metric: 22, value: 12.5, body: 11.5, small: 10.5, label: 9.5 };
 export const ICON = 15;
+// A machine header is a step larger than a row glyph.
+export const HEADER_ICON = 17;
 export const EASE = { duration: 180, easing: "ease-out" };
 /** A second press within this long confirms a removal. */
 export const ARM_MS = 4000;
@@ -68,7 +70,7 @@ export function iconButton(id, icon, tip, onClick, c, { spin = false, disabled =
 
 export function section(c, title, note) {
   return h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.sm)
-    .child(div().flex_none().text_size(15).text_color(c.text).child(title))
+    .child(div().flex_none().text_size(T.title).text_color(c.text).child(title))
     .child(div().min_w(0).truncate().text_size(12).text_color(c.dim).child(note ?? ""));
 }
 

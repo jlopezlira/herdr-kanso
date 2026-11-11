@@ -1,4 +1,4 @@
-// Budgets count real production paths through their first native draw.
+// Budgets count production paths through their first loading draw.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { temporary } from "./helpers.mjs";
@@ -36,8 +36,8 @@ for (const quiet of ["sleeping", "off"]) {
   });
 }
 
-test("sidebar at rest with 10 agents in 4 projects starts at most 12 processes per minute", async (t) => {
-  const dir = await temporary(t), f = fixture({ dir });
+for (const [working, budget] of [[2, 15], [0, 3]]) test(`sidebar at rest with 10 agents, ${working} working, in 4 projects starts at most ${budget} processes per minute`, async (t) => {
+  const dir = await temporary(t), f = fixture({ dir, working });
   const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
   f.host.Kdb = Kdb;
   const db = new Kdb();
@@ -53,7 +53,10 @@ test("sidebar at rest with 10 agents in 4 projects starts at most 12 processes p
   f.state.processes.length = 0;
   f.state.reads.length = 0;
   await f.advance(60_000);
-  t.diagnostic(JSON.stringify({ processes: f.state.processes.length, commands: f.state.processes.reduce((out, p) => ({ ...out, [p.command]: (out[p.command] ?? 0) + 1 }), {}), files: f.state.reads.length }));
+  t.diagnostic(JSON.stringify({ working, processes: f.state.processes.length, commands: f.state.processes.reduce((out, p) => ({ ...out, [p.command]: (out[p.command] ?? 0) + 1 }), {}), shells: f.state.processes.filter((p) => p.command === "sh").reduce((out, p) => {
+    const kind = p.args[1].startsWith('pid="$1"') ? "transcript discovery" : p.args[1].startsWith("for d;") ? "project folders" : p.args[1].startsWith("printf") ? "home" : "other";
+    return { ...out, [kind]: (out[kind] ?? 0) + 1 };
+  }, {}), files: f.state.reads.length }));
   assert.equal(f.state.timers.filter((timer) => timer.every && timer.ms === 1000).length, 0, "sleep kick registered a separate 1-second timer; budget 0");
-  assert.ok(f.state.processes.length <= 12, `sidebar at rest started ${f.state.processes.length} processes per minute; budget 12`);
+  assert.ok(f.state.processes.length <= budget, `sidebar at rest (${working} working) started ${f.state.processes.length} processes per minute; budget ${budget}`);
 });

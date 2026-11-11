@@ -72,3 +72,14 @@ test("a failed cached read is tried again", async (t) => {
   await db.run("CREATE TABLE prefs(key TEXT, value TEXT);");
   assert.deepEqual(clone(await db.prefs()), []);
 });
+
+test("space synchronization and sleeping rows share one database process", async (t) => {
+  const { db, calls } = await database(t);
+  await db.sleepTab({ name: "Sleep", space: { id: "s1", name: "Project" }, project: ":/project", layout: { cols: [] }, agents: [] });
+  calls.length = 0;
+  const rows = await db.sleeps([{ id: "s1", name: "Project", folder: "/project" }], 123);
+  assert.equal(calls.length, 1, `sleep reload started ${calls.length} processes; budget 1`);
+  assert.equal(rows[0].name, "Sleep");
+  assert.deepEqual(Array.from(rows[0].agents), []);
+  assert.equal((await db.read("SELECT seen FROM spaces WHERE id='s1';"))[0].seen, 123);
+});
