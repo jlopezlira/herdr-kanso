@@ -180,6 +180,9 @@ export default class Tabs extends View {
     else if (tab) {
       const tabs = spaces().find((s) => s.active)?.tabs ?? [];
       if (Number(tab[1]) <= tabs.length) run("tab.select", { index: Number(tab[1]) });
+    } else if (name === "memory") {
+      const tree = layout();
+      if (this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body")) !== "memory") this.mount("memory");
     } else if (name === "sim" || panel) {
       const id = panel ? panelList().filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
       if (!id) return;

@@ -8,7 +8,7 @@ import { exec, knownAgents, notify, openOverlay, run, theme, setShared, shared, 
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./ghchecks.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
@@ -17,7 +17,7 @@ import { awayShown } from "./since-left-model.js";
 import { pieces } from "./pieces.js";
 import { fetchDue, parseRemote } from "./pr-remote.js";
 import { q } from "./kdb.js";
-import { CALL_MS, TICK_MS, ageOf, asOfAge, authFresh, bounded, heldView, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
+import { CALL_MS, TICK_MS, ageOf, asOfAge, authFresh, heldView, needsPermission, needsThreads, pollFacing, pollTick, readDue, stayOnBranch, threadKey, waitLine } from "./pr-poll.js";
 
 const keepsFacts = () => awayShown(pieces(shared));
 

@@ -230,7 +230,7 @@ test("sidebar.away hidden records nothing", async () => {
 test("sidebar.computers hidden does not list computers", async () => {
   const { view, cx, cmds, flush } = await sidebar({ "sidebar.computers": "hide" });
   let held = 0;
-  view.awake = { sync: async () => { held += 1; }, nextWait: () => null };
+  view.awake = { sync: async () => { held += 1; }, nextWait: () => null, follow() { return this.nextWait(); } };
   view.refreshMachines(cx);
   await flush();
   assert.equal(cmds.includes("hc"), false);

@@ -15,7 +15,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - **Top strip**, 48 tall: the macOS traffic lights (at `[12, 16]`) and,
     at its right end (14 in), Herdr's mark: its icon
     (`frame/welcome/herdr.png`, 20, radius 6) and "Herdr" (13, semibold,
-    `foreground`), so you know what you're in. It drags the window.
+    `foreground`). It drags the window.
     Collapsed, the strip is empty and the mark sits lower, over the rail's
     buttons.
   - **Spaces** (`kanso-spaces`), filling the middle.
@@ -163,11 +163,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     "− n +" control: fewer or more panes per view, and the number itself
     evens the columns out to 1/n.
     `kanso-status`, text 11.5 `muted`:
-    - At the left, the machine (monitor or server icon, "This computer") and
-      the branch.
-    - At the right, "N agent(s) need you" in `blocked` with a dot (blocked or unseen done), then "X of N working" (or "N agents
-      idle" / "No agents"), then the palette shortcut "⌘⇧P" with the tooltip
-      "Command palette".
+    - Left: computer icon, "This computer" or its name, then the branch.
+      Unreachable: "<name> · unreachable" in `blocked`; a click retries.
+    - Right, while someone waits: mark, name, question (260) and +N; a click
+      runs `kanso-spaces.needs-you.next`. "Memory N% free" in `blocked` when
+      under the guard's floor; a click opens Memory. Then the working count
+      and "⌘⇧P".
 - **Themes**: `kanso` (dark) and `kanso-day` (light), in `themes/`.
   - Dark: background `#1b1b19`, foreground `#d8d4cb`, chrome and canvas
     `#161615`, border `#272725`, input `#353430`, muted `#949086`, dim
@@ -193,7 +194,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
-  loading: kit; unavailable: error. Status shares this queue.
+  loading: kit; unavailable: error. The bar names the oldest blocked one from this queue.
   Strip checks panes each 1.5 s; leaving
   `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
   commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
@@ -213,13 +214,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `icons/working.svg`), in `working`, turning once every 0.9 s
     (`.spin(900)`). No other spinner for an agent's state.
   - Blocked: a solid `blocked` disc with a bold `chrome` "!". The pane
-    header adds the text "Needs you", the status bar says "N agent(s) need
-    you", and a project in the collapsed rail shows it.
+    header adds "Needs you", and a project in the collapsed rail shows it.
   - Done: the circle closed, in `done`.
   - Idle: a thin even ring in `idle` at 70%, on sidebar rows (and in the
     status bar when nothing works); nothing on the tab or header.
-  - The 7px corner dots on the strip's edge tabs stay dots: a badge, too
-    small for a mark.
+  - The 7px corner dots on the strip's edge tabs stay dots: a badge.
 - **Motion**, native, and never stopped behind other windows (a still ring
   there reads as a stalled agent; what the window saves behind others is
   work: Git, machines, processes less often). The view switch's
@@ -261,13 +260,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `hc machine ls` shows it connected. If the save fails after the remove,
     or add keeps failing, it stays with Retry; the hint is the state's
     tooltip. This computer has no power. Alone, no header. On keeps it awake
-    and renews that hold; a closed lid still sleeps, and an asleep machine
-    is not woken. Connected, a remote row has Sync (`sync-row.js`): `text`
-    and always shown when on, `yellow` when it cannot run, `dim` on hover
-    when off; the tooltip has the words. A click saves
-    `data/kanso-sync/config.json` and bumps `kanso.sync.kick`, so Spend
-    exchanges at once.
-    `hc machine ls`: 30 s in front, 2 min behind.
+    and renews that hold after a missed answer; a closed lid still sleeps,
+    and an asleep machine is not woken. Connected, a remote row has Sync
+    (`sync-row.js`): `text` and always shown when on, `yellow` when it cannot
+    run, `dim` on hover when off; the tooltip has the words. A click saves
+    `data/kanso-sync/config.json` and bumps
+    `kanso.sync.kick`, so Spend exchanges at once.
+    `hc machine ls`: 30 s in front, 2 min behind, and a hung one is given up.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
     order button (kanso.db `spaces.order`): last update, needs you, kind,
@@ -534,13 +533,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `data/kanso-arrange/arrange.db`, by project and name; another
     project's opens in this space's folder). Save reads each pane's `hc
     get --json` foreground argv (session flags dropped) and cwd and the
-    strip's columns; opening (tabkit.js, shared with kanso-sleep) runs
+    strip's columns; opening (tabkit.js) runs
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
-  - `kanso-sleep`: a dialog (520 wide); asleep is a status in that computer's
-    `kanso.db`. Sleep hides it; a last tab selects a neighbour (Undo returns),
-    or stays shown when alone. One owner (20 s). Another computer's space
-    sleeps there; while it is silent its rows stay grey and Wake waits.
+  - `kanso-sleep`: a dialog (520 wide); asleep is in that computer's `kanso.db`.
+    Sleep hides it; a last tab selects a neighbour (Undo returns) or stays alone.
+    One owner (20 s). Another computer's space sleeps there; each step asks
+    once, then not again until its timer. Silent rows stay grey and Wake waits.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With
@@ -554,7 +553,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
     Cmd+Shift+O (`mod.open:open-with`, in `keys.json`) opens it.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
-  - `kanso-status`: status bar; "N agents need you" runs `kanso-spaces.needs-you.next`.
+  - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
     (a failure says why), git marks, code in place, Markdown or a picture to
@@ -712,8 +711,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - With the panel closed, no process started by Files or Insights is
   running.
 - A working agent shows the same turning arc on its tab, header,
-  agent row and the status bar. A blocked one shows "Needs you" in its header and in the
-  status bar.
+  agent row and the status bar. A blocked one shows "Needs you" in its header.
 - Collapsed, the sidebar is 76 wide, its edge does not drag, and the traffic
   lights sit inside it. Opened, it drags between 200 and 480 and reopens at
   the width you left.
