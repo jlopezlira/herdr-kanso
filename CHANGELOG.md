@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.26.0] - 2026-11-11
+
+### Added
+
+- Memory can be turned on in Windows. It checks every minute in the background without opening a console and starts again when you sign in. Windows reports each process's working set instead of macOS's physical footprint, and page-file usage instead of macOS swap pressure. Window restarts are available only when the recorded window program identifies exactly one process; with no match or several windows, Memory explains why and leaves them alone.
+
 ## [3.25.0] - 2026-11-11
 
 ### Added

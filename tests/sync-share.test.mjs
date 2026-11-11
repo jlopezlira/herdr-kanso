@@ -26,7 +26,7 @@ test("Every shipped platform copy is required by its mod's imports", async () =>
     .map((entry) => `kanso/mods/${entry.name}/`).concat(["markdown-panel/mods/markdown-panel/", "open-with/mods/open-with/"]);
   for (const folder of folders.filter((folder) => folder !== source)) {
     const files = await readdir(new URL(folder, root));
-    const modules = await Promise.all(files.filter((name) => name.endsWith(".js") && !platformFile(name)).map((name) => readFile(new URL(folder + name, root), "utf8")));
+    const modules = await Promise.all(files.filter((name) => /\.m?js$/.test(name) && !platformFile(name)).map((name) => readFile(new URL(folder + name, root), "utf8")));
     const needed = [...platformDependencies(modules, canonical)].sort();
     assert.deepEqual(files.filter(platformFile).sort(), needed, folder);
     if (folder.startsWith("kanso/") || folder.startsWith("markdown-panel/")) {

@@ -133,7 +133,7 @@ export class Ports {
     return list.map((s) => {
       const h = historyOf(s, this.hist?.data, now);
       return {
-        ...s,
+        ...s, cwdReason: cwd.reason ?? null,
         // One asked to stop that is still here gets a force stop next.
         ...(this.forced?.has(s.pid) ? { force: true } : {}),
         ...(h ? { mb: h.mb, startedAt: h.startedAt, project: h.project } : {}),
@@ -218,7 +218,7 @@ export class Ports {
     this.busy = { ...this.busy, install: Date.now() };
     cx.notify();
     cx.spawn(async (cx) => {
-      await localService(systemApi).guardRun(await this.node(), paths.join(appHome(), GUARD_FILE), ["install"]).catch(() => { this.idle(); });
+      await localService(systemApi).guardRun(await this.node(), paths.join(appHome(), GUARD_FILE), ["install"], appHome()).catch(() => { this.idle(); });
       this.guardFile = undefined;
       for (const ms of [3000, 8000, 20_000]) cx.timer.after(ms, (cx) => this.refresh(cx, { history: true }));
       cx.notify();
@@ -250,7 +250,7 @@ export class Ports {
       .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
         .child(div().size(6).flex_none().rounded_full().bg(owner ? c.green : c.yellow))
         .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : "No pane runs it"))
-        .when(Boolean(s.cwd || s.project), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(s.cwd ? tilde(s.cwd) : s.project))))
+        .when(Boolean(s.cwd || s.project || s.cwdReason), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(s.cwd ? tilde(s.cwd) : s.project || s.cwdReason))))
       .child(h_flex().flex_wrap().gap_x(G.lg)
         .child(quietLink(`pt-open-${s.pid}`, "Open in the browser", (cx) => cx.open_url(`http://localhost:${s.ports[0]}`), c, { color: c.text }))
         .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${s.pid}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))

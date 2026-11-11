@@ -172,6 +172,8 @@ test("guard: resume command keeps safe options and refuses what it can't rebuild
   assert.equal(g.resumeArgv(["node", "/x/cli.js"], "S"), null);
   assert.equal(g.sameStart("Sun Nov  1 06:12:52 2026", new Date(Date.UTC(2026, 10, 1, 6, 12, 52)).toString().slice(0, 24)), true);
   assert.equal(g.sameStart("Sun Nov  1 06:12:52 2026", new Date(Date.UTC(2026, 10, 1, 6, 42, 52)).toString().slice(0, 24)), false);
+  assert.equal(g.sameStart("2026-11-11T00:00:00Z", "2026-11-11T00:00:00.000Z"), true);
+  assert.equal(g.sameStart("2026-11-11T00:00:00Z", "2026-11-11T00:00:10.000Z"), false);
 });
 
 test("resume: one rebuild of a Claude Code command, the options it keeps and the ones it refuses", async () => {
@@ -441,4 +443,73 @@ test("guard: a server missed by one look and back is still running; running ones
   const many = Array.from({ length: 301 }, (_, i) => ({ ...a, key: `${i}@${i}`, pid: i }));
   p = g.updatePorts(g.updatePorts(null, many, 1000), many, 2000);
   assert.equal(p.totals.opened, 301);
+});
+
+test("Memory reports a failed Turn on and ignores earlier install attempts", async () => {
+  const { installError } = await load("kanso-guard/model.js", ["installError"]);
+  assert.equal(installError('{"at":100,"ok":false,"reason":"Access is denied"}', 90), "Access is denied");
+  assert.equal(installError('{"at":80,"ok":false,"reason":"old"}', 90), null);
+  assert.equal(installError('{"at":100,"ok":true}', 90), null);
+  assert.equal(installError('{"at":100,"ok":false}', 90), "Memory could not turn on");
+  assert.equal(installError("bad", 90), null);
+});
+
+test("Windows Turn on launches hidden and keeps the installer ancestry alive until capture", async () => {
+  const calls = [], { Memory } = await load("kanso-guard/main.js", ["Memory"], {
+    window: () => ({ platform: "windows" }), appHome: () => "C:\\Herdr Home", readTextFile: async () => '{"node":"C:\\\\Node JS\\\\node.exe"}',
+    exec: async (command, args) => { calls.push([command, args]); return { code: 0, stdout: "", stderr: "" }; },
+  });
+  const pending = [], cx = { notify() {}, spawn: (fn) => pending.push(fn(cx)), timer: { after() {} } };
+  const view = new Memory();
+  Object.assign(view, { busy: {}, node: null, timers: [], awake: true });
+  view.turnOn(cx);
+  while (pending.length) await pending.shift();
+  assert.equal(calls[0][0], "pwsh");
+  assert.match(calls[0][1].at(-1), /Start-Process.*Node JS.*Hidden.*installerPid/s);
+  assert.match(calls[0][1].at(-1), /HERDR_APP_HOME='C:\\Herdr Home'/);
+  assert.ok(view.busy.install);
+});
+
+test("Memory hides the restart without an identified window and omits actions for unsupported shells", async () => {
+  const ids = [], texts = [];
+  const element = () => {
+    const proxy = new Proxy({}, { get: (_target, method) => (...args) => {
+      if (method === "when" && args[0]) args[1](proxy);
+      if (method === "id") ids.push(args[0]);
+      if (method === "child" && typeof args[0] === "string") texts.push(args[0]);
+      return proxy;
+    } });
+    return proxy;
+  };
+  const { Memory } = await load("kanso-guard/main.js", ["Memory"], { div: element, v_flex: element, h_flex: element, Button: { new: (id) => { ids.push(id); return element(); } } });
+  const view = new Memory(), data = sample();
+  Object.assign(view, { busy: {}, armed: { is: () => false }, digest: null, now: { data } });
+  data.window = { pid: null, mb: 0, reason: "Several windows" };
+  data.swapLabel = "page file";
+  view.hero({}, data, false);
+  assert.ok(!ids.includes("guard-restart"));
+  assert.equal(texts.filter((text) => text === "Several windows").length, 1);
+  assert.ok(texts.some((text) => text.includes("page file")));
+  data.window = { pid: 10, mb: 200 };
+  view.hero({}, data, false);
+  assert.ok(ids.includes("guard-restart"));
+  ids.length = 0;
+  const agent = { ...data.agents[1], closeable: false, recyclable: false };
+  view.agentRow({}, agent, 0, { limit: 900, action: false, reason: true });
+  assert.ok(!ids.some((id) => /guard-(?:recycle|close)-/.test(id)));
+  const { staleAgents } = await load("kanso-guard/model.js", ["staleAgents"]);
+  assert.equal(staleAgents([{ ...agent, idleMin: 9000 }]).length, 0);
+});
+
+test("Windows server rows retain the reason their working directory is unavailable", async () => {
+  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], {
+    window: () => ({ platform: "windows" }), home: () => "C:\\Users\\JJ", appHome: () => "C:\\Herdr",
+    exec: async (_command, args) => ({ code: 0, stdout: args.at(-1).includes("Get-NetTCPConnection") ? '[{"pid":50,"port":3000}]' : '[{"pid":50,"ppid":7,"command":"node server.js","name":"node.exe"}]', stderr: "" }),
+  });
+  const view = new Ports();
+  view.shells = async () => new Map([[7, "t1"]]);
+  const rows = await view.read();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].cwd, null);
+  assert.match(rows[0].cwdReason, /Herdr API on Windows/);
 });

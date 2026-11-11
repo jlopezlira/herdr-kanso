@@ -10,11 +10,30 @@ mounted with `{ mod: "kanso-guard" }`, with a memory-stick icon
 the title "Memory", so Herdr never docks a copy on its own.
 
 A quiet panel for sessions that run for weeks: about a dozen coding agents that
-are never closed. A daemon, the guard (`guard.mjs`, run by launchd every 60 s),
+are never closed. A daemon, the guard (`guard.mjs`, checked every 60 s),
 samples memory, recycles bloated idle Claude agents, restarts the Herdr window
 when it bloats, ends hung helpers and keeps a history. The panel shows what the
 guard sees and did, and lets you do the same by hand. It works only while you
-can see it: hidden or closed, it runs nothing.
+can see it: hidden or closed, the panel runs nothing; the installed guard keeps
+checking in the background.
+
+On macOS, launchd still runs each check. Windows registers one current-user
+logon task and starts it at Turn on: a hidden `watch` process checks every
+60 seconds, with one watcher owner and the usual lock around each check.
+`uninstall` stops it and removes the task. No administrator rights or downloads.
+Windows measures **working set**, not physical footprint; free memory comes from
+available RAM and page-file usage is informational, so only the free-memory
+limit triggers low memory. Forced stops say why. Unavailable working directories
+say so; recycling and closing require a PowerShell terminal on Windows.
+
+At install on Windows, the guard records the executable of its first ancestor
+beyond Node and shell launchers. Only exactly one matching process is the window;
+zero or several matches produce one event per changed reason, no window sample
+and no Restart window action. Windows core identity comes from `hc server status --json`;
+macOS sums all process-table `herdr-core` programs except `connect` clients.
+Failed readings log the primitive and keep the check running with its previous
+fallback; failed macOS memory fields and idle seconds are zero.
+Linux remains unavailable. `HERDR_APP_HOME` overrides Herdr's `~/.config/herdr-app`.
 
 ## What you see
 
@@ -79,8 +98,8 @@ keep moving behind other windows.
   `data/kanso-guard/now.json`; `history.json` once a minute. No process runs to
   read. History is reduced right after reading to the three chart series, the
   sparklines and the totals (`digestHistory`); the raw file is not kept.
-- **Actions.** Each starts the guard detached, so exec's 30 s limit never
-  applies: `exec("sh", ["-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', node,
+- **Actions.** Each starts the guard detached, hidden on Windows, so exec's
+  30 s limit applies only to the launcher. On macOS: `exec("sh", ["-c", 'nohup "$0" "$@" >/dev/null 2>&1 &', node,
   "<appHome>/mods/kanso-guard/guard.mjs", ...args])`, with `node` from the
   mod's `runtime.json` (`{ "node": "node" }`). The view reads again 3, 8 and 20
   s later. The action's label reads "…ing" until the guard's files show it
@@ -92,7 +111,9 @@ keep moving behind other windows.
     window").
   - `reap`: ends hung helpers; confirmed the same way.
   - `check`: the refresh icon and ⌘R.
-  - `install`: "Turn on".
+  - `install`: "Turn on". The Windows launcher keeps its ancestry alive for
+    up to 10 s while the installer records the window program; install failures
+    are shown from `install.json` even before the first sample.
 - **Keys** (from `keys.json`, `mod:kanso-guard`, only while the panel has
   focus): ⌘R check now, Esc back (disarms a pending confirmation and folds
   the agent list). Both are on the Keys page.
@@ -105,7 +126,7 @@ keep moving behind other windows.
 
 Written by the guard to `${appHome()}/data/kanso-guard/` (read up to 1 MiB):
 
-- `now.json`: `{"v":1,"at":ms,"machine":{"totalMB","freePct","swapMB","swapTotalMB"},
+- `now.json`: `{"v":1,"at":ms,"metric":"working set"|"physical footprint","swapLabel":"page file"|"swap","machine":{"totalMB","freePct","swapMB","swapTotalMB"},
   "window":{"pid","mb","oom","limitMB"},"core":{"mb"},"agents":[{"pid","kind","name","cwd",
   "terminal","mb","status","idleMin","session","ageMin","recyclable","why"}],
   "heaviest":[{"pid","name","mb","ageMin"}],"helpers":n,"limits":{"windowMB","agentMB",
@@ -131,7 +152,8 @@ Written by the guard to `${appHome()}/data/kanso-guard/` (read up to 1 MiB):
   `agentSparks`, `sparkFor`, `digestHistory`.
 - **`ui.js`**: the panel kit, a byte-for-byte copy of `kanso-panel/ui.js`
   (`npm run sync:share`).
-- **`guard.mjs`**: the daemon (Node). Commands: `check`, `install`,
+- **`guard-host.mjs`**: Node host primitives, with shared process and port services.
+- **`guard.mjs`**: the daemon (Node). Commands: `watch`, `check`, `install`, `uninstall`,
   `recycle <pid>`, `restart-window`, `reap`. It writes only under
   `data/kanso-guard/`.
 

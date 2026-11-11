@@ -164,7 +164,7 @@ export function parseBatch(text, now = Date.now()) {
 }
 
 export function staleAgents(agents = [], minIdle = 2880, focused = null) {
-  return agents.filter((a) => a.kind === "claude" && a.status === "idle" && (num(a.idleMin) ?? 0) >= minIdle && (!focused || a.terminal !== focused))
+  return agents.filter((a) => a.closeable !== false && a.kind === "claude" && a.status === "idle" && (num(a.idleMin) ?? 0) >= minIdle && (!focused || a.terminal !== focused))
     .toSorted((a, b) => (num(b.idleMin) ?? 0) - (num(a.idleMin) ?? 0));
 }
 
@@ -173,4 +173,9 @@ export function idleWords(min) {
   if (n >= 1440 && n % 1440 === 0) return `${n / 1440} ${n === 1440 ? "day" : "days"}`;
   if (n >= 60) return `${Math.round(n / 60)} hours`;
   return `${Math.round(n)} min`;
+}
+
+export function installError(text, since) {
+  const raw = parseOr(text, null);
+  return raw && typeof raw.at === "number" && raw.at >= since && raw.ok === false ? String(raw.reason || "Memory could not turn on") : null;
 }
