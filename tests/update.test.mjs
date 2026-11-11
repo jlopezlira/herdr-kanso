@@ -1,14 +1,72 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { execFile, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { load, context, exec, temporary, clone } from "./helpers.mjs";
+import { load, context, exec, nativePlatform, nativeWindow, temporary, clone } from "./helpers.mjs";
 
-const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER"];
-const unixTest = (name, fn) => test(name, { skip: process.platform === "win32" && "Unix updater; PowerShell updater belongs to piece 3" }, fn);
+const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 const repo = new URL("../kanso/", import.meta.url);
+const windows = process.platform === "win32";
+const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
+const pauses = (command, args) => command === "sleep" || (args ?? []).some((arg) => String(arg).includes("Start-Sleep"));
+const fetches = (command) => command === "curl" || command === "curl.exe";
+
+function rawExec(command, args, options = {}) {
+  return new Promise((resolve) => {
+    execFile(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      maxBuffer: 4 * 1024 * 1024,
+      timeout: options.limit ?? 60000,
+      killSignal: "SIGKILL",
+      windowsHide: true,
+    }, (error, stdout, stderr) => {
+      if (!error) resolve({ code: 0, stdout: stdout ?? "", stderr: stderr ?? "", signal: null });
+      else resolve({ code: error.code ?? null, stdout: error.stdout ?? stdout ?? "", stderr: error.stderr ?? stderr ?? "", signal: error.signal ?? null });
+    });
+  });
+}
+function classify(result) {
+  if (result?.signal === "SIGKILL" || result?.signal === "SIGTERM" || result?.code === 137) return "killed";
+  if (result?.code === 0) return "ok";
+  const line = String(result?.stderr ?? "").replace(/^\uFEFF/, "").trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "";
+  return `failed: ${line}`;
+}
+async function writeChecker(root, { record = false } = {}) {
+  if (!windows) {
+    const checker = join(root, "check.sh");
+    const body = record
+      ? [
+        "name=$(basename \"$2\")",
+        `echo "$name" >> "${root}/checks"`,
+        `if [ -f "${root}/slow" ] && [ "$name" = open-with ]; then while [ ! -f "${root}/go" ]; do sleep 0.05; done; fi`,
+        `if [ -f "${root}/sabotage" ] && [ "$name" = kanso-chrome ]; then chmod 555 "$2"; fi`,
+        "",
+      ].join("\n")
+      : `if [ -f "${root}/sabotage" ] && [ "$(basename "$2")" = kanso-chrome ]; then chmod 555 "$2"; fi\n`;
+    await writeFile(checker, body, { mode: 0o755 });
+    return checker;
+  }
+  const script = join(root, "check.mjs");
+  await writeFile(script, [
+    `import { appendFileSync, existsSync } from "node:fs";`,
+    `import { basename, join } from "node:path";`,
+    `import { execFileSync } from "node:child_process";`,
+    `const root = ${JSON.stringify(root)};`,
+    `const modPath = process.argv[3];`,
+    `const name = basename(modPath ?? "");`,
+    record ? `appendFileSync(join(root, "checks"), name + "\\n");` : "",
+    record ? `if (existsSync(join(root, "slow")) && name === "open-with") { while (!existsSync(join(root, "go"))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }` : "",
+    `if (existsSync(join(root, "sabotage")) && name === "kanso-chrome") execFileSync("icacls", [modPath, "/deny", "*S-1-1-0:(OI)(CI)F"], { stdio: "ignore", windowsHide: true });`,
+    "",
+  ].filter((line) => line !== "").join("\n"));
+  const checker = join(root, "check.cmd");
+  await writeFile(checker, "@echo off\r\nnode \"%~dp0check.mjs\" \"%~1\" \"%~2\"\r\n");
+  return checker;
+}
+const windowsOnly = (name, fn) => test(name, { skip: !windows && "Unix has no Windows file lock, read-only attribute, or curl.exe beside powershell.exe" }, fn);
 
 async function updater(host) {
   return load("kanso-chrome/update.js", names, host);
@@ -97,9 +155,9 @@ test("An update points Cmd+F at the conversation when it still searches the term
 
 // A Herdr home with Kanso 1.0.0 installed and used, and two releases served
 // from file:// URLs: what v1.0.0 shipped and the v1.1.0 tarball.
-async function fixture(t, { layoutChanged = true } = {}) {
+async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = {}) {
   const root = await temporary(t);
-  const home = join(root, "home"), site = join(root, "site");
+  const home = join(root, homeName), site = join(root, "site");
   const shippedKeys = JSON.parse(await readFile(new URL("keys.json", repo), "utf8"));
   const shippedLayout = await readFile(new URL("layouts/kanso.json", repo), "utf8");
 
@@ -125,14 +183,7 @@ async function fixture(t, { layoutChanged = true } = {}) {
 
   // Herdr's `herdr-app check`, faked: it notes each mod, and on a file's say holds open-with
   // (slow) or makes kanso-chrome, the last to go in, impossible to move into place (sabotage).
-  const checker = join(root, "check.sh");
-  await writeFile(checker, [
-    "name=$(basename \"$2\")",
-    `echo "$name" >> "${root}/checks"`,
-    `if [ -f "${root}/slow" ] && [ "$name" = open-with ]; then while [ ! -f "${root}/go" ]; do sleep 0.05; done; fi`,
-    `if [ -f "${root}/sabotage" ] && [ "$name" = kanso-chrome ]; then chmod 555 "$2"; fi`,
-    "",
-  ].join("\n"), { mode: 0o755 });
+  const checker = await writeChecker(root, { record: true });
 
   // The person's home: Kanso 1.0.0, a custom key, a live layout, another mod.
   await mkdir(join(home, "mods/kanso-chrome"), { recursive: true });
@@ -174,10 +225,11 @@ async function fixture(t, { layoutChanged = true } = {}) {
       notify: (n) => { toasts.push(n); return String(toasts.length); },
       readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
       writeTextFile: async (p, text) => { await writeFile(p, text); return null; },
+      window: nativeWindow,
       exec: async (command, args, options) => {
         if (command === "git") return { code: 0, stdout: "x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n", stderr: "" };
-        if (ctl.abandon && command === "sleep") { ctl.stuck += 1; return new Promise(() => {}); }
-        if (ctl.holdCurl && command === "curl") { ctl.held += 1; await gate.promise; }
+        if (ctl.abandon && pauses(command, args)) { ctl.stuck += 1; return new Promise(() => {}); }
+        if (ctl.holdCurl && fetches(command)) { ctl.held += 1; await gate.promise; }
         return exec(command, args, { ...options, limit: ctl.limit });
       },
     };
@@ -197,20 +249,29 @@ const staged = async (home) => [
 const until = async (ok) => { while (!(await ok())) await new Promise((r) => setTimeout(r, 20)); };
 const pending = (f) => Object.keys(f.store["kanso.update"]?.installs ?? {});
 // Another install holding the lock: a real process, asleep, whose life is the lock's.
+function pickCommand(commands) {
+  if (commands.length === 1) return commands[0];
+  for (const command of commands) {
+    try { execFileSync(command, ["-NoProfile", "-NonInteractive", "-Command", "exit 0"], { stdio: "ignore", windowsHide: true, timeout: 15000 }); return command; }
+    catch (error) { if (error.status === 0) return command; }
+  }
+  return commands.at(-1);
+}
+const stopProcess = (pid) => { try { process.kill(windows ? pid : -pid, "SIGKILL"); } catch {} };
 async function holder(t, f) {
   await mkdir(updates(f.home), { recursive: true });
-  const child = spawn("sh", ["-c", `${f.HOLD}\nhold "$1" || exit $?\necho held\nexec sleep 60`, "sh", join(updates(f.home), "lock")],
-    { detached: true, stdio: ["ignore", "pipe", "ignore"] });
+  const spec = f.updater.host.holdArgs(join(updates(f.home), "lock"));
+  const child = spawn(pickCommand(spec.commands), spec.args, { detached: true, stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
   const ended = new Promise((resolve) => child.once("exit", resolve));
-  t.after(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} });
+  t.after(() => stopProcess(child.pid));
   const got = await Promise.race([new Promise((resolve) => child.stdout.once("data", () => resolve(true))), ended.then(() => false)]);
-  return { got, pid: child.pid, kill: async () => { process.kill(-child.pid, "SIGKILL"); await ended; } };
+  return { got, pid: child.pid, kill: async () => { stopProcess(child.pid); await ended; } };
 }
 const version = async (home) => JSON.parse(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8")).version;
 const told = (toasts) => toasts.filter((n) => n.title === "kansō is already being updated");
 const updated = (toasts) => toasts.filter((n) => n.title === "kansō updated to 1.1.0");
 
-unixTest("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
+test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -264,7 +325,7 @@ unixTest("Updating Kanso swaps its mods, merges its keys and keeps your layout a
   assert.deepEqual(f.resizes, [192, 156], "and gives the room back");
 });
 
-unixTest("A copy that started before version.json arrived stops offering what is installed", async (t) => {
+test("A copy that started before version.json arrived stops offering what is installed", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -278,7 +339,7 @@ unixTest("A copy that started before version.json arrived stops offering what is
   assert.equal(f.toasts.length, 1);
 });
 
-unixTest("A release that kept the layout leaves yours as it is", async (t) => {
+test("A release that kept the layout leaves yours as it is", async (t) => {
   const f = await fixture(t, { layoutChanged: false });
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -291,7 +352,7 @@ unixTest("A release that kept the layout leaves yours as it is", async (t) => {
   assert.ok(!(await readdir(join(f.home, "layouts"))).some((n) => n.startsWith("kanso.json.old-")));
 });
 
-unixTest("A tag whose files say another version is not installed", async (t) => {
+test("A tag whose files say another version is not installed", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -312,7 +373,7 @@ unixTest("A tag whose files say another version is not installed", async (t) => 
   assert.deepEqual(await staged(f.home), []);
 });
 
-unixTest("Update from the footer and from the tab bar at once: one installs, the other is told", async (t) => {
+test("Update from the footer and from the tab bar at once: one installs, the other is told", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -333,7 +394,7 @@ unixTest("Update from the footer and from the tab bar at once: one installs, the
   assert.equal(tabs.busy, false);
 });
 
-unixTest("Two windows installing at once share no state, and the lock lets one through", async (t) => {
+test("Two windows installing at once share no state, and the lock lets one through", async (t) => {
   const f = await fixture(t);
   const other = await f.window();
   const { cx } = context();
@@ -351,7 +412,7 @@ unixTest("Two windows installing at once share no state, and the lock lets one t
   assert.deepEqual(await staged(f.home), []);
 });
 
-unixTest("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
+test("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -374,7 +435,7 @@ unixTest("An install whose owner is alive is left alone, staging and all; once i
   assert.deepEqual(await staged(f.home), [], "the dead install's staging, swept under the lock (no live one can have any)");
 });
 
-unixTest("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
+test("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -395,7 +456,7 @@ unixTest("An owner that lets go while another waits: the next to take the lock k
   assert.equal(await version(f.home), "1.1.0");
 });
 
-unixTest("An install longer than exec's limit runs to the end, and keeps the lock all along", async (t) => {
+test("An install longer than exec's limit runs to the end, and keeps the lock all along", async (t) => {
   const f = await fixture(t);
   const other = await f.window();
   // Herdr kills an exec at 30 s; here at 1 s, and the install takes longer.
@@ -425,7 +486,7 @@ unixTest("An install longer than exec's limit runs to the end, and keeps the loc
   assert.deepEqual(await staged(f.home), []);
 });
 
-unixTest("A swap that fails on its last mod puts back every one before it: the old version stays", async (t) => {
+test("A swap that fails on its last mod puts back every one before it: the old version stays", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -475,24 +536,27 @@ async function small(t) {
   await writeFile(join(base, "layouts/kanso.json"), '{"root":{"id":"yours"}}\n');
   await writeFile(join(base, "layouts/kanso.png"), "png 1.0.0\n");
   await writeFile(join(base, "keys.json"), '{"yours":true}\n');
-  const checker = join(root, "check.sh");
-  await writeFile(checker, `if [ -f "${root}/sabotage" ] && [ "$(basename "$2")" = kanso-chrome ]; then chmod 555 "$2"; fi\n`, { mode: 0o755 });
+  const checker = await writeChecker(root);
   const url = pathToFileURL(join(site, "v1.1.0.tar.gz")).href;
-  const { INSTALL_SCRIPT, RECOVER } = await updater();
+  const { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH, updateHost } = await updater({ window: nativeWindow });
+  const writer = async (path, text) => { await writeFile(path, text); return null; };
+  const host = updateHost(nativePlatform, rawExec, writer, { HOLD, INSTALL_SCRIPT, RECOVER, LAUNCH });
   // An install of 1.1.0 over `from`, killed after its `stop`-th step (0: never). By default it
   // brings keys merged from yours and a new layout; a reinstall over 1.1.0 brings neither.
-  const run = async (home, stop, { from = "1.0.0", sabotage = false, base } = {}) => {
+  const run = async (home, stop, { from = "1.0.0", sabotage = false, base, env = {} } = {}) => {
     const dir = join(home, ".kanso-updates");
     await mkdir(dir, { recursive: true }); // as LAUNCH makes it
     if (sabotage) await writeFile(join(root, "sabotage"), "");
     const plan = from === "1.0.0" ? ['{"merged":true}', "1", '{"yours":true}\n'] : ["", "", ""];
-    const [keys, layout] = plan;
-    const how = await new Promise((resolve) => execFile("sh", ["-c", INSTALL_SCRIPT, "sh", url, home, dir, "op", "1.1.0", from, checker, "20261108-1200", keys, layout, base ?? plan[2]],
-      { env: { ...process.env, KANSO_UPDATE_STOP: String(stop) } }, (error, _out, err) => resolve(error?.signal === "SIGKILL" ? "killed" : error ? `failed: ${err.trim().split("\n").at(-1)}` : "ok")));
+    const [keys, layout, baseKeys] = plan;
+    const result = await host.foreground({
+      url, home, dir, id: "op", want: "1.1.0", from, checker, stamp: "20261108-1200",
+      keys, layout, base: base ?? baseKeys,
+    }, { env: { ...process.env, KANSO_UPDATE_STOP: String(stop), ...env }, limit: 60000 });
     await rm(join(root, "sabotage"), { force: true });
-    return how;
+    return classify(result);
   };
-  const recover = (home) => exec("sh", ["-c", RECOVER, "sh", home, join(home, ".kanso-updates")]);
+  const recover = (home) => host.recover(home, join(home, ".kanso-updates"));
   const fresh = async (name) => { const home = join(root, name); await cp(base, home, { recursive: true }); return home; };
   const before = await tree(base);
   const whole = await fresh("whole");
@@ -525,7 +589,7 @@ async function recovered(s, home, at) {
   return end;
 }
 
-unixTest("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one, and the next install goes through", async (t) => {
+test("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one, and the next install goes through", async (t) => {
   const s = await small(t);
   assert.equal(s.after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
   assert.equal(s.after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
@@ -558,7 +622,7 @@ unixTest("Killed after any step of the swap or of its undoing, recovery ends at 
   assert.deepEqual(back.last, s.before, "a failed swap undone in full");
 });
 
-unixTest("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
+test("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
   const s = await small(t);
   // The sabotaged install, killed once every slot is back (its last step, the journal emptied,
   // before the journal goes); then all the stage holds but its journal is gone, as a removal
@@ -568,12 +632,13 @@ unixTest("An undoing killed as its stage was being removed never takes back what
   const [stage] = await stages(home);
   const st = join(updates(home), stage);
   assert.equal(await readFile(join(st, "slots"), "utf8"), "", "every slot is out of the journal");
-  await exec("chmod", ["-R", "u+w", st]); // the sabotaged kanso-chrome
+  if (windows) await exec("icacls", [st, "/reset", "/T", "/C", "/Q"]);
+  else await exec("chmod", ["-R", "u+w", st]); // the sabotaged kanso-chrome
   await Promise.all(["keys.json", "kanso.json", "old", "src"].map((x) => rm(join(st, x), { recursive: true, force: true })));
   assert.equal(await recovered(s, home, "a removal cut short"), "old");
 });
 
-unixTest("A finished install killed as its stage was being removed is not done again: the next install goes through", async (t) => {
+test("A finished install killed as its stage was being removed is not done again: the next install goes through", async (t) => {
   const s = await small(t);
   // Killed after the commit and the layout you had kept; then the stage loses all but its journal
   // and the `committed` mark, as a removal cut short could leave it: the release's themes and
@@ -587,7 +652,7 @@ unixTest("A finished install killed as its stage was being removed is not done a
   assert.equal(await recovered(s, home, "a removal cut short"), "new");
 });
 
-unixTest("Keys merged from another keys.json than the one in place are not installed: nothing changes", async (t) => {
+test("Keys merged from another keys.json than the one in place are not installed: nothing changes", async (t) => {
   const s = await small(t);
   const home = await s.fresh("stale");
   assert.equal(await s.run(home, 0, { base: '{"half":true}\n' }), "failed: your keys.json changed while the update was prepared; try again");
@@ -610,7 +675,7 @@ async function killed(t, f, stop) {
   f.ctl.abandon = false;
   const pid = join(updates(f.home), `${pending(f)[0]}.pid`);
   await f.flag("go");
-  await until(async () => (await exec("sh", ["-c", 'kill -0 "$(cat "$1")" 2>/dev/null', "sh", pid])).code !== 0);
+  await until(async () => (await f.updater.host.alive(pid)).code !== 0);
   delete process.env.KANSO_UPDATE_STOP;
   return { cx, drain };
 }
@@ -623,7 +688,7 @@ const chromeIn = async () => {
   return 4 + 1 + themes + (mods - 1) + 2;
 };
 
-unixTest("An install that died with the new keys in place, retried from another window, ends with the new keys", async (t) => {
+test("An install that died with the new keys in place, retried from another window, ends with the new keys", async (t) => {
   const f = await fixture(t);
   await killed(t, f, 2); // keys aside, then the merged ones in
   const now = JSON.parse(await readFile(new URL("keys.json", repo), "utf8"))["layout:kanso"];
@@ -646,7 +711,7 @@ unixTest("An install that died with the new keys in place, retried from another 
   assert.deepEqual(await stages(f.home), [], "the dead install's stage settled (its outcome stays for its own window to report)");
 });
 
-unixTest("A follower whose recovery finds the lock taken waits for it, then reports once what recovery left", async (t) => {
+test("A follower whose recovery finds the lock taken waits for it, then reports once what recovery left", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died half new");
@@ -667,7 +732,7 @@ unixTest("A follower whose recovery finds the lock taken waits for it, then repo
   assert.deepEqual(await staged(f.home), []);
 });
 
-unixTest("A recovery killed partway is not taken for done: the follower tries again and reports what it left", async (t) => {
+test("A recovery killed partway is not taken for done: the follower tries again and reports what it left", async (t) => {
   const f = await fixture(t);
   const { cx } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died half new");
@@ -682,7 +747,7 @@ unixTest("A recovery killed partway is not taken for done: the follower tries ag
   assert.deepEqual(await staged(f.home), []);
 });
 
-unixTest("A window that starts while another recovers, which then dies, recovers itself", async (t) => {
+test("A window that starts while another recovers, which then dies, recovers itself", async (t) => {
   const f = await fixture(t);
   await killed(t, f, await chromeIn());
   // The other recoverer: it holds the lock, then dies without settling anything.
@@ -701,7 +766,7 @@ unixTest("A window that starts while another recovers, which then dies, recovers
   assert.deepEqual(await stages(f.home), []);
 });
 
-unixTest("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
+test("A copy that starts after an install died mid-swap undoes it before it reads the version", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died with the new kanso-chrome in place");
@@ -717,7 +782,7 @@ unixTest("A copy that starts after an install died mid-swap undoes it before it 
   assert.deepEqual(await staged(f.home), []);
 });
 
-unixTest("A copy started while another prepares its install waits for it, and the outcome is told once, with its version", async (t) => {
+test("A copy started while another prepares its install waits for it, and the outcome is told once, with its version", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -739,7 +804,7 @@ unixTest("A copy started while another prepares its install waits for it, and th
   assert.equal(await version(f.home), "1.1.0");
 });
 
-unixTest("The copy the swap starts picks up the install's outcome and reports it", async (t) => {
+test("The copy the swap starts picks up the install's outcome and reports it", async (t) => {
   const f = await fixture(t);
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -903,7 +968,7 @@ test("The update plan reads this platform's keymap and adds Windows keys when th
         window: () => ({ platform }),
         readTextFile: async () => JSON.stringify(current),
         exec: async (cmd, args) => {
-          assert.equal(cmd, "curl");
+          assert.ok(cmd === "curl" || cmd === "curl.exe", cmd);
           const url = args.at(-1);
           requests.push(url);
           if (url.endsWith("layouts/kanso.json")) return { code: 0, stdout: "{}" };
@@ -923,4 +988,139 @@ test("The update plan reads this platform's keymap and adds Windows keys when th
       }
     }
   }
+});
+
+async function hostFor(platform) {
+  const loaded = await updater({ window: () => ({ platform }) });
+  const host = loaded.updateHost(platform, rawExec, async (path, text) => { await writeFile(path, text); return null; }, loaded);
+  return { ...loaded, host };
+}
+
+test("The POSIX lock holder is the shell the updater already starts", async () => {
+  const { host, HOLD } = await hostFor("macos");
+  const got = host.holdArgs("/tmp/lock");
+  assert.deepEqual([...got.commands], ["sh"]);
+  assert.equal(got.args[1], `${HOLD}\nhold "$1" || exit $?\necho held\nexec sleep 60`);
+  assert.deepEqual([...got.args.slice(2)], ["sh", "/tmp/lock"]);
+});
+
+test("A stage is on the same volume as the app home", async () => {
+  const { sameVolume } = await updater();
+  assert.equal(sameVolume("/tmp/app/.kanso-updates/id", "/tmp/app"), true);
+  assert.equal(sameVolume("C:\\Users\\a\\.kanso-updates\\id", "C:\\Users\\a"), true);
+  assert.equal(sameVolume("C:\\stage", "D:\\home"), false);
+  assert.equal(sameVolume("\\\\server\\share\\a", "\\\\server\\share\\b"), true);
+});
+
+test("A pid file names a live process or a dead one", async (t) => {
+  const dir = await temporary(t);
+  const { host } = await hostFor(nativePlatform);
+  const live = join(dir, "live.pid");
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
+  t.after(() => { try { child.kill("SIGKILL"); } catch {} });
+  await writeFile(live, `${child.pid}\n`);
+  assert.equal((await host.alive(live)).code, 0, `step alive, file ${live}`);
+  child.kill("SIGKILL");
+  await new Promise((resolve) => child.once("exit", resolve));
+  assert.notEqual((await host.alive(live)).code, 0, `step dead, file ${live}`);
+});
+
+test("The Windows updater script keeps the same contract and PowerShell 5.1", async () => {
+  const home = join("/tmp", "O'Brien home");
+  const dir = join(home, ".kanso-updates");
+  const { windowsInstallScript, windowsLaunchScript, windowsRecoverScript, host } = await hostFor("windows");
+  const script = windowsInstallScript({
+    url: "https://example.test/v.tar.gz", home, dir, id: "op", want: "1.1.0", from: "1.0.0",
+    checker: join(dir, "check.cmd"), stamp: "20261108-1200", keys: "{\"a\":1}", layout: "1", base: "{\"a\":1}\n",
+  }, join(dir, "op.ps1"));
+  assert.match(script, /O''Brien home/, "step quote, file install script");
+  assert.match(script, new RegExp(Buffer.from('{"a":1}', "utf8").toString("base64")));
+  assert.match(script, new RegExp(Buffer.from('{"a":1}\n', "utf8").toString("base64")));
+  for (const banned of ["&&", "||", "??", "-AsHashtable"]) assert.equal(script.includes(banned), false, `step syntax ${banned}`);
+  assert.match(script, /KANSO_UPDATE_STOP/);
+  assert.match(script, /\[Environment\]::Exit\(137\)/);
+  assert.match(script, /FileShare\]::None/);
+  assert.match(script, /UTF8Encoding \$false/);
+  assert.match(script, /\.status\.part/);
+  assert.match(script, /\.exe is not on PATH; nothing was downloaded another way/);
+  assert.match(script, /Require-Tool 'curl'/);
+  assert.match(script, /Require-Tool 'tar'/);
+  const curlAt = script.indexOf("Require-Tool 'curl'");
+  const tarAt = script.indexOf("Require-Tool 'tar'");
+  const srcAt = script.indexOf("New-Item -ItemType Directory -Force -Path $srcDir");
+  assert.ok(curlAt > 0 && tarAt > curlAt && srcAt > tarAt, "step tools, file before download");
+  const launch = windowsLaunchScript(dir, "op", join(dir, "op.ps1"));
+  assert.match(launch, /CreateNoWindow = \$true/);
+  assert.match(launch, /WindowStyle\]::Hidden/);
+  assert.match(windowsRecoverScript(home, dir, join(dir, "recover.ps1")), /FileShare\]::None/);
+  const held = host.holdArgs(join(dir, "lock"));
+  assert.deepEqual([...held.commands], ["pwsh", "powershell"]);
+  assert.match(held.args.at(-1), /O''Brien home/);
+  assert.match(held.args.at(-1), /WriteLine\('held'\)/);
+});
+
+test("The Windows installer copies nothing before the app home exists", async () => {
+  const text = await readFile(new URL("../scripts/local-install.ps1", import.meta.url), "utf8");
+  assert.match(text, /\$PSScriptRoot/);
+  assert.match(text, /\$env:APPDATA/);
+  assert.match(text, /HERDR_APP_HOME/);
+  assert.match(text, /keys\.windows\.json/);
+  for (const banned of ["&&", "??"]) assert.equal(text.includes(banned), false, banned);
+  const homeAt = text.indexOf("HERDR_APP_HOME");
+  const testAt = text.indexOf("Test-Path");
+  const copyAt = text.indexOf("Copy-Item");
+  assert.ok(homeAt >= 0 && testAt > homeAt && copyAt > testAt, "step home, file before copy");
+});
+
+test("A home path with a space and an apostrophe installs", async (t) => {
+  const s = await small(t);
+  const home = await s.fresh("O'Brien home");
+  assert.equal(await s.run(home, 0), "ok", `step install, file ${home}`);
+  assert.equal((await tree(home))["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
+});
+
+windowsOnly("A file in use is retried, then the update is undone and the file is named", async (t) => {
+  const s = await small(t);
+  const home = await s.fresh("in-use");
+  const locked = join(home, "mods", "kanso-chrome", "main.js");
+  const release = join(s.root, "release-lock");
+  const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
+    "$ErrorActionPreference = 'Stop'",
+    `$s = [IO.File]::Open(${quote(locked)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)`,
+    "[Console]::Out.WriteLine('held')",
+    "[Console]::Out.Flush()",
+    `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 100 }`,
+    "$s.Dispose()",
+  ].join("; ")], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  t.after(() => { writeFile(release, "").catch(() => {}); try { child.kill(); } catch {} });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`step lock, file ${locked}`)), 15000);
+    child.stdout.once("data", () => { clearTimeout(timer); resolve(); });
+    child.once("exit", (code) => { clearTimeout(timer); reject(new Error(`step lock exited ${code}, file ${locked}`)); });
+  });
+  const how = await s.run(home, 0, { env: { KANSO_UPDATE_RETRY_MS: "600" } });
+  assert.match(how, /could not put kanso-chrome in place/, how);
+  assert.ok(how.includes("kanso-chrome"), how);
+  assert.equal((await tree(home))["mods/kanso-chrome/version.json"], '{ "version": "1.0.0" }\n', how);
+  await writeFile(release, "go");
+});
+
+windowsOnly("A read-only file is still updated", async (t) => {
+  const s = await small(t);
+  const home = await s.fresh("readonly");
+  const file = join(home, "mods", "kanso-chrome", "main.js");
+  const marked = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `$i = Get-Item -LiteralPath ${quote(file)}; $i.IsReadOnly = $true; if (-not $i.IsReadOnly) { exit 2 }`]);
+  assert.equal(marked.code, 0, `step readonly, file ${file}: ${marked.stderr}`);
+  assert.equal(await s.run(home, 0), "ok", `step install, file ${file}`);
+  assert.equal((await tree(home))["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
+});
+
+windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {
+  const s = await small(t);
+  const home = await s.fresh("nocurl");
+  const powershell = join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0");
+  const how = await s.run(home, 0, { env: { PATH: powershell, Path: powershell } });
+  assert.match(how, /curl\.exe is not on PATH; nothing was downloaded another way/, how);
+  assert.deepEqual(await tree(home), s.before, how);
+  assert.deepEqual(await stages(home), [], how);
 });

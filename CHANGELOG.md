@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.30.0] - 2026-11-11
+
+### Added
+
+- kansō installs and updates on Windows the same way it does on macOS and Linux. The installer and the updater use Windows PowerShell, and the download uses the curl and tar that ship with Windows. The Windows keymap is merged on Windows. A file that is in use is retried, then the update is undone and the file is named; a read-only file is updated. The update runs with no console window.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added
