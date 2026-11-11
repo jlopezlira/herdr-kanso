@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
+// hc once stored the words false and null for a plain ssh machine.
+const CLEAN_OFF = `UPDATE machines_off SET via=CASE WHEN via IN ('false','null') THEN '' ELSE via END, session=CASE WHEN session IN ('false','null') THEN '' ELSE session END WHERE via IN ('false','null') OR session IN ('false','null');`;
+
 export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents
   WHEN OLD.sleep_id IS NOT NULL AND NEW.sleep_id IS NOT NULL AND OLD.sleep_id != NEW.sleep_id
   BEGIN SELECT RAISE(ABORT, 'that agent is already asleep'); END;`;
@@ -146,7 +149,7 @@ export class Kdb {
 
   // Enough to add a remote machine back. hc machine rm forgets it here; its terminals keep running there.
   machinesOff() {
-    return this.read("SELECT name, target, via, session, temporary FROM machines_off ORDER BY name;").then((rows) => rows.map((row) => ({
+    return this.run(CLEAN_OFF).then(() => this.read("SELECT name, target, via, session, temporary FROM machines_off ORDER BY name;")).then((rows) => rows.map((row) => ({
       name: row.name, target: row.target ?? "", via: row.via ?? "", session: row.session ?? "", temporary: Boolean(row.temporary),
     })));
   }

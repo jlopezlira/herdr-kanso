@@ -21,8 +21,8 @@ import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThr
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
-import { skeleton, breathe, H, G, T, R, ICON, HEADER_ICON, toggleSwitch, tokens, quietLink } from "./ui.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineMarks } from "./machines.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip } from "./machines.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
@@ -198,6 +198,7 @@ export default class Spaces extends View {
     this.login = new Set();
     this.failed = new Set();
     this.powerBusy = new Set();
+    this.hints = {};
     this.hostName = "";
     // The first frame uses localStorage's copy; the database's answer replaces it when it comes.
     this.panel = new Panel(PREFS, this.leftNavStore());
@@ -1038,6 +1039,15 @@ export default class Spaces extends View {
     this.login.delete(name);
     this.failed.delete(name);
     this.waking.delete(name);
+    this.hints = Object.fromEntries(Object.entries(this.hints ?? {}).filter(([key]) => key !== name));
+  }
+
+  markFailed(name, why) {
+    this.waking.delete(name);
+    const hint = typeof why?.hint === "string" ? why.hint.trim() : "";
+    this.hints = { ...(this.hints ?? {}), [name]: hint };
+    if (needsLogin(why)) { this.login.add(name); return; }
+    this.failed.add(name);
   }
 
   async unpark(name) {
@@ -1045,11 +1055,21 @@ export default class Spaces extends View {
     await this.db().forgetMachine(name).catch(() => {});
   }
 
-  // hc machine rm forgets it here; work already running there keeps running.
+  // The row is already in memory. A remove that lands still offers Retry when it cannot be stored.
+  async settleOff(name, record, live, rev) {
+    if ((this.parkRev ?? 0) !== rev) return;
+    const result = live ? await hc(rmArgs(name)).catch(() => null) : { code: 0 };
+    if ((this.parkRev ?? 0) !== rev) return;
+    if (result && result.code !== 0) { await this.unpark(name); return; }
+    const stored = await this.db().parkMachine(record).then(() => true, () => false);
+    if ((this.parkRev ?? 0) !== rev) return;
+    if (!stored || !result) this.markFailed(name, null);
+  }
+
   turnOff(name, cx) {
     const live = (this.machines ?? []).find((row) => row.name === name) ?? null;
     const had = (this.parked ?? []).find((row) => row.name === name) ?? null;
-    const record = machineRecord(live) ?? had;
+    const record = machineRecord(live) ?? machineRecord(had);
     if (!canRestore(record)) return;
     this.parkRev = (this.parkRev ?? 0) + 1;
     const rev = this.parkRev;
@@ -1058,23 +1078,13 @@ export default class Spaces extends View {
     this.parked = [...(this.parked ?? []).filter((row) => row.name !== name), record];
     cx.notify();
     cx.spawn(async (cx) => {
-      try {
-        await this.db().parkMachine(record);
-        if (!live || (this.parkRev ?? 0) !== rev) return;
-        const result = await hc(rmArgs(name));
-        if ((this.parkRev ?? 0) !== rev || result.code === 0) return;
-        await this.unpark(name);
-      } catch {
-        if (live && (this.parkRev ?? 0) === rev) await this.unpark(name);
-      } finally {
-        this.powerBusy.delete(name);
-        cx.notify();
-      }
+      try { await this.settleOff(name, record, live, rev); }
+      finally { this.powerBusy.delete(name); cx.notify(); }
     });
   }
 
   turnOn(name, cx) {
-    const record = (this.parked ?? []).find((row) => row.name === name);
+    const record = machineRecord((this.parked ?? []).find((row) => row.name === name));
     if (!canRestore(record)) return;
     this.powerBusy.add(name);
     this.clearFlags(name);
@@ -1085,9 +1095,7 @@ export default class Spaces extends View {
         const result = await hc(addArgs(record)).catch((error) => ({ code: 1, stdout: "", stderr: String(error) }));
         const why = hcError(result);
         if (!why) { await this.readMachines().catch(() => {}); return; }
-        this.waking.delete(name);
-        if (needsLogin(why)) this.login.add(name);
-        else this.failed.add(name);
+        this.markFailed(name, why);
       } finally {
         this.powerBusy.delete(name);
         cx.notify();
@@ -1784,91 +1792,68 @@ export default class Spaces extends View {
     return [null, ...remote].flatMap((m) => this.machineBlock(m, block));
   }
 
-  machineMark(t, phase) {
-    const mark = machineMarks[phase];
-    if (!mark) return null;
-    const glyph = svg(`mods/kanso-chrome/icons/${mark.icon}.svg`).size(ICON).flex_none().text_color(t[mark.color]).tooltip(mark.tip);
-    return mark.icon === "refresh" ? glyph.spin(900) : glyph;
+  machineButton(nav, id, icon, tip, go, t) {
+    const act = (cx) => { cx.stop_propagation?.(); go(cx); };
+    const ring = this.navMark(nav, act);
+    return iconButton(id, icon, tip, act, tokens(t))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .when(ring, (el) => el.border_1().border_color(t.accent));
   }
 
-  machineSwitch(m, phase, t, collapsed) {
-    const id = powerId(m);
-    if (!id) return null;
-    const on = phase !== "off";
-    const ring = this.navMark(`machine-power:${m}`, (cx) => this.setPower(m, this.phaseOf(m) === "off", cx));
-    const stop = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
-    if (collapsed) {
-      return stop(div().id(id).size(ICON).flex_none().cursor_pointer().tooltip(on ? "On" : "Off"))
-        .when(ring, (el) => el.border_1().border_color(t.accent))
-        .on_click((_e, cx) => { cx.stop_propagation(); this.setPower(m, !on, cx); })
-        .child(svg("mods/kanso-chrome/icons/plug.svg").size(ICON).text_color(on ? t.foreground : t.muted));
-    }
-    return stop(toggleSwitch(id, on, (next, cx) => this.setPower(m, next, cx), tokens(t), { label: on ? `Disconnect ${m}` : `Connect ${m}` }))
-      .when(ring, (el) => el.border_color(t.accent));
+  machineActions(m, phase, t) {
+    const key = m ?? "local";
+    const line = m ? loginLine(m) : "";
+    const copy = phase === "login" && m ? this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t) : null;
+    const power = !copy && m && (phase === "connected" || phase === "off")
+      ? this.machineButton(`machine-power:${key}`, powerId(m), "power", phase === "connected" ? "Turn off" : "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t)
+      : null;
+    const retry = phase === "unavailable" && m
+      ? this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t)
+      : null;
+    const plus = phase === "connected"
+      ? this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t)
+      : null;
+    return [copy, power, retry, plus].filter(Boolean);
+  }
+
+  openMachine(m, phase, folded, cx) {
+    if (phase === "loading") return;
+    if (phase === "off" && m) { this.setPower(m, true, cx); return; }
+    if (phase === "unavailable" && m) { this.retryMachine(m, cx); return; }
+    if (phase === "login" && m) { cx.write_to_clipboard?.(loginLine(m)); return; }
+    if (phase !== "connected") return;
+    if (folded) this.folded.delete(m); else this.folded.add(m);
+    this.panel?.set("machines.folded", [...this.folded]);
+    cx.notify();
   }
 
   machineHead(m, phase, t, collapsed, folded) {
+    const key = m ?? "local";
     const title = machineTitle(m, this.hostName);
-    const off = phase === "off";
+    const word = machineState(phase);
+    const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
     const connected = phase === "connected";
-    const ink = off ? t.dim : t.foreground;
-    const mark = this.machineMark(t, phase);
-    const go = (cx) => {
-      if (off && m) { this.setPower(m, true, cx); return; }
-      if (!connected) return;
-      if (folded) this.folded.delete(m); else this.folded.add(m);
-      this.panel?.set("machines.folded", [...this.folded]);
-      cx.notify();
-    };
-    const ring = this.navMark(`machine:${m ?? "local"}`, go);
-    const power = this.machineSwitch(m, phase, t, collapsed);
-    const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(HEADER_ICON).flex_none().text_color(ink);
-    return h_flex().id(`machine-${m ?? "local"}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
-      .px(collapsed ? 0 : G.sm).gap(collapsed ? G.xs : G.sm).items_center().justify_center().text_color(ink)
-      .when(!collapsed, (el) => el.justify_start())
+    const ink = (collapsed ? !connected : phase === "off" || phase === "unavailable") ? t.dim : t.foreground;
+    const go = (cx) => this.openMachine(m, phase, folded, cx);
+    const ring = this.navMark(`machine:${key}`, go);
+    const hot = !collapsed && machineHot(m, this.hoverMachine, this.kbd, this.navKey);
+    const tools = hot ? this.machineActions(m, phase, t) : [];
+    const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(ink);
+    const wash = t.foreground + "0c";
+    return h_flex().id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
+      .px(collapsed ? 0 : G.sm).gap(G.sm).items_center().rounded(R.card).text_color(ink)
+      .when(collapsed, (el) => el.justify_center())
       .when(ring, (el) => el.border_1().border_color(t.accent))
-      .when(connected || (off && Boolean(m)), (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)))
+      .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(wash)))
       .on_click((_e, cx) => go(cx))
-      .when(collapsed, (el) => el.tooltip(phase === "login" ? `${title}: ${loginLine(m)}` : title).child(icon).when(Boolean(power), (row) => row.child(power)))
+      .on_hover((h, cx) => { if (h ? this.hoverMachine !== key : this.hoverMachine === key) { this.hoverMachine = h ? key : null; cx.notify(); } })
+      .when(collapsed, (el) => el.tooltip(machineTip(title, phase, hint)).child(icon))
       .when(!collapsed, (el) => el.child(icon)
-        .child(div().flex_1().min_w(0).truncate().text_size(T.title).font_semibold().text_color(ink).child(title))
-        .when(connected, (row) => row.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(G.xs).rounded(R.control)
-          .hover((s) => s.bg(t.hover).text_color(t.foreground))
-          .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
-        .when(mark, (row) => row.child(mark))
-        .when(Boolean(power), (row) => row.child(power))
-        .when(connected, (row) => row.child(svg(`mods/kanso-chrome/icons/chevron-${folded ? "right" : "down"}.svg`).size(12).flex_none().text_color(t.dim))));
-  }
-
-  machineDown(m, t, collapsed) {
-    const retry = (cx) => this.retryMachine(m, cx);
-    if (collapsed) {
-      return div().id(`machine-retry-${m}`).size(ICON).flex_none().cursor_pointer().tooltip("Unavailable")
-        .on_click((_e, cx) => retry(cx))
-        .child(svg("mods/kanso-chrome/icons/refresh.svg").size(ICON).text_color(t.blocked));
-    }
-    return h_flex().id(`machine-unavailable-${m}`).h(H.compact).flex_none().px(G.sm).gap(G.sm).items_center()
-      .child(div().text_size(T.body).text_color(t.blocked).child("Unavailable"))
-      .child(quietLink(`machine-retry-${m}`, "Retry", retry, tokens(t), { color: t.foreground, label: "Retry" }));
-  }
-
-  machineLogin(m, t, collapsed) {
-    const line = loginLine(m);
-    const onCopy = (_e, cx) => { cx.stop_propagation(); cx.write_to_clipboard?.(line); this.copiedLogin = line; cx.notify(); };
-    if (collapsed) {
-      return div().id(`machine-login-copy-${m}`).size(ICON).flex_none().cursor_pointer().tooltip(line)
-        .on_click(onCopy)
-        .child(svg("mods/kanso-chrome/icons/copy.svg").size(ICON).text_color(t.foreground));
-    }
-    return v_flex().id(`machine-login-${m}`).px(G.sm).gap(G.xs).flex_none()
-      .child(div().text_size(T.small).text_color(t.blocked).child("Needs a login"))
-      .child(h_flex().gap(G.xs).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(t.muted).child(line))
-        .child(div().id(`machine-login-copy-${m}`).flex_none().px(G.xs).rounded(R.control).cursor_pointer()
-          .text_size(T.small).text_color(t.foreground).tooltip(line)
-          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-          .on_click(onCopy)
-          .child(this.copiedLogin === line ? "Copied" : "Copy")));
+        .child(div().flex_1().min_w(0).truncate().text_size(T.card).font_medium().text_color(ink).child(title))
+        .when(phase === "loading", (row) => row.child(breathe(skeleton(tokens(t)).line(G.xl * 3).id(`machine-loading-${key}`))))
+        .when(Boolean(word), (row) => row.child(div().flex_none().text_size(T.small).text_color(t.dim).when(Boolean(hint), (el) => el.tooltip(hint)).child(word)))
+        .when(tools.length > 0, (row) => tools.reduce((el, tool) => el.child(tool), row))
+        .when(connected, (row) => row.child(svg(`mods/kanso-chrome/icons/chevron-${folded ? "right" : "down"}.svg`).size(ICON).flex_none().text_color(t.dim))));
   }
 
   machineBlock(m, block) {
@@ -1877,15 +1862,11 @@ export default class Spaces extends View {
     const folded = phase === "connected" && (this.folded ?? new Set()).has(m);
     const mine = rows.filter((r) => (r.w.machine ?? null) === m);
     const headItem = item(this.machineHead(m, phase, t, collapsed, folded), collapsed ? RAIL_MARK : PLAIN_ROW);
-    if (phase === "off") return [headItem];
-    if (phase === "loading") return [headItem, loadingRow(m)];
-    if (phase === "unavailable") return [headItem, item(this.machineDown(m, t, collapsed), collapsed ? RAIL_MARK : H.compact)];
-    if (phase === "login") return [headItem, item(this.machineLogin(m, t, collapsed), collapsed ? RAIL_MARK : H.compact * 2)];
+    if (phase !== "connected" || folded) return [headItem];
     const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(R.control)
       .text_size(12).text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_click(() => run("space.new", { machine: m ?? "" }))
       .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
-    if (folded) return [headItem];
     const asleep = this.closedOn(m, ctx).length > 0;
     return [headItem, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
   }

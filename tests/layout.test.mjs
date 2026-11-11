@@ -248,7 +248,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   ];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, svg: node, image: node, h_flex: node, v_flex: node,
-    Popover: { new: node }, Toggle: { new: node }, Button: { new: node },
+    Popover: { new: node }, Toggle: { new: node }, Button: { new: (id) => { const el = node(); return id ? el.id(id) : el; } },
     ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
     orderSessions: (l) => l, withTerminals: () => [], terminals: () => [], nest: () => [], bySection: () => [],
     track: () => null, elapsed: () => null, activityOf: () => null, agentLabel: () => "", duration: () => "", findThreads: async () => ({}),
@@ -265,11 +265,14 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
     machines: [{ name: "odin", state: "connected", target: "odin.example" }], folded: new Set(), agentsFolded: new Set(),
     orderPicker: node,
   });
+  view.hoverMachine = "local";
   view.render();
 
   const cx = { stop_propagation() {}, notify() {} };
   clicks["machine-add-local"]({}, cx);
   clicks["machine-new-local"]({}, cx);
+  view.hoverMachine = "odin";
+  view.render();
   clicks["machine-add-odin"]({}, cx);
 
   // The top + is no longer a bare space: it adds a project (tests/projects.test.mjs).
