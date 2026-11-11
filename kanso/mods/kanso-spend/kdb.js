@@ -114,6 +114,7 @@ CREATE INDEX IF NOT EXISTS since_events_project ON since_events(project, id);
 CREATE TABLE IF NOT EXISTS since_observed(source TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NULL, state_json TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(project, panel));
 CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS computer_alias(route TEXT PRIMARY KEY, name TEXT NOT NULL, at INTEGER NOT NULL, pending INTEGER NOT NULL DEFAULT 0);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
 // hc once stored the words false and null for a plain ssh machine.
@@ -542,12 +543,30 @@ export class Kdb {
     return `BEGIN;${step}${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping' AND ${gone}`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine}) AND ${gone};UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} AND ${gone} RETURNING id;COMMIT;`;
   }
 
-  async sleeps(spaces = null, now = Date.now()) {
-    const [, rows, agents] = await Promise.all([
-      spaces ? this.syncSpaces(spaces, now) : Promise.resolve(),
-      this.read("SELECT * FROM sleeps;"), this.read("SELECT * FROM agents WHERE sleep_id IS NOT NULL;"),
+  // The writer's clock: a row ahead of it keeps its later time and takes this name.
+  aliasSql(row, now) {
+    const route = String(row?.route ?? "");
+    const name = String(row?.name ?? "").trim();
+    const at = Math.round(Number(row?.at) || 0);
+    const pending = row?.pending ? 1 : 0;
+    const writerNow = Math.round(Number(now) || 0);
+    return `INSERT INTO computer_alias(route,name,at,pending) VALUES(${q(route)},${q(name)},${n(at)},${pending}) ON CONFLICT(route) DO UPDATE SET name=excluded.name,at=CASE WHEN computer_alias.at > excluded.at THEN computer_alias.at ELSE excluded.at END,pending=excluded.pending WHERE excluded.at >= computer_alias.at OR (computer_alias.at > ${n(writerNow)} AND excluded.at >= ${n(writerNow)}) RETURNING name,at,pending;`;
+  }
+  saveAlias(row, now = Date.now()) { return this.run(this.aliasSql(row, now)); }
+
+  async sleeps(spaces = null, now = Date.now(), write = null) {
+    const list = write == null ? [] : (Array.isArray(write) ? write : [write]);
+    // One statement, so a retry of several rows stays in this read's process.
+    const sql = list.map((row) => this.aliasSql({ ...row, route: row.route ?? "" }, now)).join("");
+    const batch = await Promise.all([
+      sql ? this.run(sql) : Promise.resolve([]),
+      spaces ? this.syncSpaces(spaces, now) : Promise.resolve([]),
+      this.read("SELECT * FROM sleeps;"),
+      this.read("SELECT * FROM agents WHERE sleep_id IS NOT NULL;"),
+      this.read("SELECT route, name, at, pending FROM computer_alias;"),
     ]);
-    return rows.map((r) => ({ ...r, agents: agents.filter((a) => a.sleep_id === r.id) }));
+    this.seenAlias = batch[4];
+    return batch[2].map((r) => ({ ...r, agents: batch[3].filter((a) => a.sleep_id === r.id) }));
   }
 
   // Projects you added stay when their last agent closes; removed ones are kept as removed, so no window brings them back.

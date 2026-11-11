@@ -122,6 +122,9 @@ test("off hides that machine, and this computer has no switch", async () => {
   assert.equal(machineTitle(null, "macbook"), "macbook");
   assert.equal(machineTitle(null, ""), "This computer");
   assert.equal(machineTitle("dark", "macbook"), "dark");
+  assert.equal(machineTitle("dark", "macbook", "Night"), "Night");
+  assert.equal(machineTitle("dark", "macbook", "  "), "dark");
+  assert.equal(machineTitle(null, "macbook", "Studio"), "Studio");
   const phase = (extra) => machinePhase({ name: "dark", stored, live: [], layout: null, asking: false, login: false, failed: false, ...extra });
   assert.equal(phase({}), "off");
   assert.equal(phase({ asking: true }), "loading");

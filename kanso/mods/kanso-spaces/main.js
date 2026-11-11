@@ -30,7 +30,8 @@ import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW } from "./sidebar-rows.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed, segmented } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
+import { Names } from "./alias.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { readSync, saveSync } from "./sync-row.js";
 import { createAwake, keepAwake } from "./awake.js";
@@ -157,9 +158,11 @@ export function tone(t, status) {
 }
 
 export default class Spaces extends View {
+  names = new Names(this);
+
   init(_props, cx) {
     // Opened as a row's right-click menu (props().menu): nothing else to run.
-    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject) {
+    if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
       this.armed = new Armed(); this.menuAt = -1; this.handle = cx.focus_handle();
       // A scroll handle is state: made here, never during render (Herdr refuses it there).
@@ -539,7 +542,8 @@ export default class Spaces extends View {
     if (!due) return kept;
     try {
       const store = await this.storeOn(name);
-      const rows = await store.asleep(true, null, now);
+      const rows = await store.asleep(true, null, now, this.names.owed(name));
+      this.names.took(name, store.kdb && store.kdb.seenAlias, now);
       const published = rows.map((row) => ({ ...seenRow(shownOf(row, now), name), machine: name }));
       (this.remoteKept ??= new Map()).set(name, published);
       (this.remoteAt ??= new Map()).set(name, now);
@@ -594,12 +598,13 @@ export default class Spaces extends View {
     const seq = this.asleepReads;
     // A sleep from before space ids adopts the one space it now fits.
     const st = this.leftNavStore();
-    const rows = await st.asleep(true, sp, started).catch(() => null);
+    const rows = await st.asleep(true, sp, started, this.names.pending()).catch(() => null);
     if (rows) {
       const found = rows.filter((a) => !a.spaceId).map((a) => ({ sleep: a.id, space: spaceFor({ spaceName: a.space, project: a.from }, sp, home())?.id })).filter((x) => x.space);
       if (found.length) await st.kdb.adoptSpaces(found).catch(() => {});
       await this.loadProjects(st.kdb, rows).catch(() => {});
       this.settleHidden(rows);
+      this.names.absorb(st.kdb && st.kdb.seenAlias, started);
     }
     if (!(rows && seq >= this.asleepApplied && (shared("kanso.asleep.at") ?? 0) <= started)) return "drop";
     this.asleepApplied = seq;
@@ -921,12 +926,14 @@ export default class Spaces extends View {
   }
 
   checkNew(cx) {
+    this.names.paint(cx);
     this.pollSleepWork(cx, false);
     const now = Date.now();
     const active = window().active;
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
     this.lastLook = now;
     this.takeMoves();
+    this.names.take(cx);
     const projects = registry();
     if (!sameProjects(projects, this.projectsSeen)) { this.projectsSeen = projects; cx.notify(); }
     this.trackFocus();
@@ -2095,7 +2102,7 @@ export default class Spaces extends View {
 
   machineHead(m, phase, t, collapsed, folded) {
     const key = m ?? "local";
-    const title = machineTitle(m, this.hostName);
+    const title = this.names.title(m);
     const word = machineState(phase);
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
     const connected = phase === "connected";
@@ -2111,7 +2118,9 @@ export default class Spaces extends View {
       .when(collapsed, (el) => el.justify_center())
       .when(ring, (el) => el.border_1().border_color(t.accent))
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(wash)))
-      .on_click((_e, cx) => go(cx))
+      .on_click((e, cx) => { if (e.click_count === 2) return; go(cx); })
+      .on_mouse_down("left", (e, cx) => { if (e.click_count !== 2) return; cx.stop_propagation(); this.names.rename(m); })
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.names.open(m); })
       .on_hover((h, cx) => { if (h ? this.hoverMachine !== key : this.hoverMachine === key) { this.hoverMachine = h ? key : null; cx.notify(); } })
       .when(collapsed, (el) => el.tooltip(machineTip(title, phase, hint)).child(icon))
       .when(!collapsed, (el) => el.child(icon)
@@ -2684,6 +2693,7 @@ export default class Spaces extends View {
     if (props()?.newConversation) return this.newConversationView(t);
     if (props()?.newProject) return this.newProjectView(t);
     if (props()?.worktree) return this.worktreeView(t);
+    if (props()?.machineMenu) return this.names.menu(t);
     const collapsed = shared("sidebar.collapsed") === true;
     if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;

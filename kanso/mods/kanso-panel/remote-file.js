@@ -1,10 +1,10 @@
 // A file on another machine, copied into the app folder so a picture can be drawn here.
-import { appHome } from "herdr";
+import { appHome, shared } from "herdr";
 import { exists, mkdir, readFile, readdir, unlink, writeFile } from "fs/promises";
 import { localService, serviceOn } from "./platform-host.js";
 import { fileApi, pairEntries, CHUNK } from "./platform-files.js";
 import { paths } from "./platform-paths.js";
-import { extOf } from "./pure.js";
+import { aliasText, extOf, machineTitle } from "./pure.js";
 
 export const BYTE_CAP = 20 * 1024 * 1024;
 export const ASK_BYTES = 2 * 1024 * 1024;
@@ -49,6 +49,8 @@ export const sweepLook = async (root, id, keep) => {
 
 export const said = (error) => String(error?.message ?? error ?? "").replace(/^Error:\s*/, "").trim();
 
+const aliasName = (machine) => aliasText(shared("kanso.alias"), machine);
+
 export const quietError = (error) => {
   const text = said(error);
   return !text || QUIET.test(text);
@@ -60,14 +62,17 @@ export const copyFailure = (error, machine) => {
   if (/cut short|truncat/i.test(text)) return "The copy was cut short";
   if (DENIED.test(text)) return "Cannot read this file: permission denied";
   if (MISSING.test(text)) return "This file is no longer available";
-  if (!text || QUIET.test(text)) return `${machine} did not answer`;
+  if (!text || QUIET.test(text)) {
+    const alias = aliasName(machine);
+    return `${alias ? machineTitle(machine || "", "", alias) : machine} did not answer`;
+  }
   return text;
 };
 
 export const listFailure = (error, machine) => {
   const text = said(error);
   if (DENIED.test(text)) return "Cannot list this folder: permission denied";
-  if (!text || QUIET.test(text)) return machine ? `${machine} did not answer` : "This computer did not answer";
+  if (!text || QUIET.test(text)) return `${machineTitle(machine || "", "", aliasName(machine))} did not answer`;
   return text || "Cannot list this folder";
 };
 

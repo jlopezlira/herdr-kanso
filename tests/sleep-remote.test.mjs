@@ -257,6 +257,43 @@ test("a computer with no space open is read in front, shown, and left until the 
   assert.equal(view.closedOn("light", { asleep: shown(), registry: [], spaces: [] }).some((item) => item.list.some((entry) => entry.asleep.id === "z1")), true);
 });
 
+test("a registered computer with nothing open and nothing asleep costs the one read develop already makes", async () => {
+  // Counted on origin/develop 98cf313 with an empty asleep list: first 1, an immediate repeat 1, a minute later behind 1.
+  let now = 100000, active = false;
+  const reads = { light: 0 };
+  const seen = [{ route: "", name: "Night", at: 5, pending: 0 }];
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    Date: { now: () => now },
+    spaces: () => [],
+    window: () => ({ platform: "macos", active }),
+    shared: (key) => (key === "kanso.sleep.kick" ? 0 : 0),
+    setShared() {},
+    machines: () => [{ name: "light", layout: "ready" }],
+    home: () => "/Users/jj",
+  });
+  const view = Object.assign(new Spaces(), {
+    asleepReads: 0, asleepApplied: 0, hostName: "macbook",
+    leftNavStore: () => ({ asleep: async () => [], kdb: {} }),
+    loadProjects: async () => {}, settleHidden() {},
+    storeOn: async () => ({ asleep: async () => { reads.light += 1; return []; }, kdb: { seenAlias: seen } }),
+  });
+  view.names.book = { light: { name: "Cave", at: 1, pending: 0 } };
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 0, "behind, last saved stays and nothing is read");
+  assert.equal(view.names.title("light"), "Cave");
+  active = true;
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 1, "in front, the read that draws the row is the only call");
+  assert.equal(view.names.title("light"), "Night");
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 1, "an immediate repeat does not read again");
+  active = false;
+  now = 190000;
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 1, "a minute later behind it is not read");
+  assert.equal(view.names.title("light"), "Night");
+});
+
 test("the dialog wakes an asleep tab on a computer with no space open, and an unreachable one stays grey", async () => {
   let layout = "ready", reads = 0;
   const claims = [];

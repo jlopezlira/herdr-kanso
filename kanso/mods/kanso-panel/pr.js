@@ -8,7 +8,7 @@ import { exec, notify, run, theme, setShared, shared, window, layout, focused, p
 import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
-import { tryOr, tryOrAsync, bounded } from "./pure.js";
+import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
@@ -943,10 +943,11 @@ export class PullRequest {
   }
 
   scene() {
+    const named = aliasText(shared("kanso.alias"), this.on || "");
     return {
       kind: this.sceneKind(), pr: this.pr, checks: this.pr ? this.checks() : [], threads: this.threads ?? [],
       permission: this.permission ?? null, agent: this.frontAgent(), stale: Boolean(this.stale), baseBehind: this.baseBehind ?? null,
-      log: this.parsedLog(), now: Date.now(), branch: this.branch, place: this.pr ? "" : this.place(), computer: this.on || "",
+      log: this.parsedLog(), now: Date.now(), branch: this.branch, place: this.pr ? "" : this.place(), computer: named ? machineTitle(this.on || "", "", named) : (this.on || ""),
       title: this.missing?.title, canCreate: this.canCreate(), ahead: this.aheadCount ?? 0, behindCount: this.behindCount ?? 0, subjects: this.subjects ?? [],
     };
   }

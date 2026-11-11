@@ -60,7 +60,7 @@ test("Needs you names the oldest blocked agent, and nothing when nobody waits", 
 
 test("The computer says where you are, and Retry only when that computer is unreachable", async () => {
   const { computerOf } = await load("kanso-status/model.js", ["computerOf"]);
-  const shown = (space, layouts) => clone(computerOf(space, layouts));
+  const shown = (space, layouts, alias = "") => clone(computerOf(space, layouts, alias));
   assert.deepEqual(shown(null, []), { icon: "monitor", words: "This computer", tone: "muted", command: null, tooltip: null });
   assert.deepEqual(shown({ machine: "" }, [{ name: "devbox", layout: "unavailable" }]), { icon: "monitor", words: "This computer", tone: "muted", command: null, tooltip: null });
   assert.deepEqual(shown({ machine: "devbox" }, [{ name: "devbox", layout: "ready" }]), { icon: "server", words: "devbox", tone: "muted", command: null, tooltip: null });
@@ -70,6 +70,10 @@ test("The computer says where you are, and Retry only when that computer is unre
   assert.deepEqual(shown({ machine: "devbox" }, [{ name: "devbox", layout: "unavailable" }]), {
     icon: "server", words: "devbox · unreachable", tone: "blocked", command: "kanso-spaces.retry-machine:devbox", tooltip: "devbox · unreachable",
   });
+  assert.deepEqual(shown({ machine: "devbox" }, [{ name: "devbox", layout: "unavailable" }], "Night"), {
+    icon: "server", words: "Night · unreachable", tone: "blocked", command: "kanso-spaces.retry-machine:devbox", tooltip: "Night · unreachable",
+  });
+  assert.deepEqual(shown(null, [], "Studio"), { icon: "monitor", words: "Studio", tone: "muted", command: null, tooltip: null });
 });
 
 test("Low memory uses the guard's words, and a stale or fine reading says nothing", async () => {

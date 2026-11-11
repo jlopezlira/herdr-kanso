@@ -85,7 +85,7 @@ export async function load(file, names, host = {}, root = mods) {
   const pending = [file];
   while (pending.length) {
     const text = sources.get(pending.pop());
-    for (const m of text.matchAll(/^import\s+(?:\{[^}]*\}\s+from\s+)?["'](\.\/[^"']+)["'];/gm)) {
+    for (const m of text.matchAll(/^(?:import\s+(?:\{[^}]*\}\s+from\s+)?|export\s+\{[^}]*\}\s+from\s+)["'](\.\/[^"']+)["'];/gm)) {
       const sibling = `${dir}${m[1].slice(2)}`;
       if (!sources.has(sibling)) { sources.set(sibling, await read(sibling)); pending.push(sibling); }
     }

@@ -92,6 +92,7 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 - **Spend and Shipped.** What your AI work is worth at list price, and what you
   delivered on GitHub, with share images that carry totals only. Turn Sync on
   from another computer's row and Spend adds that computer's tokens.
+  A computer's row can be renamed, and that name shows on the other computer.
 - **The device beside the agent.** Simulator is kansō's own panel, using only
   Xcode's and Android's tools. It installs nothing. The iOS screen is a view;
   touch it in Apple's Simulator. Android keeps touch, typing and keys, with

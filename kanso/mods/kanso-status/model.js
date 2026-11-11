@@ -1,5 +1,5 @@
 // What the status bar says, and where a click goes. No host calls.
-import { parseOr, oneLine, memoryFree } from "./pure.js";
+import { machineTitle, parseOr, oneLine, memoryFree } from "./pure.js";
 
 export const QUESTION_W = 260;
 export const MEMORY_MS = 60_000;
@@ -44,14 +44,14 @@ export function needsItem(rows, questions = {}) {
   };
 }
 
-export function computerOf(space, layouts) {
+export function computerOf(space, layouts, alias = "") {
   const remote = space?.machine ? String(space.machine) : "";
-  const name = remote || "This computer";
+  const name = machineTitle(remote, "", alias);
   const icon = remote ? "server" : "monitor";
   const layout = remote ? (layouts ?? []).find((row) => row?.name === remote)?.layout : null;
   if (remote && layout === "unavailable") {
     const words = `${name} · unreachable`;
-    return { icon, words, tone: "blocked", command: `kanso-spaces.retry-machine:${name}`, tooltip: words };
+    return { icon, words, tone: "blocked", command: `kanso-spaces.retry-machine:${remote}`, tooltip: words };
   }
   return { icon, words: name, tone: "muted", command: null, tooltip: null };
 }
