@@ -482,17 +482,20 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     the automatic name), so it survives a restart and the pane header, the
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
-  - With another machine, each has a header: a 17 monitor or server icon in
-    `foreground` and the name at 15 semibold (this computer's is its host
-    name). The switch says on or off; a mark shows only while loading,
-    unavailable, or waiting for a login. Off stores the target, name, via,
-    session and temporary flag, then `hc machine rm` (terminals there keep
-    running) and leaves one dim row: nothing under it is listed or read. On
-    is `hc machine add` with those values, never `--install`; the row is
-    dropped once `hc machine ls` shows it connected. A login says Needs a
-    login, then the command, with Copy. Unavailable has Retry. Alone, this
-    computer has no header and no switch. `hc machine ls` runs every 30 s
-    in front and every 2 min behind.
+  - With another machine, each is one project-height row: monitor or server
+    icon, medium name (`foreground` connected, `dim` off or unreachable;
+    this computer's host name). Small `dim`: Off, Unreachable, Needs login;
+    a breathing line while loading. Hover or keyboard: power, Retry when
+    unreachable, + when connected; a chevron folds it. Needs login copies
+    `hc machine login <name>` from the tooltip (power's place). Off stores
+    target, name, via, session and temporary, then `hc machine rm`
+    (terminals keep running); nothing under it is listed or read. `false`
+    and `null` are none, so add never sends an empty `--via`. On is
+    `hc machine add` with those, never `--install`; dropped once
+    `hc machine ls` shows it connected. If the save fails after the remove,
+    or add keeps failing, it stays with Retry; the hint is the state's
+    tooltip. This computer has no power. Alone, no header.
+    `hc machine ls`: 30 s in front, 2 min behind.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
     order button (kanso.db `spaces.order`): last update, needs you, kind,

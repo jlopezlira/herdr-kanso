@@ -1,12 +1,19 @@
 // A remote machine turned off from the sidebar: what to store, the hc argv, and what the row should show.
 
+// hc machine ls uses false and null when a plain ssh machine has no via or session.
+const kept = (value) => {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  return text === "false" || text === "null" ? "" : text;
+};
+
 export function machineRecord(row) {
   if (!row || row.name == null || row.name === "") return null;
   return {
     name: String(row.name),
     target: String(row.target ?? ""),
-    via: String(row.via ?? ""),
-    session: String(row.session ?? ""),
+    via: kept(row.via),
+    session: kept(row.session),
     temporary: row.temporary === true || row.temporary === 1 || row.temporary === "1",
   };
 }
@@ -85,12 +92,26 @@ export function machinePhase({ name, stored, live, layout, asking, login, failed
   return "loading";
 }
 
-// The switch already says on and off. A mark is only a phase with something left to say.
-export const machineMarks = {
-  loading: { tip: "Loading", color: "muted", icon: "refresh" },
-  unavailable: { tip: "Unavailable", color: "blocked", icon: "plug" },
-  login: { tip: "Needs a login", color: "blocked", icon: "plug" },
-};
+const MACHINE_WORD = { off: "Off", unavailable: "Unreachable", login: "Needs login" };
+
+export function machineState(phase) {
+  return MACHINE_WORD[phase] ?? "";
+}
+
+export function machineTip(title, phase, hint = "") {
+  const word = machineState(phase);
+  const note = typeof hint === "string" ? hint.trim() : "";
+  return word ? `${title}: ${note || word}` : title;
+}
+
+const HOT = ["machine", "machine-power", "machine-retry", "machine-login", "machine-add"];
+
+export function machineHot(name, hover, kbd, navKey) {
+  const key = name ?? "local";
+  if (hover === key) return true;
+  if (!kbd) return false;
+  return HOT.some((prefix) => navKey === `${prefix}:${key}`);
+}
 
 export function powerId(name) {
   return name ? `machine-power-${name}` : null;

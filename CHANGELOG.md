@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.22.3] - 2026-11-10
+
+### Fixed
+
+- A remote machine is one quiet row, the same height as a project. Off, unreachable, and needs login say so on that row, and it can be turned off, retried, or given a space from there. One that cannot be reached stays in the list. Turning one off no longer forgets how to connect it.
+
 ## [3.22.2] - 2026-11-10
 
 ### Fixed
