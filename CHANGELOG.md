@@ -30,6 +30,7 @@ release.
 - A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
 - An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
 - An asleep row shows Wake. Enter wakes it. A click opens its menu.
+- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
 
 ### Fixed
 
