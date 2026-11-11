@@ -11,11 +11,17 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.23.0] - 2026-11-10
+
+### Added
+
+- Sync in settings is off until you turn a computer on. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then, Settings and Spend say Update kanso there. A computer turned off from the sidebar is not asked and shows as off. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
+
 ## [3.22.0] - 2026-11-10
 
 ### Added
 
-- Sync in settings is off until you turn a computer on. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then, Settings and Spend say Update kanso there. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
+- Each remote machine in the sidebar has a switch that turns its connection off and back on with the setup already saved. Off leaves one dim row and is remembered; work already running on that machine keeps running. This computer has no switch. When another machine is present, each machine has a header with its name. A mark shows only while it is loading, unavailable, or waiting for a login. Unavailable can be retried, and a login Herdr asks for can be copied. With only this computer, the list is unchanged.
 
 ## [3.21.1] - 2026-11-10
 

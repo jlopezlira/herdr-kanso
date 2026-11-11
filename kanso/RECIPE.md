@@ -468,7 +468,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
   rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
-  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), Sync shares token spend when both are on this version, What's new the log, Credits who.
+  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), Sync shares token spend when both are on this version, and skips one the sidebar turned off, What's new the log, Credits who.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
@@ -481,24 +481,22 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     the automatic name), so it survives a restart and the pane header, the
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
-  - Click an agent row to focus its pane. Agents are listed as T3 Code
-    lists its threads: the pinned ones first, in the order you drag them,
-    then the rest in the order chosen with the order button at the top of
-    the sidebar (a Popover over the list, a check on the current one,
-    remembered in kanso.db `spaces.order`): last update (Herdr's `seq`,
-    the default, as in T3 Code), needs you first (blocked, done, working,
-    idle, then last update), by kind (agents by their program, then
-    shells, then the rest), as on screen (the strip's order, tab by tab,
-    with the panes stacked in one column held together in one soft slab,
-    `foreground` at 3%, radius 6), or your own order (drag an agent where
-    you want it; per space, kanso.db `spaces.custom`; new ones
-    join at the end by last update). The pin is the `kanso.pin` label on
-    the terminal (its number is its place; pinning adds it last among the
-    pinned, a drag among the pinned renumbers them through `hc label`),
-    shown always on a pinned row and on hover on the rest; a click pins or
-    unpins. A drag only reorders within its section (the pinned, or your
-    order) and shows a 2px `accent` line where it lands; moving a pane in
-    the strip is the header grip's job.
+  - With another machine, each has a header: a 17 monitor or server icon in
+    `foreground` and the name at 15 semibold (this computer's is its host
+    name). The switch says on or off; a mark shows only while loading,
+    unavailable, or waiting for a login. Off stores the target, name, via,
+    session and temporary flag, then `hc machine rm` (terminals there keep
+    running) and leaves one dim row: nothing under it is listed or read. On
+    is `hc machine add` with those values, never `--install`; the row is
+    dropped once `hc machine ls` shows it connected. A login says Needs a
+    login, then the command, with Copy. Unavailable has Retry. Alone, this
+    computer has no header and no switch. `hc machine ls` runs every 30 s
+    in front and every 2 min behind.
+  - Click an agent row to focus its pane. Pinned agents come first (the
+    `kanso.pin` label; drag them, or click the pin). The rest follow the
+    order button (kanso.db `spaces.order`): last update, needs you, kind,
+    on screen, or your own drag order (`spaces.custom`). A drag stays in
+    its section and shows a 2px `accent` line.
   - Each agent row carries its activity (kanso-spaces/agents.js `track`,
     `elapsed`, `activityOf`). At the right, before the state mark, the time
     in its state (11px `dim`, 28 wide, right-aligned): how long it has been
@@ -692,9 +690,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     PR rereads every minute while shown, every 20 s while a check runs.
 - **Background**:
   - Git runs only while Spaces shows (0.5 s in front, 5 s behind); the
-    `ps` under agents skips Threads.
-  - `hc machine ls` runs every 30 s with the window in front, and every
-    2 min with it behind.
+    `ps` under agents skips Threads. A machine that is off is not read.
 
 ## Built from
 
@@ -719,7 +715,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       (`kanso-status` `{side: "right"}`, weight 1).
 - **Mods**:
   - `kanso-spaces`: spaces, agents (`agents.js`), git per space via `exec`,
-    machines via `hc machine ls`.
+    machines via `hc machine ls`, `add` and `rm`.
   - `kanso-tabs`: tabs, panel buttons and the on-demand panel mount via
     `layout.set`.
   - `kanso-strip`: the canvas. The copy in the status row is the controller

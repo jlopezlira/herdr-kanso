@@ -8,6 +8,7 @@ import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTa
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { clock, tryOr, tryOrAsync } from "./pure.js";
+import { powerOf } from "./sync-power.js";
 import { EXCHANGE_MS, configFrom, exchangeAll, holdsOf, identityFrom, joinUnder, periodKeyOf, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
 
 const MOD = "kanso-spend";
@@ -108,6 +109,7 @@ export default class TokenSpend extends View {
     this.openMenu = null;
     this.menuOptions = null;
     this.syncHolds = [];
+    this.syncStored = [];
 
     this.ticker = null;
     this.awake = false;
@@ -307,14 +309,17 @@ export default class TokenSpend extends View {
     const periodKey = periodKeyOf(this.cost);
     const options = { today: this.options().today, cost: { period: this.cost.period, offset: Number(this.cost.offset) || 0, project: "all", model: "all" } };
     const self = this.costs?.syncSelf || identityFrom(await readTextFile(joinUnder(dir, "identity.json")).catch(() => null), () => "", "").id;
+    const power = await powerOf(this.syncStored);
+    if (!this.awake || this.closed) return;
+    this.syncStored = power.stored;
     const out = await exchangeAll({ exec }, {
       config, peers: machines(), status: statusFrom(await readTextFile(joinUnder(dir, "status.json")).catch(() => null)),
       rows: rowsFrom(await readTextFile(joinUnder(dir, "rows.json")).catch(() => null)),
       self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
-      now, periodKey, options,
+      now, periodKey, options, stored: power.stored, live: power.live,
     });
     if (!this.awake || this.closed) return;
-    this.syncHolds = holdsOf(out.status);
+    this.syncHolds = holdsOf(out.status, power.stored, power.live);
     if (!out.ran) return;
     await mkdir(dir, { recursive: true });
     const rowsFile = joinUnder(dir, "rows.json");

@@ -192,6 +192,7 @@ test("A computer on an older kansō says to update it, and nothing is written th
   await copyFile(fromMod("sync-probe.mjs"), path.join(probeDir, "sync-probe.mjs"));
   await copyFile(fromMod("sync.js"), path.join(probeDir, "sync.js"));
   await copyFile(fromMod("pure.js"), path.join(probeDir, "pure.js"));
+  await copyFile(fromMod("machines.js"), path.join(probeDir, "machines.js"));
   await writeFile(path.join(custom, "mods", "kanso-chrome", "version.json"), `${JSON.stringify({ version: "3.21.0" })}\n`);
   const { stdout } = await runFile(process.execPath, [sync.PROBE_REL, "{}"], {
     cwd: home,
@@ -217,6 +218,47 @@ test("A computer on an older kansō says to update it, and nothing is written th
   const enabled = sync.withPeer({ version: 1, peers: {} }, "odin", true);
   assert.equal(enabled.peers.odin.kinds.spend, true);
   assert.equal(sync.syncOn(sync.withKind(enabled, "odin", "spend", false)), false);
+});
+
+test("A computer turned off from the sidebar is not asked and shows as off", async () => {
+  const stored = [{ name: "odin", target: "odin.example", via: "", session: "", temporary: false }];
+  const live = [];
+  const connected = [{ name: "odin", state: "connected" }];
+  let calls = 0;
+  const runner = { exec: async () => { calls += 1; return { code: 0, stdout: JSON.stringify(reply([])) }; } };
+  const base = { config: on(), peers: ready(), status: {}, rows: [], self: SELF, now: NOW, periodKey: "month:0", stored };
+  const parked = await sync.exchangeAll(runner, { ...base, live });
+  assert.equal(calls, 0);
+  assert.equal(parked.ran, false);
+  const resumed = await sync.exchangeAll(runner, { ...base, live: connected });
+  assert.equal(calls, 1);
+  assert.equal(resumed.ran, true);
+  const both = {
+    version: 1,
+    peers: {
+      odin: { enabled: true, kinds: { spend: true } },
+      loki: { enabled: true, kinds: { spend: true } },
+    },
+  };
+  const steps = sync.planExchange({
+    config: both, peers: [{ name: "odin", layout: "ready" }, { name: "loki", layout: "ready" }],
+    status: {}, now: NOW, periodKey: "month:0", stored, live,
+  });
+  assert.deepEqual(steps.map((step) => step.id), ["loki"]);
+  const roster = sync.syncRoster(ready(), on(), { odin: { reason: "update" } }, NOW, { stored, live });
+  assert.equal(roster.peers.length, 1);
+  assert.equal(roster.peers[0].state.kind, "off");
+  assert.equal(roster.peers[0].state.text, "Off");
+  assert.equal(sync.holdsOf({ odin: { reason: "update" } }, stored, live).length, 0);
+  assert.equal(sync.holdsOf({ odin: { reason: "update" } }, stored, connected)[0].text, sync.UPDATE_TEXT);
+  const missing = sync.syncRoster([{ name: null, layout: "ready" }], on(), { odin: { reason: "update" } }, NOW, { stored, live });
+  assert.equal(missing.state, "peers");
+  assert.equal(missing.peers[0].id, "odin");
+  assert.equal(missing.peers[0].state.text, "Off");
+  const quiet = sync.syncRoster([], {}, {}, NOW, { stored: [{ name: "tmp", temporary: true }], live });
+  assert.equal(quiet.state, "loading");
+  const awake = sync.syncRoster(ready(), on(), {}, NOW, { stored, live: connected });
+  assert.equal(awake.peers[0].state.kind, "idle");
 });
 
 test("Paths are built with the other computer's path API", async () => {

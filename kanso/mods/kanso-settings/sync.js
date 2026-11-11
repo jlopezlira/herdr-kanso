@@ -1,11 +1,12 @@
 // Machine sync: a stable id, peers, and rows moved each way. No machine is in charge.
+import { isOff } from "./machines.js";
 import { clock, parseOr, reduceSeries } from "./pure.js";
 
 export const KINDS = [{ id: "spend", label: "Token spend" }];
 export const EXCHANGE_MS = 180_000;
 export const BACKOFF_MAX_MS = 1_800_000;
 export const RETRY_FLOOR_MS = 15_000;
-export const MIN_VERSION = "3.22.0";
+export const MIN_VERSION = "3.23.0";
 export const PROTOCOL = 1;
 export const UPDATE_TEXT = "Update kanso there";
 
@@ -80,14 +81,20 @@ export function withKind(config, id, kind, enabled) {
   return { ...base, peers: { ...base.peers, [id]: { ...prev, kinds: { ...prev.kinds, [kind]: Boolean(enabled) } } } };
 }
 
-export function peersOf(list) {
-  return (Array.isArray(list) ? list : [])
+export function peersOf(list, stored = [], live = []) {
+  const named = (Array.isArray(list) ? list : [])
     .filter((machine) => machine && typeof machine.name === "string" && machine.name && !machine.temporary)
     .map((machine) => ({
       id: machine.name,
       name: machine.name,
       layout: machine.layout === "ready" || machine.layout === "unavailable" ? machine.layout : "loading",
+      off: isOff(machine.name, stored, live),
     }));
+  const ids = named.map((peer) => peer.id);
+  const parked = (Array.isArray(stored) ? stored : [])
+    .filter((row) => row?.name && !row.temporary && !ids.includes(row.name))
+    .map((row) => ({ id: row.name, name: row.name, layout: "unavailable", off: isOff(row.name, stored, live) }));
+  return [...named, ...parked];
 }
 
 export function periodKeyOf(cost) {
@@ -184,9 +191,9 @@ export function due(status, now, periodKey) {
   return now - at >= EXCHANGE_MS;
 }
 
-export function planExchange({ config, peers, status, now, periodKey }) {
-  return peersOf(peers).flatMap((peer) => {
-    if (peer.layout !== "ready") return [];
+export function planExchange({ config, peers, status, now, periodKey, stored = [], live = [] }) {
+  return peersOf(peers, stored, live).flatMap((peer) => {
+    if (peer.off || peer.layout !== "ready") return [];
     const kinds = KINDS.filter((kind) => kindOn(config, peer.id, kind.id)).map((kind) => kind.id);
     if (!kinds.length || !due(status?.[peer.id], now, periodKey)) return [];
     return [{ id: peer.id, on: peer.id, name: peer.name, kinds }];
@@ -229,7 +236,7 @@ export async function exchangeAll(runner, input) {
   const periodKey = input.periodKey;
   const rows = input.own ? mergeRows(input.rows ?? [], [input.own]) : (input.rows ?? []);
   const status = input.status ?? {};
-  const steps = planExchange({ config: input.config, peers: input.peers, status, now, periodKey });
+  const steps = planExchange({ config: input.config, peers: input.peers, status, now, periodKey, stored: input.stored ?? [], live: input.live ?? [] });
   if (!steps.length) return { rows, status, ran: false };
   const done = await reduceSeries(steps, async (state, step) => {
     const payload = JSON.stringify({ push: push(state.rows), options: input.options, kinds: step.kinds });
@@ -242,6 +249,7 @@ export async function exchangeAll(runner, input) {
 }
 
 function peerState(peer, status, now) {
+  if (peer.off) return { kind: "off", text: "Off" };
   if (peer.layout === "loading") return { kind: "loading", text: "" };
   if (status?.reason === "update") return { kind: "update", text: UPDATE_TEXT };
   const time = clock(status?.synced_at, now);
@@ -261,13 +269,15 @@ export function peerView(peer, config, status, now) {
   };
 }
 
-export function holdsOf(status) {
-  return Object.entries(status ?? {}).flatMap(([id, row]) => (row?.reason === "update" ? [{ id, text: UPDATE_TEXT }] : []));
+export function holdsOf(status, stored = [], live = []) {
+  return Object.entries(status ?? {}).flatMap(([id, row]) => (row?.reason === "update" && !isOff(id, stored, live) ? [{ id, text: UPDATE_TEXT }] : []));
 }
 
-export function syncRoster(list, config, status, now) {
+export function syncRoster(list, config, status, now, power = {}) {
   const machines = Array.isArray(list) ? list : [];
-  const peers = peersOf(machines);
+  const stored = power.stored ?? [];
+  const live = power.live ?? [];
+  const peers = peersOf(machines, stored, live);
   const settling = machines.length === 0 || machines.some((machine) => machine?.layout === "loading");
   if (!peers.length && settling) return { state: "loading", peers: [] };
   if (!peers.length) return { state: "empty", peers: [] };

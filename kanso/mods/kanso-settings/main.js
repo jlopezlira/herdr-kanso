@@ -9,6 +9,7 @@ import { GROUPS, ofRow, familyPattern, familyChords, conflictsOf, rebound } from
 import { DEFAULT_KEYS } from "./defaults.js";
 import { parseChangelog, plain, compare } from "./changelog.js";
 import { tryOr, tryOrAsync } from "./pure.js";
+import { powerOf } from "./sync-power.js";
 import { configFrom, joinUnder, statusFrom, syncDir, syncRoster, withKind, withPeer } from "./sync.js";
 
 const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "sync", label: "Sync" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
@@ -55,6 +56,8 @@ export default class Settings extends View {
     this.syncConfig = { version: 1, peers: {} };
     this.syncStatus = {};
     this.syncMachines = [];
+    this.syncStored = [];
+    this.syncLive = [];
     this.syncError = null;
     this.syncWrite = Promise.resolve();
     this.syncTimer = null;
@@ -331,9 +334,12 @@ export default class Settings extends View {
       const dir = syncDir(appHome());
       const configText = await tryOrAsync(() => readTextFile(joinUnder(dir, "config.json")));
       const statusText = await tryOrAsync(() => readTextFile(joinUnder(dir, "status.json")));
+      const power = await powerOf(this.syncStored);
       if (this.syncLoad !== generation) return;
       this.syncConfig = configFrom(configText);
       this.syncStatus = statusFrom(statusText);
+      this.syncStored = power.stored;
+      this.syncLive = power.live;
       this.syncMachines = tryOr(() => machines(), []);
       this.syncReady = true;
       syncCx.notify();
@@ -352,15 +358,19 @@ export default class Settings extends View {
     this.syncTimer = cx.timer.after(2000, (timerCx) => {
       this.syncTimer = null;
       if (this.page !== "sync") return;
-      const next = tryOr(() => machines(), null);
-      const machinesChanged = Boolean(next) && JSON.stringify(next) !== JSON.stringify(this.syncMachines);
-      if (machinesChanged) this.syncMachines = next;
       timerCx.spawn(async (readCx) => {
+        const power = await powerOf(this.syncStored);
         const status = statusFrom(await tryOrAsync(() => readTextFile(joinUnder(syncDir(appHome()), "status.json"))));
         if (this.page !== "sync") return;
+        const next = tryOr(() => machines(), null);
+        const machinesChanged = Boolean(next) && JSON.stringify(next) !== JSON.stringify(this.syncMachines);
+        if (machinesChanged) this.syncMachines = next;
+        const powerChanged = JSON.stringify(power.stored) !== JSON.stringify(this.syncStored) || JSON.stringify(power.live) !== JSON.stringify(this.syncLive);
+        this.syncStored = power.stored;
+        this.syncLive = power.live;
         const statusChanged = JSON.stringify(status) !== JSON.stringify(this.syncStatus);
         if (statusChanged) this.syncStatus = status;
-        if (machinesChanged || statusChanged) readCx.notify();
+        if (machinesChanged || statusChanged || powerChanged) readCx.notify();
         this.armSync(readCx);
       });
     });
@@ -403,11 +413,12 @@ export default class Settings extends View {
   }
 
   syncPeer(c, peer) {
-    const state = peer.enabled ? peer.state : { kind: "idle", text: "" };
+    const off = peer.state.kind === "off";
+    const state = off || peer.enabled ? peer.state : { kind: "idle", text: "" };
     const dom = `sync-${String(peer.id).replace(/[^A-Za-z0-9_-]/g, "-")}`;
     return v_flex().w_full()
       .child(h_flex().w_full().py(G.sm).gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(peer.name))
+        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(off ? c.dim : c.text).child(peer.name))
         .child(toggleSwitch(`${dom}-on`, peer.enabled, (next, cx) => this.setPeer(peer.id, next, cx), c, { label: peer.name })))
       .when(peer.enabled, (el) => el.children(peer.kinds.map((kind) => h_flex().w_full().py(G.xs).pl(G.lg).gap(G.md).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.muted).child(kind.label))
@@ -418,7 +429,7 @@ export default class Settings extends View {
 
   syncPage(_t, c) {
     if (!this.syncReady) return this.newsBones(c);
-    const roster = syncRoster(this.syncMachines, this.syncConfig, this.syncStatus, Date.now());
+    const roster = syncRoster(this.syncMachines, this.syncConfig, this.syncStatus, Date.now(), { stored: this.syncStored, live: this.syncLive });
     if (roster.state === "loading") return this.newsBones(c);
     if (roster.state === "empty") return div().py(G.sm).text_size(13).text_color(c.muted).child("No other machines");
     return v_flex().w_full()
