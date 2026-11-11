@@ -13,6 +13,7 @@ import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from
 import { tryOr, tryOrAsync } from "./pure.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold } from "./ghchecks.js";
+import { pieces, shown, runs } from "./pieces.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -123,7 +124,17 @@ export function digestPr(view) {
 }
 
 // `run(cmd, args)` resolves with stdout, or null when the command fails.
-export async function readDigest(cwd, run) {
+export async function readDigest(cwd, run, want = {}) {
+  const gitOn = want.git !== false, prOn = want.pr !== false;
+  if (!gitOn && !prOn) return null;
+  const pull = async () => {
+    const out = await run("gh", ["pr", "view", "--json", PR_FIELDS], cwd);
+    return tryOr(() => digestPr(out ? JSON.parse(out) : null));
+  };
+  if (!gitOn) {
+    const pr = await pull();
+    return pr ? { files: 0, add: 0, del: 0, ahead: 0, pushed: false, pr } : null;
+  }
   const git = (...args) => run("git", ["-C", cwd, ...args]);
   if ((await git("rev-parse", "--is-inside-work-tree"))?.trim() !== "true") return null;
   const [status, stat, upstream, branch] = await Promise.all([
@@ -134,13 +145,16 @@ export async function readDigest(cwd, run) {
   // Without an upstream, ahead of the default branch.
   const aheadOfBase = async () => { const base = await git("rev-list", "--count", "origin/HEAD..HEAD"); return base == null ? 0 : Number(base.trim()) || 0; };
   const ahead = pushed ? Number(upstream.trim()) || 0 : await aheadOfBase();
-  const prOf = async () => {
-    if (!branch?.trim()) return null;
-    const out = await run("gh", ["pr", "view", "--json", PR_FIELDS], cwd);
-    return tryOr(() => digestPr(out ? JSON.parse(out) : null));
-  };
-  const pr = await prOf();
+  const pr = prOn && branch?.trim() ? await pull() : null;
   return { files, ...parseShortstat(stat), ahead, pushed, pr };
+}
+
+function drawnDigest(d, map) {
+  if (!d) return null;
+  const files = shown("header.digest", d.files > 0 || d.ahead > 0, map);
+  const pr = shown("header.pr", d.pr?.state === "OPEN", map);
+  const next = { ...d, files: files ? d.files : 0, add: files ? d.add : 0, del: files ? d.del : 0, ahead: files ? d.ahead : 0, pr: pr ? d.pr : null };
+  return next.files > 0 || next.ahead > 0 || next.pr?.state === "OPEN" ? next : null;
 }
 
 export function digestTip(d) {
@@ -420,8 +434,10 @@ export default class Strip extends View {
     const col = cols.findIndex((c) => c.panes?.includes(pane));
     const pinned = Boolean(cols[col]?.pin);
     const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
+    const map = pieces(shared);
     const d = st !== "working" ? shared(DIGEST)?.[pane] : null;
-    const digest = d && (d.files > 0 || d.ahead > 0 || d.pr?.state === "OPEN") ? d : null;
+    const digest = drawnDigest(d, map);
+    const place = shown("header.place", true, map);
     const canSend = Boolean(p.terminal) && all.some((q) => q.pane !== pane && q.terminal && (q.program?.agent || q.status));
     return h_flex().id(`pane-head-${pane}`).size_full().pl(14).pr(6).gap(10).items_center().text_size(12.5).relative()
       .rounded_t(RADIUS)
@@ -458,8 +474,8 @@ export default class Strip extends View {
       .on_click(() => run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }))
       .when(Boolean(pic), (el) => el.child(pic.opacity(ink ? 1 : 0.75)))
       .child(div().flex_none().truncate().max_w(260).text_size(12.5).when(ink, (el) => el.font_medium()).text_color(ink ? t.foreground : t.muted).child(name))
-      .when(Boolean(p.cwd), (el) => el.child(this.badge(t, folder(p.cwd), null, ink)))
-      .when(Boolean(p.branch), (el) => el.child(this.badge(t, p.branch, "mods/kanso-chrome/icons/branch.svg", ink)))
+      .when(Boolean(p.cwd) && place, (el) => el.child(this.badge(t, folder(p.cwd), null, ink)))
+      .when(Boolean(p.branch) && place, (el) => el.child(this.badge(t, p.branch, "mods/kanso-chrome/icons/branch.svg", ink)))
       .when(Boolean(digest), (el) => el.child(this.digestBadge(t, pane, digest, ink)))
       .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
       .child(div().flex_1())
@@ -628,12 +644,15 @@ export default class Strip extends View {
   }
 
   digest(p, cx) {
+    const map = pieces(shared);
+    const want = { git: runs("header.digest", map), pr: runs("header.pr", map) };
+    if (!want.git && !want.pr) return;
     this.digesting.add(p.pane);
     const on = spaces().find((s) => s.tabs.some((x) => x.id === p.tab))?.machine ?? null;
     const run = (cmd, args, cwd) => exec(cmd, args, { cwd, on }).then((r) => (r.code === 0 ? r.stdout : null)).catch(() => null);
     cx.spawn(async () => {
       try {
-        const d = await readDigest(p.cwd, run);
+        const d = await readDigest(p.cwd, run, want);
         // It went back to work meanwhile: what it left is no longer the news.
         if (panes().find((q) => q.pane === p.pane)?.status === "working") return;
         setShared(DIGEST, { ...(shared(DIGEST) ?? {}), [p.pane]: d ? { ...d, at: Date.now() } : null });
@@ -1088,7 +1107,7 @@ export default class Strip extends View {
           .bg(at?.ci === i && at?.ri !== r ? t.muted : tone)));
     });
     // The minimap can be turned off in Kanso settings; the model above still runs.
-    if ((shared("kanso.hidden") ?? []).includes?.("strip.minimap")) return div();
+    if (!shown("strip.minimap", true, pieces(shared))) return div();
     const n = st.n ?? DEFAULT_N;
     const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
       .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)

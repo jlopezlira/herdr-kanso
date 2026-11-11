@@ -226,7 +226,7 @@ test("Hidden working count and palette stay hidden, and Windows names its palett
   const ui = bar();
   const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
   ui.state.platform = "windows";
-  ui.state.shared["kanso.hidden"] = ["status.agents", "status.palette"];
+  ui.state.shared["kanso.pieces"] = { "status.agents": "hide", "status.palette": "hide" };
   ui.state.agents = [{ address: "a", status: "working" }];
   const view = new WorkspaceStatus();
   view.render();
