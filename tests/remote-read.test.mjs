@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { mkdtemp, readdir, readFile, rm, stat, unlink, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rename, rm, stat, unlink, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
-import { load, context, clone, modSandbox } from "./helpers.mjs";
+import { bindHerdrModules, load, context, clone, modSandbox } from "./helpers.mjs";
 
 const NAMES = ["bring", "copyName", "fileId", "dropCopies", "tooBig", "BYTE_CAP", "ASK_BYTES", "CHECK_MS", "SLOW_MS", "CHUNK", "slices", "cutShort", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts", "pollStart", "pollNext", "checkOutcome", "asOf", "staleView", "askPicture", "bytesLabel", "parseTree"];
 const pure = await load("kanso-panel/remote-file.js", NAMES, { appHome: () => "/app", window: () => ({ platform: "macos" }) });
@@ -38,6 +38,17 @@ test("a copy stops at 20 MB and rejects a cut-short read", () => {
   assert.equal(pure.cutShort({ truncated: true }), true);
   assert.equal(pure.cutShort({ stdout: "truncated by the host" }), true);
   assert.equal(pure.cutShort({ stdout: "AQIDBA==" }), false);
+});
+
+test("the mod host only has the fs, net and websocket exports Herdr declares", () => {
+  assert.throws(() => bindHerdrModules('import { mkdir, stat } from "fs/promises";\n'), /Could not find export 'stat' in module 'fs\/promises'/);
+  assert.throws(() => bindHerdrModules('import { createServer } from "net";\n'), /Could not find export 'createServer' in module 'net'/);
+  assert.throws(() => bindHerdrModules('import { Server } from "websocket";\n'), /Could not find export 'Server' in module 'websocket'/);
+  const bound = bindHerdrModules('import { exists } from "fs/promises";\nimport { connect } from "net";\nimport { WebSocket } from "websocket";\n');
+  assert.equal(bound.includes("stat"), false);
+  assert.match(bound, /__herdrModule\("fs\/promises"\)/);
+  assert.match(bound, /__herdrModule\("net"\)/);
+  assert.match(bound, /__herdrModule\("websocket"\)/);
 });
 
 test("the mod host fails on TextDecoder, atob, and Buffer", async () => {
@@ -205,6 +216,14 @@ async function remoteBring(platform) {
       await writeFile(args[4], Buffer.concat([prior, extra]));
       return { code: 0, stdout: "", stderr: "" };
     }
+    if (cmd === "stat" && !options.on) {
+      const info = await stat(args.at(-1)).catch(() => null);
+      return info ? { code: 0, stdout: `${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "missing" };
+    }
+    if (cmd === "mv" && !options.on) {
+      await rename(args.at(-2), args.at(-1));
+      return { code: 0, stdout: "", stderr: "" };
+    }
     if (state.fail && options.on) throw state.fail;
     const script = String(args.at(-1) ?? "");
     if (cmd === "pwsh" || cmd === "powershell") {
@@ -255,6 +274,33 @@ test("a file here is not copied, and one elsewhere is kept until its mtime chang
   } finally { await box.done(); }
 });
 
+test("old copies go by the kept list, and by the stamp in a name the list does not have", async () => {
+  const box = await remoteBring("macos");
+  try {
+    await box.bring("/remote/a.png", "light");
+    const root = join(box.dir, "data/kanso-panel/remote");
+    const sec = Math.floor(Date.now() / 1000);
+    const oldStamp = "old-1-4.png";
+    const newStamp = `new-${sec}-4.png`;
+    const listedNow = "kept-1-4.png";
+    const listedOld = `list-${sec}-4.png`;
+    await writeFile(join(root, oldStamp), "old");
+    await writeFile(join(root, newStamp), "new");
+    await writeFile(join(root, listedNow), "stay");
+    await writeFile(join(root, listedOld), "drop");
+    const kept = join(box.dir, "data/kanso-panel/remote.kept");
+    const prior = await readFile(kept, "utf8");
+    await writeFile(kept, `${prior}\n${listedNow}\t${Date.now()}\n${listedOld}\t${Date.now() - 86_400_000 - 1}`);
+    await box.bring("/remote/a.png", "light");
+    const names = await readdir(root);
+    assert.equal(names.includes(oldStamp), false);
+    assert.equal(names.includes(listedOld), false);
+    assert.equal(names.includes(newStamp), true);
+    assert.equal(names.includes(listedNow), true);
+    assert.equal(names.some((name) => name.endsWith("-1700000000-4.png")), true);
+  } finally { await box.done(); }
+});
+
 test("a picture over 2 MB is not copied until it is asked for", async () => {
   const box = await remoteBring("macos");
   try {
@@ -267,7 +313,7 @@ test("a picture over 2 MB is not copied until it is asked for", async () => {
     assert.equal(box.calls.some((call) => call[0] === "python3"), false);
     assert.ok(box.calls.some((call) => call[0] === "sh" && String(call[1][1]).includes(">>")));
     assert.ok(box.calls.some((call) => call[0] === "base64" && call[1][0] === "-D"));
-    assert.equal((await readdir(join(box.dir, "data/kanso-panel/remote"))).some((name) => name.includes(".b64")), false);
+    assert.equal((await readdir(join(box.dir, "data/kanso-panel/remote"))).some((name) => name.includes(".b64") || name.endsWith(".part")), false);
     box.state.stat = `${pure.ASK_BYTES} 8\n`;
     const before = box.calls.filter((call) => call[0] === "base64").length;
     await assert.rejects(box.bring("/remote/exact.png", "light"), /cut short/);
@@ -517,6 +563,10 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
       TextView: { markdown: () => view() }, Textarea: { new: view }, Editor: { new: view },
       EditorState: { new: () => ({}) }, TextareaState: { new: () => ({ set_auto_grow() {}, on() {}, focus() {}, release() {} }) },
       exec: async (cmd, args = []) => {
+        if (cmd === "mv") {
+          await rename(args.at(-2), args.at(-1));
+          return { code: 0, stdout: "", stderr: "" };
+        }
         if (cmd === "base64" && args[0] === "-D") {
           const text = await readFile(args[2], "utf8");
           await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));

@@ -1,7 +1,7 @@
 // A file on another machine, copied into the app folder so a picture can be drawn here.
 import { appHome } from "herdr";
-import { mkdir, readdir, stat, unlink, writeFile } from "fs/promises";
-import { serviceOn } from "./platform-host.js";
+import { exists, mkdir, readFile, readdir, unlink, writeFile } from "fs/promises";
+import { localService, serviceOn } from "./platform-host.js";
 import { fileApi, pairEntries } from "./platform-files.js";
 import { paths } from "./platform-paths.js";
 import { extOf } from "./pure.js";
@@ -182,34 +182,68 @@ export const markdownParts = (text) => {
   return [...parts.map(({ end: _end, ...part }) => part), ...(rest ? [{ kind: "text", text: rest }] : [])];
 };
 
-const aged = async (root) => Promise.all((await readdir(root).catch(() => [])).map(async (name) => ({ name, mtime: await stat(paths.join(root, name)).then((s) => s.mtimeMs).catch(() => 0) })));
+const keptFile = (root) => paths.join(paths.dirname(root), "remote.kept");
+
+// Remote mtime sits in the name; the kept list is when this computer wrote the copy.
+const stampAt = (name) => {
+  const sec = Number(/-(\d+)-\d+(?:\.[^.]+)?$/.exec(name)?.[1]);
+  return Number.isFinite(sec) ? sec * 1000 : 0;
+};
+
+const readKept = async (file) => (await readFile(file, "utf8").catch(() => "")).split("\n").flatMap((line) => {
+  const tab = line.indexOf("\t");
+  if (tab < 1) return [];
+  const at = Number(line.slice(tab + 1));
+  return Number.isFinite(at) ? [[line.slice(0, tab), at]] : [];
+});
+
+const atOf = (rows, name) => rows.find((row) => row[0] === name)?.[1];
+
+const sweep = async (root, id, keep) => {
+  const names = await readdir(root).catch(() => []);
+  const now = Date.now();
+  const rows = await readKept(keptFile(root));
+  const known = atOf(rows, keep) === undefined ? [...rows, [keep, now]] : rows;
+  const drop = dropCopies(names.map((entry) => ({ name: entry, mtime: atOf(known, entry) ?? stampAt(entry) })), { id, keep, now });
+  await Promise.all(drop.map((old) => unlink(paths.join(root, old)).catch(() => {})));
+  const gone = new Set(drop);
+  const live = names.filter((entry) => !gone.has(entry)).map((entry) => [entry, atOf(known, entry) ?? now]);
+  const listed = live.some((row) => row[0] === keep) ? live : [...live, [keep, atOf(known, keep) ?? now]];
+  await writeFile(keptFile(root), listed.map((row) => `${row[0]}\t${row[1]}`).join("\n"));
+};
 
 // QuickJS has no JIT: the base64 stays text and this computer's own tool writes the bytes.
 const place = async (files, file, info, dest) => {
-  const here = await serviceOn(fileApi, null);
+  const here = localService(fileApi);
   const parts = slices(info.size);
   if (!parts) throw new Error("The copy was cut short");
-  const temp = `${dest}.b64`;
+  const text = `${dest}.b64`;
+  const staging = `${dest}.part`;
   try {
-    if (!parts.length) { await writeFile(dest, ""); return; }
-    await parts.reduce(async (acc, slice, index) => {
-      await acc;
-      const encoded = await files.encode(file, parts.length === 1 ? undefined : slice);
-      if (!encoded || cutShort(encoded) || encoded.code !== 0) throw new Error(encoded?.stderr || "The copy was cut short");
-      const text = String(encoded.stdout ?? "");
-      if (index === 0) await writeFile(temp, text);
-      else {
-        const part = `${temp}.${index}`;
-        await writeFile(part, text);
-        await here.decodeBase64File(temp, null, { append: part });
-        await unlink(part);
-      }
-    }, Promise.resolve());
-    await here.decodeBase64File(temp, dest);
-    const wrote = await stat(dest).then((row) => row.size).catch(() => -1);
-    if (wrote !== info.size) { await unlink(dest).catch(() => {}); throw new Error("The copy was cut short"); }
+    if (!parts.length) await writeFile(staging, "");
+    else {
+      await parts.reduce(async (acc, slice, index) => {
+        await acc;
+        const encoded = await files.encode(file, parts.length === 1 ? undefined : slice);
+        if (!encoded || cutShort(encoded) || encoded.code !== 0) throw new Error(encoded?.stderr || "The copy was cut short");
+        const body = String(encoded.stdout ?? "");
+        if (index === 0) await writeFile(text, body);
+        else {
+          const part = `${text}.${index}`;
+          await writeFile(part, body);
+          await here.decodeBase64File(text, null, { append: part });
+          await unlink(part);
+        }
+      }, Promise.resolve());
+      await here.decodeBase64File(text, staging);
+    }
+    const wrote = await here.stat(staging);
+    if (wrote.size !== info.size) throw new Error("The copy was cut short");
+    const moved = await here.move(staging, dest);
+    if (moved?.code !== 0) throw new Error(moved?.stderr || "The copy was cut short");
   } finally {
-    await unlink(temp).catch(() => {});
+    await unlink(text).catch(() => {});
+    await unlink(staging).catch(() => {});
   }
 };
 
@@ -223,10 +257,10 @@ export async function bring(file, on, { ask = false } = {}) {
     const root = paths.join(appHome(), REMOTE_DIR);
     const dest = paths.join(root, name);
     await mkdir(root, { recursive: true });
-    const have = await stat(dest).then((s) => s.size === info.size).catch(() => false);
+    const have = await exists(dest);
     if (!have && !ask && askPicture(info.size)) return { deferred: true, size: info.size, mtime: info.mtime };
     if (!have) await place(files, file, info, dest);
-    await Promise.all(dropCopies(await aged(root), { id: fileId(on, file), keep: name, now: Date.now() }).map((old) => unlink(paths.join(root, old)).catch(() => {})));
+    await sweep(root, fileId(on, file), name);
     return { path: dest, size: info.size, mtime: info.mtime };
   } catch (e) {
     throw new Error(copyFailure(e, on));

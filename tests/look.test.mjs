@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
@@ -116,6 +116,14 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (options?.on && (cmd === "pwsh" || cmd === "powershell")) return { code: 127, stdout: "", stderr: "" };
       if (options?.on && cmd === "uname") return { code: 0, stdout: "Darwin\n" };
       if (options?.on && cmd === "stat") return { code: 0, stdout: world.statText };
+      if (cmd === "stat") {
+        const info = await stat(args.at(-1)).catch(() => null);
+        if (info) return { code: 0, stdout: `${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`, stderr: "" };
+      }
+      if (cmd === "mv") {
+        await rename(args.at(-2), args.at(-1));
+        return { code: 0, stdout: "", stderr: "" };
+      }
       if (options?.on && cmd === "base64") return { code: 0, stdout: "AQIDBA==\n" };
       if (cmd === "base64" && args[0] === "-D") {
         const text = await readFile(args[2], "utf8");
