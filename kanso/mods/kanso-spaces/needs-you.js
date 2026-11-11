@@ -1,8 +1,7 @@
 export const NEEDS_YOU = "kanso.needs-you";
 export const EMPTY_NOTICE_MS = 1800;
 
-const rank = (row) => row.status === "blocked" ? 0 : 1;
-const order = (a, b) => rank(a) - rank(b) || a.at - b.at || a.seq - b.seq || a.address.localeCompare(b.address);
+const order = (a, b) => a.at - b.at || a.seq - b.seq || a.address.localeCompare(b.address);
 
 const field = (value) => { const text = String(value ?? ""); return `${text.length}:${text}`; };
 
@@ -31,7 +30,7 @@ export function waitingQueue(list, terms, excluded = new Set(), previous = [], n
   const byAddress = new Map(terms.map((term) => [term.address, term]));
   const before = new Map(previous.map((row) => [row.address, row]));
   return list.filter((a) => a.pane && !a.asleep && !a.dozing && !excluded.has(a.address)
-    && (a.status === "blocked" || a.status === "done") && (!byAddress.has(a.address) || byAddress.get(a.address).state === "live"))
+    && a.status === "blocked" && (!byAddress.has(a.address) || byAddress.get(a.address).state === "live"))
     .map((a) => {
       const was = before.get(a.address), term = byAddress.get(a.address);
       const at = was?.status === a.status ? was.at : term?.status_ms ?? now;
@@ -53,5 +52,5 @@ export function queueState(rows, machines) {
   return { rows, state: "ready" };
 }
 
-export const waitingReason = (row) => row.status === "blocked" ? "Waiting for you" : "Finished";
+export const waitingReason = () => "Waiting for you";
 export const queueMessage = (state) => state === "unavailable" ? "Queue unavailable" : "Nobody is waiting";

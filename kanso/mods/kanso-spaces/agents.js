@@ -10,6 +10,7 @@ export { segmentAt };
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { prLine } from "./ghchecks.js";
+import { activityTone } from "./sidebar-rows.js";
 
 export { NAME_LABEL };
 
@@ -383,7 +384,7 @@ const ROW = 32, TWO = 50, ROOMY = 64;
 export function agentRow(a, indent, t, row, more = {}) {
   const project = more.project ?? null;
   const pic = programIcon(a.program, a.sub ? 13 : 15, t.foreground);
-  const zz = a.status === "asleep" || Boolean(a.dozing);
+  const zz = Boolean(a.dozing);
   const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
   const ink = zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -430,18 +431,17 @@ export function agentRow(a, indent, t, row, more = {}) {
   const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
     .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
     .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))
-    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(more.faint ? t.dim : t.muted).child(more.activity)))
+    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t[activityTone(a.status)]).child(more.activity)))
     .when(Boolean(more.step), (el) => el.child(div().flex_none().pl(5).text_color(more.step.stuck ? t.blocked : t.dim).child(more.step.time)));
   const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
   return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
     .items_center().rounded(8).cursor_pointer()
-    .when(Boolean(a.asleep?.quiet), (el) => el.opacity(0.55))
     // The focused row's wash is the list's pill (main.js), which glides here.
     .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
     .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click((_e, cx) => (a.asleep ? row?.menu?.(cx) : a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address })))
-    .on_mouse_down("left", (e) => { if (e.click_count === 2 && !a.asleep) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
+    .on_click((_e, cx) => { if (a.pane) run("pane.focus", { pane: a.pane }); else run("terminal.peek", { terminal: a.address }); })
+    .on_mouse_down("left", (e) => { if (e.click_count === 2) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
     .when(Boolean(drag), (el) => el.on_mouse_up("left", (_e, cx) => drag.up(cx)))
     .when(Boolean(row?.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))
     .when(Boolean(row?.menu), (el) => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); }))
