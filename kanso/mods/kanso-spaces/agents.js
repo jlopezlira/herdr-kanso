@@ -9,6 +9,7 @@ import { segmentAt } from "./ui.js";
 export { segmentAt };
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
+import { prLine } from "./ghchecks.js";
 
 export { NAME_LABEL };
 
@@ -142,10 +143,12 @@ export function elapsed(a, since, now) {
 
 export function digestLine(d) {
   if (!d) return null;
+  const open = d.pr?.number && String(d.pr.state ?? "OPEN").toUpperCase() === "OPEN";
+  const line = open ? prLine(d) : null;
   const parts = [
     d.files ? (d.add || d.del ? `+${d.add ?? 0} −${d.del ?? 0}` : `${d.files} ${d.files === 1 ? "file" : "files"}`) : null,
     d.ahead ? `${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}` : null,
-    d.pr?.number ? `PR #${d.pr.number}${d.pr.hold ? `, ${d.pr.hold[0].toLowerCase()}${d.pr.hold.slice(1)}` : d.pr.checks === "failing" ? " failing" : ""}` : null,
+    open ? `PR #${d.pr.number}${line ? ` · ${line.text}` : ""}` : null,
   ].filter((x) => x !== null);
   return parts.length ? parts.join(" · ") : null;
 }

@@ -22,6 +22,16 @@ const ranked = (entries, room) => entries.slice(0, Math.max(0, room)).toSorted((
 const markOf = (xy) => xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
 const marksFrom = (top, rows) => Object.fromEntries(rows.filter(Boolean).slice(0, TOTAL).map((entry) => [`${top}/${entry.slice(3)}`, markOf(entry.slice(0, 2))]));
 
+export function changedFiles(marks, root) {
+  const base = String(root ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!base) return [];
+  return Object.entries(marks ?? {}).flatMap(([abs, mark]) => {
+    const full = String(abs).replace(/\\/g, "/").replace(/\/+$/, "");
+    const rel = full.startsWith(`${base}/`) ? full.slice(base.length + 1) : "";
+    return rel ? [{ path: rel, entry: { name: rel, dir: false }, depth: 0, mark }] : [];
+  }).toSorted((a, b) => a.path.localeCompare(b.path));
+}
+
 async function directory(path, on) {
   return (await serviceOn(fileApi, on)).directory(path);
 }
@@ -29,8 +39,9 @@ async function directory(path, on) {
 export class Files {
   constructor() { this.rev = 0; } // bumped whenever the rows would differ; the tree is rebuilt only then
 
-  init(cx) {
+  init(cx, given = {}) {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
+    this.changed = Boolean(given?.changed);
     // Returning from the preview: the folders that were open, for the same place.
     const back = shared(RETURN);
     if (back) {
@@ -232,6 +243,7 @@ export class Files {
 
   // Rebuilt only when `rev` changes: a draw comes with every shared write anywhere, and rows run to 5,000.
   rows() {
+    if (this.changed) return changedFiles(this.marks, this.root);
     if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0).slice(0, TOTAL) };
     return this.shown.items;
   }
@@ -280,6 +292,7 @@ export class Files {
     return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .child(div().font_semibold().child("Files"))
+        .when(Boolean(this.changed), (el) => el.child(quietLink("files-all", "All files", (clickCx) => { this.changed = false; clickCx.notify(); }, tokens(t))))
         .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.root?.split(/[\\/]/).at(-1) ?? "")))
       .child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
@@ -303,7 +316,7 @@ export class Files {
           .child(div().text_size(12).text_color(t.dim).child(this.error))
           .when(Boolean(this.on), (row) => row.child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), tokens(t))))))
         .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
-        .when(!this.error && !this.loading && !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.root ? "No files" : "No folder")))
+        .when(!this.error && !this.loading && items.length === 0, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.changed ? "Nothing changed." : this.root ? "No files" : "No folder")))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }
 }
