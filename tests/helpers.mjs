@@ -101,7 +101,7 @@ export const psMissing = (() => {
 
 export async function temporary(t) {
   const dir = await mkdtemp(join(tmpdir(), "kanso-test-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
   return dir;
 }
 

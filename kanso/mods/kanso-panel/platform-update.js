@@ -10,26 +10,22 @@ const utf8Bytes = (c) => c < 0x80 ? [c]
   : c < 0x10000 ? [0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f)]
   : [0xf0 | (c >> 18), 0x80 | ((c >> 12) & 0x3f), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f)];
 
+const base64 = (bytes) => Array.from({ length: Math.ceil(bytes.length / 3) }, (_, i) => {
+  const a = bytes[i * 3], b = bytes[i * 3 + 1], c = bytes[i * 3 + 2];
+  const n = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
+  return B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + (b == null ? "=" : B64[(n >> 6) & 63]) + (c == null ? "=" : B64[n & 63]);
+}).join("");
+
+const utf16leBytes = (text) => [...text].flatMap((ch) => {
+  const units = ch.length === 1 ? [ch.charCodeAt(0)] : [ch.charCodeAt(0), ch.charCodeAt(1)];
+  return units.flatMap((code) => [code & 255, code >> 8]);
+});
+
 export function utf8Base64(text) {
-  const bytes = [...String(text).matchAll(/./gsu)].flatMap((m) => utf8Bytes(m[0].codePointAt(0)));
-  return Array.from({ length: Math.ceil(bytes.length / 3) }, (_, i) => {
-    const a = bytes[i * 3], b = bytes[i * 3 + 1], c = bytes[i * 3 + 2];
-    const n = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
-    return B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + (b == null ? "=" : B64[(n >> 6) & 63]) + (c == null ? "=" : B64[n & 63]);
-  }).join("");
+  return base64([...String(text).matchAll(/./gsu)].flatMap((m) => utf8Bytes(m[0].codePointAt(0))));
 }
 
-const encodeCommand = (script) => {
-  const bytes = [...script].flatMap((ch) => {
-    const code = ch.charCodeAt(0);
-    return [code & 255, (code >> 8) & 255];
-  });
-  return Array.from({ length: Math.ceil(bytes.length / 3) }, (_, i) => {
-    const a = bytes[i * 3], b = bytes[i * 3 + 1], c = bytes[i * 3 + 2];
-    const n = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
-    return B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + (b == null ? "=" : B64[(n >> 6) & 63]) + (c == null ? "=" : B64[n & 63]);
-  }).join("");
-};
+const encodeCommand = (script) => base64(utf16leBytes(script));
 
 const driveRoot = (value) => {
   const text = String(value).replace(/\//g, "\\");

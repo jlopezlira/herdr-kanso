@@ -300,13 +300,18 @@ function pickCommand(commands) {
 async function holder(t, f) {
   await mkdir(updates(f.home), { recursive: true });
   const spec = f.updater.host.holdArgs(join(updates(f.home), "lock"));
-  const child = trackedSpawn(pickCommand(spec.commands), spec.args, { detached: true, stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
-  const ended = new Promise((resolve) => child.once("exit", resolve));
+  // Detached on Windows drops the stdout handle, so the holder exits before it says it holds the lock.
+  const child = trackedSpawn(pickCommand(spec.commands), spec.args, { detached: !windows, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  let note = "";
+  child.stderr.on("data", (chunk) => { note = `${note}${chunk}`.slice(-400); });
+  child.once("error", (error) => { note = `${note} ${error.message}`.trim(); });
+  const ended = new Promise((resolve) => child.once("close", resolve));
   const kill = async () => { endTree(child.pid); await ended; };
   t.after(() => endTree(child.pid));
   const got = await Promise.race([new Promise((resolve) => child.stdout.once("data", () => resolve(true))), ended.then(() => false)]);
-  return { got, pid: child.pid, kill };
+  return { got, pid: child.pid, kill, note: note.replace(/^\uFEFF/, "").trim() };
 }
+const took = (h, why) => assert.ok(h.got, [why, h.note].filter(Boolean).join(": "));
 const version = async (home) => JSON.parse(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8")).version;
 const told = (toasts) => toasts.filter((n) => n.title === "kansō is already being updated");
 const updated = (toasts) => toasts.filter((n) => n.title === "kansō updated to 1.1.0");
@@ -459,7 +464,7 @@ test("An install whose owner is alive is left alone, staging and all; once it is
   f.updater.start(cx); await drain();
 
   const a = await holder(t, f);
-  assert.ok(a.got, "the holder takes a free lock");
+  took(a, "the holder takes a free lock");
   await mkdir(join(updates(f.home), "a/src"), { recursive: true }); // its staging
   assert.equal(await f.updater.install(cx), "busy");
   assert.equal(f.updater.error, null);
@@ -485,7 +490,7 @@ test("An owner that lets go while another waits: the next to take the lock keeps
   // A finishes; C takes the lock straight away. Nothing judged A gone, so nothing can undo C.
   await a.kill();
   const c = await holder(t, f);
-  assert.ok(c.got);
+  took(c, "the next holder takes the lock");
   await mkdir(join(updates(f.home), "c/src"), { recursive: true });
   assert.equal(await f.updater.install(cx), "busy");
   assert.deepEqual(await staged(f.home), [".kanso-updates/c"]);
@@ -543,7 +548,7 @@ test("A swap that fails on its last mod puts back every one before it: the old v
   assert.equal(await readFile(join(f.home, "layouts/kanso.json"), "utf8"), '{"root":{"id":"live"}}', "your layout as it was");
   assert.deepEqual(await readdir(join(f.home, "themes")), [], "the release's themes taken back too");
   assert.deepEqual(await staged(f.home), [], "backups removed only once everything is back");
-  assert.ok((await holder(t, f)).got, "the lock went with its process");
+  took(await holder(t, f), "the lock went with its process");
   assert.equal(f.updater.available(), "1.1.0", "and the update is offered again");
 });
 
@@ -758,7 +763,7 @@ test("A follower whose recovery finds the lock taken waits for it, then reports 
   assert.equal(await version(f.home), "1.1.0", "it died half new");
   // Another window recovering, or what the dead install started still holding its lock.
   const other = await holder(t, f);
-  assert.ok(other.got);
+  took(other, "the holder takes the lock recovery is waiting on");
   const fresh = new f.Updater(f.source);
   fresh.start(cx);
   await new Promise((r) => setTimeout(r, 400)); // it tries a few times meanwhile
@@ -773,7 +778,7 @@ test("A follower whose recovery finds the lock taken waits for it, then reports 
   assert.deepEqual(await staged(f.home), []);
 });
 
-test("A recovery killed partway is not taken for done: the follower tries again and reports what it left", async (t) => {
+test("A recovery killed partway is not taken for done: the follower tries again and reports what it left", { timeout: 240_000 }, async (t) => {
   const f = await fixture(t);
   const { cx } = await killed(t, f, await chromeIn());
   assert.equal(await version(f.home), "1.1.0", "it died half new");
@@ -793,7 +798,7 @@ test("A window that starts while another recovers, which then dies, recovers its
   await killed(t, f, await chromeIn());
   // The other recoverer: it holds the lock, then dies without settling anything.
   const other = await holder(t, f);
-  assert.ok(other.got);
+  took(other, "the other recoverer holds the lock");
   const w = await f.window(); // no install of its own to follow
   const { cx, drain } = context();
   cx.timer = { every() {} };
@@ -1143,7 +1148,17 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
     `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 100 }`,
     "$s.Dispose()",
   ].join("; ")], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-  t.after(() => { try { writeFileSync(release, "go"); } catch { /* the tree is already gone */ } endTree(child.pid); });
+  const ended = new Promise((resolve) => child.once("exit", resolve));
+  const releaseLock = async () => {
+    try { writeFileSync(release, "go"); } catch { /* the tree is already gone */ }
+    const finished = await Promise.race([ended.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 2000))]);
+    if (!finished) {
+      try { child.kill("SIGKILL"); } catch { /* already gone */ }
+      endTree(child.pid);
+    }
+    await Promise.race([ended, new Promise((resolve) => setTimeout(resolve, 2000))]);
+  };
+  t.after(releaseLock);
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`step lock, file ${locked}`)), 15000);
     child.stdout.once("data", () => { clearTimeout(timer); resolve(); });
@@ -1153,7 +1168,7 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
   assert.match(how, /could not put kanso-chrome in place/, how);
   assert.ok(how.includes("kanso-chrome"), how);
   assert.equal(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8"), '{ "version": "1.0.0" }\n', how);
-  await writeFile(release, "go");
+  await releaseLock();
 });
 
 windowsOnly("A read-only file is still updated", async (t) => {
