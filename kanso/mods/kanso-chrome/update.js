@@ -1,3 +1,5 @@
+import { localName } from "./platform-host.js";
+import { shippedKeymap } from "./platform-keymap.js";
 import { paths } from "./platform-paths.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, readTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
@@ -517,10 +519,12 @@ export class Updater {
         return r.code === 0 ? r.stdout : null;
       } catch { return null; }
     };
-    const [oldKeys, oldLayout, newKeys, newLayout] = await Promise.all([
-      shipped(this.installed, "kanso/keys.json"), shipped(this.installed, "kanso/layouts/kanso.json"),
-      shipped(v, "kanso/keys.json"), shipped(v, "kanso/layouts/kanso.json"),
+    const keymap = shippedKeymap(localName());
+    const [beforeKeys, oldLayout, newKeys, newLayout] = await Promise.all([
+      shipped(this.installed, keymap), shipped(this.installed, "kanso/layouts/kanso.json"),
+      shipped(v, keymap), shipped(v, "kanso/layouts/kanso.json"),
     ]);
+    const oldKeys = beforeKeys ?? (localName() === "windows" ? "{}" : null);
     const layout = oldLayout !== null && newLayout !== null && !sameJson(oldLayout, newLayout);
     const userKeys = await readTextFile(`${home}/keys.json`);
     const differ = oldKeys !== null && newKeys !== null && userKeys !== null && !sameJson(oldKeys, newKeys);
