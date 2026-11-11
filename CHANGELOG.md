@@ -17,6 +17,10 @@ release.
 
 - Sync in settings is off until you turn a computer on. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then, Settings and Spend say Update kanso there. A computer turned off from the sidebar is not asked and shows as off. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
 
+### Changed
+
+- The recipe keeps complete panel briefs in separate linked parts, with size checks that leave room for future changes and keep it in the gallery.
+
 ## [3.22.3] - 2026-11-10
 
 ### Fixed
