@@ -54,8 +54,9 @@ export function checkSummary(states) {
 
 export const rollupState = (rollup) => checkSummary(onePerJob(rollup).map(checkState)).state;
 
-const CAN_MERGE = new Set(["CLEAN", "HAS_HOOKS", "UNSTABLE"]);
+const CAN_MERGE = new Set(["CLEAN", "HAS_HOOKS"]);
 const WRITERS = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+export const READY_TEXT = "Ready to merge";
 
 const checkLine = (checks) => {
   if (!checks?.state || checks.state === "pass") return null;
@@ -90,9 +91,12 @@ export function mergeReadiness(pr, { permission = null, checks = null } = {}) {
       ? { offer: false, text: "No permission to merge", tone: "dim" }
       : { offer: false, text: "Checking whether it can merge…", tone: "dim", awaitingPermission: true };
   }
-  if (status === "UNSTABLE") {
-    const line = checkLine(checks);
-    return { offer: true, text: line || "Checks failing", tone: line && checks.state === "fail" ? "red" : "yellow" };
-  }
-  return { offer: true, text: "Ready to merge", tone: "green" };
+  return { offer: true, text: READY_TEXT, tone: "green" };
+}
+
+// The header's words for one pull request. Unknown permission is not ready.
+export function headerHold(view) {
+  const checks = checkSummary(onePerJob(view?.statusCheckRollup).map(checkState));
+  const gate = mergeReadiness(view, { permission: view?.viewerPermission ?? null, checks });
+  return gate.text === READY_TEXT ? null : gate.text;
 }

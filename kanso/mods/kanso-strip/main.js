@@ -12,7 +12,7 @@ import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } fro
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from "./layout.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { FIND } from "./find-key.js";
-import { rollupState, mergeReadiness, checkSummary, onePerJob, checkState } from "./ghchecks.js";
+import { rollupState, headerHold } from "./ghchecks.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -116,12 +116,10 @@ const CHECKS = { fail: "failing", pending: "running", unknown: "unknown", pass: 
 export const checksOf = (rollup) => CHECKS[rollupState(rollup)] ?? null;
 const PR_FIELDS = "number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,statusCheckRollup";
 
-// Open pull request for the header. `hold` is why GitHub would not call it ready; a clean one has none.
+// Open pull request for the header. `hold` is why it is not ready; unknown permission is not ready.
 export function digestPr(view) {
   if (!view?.number || view.state !== "OPEN") return null;
-  const checks = checkSummary(onePerJob(view.statusCheckRollup).map(checkState));
-  const gate = mergeReadiness(view, { permission: "WRITE", checks });
-  return { number: view.number, state: view.state, checks: checksOf(view.statusCheckRollup), hold: gate.text === "Ready to merge" ? null : gate.text };
+  return { number: view.number, state: view.state, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) };
 }
 
 // `run(cmd, args)` resolves with stdout, or null when the command fails.
