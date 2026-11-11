@@ -844,7 +844,7 @@ export default class Spaces extends View {
   returnRows(t, space) {
     if (!space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
     const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.jumpReturn(row),
-      (label, count, dismiss) => this.sectionHead(t, "since-left", 0, false, () => {}, null, label, count, t.foreground, dismiss, 0, false));
+      (label, count, dismiss) => this.bareHead(t, "since-left", label, count, t.foreground, dismiss));
     return this.sinceLeft.showing ? [item(view, this.sinceLeft.blockHeight())] : [];
   }
 
@@ -2137,8 +2137,12 @@ export default class Spaces extends View {
     });
   }
 
+  bareHead(t, id, name, count, ink, extra) {
+    return this.sectionHead(t, id, 0, false, null, null, name, count, ink, { extra, lift: 0, chevron: false });
+  }
+
   // `lift`: the space above the header (12 under an earlier section).
-  sectionHead(t, id, i, open, toggle, mark, name, count, ink, extra = null, lift = i ? 12 : 0, chevron = true) {
+  sectionHead(t, id, i, open, toggle, mark, name, count, ink, { extra = null, lift = i ? 12 : 0, chevron = true } = {}) {
     const row = h_flex().id(id).h(32 + lift).pt(lift).px(12).flex_none().gap(10).items_center()
       .text_size(13).font_semibold().text_color(ink)
       .when(chevron, (el) => el.cursor_pointer().on_click((_e, cx) => { toggle(cx); cx.notify(); }))
@@ -2416,7 +2420,7 @@ export default class Spaces extends View {
       // A project starts after a wider breath than the gap inside it, so each reads as one group.
       const lift = i ? (p ? 18 : 12) : 0;
       const headName = p ? p.name : whole ? this.zzProject(whole.rows[0].a, t).name : (s.label ?? "Active");
-      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, s.rows.length, folds ? t.muted : t.foreground, extra, lift), 32 + lift)];
+      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, s.rows.length, folds ? t.muted : t.foreground, { extra, lift }), 32 + lift)];
       const body = whole ? s.rows : split.live;
       const show = this.unfolded(foldId, open, ctx.now);
       const laid = show ? body.map((r) => row(r, Boolean(s.project))) : [];

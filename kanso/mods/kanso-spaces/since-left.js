@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, R, T, ICON } from "./ui.js";
+import { G, R, T, ICON, iconButton, tokens } from "./ui.js";
 import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
 import { statusMark, AGENT_PAD, agentRowH, duration } from "./agents.js";
@@ -85,12 +85,7 @@ export class SinceLeft {
   }
 
   dismissControl(t) {
-    return div().id("since-dismiss").size(20).flex_none().rounded(R.control)
-      .flex().items_center().justify_center().cursor_pointer().text_color(t.dim).tooltip("Dismiss")
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); })
-      .child(svg("mods/kanso-chrome/icons/close.svg").size(G.md).text_color(t.dim));
+    return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, tokens(t));
   }
 
   render(t, project, nav, jump, head = null) {
@@ -114,7 +109,6 @@ export class SinceLeft {
         .when(Boolean(row.age) && !row.more, (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
     };
     const body = shown.rows.map(line);
-    const dismiss = this.dismissControl(t);
-    return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, dismiss), ...body] : body);
+    return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(t)), ...body] : body);
   }
 }

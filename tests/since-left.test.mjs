@@ -252,7 +252,7 @@ test("the return head shows the count and its dismiss clears the rows", async (t
     } });
     return el;
   };
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], { div: node, svg: node, h_flex: node, v_flex: node });
+  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } });
   const view = new SinceLeft(db);
   view.project = project;
   view.target = "agent:1";
