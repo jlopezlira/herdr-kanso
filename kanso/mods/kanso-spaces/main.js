@@ -685,10 +685,14 @@ export default class Spaces extends View {
   checkTasks(cx, now = Date.now(), active = window().active) {
     if (!this.psFree(now) || window().platform === "windows") return;
     const background = this.background();
-    const mine = terminals().filter((k) => background.allows(k.address) && k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
+    const local = terminals().filter((k) => background.allows(k.address) && !k.address.includes("/"));
+    const mine = local.filter((k) => k.state === "live" && k.status && (k.foreground?.pid ?? k.pid));
     const pids = pidsOf(Object.fromEntries(Object.entries(this.threads ?? {}).filter(([address, thread]) => !address.includes("/") && background.allows(address, thread))));
+    const foreground = new Set(local.filter((k) => k.state === "live").map((k) => k.foreground?.pid));
+    const confirmed = aliveIn(foreground, pids), pending = pids.filter((pid) => !foreground.has(pid));
     const sig = pids.join(","), every = active ? ALIVE_MS : ALIVE_BEHIND_MS;
-    const due = pids.length && aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every);
+    if (pids.length && !pending.length) this.sawAlive(confirmed, sig, now, cx);
+    const due = pending.length && aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every);
     if (!mine.some((k) => k.status === "working") && !due) {
       if (!mine.length && Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
       return;
@@ -699,7 +703,7 @@ export default class Spaces extends View {
     cx.spawn((cx) => this.psRun(now, ["-axo", "pid=,ppid=,etime=,command="], (r) => {
       if (r.code !== 0) return;
       const table = parseProcesses(r.stdout);
-      if (pids.length) this.sawAlive(aliveIn(table.byPid, pids), pids.join(","), now, cx);
+      if (pids.length) this.sawAlive(new Set([...confirmed, ...aliveIn(table.byPid, pending)]), sig, now, cx);
       const next = Object.fromEntries(mine.flatMap((k) => {
         const had = this.tasks[k.address] ?? [];
         const list = tasksOf(table, k.foreground?.pid ?? k.pid, Boolean(k.foreground?.pid))

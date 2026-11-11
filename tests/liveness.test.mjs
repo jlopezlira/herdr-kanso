@@ -8,7 +8,7 @@ const T1 = { address: "t1", state: "live", status: "working", pid: 50, foregroun
 // A fake Herdr whose `ps` answers `latency` ms after it is asked, and counts every one.
 // `plan(n)` makes the n-th `ps` "reject" or "hang" (kept in h.hung, answered only when a test says so).
 async function sidebar({ latency = 0, active = true, collapsed = false, view = "spaces", terms = [T1], rows = [], plan = () => null, host = {} } = {}) {
-  const h = { clock: 0, active, collapsed, live: new Set([101, 202]), ps: [], inFlight: 0, most: 0, waiting: [], hung: [] };
+  const h = { clock: 0, active, collapsed, terms: clone(terms), live: new Set([101, 202]), ps: [], inFlight: 0, most: 0, waiting: [], hung: [] };
   const table = () => [...[...h.live].map((pid) => `${pid} 1 00:10 claude`), ...rows].join("\n");
   const answer = (args) => {
     if (args[0] === "-axo") return { code: 0, stdout: `${table()}\n` };
@@ -29,7 +29,7 @@ async function sidebar({ latency = 0, active = true, collapsed = false, view = "
     Date: { now: () => h.clock }, exec,
     window: () => ({ active: h.active, platform: "macos" }),
     shared: (k) => (k === "sidebar.collapsed" ? h.collapsed : null), setShared: () => {},
-    terminals: () => terms, spaces: () => [], panes: () => [], agents: () => [], machines: () => [],
+    terminals: () => h.terms, spaces: () => [], panes: () => [], agents: () => [], machines: () => [],
     ...host,
   });
   const v = Object.assign(new Spaces(), {
@@ -83,6 +83,35 @@ test("idle agents without conversations never ask for a process table", async ()
   assert.equal(h.ps.length, 0);
 });
 
+test("idle conversations with live foreground pids need no process table", async () => {
+  const { h, v } = await sidebar({ terms: [{ ...T1, status: "idle" }] });
+  v.threads = { t1: v.threads.t1 };
+  h.live.clear();
+  await h.run(60000);
+  assert.equal(h.ps.length, 0);
+  assert.deepEqual([...v.alive], [101]);
+});
+
+test("idle conversations not confirmed by a terminal still check the process table", async () => {
+  const { h, v } = await sidebar({ terms: [{ ...T1, status: "idle" }] });
+  await h.run(20000);
+  assert.deepEqual(h.ps.map((x) => x.at), [0, 10000, 20000]);
+  assert.deepEqual([...v.alive].toSorted(), [101, 202]);
+});
+
+test("a replaced foreground pid stops confirming the previous conversation", async () => {
+  const { h, v } = await sidebar({ terms: [{ ...T1, status: "idle" }] });
+  v.threads = { t1: v.threads.t1 };
+  await h.run(20000, (t) => {
+    if (t === 1000) {
+      h.terms = [{ ...T1, status: "idle", foreground: { pid: 303 } }];
+      h.live.delete(101);
+    }
+  });
+  assert.deepEqual(h.ps.map((x) => x.at), [10000, 20000]);
+  assert.deepEqual([...v.alive], []);
+});
+
 test("a new conversation is included in the next shared table", async () => {
   const { h, v } = await sidebar({ view: "threads" });
   h.live.add(303);
@@ -95,7 +124,12 @@ test("a conversation that exits is removed by the next shared table, including a
   const { h, v } = await sidebar();
   await h.run(20000, (t) => { if (t === 7000) h.live.delete(202); });
   assert.deepEqual([...v.alive], [101]);
-  await h.run(30000, (t) => { if (t === 25000) h.live.delete(101); });
+  await h.run(30000, (t) => {
+    if (t === 25000) {
+      h.live.delete(101);
+      h.terms = [{ ...T1, state: "exited" }];
+    }
+  });
   assert.deepEqual([...v.alive], []);
 });
 

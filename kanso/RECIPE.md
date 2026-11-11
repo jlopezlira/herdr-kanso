@@ -714,8 +714,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       weight 1), `strip-map` (`kanso-strip`, 180 px), `status-right`
       (`kanso-status` `{side: "right"}`, weight 1).
 - **Mods**:
-  - `kanso-spaces`: tracks every 2 s; sleeping/off skip reads.
-    Cached thread paths; misses wait 1-10 min/PID. Git: `exec`; machines: `hc`.
+  - `kanso-spaces`: tracks/2 s; sleeping/off skip reads. Live PIDs skip `ps`.
+    Threads: status/turn or 5 min; misses: 1-10 min/PID.
   - `kanso-tabs`: tabs, panel buttons and the on-demand panel mount via
     `layout.set`.
   - `kanso-strip`: canvas; the status row's controller/minimap samples native
