@@ -16,10 +16,8 @@ const read = (files) => (file) => {
   return files[file];
 };
 
-// The one bare use of a global the declarations do not provide. The mod is unchanged.
-const UNDECLARED_GLOBAL_USES = [
-  { file: "kanso/mods/kanso-sim/ios.js", line: 36, name: "URL" },
-];
+// Bare uses of a global Herdr does not declare.
+const UNDECLARED_GLOBAL_USES = [];
 
 test("Declarations keep value exports and drop types", () => {
   const gpui = `
@@ -125,7 +123,7 @@ test("The sandbox throws for a global Herdr does not declare, including one a fi
   assert.throws(() => bindHerdrModules("import { stat } from \"herdr\";\n"), /Could not find export 'stat' in module 'herdr'/);
 });
 
-test("Every mod imports only names Herdr declares, and the one known global stays on the list", () => {
+test("Every mod imports only names Herdr declares, and no file uses a global it does not", () => {
   const { issues, uses, files } = repositoryAudit(root, api, MOD_BANNED_GLOBALS);
   assert.deepEqual(issues, []);
   const byPos = (a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.name.localeCompare(b.name);

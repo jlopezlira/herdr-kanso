@@ -17,6 +17,10 @@ release.
 
 - A mod that imports a name Herdr does not provide fails the test run, so it cannot ship with its panels dead.
 
+### Fixed
+
+- Opening an iOS simulator no longer fails before its screen appears.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added

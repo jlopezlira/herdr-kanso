@@ -107,6 +107,20 @@ export function lastJson(text) {
   return JSON.parse(line?.trim() || "{}");
 }
 
+export function streamAddress(address) {
+  const rest = String(address ?? "").replace(/^https?:\/\//, "");
+  const cut = rest.search(/[/?#]/);
+  const authority = cut < 0 ? rest : rest.slice(0, cut);
+  const tail = cut < 0 ? "" : rest.slice(cut);
+  const path = (tail.startsWith("/") ? tail : `/${tail}`).split(/[?#]/)[0] || "/";
+  const colon = authority.lastIndexOf(":");
+  return {
+    host: colon < 0 ? authority : authority.slice(0, colon),
+    port: colon < 0 ? 0 : Number(authority.slice(colon + 1)),
+    path,
+  };
+}
+
 export function frameBytes(tag, body) {
   const json = body === undefined ? "" : JSON.stringify(body);
   return Uint8Array.from([tag, ...[...json].map((ch) => ch.charCodeAt(0))]);
