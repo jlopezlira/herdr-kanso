@@ -44,8 +44,8 @@ for pid in "$@"; do
   if [ -f "$f" ]; then cat "$f" || true; fi
   printf '\n%s\n' "${LOOK_END}"
 done`;
-const windowsLook = (ids) => `$home = $env:USERPROFILE
-Write-Output ('home=' + $home)
+const windowsLook = (ids) => `$userHome = $env:USERPROFILE
+Write-Output ('home=' + $userHome)
 foreach ($id in @(${ids.join(",")})) {
   $alive = ''
   try {
@@ -60,7 +60,7 @@ foreach ($id in @(${ids.join(",")})) {
   Write-Output ('alive=' + $alive)
   Write-Output 'record'
   try {
-    $file = [IO.Path]::Combine($home, '.claude', 'sessions', ([string]$id + '.json'))
+    $file = [IO.Path]::Combine($userHome, '.claude', 'sessions', ([string]$id + '.json'))
     if ([IO.File]::Exists($file)) { [IO.File]::ReadAllText($file) }
   } catch { }
   Write-Output '${LOOK_END}'
