@@ -24,8 +24,8 @@ export class SinceStore {
       if (raw === json) return [`UPDATE since_observed SET at=MAX(at,${now}) WHERE source=${q(source)} AND value=${q(raw)};`];
       const guard = raw == null ? `NOT EXISTS(SELECT 1 FROM since_observed WHERE source=${q(source)})`
         : `EXISTS(SELECT 1 FROM since_observed WHERE source=${q(source)} AND value=${q(raw)} AND at <= ${now})`;
-      const events = changes(before, after).map((event) => `INSERT INTO since_events(project,target,kind,text,at)
-        SELECT ${q(project)},${q(after.target)},${q(event.kind)},${q(event.text)},${now} WHERE ${guard};`).join("");
+      const events = changes(before, after).map((event) => `INSERT INTO since_events(project,target,kind,text,did,at)
+        SELECT ${q(project)},${q(after.target)},${q(event.kind)},${q(event.text)},${q(event.did)},${now} WHERE ${guard};`).join("");
       return [`${events}INSERT INTO since_observed(source,value,at) VALUES(${q(source)},${q(json)},${now})
         ON CONFLICT(source) DO UPDATE SET value=excluded.value,at=excluded.at WHERE ${guard};`];
     });

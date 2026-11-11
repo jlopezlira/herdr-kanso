@@ -435,8 +435,9 @@ const ACTS = {
 
 export class SleepWork {
   // kdb: the sidebar's database; changed(row): a row changed state (`row` as it is now when this window moved it), for the sidebar to read again.
-  constructor(kdb, changed = () => {}, me = null) {
+  constructor(kdb, changed = () => {}, me = null, records = () => true) {
     this.kdb = kdb;
+    this.records = records;
     this.changed = changed;
     this.me = me || keptOwner();
     this.held = new Set();
@@ -481,7 +482,7 @@ export class SleepWork {
     if (stranded.length) {
       await Promise.all(stranded.map(async (r) => {
         const why = r.why || "The sleep stopped";
-        if ((await this.kdb.holdWork(r.id, this.me, now)) && (await this.kdb.setWorkState(r.id, this.me, r.state, "stuck", why, now, sleepEvent(r.id, "stuck")))) this.changed({ ...r, state: "stuck", why });
+        if ((await this.kdb.holdWork(r.id, this.me, now)) && (await this.kdb.setWorkState(r.id, this.me, r.state, "stuck", why, now, this.fact(r.id, "stuck", why)))) this.changed({ ...r, state: "stuck", why });
       }));
     }
     const skip = new Set(stranded.map((r) => r.id));
@@ -491,6 +492,8 @@ export class SleepWork {
     await Promise.all(held.map((r) => this.advance(r, cx).catch(() => null)));
     return held.length > 0;
   }
+
+  fact(id, state, why) { return this.records() ? sleepEvent(id, state, why) : null; }
 
   // A stuck agent that went on its own (you ended it there) has left; the sleep then goes on.
   // True when the row goes on.
@@ -507,7 +510,7 @@ export class SleepWork {
     const agents = agentsOf(row);
     const plan = sleepStep(row, agents);
     if (plan.state) {
-      if (await this.kdb.setWorkState(row.id, this.me, row.state, plan.state, plan.why ?? null, now, sleepEvent(row.id, plan.state))) this.changed({ ...row, state: plan.state, why: plan.why ?? null });
+      if (await this.kdb.setWorkState(row.id, this.me, row.state, plan.state, plan.why ?? null, now, this.fact(row.id, plan.state, plan.why))) this.changed({ ...row, state: plan.state, why: plan.why ?? null });
       return;
     }
     if (plan.close) return this.close(row);
@@ -551,7 +554,7 @@ export class SleepWork {
     if (plan.closeTab) run("tab.close", { id: tab, confirmed: true });
     for (const t of plan.kill) if (!plan.closeTab || !open.has(t)) run("terminal.kill", { terminal: t });
     const why = plan.busy.length ? `${plan.busy.join(", ")} ${plan.busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${plan.busy.length === 1 ? "stays" : "stay"} open.` : null;
-    if (await this.kdb.finishSleep(row.id, this.me, why, Date.now(), sleepEvent(row.id, "asleep"))) this.changed();
+    if (await this.kdb.finishSleep(row.id, this.me, why, Date.now(), this.fact(row.id, "asleep", why))) this.changed();
   }
 
   // An undo is done: what came back is awake, what did not stays asleep (one unsure with its terminal looked at first).

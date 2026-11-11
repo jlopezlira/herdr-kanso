@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec, singleUse } from "./helpers.mjs";
-import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, sleepEvent, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL } from "../kanso/mods/kanso-spaces/since-left-model.js";
+import { load, clone, temporary, exec, singleUse, context, tape } from "./helpers.mjs";
+import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, sleepEvent, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL, destinationOf, livePlaces, eventLabel, oneLine, awayShown, AWAY_PIECE, DID_CAP } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const project = ":C:\\work\\kanso";
 const event = (id, kind = "finished", at = id) => ({ id, project, target: `agent:${id}`, kind, text: `Agent ${id}`, at });
@@ -212,7 +212,8 @@ test("a return row is a mark, a name and an age, and one agent keeps its latest 
   assert.equal(by["agent:b"].name, "Implement performance budget CI");
   assert.equal(by["agent:b"].age, "1h");
   assert.equal(by["pr:https://x/pull/12"].mark, "pr");
-  assert.equal(by["pr:https://x/pull/12"].name, "PR #12 approved");
+  assert.equal(by["pr:https://x/pull/12"].name, "PR #12");
+  assert.equal(by["pr:https://x/pull/12"].outcome, "Approved");
   assert.equal(by["pr:https://x/pull/12"].age, duration(60_000));
   assert.equal(by["sleep:s"].mark, "asleep");
   assert.equal(by["sleep:s"].name, "Rey");
@@ -220,6 +221,7 @@ test("a return row is a mark, a name and an age, and one agent keeps its latest 
   assert.equal(by["sleep:t"].mark, "error");
   assert.equal(by["sleep:t"].name, "Finn");
   assert.equal(by["sleep:t"].age, "<1m");
+  assert.deepEqual(shown.rows.map((item) => [item.outcome, item.did]), [["Needs you", null], ["Could not sleep", null], ["Failed", null], ["Approved", null], ["Went to sleep", null]]);
   const away = present(events, { now, focus: "agent:a", format: duration });
   assert.equal(away.count, 4);
   assert.equal(away.rows.some((item) => item.target === "agent:a"), false);
@@ -303,20 +305,33 @@ test("return tracking holds the initial focus, dismisses on a later target, and 
   assert.equal(view.rows.length, 0);
 });
 
-test("return targets focus an agent, open an explicit PR panel, or show the sleep control", async () => {
+test("a return row takes you to the agent's pane, the menu that wakes it, or the PR, and a gone one nowhere", async () => {
   const calls = [], commits = [], overlays = [];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    panes: () => [], spaces: () => [], agents: () => [{ address: "t1", title: "Padme" }], terminals: () => [{ address: "t1", labels: { "kanso.id": "stable" } }],
     run: (...args) => calls.push(clone(args)), commitLayout: (patch) => commits.push(clone(patch)), openOverlay: (overlay) => overlays.push(clone(overlay)),
   });
   const view = new Spaces();
-  view.jumpReturn({ target: "agent:stable" });
+  view.returnPlaces = livePlaces([{ address: "t1" }], () => ["agent:c1", "agent:t1:5"]);
+  view.sleepingRows = { rows: [{ address: "zz:c9", name: "Leia", asleep: { id: "s1", resume: "c9" } }] };
+  view.returnGo({ target: "agent:t1:5" })();
   assert.deepEqual(calls, [["agent.focus", { terminal: "t1" }]]);
-  assert.equal(view.jumpReturn({ target: "agent:gone" }), false);
-  view.jumpReturn({ target: "pr:https://ghe.example/o/r/pull/2" });
+  view.returnGo({ target: "agent:c9" })();
+  view.returnGo({ target: "sleep:s1" })();
+  assert.deepEqual(overlays.map((o) => o.props.menu.asleep.id), ["s1", "s1"]);
+  view.returnGo({ target: "pr:https://ghe.example/o/r/pull/2" })();
   assert.equal(commits[0].panel.content.props.url, "https://ghe.example/o/r/pull/2");
-  view.jumpReturn({ target: "sleep:s1" });
-  assert.equal(overlays[0].props.wake.id, "s1");
+  for (const target of ["agent:gone", "sleep:woken", "unknown:id", "constructor:id"]) assert.equal(view.returnGo({ target }), null);
+});
+
+test("each kind of event leads where it happened: a waiting or failed agent to its pane, a sleep to its wake menu", () => {
+  const live = new Map([["agent:c1", "t1"]]);
+  const asleep = [{ asleep: { id: "s1", resume: "c9" } }];
+  const kinds = { blocked: "agent:c1", error: "agent:c1", finished: "agent:c1", sleep_failed: "sleep:s1", sleep_finished: "sleep:s1", pr: "pr:https://github.com/o/r/pull/4" };
+  const to = Object.fromEntries(Object.entries(kinds).map(([kind, target]) => [kind, destinationOf(target, live, asleep)]));
+  for (const kind of ["blocked", "error", "finished"]) assert.deepEqual(to[kind], { kind: "agent", address: "t1" });
+  for (const kind of ["sleep_failed", "sleep_finished"]) assert.equal(to[kind].row, asleep[0]);
+  assert.deepEqual(to.pr, { kind: "pr", url: "https://github.com/o/r/pull/4" });
+  assert.equal(destinationOf("agent:c9", live, asleep).kind, "asleep");
 });
 
 test("a first detailed PR read compares against the inbox cache, including a merged PR", async (t) => {
@@ -360,13 +375,10 @@ test("an unseen digest adds the next absence's events and skips events from the 
   assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_focus;"))[0].n, 1);
 });
 
-test("targets round trip ids containing colons and reject unknown destinations", async () => {
+test("targets round trip ids containing colons", () => {
   for (const [kind, id] of [["pr", "https://ghe.example/o/r/pull/1"], ["agent", "t1:123"], ["sleep", "s1"]]) {
     assert.deepEqual(parseTarget(targetOf(kind, id)), { kind, id });
   }
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"]);
-  assert.equal(new Spaces().jumpReturn({ target: "unknown:id" }), false);
-  assert.equal(new Spaces().jumpReturn({ target: "constructor:id" }), false);
   assert.equal(sleepEvent("s1", "sleeping"), null);
 });
 
@@ -424,4 +436,94 @@ test("unchanged return polling skips snapshots and sleeping projects never read 
   await view.update({ project: null, snapshots: [snapshot("working")], now: 1 }, cx);
   await view.update({ project: null, now: MAINTENANCE_MS + 1 }, cx);
   assert.deepEqual(calls, ["observe", "heartbeat", "prune"]);
+});
+
+test("each kind of event says its outcome in words beside the name", () => {
+  const outcome = (kind, text = "Cassian") => eventLabel({ kind, text }).outcome;
+  assert.deepEqual(["finished", "blocked", "error", "sleep_finished", "sleep_failed"].map((kind) => outcome(kind)),
+    ["Finished", "Needs you", "Failed", "Went to sleep", "Could not sleep"]);
+  assert.deepEqual(eventLabel({ kind: "pr", text: "PR #12 changes requested" }), { name: "PR #12", outcome: "Changes requested" });
+  assert.equal(outcome("unknown"), null);
+});
+
+test("what the agent did is one line, capped, and absent when it said nothing", () => {
+  assert.equal(oneLine("\n  Ran the tests\n\nthen pushed"), "Ran the tests");
+  assert.equal(oneLine("a   b\tc"), "a b c");
+  for (const empty of [null, undefined, "", "  \n "]) assert.equal(oneLine(empty), null);
+  const long = oneLine("x".repeat(DID_CAP * 2));
+  assert.equal(long.length, DID_CAP);
+  assert.ok(long.endsWith("\u2026"));
+  const rows = present([{ id: 1, target: "agent:a", kind: "finished", text: "Cassian", at: 0 }], { now: 0, format: String }).rows;
+  assert.equal(rows[0].did, null);
+});
+
+test("what the agent did is kept with the event and outlives the agent's next step", async (t) => {
+  const { db, store } = await database(t);
+  const term = (msg, status) => agentSnapshot({ address: "t1", status, title: "Cassian" }, { conversation: "c1" }, { report: { msg } }, project);
+  await store.observe([term("Running the suite", "working")], 1);
+  await store.observe([term("Fixed the away rows\nand tests", "done")], 2);
+  await store.observe([term("Reading the next brief", "working")], 3);
+  const [row] = await db.read("SELECT kind,text,did FROM since_events;");
+  assert.deepEqual(clone(row), { kind: "finished", text: "Cassian", did: "Fixed the away rows" });
+  const shown = present(await db.read("SELECT * FROM since_events;"), { now: 4, format: String });
+  assert.deepEqual([shown.rows[0].name, shown.rows[0].outcome, shown.rows[0].did], ["Cassian", "Finished", "Fixed the away rows"]);
+});
+
+test("a sleep that could not finish keeps why with its event", async (t) => {
+  const { db } = await database(t);
+  await db.run("INSERT INTO sleeps(id,name,project,layout,saved,pending,state) VALUES('s1','Rey','p','{}',0,'owner','sleeping');");
+  assert.equal(await db.setWorkState("s1", "owner", "sleeping", "stuck", "Rey's conversation was not found", 5, sleepEvent("s1", "stuck", "Rey's conversation was not found")), true);
+  assert.deepEqual(clone((await db.read("SELECT kind,text,did FROM since_events;"))[0]), { kind: "sleep_failed", text: "Rey", did: "Rey's conversation was not found" });
+});
+
+test("While you were away is a piece: off, nothing is recorded, read or drawn", async (t) => {
+  assert.equal(awayShown(undefined), true);
+  assert.equal(awayShown(["sidebar.activity"]), true);
+  assert.equal(awayShown([AWAY_PIECE]), false);
+  const { cx } = context();
+  const reads = [], runs = [];
+  const db = { read: async (sql) => { reads.push(sql); return []; }, run: async (sql) => { runs.push(sql); } };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"]);
+  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
+  const view = new Spaces();
+  Object.assign(view, { showAway: false, returnSignature: "x", sinceLeft: Object.assign(new SinceLeft(db), { project: project, rows: [event(1)] }) });
+  view.trackReturn([], [], true, 10, cx);
+  assert.deepEqual([reads, runs], [[], []]);
+  assert.equal(view.returnSignature, null);
+  assert.deepEqual(clone([view.sinceLeft.project, view.sinceLeft.rows]), [null, []]);
+  assert.equal(view.returnRows({}, { folder: "C:\\work\\kanso" }).length, 0);
+  const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"]);
+  assert.equal(new SleepWork(db, () => {}, "w", () => false).fact("s1", "stuck", "why"), null);
+  assert.equal(new SleepWork(db, () => {}, "w").fact("s1", "stuck", "why").did, "why");
+});
+
+test("a row says who, what happened and what it did; a gone agent's row stays but leads nowhere", async () => {
+  const ui = tape();
+  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], ui.host);
+  const { agentRowH } = await load("kanso-spaces/agents.js", ["agentRowH"], ui.host);
+  const view = Object.assign(new SinceLeft(null), { project, rows: [
+    { id: 1, target: "agent:c1", kind: "finished", text: "Cassian", did: "Fixed the away rows", at: 0 },
+    { id: 2, target: "agent:gone", kind: "error", text: "Bodhi", did: null, at: 0 },
+  ] });
+  const marked = [], went = [];
+  view.render({ foreground: "#fff" }, project, (key) => { marked.push(key); return false; }, (row) => (row.target === "agent:c1" ? () => went.push(row.id) : null));
+  for (const text of ["Cassian", "Finished", "Fixed the away rows", "Bodhi", "Failed"]) assert.ok(ui.texts.includes(text), text);
+  assert.deepEqual(marked, ["since-1"]);
+  assert.equal(ui.handlers.has("since-2"), false);
+  ui.handlers.get("since-1")({}, { notify() {} });
+  assert.deepEqual(went, [1]);
+  assert.equal(view.blockHeight(), agentRowH({}, { activity: "x" }) + agentRowH({}, {}) + 1);
+});
+
+test("with While you were away off, a pull request read records no fact", async (t) => {
+  const { db } = await database(t);
+  await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
+  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
+  const observed = async (hidden) => {
+    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], { exec, shared: () => hidden });
+    await new PullRequest(db).keepPrFacts([{ url: "https://github.com/o/r/pull/4", number: 4, state: "OPEN" }]);
+    return (await db.read("SELECT COUNT(*) AS n FROM since_observed;"))[0].n;
+  };
+  assert.equal(await observed([AWAY_PIECE]), 0);
+  assert.equal(await observed([]), 1);
 });

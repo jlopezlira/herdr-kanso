@@ -11,6 +11,14 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.22.7] - 2026-11-10
+
+### Changed
+
+- Each row of While you were away says what happened beside the agent's name (Finished, Needs you, Failed, Went to sleep, Could not sleep, or the pull request's new state) and, under it, what the agent said it was doing at that moment, kept after it moves on. A sleep that could not finish says why.
+- A click or Enter on a row takes you to that agent's pane, wherever it is; to its Wake menu when it was put to sleep; or to the pull request. The row of an agent that no longer exists stays, dimmed, and leads nowhere.
+- While you were away can be switched off in Settings > Mods > Pieces and in the sidebar's Show menu. Off, nothing is recorded or read for it.
+
 ## [3.22.6] - 2026-11-10
 
 ### Fixed

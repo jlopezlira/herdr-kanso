@@ -12,7 +12,7 @@ import { parseProcesses } from "./procs.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
 import { spaceFor, inPlace } from "./kdb.js";
-import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
+import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, awayShown, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
@@ -187,7 +187,7 @@ export default class Spaces extends View {
     this.sleepWork = new SleepWork(this.leftNavStore().kdb, (row) => {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
-    });
+    }, null, () => awayShown(shared("kanso.hidden")));
     this.pollSleepWork(cx);
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
@@ -806,6 +806,7 @@ export default class Spaces extends View {
 
   trackReturn(sp, ps, active, now, cx) {
     if (this.sinceLeft.busy) return;
+    if (this.showAway === false) { this.returnSignature = null; this.sinceLeft.leave(); return; }
     const background = this.background();
     const allowed = activePlaces(sp, ps, background.sleeps, background.layouts, home());
     const off = this.offNames();
@@ -820,38 +821,33 @@ export default class Spaces extends View {
       return { ...snapshot, project: assigned ?? snapshot.project };
     }) : undefined;
     const targets = changed ? new Map(live.map((agent, index) => [agent.address, snapshots[index].value.target])) : this.returnTargets;
+    const places = changed ? livePlaces(live, (agent) => agentTargets(agent, this.seenNow?.get(agent.address), terms.get(agent.address))) : this.returnPlaces;
     const project = active && focus ? sp.find((space) => space.id === focus.space && allowed.has(space.id)) : null;
     const pr = shared("kanso.pr.seen");
     const seenTarget = pr && pr.at > (this.prSeenAt ?? 0) ? targetOf("pr", pr.url) : null;
     this.sinceLeft.update({ project: project ? projectKey(project) : null, target: targets?.get(focus?.terminal) ?? null, seenTarget, snapshots, now }, cx).then(() => {
       this.returnSignature = signature;
       this.returnTargets = targets;
+      this.returnPlaces = places;
       if (pr) this.prSeenAt = pr.at;
     }).catch(() => {});
   }
 
   returnRows(t, space) {
-    if (!space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
-    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.jumpReturn(row),
+    if (this.showAway === false || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
+    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row),
       (label, count, dismiss) => this.bareHead(t, "since-left", label, count, t.foreground, dismiss));
     return this.sinceLeft.showing ? [item(view, this.sinceLeft.blockHeight())] : [];
   }
 
-  jumpReturn(row) {
-    const { kind, id } = parseTarget(row.target);
-    const destinations = {
-      pr: () => commitLayout({ panel: { id: "pr", type: "block", content: { mod: "kanso-panel", props: { panel: "pr", url: id, at: Date.now() } } } }),
-      sleep: () => wakeRow(id),
-      agent: () => this.focusReturnAgent(row.target),
+  returnGo(row) {
+    const to = destinationOf(row.target, this.returnPlaces ?? new Map(), this.sleepingRows?.rows ?? []);
+    const go = {
+      pr: () => commitLayout({ panel: { id: "pr", type: "block", content: { mod: "kanso-panel", props: { panel: "pr", url: to.url, at: Date.now() } } } }),
+      agent: () => run("agent.focus", { terminal: to.address }),
+      asleep: () => this.openMenu(to.row),
     };
-    return Object.hasOwn(destinations, kind) ? destinations[kind]() : false;
-  }
-
-  focusReturnAgent(target) {
-    const terms = new Map(terminals().map((term) => [term.address, term]));
-    const agent = observedAgents(agents(), panes(), spaces(), [...terms.values()]).find((a) => agentTargets(a, this.seenNow?.get(a.address), terms.get(a.address)).includes(target));
-    if (!agent) return false;
-    run("agent.focus", { terminal: agent.address });
+    return to ? go[to.kind] : null;
   }
 
   // `seen` goes to the database; each name goes to shared "kanso.names" (Sleep keeps it),
@@ -1725,7 +1721,7 @@ export default class Spaces extends View {
   // With the switch off, the sidebar stays on Spaces.
   setShown(key, on, cx) {
     if (key === "switch" && !on) this.setView("spaces");
-    this.hide(key === "switch" ? "sidebar.switch" : "sidebar.activity", !on);
+    this.hide({ switch: "sidebar.switch", activity: "sidebar.activity", away: AWAY_PIECE }[key], !on);
     cx.notify();
   }
 
@@ -1795,6 +1791,7 @@ export default class Spaces extends View {
         .child(div().mx(8).my(5).h(1).bg(t.border))
         .child(title("Show"))
         .child(line("spaces-show-activity", "What each agent is on", this.showActivity !== false, (cx) => this.setShown("activity", this.showActivity === false, cx)))
+        .child(line("spaces-show-away", RETURN_LABEL, this.showAway !== false, (cx) => this.setShown("away", this.showAway === false, cx)))
         .child(line("spaces-show-switch", "Projects, Status and Threads", this.showSwitch !== false, (cx) => this.setShown("switch", this.showSwitch === false, cx))));
   }
 
@@ -2513,6 +2510,7 @@ export default class Spaces extends View {
     const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
     this.showSwitch = !hidden.has("sidebar.switch");
     this.showActivity = !hidden.has("sidebar.activity");
+    this.showAway = !hidden.has(AWAY_PIECE);
     const switchShown = this.showSwitch !== false;
     // Collapsed, the rail keeps the view you chose: projects as avatars, agents and threads as tiles.
     const view = switchShown ? this.view : "spaces";

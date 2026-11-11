@@ -4,14 +4,22 @@ export const EVENT_CAP = 500;
 export const LINE_CAP = 3;
 export const MAINTENANCE_MS = 120_000;
 export const LOG_LIMITS = { cap: EVENT_CAP, keepMs: KEEP_MS };
+export const DID_CAP = 200;
+export const AWAY_PIECE = "sidebar.away";
+export const awayShown = (hidden) => !(Array.isArray(hidden) && hidden.includes(AWAY_PIECE));
+export function oneLine(text) {
+  const line = String(text ?? "").split(/\r?\n/).find((l) => l.trim()) ?? "";
+  const flat = line.replace(/\s+/g, " ").trim();
+  return flat.length > DID_CAP ? `${flat.slice(0, DID_CAP - 1)}\u2026` : flat || null;
+}
 export const targetOf = (kind, id) => `${kind}:${id}`;
 export function parseTarget(target) {
   const [kind, ...parts] = String(target ?? "").split(":");
   return { kind, id: parts.join(":") };
 }
-export function sleepEvent(id, state) {
+export function sleepEvent(id, state, why = null) {
   const kind = { stuck: "sleep_failed", asleep: "sleep_finished" }[state];
-  return kind ? { ...LOG_LIMITS, target: targetOf("sleep", id), kind } : null;
+  return kind ? { ...LOG_LIMITS, target: targetOf("sleep", id), kind, did: oneLine(why) } : null;
 }
 const PRIORITY = { blocked: 0, error: 1, sleep_failed: 1, pr: 2, finished: 3, sleep_finished: 3 };
 
@@ -20,10 +28,10 @@ export function changes(before, after) {
   if (after.type === "agent") {
     const newTurn = after.turn != null && before.turn != null && after.turn !== before.turn;
     if (before.status === after.status && !(after.status === "done" && newTurn)) return [];
-    const name = after.name || "Agent";
-    if (after.status === "blocked") return [{ kind: "blocked", text: name }];
-    if (after.status === "error") return [{ kind: "error", text: name }];
-    if ((after.status === "done" && before.status !== "idle") || (after.status === "idle" && before.status === "working")) return [{ kind: "finished", text: name }];
+    const fact = (kind) => [{ kind, text: after.name || "Agent", did: after.did ?? null }];
+    if (after.status === "blocked") return fact("blocked");
+    if (after.status === "error") return fact("error");
+    if ((after.status === "done" && before.status !== "idle") || (after.status === "idle" && before.status === "working")) return fact("finished");
     return [];
   }
   const words = [
@@ -53,6 +61,8 @@ export function lines(events, expanded = false) {
 
 export const RETURN_LABEL = "While you were away";
 const MARK = { blocked: "blocked", error: "error", sleep_failed: "error", finished: "done", sleep_finished: "asleep", pr: "pr" };
+const OUTCOME = { blocked: "Needs you", error: "Failed", sleep_failed: "Could not sleep", finished: "Finished", sleep_finished: "Went to sleep" };
+const PR_TEXT = /^(PR #\d+)\s+(.+)$/;
 const SPOKEN = /\s+(?:finished|needs you|errored|slept|could not sleep)$/;
 
 export function shownName(agent, seen, term) {
@@ -67,10 +77,11 @@ export function shownName(agent, seen, term) {
   return raw.split(" | ")[0].trim() || "Agent";
 }
 
-export function eventName(event) {
+export function eventLabel(event) {
   const text = String(event?.text ?? "").trim();
-  if (event?.kind === "pr") return text;
-  return text.replace(SPOKEN, "").split(" | ")[0].trim() || "Agent";
+  const pr = event?.kind === "pr" ? text.match(PR_TEXT) : null;
+  if (pr) return { name: pr[1], outcome: pr[2].charAt(0).toUpperCase() + pr[2].slice(1) };
+  return { name: text.replace(SPOKEN, "").split(" | ")[0].trim() || "Agent", outcome: OUTCOME[event?.kind] ?? null };
 }
 
 export function collapsed(events) {
@@ -87,7 +98,7 @@ export function rowOf(event, now, format) {
   const at = Number(event.at);
   return {
     id: event.id, target: event.target, kind: event.kind, mark: MARK[event.kind] ?? null,
-    name: eventName(event), age: Number.isFinite(at) ? format(Math.max(0, now - at)) : "",
+    ...eventLabel(event), did: event.did || null, age: Number.isFinite(at) ? format(Math.max(0, now - at)) : "",
   };
 }
 
@@ -108,7 +119,21 @@ export function agentSnapshot(agent, seen, term, project) {
   const target = agentTargets(agent, seen, term)[0];
   return { source: target, project, value: {
     type: "agent", target, turn: term?.turn ?? null, name: shownName(agent, seen, term), status: term?.status === "error" ? "error" : agent.status,
+    did: oneLine(term?.report?.msg),
   } };
+}
+
+// Where a row takes you: the agent's pane, the menu that wakes it, or the PR; null when it is gone.
+export function destinationOf(target, live, asleep) {
+  const { kind, id } = parseTarget(target);
+  if (kind === "pr") return { kind, url: id };
+  if (kind === "agent" && live.has(target)) return { kind, address: live.get(target) };
+  const row = asleep.find((a) => (kind === "sleep" ? a.asleep?.id === id : kind === "agent" && a.asleep?.resume === id));
+  return row ? { kind: "asleep", row } : null;
+}
+
+export function livePlaces(agents, targetsOf) {
+  return new Map(agents.flatMap((agent) => targetsOf(agent).map((target) => [target, agent.address])));
 }
 
 export function observedAgents(list, panes, spaces, terms) {

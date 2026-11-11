@@ -28,6 +28,7 @@ export const HIDDEN = "kanso.hidden";
 export const PIECES = [
   { id: "sidebar.switch", label: "Projects, Status and Threads", note: "The switch at the top of the sidebar; without it the sidebar stays on Projects" },
   { id: "sidebar.activity", label: "What each agent is on", note: "The line under each agent in the sidebar" },
+  { id: "sidebar.away", label: "While you were away", note: "What finished, failed or needs you since you last looked" },
   { id: "tabs.arrange", label: "Arrangements", note: "The button in the tab bar; the key still opens them" },
   { id: "footer.machine", label: "Add machine", note: "In the sidebar's footer" },
   { id: "status.agents", label: "Agents at work", note: "The count in the status bar" },
