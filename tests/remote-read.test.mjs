@@ -6,7 +6,7 @@ import { basename, join } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { load, context, clone } from "./helpers.mjs";
 
-const NAMES = ["bring", "copiedBytes", "copyName", "fileId", "dropCopies", "tooBig", "BYTE_CAP", "CHUNK", "slices", "cutShort", "decodeBase64", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts"];
+const NAMES = ["bring", "copiedBytes", "copyName", "fileId", "dropCopies", "tooBig", "BYTE_CAP", "ASK_BYTES", "CHECK_MS", "SLOW_MS", "CHUNK", "slices", "cutShort", "decodeBase64", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts", "pollStart", "pollNext", "checkOutcome", "asOf", "staleView", "askPicture", "bytesLabel", "parseTree"];
 const pure = await load("kanso-panel/remote-file.js", NAMES, { appHome: () => "/app", window: () => ({ platform: "macos" }) });
 
 test("a remote copy is named by machine, path and mtime, and old copies go", () => {
@@ -79,7 +79,66 @@ test("a failure says whether the computer is quiet or the folder cannot be read"
   assert.deepEqual(clone(pure.markdownParts("<img src='./c.gif'>").map((part) => part.url)), ["./c.gif"]);
 });
 
+test("a quiet check backs off, and a failed check keeps the last view", () => {
+  const start = pure.pollStart();
+  assert.deepEqual(clone(start), { quiet: 0, wait: pure.CHECK_MS });
+  const once = pure.pollNext(start, "same");
+  const twice = pure.pollNext(once, "same");
+  const thrice = pure.pollNext(twice, "same");
+  assert.deepEqual(clone([once.wait, twice.wait, thrice.wait]), [pure.CHECK_MS, pure.CHECK_MS, pure.SLOW_MS]);
+  assert.equal(pure.pollNext(thrice, "changed").wait, pure.CHECK_MS);
+  assert.equal(pure.pollNext(start, "failed").wait, pure.SLOW_MS);
+  assert.equal(pure.pollNext(once, "seen").wait, pure.CHECK_MS);
+  assert.equal(pure.checkOutcome(null, null), "failed");
+  assert.equal(pure.checkOutcome(null, { size: 1, mtime: 2 }), "seen");
+  assert.equal(pure.checkOutcome({ size: 1, mtime: 2 }, { size: 1, mtime: 2 }), "same");
+  assert.equal(pure.checkOutcome({ size: 1, mtime: 2 }, { size: 2, mtime: 2 }), "changed");
+  assert.equal(pure.asOf(0, 120000), "as of 2 min ago");
+  assert.equal(pure.asOf(0, 10000), "as of just now");
+  assert.deepEqual(clone(pure.staleView(true, 0, 120000, "light did not answer")), { keep: true, hold: { at: 0 }, error: null, loading: false });
+  const empty = pure.staleView(false, null, 120000, "light did not answer");
+  assert.equal(empty.keep, false);
+  assert.equal(empty.loading, false);
+  assert.equal(empty.error, "light did not answer");
+  assert.equal(pure.askPicture(pure.ASK_BYTES), false);
+  assert.equal(pure.askPicture(pure.ASK_BYTES + 1), true);
+  assert.equal(pure.bytesLabel(3 * 1024 * 1024), "3 MB");
+  const row = " M src/a.js";
+  const tree = ["\x055 1700000000", "\x01", "./a.txt", "./dir", "./dir", "\x02", "\x03/repo", Buffer.from(`${row}\0`).toString("base64"), "\x04"].join("\0") + "\0";
+  const snap = pure.parseTree(tree);
+  assert.deepEqual(clone(snap.stamp), { size: 5, mtime: 1700000000 });
+  assert.deepEqual(clone(snap.folders), [{ rel: "", entries: [{ name: "a.txt", dir: false }, { name: "dir", dir: true }] }]);
+  assert.equal(snap.top, "/repo");
+  assert.deepEqual(clone(snap.rows), [row]);
+  const win = pure.parseTree(["\x051 2", "\x01sub", "f\tnote.txt", "d\tfolder", "\x02", "\x03", "\x04"].join("\0") + "\0");
+  assert.equal(win.top, null);
+  assert.deepEqual(clone(win.folders), [{ rel: "sub", entries: [{ name: "note.txt", dir: false }, { name: "folder", dir: true }] }]);
+});
+
 for (const platform of ["macos", "linux", "windows"]) {
+  test(`a folder listing and its git status are one call on ${platform}`, async () => {
+    const calls = [];
+    const api = fileApi(platform, async (cmd, args) => {
+      calls.push([cmd, args]);
+      return { code: 0, stdout: "\x050 0\x00\x01\x00\x02\x00\x03\x00\x04\x00", stderr: "" };
+    });
+    await api.tree("/repo", ["", "src"]);
+    assert.equal(calls.length, 1);
+    const script = String(calls[0][0] === "sh" ? calls[0][1][1] : calls[0][1].at(-1));
+    if (platform === "windows") {
+      assert.equal(calls[0][0], "pwsh");
+      assert.match(script, /Get-ChildItem/);
+      assert.match(script, /ToBase64String/);
+      assert.equal(script.includes("sh "), false);
+    } else {
+      assert.equal(calls[0][0], "sh");
+      assert.match(script, platform === "macos" ? /stat -f '%z %m'/ : /stat -c '%s %Y'/);
+      assert.match(script, /find -H/);
+      assert.match(script, /status --porcelain=v1 -z/);
+      assert.deepEqual(calls[0][1].slice(3), ["/repo", "", "src"]);
+    }
+  });
+
   test(`stat and encode on ${platform} stay on that computer's programs`, async () => {
     const calls = [];
     const run = async (cmd, args) => {
@@ -162,6 +221,32 @@ test("a file here is not copied, and one elsewhere is kept until its mtime chang
   } finally { await box.done(); }
 });
 
+test("a picture over 2 MB is not copied until it is asked for", async () => {
+  const box = await remoteBring("macos");
+  try {
+    const big = pure.ASK_BYTES + 1;
+    box.state.stat = `${big} 9\n`;
+    assert.deepEqual(clone(await box.bring("/remote/big.png", "light")), { deferred: true, size: big, mtime: 9 });
+    assert.equal(box.calls.some((call) => call[0] === "base64" || call[0] === "python3"), false);
+    await assert.rejects(box.bring("/remote/big.png", "light", { ask: true }));
+    assert.equal(box.calls.some((call) => call[0] === "base64" || call[0] === "python3"), true);
+    box.state.stat = `${pure.ASK_BYTES} 8\n`;
+    const before = box.calls.filter((call) => call[0] === "base64").length;
+    await assert.rejects(box.bring("/remote/exact.png", "light"), /cut short/);
+    assert.ok(box.calls.filter((call) => call[0] === "base64").length > before);
+    const name = pure.copyName("light", "/remote/kept.png", 9, big, "png");
+    const root = join(box.dir, "data/kanso-panel/remote");
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, name), Buffer.alloc(big));
+    const encoded = box.calls.filter((call) => call[0] === "base64").length;
+    box.state.stat = `${big} 9\n`;
+    assert.equal((await box.bring("/remote/kept.png", "light")).path, join(root, name));
+    assert.equal(box.calls.filter((call) => call[0] === "base64").length, encoded);
+    box.state.stat = `${pure.BYTE_CAP + 1} 1\n`;
+    await assert.rejects(box.bring("/remote/huge.png", "light", { ask: true }), /over 20 MB/);
+  } finally { await box.done(); }
+});
+
 test("linux and windows copies use that computer's encoder and never a shell on windows", async () => {
   const linux = await remoteBring("linux");
   const windows = await remoteBring("windows");
@@ -187,8 +272,9 @@ const node = () => {
 test("preview chooses a picture, markdown or text, and re-reads a remote file only while shown", async () => {
   const dir = await mkdtemp(join(tmpdir(), "kanso-preview-"));
   const reads = [];
-  const ticks = [];
-  let active = true, hidden = false;
+  const calls = [];
+  const afters = [];
+  let active = true, hidden = false, stamp = "4 9\n", failStat = false;
   try {
     const { Preview, previewKind } = await load("kanso-panel/preview.js", ["Preview", "previewKind"], {
       appHome: () => dir,
@@ -200,11 +286,13 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
       theme: () => ({}),
       div: node, svg: node, image: node, h_flex: node, v_flex: node, Editor: { new: node },
       exec: async (cmd, args = []) => {
+        calls.push(cmd);
         if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
         if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
-        if (cmd === "stat") return { code: 0, stdout: "4 9\n", stderr: "" };
+        if (cmd === "stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
         if (cmd === "base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
         if (cmd === "sips") return { code: 0, stdout: "pixelWidth: 12\npixelHeight: 8\n", stderr: "" };
+        if (cmd === "head") return { code: 0, stdout: "hello", stderr: "" };
         return { code: 0, stdout: "", stderr: "" };
       },
       writeFile, mkdir, readdir, unlink, stat,
@@ -217,6 +305,7 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
     assert.equal(previewKind("/a.pdf"), "text");
     assert.equal(previewKind("/a.heic"), "text");
     const { cx, drain } = context();
+    cx.timer = { every() {}, after(ms, fn) { afters.push([ms, fn]); } };
     const quiet = { ...cx, timer: { every() {}, after() {} }, focus_handle: () => ({}) };
     const text = new Preview();
     text.init(quiet, { path: "/repo/a.js" });
@@ -234,55 +323,82 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
     assert.match(picture.picture.image, /^data\/kanso-panel\/preview\//);
     assert.deepEqual(clone(picture.pixels), { width: 12, height: 8 });
     const remote = new Preview();
-    remote.init({ ...cx, timer: { every(_ms, fn) { ticks.push(fn); }, after() {} }, focus_handle: () => ({}) }, { path: "/repo/a.js", on: "light" });
+    remote.init({ ...cx, focus_handle: () => ({}) }, { path: "/repo/a.js", on: "light" });
     await drain();
-    const before = reads.length;
+    const heads = () => calls.filter((cmd) => cmd === "head").length;
+    const before = heads();
+    assert.equal(before, 1);
+    const fire = async () => { afters.at(-1)[1](cx); await drain(); };
     active = false;
-    ticks[0](cx);
-    await drain();
-    assert.equal(reads.length, before);
+    await fire();
     active = true;
     hidden = true;
-    ticks[0](cx);
-    await drain();
-    assert.equal(reads.length, before);
+    await fire();
     hidden = false;
-    ticks[0](cx);
-    await drain();
-    assert.equal(reads.length, before + 1);
+    await fire();
+    assert.equal(heads(), before, "a stat that has not changed does not read the file");
+    assert.equal(remote.code != null, true);
+    for (let n = 0; n < 3; n += 1) await fire();
+    assert.equal(afters.at(-1)[0], 30000, "three quiet checks wait 30 s");
+    assert.equal(heads(), before);
+    stamp = "5 9\n";
+    await fire();
+    assert.equal(heads(), before + 1);
+    assert.equal(afters.at(-1)[0], 5000);
+    failStat = true;
+    await fire();
+    assert.equal(heads(), before + 1);
+    assert.equal(remote.error, null);
+    assert.ok(remote.held);
+    assert.equal(remote.code != null, true);
+    remote.held = { at: Date.now() - 120000 };
+    assert.equal(pure.asOf(remote.held.at, Date.now()), "as of 2 min ago");
+    assert.equal(afters.at(-1)[0], 30000);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test("a remote folder says why it failed and is listed again only while shown", async () => {
   const calls = [];
   const ticks = [];
-  let active = true, hidden = false, denied = false;
+  const afters = [];
+  let active = true, hidden = false, denied = false, listed = false;
+  const tree = ["\x055 9", "\x01", "./a.txt", "\x02", "\x03", "\x04"].join("\0") + "\0";
   const { Files } = await load("kanso-panel/files.js", ["Files"], {
     key: () => "ctx",
     location: () => ({ cwd: "/repo", on: "light" }),
     window: () => ({ active, platform: "macos" }),
     layout: () => ({ id: "panel-body", hidden }),
-    exec: async () => { calls.push("exec"); throw new Error(denied ? "Permission denied" : "light is unreachable"); },
+    exec: async (cmd) => {
+      calls.push(cmd);
+      if (denied) throw new Error("Permission denied");
+      if (!listed) throw new Error("light is unreachable");
+      if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
+      if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
+      if (cmd === "stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
+      if (cmd === "sh") return { code: 0, stdout: tree, stderr: "" };
+      return { code: 1, stdout: "", stderr: cmd };
+    },
     watchFolder: async () => { throw new Error("no"); },
   });
+  let stamp = "5 9\n", failStat = false;
   const { cx, drain } = context();
+  cx.timer = { every(_ms, fn) { ticks.push(fn); }, after(ms, fn) { afters.push([ms, fn]); } };
   const files = new Files();
-  files.init({ ...cx, timer: { every(_ms, fn) { ticks.push(fn); }, after() {} } }, {});
+  files.init(cx, {});
   await drain();
   assert.equal(files.error, "light did not answer");
+  assert.equal(files.loading, false);
+  assert.equal(afters.at(-1)[0], 30000);
   const quiet = calls.length;
+  const fire = async () => { afters.at(-1)[1](cx); await drain(); };
   active = false;
-  ticks[1](cx);
-  await drain();
-  assert.equal(calls.length, quiet);
+  await fire();
   active = true;
   hidden = true;
-  ticks[1](cx);
-  await drain();
+  await fire();
   assert.equal(calls.length, quiet);
   hidden = false;
-  ticks[1](cx);
-  await drain();
+  await fire();
   assert.ok(calls.length > quiet);
   const mid = calls.length;
   ticks[0](cx);
@@ -293,6 +409,26 @@ test("a remote folder says why it failed and is listed again only while shown", 
   files.refresh(cx);
   await drain();
   assert.equal(files.error, "Cannot list this folder: permission denied");
+  denied = false;
+  listed = true;
+  files.context = null;
+  files.refresh(cx);
+  await drain();
+  assert.equal(files.error, null);
+  assert.deepEqual(clone(files.entries.get("").map((entry) => entry.name)), ["a.txt"]);
+  const shells = calls.filter((cmd) => cmd === "sh").length;
+  stamp = "5 9\n";
+  await fire();
+  await fire();
+  assert.equal(calls.filter((cmd) => cmd === "sh").length, shells, "an unchanged folder is not listed again");
+  failStat = true;
+  await fire();
+  assert.equal(files.error, null);
+  assert.equal(files.loading, false);
+  assert.ok(files.held);
+  assert.deepEqual(clone(files.entries.get("").map((entry) => entry.name)), ["a.txt"]);
+  files.held = { at: Date.now() - 120000 };
+  assert.equal(pure.asOf(files.held.at, Date.now()), "as of 2 min ago");
 });
 
 test("a picture in Files opens in Preview, and a Markdown file on another computer draws its pictures", async () => {
@@ -346,6 +482,7 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
         if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
         if (cmd === "stat") return { code: 0, stdout: "4 3\n", stderr: "" };
         if (cmd === "base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
+        if (cmd === "head") return { code: 0, stdout: "Hello\n\n![shot](./shot.png)\n", stderr: "" };
         return { code: 1, stdout: "", stderr: cmd };
       },
       writeFile, mkdir, readdir, unlink, stat,

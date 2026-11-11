@@ -8,11 +8,11 @@ import { imageApi } from "./platform-images.js";
 import { codeState, isMarkdown, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines } from "./doc.js";
-import { skeleton } from "./ui.js";
+import { skeleton, quietLink, tokens } from "./ui.js";
 import { tryOrAsync, extOf } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 import { walkLayout } from "./layout.js";
-import { bring, appRelative, svgPixels, copyFailure, remoteDue, fileId } from "./remote-file.js";
+import { bring, appRelative, svgPixels, copyFailure, remoteDue, fileId, armPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
@@ -28,10 +28,8 @@ export class Preview {
     this.on = p.on ?? kept?.on ?? null;
     this.back = BACK[p.back] ? p.back : (kept?.back && BACK[kept.back] ? kept.back : null);
     this.handle = cx.focus_handle();
+    this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
     this.open(p.path || kept?.path || "", cx);
-    if (this.on) cx.timer.every(5000, (cx) => {
-      if (this.path && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) this.load(cx);
-    });
   }
 
   saveState() {
@@ -62,11 +60,13 @@ export class Preview {
     this.path = path;
     this.doc?.release(); this.doc = null;
     this.code?.release(); this.code = null; this.error = null; this.picture = null; this.pixels = null;
+    this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
     if (!path) { cx.notify(); return; }
     if (previewKind(path) === "markdown") this.doc = new MarkdownDoc(path, this.on, (to) => this.follow(to, cx));
     else if (previewKind(path) === "picture") this.picture = { busy: true };
     this.load(cx);
     this.watch(cx);
+    if (this.on) armPoll.call(this, cx, (tick) => this.probe(tick));
     cx.notify();
   }
 
@@ -85,36 +85,72 @@ export class Preview {
   load(cx) {
     if (this.doc) { this.doc.load(cx); return; }
     if (this.picture || previewKind(this.path) === "picture") { this.loadPicture(cx); return; }
-    const path = this.path;
+    const path = this.path, on = this.on;
     cx.spawn(async (cx) => {
       try {
-        const text = await readTextFile(path, { on: this.on });
+        const text = on ? await (await serviceOn(fileApi, on)).read(path) : await readTextFile(path);
         if (this.path !== path) return;
-        if (text === null) this.error = "This file is no longer available";
-        else if (text.includes("\0")) this.error = "Binary file: no text preview";
-        else { this.error = null; this.code?.release(); this.code = codeState(path, text); }
-      } catch (e) { this.error = `Cannot read this file: ${e?.message ?? e}`; }
+        if (text === null || text === undefined) this.miss(on, "This file is no longer available");
+        else if (String(text).includes("\0")) this.miss(on, "Binary file: no text preview");
+        else { this.error = null; this.held = null; this.fresh = Date.now(); this.code?.release(); this.code = codeState(path, text); }
+      } catch (e) { if (this.path === path) this.miss(on, on ? copyFailure(e, on) : `Cannot read this file: ${e?.message ?? e}`); }
       finally { cx.notify(); }
     });
   }
 
-  loadPicture(cx) {
+  miss(on, error) {
+    const view = on ? staleView(Boolean(this.code), this.fresh, Date.now(), error) : null;
+    if (view?.keep) { this.held = view.hold; return; }
+    this.error = error;
+  }
+
+  loadPicture(cx, ask = false) {
     const path = this.path, on = this.on;
-    this.picture = { busy: true }; this.error = null;
+    const kept = this.picture?.image || this.picture?.deferred ? this.picture : null;
+    if (!kept) this.picture = { busy: true };
+    this.error = null;
     cx.spawn(async (cx) => {
       try {
-        const absolute = on ? (await bring(path, on)).path : await this.stage(path);
+        const got = on ? await bring(path, on, { ask }) : { path: await this.stage(path) };
         if (this.path !== path) return;
-        const rel = appRelative(absolute, appHome());
+        if (got.deferred) {
+          this.picture = { deferred: true, size: got.size };
+          this.pixels = null; this.error = null; this.held = null; this.fresh = Date.now();
+          if (got.mtime != null) this.stamp = { size: got.size, mtime: got.mtime };
+          return;
+        }
+        const rel = appRelative(got.path, appHome());
         if (!rel) throw new Error("Cannot read this file");
-        const pixels = extOf(path) === "svg" ? svgPixels(await readTextFile(absolute)) : await localService(imageApi).pixels(absolute).catch(() => null);
+        const pixels = extOf(path) === "svg" ? svgPixels(await readTextFile(got.path)) : await localService(imageApi).pixels(got.path).catch(() => null);
         if (this.path !== path) return;
-        this.picture = { image: rel }; this.pixels = pixels; this.error = null;
+        this.picture = { image: rel }; this.pixels = pixels; this.error = null; this.held = null; this.fresh = Date.now();
+        if (got.mtime != null) this.stamp = { size: got.size, mtime: got.mtime };
       } catch (e) {
         if (this.path !== path) return;
-        this.picture = null;
-        this.error = on ? copyFailure(e, on) : `Cannot read this file: ${e?.message ?? e}`;
+        const view = on ? staleView(Boolean(kept?.image || kept?.deferred), this.fresh, Date.now(), copyFailure(e, on)) : null;
+        if (view?.keep) { this.picture = kept; this.held = view.hold; }
+        else { this.picture = null; this.error = on ? copyFailure(e, on) : `Cannot read this file: ${e?.message ?? e}`; }
       } finally { cx.notify(); }
+    });
+  }
+
+  probe(cx) {
+    const path = this.path, on = this.on;
+    if (!path || !remoteDue(on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) return;
+    cx.spawn(async (cx) => {
+      const { outcome, next } = await takeStamp(async () => (await serviceOn(fileApi, on)).stat(path), this.stamp);
+      if (this.path !== path) return;
+      if (outcome === "seen") this.stamp = next;
+      if (outcome === "changed") { this.stamp = next; this.load(cx); }
+      if (outcome === "failed") {
+        const had = Boolean(this.code || this.picture?.image || this.picture?.deferred || this.doc?.saved != null);
+        const view = staleView(had, this.fresh ?? this.doc?.fresh, Date.now(), copyFailure(new Error("timed out"), on));
+        if (view.keep) this.held = view.hold;
+        else if (!this.error) this.error = view.error;
+      }
+      this.poll = pollNext(this.poll, outcome);
+      armPoll.call(this, cx, (tick) => this.probe(tick));
+      cx.notify();
     });
   }
 
@@ -153,7 +189,8 @@ export class Preview {
       .child(readingLines(c));
   }
 
-  render() {
+  render(cx) {
+    if (this.on && this.path && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) armPoll.call(this, cx, (tick) => this.probe(tick));
     const t = theme();
     const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { action(cx); })
@@ -164,13 +201,17 @@ export class Preview {
         .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx))))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
           .child(div().truncate().font_semibold().text_size(13).child(nameOf(this.path)))
-          .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}`)))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}${(this.held ?? this.doc?.held) ? ` · ${asOf((this.held ?? this.doc.held).at, Date.now())}` : ""}`)))
         .children(this.doc ? this.doc.controls(t, "preview") : [])
         .child(button("preview-open-with", "open-with", "Open with…", () => this.openWith()))
-        .when(!this.doc?.editing, (el) => el.child(button("preview-refresh", "refresh", "Read again", (cx) => this.load(cx))))
+        .when(!this.doc?.editing, (el) => el.child(button("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.load(cx))))
         .child(button("preview-close", "close", "Close", (cx) => this.leave(cx, () => showPanel(null)))))
       .child(this.doc ? this.doc.body(t, "preview-md")
         : this.error ? div().p(12).text_color(t.dim).child(this.error)
+        : this.picture?.deferred ? v_flex().id("preview-hold").flex_1().min_h(0).items_center().justify_center().gap(8)
+          .child(div().font_semibold().child(nameOf(this.path)))
+          .child(div().text_size(12).text_color(t.dim).child(bytesLabel(this.picture.size)))
+          .child(quietLink("preview-load", "Load", (cx) => this.loadPicture(cx, true), tokens(t)))
         : this.picture?.image ? v_flex().id("preview-picture").flex_1().min_h(0).p(16).items_center().justify_center().child(image(this.picture.image).w_full())
         : this.code ? Editor.new(this.code).flex_1().min_h(0)
         : this.path ? readingLines(t) : div().flex_1());

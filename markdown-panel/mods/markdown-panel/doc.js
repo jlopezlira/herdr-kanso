@@ -1,10 +1,12 @@
+import { serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
 import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home, appHome } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
-import { skeleton, breathe } from "./ui.js";
-import { bring, appRelative, markdownParts } from "./remote-file.js";
+import { skeleton, breathe, quietLink, tokens } from "./ui.js";
+import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure } from "./remote-file.js";
 
 export function readingLines(t) {
   const { line } = skeleton({ border: t.border });
@@ -55,20 +57,30 @@ export class MarkdownDoc {
     const path = this.path;
     cx.spawn(async (cx) => {
       try {
-        const text = await readTextFile(path, { on: this.on });
+        const text = this.on
+          ? await (await serviceOn(fileApi, this.on)).read(path)
+          : await readTextFile(path);
         if (this.path !== path) return;
-        if (text === null) { this.error = "This file is no longer available"; return; }
-        if (text.includes("\0")) { this.error = "Binary file: nothing to show"; return; }
-        this.error = null;
+        if (text == null) { this.miss("This file is no longer available"); return; }
+        if (String(text).includes("\0")) { this.miss("Binary file: nothing to show"); return; }
+        this.error = null; this.held = null; this.fresh = Date.now();
         if (text === this.saved) { if (this.on) this.pictures(cx); return; }
         // Yours, not saved yet, and the file moved on: you choose which stays.
         if (this.dirty) { this.conflict = true; this.disk = text; return; }
         this.saved = text; this.big = text.length > MAX_TEXT;
         this.setText(text);
         if (this.on) this.pictures(cx);
-      } catch (e) { this.error = `Cannot read this file: ${e?.message ?? e}`; }
-      finally { cx.notify(); }
+      } catch (e) {
+        if (this.path === path) this.miss(this.on ? copyFailure(e, this.on) : `Cannot read this file: ${e?.message ?? e}`);
+      } finally { cx.notify(); }
     });
+  }
+
+  // A later miss keeps the document; the panel shows its age.
+  miss(message) {
+    const view = this.on ? staleView(this.saved != null, this.fresh, Date.now(), message) : null;
+    if (view?.keep) { this.held = view.hold; this.error = null; return; }
+    this.error = message;
   }
 
   setText(text) {
@@ -310,6 +322,10 @@ export class MarkdownDoc {
       const file = linkTarget(part.url, this.path)?.file;
       const shot = file && this.shots?.has(file) ? this.shots.get(file) : undefined;
       if (shot === undefined) return breathe(div().id(`${id}-shot-${k}`)).child(skeleton({ border: t.border }).block(240, 140, 8));
+      if (shot?.deferred) return h_flex().id(`${id}-shot-${k}`).gap(8).items_center()
+        .child(div().text_size(12).text_color(t.foreground).child(paths.basename(file)))
+        .child(div().text_size(12).text_color(t.dim).child(bytesLabel(shot.size)))
+        .child(quietLink(`${id}-load-${k}`, "Load", (cx) => this.loadShot(file, cx), tokens(t)));
       if (!shot) return div().id(`${id}-shot-${k}`).text_size(12).text_color(t.dim).child("Cannot show this picture");
       return div().id(`${id}-shot-${k}`).w_full().child(image(shot).w_full());
     }).filter(Boolean));
@@ -329,11 +345,21 @@ export class MarkdownDoc {
       await files.reduce(async (done, file) => {
         await done;
         if (this.shotSeq !== seq || this.path !== path) return;
-        const shot = await bring(file, on).then((got) => appRelative(got.path, appHome())).catch(() => null);
+        const shot = await bring(file, on).then((got) => got.deferred ? { deferred: true, size: got.size, file } : appRelative(got.path, appHome())).catch(() => null);
         if (this.shotSeq !== seq || this.path !== path) return;
         this.shots = new Map([...this.shots, [file, shot]]);
         cx.notify();
       }, Promise.resolve());
+    });
+  }
+
+  loadShot(file, cx) {
+    const seq = this.shotSeq, path = this.path, on = this.on;
+    cx.spawn(async (cx) => {
+      const shot = await bring(file, on, { ask: true }).then((got) => appRelative(got.path, appHome())).catch(() => null);
+      if (this.shotSeq !== seq || this.path !== path) return;
+      this.shots = new Map([...this.shots, [file, shot]]);
+      cx.notify();
     });
   }
 

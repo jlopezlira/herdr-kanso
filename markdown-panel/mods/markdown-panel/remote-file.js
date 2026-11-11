@@ -2,11 +2,15 @@
 import { appHome } from "herdr";
 import { mkdir, readdir, stat, unlink, writeFile } from "fs/promises";
 import { serviceOn } from "./platform-host.js";
-import { fileApi } from "./platform-files.js";
+import { fileApi, pairEntries } from "./platform-files.js";
 import { paths } from "./platform-paths.js";
 import { extOf } from "./pure.js";
 
 export const BYTE_CAP = 20 * 1024 * 1024;
+export const ASK_BYTES = 2 * 1024 * 1024;
+export const CHECK_MS = 5000;
+export const SLOW_MS = 30000;
+export const QUIET_LIMIT = 3;
 // Each slice stays under Herdr's exec output cap; a 20 MB file is several.
 export const CHUNK = 2 * 1024 * 1024;
 export const REMOTE_DIR = "data/kanso-panel/remote";
@@ -69,6 +73,85 @@ export const listFailure = (error, machine) => {
 
 export const remoteDue = (on, active, hidden) => Boolean(on) && active !== false && hidden !== true;
 
+export const pollStart = () => ({ quiet: 0, wait: CHECK_MS });
+
+export const pollNext = (poll, outcome) => {
+  if (outcome === "changed" || outcome === "seen") return { quiet: 0, wait: CHECK_MS };
+  if (outcome === "failed") return { quiet: poll?.quiet ?? 0, wait: SLOW_MS };
+  const quiet = (poll?.quiet ?? 0) + 1;
+  return { quiet, wait: quiet >= QUIET_LIMIT ? SLOW_MS : CHECK_MS };
+};
+
+export const stampOf = (size, mtime) => Number.isFinite(size) && Number.isFinite(mtime) ? { size, mtime } : null;
+
+export const checkOutcome = (previous, next) => !next ? "failed" : !previous ? "seen" : previous.size === next.size && previous.mtime === next.mtime ? "same" : "changed";
+
+export const asOf = (then, now) => {
+  const min = Math.round(Math.max(0, now - then) / 60000);
+  return min < 1 ? "as of just now" : `as of ${min} min ago`;
+};
+
+export const staleView = (had, fresh, now, error) => had
+  ? { keep: true, hold: { at: fresh ?? now }, error: null, loading: false }
+  : { keep: false, hold: null, error, loading: false };
+
+export const askPicture = (size) => Number.isFinite(size) && size > ASK_BYTES;
+
+export const bytesLabel = (size) => {
+  if (!Number.isFinite(size) || size < 0) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1048576) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  const mb = size / 1048576;
+  const text = mb >= 10 ? String(Math.round(mb)) : String(Math.round(mb * 10) / 10);
+  return `${text} MB`;
+};
+
+export function armPoll(cx, probe) {
+  if (this.arm) return;
+  this.arm = cx.timer.after((this.poll ?? pollStart()).wait, (cx) => {
+    this.arm = null;
+    probe(cx);
+  });
+}
+
+export async function takeStamp(stat, previous) {
+  try {
+    const info = await stat();
+    const next = stampOf(info?.size, info?.mtime);
+    return { outcome: checkOutcome(previous, next), next };
+  } catch {
+    return { outcome: "failed", next: null };
+  }
+}
+
+const winEntry = (chunk) => (chunk[0] === "d" || chunk[0] === "f") && chunk[1] === "\t" ? { name: chunk.slice(2), dir: chunk[0] === "d" } : null;
+
+const entriesOf = (names) => names[0]?.startsWith("./") || !names.length
+  ? pairEntries(names)
+  : names.slice(0, 501).flatMap((chunk) => { const row = winEntry(chunk); return row ? [row] : []; });
+
+const foldTree = (state, chunk) => {
+  if (chunk.startsWith("\x05")) {
+    const [size, mtime] = chunk.slice(1).trim().split(/\s+/).map(Number);
+    return { ...state, stamp: stampOf(size, mtime) };
+  }
+  if (chunk.startsWith("\x01")) return { ...state, rel: chunk.slice(1), names: [], mode: "list" };
+  if (chunk === "\x02") return { ...state, folders: [...state.folders, { rel: state.rel ?? "", entries: entriesOf(state.names) }], names: [], mode: null };
+  if (chunk.startsWith("\x03")) return { ...state, mode: "git", git: chunk.length > 1 ? { top: chunk.slice(1), b64: "" } : null };
+  if (chunk === "\x04") return { ...state, mode: null };
+  if (state.mode === "list") return { ...state, names: [...state.names, chunk] };
+  if (state.mode === "git" && state.git && chunk) return { ...state, git: { ...state.git, b64: chunk } };
+  return state;
+};
+
+export function parseTree(stdout) {
+  const text = String(stdout ?? "");
+  const chunks = text.endsWith("\0") ? text.slice(0, -1).split("\0") : text.split("\0");
+  const state = chunks.reduce(foldTree, { folders: [], names: [], rel: null, mode: null, stamp: null, git: null });
+  const rows = state.git?.b64 ? new TextDecoder().decode(decodeBase64(state.git.b64)).split("\0").filter(Boolean) : [];
+  return { folders: state.folders, stamp: state.stamp, top: state.git?.top ?? null, rows };
+}
+
 export const machineOf = (address) => {
   const at = String(address ?? "").indexOf("/");
   return at > 0 ? String(address).slice(0, at) : null;
@@ -114,9 +197,10 @@ export async function copiedBytes(encode, size, chunk = CHUNK) {
   const parts = slices(size, chunk);
   if (!parts) throw new Error("The copy was cut short");
   const chunks = await parts.reduce(async (acc, slice) => {
+    const prior = await acc;
     const encoded = await encode(parts.length === 1 ? undefined : slice);
     if (!encoded || cutShort(encoded) || encoded.code !== 0) throw new Error(encoded?.stderr || "The copy was cut short");
-    return [...await acc, decodeBase64(encoded.stdout)];
+    return [...prior, decodeBase64(encoded.stdout)];
   }, Promise.resolve([]));
   const bytes = concat(chunks);
   if (bytes.length !== size) throw new Error("The copy was cut short");
@@ -125,7 +209,7 @@ export async function copiedBytes(encode, size, chunk = CHUNK) {
 
 const aged = async (root) => Promise.all((await readdir(root).catch(() => [])).map(async (name) => ({ name, mtime: await stat(paths.join(root, name)).then((s) => s.mtimeMs).catch(() => 0) })));
 
-export async function bring(file, on) {
+export async function bring(file, on, { ask = false } = {}) {
   if (!on) return { path: file };
   try {
     const files = await serviceOn(fileApi, on);
@@ -136,9 +220,10 @@ export async function bring(file, on) {
     const dest = paths.join(root, name);
     await mkdir(root, { recursive: true });
     const have = await stat(dest).then((s) => s.size === info.size).catch(() => false);
+    if (!have && !ask && askPicture(info.size)) return { deferred: true, size: info.size, mtime: info.mtime };
     if (!have) await writeFile(dest, await copiedBytes((range) => files.encode(file, range), info.size));
     await Promise.all(dropCopies(await aged(root), { id: fileId(on, file), keep: name, now: Date.now() }).map((old) => unlink(paths.join(root, old)).catch(() => {})));
-    return { path: dest };
+    return { path: dest, size: info.size, mtime: info.mtime };
   } catch (e) {
     throw new Error(copyFailure(e, on));
   }

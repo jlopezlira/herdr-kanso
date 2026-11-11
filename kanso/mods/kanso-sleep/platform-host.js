@@ -7,11 +7,13 @@ export const sleepFor = (platform, runner, seconds) => platform === "windows"
   ? powershell(runner, `Start-Sleep -Milliseconds ${Math.max(0, Math.round(Number(seconds) * 1000))}`)
   : runner("sleep", [String(seconds)]);
 export const localSleep = (seconds) => sleepFor(localName(), exec, seconds);
+// A poor link has to give up, or a panel would spin until Herdr's own limit.
+export const REMOTE_TIMEOUT = 12000;
 class RemoteServices {
   constructor() { this.names = new Map(); }
   async get(factory, on) {
     if (!on) return localService(factory);
-    const runner = (program, args, options) => exec(program, args, { ...options, on });
+    const runner = (program, args, options) => exec(program, args, { timeout: REMOTE_TIMEOUT, ...options, on });
     if (!this.names.has(on)) {
       const probe = await powershell(runner, "[Environment]::OSVersion.Platform.ToString()").catch(() => null);
       const name = probe?.code === 0 && probe.stdout.trim() === "Win32NT" ? "windows" : checked(await runner("uname", ["-s"])).stdout.trim() === "Darwin" ? "macos" : "linux";

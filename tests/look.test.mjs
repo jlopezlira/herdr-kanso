@@ -139,8 +139,9 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   const { Look } = await load("kanso-panel/look.js", ["Look"], host);
   const { Kdb } = await load("kanso-panel/kdb.js", ["Kdb"], host);
   const { cx, drain } = context();
+  cx.timer = { every() {}, after() {} };
   const look = new Look(new Kdb());
-  look.init({ ...cx, timer: { every() {}, after() {} }, focus_handle: () => ({}) }, {});
+  look.init({ ...cx, focus_handle: () => ({}) }, {});
   await drain();
   return { look, cx, drain, calls, ons, say, store, world };
 }
@@ -710,4 +711,16 @@ test("a picture on a computer that does not answer stays listed and says why", a
   assert.equal(look.list().some((i) => i.path === file), true);
   assert.equal(look.shown, null);
   assert.match(look.note.text, /over 20 MB/);
+});
+
+test("a picture over 2 MB on another computer waits until it is asked for", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const file = "/repo/tests/shot.png";
+  const { look, ons } = await panel({ remote: "light", files: [file], appHome: dir, statText: `${3 * 1024 * 1024} 1\n` });
+  assert.equal(look.list().some((i) => i.path === file), true);
+  assert.equal(look.shown?.deferred, true);
+  assert.equal(look.shown.size, 3 * 1024 * 1024);
+  assert.equal(ons.some((c) => c[0] === "base64"), false);
+  assert.equal(look.note, null);
 });

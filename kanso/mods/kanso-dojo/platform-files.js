@@ -1,4 +1,65 @@
-import { checked, jsonRows, powershell, psQuote } from "./platform-command.js";
+import { checked, jsonRows, powershell, psQuote, windowsArg } from "./platform-command.js";
+
+// find prints each directory twice in a row, so its type costs no extra call.
+export const pairEntries = (raw) => {
+  const names = raw.slice(0, 2 * (500 + 2)).map((name) => name.slice(2));
+  const paired = names.reduce((out, name) => [...out, name === names[out.length - 1] && !out.at(-1)], []);
+  return names.flatMap((name, i) => (paired[i] ? [] : [{ name, dir: paired[i + 1] === true }])).slice(0, 500 + 1);
+};
+
+const unixTree = (platform) => {
+  const stat = platform === "macos" ? "stat -f '%z %m'" : "stat -c '%s %Y'";
+  return [
+    "root=$1",
+    "shift",
+    `stamp=$(${stat} "$root") || exit 1`,
+    "printf '\\005%s\\000' \"$stamp\"",
+    "for rel in \"$@\"; do",
+    "  if [ -n \"$rel\" ]; then dir=\"$root/$rel\"; else dir=\"$root\"; fi",
+    "  printf '\\001%s\\000' \"$rel\"",
+    "  find -H \"$dir\" -mindepth 1 -maxdepth 1 ! -name .git \\( -type d -print0 -print0 -o -print0 \\) || exit 1",
+    "  printf '\\002\\000'",
+    "done",
+    "top=$(git -C \"$root\" rev-parse --show-toplevel 2>/dev/null) || top=",
+    "printf '\\003%s\\000' \"$top\"",
+    "if [ -n \"$top\" ]; then git -C \"$root\" status --porcelain=v1 -z --no-renames --untracked-files=normal 2>/dev/null | base64 | tr -d '\\n'; printf '\\000'; fi",
+    "printf '\\004\\000'",
+  ].join("\n");
+};
+
+const winTree = (root, rels) => `
+$root = ${psQuote(root)}
+$rels = @(${rels.map(psQuote).join(",")})
+$item = Get-Item -LiteralPath $root
+$stamp = '{0} {1}' -f $item.Length, ([DateTimeOffset]$item.LastWriteTimeUtc).ToUnixTimeSeconds()
+[Console]::Out.Write([string][char]5 + $stamp + [char]0)
+foreach ($rel in $rels) {
+  $dir = if ([string]::IsNullOrEmpty($rel)) { $root } else { Join-Path $root $rel }
+  [Console]::Out.Write([string][char]1 + $rel + [char]0)
+  foreach ($row in @(Get-ChildItem -LiteralPath $dir -Force | Where-Object { $_.Name -ne '.git' } | Select-Object -First 501)) {
+    $kind = if ($row.PSIsContainer -and -not ($row.Attributes -band [IO.FileAttributes]::ReparsePoint)) { 'd' } else { 'f' }
+    [Console]::Out.Write($kind + [char]9 + $row.Name + [char]0)
+  }
+  [Console]::Out.Write([string][char]2 + [char]0)
+}
+$top = ''
+& git -C $root rev-parse --show-toplevel 2>$null | ForEach-Object { $top = "$_".Trim() }
+[Console]::Out.Write([string][char]3 + $top + [char]0)
+if ($top) {
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = 'git'
+  $psi.Arguments = '-C ' + ${windowsArg(root)} + ' status --porcelain=v1 -z --no-renames --untracked-files=normal'
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.UseShellExecute = $false
+  $proc = [System.Diagnostics.Process]::Start($psi)
+  $ms = New-Object System.IO.MemoryStream
+  $proc.StandardOutput.BaseStream.CopyTo($ms)
+  $proc.WaitForExit()
+  [Console]::Out.Write([Convert]::ToBase64String($ms.ToArray()))
+}
+[Console]::Out.Write([string][char]0 + [char]4 + [char]0)
+`;
 
 export function fileApi(platform, run) {
   const ps = (script, options) => powershell(run, "$ErrorActionPreference='Stop'; " + script, options);
@@ -17,20 +78,10 @@ export function fileApi(platform, run) {
   };
   const directory = async (path, options) => {
     if (platform === "windows") return jsonRows(checked(await ps(`@(Get-ChildItem -LiteralPath ${psQuote(path)} -Force | Where-Object { $_.Name -ne '.git' } | Select-Object -First 501 | ForEach-Object { @{name=$_.Name;dir=($_.PSIsContainer -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint))} }) | ConvertTo-Json -Compress`, options)).stdout);
-  // find prints each directory twice in a row, so its type costs no extra call.
   // -H follows only the folder itself (a link to a folder should open); entries are not followed.
   const fast = await run("find", ["-H", ".", "-mindepth", "1", "-maxdepth", "1", "!", "-name", ".git",
     "(", "-type", "d", "-print0", "-print0", "-o", "-print0", ")"], { ...options, cwd: path }).catch(() => null);
-  if (fast?.code === 0) {
-    // Names kept: two per folder, one for anything else; "./" dropped.
-    const names = fast.stdout.split("\0").slice(0, -1).slice(0, 2 * (500 + 2)).map((name) => name.slice(2));
-    // A name equal to the one before it, unless that was itself a pair's second, is a folder's second print.
-    const paired = names.reduce((out, name) => [...out, name === names[out.length - 1] && !out.at(-1)], []);
-    const second = paired;
-    const out = names.flatMap((name, i) => (second[i] ? [] : [{ name, dir: second[i + 1] === true }]));
-    // One past the cap tells the panel the folder was cut short.
-    return out.slice(0, 500 + 1);
-  }
+  if (fast?.code === 0) return pairEntries(fast.stdout.split("\0").slice(0, -1));
   // Fallback when find is missing or its output would pass exec's limit; one extra entry detects truncation.
   const script = `
 n=0
@@ -63,9 +114,15 @@ test -d "$1"`;
     if (platform === "windows") return checked(await ps(`if (Test-Path -LiteralPath ${psQuote(dir)}) { Get-ChildItem -LiteralPath ${psQuote(dir)} -Filter '*.path' -File | ForEach-Object { [Console]::Write([IO.File]::ReadAllText($_.FullName)+[char]0); Remove-Item -LiteralPath $_.FullName -Force } }`));
     return run("sh", ["-c", 'for f in "$1"/*.path; do [ -f "$f" ] || continue; cat "$f"; printf "\\0"; rm -f "$f"; done', "sh", dir]);
   };
-  const read = async (path, limit = 1048576) => platform === "windows"
-    ? checked(await ps(`$s=[IO.File]::Open(${psQuote(path)},'Open','Read','ReadWrite'); try { $b=New-Object byte[] ([Math]::Min($s.Length,${Number(limit)})); $n=$s.Read($b,0,$b.Length); [Console]::Write([Text.Encoding]::UTF8.GetString($b,0,$n)) } finally { $s.Dispose() }`)).stdout
-    : checked(await run("head", ["-c", String(limit), path])).stdout;
+  const read = async (path, limit = 1048576, options) => platform === "windows"
+    ? checked(await ps(`$s=[IO.File]::Open(${psQuote(path)},'Open','Read','ReadWrite'); try { $b=New-Object byte[] ([Math]::Min($s.Length,${Number(limit)})); $n=$s.Read($b,0,$b.Length); [Console]::Write([Text.Encoding]::UTF8.GetString($b,0,$n)) } finally { $s.Dispose() }`, options)).stdout
+    : checked(await run("head", ["-c", String(limit), path], options)).stdout;
+  const tree = async (root, rels = [], options) => {
+    const folders = rels.length ? rels : [""];
+    const r = platform === "windows" ? await ps(winTree(root, folders), options) : await run("sh", ["-c", unixTree(platform), "tree", root, ...folders], options);
+    if (r.code !== 0 || r.truncated || /truncat/i.test(`${r.stdout ?? ""}${r.stderr ?? ""}`)) throw new Error(r.stderr || "Cannot list this folder");
+    return r.stdout;
+  };
   const walk = async (roots, { depth = 4, names = [], skip = ["node_modules", ".venv", "venv", "target", "dist", "build", ".next", ".turbo", ".cache", "vendor", "Pods", "DerivedData", "coverage", "__pycache__", ".Trash", "Library"], newer = null } = {}) => {
     if (!roots.length) return [];
     if (platform === "windows") return jsonRows(checked(await ps(`$skip=@(${skip.map(psQuote).join(",")}); $names=@(${names.map(psQuote).join(",")}); function walk($dir,$level) { if ($level -gt ${Number(depth)}) { return }; foreach ($f in Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop) { if (($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $skip -contains $f.Name) { continue }; if (($names.Count -eq 0 -or $names -contains $f.Name)${newer == null ? "" : ` -and $f.LastWriteTimeUtc -gt [DateTimeOffset]::FromUnixTimeMilliseconds(${Number(newer)}).UtcDateTime`}) { $f.FullName }; if ($f.PSIsContainer -and $skip -notcontains $f.Name -and $names -notcontains $f.Name) { walk $f.FullName ($level+1) } } }; @(foreach ($root in @(${roots.map(psQuote).join(",")})) { if (Test-Path -LiteralPath $root -PathType Container) { walk $root 1 } }) | ConvertTo-Json -Compress`)).stdout);
@@ -107,5 +164,5 @@ test -d "$1"`;
   const migrate = (from, to) => platform === "windows"
     ? ps(`$from=${psQuote(from)}; $to=${psQuote(to)}; if (-not (Test-Path -LiteralPath (Join-Path $to 'store.json')) -and (Test-Path -LiteralPath $from -PathType Container)) { [IO.Directory]::CreateDirectory($to) | Out-Null; Get-ChildItem -LiteralPath $from -Force | Copy-Item -Destination $to -Recurse -Force; Get-ChildItem -LiteralPath $to -Filter '*.lock' -Force | Remove-Item -Force -Recurse }`)
     : run("sh", ["-c", 'if [ ! -e "$2/store.json" ] && [ -d "$1" ]; then mkdir -p "$2" && cp -R "$1/." "$2/" && rm -rf "$2"/*.lock; fi', "sh", from, to]);
-  return { recent, migrate, mkdir, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch, stat, encode };
+  return { recent, migrate, mkdir, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch, stat, encode, tree };
 }

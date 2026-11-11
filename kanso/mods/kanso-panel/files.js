@@ -11,14 +11,17 @@ import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared,
 import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
 import { walkLayout } from "./layout.js";
-import { listFailure, remoteDue } from "./remote-file.js";
+import { listFailure, remoteDue, parseTree, pollStart, pollNext, armPoll, takeStamp, staleView, asOf } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { readingLines } from "./doc.js";
-import { skeleton, breathe } from "./ui.js";
+import { skeleton, breathe, quietLink, tokens } from "./ui.js";
 
 const PER_FOLDER = 500, TOTAL = 5000;
 const RETURN = "kanso.files.return";
+const ranked = (entries, room) => entries.slice(0, Math.max(0, room)).toSorted((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+const markOf = (xy) => xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
+const marksFrom = (top, rows) => Object.fromEntries(rows.filter(Boolean).slice(0, TOTAL).map((entry) => [`${top}/${entry.slice(3)}`, markOf(entry.slice(0, 2))]));
 
 async function directory(path, on) {
   return (await serviceOn(fileApi, on)).directory(path);
@@ -35,9 +38,9 @@ export class Files {
       setShared(RETURN, null);
       if (back.context === key()) { this.context = back.context; ({ cwd: this.root, on: this.on } = location()); this.folders = new Set(back.folders ?? []); }
     }
+    this.poll = pollStart(); this.stamp = null; this.fresh = null; this.held = null; this.arm = null;
     this.refresh(cx);
     cx.timer.every(10000, (cx) => { if (!this.on) this.refresh(cx); });
-    cx.timer.every(5000, (cx) => { if (remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) this.refresh(cx); });
   }
 
   saveState() {
@@ -78,7 +81,7 @@ export class Files {
     const entries = await directory(path ? paths.join(root, path) : root, on);
     if (key() !== context || (path && !this.folders.has(path))) return;
     const used = [...this.entries.entries()].filter(([p]) => p !== path).reduce((n, [, e]) => n + e.length, 0);
-    const kept = entries.slice(0, Math.max(0, Math.min(PER_FOLDER, TOTAL - used))).toSorted((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+    const kept = ranked(entries, Math.min(PER_FOLDER, TOTAL - used));
     this.entries = new Map([...this.entries, [path, kept]]);
     this.rev = this.rev + 1;
     if (entries.length > PER_FOLDER || used + entries.length > TOTAL) this.limited = true;
@@ -96,31 +99,92 @@ export class Files {
       this.folders = new Set(mem?.folders ?? []);
       this.pendingFile = mem?.file ?? null;
       this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
+      this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
       this.rev = this.rev + 1;
     }
     if (!cwd) return;
     this.loading = true;
     this.limited = false;
-    cx.spawn(async cx => {
+    cx.spawn(async (cx) => {
       try {
-        await mapSeries(["", ...this.folders], async (path) => {
-          try { await this.loadFolder(path, context); }
-          catch (e) { if (path) this.folders = new Set([...this.folders].filter((folder) => folder !== path && !folder.startsWith(`${path}/`))); else throw e; }
-        });
-        const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
-        const status = top?.code === 0
-          ? await exec("git", ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null)
-          : null;
-        const marks = Object.fromEntries(status?.code === 0 ? status.stdout.split("\0").filter(Boolean).slice(0, TOTAL).map((entry) => {
-          const xy = entry.slice(0, 2);
-          return [`${top.stdout.trim()}/${entry.slice(3)}`, xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M"];
-        }) : []);
+        if (on) await this.loadRemote(cwd, context, cx);
+        else await this.loadHere(cwd, on, context, cx);
+      } catch (e) {
         if (key() !== context) return;
-        this.marks = marks; this.rev = this.rev + 1; this.error = null; this.watch(cwd, cx);
-        if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
-      } catch (e) { if (key() === context) this.error = listFailure(e, this.on); }
-      finally { this.loading = false; cx.notify(); }
+        if (!on) { this.error = listFailure(e, on); return; }
+        const view = staleView(Boolean(this.entries.get("")?.length), this.fresh, Date.now(), listFailure(e, on));
+        if (view.keep) { this.held = view.hold; this.error = null; }
+        else { this.error = view.error; this.held = null; }
+        this.poll = pollNext(this.poll, "failed");
+      } finally {
+        this.loading = false;
+        if (this.on && key() === context) armPoll.call(this, cx, (tick) => this.probe(tick));
+        cx.notify();
+      }
     });
+  }
+
+  async loadHere(cwd, on, context, cx) {
+    await mapSeries(["", ...this.folders], async (path) => {
+      try { await this.loadFolder(path, context); }
+      catch (e) { if (path) this.folders = new Set([...this.folders].filter((folder) => folder !== path && !folder.startsWith(`${path}/`))); else throw e; }
+    });
+    const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
+    const status = top?.code === 0
+      ? await exec("git", ["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=normal"], { cwd, on }).catch(() => null)
+      : null;
+    if (key() !== context) return;
+    this.marks = status?.code === 0 ? marksFrom(top.stdout.trim(), status.stdout.split("\0")) : {};
+    this.rev = this.rev + 1; this.error = null; this.watch(cwd, cx);
+    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
+  }
+
+  async loadRemote(cwd, context, cx) {
+    const snap = parseTree(await (await serviceOn(fileApi, this.on)).tree(cwd, ["", ...this.folders]));
+    if (key() !== context) return;
+    const placed = snap.folders.reduce((acc, { rel, entries }) => {
+      if (rel && !acc.open.has(rel)) return acc;
+      const used = [...acc.entries.values()].reduce((n, rows) => n + rows.length, 0);
+      const kept = ranked(entries, Math.min(PER_FOLDER, TOTAL - used));
+      return { entries: new Map([...acc.entries, [rel, kept]]), open: acc.open, limited: acc.limited || entries.length > PER_FOLDER || used + entries.length > TOTAL };
+    }, { entries: new Map(), open: this.folders, limited: false });
+    const got = new Set(snap.folders.map((folder) => folder.rel));
+    this.entries = placed.entries;
+    this.folders = new Set([...this.folders].filter((folder) => got.has(folder)));
+    this.limited = placed.limited;
+    this.marks = snap.top ? marksFrom(snap.top, snap.rows) : {};
+    this.stamp = snap.stamp ?? this.stamp;
+    this.fresh = Date.now(); this.held = null; this.error = null;
+    this.poll = pollNext(this.poll, "changed");
+    this.rev = this.rev + 1;
+    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
+  }
+
+  probe(cx) {
+    const on = this.on, root = this.root;
+    if (!remoteDue(on, window()?.active, walkLayout(layout(), "panel-body")?.hidden) || !root) return;
+    cx.spawn(async (cx) => {
+      const { outcome, next } = await takeStamp(async () => (await serviceOn(fileApi, on)).stat(root), this.stamp);
+      if (this.on !== on || this.root !== root) return;
+      if (outcome === "changed") this.refresh(cx);
+      else {
+        if (outcome === "seen") this.stamp = next;
+        if (outcome === "failed") {
+          const view = staleView(Boolean(this.entries.get("")?.length), this.fresh, Date.now(), listFailure(new Error("timed out"), on));
+          if (view.keep) { this.held = view.hold; this.error = null; }
+          else if (!this.error) this.error = view.error;
+        }
+        this.poll = pollNext(this.poll, outcome);
+        armPoll.call(this, cx, (tick) => this.probe(tick));
+        cx.notify();
+      }
+    });
+  }
+
+  retry(cx) {
+    this.poll = pollStart();
+    this.arm = null;
+    this.refresh(cx);
   }
 
   toggle(path, cx) {
@@ -216,6 +280,7 @@ export class Files {
 
   render(cx) {
     if (key() !== this.context) this.refresh(cx);
+    if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) armPoll.call(this, cx, (tick) => this.probe(tick));
     const t = theme();
     const items = this.file ? [] : this.rows();
     return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
@@ -242,7 +307,12 @@ export class Files {
               if (item && !item.entry.dir) this.openWith(path);
             }).size_full())
           .child(Scrollbar.vertical("files-rows").absolute().inset_0())))
-        .when(Boolean(this.error), el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.error)))
+        .when(Boolean(this.held), (el) => el.child(h_flex().id("files-stale").px(8).py(4).gap(8).items_center()
+          .child(div().text_size(12).text_color(t.dim).child(asOf(this.held.at, Date.now())))
+          .child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), tokens(t)))))
+        .when(Boolean(this.error), (el) => el.child(h_flex().id("files-error").p(8).gap(8).items_center()
+          .child(div().text_size(12).text_color(t.dim).child(this.error))
+          .when(Boolean(this.on), (row) => row.child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), tokens(t))))))
         .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
         .when(!this.error && !this.loading && !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.root ? "No files" : "No folder")))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))

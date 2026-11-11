@@ -561,7 +561,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
-    again when its folder changes (every 5 s on another computer), with Open with, read-again and close:
+    again only when that file changed, with Open with, read-again and close:
     code read-only, a picture (png jpg jpeg gif webp svg, name and pixel size when known), Markdown as `doc.js` `MarkdownDoc`
     (embedded pictures on another computer), formatted
     and edited in place (a double-click opens one block, a table as cells;
@@ -582,8 +582,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     while shown; Stop: SIGTERM on a second press, then SIGKILL.
     `look.js` (Images, panel id `look`, `eye.svg`): no mod hears a click on
     a terminal's link, so it reads the terminal in focus (`hc read --lines
-    400`, every 4 s while shown; pinnable) and a session's transcript
-    (`transcript.js`). Elsewhere it is read there, drawn from a copy here, and a note still sends. Pictures already found are rows in `kanso.db`
+    400` when that file changes; pinnable) and a session's transcript
+    (`transcript.js`). Elsewhere it is checked before a read, drawn from a copy here. Over 2 MB waits, and a note still sends. Pictures already found are rows in `kanso.db`
     (path, first-seen order, color, there) with the offset of the last whole
     line; the next read greps only new whole lines, and a rewritten file is
     read once and replaces its rows. A missing file, or one that will not
