@@ -15,6 +15,7 @@ release.
 
 ### Changed
 
+- A beta and a release candidate can be published before a version is the one everyone gets.
 - Docs: the README, the gallery card and the site say what kansō does on macOS, Windows and Linux.
 
 ## [3.29.0] - 2026-11-11
