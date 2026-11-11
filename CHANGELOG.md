@@ -21,14 +21,14 @@ release.
 
 ### Changed
 
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
+- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
 - A finished agent's row shows what it last said. Files, commits and the pull request stay on the pane header.
 - An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
 - What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
 - When memory is low, the notice says "Memory N% free", the same words as the status bar.
 - When a sleep cannot finish, the notice and the Asleep line say the same sentence. Retry and undo stay on that line.
 - Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
-- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
-- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
 
 ### Fixed
 
