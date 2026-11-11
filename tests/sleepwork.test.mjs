@@ -343,10 +343,9 @@ test("an Enter decided by a window that lost the row meanwhile is never sent", a
   const { world, kdb, id, worker, steps } = await setup(t, { t1: "asks" });
   const a = worker("w-a");
   await drive(a, 40, async () => (await steps()).Alice === "exiting");
-  const stale = clone((await kdb.sleeps()).find((r) => r.id === id));
   // b took it over while a was looking (a's heartbeat stopped for a while), and answered the question itself.
   await kdb.run(`UPDATE sleeps SET pending='w-b', pending_at=${Date.now()} WHERE id='${id}';`);
-  await a.advance(stale, cx);
+  await a.tick(cx);
   assert.deepEqual(world.sent("keys", "enter"), [], "a sends nothing on what it read before");
 });
 
@@ -507,6 +506,7 @@ test("two sleeps move at once: one terminal's slow read does not hold the other"
   };
   const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], world.host);
   const w = new SleepWork(kdb, () => {}, "w-a");
+  await w.tick(cx);
   const tickP = w.tick(cx);
   try {
     const [other] = await Promise.race([otherRead, tickP.then(() => { throw new Error("The other terminal was never read"); })]);

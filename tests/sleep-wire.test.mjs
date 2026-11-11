@@ -220,7 +220,7 @@ test("a local sleep and wake of one idle agent, counted on this computer", async
   assert.equal(sleep.exec, 12);
   assert.equal(sleep.sqlite, 9);
   assert.equal(sleep.files, 0);
-  assert.equal(sleep.hc, 6);
+  assert.equal(sleep.hc, 5);
   assert.equal(wake.exec, 8);
   assert.equal(wake.sqlite, 6);
   assert.equal(wake.files, 1);

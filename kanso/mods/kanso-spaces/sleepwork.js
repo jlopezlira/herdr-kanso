@@ -478,6 +478,9 @@ function followSql(kdb, me, row, agent, next, now) {
 }
 const flightOf = (row, agent, act) => (act ? JSON.stringify([row.id, agent.conversation, act === "again" ? "return" : act]) : null);
 
+// Here, rows are read again every tick and a look is always due. Far away, rows stay and a look waits for its timer.
+const placePolicy = (machine) => (machine ? { trustRows: true, lookAlways: false } : { trustRows: false, lookAlways: true });
+
 const acts = (machine) => ({
   interrupt: (a) => hc(["keys", seenAddress(a.terminal, machine), "ctrl+c"]),
   exit: (a) => hc(["send", seenAddress(a.terminal, machine), "/exit"]),
@@ -491,6 +494,7 @@ export class SleepWork {
     this.records = records;
     this.changed = changed;
     this.machine = machine || kdb?.machine || null;
+    this.policy = placePolicy(this.machine);
     this.me = me || keptOwner();
     this.held = new Set();
     this.pending = new Set();
@@ -526,23 +530,20 @@ export class SleepWork {
   }
 
   // True while this window holds a row; rows held elsewhere are left to their owner until its heartbeat stops.
-  // Far away, the claim is the whole tick. Here, the terminals are still read, so two sleeps move together.
   async tick(cx, now = Date.now()) {
     if (this.kicked !== this.seenKick) {
       this.seenKick = this.kicked;
       this.rows = null;
       this.looks = new Map();
     }
-    if (!this.machine) this.rows = null;
+    if (!this.policy.trustRows) this.rows = null;
     const cold = !this.rows;
     const before = cold ? await this.claim(now) : new Map();
     const jobs = this.jobs(now);
     const fresh = cold ? jobs.filter((job) => job.kind === "agent" && before.get(job.key) === "requested").map((job) => job.key) : [];
     const work = jobs.filter((job) => job.kind !== "skip" && !fresh.includes(job.key));
-    if (this.machine && fresh.length > 0 && work.length === 0 && this.held.size > 0) return true;
     const stuck = this.stuckAgents();
     if (!this.held.size && stuck.length && now - this.watchedAt >= 5000) return this.watch(stuck, now);
-    if (!this.machine && fresh.length) await Promise.all(jobs.filter((job) => fresh.includes(job.key)).map((job) => this.touch(job.agent)));
     if (!work.length) return this.renew(now);
     await this.play(work.filter((job) => job.kind !== "agent"), now);
     const agents = work.filter((job) => job.kind === "agent");
@@ -559,11 +560,6 @@ export class SleepWork {
     return new Map((wrote[0] ?? []).map((agent) => [`${agent.sleep_id}:${agent.id}`, agent.step]));
   }
 
-  async touch(agent) {
-    const address = seenAddress(agent.terminal, this.machine);
-    if (agent.terminal && terminals().some((terminal) => terminal.address === address)) await termOf(address);
-  }
-
   jobs(now) {
     return (this.rows ?? []).filter((row) => this.held.has(row.id)).map((row) => this.rowJob(row, now)).filter(Boolean);
   }
@@ -578,7 +574,7 @@ export class SleepWork {
     const agent = plan.agent;
     const key = `${row.id}:${agent.conversation}`;
     const blind = Boolean(plan.undo) && agent.step === "left";
-    const waiting = !blind && !lookDue(agent, now, this.looks.get(key), !this.machine);
+    const waiting = !blind && !lookDue(agent, now, this.looks.get(key), this.policy.lookAlways);
     return waiting ? { kind: "skip", row, key } : { kind: "agent", row, agent, agents, undo: Boolean(plan.undo), key };
   }
 
@@ -702,18 +698,6 @@ export class SleepWork {
   }
 
   fact(id, state, why) { return this.records() ? sleepEvent(id, state, why) : null; }
-
-  async advance(row, cx) {
-    const now = Date.now();
-    const agents = agentsOf(row);
-    const plan = sleepStep(row, agents);
-    if (plan.state) return this.play([{ kind: "state", row, plan }], now);
-    if (plan.close) return this.close(row);
-    if (plan.finish) return this.play([{ kind: "finish", row, agents }], now);
-    if (!plan.agent) return;
-    const agent = plan.agent;
-    return this.observeAll([{ kind: "agent", row, agent, agents, undo: Boolean(plan.undo), key: `${row.id}:${agent.conversation}` }], cx, now);
-  }
 
   startAct(key, cx, act) {
     this.pending.add(key);
