@@ -483,11 +483,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
   - With another machine, each is one project-height row: monitor or server
-    icon, medium name (`foreground` connected, `dim` off or unreachable;
-    this computer's host name). Small `dim`: Off, Unreachable, Needs login;
-    a breathing line while loading. Hover or keyboard: power, Retry when
-    unreachable, + when connected; a chevron folds it. Needs login copies
-    `hc machine login <name>` from the tooltip (power's place). Off stores
+    icon, medium name (`foreground` connected, `muted` off, unreachable,
+    or needs login; this computer's host name). Small `dim`: Off, Unreachable,
+    Needs login; a breathing line while loading. Turn on, Retry, and copy stay
+    visible; hover or keyboard shows turn off and + only when connected; a
+    chevron folds it. Copy is `hc machine login <name>`. Off stores
     target, name, via, session and temporary, then `hc machine rm`
     (terminals keep running); nothing under it is listed or read. `false`
     and `null` are none, so add never sends an empty `--via`. On is

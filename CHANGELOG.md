@@ -16,6 +16,7 @@ release.
 ### Fixed
 
 - A switch is a short pill beside its label. Off keeps the knob at the left and on at the right, and the space around the pill still takes the click.
+- A machine that is off, unreachable, or needs a login keeps its name readable, and turn on, Retry, or copy stays on that row. Turn off and a new space still appear only while the pointer or the keyboard is on a connected machine.
 
 ## [3.22.3] - 2026-11-10
 
