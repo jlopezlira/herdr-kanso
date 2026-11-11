@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [Unreleased]
+
+### Changed
+
+- Docs: the README, the gallery card and the site say what kansō does on macOS, Windows and Linux.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added
