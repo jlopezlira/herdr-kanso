@@ -11,8 +11,8 @@ export const ASK_BYTES = 2 * 1024 * 1024;
 export const CHECK_MS = 5000;
 export const SLOW_MS = 30000;
 export const QUIET_LIMIT = 3;
-// Each slice stays under Herdr's exec output cap; a 20 MB file is several.
-export const CHUNK = 2 * 1024 * 1024;
+// 2097150 is a multiple of 3, so only the last slice's base64 is padded, and it stays under the exec cap.
+export const CHUNK = 2097150;
 export const REMOTE_DIR = "data/kanso-panel/remote";
 const DAY = 86400000;
 const QUIET = /unreachable|did not answer|timed out|timeout|econnrefused|connection refused|offline|no route|was lost/i;

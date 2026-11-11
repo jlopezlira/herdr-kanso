@@ -146,7 +146,7 @@ test -d "$1"`;
     if (platform === "windows") return whole
       ? ps(`[Convert]::ToBase64String([IO.File]::ReadAllBytes(${psQuote(path)}))`, options)
       : ps(`$s=[IO.File]::OpenRead(${psQuote(path)}); try { [void]$s.Seek(${Number(range.offset)}, 'Begin'); $b=New-Object byte[] ${Number(range.length)}; $n=$s.Read($b,0,$b.Length); [Convert]::ToBase64String($b,0,$n) } finally { $s.Dispose() }`, options);
-    if (!whole) return run("python3", ["-c", "import sys,base64; f=open(sys.argv[1],'rb'); f.seek(int(sys.argv[2])); sys.stdout.write(base64.b64encode(f.read(int(sys.argv[3]))).decode())", path, String(range.offset), String(range.length)], options);
+    if (!whole) return run("sh", ["-c", "tail -c +\"$2\" \"$1\" | head -c \"$3\" | base64", "slice", path, String(Number(range.offset) + 1), String(Number(range.length))], options);
     return platform === "macos" ? run("base64", ["-i", path], options) : run("base64", [path], options);
   };
   const decodeBase64File = async (from, to, options = {}) => {

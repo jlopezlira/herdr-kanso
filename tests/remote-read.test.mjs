@@ -29,6 +29,10 @@ test("a copy stops at 20 MB and rejects a cut-short read", () => {
   assert.equal(pure.tooBig(pure.BYTE_CAP + 1), true);
   assert.equal(pure.tooBig(Number.NaN), true);
   assert.equal(pure.slices(0).length, 0);
+  assert.equal(pure.CHUNK % 3, 0);
+  assert.equal(pure.slices(pure.CHUNK).length, 1);
+  assert.equal(pure.slices(pure.CHUNK + 1).length, 2);
+  assert.ok(pure.slices(pure.CHUNK * 2 + 1).slice(0, -1).every((part) => part.length % 3 === 0));
   assert.deepEqual(clone(pure.slices(5, 2)), [{ offset: 0, length: 2 }, { offset: 2, length: 2 }, { offset: 4, length: 1 }]);
   assert.equal(pure.slices(Number.NaN), null);
   assert.equal(pure.cutShort({ truncated: true }), true);
@@ -143,7 +147,8 @@ for (const platform of ["macos", "linux", "windows"]) {
       calls.push([cmd, args]);
       const script = String(args?.at?.(-1) ?? "");
       if (cmd === "stat") return { code: 0, stdout: "4 1700000000\n", stderr: "" };
-      if (cmd === "base64" || cmd === "python3") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
+      if (cmd === "base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
+      if (cmd === "sh" && String(args?.[1] ?? "").includes("tail -c")) return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
       if (cmd === "sh" && String(args?.[1] ?? "").includes("base64 -d")) return { code: 0, stdout: "", stderr: "" };
       if (cmd === "pwsh") return { code: 0, stdout: script.includes("ToBase64String") || script.includes("WriteAllBytes") ? "AQIDBA==\n" : "4 1700000000\n", stderr: "" };
       return { code: 1, stdout: "", stderr: cmd };
@@ -156,14 +161,16 @@ for (const platform of ["macos", "linux", "windows"]) {
     if (platform === "linux") assert.deepEqual(calls.filter((c) => c[0] === "base64").map((c) => c[1]), [["/tmp/a.png"]]);
     if (platform === "macos" || platform === "linux") {
       assert.deepEqual(calls.find((c) => c[0] === "stat")[1], platform === "macos" ? ["-f", "%z %m", "/tmp/a.png"] : ["-c", "%s %Y", "/tmp/a.png"]);
-      assert.equal(calls.some((c) => c[0] === "python3"), true);
+      const range = calls.find((c) => c[0] === "sh" && String(c[1][1]).includes("tail -c"));
+      assert.deepEqual(range[1], ["-c", "tail -c +\"$2\" \"$1\" | head -c \"$3\" | base64", "slice", "/tmp/a.png", "3", "2"]);
+      assert.equal(calls.some((c) => c[0] === "python3"), false);
     }
     if (platform === "windows") {
       const scripts = calls.filter((c) => c[0] === "pwsh").map((c) => String(c[1].at(-1)));
       assert.ok(scripts.some((script) => script.includes("Get-Item") && script.includes("ToUnixTimeSeconds")));
       assert.ok(scripts.some((script) => script.includes("[Convert]::ToBase64String([IO.File]::ReadAllBytes(")));
       assert.ok(scripts.some((script) => script.includes("OpenRead") && script.includes("Seek") && !script.includes("sh ")));
-      assert.equal(calls.some((c) => c[0] === "sh" || c[0] === "base64"), false);
+      assert.equal(calls.some((c) => c[0] === "sh" || c[0] === "base64" || c[0] === "python3"), false);
     }
     await api.decodeBase64File("/tmp/in.b64", "/tmp/out.bin");
     if (platform === "macos") assert.deepEqual(calls.filter((c) => c[0] === "base64" && c[1][0] === "-D").map((c) => c[1]), [["-D", "-i", "/tmp/in.b64", "-o", "/tmp/out.bin"]]);
@@ -209,7 +216,7 @@ async function remoteBring(platform) {
     }
     if (cmd === "uname") return { code: 0, stdout: platform === "macos" ? "Darwin\n" : "Linux\n", stderr: "" };
     if (cmd === "stat") return { code: 0, stdout: state.stat, stderr: "" };
-    if (cmd === "python3") return { code: 0, stdout: state.stdout, stderr: "" };
+    if (cmd === "sh" && String(args[1] ?? "").includes("tail -c")) return { code: 0, stdout: state.stdout, stderr: "" };
     if (cmd === "base64") return { code: 0, stdout: state.stdout, stderr: "" };
     return { code: 1, stdout: "", stderr: cmd };
   };
@@ -254,9 +261,10 @@ test("a picture over 2 MB is not copied until it is asked for", async () => {
     const big = pure.ASK_BYTES + 1;
     box.state.stat = `${big} 9\n`;
     assert.deepEqual(clone(await box.bring("/remote/big.png", "light")), { deferred: true, size: big, mtime: 9 });
-    assert.equal(box.calls.some((call) => call[0] === "base64" || call[0] === "python3"), false);
+    assert.equal(box.calls.some((call) => call[0] === "base64" || call[0] === "python3" || String(call[1]?.[1] ?? "").includes("tail -c")), false);
     await assert.rejects(box.bring("/remote/big.png", "light", { ask: true }), /cut short/);
-    assert.equal(box.calls.some((call) => call[0] === "python3"), true);
+    assert.ok(box.calls.some((call) => call[2] === "light" && String(call[1]?.[1] ?? "").includes("tail -c")));
+    assert.equal(box.calls.some((call) => call[0] === "python3"), false);
     assert.ok(box.calls.some((call) => call[0] === "sh" && String(call[1][1]).includes(">>")));
     assert.ok(box.calls.some((call) => call[0] === "base64" && call[1][0] === "-D"));
     assert.equal((await readdir(join(box.dir, "data/kanso-panel/remote"))).some((name) => name.includes(".b64")), false);
