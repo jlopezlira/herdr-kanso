@@ -30,8 +30,9 @@
 Tell your agent: **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 
 Or, from a clone: `sh ./scripts/local-install.sh`. You need the Herdr app;
-`gh` for the PR and Shipped panels; Node 22.15 or newer for Spend. kansō
-updates itself: a release shows as a row above Settings, and a click installs
+`gh` for the PR and Shipped panels; Node 22.15 or newer for Spend and Memory.
+Memory supports macOS and Windows; Windows uses its built-in PowerShell and
+Task Scheduler without administrator rights. kansō updates itself: a release shows as a row above Settings, and a click installs
 it. `ctrl-shift-l` goes back to your previous layout.
 
 ## What it does

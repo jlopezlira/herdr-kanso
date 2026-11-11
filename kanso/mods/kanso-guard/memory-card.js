@@ -40,7 +40,7 @@ export function memorySpec(data, digest) {
     w.recycles ? { value: String(w.recycles), unit: w.recycles === 1 ? "recycle" : "recycles" } : null,
     w.closed ? { value: String(w.closed), unit: w.closed === 1 ? "closed" : "closed" } : null,
     w.freedMB ? { value: size(w.freedMB), unit: "given back" } : null,
-    w.windowMB !== null ? { value: size(w.windowMB), unit: "Herdr window" } : null,
+    w.windowMB !== null ? { value: size(w.windowMB), unit: data?.metric === "working set" ? "window working set" : "Herdr window" } : null,
     { value: String(w.restarts), unit: w.restarts === 1 ? "window restart" : "window restarts" },
   ].filter(Boolean).slice(0, 6);
   const week = digest?.series?.week;

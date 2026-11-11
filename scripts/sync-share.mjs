@@ -90,7 +90,7 @@ async function platformShares() {
     if (folder === PLATFORM) continue;
     const names = await readdir(new URL(folder, root));
     const planned = [...new Set([...names, ...[...overrides.keys()].filter((copy) => copy.startsWith(folder)).map((copy) => copy.slice(folder.length))])];
-    const modules = await Promise.all(planned.filter((name) => name.endsWith(".js") && !platformFile(name))
+    const modules = await Promise.all(planned.filter((name) => /\.m?js$/.test(name) && !platformFile(name))
       .map((name) => readFile(new URL(overrides.get(folder + name) ?? folder + name, root), "utf8")));
     const needed = platformDependencies(modules, canonical);
     for (const name of needed) shared.get(name).copies.push(folder + name);
