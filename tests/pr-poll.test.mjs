@@ -5,10 +5,20 @@ import { load, context, tape, singleUse } from "./helpers.mjs";
 
 const TONE = { dim: "dim", muted: "muted", text: "text", border: "border", red: "red", yellow: "yellow", green: "green" };
 
+const ticksFrom = (t, from, pending, until, readDue, tick) => {
+  if (t > until) return [];
+  const due = readDue(from, t, pending);
+  const rest = ticksFrom(t + tick, due ? t : from, pending, until, readDue, tick);
+  return due ? [t, ...rest] : rest;
+};
+
+const refreshTicks = ({ pending = false, until = 60_000, loadedAt = 0, readDue, tick }) => ticksFrom(tick, loadedAt, pending, until, readDue, tick);
+
 test("the panel reads once a minute at rest, and every 20 seconds while a check runs", async () => {
-  const { refreshTicks, readDue, TICK_MS, QUIET_MS } = await load("kanso-panel/pr-poll.js", ["refreshTicks", "readDue", "TICK_MS", "QUIET_MS"], {});
-  assert.equal(refreshTicks().join(","), "60000");
-  assert.equal(refreshTicks({ pending: true }).join(","), "20000,40000,60000");
+  const { readDue, TICK_MS, QUIET_MS } = await load("kanso-panel/pr-poll.js", ["readDue", "TICK_MS", "QUIET_MS"], {});
+  const at = (opts) => refreshTicks({ readDue, tick: TICK_MS, ...opts });
+  assert.equal(at().join(","), "60000");
+  assert.equal(at({ pending: true }).join(","), "20000,40000,60000");
   assert.equal(readDue(0, TICK_MS, false), false);
   assert.equal(readDue(0, QUIET_MS + 1, false), true);
   assert.equal(readDue(0, TICK_MS, true), true);
@@ -59,15 +69,13 @@ test("merge is offered only when it is ready, and the header does not say ready 
     number: 1, state: "OPEN", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", baseRefName: "main",
     statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS", name: "ci" }],
   };
-  assert.equal(headerHold(clean), "Checking whether it can merge…");
-  assert.equal(/ready/i.test(headerHold(clean)), false);
+  assert.equal(headerHold(clean), null);
   assert.equal(headerHold({ ...clean, viewerPermission: "WRITE" }), null);
-  assert.equal(headerHold({ ...clean, viewerPermission: "READ" }), "No permission to merge");
+  assert.equal(headerHold({ ...clean, viewerPermission: "READ" }), null);
   const { digestPr } = await load("kanso-strip/main.js", ["digestPr"], {});
-  assert.equal(digestPr(clean).hold, "Checking whether it can merge…");
-  assert.equal(/ready/i.test(String(digestPr(clean).hold)), false);
+  assert.equal(digestPr(clean).hold, null);
   assert.equal(digestPr({ ...clean, viewerPermission: "WRITE" }).hold, null);
-  assert.equal(digestPr({ ...clean, viewerPermission: "READ" }).hold, "No permission to merge");
+  assert.equal(digestPr({ ...clean, viewerPermission: "READ" }).hold, null);
   const blocked = digestPr({ ...clean, mergeStateStatus: "BLOCKED", reviewDecision: "REVIEW_REQUIRED" });
   assert.equal(blocked.hold, "Review required");
 });
@@ -142,8 +150,8 @@ test("at rest one open pull request is one view, and a running check does not ad
   assert.equal(panel.checks().some((check) => check.state === "pending"), true);
   assert.equal(calls.filter((call) => call.command === "gh" && call.args[1] === "view").length, 1);
   assert.equal(calls.some((call) => call.args[1] === "list"), false);
-  const { refreshTicks } = await load("kanso-panel/pr-poll.js", ["refreshTicks"], {});
-  assert.equal(refreshTicks({ pending: true }).length, 3);
+  const { readDue, TICK_MS } = await load("kanso-panel/pr-poll.js", ["readDue", "TICK_MS"], {});
+  assert.equal(refreshTicks({ pending: true, readDue, tick: TICK_MS }).length, 3);
 
   calls.length = 0;
   panel.listing = true;

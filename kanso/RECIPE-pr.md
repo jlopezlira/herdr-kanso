@@ -51,8 +51,8 @@ and tone, hairlines between list rows. Top to bottom:
   computing. Failing checks, including GitHub's unstable state, show
   those words and no Merge. Merge (30 tall, second press within 4 s,
   red while armed) is shown only for "Ready to merge". The pane header
-  uses these same words and does not call it ready until it knows you
-  can merge. Quiet links: Ready for review or Back to draft,
+  uses these same words for checks and reviews, says nothing about
+  permission, and does not call a pull request ready. Quiet links: Ready for review or Back to draft,
   and Close. A closed one offers Reopen. Author and age (12, dim),
   then light numbers (22/28): files, added, removed, threads, checks.
 - Description: the PR's body as Markdown (`TextView.markdown`,

@@ -116,7 +116,7 @@ const CHECKS = { fail: "failing", pending: "running", unknown: "unknown", pass: 
 export const checksOf = (rollup) => CHECKS[rollupState(rollup)] ?? null;
 const PR_FIELDS = "number,state,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,statusCheckRollup";
 
-// Open pull request for the header. `hold` is why it is not ready; unknown permission is not ready.
+// Open pull request for the header. `hold` is why it cannot merge. Permission is not a header fact.
 export function digestPr(view) {
   if (!view?.number || view.state !== "OPEN") return null;
   return { number: view.number, state: view.state, checks: checksOf(view.statusCheckRollup), hold: headerHold(view) };

@@ -19,18 +19,6 @@ export function pollTick({ shown, away, picker, due }) {
   return { away: false, read: Boolean(away) || Boolean(due) };
 }
 
-const ticksFrom = (t, from, pending, until) => {
-  if (t > until) return [];
-  const due = readDue(from, t, pending);
-  const rest = ticksFrom(t + TICK_MS, due ? t : from, pending, until);
-  return due ? [t, ...rest] : rest;
-};
-
-// Reads a timer would start in one quiet minute after a read at t = 0, or while a check is still running.
-export function refreshTicks({ pending = false, until = 60_000, loadedAt = 0 } = {}) {
-  return ticksFrom(TICK_MS, loadedAt, pending, until);
-}
-
 export const authFresh = (auth, now) => auth?.at != null && now - auth.at < AUTH_MS;
 
 export const threadKey = (url, updatedAt) => `${url}\0${updatedAt ?? ""}`;
