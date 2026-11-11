@@ -123,10 +123,6 @@ test("files, preview and a document show the shared skeleton while they are read
   assertSkeleton(files.bones(c));
   Object.assign(files, { loading: false, error: null });
   assert.equal(walk(files.render({})).texts.includes("No files"), true);
-  Object.assign(files, { file: "a.txt", text: null, code: null, fileError: null });
-  assertSkeleton(files.render({}));
-  Object.assign(files, { fileError: "Cannot preview this file" });
-  assert.equal(walk(files.render({})).texts.includes("Cannot preview this file"), true);
 
   const { Preview } = await load("kanso-panel/preview.js", ["Preview"], host);
   const preview = new Preview();

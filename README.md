@@ -79,8 +79,8 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   pin it and say what about it; ⌘↩ sends every note to the agent. Files,
   Preview and Images work for a space on another computer, and a note still sends.
 - **Review without leaving.** Pull requests with diff, checks and threads, and
-  one click to hand the feedback to an agent. Markdown files open to read and
-  edit in place; `md-review plan.md` from an agent asks for your comments.
+  one click to hand the feedback to an agent. Any file that is not a picture opens in Preview,
+  and it can be edited when the read has no NUL and fits in 1 MiB, on this computer or another; `md-review plan.md` from an agent asks for your comments.
 - **Take over in one key.** Cmd+Shift+O opens the agent's folder, worktree
   included, in your editor. Cmd+Alt+S hands a pane's work to another agent.
 - **What your agents leave running.** Ports: dev servers and the panes that
