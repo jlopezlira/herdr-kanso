@@ -17,7 +17,7 @@ import { tryOr, tryOrAsync } from "./pure.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { DEFAULTED, ENV_NAMES, PROBE_MS, applySimDefault, probeTools, readNamedEnv } from "./sim-register.js";
-import { loadPieces, runs, shown, setPiece, STORE, panelOff } from "./pieces.js";
+import { pieces, runs, shown, setPiece, STORE, panelOff } from "./pieces.js";
 
 function storedObject(key) {
   try {
@@ -71,7 +71,7 @@ const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filte
 // Panels you never placed keep their catalog place after the ones you dragged.
 function panelList() {
   const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
-  const order = list(ORDER), map = loadPieces(shared, setShared);
+  const order = list(ORDER), map = pieces(shared);
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
   return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
@@ -83,7 +83,7 @@ function movePanel(from, to) {
 }
 
 function setPanelOn(id, on) {
-  setShared(STORE, setPiece(loadPieces(shared, setShared), `panel.${id}`, on ? "show" : "hide"));
+  setShared(STORE, setPiece(pieces(shared), `panel.${id}`, on ? "show" : "hide"));
 }
 
 const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
@@ -148,13 +148,13 @@ export default class Tabs extends View {
   defaultSimulator(cx) {
     if (shared(DEFAULTED)) return;
     const platform = window()?.platform ?? "macos";
-    const before = JSON.stringify(panelOff(loadPieces(shared, setShared)));
+    const before = JSON.stringify(panelOff(pieces(shared)));
     this.simSettled = false;
     const finish = (off) => {
       if (this.simSettled) return;
       this.simSettled = true;
-      if (off && JSON.stringify(panelOff(loadPieces(shared, setShared))) === before) {
-        setShared(STORE, off.reduce((map, id) => setPiece(map, `panel.${id}`, "hide"), loadPieces(shared, setShared)));
+      if (off && JSON.stringify(panelOff(pieces(shared))) === before) {
+        setShared(STORE, off.reduce((map, id) => setPiece(map, `panel.${id}`, "hide"), pieces(shared)));
       }
       if (!shared(DEFAULTED)) setShared(DEFAULTED, true);
       cx.notify();
@@ -164,7 +164,7 @@ export default class Tabs extends View {
       try {
         const env = await readNamedEnv(platform, exec, ENV_NAMES, powershell);
         const tools = await probeTools({ platform, home: home(), env, run: exec, api: pathApi(platform) });
-        if (JSON.stringify(panelOff(loadPieces(shared, setShared))) !== before) { finish(null); return; }
+        if (JSON.stringify(panelOff(pieces(shared))) !== before) { finish(null); return; }
         const next = applySimDefault(JSON.parse(before), tools, false);
         finish(JSON.stringify(next.off) === before ? null : next.off);
       } catch { finish(null); }
@@ -364,7 +364,7 @@ export default class Tabs extends View {
     // Kanso settings lists the panels from here (it can't import this file).
     const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ?? null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
-    const map = loadPieces(shared, setShared);
+    const map = pieces(shared);
     const update = this.updater?.available() ?? null;
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);

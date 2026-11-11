@@ -533,7 +533,9 @@ test("with While you were away off, a pull request read records no fact", async 
   await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
   await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
   const observed = async (hidden) => {
-    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], { exec, shared: () => hidden });
+    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+      exec, shared: (key) => (key === "kanso.pieces" ? Object.fromEntries(hidden.map((id) => [id, "hide"])) : null),
+    });
     await new PullRequest(db).keepPrFacts([{ url: "https://github.com/o/r/pull/4", number: 4, state: "OPEN" }]);
     return (await db.read("SELECT COUNT(*) AS n FROM since_observed;"))[0].n;
   };

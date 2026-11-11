@@ -11,11 +11,13 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.30.0] - 2026-11-11
+## [Unreleased]
 
 ### Added
 
 - Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
+
+## [3.29.1] - 2026-11-11
 
 ### Changed
 

@@ -6,11 +6,12 @@ import { join } from "node:path";
 import { load } from "./helpers.mjs";
 import {
   PIECES, GROUPS, STATE_LABEL, STORE, MIGRATED, pieceOf, choice, shown, runs, setPiece,
-  migratePieces, loadPieces, filterPieces, groupsOf, withRoster,
+  migratePieces, loadPieces, pieces, filterPieces, groupsOf, withRoster,
 } from "../kanso/mods/kanso-settings/pieces.js";
 
 const LEFT_OUT = ["status.needs", "status.memory", "status.ports", "status.containers", "status.reviews", "status.spend", "pr.directory", "pr.agent", "pr.write", "files.named", "toast.pr", "toast.agent", "header.actions", "computers.awake"];
 const STATES = new Set(["show", "needed", "hide"]);
+const JOBS = new Set(["git", "gh", "lsof", "docker", "ps", "remote"]);
 
 test("the registry ids are unique and each default is one of its states", () => {
   const ids = PIECES.map((row) => row.id);
@@ -23,9 +24,17 @@ test("the registry ids are unique and each default is one of its states", () => 
     assert.ok(row.states.every((state) => STATES.has(state)), row.id);
     assert.ok(row.states.includes(row.default), row.id);
     assert.equal(STATE_LABEL[row.default] != null, true, row.id);
-    if (row.stops === "work") assert.equal(typeof row.job, "string", row.id);
+    if (row.stops === "work") assert.ok(row.job === null || JOBS.has(row.job), `${row.id} ${row.job}`);
     else assert.equal(row.stops, "draw", row.id);
   }
+  assert.deepEqual(Object.fromEntries(PIECES.filter((row) => row.job).map((row) => [row.id, row.job])), {
+    "sidebar.activity": "ps", "sidebar.tasks": "ps", "sidebar.git": "git", "header.digest": "git", "header.pr": "gh",
+    "panel.files": "git", "panel.pr": "gh", "panel.shipped": "git", "panel.worktrees": "git", "panel.ports": "lsof",
+    "panel.containers": "docker", "panel.memory": "ps", "update.check": "git",
+  });
+  assert.equal(PIECES.find((row) => row.id === "sidebar.away").job, null);
+  assert.equal(PIECES.find((row) => row.id === "sidebar.computers").job, null);
+  assert.equal(pieceOf("panel.workflow").job, null);
   for (const id of LEFT_OUT) assert.equal(PIECES.some((row) => row.id === id), false, id);
   assert.equal(PIECES.some((row) => row.id === "sidebar.away"), true);
   assert.equal(PIECES.find((row) => row.id === "sidebar.needs").default, "needed");
@@ -83,6 +92,11 @@ test("old hide lists and a turned-off update check move once, and a second read 
   store[STORE] = { "sidebar.activity": "show" };
   assert.deepEqual(loadPieces(shared, setShared), { "sidebar.activity": "show" });
   assert.equal(migratePieces({ hidden: [], off: [], autoCheck: true, pieces: {}, migrated: false }).pieces["update.check"], undefined);
+  const read = { [STORE]: { "sidebar.git": "hide" }, "kanso.hidden": ["footer.machine"] };
+  assert.deepEqual(pieces((key) => read[key]), { "sidebar.git": "hide" });
+  assert.deepEqual(read, { [STORE]: { "sidebar.git": "hide" }, "kanso.hidden": ["footer.machine"] });
+  assert.deepEqual(pieces(() => ["footer.machine"]), {});
+  assert.deepEqual(pieces(() => null), {});
 });
 
 test("find matches a label or an id and keeps the window order", () => {
@@ -114,6 +128,22 @@ function callsOf(root) {
   walk(root);
   return { calls, panels };
 }
+
+test("the shared map is migrated from one start, and a draw only reads it", () => {
+  const root = new URL("../kanso/mods", import.meta.url).pathname;
+  const sites = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) { walk(path); continue; }
+      if (!name.endsWith(".js")) continue;
+      const text = readFileSync(path, "utf8");
+      if (/(?<!function )loadPieces\s*\(/.test(text)) sites.push(path.split("/").slice(-2).join("/"));
+    }
+  };
+  walk(root);
+  assert.deepEqual(sites, ["kanso-chrome/main.js"]);
+});
 
 test("every shown or runs id is in the registry, and every registry id is read", () => {
   const { calls, panels } = callsOf(new URL("../kanso/mods", import.meta.url).pathname);

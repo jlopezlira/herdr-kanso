@@ -6,7 +6,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, theme, run, window, props, shared, setShared } from "herdr";
 import { stateMark } from "./marks.js";
-import { loadPieces, shown } from "./pieces.js";
+import { pieces, shown } from "./pieces.js";
 
 
 export default class WorkspaceStatus extends View {
@@ -22,7 +22,7 @@ export default class WorkspaceStatus extends View {
     const label = (icon, text) => h_flex().gap(6).items_center().min_w(0)
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(13).flex_none()).child(div().truncate().child(text));
     const mac = window()?.platform === "macos";
-    const map = loadPieces(shared, setShared);
+    const map = pieces(shared);
     const agentsText = list.length === 0 ? "No agents"
       : working > 0 ? `${working} of ${list.length} working` : `${list.length} ${list.length === 1 ? "agent" : "agents"} idle`;
     return h_flex().size_full().px(12).gap(18).items_center().text_size(11.5).text_color(t.muted)

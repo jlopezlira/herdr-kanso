@@ -15,7 +15,7 @@ function chain(tag) {
         state.calls.push(["when", Boolean(condition)]);
         return condition ? build(node) : node;
       };
-      if (prop === "child") return (child) => { state.calls.push(["child"]); adopt(child); return node; };
+      if (prop === "child") return (child) => { state.calls.push(["child", child]); adopt(child); return node; };
       if (prop === "children") return (list) => { state.calls.push(["children"]); for (const child of list ?? []) adopt(child); return node; };
       return (...args) => { state.calls.push([String(prop), ...args]); return node; };
     },
@@ -162,9 +162,11 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
     props: () => ({}),
     appHome: () => "/tmp/app",
     home: () => "/tmp",
+    InputState: { new: () => ({ value() { return ""; }, on() {} }) },
   };
   const { Settings } = await load("kanso-settings/main.js", ["Settings"], desk);
   const settings = new Settings();
+  settings.init({}, { focus_handle() { return { focus() {} }; }, spawn() {}, notify() {} });
   settings.news = { entries: [], error: null, from: null };
   settings.installed = "3.22.3";
   const pieces = settings.piecesPage(theme, theme);
@@ -176,6 +178,16 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.pieces", { "panel.files": "hide" }]));
   arg(check, "on_click")({}, { notify() {} });
   assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.pieces", { "update.check": "hide" }]));
+  const up = find(pieces, "order-files--1");
+  const down = find(pieces, "order-files-1");
+  assert.equal(up.calls.some((call) => call[0] === "on_click"), false);
+  arg(down, "on_click")();
+  assert.equal(written.at(-1)[0], "kanso.panels.order");
+  assert.equal(written.at(-1)[1][0], "insights");
+  assert.equal(written.at(-1)[1][1], "files");
+  settings.find = { value() { return "zzzz-no-piece"; }, on() {} };
+  const none = settings.piecesPage(theme, theme);
+  assert.ok(find(none, "pieces-none").calls.some((call) => call[0] === "child" && call[1] === "No piece matches."));
 
   const news = settings.newsPage(theme, theme);
   assert.equal(find(news, "auto-update-check"), null);

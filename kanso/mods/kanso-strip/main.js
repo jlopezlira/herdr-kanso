@@ -13,7 +13,7 @@ import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout } from
 import { tryOr, tryOrAsync } from "./pure.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold } from "./ghchecks.js";
-import { loadPieces, shown, runs } from "./pieces.js";
+import { pieces, shown, runs } from "./pieces.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -434,7 +434,7 @@ export default class Strip extends View {
     const col = cols.findIndex((c) => c.panes?.includes(pane));
     const pinned = Boolean(cols[col]?.pin);
     const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
-    const map = loadPieces(shared, setShared);
+    const map = pieces(shared);
     const d = st !== "working" ? shared(DIGEST)?.[pane] : null;
     const digest = drawnDigest(d, map);
     const place = shown("header.place", true, map);
@@ -644,7 +644,7 @@ export default class Strip extends View {
   }
 
   digest(p, cx) {
-    const map = loadPieces(shared, setShared);
+    const map = pieces(shared);
     const want = { git: runs("header.digest", map), pr: runs("header.pr", map) };
     if (!want.git && !want.pr) return;
     this.digesting.add(p.pane);
@@ -1107,7 +1107,7 @@ export default class Strip extends View {
           .bg(at?.ci === i && at?.ri !== r ? t.muted : tone)));
     });
     // The minimap can be turned off in Kanso settings; the model above still runs.
-    if (!shown("strip.minimap", true, loadPieces(shared, setShared))) return div();
+    if (!shown("strip.minimap", true, pieces(shared))) return div();
     const n = st.n ?? DEFAULT_N;
     const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
       .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)

@@ -26,7 +26,7 @@ import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
 import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed, segmented } from "./ui.js";
-import { loadPieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
+import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { readSync, saveSync } from "./sync-row.js";
@@ -195,7 +195,7 @@ export default class Spaces extends View {
     this.sleepWork = new SleepWork(this.leftNavStore().kdb, (row) => {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
-    }, null, () => awayShown(loadPieces(shared, setShared)));
+    }, null, () => awayShown(pieces(shared)));
     this.pollSleepWork(cx);
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
@@ -499,7 +499,7 @@ export default class Spaces extends View {
     const worker = new SleepWork(store.kdb, (row) => {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
-    }, null, () => awayShown(loadPieces(shared, setShared)));
+    }, null, () => awayShown(pieces(shared)));
     this.remoteWorkers.set(machine, worker);
     return worker;
   }
@@ -786,7 +786,7 @@ export default class Spaces extends View {
     const sig = pids.join(","), every = active ? ALIVE_MS : ALIVE_BEHIND_MS;
     if (pids.length && !pending.length) this.sawAlive(confirmed, sig, now, cx);
     const due = pending.length && aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every);
-    const map = loadPieces(shared, setShared);
+    const map = pieces(shared);
     const tasksOn = runs("sidebar.tasks", map);
     const working = mine.some((k) => k.status === "working");
     if (!working && !due) {
@@ -917,13 +917,13 @@ export default class Spaces extends View {
     this.keepSeen(now);
     // Git shows on space rows only: the Agents and Threads views don't ask.
     const due = this.due(now, sp, ps, placesOf(sp, ps), active);
-    if (due.size && this.shownView() === "spaces" && runs("sidebar.git", loadPieces(shared, setShared))) this.refreshGit(due, cx);
+    if (due.size && this.shownView() === "spaces" && runs("sidebar.git", pieces(shared))) this.refreshGit(due, cx);
     if (now - (this.prunedAt ?? 0) > 30000) { this.prunedAt = now; this.prune(sp, now); }
   }
 
   trackReturn(sp, ps, active, now, cx) {
     if (this.sinceLeft.busy) return;
-    if (!runs("sidebar.away", loadPieces(shared, setShared))) { this.returnSignature = null; this.sinceLeft.leave(); return; }
+    if (!runs("sidebar.away", pieces(shared))) { this.returnSignature = null; this.sinceLeft.leave(); return; }
     const background = this.background();
     const allowed = activePlaces(sp, ps, background.sleeps, background.layouts, home());
     const off = this.offNames();
@@ -951,7 +951,7 @@ export default class Spaces extends View {
   }
 
   returnRows(t, space) {
-    if (!runs("sidebar.away", loadPieces(shared, setShared)) || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
+    if (!runs("sidebar.away", pieces(shared)) || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
     const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row),
       (label, count, dismiss) => this.bareHead(t, "since-left", label, count, t.foreground, dismiss));
     return this.sinceLeft.showing ? [item(view, this.sinceLeft.blockHeight())] : [];
@@ -1193,7 +1193,7 @@ export default class Spaces extends View {
 
   // One look at a time: a herdr-core that hangs must not stack them up.
   refreshMachines(cx, repeat = false) {
-    if (!runs("sidebar.computers", loadPieces(shared, setShared))) { this.holdAwake(cx); return; }
+    if (!runs("sidebar.computers", pieces(shared))) { this.holdAwake(cx); return; }
     if (this.machinesBusy || repeat && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
     this.machinesBusy = true;
     cx.spawn(async (cx) => {
@@ -1304,7 +1304,7 @@ export default class Spaces extends View {
 
   // One look at a time, each place once however often it was asked for meanwhile.
   refreshGit(keys, cx) {
-    if (!runs("sidebar.git", loadPieces(shared, setShared))) return;
+    if (!runs("sidebar.git", pieces(shared))) return;
     for (const k of keys) this.pending.add(k);
     if (this.refreshing) return;
     this.refreshing = true;
@@ -1323,7 +1323,7 @@ export default class Spaces extends View {
   }
 
   async check(key, cx) {
-    if (!runs("sidebar.git", loadPieces(shared, setShared))) return;
+    if (!runs("sidebar.git", pieces(shared))) return;
     const [on, cwd] = JSON.parse(key);
     if (on && this.offNames().has(on)) return;
     if (![...this.pollingPlaces().values()].some((place) => place.key === key)) return;
@@ -1886,7 +1886,7 @@ export default class Spaces extends View {
 
   // Hide stores hide; showing again stores the piece's default.
   hide(id, off) {
-    const map = loadPieces(shared, setShared);
+    const map = pieces(shared);
     const next = setPiece(map, id, off ? "hide" : (pieceOf(id)?.default ?? "show"));
     if (JSON.stringify(next) === JSON.stringify(map)) return;
     setShared(STORE, next);
@@ -2007,7 +2007,7 @@ export default class Spaces extends View {
       const box = agents.els.map((el) => item(el, this.asleepOpenOf(group.id) ? ((this.foldH ?? {})[`asleep-${group.id}`] ?? agents.h) : 0));
       return [item(div().h(10).flex_none(), 10), item(this.closedRow(t, c, names, group), rowHeight({ tree: null })), ...box];
     });
-    const heads = shown("sidebar.computers", true, loadPieces(shared, setShared));
+    const heads = shown("sidebar.computers", true, pieces(shared));
     if (!remote.length || !heads) {
       const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
       return loading(null) && !rows.length && !shut.length ? [loadingRow(null)] : [...rows.flatMap(draw), ...shut];
@@ -2246,7 +2246,7 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
-          .child(g && !asleep && shown("sidebar.git", true, loadPieces(shared, setShared)) ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, group)))
           .when(this.hoverSpace === w.id, (el) => el.child(this.plus(`space-plus-${w.id}`, t, placeOfSpace(w))).child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
           .when(!asleep && mine.length > 0, (el) => el.child(this.fold(w, mine, t))),
@@ -2684,7 +2684,7 @@ export default class Spaces extends View {
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(17));
     const active = sp.find((p) => p.active);
     // Read once per draw: each read copies every record.
-    const map = loadPieces(shared, setShared);
+    const map = pieces(shared);
     this.showSwitch = shown("sidebar.switch", true, map);
     this.showActivity = shown("sidebar.activity", true, map);
     this.showAway = runs("sidebar.away", map);

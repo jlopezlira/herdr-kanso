@@ -12,8 +12,8 @@ const THREE = ["show", "needed", "hide"];
 const piece = (id, label, group, states, def, stops, job = null) => ({ id, label, group, states, default: def, stops, job });
 
 const PANELS = [
-  ["files", "Files"], ["insights", "Spend"], ["pr", "PR"], ["shipped", "Shipped"], ["worktrees", "Worktrees"],
-  ["ports", "Ports"], ["containers", "Containers"], ["memory", "Memory"], ["look", "Images"], ["sim", "Simulator"],
+  ["files", "Files", "git"], ["insights", "Spend"], ["pr", "PR", "gh"], ["shipped", "Shipped", "git"], ["worktrees", "Worktrees", "git"],
+  ["ports", "Ports", "lsof"], ["containers", "Containers", "docker"], ["memory", "Memory", "ps"], ["look", "Images"], ["sim", "Simulator"],
 ];
 
 export const PIECES = [
@@ -22,10 +22,10 @@ export const PIECES = [
   piece("sidebar.time", "Time in its state", "Sidebar", SHOW, "show", "draw"),
   piece("sidebar.tasks", "Commands still running", "Sidebar", SHOW, "show", "work", "ps"),
   piece("sidebar.git", "Branch, ahead, behind", "Sidebar", SHOW, "show", "work", "git"),
-  piece("sidebar.away", "While you were away", "Sidebar", THREE, "needed", "work", "away"),
+  piece("sidebar.away", "While you were away", "Sidebar", THREE, "needed", "work"),
   // The list already appears only when it has rows, so the default stays When needed.
   piece("sidebar.needs", "Needs you", "Sidebar", THREE, "needed", "draw"),
-  piece("sidebar.computers", "Computers", "Sidebar", SHOW, "show", "work", "hc"),
+  piece("sidebar.computers", "Computers", "Sidebar", SHOW, "show", "work"),
   piece("footer.machine", "Add a computer", "Sidebar", SHOW, "show", "draw"),
   piece("header.place", "Folder and branch", "Pane header", SHOW, "show", "draw"),
   piece("header.digest", "Files and commits", "Pane header", THREE, "needed", "work", "git"),
@@ -35,7 +35,7 @@ export const PIECES = [
   piece("strip.minimap", "Minimap", "Status bar", SHOW, "show", "draw"),
   piece("status.palette", "Command palette key", "Status bar", SHOW, "show", "draw"),
   piece("tabs.arrange", "Arrangements", "Tab bar and panels", SHOW, "show", "draw"),
-  ...PANELS.map(([id, label]) => piece(`panel.${id}`, label, "Tab bar and panels", SHOW, "show", "work", "panel")),
+  ...PANELS.map(([id, label, job = null]) => piece(`panel.${id}`, label, "Tab bar and panels", SHOW, "show", "work", job)),
   piece("toast.update", "kansō update", "Notifications", SHOW, "show", "draw"),
   piece("toast.memory", "Memory low", "Notifications", SHOW, "show", "draw"),
   piece("update.check", "Check for updates", "Background", SHOW, "show", "work", "git"),
@@ -47,12 +47,16 @@ export function pieceOf(id) {
   const found = PIECES.find((row) => row.id === id);
   if (found) return found;
   if (typeof id === "string" && id.startsWith("panel.") && id.length > "panel.".length) {
-    return piece(id, id.slice("panel.".length), "Tab bar and panels", SHOW, "show", "work", "panel");
+    return piece(id, id.slice("panel.".length), "Tab bar and panels", SHOW, "show", "work");
   }
   return null;
 }
 
 const asMap = (map) => (map && typeof map === "object" && !Array.isArray(map) ? map : {});
+
+export function pieces(read) {
+  return asMap(read?.(STORE));
+}
 
 export function choice(id, map) {
   const row = pieceOf(id);

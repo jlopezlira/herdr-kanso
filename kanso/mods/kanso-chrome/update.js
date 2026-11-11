@@ -4,7 +4,7 @@ import { paths } from "./platform-paths.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, readTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
-import { loadPieces, runs, shown, hiddenSet, STORE } from "./pieces.js";
+import { pieces, runs, shown, hiddenSet, STORE } from "./pieces.js";
 
 export const SOURCE = {
   remote: "https://github.com/jlopezlira/herdr-kanso.git",
@@ -290,7 +290,7 @@ export class Updater {
   installs() { return this.state().installs ?? {}; }
   mark(id, patch) { this.setState({ installs: { ...this.installs(), [id]: { ...this.installs()[id], ...patch } } }); }
   unmark(id) { this.setState({ installs: Object.fromEntries(Object.entries(this.installs()).filter(([k]) => k !== id)) }); }
-  autoCheckEnabled() { return runs("update.check", loadPieces(shared, setShared)); }
+  autoCheckEnabled() { return runs("update.check", pieces(shared)); }
 
   available() {
     const { latest } = this.state();
@@ -341,7 +341,7 @@ export class Updater {
     const found = tryOr(() => ({ size: findNode(layout()?.root ?? layout(), FOOTER)?.size?.px }));
     if (!found) return;
     const { size } = found;
-    const hidden = tryOr(() => hiddenSet(loadPieces(shared, setShared)), new Set());
+    const hidden = tryOr(() => hiddenSet(pieces(shared)), new Set());
     const want = footerPx(hidden, Boolean(this.available()));
     if (size !== want && OURS(size)) run("layout.resize", { id: FOOTER, px: want });
   }
@@ -352,7 +352,7 @@ export class Updater {
     if (!done) return;
     this.setState({ done: null });
     if (done.version !== this.installed) return;
-    if (shown("toast.update", true, loadPieces(shared, setShared))) notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
+    if (shown("toast.update", true, pieces(shared))) notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
   }
 
   async check(cx, force = false, report = false) {
@@ -375,7 +375,7 @@ export class Updater {
     if (report && v && this.state().notified === v) this.setState({ notified: null }); // an explicit check re-notifies for the same version
     if (v && this.state().notified !== v) {
       this.setState({ notified: v });
-      if (report || shown("toast.update", true, loadPieces(shared, setShared))) notify({
+      if (report || shown("toast.update", true, pieces(shared))) notify({
         title: `kansō ${v} is available`,
         body: `You have ${this.installed}. Click to update; Herdr's own updates stay under Settings.`,
         action: { name: "kanso-tabs.update" },

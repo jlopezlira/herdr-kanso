@@ -7,7 +7,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Input, InputState } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
 import { G, H, T, SEG, tokens, quietTabs, quietLink, skeleton, breathe, Armed, controlInput, section, segmented } from "./ui.js";
-import { loadPieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LABEL, STORE } from "./pieces.js";
+import { pieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LABEL, STORE } from "./pieces.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
@@ -46,8 +46,8 @@ export default class Settings extends View {
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
     this.avatars = null;
-    this.find = typeof InputState === "undefined" ? null : InputState.new({ placeholder: "Find" });
-    this.find?.on("change", (_e, cx) => cx.notify());
+    this.find = InputState.new({ placeholder: "Find" });
+    this.find.on("change", (_e, cx) => cx.notify());
     if (this.page === "credits") this.readAvatars(cx);
     cx.spawn(async (cx) => {
       try { this.installed = JSON.parse(await readTextFile(paths.join(appHome(), "mods", "kanso-chrome", "version.json")) ?? "{}").version ?? null; } catch {}
@@ -196,33 +196,52 @@ export default class Settings extends View {
   }
 
   query() {
-    const value = this.find && typeof this.find.value === "function" ? this.find.value() : "";
-    return String(value ?? "");
+    return String(this.find.value() ?? "");
   }
 
   findField(c) {
-    if (!this.find || typeof Input === "undefined") return div().id("pieces-find").w_full().h(H.control);
     return controlInput(Input.new(this.find).w_full(), c).id("pieces-find");
   }
 
   piecesPage(t, c) {
-    this.armed ??= new Armed();
-    const map = loadPieces(shared, setShared);
-    const groups = groupsOf(filterPieces(this.query(), withRoster(shared("kanso.panels.all"))));
+    const map = pieces(shared);
+    const roster = shared("kanso.panels.all");
+    const full = withRoster(roster);
+    const known = full.filter((row) => row.id.startsWith("panel.")).map((row) => row.id.slice("panel.".length));
+    const fromBar = (Array.isArray(roster) ? roster : []).flatMap((panel) => (panel && typeof panel.id === "string" && known.includes(panel.id) ? [panel.id] : []));
+    const panelIds = [...fromBar, ...known.filter((id) => !fromBar.includes(id))];
+    const listed = filterPieces(this.query(), full);
+    const first = listed.findIndex((row) => row.id.startsWith("panel."));
+    const ordered = first < 0 ? listed : [
+      ...listed.slice(0, first),
+      ...panelIds.flatMap((id) => listed.filter((row) => row.id === `panel.${id}`)),
+      ...listed.slice(first).filter((row) => !row.id.startsWith("panel.")),
+    ];
+    const groups = groupsOf(ordered);
+    // kanso.panels.order: the same list the bar's drag writes.
+    const step = (id, by, glyph) => {
+      const i = panelIds.indexOf(id), j = i + by, can = i >= 0 && j >= 0 && j < panelIds.length;
+      return div().id(`order-${id}-${by}`).size(22).flex_none().rounded(4).flex().items_center().justify_center().text_size(12)
+        .text_color(can ? c.muted : c.border).when(can, (el) => el.cursor_pointer().hover((s) => s.bg(c.input).text_color(c.text))
+          .on_click(() => setShared("kanso.panels.order", panelIds.with(i, panelIds[j]).with(j, panelIds[i]))))
+        .child(glyph);
+    };
     const row = (piece) => {
       const items = piece.states.map((key) => ({ key, label: STATE_LABEL[key] }));
+      const bare = piece.id.startsWith("panel.") ? piece.id.slice("panel.".length) : "";
       return h_flex().id(`piece-row-${piece.id}`).w_full().h(H.row).gap(G.md).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(piece.label))
         .when(piece.stops === "work" && piece.job, (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(piece.job)))
+        .when(Boolean(bare), (el) => el.child(h_flex().flex_none().gap(2).children([step(bare, -1, "\u2191"), step(bare, 1, "\u2193")])))
         .child(segmented(`piece-${piece.id}`, items, choice(piece.id, map), (state, cx) => {
-          setShared(STORE, setPiece(loadPieces(shared, setShared), piece.id, state));
+          setShared(STORE, setPiece(pieces(shared), piece.id, state));
           cx.notify();
         }, c, { width: items.length > 2 ? SEG.three : SEG.two }));
     };
     const armed = this.armed.is("reset");
     return v_flex().w_full()
       .child(this.findField(c))
-      .when(!groups.length, (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("None")))
+      .when(!groups.length, (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("No piece matches.")))
       .children(groups.map((group) => v_flex().w_full().pt(G.lg).child(section(c, group.name)).children(group.rows.map(row))))
       .child(h_flex().w_full().justify_end().pt(G.lg).child(quietLink("pieces-reset", armed ? "Press again" : "Reset all", (cx) => {
         this.armed.press("reset", cx, () => { setShared(STORE, {}); cx.notify(); });
