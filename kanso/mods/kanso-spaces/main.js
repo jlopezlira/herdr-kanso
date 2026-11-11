@@ -7,7 +7,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
-import { findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
+import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { parseProcesses } from "./procs.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
@@ -1762,8 +1762,9 @@ export default class Spaces extends View {
     const background = this.background();
     const list = agents().filter((a) => !a.address.includes("/") && background.allows(a.address, this.threads?.[a.address])).map((a) => ({ address: a.address, app: a.app }));
     if (!list.length) { this.readingThreads = false; return; }
+    this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {
-      try { this.threads = await findThreads(list, this.threads ?? {}, terminals()); } catch { this.threads ??= {}; }
+      try { this.threads = await findThreads(list, this.threads ?? {}, terminals(), this.threadLocator); } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }
       cx.notify();
     });

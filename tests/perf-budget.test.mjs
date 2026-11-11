@@ -50,6 +50,8 @@ for (const [working, budget] of [[2, 15], [0, 3]]) test(`sidebar at rest with 10
   view.render();
   await f.settle();
   await f.advance(60_000);
+  assert.equal(Object.keys(view.threads ?? {}).length, 10, "rest fixture must locate all 10 transcripts during warm-up");
+  for (const term of f.terms) assert.equal(view.threads[term.address]?.pid, term.foreground.pid, `${term.address} must retain its located transcript before the rest measurement`);
   f.state.processes.length = 0;
   f.state.reads.length = 0;
   await f.advance(60_000);

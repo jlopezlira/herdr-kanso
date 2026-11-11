@@ -27,6 +27,12 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     name: `Agent ${i}`, status: i < working ? "working" : "idle", app: "agent", seq: i, program: { agent: true, name: "Agent" }, focused: i === 0 }));
   const terms = list.map((a, i) => ({ address: a.address, state: "live", status: a.status, status_ms: state.now - 1000, created_ms: state.now - 2000 + i, pid: 100 + i, foreground: { pid: 200 + i, argv: ["claude"] },
     labels: { "kanso.id": `id${i}`, "kanso.shown": a.name, "kanso.project": a.space_name, "herdr.space": a.space }, program: a.program, title: a.name }));
+  const transcripts = terms.map((term, i) => {
+    const sessionId = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, cwd = projects[i % 4].folder;
+    const prompt = JSON.stringify({ type: "user", timestamp: "2026-11-10T00:00:00Z", message: { content: list[i].name } });
+    const text = [JSON.stringify({ type: "ai-title", aiTitle: list[i].name }), prompt, prompt, prompt].join("\n\u001e\n");
+    return { pid: term.foreground.pid, sessionId, cwd, file: `/home/fixture/.claude/projects/${cwd.replace(/[^A-Za-z0-9]/g, "-")}/${sessionId}.jsonl`, text };
+  });
   const ps = list.map((a, i) => ({ pane: a.pane, terminal: a.address, tab: a.tab, cwd: projects[i % 4].folder, status: a.status, program: a.program }));
   if (quiet === "sleeping") {
     shared.set("kanso.asleep", projects.map((p) => ({ id: `sleep-${p.id}`, from: `:${p.folder}`, spaceId: p.id, state: "asleep", saved: state.now,
@@ -57,6 +63,17 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
         return { code: 0, stdout: JSON.stringify(args[0] === "get" ? terms.find((term) => term.address === args[1]) ?? {} : { machines: [] }), stderr: "" };
       }
       if (command === "git") return { code: 128, stdout: "", stderr: "not a git repository" };
+      if (command === "wc") {
+        const transcript = transcripts.find((row) => row.file === args[1]);
+        return { code: transcript ? 0 : 1, stdout: transcript ? `${Buffer.byteLength(transcript.text)} ${transcript.file}\n` : "", stderr: "" };
+      }
+      if (command === "sh" && args[1].startsWith('pid="$1"')) {
+        const transcript = transcripts.find((row) => row.pid === Number(args[3]));
+        return { code: 0, stdout: transcript ? `claude\t${JSON.stringify({ sessionId: transcript.sessionId, cwd: transcript.cwd })}\n` : "", stderr: "" };
+      }
+      if (command === "sh" && args[1].startsWith('f="$1"; said()')) {
+        return { code: 0, stdout: transcripts.find((row) => row.file === args[3])?.text ?? "", stderr: "" };
+      }
       return { code: 0, stdout: "", stderr: "" };
     } finally { state.inFlight -= 1; }
   };
@@ -108,7 +125,7 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
     }
     state.now = end;
   };
-  return { state, host, cx, shared, projects, list, terms, ps, settle, advance };
+  return { state, host, cx, shared, projects, list, terms, transcripts, ps, settle, advance };
 }
 
 export async function firstDraw(id) {

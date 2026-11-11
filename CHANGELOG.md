@@ -15,7 +15,7 @@ release.
 
 ### Changed
 
-- The sidebar reuses thread locations and unchanged sleeping rows, checks folders less often, and skips background reads for sleeping projects and unavailable machines. Database maintenance waits for changes or a slower fallback; calls share processes and cache preferences. The strip reads divider sizes less often at rest.
+- The sidebar reuses thread locations and unchanged sleeping rows, backs off failed thread discovery, checks folders less often, and skips background reads for sleeping projects and unavailable machines. Database maintenance waits for changes or a slower fallback; calls share processes and cache preferences. The strip reads divider sizes less often at rest.
 
 ## [3.22.0] - 2026-11-10
 

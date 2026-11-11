@@ -55,6 +55,42 @@ test("a known pid reuses its location and an unchanged transcript is not read ag
   assert.deepEqual(calls.map(([command]) => command), ["sh", "wc", "sh"]);
 });
 
+test("missing transcripts retry after 1, 2, 4, 8 and at most 10 minutes, resetting for a new pid", async () => {
+  let now = 0;
+  const attempts = [];
+  const { ThreadLocator, findThreads } = await load("kanso-spaces/threads.js", ["ThreadLocator", "findThreads"], {
+    Date: { now: () => now }, home: () => "/home/me",
+    exec: async (command, args) => { attempts.push([now, command, args.at(-2)]); return { code: 0, stdout: "" }; },
+  });
+  const locator = new ThreadLocator(), list = [{ address: "t1", app: "agent" }];
+  let pid = 101;
+  const scan = () => findThreads(list, {}, [{ address: "t1", foreground: { pid } }], locator);
+  await scan();
+  const due = [60000, 180000, 420000, 900000, 1500000, 2100000];
+  for (const [i, at] of due.entries()) {
+    now = at - 1;
+    await scan();
+    assert.equal(attempts.length, i + 1, `LOCATE retried before ${at} ms`);
+    now = at;
+    await scan();
+    assert.equal(attempts.length, i + 2);
+  }
+  assert.deepEqual(attempts.map(([at]) => at), [0, ...due]);
+  pid = 202;
+  now += 1;
+  await scan();
+  assert.deepEqual(attempts.at(-1), [2100001, "sh", "202"]);
+  now = 2160000;
+  await scan();
+  assert.equal(attempts.length, 8);
+  now = 2160001;
+  await scan();
+  assert.equal(attempts.length, 9, "a replacement pid starts with the one-minute delay again");
+  await findThreads([], {}, [], locator);
+  await scan();
+  assert.equal(attempts.length, 10, "a terminal that leaves does not retain an old lookup delay");
+});
+
 test("machine polling stops after the first local read and resumes for a remote or parked machine", async () => {
   const calls = [];
   let layouts = [{ name: null, layout: "ready" }];

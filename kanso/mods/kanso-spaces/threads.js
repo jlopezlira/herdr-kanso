@@ -81,12 +81,31 @@ export function readThread(kind, titleLine, head, recent, tail, name = null) {
   };
 }
 
+export class ThreadLocator {
+  constructor() { this.missing = new Map(); }
+
+  retain(list) {
+    const addresses = new Set(list.map((item) => item.address));
+    this.missing = new Map([...this.missing].filter(([address]) => addresses.has(address)));
+  }
+
+  async locate({ address, pid, kind, home }, known) {
+    if (!pid || known?.pid === pid) { this.missing.delete(address); return pid ? known : null; }
+    const previous = this.missing.get(address), now = Date.now();
+    if (previous?.pid === pid && now < previous.next) return null;
+    const where = parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
+    if (where) { this.missing.delete(address); return where; }
+    const wait = Math.min(previous?.pid === pid ? previous.wait * 2 : 60000, 600000);
+    this.missing.set(address, { pid, wait, next: now + wait });
+    return null;
+  }
+}
+
 // `pid` ties the reading to the process it came from, so a program started later in the same terminal is never taken for it.
-async function findThread({ app }, known, home, got) {
+async function findThread({ address, app }, known, home, got, locator) {
   const pid = got?.foreground?.pid;
-  if (!pid) return null;
-  const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
-  const where = known?.pid === pid ? known : parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
+  const kind = app === "codex" || /codex/.test(got?.foreground?.argv?.[0] ?? "") ? "codex" : "claude";
+  const where = await locator.locate({ address, pid, kind, home }, known);
   if (!where) return null;
   const size = Number((await exec("wc", ["-c", where.file])).stdout.trim().split(/\s+/)[0]);
   if (!size) return null;
@@ -100,14 +119,15 @@ async function findThread({ app }, known, home, got) {
 // Read up to four terminals concurrently.
 const AT_ONCE = 4;
 
-export async function findThreads(list, known = {}, terms = []) {
+export async function findThreads(list, known = {}, terms = [], locator = new ThreadLocator()) {
+  locator.retain(list);
   const byAddress = new Map(terms.map((term) => [term.address, term]));
   const here = home();
   const queue = list.values();
   const lane = async (got = []) => {
     const { value: item, done } = queue.next();
     if (done) return got;
-    return lane([...got, [item.address, await findThread(item, known[item.address], here, byAddress.get(item.address))]]);
+    return lane([...got, [item.address, await findThread(item, known[item.address], here, byAddress.get(item.address), locator)]]);
   };
   const found = await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
   return Object.fromEntries(found.flat().filter(([, thread]) => thread));
