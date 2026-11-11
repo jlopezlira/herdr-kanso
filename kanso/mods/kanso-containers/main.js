@@ -7,7 +7,7 @@ import { systemApi } from "./platform-system.js";
 // Docker, simply: what runs and for which project, and everything you'd open Docker Desktop for.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { exec, run, spaces, panes, home, theme, shared, setShared } from "herdr";
+import { exec, run, spaces, panes, home, theme, shared, setShared, window } from "herdr";
 import { G, Armed, tokens, quietLink, iconButton, ghost, breathe } from "./ui.js";
 import { afterMount } from "./pure.js";
 import {
@@ -20,6 +20,11 @@ import {
 const EVERY_MS = 5000;
 // `docker stats` takes a second or two: every third read. Compose files are looked for once a minute.
 const STATS_EVERY = 3, FILES_EVERY = 12;
+// Stats and the file walk take different beats; the first read still does both.
+export function readPlan(reads) {
+  const files = reads % FILES_EVERY === 1, stats = reads % STATS_EVERY === 1, shift = files && stats && reads !== 1;
+  return { files: (files && !shift) || (reads % FILES_EVERY === 2 && reads !== 2), stats };
+}
 // Compose project names and files seen per folder, kept across panels and restarts.
 // Kept per Docker context: another engine's projects are not this one's.
 const namesKey = (context) => `kanso.containers.names.${context?.name ?? "default"}`;
@@ -65,7 +70,12 @@ export default class Containers extends View {
     this.pull.on("submit", () => this.pullImage());
     this.runFor = null;       // the image whose Run form is open, with its fields
     afterMount(cx, (cx) => this.refresh(cx));
-    this.ticker = cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
+    this.armTicker(cx);
+  }
+
+  armTicker(cx) {
+    if (this.ticker || window()?.active === false) return;
+    this.ticker = cx.timer.every(EVERY_MS, (tick) => this.refresh(tick));
   }
 
   close() {
@@ -75,6 +85,14 @@ export default class Containers extends View {
 
   // `now`: after an action, a read that overtakes any still going; the timer's waits its turn.
   refresh(cx, now = false) {
+    if (window()?.active === false) {
+      this.asleep = true;
+      try { this.ticker?.cancel(); } catch { /* already gone */ }
+      this.ticker = null;
+      return;
+    }
+    this.asleep = false;
+    this.armTicker(cx);
     if (this.reading && !now) return;
     this.reading = true;
     this.seq = this.seq + 1;
@@ -89,7 +107,8 @@ export default class Containers extends View {
         const found = parseContainers(ps.stdout);
         const projects = kansoProjects();
         this.reads = this.reads + 1;
-        const lookFiles = this.reads % FILES_EVERY === 1;
+        const plan = readPlan(this.reads);
+        const lookFiles = plan.files;
         const { deep, shallow } = lookIn(projects.flatMap((p) => p.folders).slice(0, 24), home());
         const named = (depth, list) => localService(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })).catch(fail);
         const [im, info, ps2, ins, ctx, vols, df, files] = await Promise.all([
@@ -105,7 +124,7 @@ export default class Containers extends View {
         const vms = vmPids(ps2.stdout);
         const openFiles = await localService(processApi).openFiles(vms).catch(() => ({ state: "error", values: [] }));
         const owned = dockerVms(openFiles.values ?? []);
-        const st = this.reads % STATS_EVERY === 1 ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
+        const st = plan.stats ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
         if (seq !== this.seq) return;
         // Docker quit while this read went on: say so rather than show what ran before.
         if ([im, info, st, vols].some(daemonDown)) { down(); return; }
@@ -410,7 +429,11 @@ export default class Containers extends View {
       .when(Boolean(space), (el) => el.child(space));
   }
 
-  render() {
+  render(cx) {
+    if (cx && this.asleep && window()?.active !== false && !this.waking) {
+      this.waking = true;
+      cx.timer.after(0, (wakeCx) => { this.waking = false; if (window()?.active !== false) this.refresh(wakeCx); });
+    }
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))

@@ -36,6 +36,18 @@ export const dropCopies = (entries, { id, keep, now, maxAge = DAY }) => entries
   .filter((entry) => entry.name !== keep && (entry.name.startsWith(`${id}-`) || now - entry.mtime > maxAge))
   .map((entry) => entry.name);
 
+export const lookStamp = (name) => {
+  const ms = Number(/-(\d+)\.[^.]+$/.exec(name)?.[1]);
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+export const sweepLook = async (root, id, keep) => {
+  const names = await readdir(root).catch(() => []);
+  const now = Date.now();
+  const drop = dropCopies(names.map((name) => ({ name, mtime: lookStamp(name) })), { id, keep, now });
+  await Promise.all(drop.map((old) => unlink(paths.join(root, old)).catch(() => {})));
+};
+
 export const said = (error) => String(error?.message ?? error ?? "").replace(/^Error:\s*/, "").trim();
 
 export const copyFailure = (error, machine) => {

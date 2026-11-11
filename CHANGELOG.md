@@ -11,6 +11,15 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.29.1] - 2026-11-11
+
+### Changed
+
+- An idle window redraws only when something on screen changed. A collapsed sidebar and a window behind others do not ask git for a project's status; opening the sidebar reads it at once.
+- Images on this computer skips a conversation whose size has not changed, and does not read while the window is behind or the panel is hidden. Files, with a folder watch, asks git once a minute instead of every 10 seconds. Ports and Containers do nothing while the window is behind, and read as soon as it is in front. Containers no longer asks for usage and compose files in the same moment.
+- The footer measures its height from one timer. Battery and the memory warning are read every 2 minutes.
+- Conversations that have left and were never moved to a project are forgotten, and a project gone for 7 days is forgotten. Picture copies on this computer are kept for a day, the same as copies from another computer.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added

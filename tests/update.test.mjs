@@ -774,6 +774,7 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
   const { cx, drain } = context();
   cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
   tabs.start(cx); footer.start(cx, { polls: false }); await drain();
+  assert.equal(timers.filter((timer) => timer.ms === 1500).length, 1, "one footer fit timer");
   assert.equal(asked, 1, "one forced look on start, not one per copy");
   assert.equal(footer.available(), "1.4.0", "the footer offers what the tab bar found");
   assert.equal(toasts.filter((n) => n.title === "kansō 1.4.0 is available").length, 1);

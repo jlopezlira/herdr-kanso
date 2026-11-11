@@ -6,7 +6,7 @@ import { killApi } from "./platform-kill.js";
 import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { hc, panes, terminals, home, run, theme, appHome, readTextFile } from "herdr";
+import { hc, panes, terminals, home, run, theme, appHome, readTextFile, window } from "herdr";
 import { tilde } from "./lib.js";
 import { tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
@@ -157,15 +157,22 @@ export class Ports {
   }
 
   refresh(cx, { history = false, then = null } = {}) {
+    if (window()?.active === false) { this.paused = true; return; }
+    this.paused = false;
     if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
     cx.spawn(async (cx) => {
+      const before = this.picture();
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
         this.list = await this.read(); this.note = this.attribution;
       } catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list = this.list ?? []; }
-      finally { this.reading = false; then?.(); cx.notify(); }
+      finally { this.reading = false; then?.(); if (this.picture() !== before) cx.notify(); }
     });
+  }
+
+  picture() {
+    return JSON.stringify([this.list, this.note, this.digest, [...(this.stopping ?? [])]]);
   }
 
   async guardReady() {
@@ -378,6 +385,10 @@ export class Ports {
   }
 
   render(cx) {
+    if (this.paused && window()?.active !== false && !this.waking) {
+      this.waking = true;
+      cx.timer.after(0, (wakeCx) => { this.waking = false; if (window()?.active !== false) this.refresh(wakeCx); });
+    }
     const c = tokens(theme()), narrow = (this.width || 368) < 560;
     const list = this.list ?? [];
     const state = this.hist?.state;

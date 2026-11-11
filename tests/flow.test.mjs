@@ -486,7 +486,8 @@ test("The sidebar keeps its state in the left nav's database: prefs moved from l
   last.kdb.observe = (list, at) => { writes.push(list.length); return observe(list, at); };
   await last.remember(new Map(), 400 + 61_000);
   assert.deepEqual(writes, [0]);
-  assert.equal((await last.kdb.read("SELECT status FROM agents WHERE id='c1'"))[0].status, "gone", "not seen for a while: gone");
+  assert.equal((await last.kdb.read("SELECT id FROM agents WHERE id='c1'")).length, 0, "not seen for a while, and never moved: forgotten");
+  assert.equal(last.agents.has("c1"), false, "the sidebar drops it too");
 });
 
 test("Send reaches any agent of any model by the name and project Kanso gives it, grouped by project, yours first", async () => {

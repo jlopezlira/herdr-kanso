@@ -248,7 +248,7 @@ export default class Spaces extends View {
     cx.timer.every(500, (cx) => this.checkNew(cx));
     cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // A sleep or wake that stopped half way shows again once old; another window's changes arrive.
-    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); cx.notify(); });
+    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); });
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -1124,9 +1124,15 @@ export default class Spaces extends View {
       this.ready[m.name] = ready;
       return ready && was === false ? [...keys].filter((k) => onOf.get(k) === m.name) : [];
     });
-    const stale = active ? [...keys].filter((k) => {
+    const railOpen = shared("sidebar.collapsed") !== true;
+    const opened = railOpen && this.railWasClosed === true;
+    this.railWasClosed = !railOpen;
+    const forward = Boolean(active) && this.gitBehind === true;
+    this.gitBehind = !active;
+    // Collapsed or behind: no fallback read. Opening the rail, or coming forward, reads at once.
+    const stale = active && railOpen ? [...keys].filter((k) => {
       const asks = this.git[k] || this.unsure.has(k);
-      return asks && !this.folded.has(onOf.get(k)) && now - (this.checked[k] ?? 0) > FALLBACK;
+      return asks && !this.folded.has(onOf.get(k)) && (opened || forward || now - (this.checked[k] ?? 0) > FALLBACK);
     }) : [];
     return new Set(pollKeys([...fresh, ...moved, ...ended, ...back, ...stale], this.offNames()));
   }
@@ -1898,9 +1904,13 @@ export default class Spaces extends View {
     if (!list.length) { this.readingThreads = false; return; }
     this.threadLocator ??= new ThreadLocator();
     cx.spawn(async (cx) => {
-      try { this.threads = await findThreads(list, this.threads ?? {}, terminals(), this.threadLocator); } catch { this.threads ??= {}; }
+      try {
+        const before = this.threads ?? {};
+        const next = await findThreads(list, before, terminals(), this.threadLocator);
+        this.threads = next;
+        if (Object.keys(before).length !== Object.keys(next).length || Object.keys(next).some((id) => next[id] !== before[id])) cx.notify();
+      } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }
-      cx.notify();
     });
   }
 
