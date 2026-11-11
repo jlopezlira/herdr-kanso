@@ -23,8 +23,7 @@ Get-ChildItem -LiteralPath (Join-Path $Root 'kanso\mods') -Directory | ForEach-O
 }
 
 Write-Output "Installed kansō files to $AppHome."
-Write-Output ("Merge the `"layout:kanso`" section of " + (Join-Path $Root 'kanso\keys.json') + " into " + (Join-Path $AppHome 'keys.json') + ".")
-Write-Output ("On Windows, merge " + (Join-Path $Root 'kanso\keys.windows.json') + " instead of keys.json.")
+Write-Output ("Merge the `"layout:kanso`" section of " + (Join-Path $Root 'kanso\keys.windows.json') + " into " + (Join-Path $AppHome 'keys.json') + ".")
 
 & herdr-app do layout.switch --name kanso
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

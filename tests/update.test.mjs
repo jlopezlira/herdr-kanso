@@ -1034,6 +1034,9 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
     checker: join(dir, "check.cmd"), stamp: "20261108-1200", keys: "{\"a\":1}", layout: "1", base: "{\"a\":1}\n",
   }, join(dir, "op.ps1"));
   assert.match(script, /O''Brien home/, "step quote, file install script");
+  assert.match(script, /\$AppHome = /);
+  assert.equal(/\$home\b/.test(script), false, "step assign, file install script");
+  assert.equal(script.includes("'/grant'"), false, "step reset, file install script");
   assert.match(script, new RegExp(Buffer.from('{"a":1}', "utf8").toString("base64")));
   assert.match(script, new RegExp(Buffer.from('{"a":1}\n', "utf8").toString("base64")));
   for (const banned of ["&&", "||", "??", "-AsHashtable"]) assert.equal(script.includes(banned), false, `step syntax ${banned}`);
@@ -1065,6 +1068,7 @@ test("The Windows installer copies nothing before the app home exists", async ()
   assert.match(text, /\$env:APPDATA/);
   assert.match(text, /HERDR_APP_HOME/);
   assert.match(text, /keys\.windows\.json/);
+  assert.equal(text.includes("instead of keys.json"), false);
   for (const banned of ["&&", "??"]) assert.equal(text.includes(banned), false, banned);
   const homeAt = text.indexOf("HERDR_APP_HOME");
   const testAt = text.indexOf("Test-Path");
