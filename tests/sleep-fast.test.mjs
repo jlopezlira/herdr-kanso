@@ -17,21 +17,99 @@ async function workerFixture(verb = "send", arg = "/exit", step = "clearing") {
   const screens = { t1: step === "exiting" ? ASK : EMPTY, t2: EMPTY };
   let reject;
   const pending = new Promise((_resolve, fail) => { reject = fail; });
+  const apply = (op) => {
+    if (op.op === "claim") {
+      rows.forEach((row) => {
+        if (!["sleeping", "undoing"].includes(row.state)) return;
+        row.pending = "owner";
+        row.pending_at = Date.now();
+        if (row.state !== "sleeping") return;
+        row.agents.forEach((agent) => {
+          if (agent.step !== "requested") return;
+          agent.step = "saving";
+          agent.step_at = Date.now();
+        });
+      });
+      return [];
+    }
+    const row = rows.find((item) => item.id === op.id);
+    const agent = row?.agents.find((item) => item.id === op.conversation);
+    if (op.op === "hold") return row && ["sleeping", "undoing"].includes(row.state) ? [row.id] : [];
+    if (op.op === "step") {
+      if (!row || row.state !== op.state || !agent || agent.step !== op.from) return [];
+      Object.assign(agent, op.fields);
+      return [agent.id];
+    }
+    if (op.op === "still") return row && row.pending === "owner" && row.state === op.state ? [row.id] : [];
+    if (op.op === "free") {
+      if (!row || row.state !== "undoing" || !agent) return [];
+      agent.step = null;
+      return [agent.id];
+    }
+    if (op.op === "leave") {
+      if (!row || row.state !== "sleeping" || row.pending !== "owner" || !agent || agent.step !== op.from) return [];
+      agent.step = "left";
+      if (!row.agents.every((item) => item.step === "left" || item.step == null)) return [];
+      row.state = "asleep";
+      row.pending = null;
+      return [row.id];
+    }
+    if (op.op === "state") {
+      if (!row || row.state !== op.from) return [];
+      row.state = op.to;
+      if (op.to === "stuck") row.pending = null;
+      return [row.id];
+    }
+    if (op.op === "end") {
+      if (!row || row.state !== "undoing") return [];
+      if (op.layout) { row.state = "asleep"; row.layout = JSON.stringify(op.layout); row.pending = null; return [row.id]; }
+      rows.splice(rows.indexOf(row), 1);
+      return [row.id];
+    }
+    if (op.op === "unstick") {
+      if (!row || row.state !== "stuck") return [];
+      if (agent?.step === "stuck") agent.step = "left";
+      if (row.agents.some((item) => item.step === "stuck")) return [];
+      row.state = "sleeping";
+      row.pending = null;
+      return [row.id];
+    }
+    return [];
+  };
   const kdb = {
     sleeps: async () => clone(rows.filter((r) => ["sleeping", "undoing"].includes(r.state))),
     holdWork: async () => true,
     stillMine: async () => true,
-    stepAgent: async (id, _owner, state, conversation, before, patch) => {
-      const row = rows.find((r) => r.id === id), a = row.agents.find((a) => a.id === conversation);
-      if (row.state !== state || a.step !== before) return false;
-      Object.assign(a, patch);
-      return true;
-    },
-    finishSleep: async (id) => { rows.find((r) => r.id === id).state = "asleep"; return true; },
-    setWorkState: async (id, _owner, _before, state) => { rows.find((r) => r.id === id).state = state; return true; },
+    stepAgent: async (id, _owner, state, conversation, before, patch) => apply({ op: "step", id, state, conversation, from: before, fields: patch }).length > 0,
+    freeAgent: async (id, _owner, conversation) => apply({ op: "free", id, conversation }).length > 0,
+    finishSleep: async (id) => { const row = rows.find((r) => r.id === id); if (!row) return false; row.state = "asleep"; return true; },
+    setWorkState: async (id, _owner, from, state) => apply({ op: "state", id, from, to: state }).length > 0,
+    stage: async (texts) => ({
+      wrote: texts.map((text) => (typeof text === "string" ? rows.flatMap((row) => (row.agents ?? []).map((agent) => ({ id: agent.id, step: agent.step, sleep_id: row.id }))) : apply(text))),
+      rows: clone(rows),
+    }),
+    claimSql: () => ({ op: "claim" }),
+    holdSql: (id) => ({ op: "hold", id }),
+    stepSql: (id, _me, state, conversation, from, fields) => ({ op: "step", id, state, conversation, from, fields }),
+    stillSql: (id, _me, state) => ({ op: "still", id, state }),
+    freeSql: (id, _me, conversation) => ({ op: "free", id, conversation }),
+    leaveSql: (id, _me, conversation, from) => ({ op: "leave", id, conversation, from }),
+    stateSql: (id, _me, from, to) => ({ op: "state", id, from, to }),
+    endSql: (id, _me, layout) => ({ op: "end", id, layout }),
+    unstickSql: (id, conversation) => ({ op: "unstick", id, conversation }),
   };
   const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], {
-    processApi: () => ({ exists: async (pid) => !gone.has(pid), runningSession: async () => null }),
+    processApi: () => ({
+      exists: async (pid) => !gone.has(pid),
+      runningSession: async () => null,
+      look: async (pids) => ({
+        home: "/home",
+        found: new Map(pids.map((pid) => {
+          const n = Number(pid);
+          return [n, { alive: !gone.has(n), record: { pid: n, sessionId: `c${n}` } }];
+        })),
+      }),
+    }),
     terminals: () => [1, 2].map((n) => ({ address: `t${n}` })),
     panes: () => [1, 2].map((n) => ({ tab: `tb${n}`, terminal: `t${n}` })),
     home: () => "/home",
