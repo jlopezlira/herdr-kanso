@@ -227,7 +227,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   tabs `left`/`width`; 220 ms) to the chosen space, agent or tab; rows fold
   by `height` (220 ms, measured) and a new row grows in; a header's tools
   slide out by `width`; a panel fades in.
-- **Keys** (keys.json `layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
+- **Keys**: on Windows merge `keys.windows.json` instead of `keys.json`.
+  macOS (`layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
@@ -423,7 +424,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Cmd+Shift+- and Cmd+Shift+= show fewer or more panes per view (every
     column 1/n); Cmd+Shift+0 evens them out. `kanso-strip.per-N` sets N.
   - Cmd+Alt+Up/Down (or K/J) move the focus within a stacked column.
-  - Kept as alternatives: Cmd+Alt+Left/Right or H/L (focus), with Shift
+  - Alternatives: Cmd+Alt+Left/Right or H/L (focus), with Shift
     (move), Cmd+Alt+1-9, Cmd+Alt+Home/End, Cmd+Alt+C (centre). There is no
     vertical move; those keys go to the program.
   - The wheel or a swipe over any pane header, an edge tab or the minimap slides the view
@@ -508,9 +509,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     adds `strip: true`) is the pane header: icon, name, folder, branch,
     status, hover buttons, the grip and the wheel. Double-click it to
     rename the terminal (the same dialog and `kanso.name` label as the
-    sidebar). The header lives in the strip so that one mod owns the
-    drag, the drop zones, the names and the icons; Herdr doesn't let a mod
-    import another's files.
+    sidebar). The strip owns the header, drag, drop zones, names and icons;
+    Herdr cannot import files across mods.
   - `kanso-prompt`: Herdr's prompt dialog, copied, for what Herdr has no
     command for. Props `{title, value, hint}` and either `command: {name,
     args}` (runs it with `name`, as Herdr's prompt) or `label: {terminal,
@@ -537,10 +537,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
   - `kanso-sleep`: a dialog (520 wide); asleep is a status in `kanso.db`.
-    Ordering hides it at once; the sidebar then runs saving, clearing,
-    exiting, left, or stuck (retry, undo). One owner (20 s). One row until
-    clicked, breathing while it goes; stuck keeps Retry and Undo. A wake
-    still going cancels it. Wake: `claude --resume`.
+    Sleep hides it; a last tab selects a neighbour (Undo
+    returns), or stays shown when alone. Worker: saving, clearing, exiting,
+    left or stuck (Retry/Undo). Acts never hold ticks or repeat while pending.
+    One owner (20 s). Wake mid-flight cancels; else resume.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

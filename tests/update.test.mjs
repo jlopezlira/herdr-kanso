@@ -891,3 +891,36 @@ test("A mod that did not load for want of memory asks for a restart, however the
   assert.equal(exhausted('kanso-menu did not load: Null "null"'), true, "no room left even for the error");
   assert.equal(exhausted("kanso-menu did not load: SyntaxError: unexpected token"), false, "a broken file is not memory");
 });
+
+test("The update plan reads this platform's keymap and adds Windows keys when the installed tag predates them", async () => {
+  for (const platform of ["macos", "linux", "windows"]) {
+    for (const missing of [false, true]) {
+      const path = `kanso/keys${platform === "windows" ? ".windows" : ""}.json`;
+      const chord = platform === "windows" ? "ctrl-shift-o" : "cmd-d";
+      const requests = [], before = { "layout:kanso": { [chord]: "before" } }, after = { "layout:kanso": { [chord]: "after", f5: "refresh" } };
+      const current = { "layout:kanso": { ...(missing ? {} : before["layout:kanso"]), f5: "mine" } };
+      const { Updater } = await updater({
+        window: () => ({ platform }),
+        readTextFile: async () => JSON.stringify(current),
+        exec: async (cmd, args) => {
+          assert.equal(cmd, "curl");
+          const url = args.at(-1);
+          requests.push(url);
+          if (url.endsWith("layouts/kanso.json")) return { code: 0, stdout: "{}" };
+          assert.ok(url.endsWith(path), url);
+          return missing && url.startsWith("old/") ? { code: 22, stdout: "" } : { code: 0, stdout: JSON.stringify(url.startsWith("old/") ? before : after) };
+        },
+      });
+      const instance = new Updater({ file: (version, file) => `${version}/${file}` });
+      instance.installed = "old";
+      const plan = await instance.plan("new", "/app");
+      assert.ok(requests.includes(`old/${path}`) && requests.includes(`new/${path}`));
+      if (missing && platform !== "windows") assert.equal(plan.keys, "", "missing Unix baseline keeps existing behavior");
+      else {
+        assert.deepEqual(JSON.parse(plan.keys), { "layout:kanso": { [chord]: "after", f5: "mine" } });
+        assert.equal(plan.base, JSON.stringify(current));
+        assert.match(plan.notes, /Kept your own f5/);
+      }
+    }
+  }
+});

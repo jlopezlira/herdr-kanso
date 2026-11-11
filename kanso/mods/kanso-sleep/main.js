@@ -155,7 +155,7 @@ export default class Sleep extends View {
     const space = this.space;
     const mine = panes().filter((p) => (space?.tabs ?? []).some((t) => t.id === p.tab));
     const order = { scope, tab: tabId ?? null, pane: paneId ?? null };
-    const plan = hidePlan(order, mine, space?.tabs ?? []);
+    const plan = hidePlan(order, mine, space?.tabs ?? [], spaces());
     if (!plan.settle.length && !plan.park.length) return;
     this.hidden = plan;
     const tabs = space?.tabs ?? [];

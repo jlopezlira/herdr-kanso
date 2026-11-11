@@ -34,6 +34,8 @@ Or, from a clone: `sh ./scripts/local-install.sh`. You need the Herdr app;
 Memory supports macOS and Windows; Windows uses its built-in PowerShell and
 Task Scheduler without administrator rights. kansō updates itself: a release shows as a row above Settings, and a click installs
 it. `ctrl-shift-l` goes back to your previous layout.
+On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
+`kanso/keys.json`.
 
 ## What it does
 

@@ -54,6 +54,11 @@ const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3", "ruby"]);
 export const programOf = (argv) => (!argv?.length ? "shell" : RUNTIMES.has(base(argv[0])) && argv[1] && !argv[1].startsWith("-") ? base(argv[1]) : base(argv[0]));
 export const summary = (a) => a.cols.flatMap((c) => c.panes).map((p) => programOf(p.argv)).join(", ");
 
+export function spaceBeside(id, list) {
+  const at = list.findIndex((s) => s.id === id);
+  return at < 0 ? null : list[at + 1] ?? list[at - 1] ?? null;
+}
+
 export const projectOf = (space) => `${space?.machine ?? ""}:${space?.folder || home()}`;
 export const folderOfKey = (key) => String(key ?? "").slice(String(key ?? "").indexOf(":") + 1);
 

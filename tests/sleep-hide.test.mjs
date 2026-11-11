@@ -1,7 +1,7 @@
 // Ordering sleep hides the tab or parks the pane before the slow read, and a wake mid-flight cancels it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, context } from "./helpers.mjs";
+import { load, context, clone } from "./helpers.mjs";
 
 const space = { id: "sp", name: "kanso", folder: "/w", active: true, tabs: [{ id: "tb1", active: true, name: "Main" }] };
 
@@ -149,3 +149,34 @@ test("a settled tab and a tab sent to sleep leave the bar", async () => {
   assert.deepEqual(shownTabs(tabs, [{ id: "away:c", tab: "c", settle: ["c"] }]).map((t) => t.id), ["a"]);
   assert.deepEqual(shownTabs(tabs, []).map((t) => t.id), ["a", "c"]);
 });
+
+for (const whole of [false, true]) {
+  test(`sleeping ${whole ? "a project" : "the only tab"} leaves its space before reading and returns after a blocker or failed write`, async () => {
+    for (const failure of ["blocker", "write"]) {
+      const calls = [], state = new Map();
+      const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], {
+        ...host([]),
+        spaces: () => [space, { id: "next", active: false, tabs: [{ id: "tb2" }] }],
+        run: (cmd, args) => calls.push([cmd, args]),
+        shared: (key) => state.get(key),
+        setShared: (key, value) => state.set(key, value),
+      });
+      const s = new Sleep();
+      s.space = space;
+      let reads = 0;
+      s.readTabs = async () => {
+        calls.push(["read"]);
+        return failure === "blocker" && (!whole || reads++ > 0) ? [{ ...shown[0], blocker: "Agent is working" }] : shown;
+      };
+      s.refresh = async () => {};
+      s.store = { asleep: async () => [], sleep: async () => { throw new Error("full"); } };
+      const { cx, drain } = context();
+      s.startSleep(cx, whole, "tb1", null);
+      if (whole) { await drain(); calls.length = 0; s.sleep(cx); }
+      assert.deepEqual(clone(calls.slice(0, 2)), [["tab.settle", { id: "tb1" }], ["space.select", { id: "next" }]]);
+      await drain();
+      assert.ok(calls.some(([cmd, args]) => cmd === "space.select" && args.id === "sp"));
+      assert.equal(state.get("kanso.sleep.hidden").length, 0);
+    }
+  });
+}
