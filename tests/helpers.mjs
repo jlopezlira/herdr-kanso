@@ -1,35 +1,44 @@
 // Shared by the tests: load a mod's real source into a fake Herdr host.
 import { execFile, execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, readdir, rmdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import vm from "node:vm";
+import { bannedGlobals } from "../scripts/herdr-api.mjs";
 import { modScript } from "../scripts/mod-source.mjs";
 
 const runFile = promisify(execFile);
 const fileExists = (path) => access(path).then(() => true, () => false);
-// What gpui-kit.d.ts declares. An import of anything else fails the way Herdr fails it.
+const api = JSON.parse(readFileSync(new URL("./herdr-api.json", import.meta.url), "utf8"));
+const declaredNames = (mod) => api.modules[mod] ?? [];
 const HERDR_MODULES = {
-  "fs/promises": ["readFile", "writeFile", "readdir", "exists", "unlink", "rmdir", "mkdir"],
-  net: ["connect"],
-  websocket: ["WebSocket"],
+  "fs/promises": declaredNames("fs/promises"),
+  net: declaredNames("net").filter((name) => name !== "default"),
+  websocket: declaredNames("websocket"),
 };
 export function bindHerdrModules(text) {
   return text.replace(/^import\s+(?:(\*\s+as\s+\w+|\{[^}]*\}|\w+)\s+from\s+)?["']([^"']+)["'];[ \t]*(?:\r?\n|$)/gm, (full, clause, from) => {
-    const allowed = HERDR_MODULES[from];
-    if (!allowed) return full;
-    if (!clause) return "";
-    if (clause.startsWith("*")) return `const ${clause.match(/\*\s+as\s+(\w+)/)[1]} = __herdrModule(${JSON.stringify(from)});\n`;
+    if (from.startsWith(".")) return full;
+    const declared = api.modules[from];
+    if (!declared) throw new Error(`Could not find module '${from}'`);
+    if (!clause) return HERDR_MODULES[from] ? "" : full;
+    if (clause.startsWith("*")) {
+      if (!HERDR_MODULES[from]) return full;
+      return `const ${clause.match(/\*\s+as\s+(\w+)/)[1]} = __herdrModule(${JSON.stringify(from)});\n`;
+    }
     if (!clause.startsWith("{")) {
-      if (from !== "net") throw new Error(`Could not find export 'default' in module '${from}'`);
+      if (!declared.includes("default") || (HERDR_MODULES[from] && from !== "net")) throw new Error(`Could not find export 'default' in module '${from}'`);
+      if (!HERDR_MODULES[from]) return full;
       return `const ${clause} = __herdrModule(${JSON.stringify(from)});\n`;
     }
     const specs = clause.slice(1, -1).split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
       const [orig, alias] = part.split(/\s+as\s+/).map((name) => name.trim());
-      if (!allowed.includes(orig)) throw new Error(`Could not find export '${orig}' in module '${from}'`);
+      if (!declared.includes(orig)) throw new Error(`Could not find export '${orig}' in module '${from}'`);
       return alias ? `${orig}: ${alias}` : orig;
     });
+    if (!HERDR_MODULES[from]) return full;
     return `const { ${specs.join(", ")} } = __herdrModule(${JSON.stringify(from)});\n`;
   });
 }
@@ -55,12 +64,13 @@ const ban = (name) => {
   return new Proxy(function banned() { fail(); }, { get: fail, apply: fail, construct: fail });
 };
 
+const vmNames = vm.runInContext("Object.getOwnPropertyNames(globalThis)", vm.createContext({}));
+export const MOD_BANNED_GLOBALS = bannedGlobals(vmNames, api.globals);
+
 // The mod runtime has none of these. Using one throws, even when a fixture passed the real one in.
 export function modSandbox(host = {}) {
   const sandbox = vm.createContext({ ...host });
-  sandbox.TextDecoder = ban("TextDecoder");
-  sandbox.atob = ban("atob");
-  sandbox.Buffer = ban("Buffer");
+  for (const name of MOD_BANNED_GLOBALS) sandbox[name] = ban(name);
   return sandbox;
 }
 

@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [Unreleased]
+
+### Changed
+
+- A mod that imports a name Herdr does not provide fails the test run, so it cannot ship with its panels dead.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added

@@ -112,11 +112,15 @@ agent unless you press Send, and share images carry totals only.
 
 ## Development
 
-`npm test` (Node 22.15+, Git, Bash, sqlite3). A pull request that changes
-what kansō installs bumps `kanso/mods/kanso-chrome/version.json` and adds the
-version's section to [CHANGELOG.md](CHANGELOG.md); `npm run check:version`
-checks it, and merging to main releases it. How every part is built:
-[kanso/RECIPE.md](kanso/RECIPE.md).
+A change passes `npm test`, `npm run sync:share -- --check` and
+`npm run check:version` (Node 22.15+, Git, Bash, sqlite3). `npm test` checks
+each mod's imports against the Herdr names in `tests/herdr-api.json`;
+`node scripts/herdr-api.mjs` rewrites that file from this machine's
+declarations. `npm run check:mods` runs `herdr-app check` on every mod when
+the app is installed. A pull request that changes what kansō installs bumps
+`kanso/mods/kanso-chrome/version.json` and adds the version's section to
+[CHANGELOG.md](CHANGELOG.md); merging to main releases it. How every part is
+built: [kanso/RECIPE.md](kanso/RECIPE.md).
 
 ## Credits and license
 
