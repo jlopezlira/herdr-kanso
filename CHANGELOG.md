@@ -14,6 +14,10 @@ release.
 
 ## [3.30.1] - 2026-11-11
 
+### Added
+
+- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
+
 ### Changed
 
 - The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
@@ -23,7 +27,6 @@ release.
 ### Added
 
 - What's new lets you choose Stable or Early. Stable is the release everyone gets. Early gets changes before they are tested by everyone, and nothing is required. Going back to Stable keeps the version you have until Stable reaches it.
-- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
 
 ### Changed
 
