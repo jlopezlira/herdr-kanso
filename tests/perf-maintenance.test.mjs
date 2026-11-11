@@ -61,3 +61,43 @@ test("sleep reloads wait for a changed stamp, a kick, or two minutes", async () 
   await view.loadAsleep(false);
   assert.equal(reads, 4);
 });
+
+test("project folders are checked only after registry changes or five minutes", async () => {
+  let now = 0, checks = 0;
+  const rows = [{ id: "p1", folder: "/project", name: "Project", machine: "" }];
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    Date: { now: () => now }, shared: () => null, spaces: () => [], home: () => "/home",
+    exec: async () => { checks += 1; return { code: 0, stdout: "/project\n" }; },
+  });
+  const view = new Spaces(), db = { projects: async () => rows };
+  assert.equal((await view.publishRegistry(db))[0].missing, true);
+  for (now of [30000, 120000, 299999]) await view.publishRegistry(db);
+  assert.equal(checks, 1);
+  now = 300000;
+  await view.publishRegistry(db);
+  assert.equal(checks, 2);
+  rows[0].name = "Renamed";
+  now += 1;
+  await view.publishRegistry(db);
+  assert.equal(checks, 3);
+});
+
+test("sleep work waits for a shared change, a kick, or its two-minute fallback", async () => {
+  let now = 0, stamp = 0, kick = 0, starts = 0;
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    Date: { now: () => now }, shared: (key) => key === "kanso.asleep.at" ? stamp : kick,
+  });
+  const view = Object.assign(new Spaces(), { sleepWork: { start() { starts += 1; } } });
+  view.pollSleepWork({});
+  for (now of [30000, 60000, 90000, 119999]) view.pollSleepWork({});
+  assert.equal(starts, 1);
+  now = 120000;
+  view.pollSleepWork({});
+  assert.equal(starts, 2);
+  kick = 1;
+  view.pollSleepWork({});
+  assert.equal(starts, 3);
+  stamp = 2;
+  view.pollSleepWork({});
+  assert.equal(starts, 4);
+});

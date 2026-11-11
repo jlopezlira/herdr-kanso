@@ -180,11 +180,11 @@ test("the top + adds a project in Projects and starts a conversation in Threads;
 });
 
 test("a local folder that is gone marks only this computer's project, never another machine's at the same path", async () => {
-  const { publishRegistry } = await load("kanso-spaces/main.js", ["publishRegistry"], {
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     spaces: () => [], home: () => "", shared: () => [], setShared: () => {}, exec: async () => ({ code: 0, stdout: "/srv/api\n" }),
   });
   const list = [{ id: "here", name: "api", folder: "/srv/api", machine: "" }, { id: "odin", name: "api", folder: "/srv/api", machine: "odin" }];
-  assert.deepEqual(clone((await publishRegistry({ projects: async () => list })).map((p) => [p.id, p.missing])), [["here", true], ["odin", false]]);
+  assert.deepEqual(clone((await new Spaces().publishRegistry({ projects: async () => list })).map((p) => [p.id, p.missing])), [["here", true], ["odin", false]]);
 });
 
 test("New project with a conversation: the name you give it, its folder, then which agent, asked", async (t) => {

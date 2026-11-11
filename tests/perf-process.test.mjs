@@ -24,14 +24,15 @@ test("terminal identity labels use created_ms without another process read", asy
   assert.deepEqual(calls, [["label", "t1", "kanso.shown=Name", "kanso.id=t1-123"], ["label", "t2"]]);
 });
 
-test("thread size runs wc directly and an unchanged file is not read again", async () => {
+test("a known pid reuses its location and an unchanged transcript is not read again", async () => {
   const calls = [];
+  let size = 123;
   const file = "/session folder/rollout-01234567-1234-1234-1234-0123456789ab.jsonl";
   const { findThreads } = await load("kanso-spaces/threads.js", ["findThreads"], {
     home: () => "/home/me",
     exec: async (command, args) => {
       calls.push([command, clone(args)]);
-      return { code: 0, stdout: command === "wc" ? `123 ${file}\n` : args.length === 5 ? `codex\t${file}\t{}\n` : "" };
+      return { code: 0, stdout: command === "wc" ? `${size} ${file}\n` : args.length === 5 ? `codex\t${file}\t{}\n` : "" };
     },
   });
   const list = [{ address: "t1", app: "codex" }], terms = [{ address: "t1", foreground: { pid: 101 } }];
@@ -42,7 +43,16 @@ test("thread size runs wc directly and an unchanged file is not read again", asy
   calls.length = 0;
   const again = await findThreads(list, found, terms);
   assert.equal(again.t1, found.t1);
-  assert.deepEqual(calls.map(([command]) => command), ["sh", "wc"]);
+  assert.deepEqual(calls.map(([command]) => command), ["wc"]);
+  size = 124;
+  calls.length = 0;
+  const grown = await findThreads(list, found, terms);
+  assert.equal(grown.t1.size, 124);
+  assert.deepEqual(calls.map(([command]) => command), ["wc", "sh"]);
+  calls.length = 0;
+  const replaced = await findThreads(list, found, [{ address: "t1", foreground: { pid: 202 } }]);
+  assert.equal(replaced.t1.pid, 202);
+  assert.deepEqual(calls.map(([command]) => command), ["sh", "wc", "sh"]);
 });
 
 test("machine polling stops after the first local read and resumes for a remote or parked machine", async () => {

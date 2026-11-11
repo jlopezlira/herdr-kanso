@@ -86,7 +86,7 @@ async function findThread({ app }, known, home, got) {
   const pid = got?.foreground?.pid;
   if (!pid) return null;
   const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
-  const where = parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
+  const where = known?.pid === pid ? known : parseLocated((await exec("sh", ["-c", LOCATE, "sh", String(pid), kind])).stdout, home);
   if (!where) return null;
   const size = Number((await exec("wc", ["-c", where.file])).stdout.trim().split(/\s+/)[0]);
   if (!size) return null;

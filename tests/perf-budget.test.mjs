@@ -58,5 +58,7 @@ for (const [working, budget] of [[2, 15], [0, 3]]) test(`sidebar at rest with 10
     return { ...out, [kind]: (out[kind] ?? 0) + 1 };
   }, {}), files: f.state.reads.length }));
   assert.equal(f.state.timers.filter((timer) => timer.every && timer.ms === 1000).length, 0, "sleep kick registered a separate 1-second timer; budget 0");
+  const sqlite = f.state.processes.filter((p) => p.command === "sqlite3").length;
+  if (working === 0) assert.ok(sqlite <= 2, `sidebar idle database timers started ${sqlite} sqlite3 processes per minute; budget 2`);
   assert.ok(f.state.processes.length <= budget, `sidebar at rest (${working} working) started ${f.state.processes.length} processes per minute; budget ${budget}`);
 });

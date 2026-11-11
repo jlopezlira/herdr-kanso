@@ -118,18 +118,6 @@ const label = (address, key, value) => hc(["label", address, `${key}=${value ?? 
 
 // The projects, as every view of the sidebar draws them (the database read last, which local folders are gone).
 const registry = () => { const rows = shared(REGISTRY); return Array.isArray(rows) ? rows : []; };
-async function publishRegistry(kdb) {
-  const list = await kdb.projects();
-  const sleeping = new Set((shared("kanso.asleep") ?? []).filter((s) => s.state !== "undoing").map((s) => s.from));
-  const awake = new Set(spaces().map((s) => keyOfSpace(s, home())));
-  const quiet = (p) => sleeping.has(keyOfProject(p)) && !awake.has(keyOfProject(p));
-  const missing = await missingFolders(list.filter((p) => !p.machine && !quiet(p)).map((p) => p.folder));
-  const previous = new Map(registry().map((p) => [p.id, p.missing]));
-  // Only this computer's folders are looked at: another machine's project is never called gone from here.
-  const shown = list.map((p) => ({ id: p.id, name: p.name, folder: p.folder, machine: p.machine ?? "", agent: p.agent ?? null, missing: quiet(p) ? (previous.get(p.id) ?? false) : !p.machine && missing.has(p.folder) }));
-  if (JSON.stringify(shown) !== JSON.stringify(registry())) setShared(REGISTRY, shown);
-  return shown;
-}
 // A sleep's key as a project's (a trailing / never makes two of one place).
 const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.slice(0, i)}:${trimmed(key.slice(i + 1))}`; };
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
@@ -215,7 +203,7 @@ export default class Spaces extends View {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
     });
-    this.sleepWork.start(cx);
+    this.pollSleepWork(cx);
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
     cx.spawn(async (cx) => {
@@ -267,7 +255,7 @@ export default class Spaces extends View {
     cx.timer.every(500, (cx) => this.checkNew(cx));
     cx.timer.every(ALIVE_MS, (cx) => this.checkTasks(cx));
     // A sleep or wake that stopped half way shows again once old; another window's changes arrive.
-    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.sleepWork.start(cx); cx.notify(); });
+    cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); cx.notify(); });
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
     cx.spawn(async (cx) => {
       for (;;) {
@@ -327,7 +315,27 @@ export default class Spaces extends View {
       await kdb.migrateProjects(startingProjects(spaces(), [...new Set(rows.map((a) => a.from).filter(Boolean))], home()));
       this.projectsIn = true;
     }
-    await publishRegistry(kdb);
+    await this.publishRegistry(kdb);
+  }
+
+  async publishRegistry(kdb) {
+    const list = await kdb.projects();
+    const sleeping = new Set((shared("kanso.asleep") ?? []).filter((s) => s.state !== "undoing").map((s) => s.from));
+    const awake = new Set(spaces().map((s) => keyOfSpace(s, home())));
+    const quiet = (p) => sleeping.has(keyOfProject(p)) && !awake.has(keyOfProject(p));
+    const folders = list.filter((p) => !p.machine && !quiet(p)).map((p) => p.folder);
+    const signature = JSON.stringify([list, folders]), now = Date.now();
+    if (signature !== this.folderSignature || now - this.foldersAt >= 300000) {
+      this.folderMissing = await missingFolders(folders);
+      this.folderSignature = signature;
+      this.foldersAt = now;
+    }
+    const missing = this.folderMissing;
+    const previous = new Map(registry().map((p) => [p.id, p.missing]));
+    // Only this computer's folders are looked at: another machine's project is never called gone from here.
+    const shown = list.map((p) => ({ id: p.id, name: p.name, folder: p.folder, machine: p.machine ?? "", agent: p.agent ?? null, missing: quiet(p) ? (previous.get(p.id) ?? false) : !p.machine && missing.has(p.folder) }));
+    if (JSON.stringify(shown) !== JSON.stringify(registry())) setShared(REGISTRY, shown);
+    return shown;
   }
 
   // The sidebar's own database handle; a popup has its own.
@@ -358,7 +366,7 @@ export default class Spaces extends View {
     cx.spawn(async (cx) => {
       try {
         const { row, existed } = await this.kdb.addProject({ name: name || folderName(folder), folder, machine: "" });
-        await publishRegistry(this.kdb);
+        await this.publishRegistry(this.kdb);
         const open = spaces().find((w) => keyOfSpace(w, home()) === keyOfProject(row));
         if (existed) notify({ title: `${row.name} is already one of your projects`, level: "info", timeout: 4000 });
         closeOverlay(props().overlay);
@@ -451,6 +459,16 @@ export default class Spaces extends View {
   }
 
 
+
+  pollSleepWork(cx, fallback = true) {
+    if (!this.sleepWork) return;
+    const now = Date.now(), stamp = shared("kanso.asleep.at") ?? 0, kick = shared("kanso.sleep.kick") ?? 0;
+    if (stamp === this.workStamp && kick === this.workKick && (!fallback || now - this.workPolledAt < 120000)) return;
+    this.workStamp = stamp;
+    this.workKick = kick;
+    this.workPolledAt = now;
+    this.sleepWork.start(cx);
+  }
 
   async loadAsleep(force = true) {
     const started = Date.now(), stamp = shared("kanso.asleep.at") ?? 0, kick = shared("kanso.sleep.kick") ?? 0;
@@ -766,7 +784,7 @@ export default class Spaces extends View {
   }
 
   checkNew(cx) {
-    if (this.sleepWork && (shared("kanso.sleep.kick") ?? 0) > this.sleepWork.kicked) this.sleepWork.start(cx);
+    this.pollSleepWork(cx, false);
     const now = Date.now();
     const active = window().active;
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
@@ -1463,7 +1481,7 @@ export default class Spaces extends View {
 
   // A popup's write finishes before the popup closes: closed first, the write could be cut off with it.
   thenClose(write, after = () => {}) {
-    Promise.resolve(write).then(() => publishRegistry(this.kdb)).catch(() => {})
+    Promise.resolve(write).then(() => this.publishRegistry(this.kdb)).catch(() => {})
       .finally(() => { after(); closeOverlay(props().overlay); });
   }
 
