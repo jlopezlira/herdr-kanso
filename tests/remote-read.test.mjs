@@ -406,6 +406,7 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
       },
       writeFile, mkdir, readdir, unlink, stat,
       watchFolder: async () => { throw new Error("no watch"); },
+      nextCommand: async () => { throw new Error("no commands"); },
     });
     assert.equal(previewKind("/a.png"), "picture");
     assert.equal(previewKind("/a.svg"), "picture");
@@ -414,8 +415,9 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
     assert.equal(previewKind("/a.pdf"), "text");
     assert.equal(previewKind("/a.heic"), "text");
     const { cx, drain } = context();
-    cx.timer = { every() {}, after(ms, fn) { afters.push([ms, fn]); } };
-    const quiet = { ...cx, timer: { every() {}, after() {} }, focus_handle: () => ({}) };
+    const miss = (ms, fn) => { if (ms === 1000) fn(); };
+    cx.timer = { every() {}, after(ms, fn) { if (ms === 1000) { fn(); return; } afters.push([ms, fn]); } };
+    const quiet = { ...cx, timer: { every() {}, after: miss }, focus_handle: () => ({}) };
     const text = new Preview();
     text.init(quiet, { path: "/repo/a.js" });
     await drain();

@@ -17,10 +17,7 @@ release.
 ### Added
 
 - What's new lets you choose Stable or Early. Stable is the release everyone gets. Early gets changes before they are tested by everyone, and nothing is required. Going back to Stable keeps the version you have until Stable reaches it.
-
-### Added
-
-- Any file that is not a picture opens from Files into Preview. It can be edited when the read has no NUL byte and fits in 1 MiB, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. A file over 1 MiB stays a view. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
+- Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
 
 ### Changed
 

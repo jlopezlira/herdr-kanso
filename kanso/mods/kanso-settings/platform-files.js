@@ -44,6 +44,7 @@ export class SaveConflict extends Error {
 const unixScript = (platform) => {
   const stat = platform === "macos" ? "stat -L -f %z" : "stat -c %s";
   const hash = platform === "macos" ? "shasum -a 256" : "sha256sum";
+  const b64 = platform === "macos" ? "base64 -D" : "base64 -d";
   return [
     "target=$1",
     "textb64=$2",
@@ -55,13 +56,13 @@ const unixScript = (platform) => {
     'cleanup() { status=$?; trap - EXIT; if [ -n "$dir" ]; then rm -rf "$dir"; fi; exit "$status"; }',
     "trap cleanup EXIT",
     'if [ -n "$textb64" ]; then',
-    '  if [ "$phase" = more ] || [ "$phase" = end ]; then printf %s "$textb64" | base64 -d >> "$dir/new" || exit 1',
-    '  else printf %s "$textb64" | base64 -d > "$dir/new" || exit 1; fi',
+    `  if [ "$phase" = more ] || [ "$phase" = end ]; then printf %s "$textb64" | ${b64} >> "$dir/new" || exit 1`,
+    `  else printf %s "$textb64" | ${b64} > "$dir/new" || exit 1; fi`,
     'elif [ "$phase" = shot ] || [ "$phase" = begin ]; then : > "$dir/new"; fi',
     'if [ "$mode" = match ]; then',
     '  if [ -n "$expb64" ]; then',
-    '    if [ "$phase" = more ] || [ "$phase" = end ]; then printf %s "$expb64" | base64 -d >> "$dir/exp" || exit 1',
-    '    else printf %s "$expb64" | base64 -d > "$dir/exp" || exit 1; fi',
+    `    if [ "$phase" = more ] || [ "$phase" = end ]; then printf %s "$expb64" | ${b64} >> "$dir/exp" || exit 1`,
+    `    else printf %s "$expb64" | ${b64} > "$dir/exp" || exit 1; fi`,
     '  elif [ "$phase" = shot ] || [ "$phase" = begin ]; then : > "$dir/exp"; fi',
     "fi",
     'if [ "$phase" = begin ] || [ "$phase" = more ]; then trap - EXIT; printf %s "$dir"; exit 0; fi',

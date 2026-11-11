@@ -135,10 +135,11 @@ test("a remote save writes in place, one call when both sides fit", () => {
     assert.equal(one[0].args("")[7], "shot");
     const script = scriptOf(one[0]);
     assert.match(script, /mktemp -d/);
-    assert.match(script, /base64 -d/);
+    assert.match(script, platform === "macos" ? /base64 -D/ : /base64 -d/);
+    assert.equal(platform === "macos" ? /base64 -d/.test(script) : /base64 -D/.test(script), false);
     assert.match(script, /cat "\$dir\/new" > "\$target"/);
     assert.match(script, /\[ -e "\$target" \] \|\| \[ -L "\$target" \]/);
-    assert.equal(/mv -f|\.kanso-|base64 -D/.test(script), false);
+    assert.equal(/mv -f|\.kanso-/.test(script), false);
     assert.match(script, platform === "macos" ? /shasum -a 256/ : /sha256sum/);
     assert.match(script, platform === "macos" ? /stat -L -f %z/ : /stat -c %s/);
     const raw = WRITE_RAW[platform];

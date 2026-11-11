@@ -34,17 +34,14 @@ class PreviewKeys {
     cx.spawn((commandCx) => commandLoop(
       () => nextCommand(),
       () => {
-        if (!this.view || typeof nextCommand !== "function") throw new Error("gone");
+        if (!this.view) throw new Error("gone");
         this.cx.notify();
       },
       (command) => {
         if (this.view && String(command).replace(/^kanso-panel\./, "") === "save") this.view.save(this.cx);
       },
       commandCx.timer,
-    ).finally(() => {
-      this.live = false;
-      if (this.view && this.cx && typeof nextCommand === "function") this.bind(this.view, this.cx);
-    }));
+    ).finally(() => { this.live = false; }));
   }
 
   unbind(view) {
