@@ -86,7 +86,7 @@ function armLook(f) {
   f.state.bytes = 40;
   f.state.mtime = 1_700_000_000;
   f.host.exec = async (command, args = [], options) => {
-    if (command === "stat") return { code: 0, stdout: `${f.state.bytes} ${f.state.mtime}\n`, stderr: "" };
+    if (command === "stat" || command === "/usr/bin/stat") return { code: 0, stdout: `${f.state.bytes} ${f.state.mtime}\n`, stderr: "" };
     if (command === "ps" && args[0] === "-o") return { code: 0, stdout: "00:01\n", stderr: "" };
     return exec(command, args, options);
   };

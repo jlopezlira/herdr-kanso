@@ -141,3 +141,63 @@ export function headerHold(view) {
   if (gate.awaitingPermission || gate.text === NO_PERMISSION || gate.text === READY_TEXT) return null;
   return gate.text;
 }
+
+const JOB = 24;
+const clipJob = (name) => {
+  const text = String(name).trim();
+  return text.length <= JOB ? text : text.slice(0, JOB).trim();
+};
+
+const jobFacts = (view) => {
+  if (!view || !("statusCheckRollup" in view) || view.statusCheckRollup == null) return null;
+  const jobs = onePerJob(view.statusCheckRollup);
+  const states = jobs.map(checkState);
+  const summary = checkSummary(states);
+  const names = jobs.filter((_c, i) => states[i] === "fail").map((c) => nameOf(c)).filter((n) => n != null && String(n).trim());
+  return { fail: summary.fail, pending: summary.pending, failed: summary.fail === 1 ? (names[0] ?? null) : null };
+};
+
+export function prFacts(view) {
+  if (view?.number == null) return null;
+  const jobs = jobFacts(view) ?? { fail: view.fail ?? 0, pending: view.pending ?? 0, failed: view.failed ?? null };
+  return {
+    number: view.number, state: view.state ?? null, isDraft: Boolean(view.isDraft),
+    mergeable: view.mergeable ?? null, mergeStateStatus: view.mergeStateStatus ?? null,
+    reviewDecision: view.reviewDecision ?? null, baseRefName: view.baseRefName ?? null,
+    fail: jobs.fail, pending: jobs.pending, failed: jobs.failed,
+  };
+}
+
+const viewOf = (d) => {
+  if (!d || typeof d !== "object") return null;
+  if (d.pr && typeof d.pr === "object") return d.pr;
+  if (d.number != null || d.statusCheckRollup != null || d.mergeStateStatus || d.reviewDecision || d.isDraft) return d;
+  return null;
+};
+
+const said = (text, tone, section, check = null) => ({ text, tone, section, check });
+
+export function prLine(d) {
+  const view = viewOf(d);
+  if (!view) return null;
+  const state = String(view.state ?? "OPEN").toUpperCase();
+  if (state !== "OPEN") return null;
+  const status = String(view.mergeStateStatus ?? "").toUpperCase();
+  const base = view.baseRefName || "base";
+  if (view.isDraft || status === "DRAFT") return said("draft", "dim", "draft");
+  if (view.mergeable === "CONFLICTING" || status === "DIRTY") return said(`conflicts with ${base}`, "blocked", "conflicts");
+  if (!status || status === "UNKNOWN") return null;
+  if (status === "BEHIND") return said(`behind ${base}`, "working", "behind");
+  const jobs = jobFacts(view) ?? { fail: view.fail ?? 0, pending: view.pending ?? 0, failed: view.failed ?? null };
+  if (status === "BLOCKED" || !CAN_MERGE.has(status)) {
+    if (jobs.fail > 1) return said(`${jobs.fail} checks failing`, "blocked", "checks");
+    if (jobs.fail === 1) return jobs.failed
+      ? said(`${clipJob(jobs.failed)} failed`, "blocked", "checks", jobs.failed)
+      : said("checks failing", "blocked", "checks");
+    if (view.reviewDecision === "CHANGES_REQUESTED") return said("changes requested", "blocked", "threads");
+    if (view.reviewDecision === "REVIEW_REQUIRED") return said("review required", "working", "review");
+    if (jobs.pending > 0) return said("checks running", "working", "checks");
+  }
+  // The header does not know merge permission, so a clean pull request says nothing.
+  return null;
+}

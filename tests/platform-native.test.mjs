@@ -107,11 +107,7 @@ test("native repository service creates, discovers and probes a worktree without
 test("a file copied in slices matches its bytes, including an empty file and one slice", async (t) => {
   const { CHUNK, slices } = await load("kanso-panel/remote-file.js", ["CHUNK", "slices"], { appHome: () => "/app" });
   const root = await temporary(t);
-  // macOS calls base64 -D. /usr/bin is that program; a GNU base64 earlier on PATH is not.
-  const run = nativePlatform === "macos"
-    ? (cmd, args, options) => exec(cmd, args, { ...options, env: { ...process.env, PATH: `/usr/bin:/bin:/usr/sbin:/sbin:${process.env.PATH ?? ""}` } })
-    : exec;
-  const files = fileApi(nativePlatform, run);
+  const files = fileApi(nativePlatform, exec);
   const copy = async (name, bytes) => {
     const source = join(root, name), dest = join(root, `${name}.out`);
     await writeFile(source, bytes);

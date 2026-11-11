@@ -6,15 +6,13 @@ import { fileApi } from "./platform-files.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-files.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-files; one of the kanso-panel mod's panels.
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
-import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
-import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
-import { kindOf } from "./kinds.js";
+import { v_flex, h_flex, v_virtual_list, Scrollbar } from "gpui-base";
+import { exec, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
+import { location, key, insideRoot, showPanel } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeStamp, staleView, asOf } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
-import { readingLines } from "./doc.js";
 import { skeleton, breathe, quietLink, tokens } from "./ui.js";
 import { Front } from "./front.js";
 
@@ -24,6 +22,16 @@ const ranked = (entries, room) => entries.slice(0, Math.max(0, room)).toSorted((
 const markOf = (xy) => xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
 const marksFrom = (top, rows) => Object.fromEntries(rows.filter(Boolean).slice(0, TOTAL).map((entry) => [`${top}/${entry.slice(3)}`, markOf(entry.slice(0, 2))]));
 
+export function changedFiles(marks, root) {
+  const base = String(root ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!base) return [];
+  return Object.entries(marks ?? {}).flatMap(([abs, mark]) => {
+    const full = String(abs).replace(/\\/g, "/").replace(/\/+$/, "");
+    const rel = full.startsWith(`${base}/`) ? full.slice(base.length + 1) : "";
+    return rel ? [{ path: rel, entry: { name: rel, dir: false }, depth: 0, mark }] : [];
+  }).toSorted((a, b) => a.path.localeCompare(b.path));
+}
+
 async function directory(path, on) {
   return (await serviceOn(fileApi, on)).directory(path);
 }
@@ -31,8 +39,9 @@ async function directory(path, on) {
 export class Files {
   constructor() { this.rev = 0; } // bumped whenever the rows would differ; the tree is rebuilt only then
 
-  init(cx) {
+  init(cx, given = {}) {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
+    this.changed = Boolean(given?.changed);
     // Returning from the preview: the folders that were open, for the same place.
     const back = shared(RETURN);
     if (back) {
@@ -108,7 +117,7 @@ export class Files {
       this.context = context; this.root = cwd; this.on = on; this.entries = new Map();
       this.folders = new Set(mem?.folders ?? []);
       this.pendingFile = mem?.file ?? null;
-      this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
+      this.pending = new Set(); this.marks = {}; this.watched = null; this.error = null; this.limited = false;
       this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
       this.rev = this.rev + 1;
     }
@@ -146,7 +155,7 @@ export class Files {
     if (key() !== context) return;
     this.marks = status?.code === 0 ? marksFrom(top.stdout.trim(), status.stdout.split("\0")) : {};
     this.rev = this.rev + 1; this.error = null; this.listedAt = Date.now(); this.watch(cwd, cx);
-    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
+    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.openSaved(file, cx); }
   }
 
   async loadRemote(cwd, context, cx) {
@@ -167,7 +176,7 @@ export class Files {
     this.fresh = Date.now(); this.held = null; this.error = null;
     this.poll = pollNext(this.poll, "changed");
     this.rev = this.rev + 1;
-    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
+    if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.openSaved(file, cx); }
   }
 
   probe(cx) {
@@ -224,34 +233,17 @@ export class Files {
   }
 
   // The open folders are kept so returning from the preview restores them.
+  openSaved(file) { this.read(file); }
+
   read(path) {
     if (!insideRoot(path)) return;
     setShared(RETURN, { context: this.context, folders: [...this.folders] });
     showPanel("preview", { mod: "kanso-panel", props: { panel: "preview", path: paths.join(this.root, path), on: this.on, back: "files" } });
   }
 
-  show(path, cx, quiet = false) {
-    this.code?.release(); this.code = null; this.text = null; this.file = path; this.fileError = null;
-    if (!path || !cx) return;
-    if (!insideRoot(path)) { if (quiet) this.file = null; else this.fileError = "Cannot preview this file"; return; }
-    const context = this.context, root = this.root, on = this.on;
-    cx.spawn(async cx => {
-      try {
-        const text = await readTextFile(paths.join(root, path), { on });
-        if (this.file !== path || key() !== context) return;
-        if (text === null || text.includes("\0")) {
-          if (quiet) { this.file = null; this.fileError = null; return; }
-          this.fileError = text === null ? "This file is no longer available" : "Binary file · no text preview";
-          return;
-        }
-        if (isMarkdown(path)) this.text = text; else this.code = codeState(path, text);
-      } catch { if (this.file === path && key() === context) { if (quiet) { this.file = null; this.fileError = null; } else this.fileError = "Cannot preview this file (binary, too large, or unreadable)"; } }
-      finally { cx.notify(); }
-    });
-  }
-
   // Rebuilt only when `rev` changes: a draw comes with every shared write anywhere, and rows run to 5,000.
   rows() {
+    if (this.changed) return changedFiles(this.marks, this.root);
     if (!this.shown || this.shown.rev !== this.rev) this.shown = { rev: this.rev, items: this.flat("", 0).slice(0, TOTAL) };
     return this.shown.items;
   }
@@ -296,16 +288,13 @@ export class Files {
     }
     if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     const t = theme();
-    const items = this.file ? [] : this.rows();
+    const items = this.rows();
     return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
-        .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => { this.show(null); cx.notify(); }).child("←")))
         .child(div().font_semibold().child("Files"))
-        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.file ?? this.root?.split(/[\\/]/).at(-1) ?? ""))
-        .when(Boolean(this.file), el => el.child(div().id("files-open-with").p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip("Open with…")
-          .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => this.openWith(this.file))
-          .child(svg("mods/kanso-chrome/icons/open-with.svg").size(14)))))
-      .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
+        .when(Boolean(this.changed), (el) => el.child(quietLink("files-all", "All files", (clickCx) => { this.changed = false; clickCx.notify(); }, tokens(t))))
+        .child(div().flex_1().min_w(0).truncate().text_right().text_size(12).text_color(t.dim).child(this.root?.split(/[\\/]/).at(-1) ?? "")))
+      .child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
           .child(v_virtual_list("files-rows", items.length, 28, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, t)))
             // Item renderers run during native layout, where per-row handlers are forbidden.
@@ -313,8 +302,7 @@ export class Files {
               const item = items.find((item) => item.path === path);
               if (!item) return;
               if (item.entry.dir) this.toggle(path, cx);
-              else if (isMarkdown(path) || kindOf(path) === "image") this.read(path);
-              else this.show(path, cx);
+              else this.read(path);
             })
             .on_item_secondary_click((path) => {
               const item = items.find((item) => item.path === path);
@@ -328,10 +316,7 @@ export class Files {
           .child(div().text_size(12).text_color(t.dim).child(this.error))
           .when(Boolean(this.on), (row) => row.child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), tokens(t))))))
         .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
-        .when(!this.error && !this.loading && !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.root ? "No files" : "No folder")))
-        .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total")))))
-      .when(Boolean(this.file), el => el.child(this.code ? Editor.new(this.code).flex_1().min_h(0)
-        : this.text !== null ? markdownView("files-md", this.text, t)
-        : this.fileError ? div().p(12).text_color(t.dim).child(this.fileError) : readingLines(t)));
+        .when(!this.error && !this.loading && items.length === 0, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.changed ? "Nothing changed." : this.root ? "No files" : "No folder")))
+        .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }
 }
