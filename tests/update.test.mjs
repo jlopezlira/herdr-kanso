@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import nodeTest, { after as afterAll } from "node:test";
 import { execFile, execFileSync, spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,6 +10,37 @@ import { load, context, exec, nativePlatform, nativeWindow, temporary, clone } f
 const names = ["Updater", "newestTag", "compareVersions", "mergeKeys", "SOURCE", "footerPx", "HOLD", "INSTALL_SCRIPT", "RECOVER", "LAUNCH", "updateHost", "windowsInstallScript", "windowsLaunchScript", "windowsRecoverScript", "sameVolume"];
 const repo = new URL("../kanso/", import.meta.url);
 const windows = process.platform === "win32";
+const test = (name, options, fn) => typeof options === "function"
+  ? nodeTest(name, { timeout: 60_000 }, options)
+  : nodeTest(name, { timeout: 60_000, ...options }, fn);
+const livePids = new Set();
+function endTree(pid) {
+  if (!pid) return;
+  if (windows) {
+    try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { /* already gone */ }
+  } else {
+    try { process.kill(-pid, "SIGKILL"); } catch { /* already gone */ }
+  }
+  try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+}
+function trackedSpawn(...args) {
+  const child = spawn(...args);
+  if (child.pid) livePids.add(child.pid);
+  child.once("exit", () => livePids.delete(child.pid));
+  return child;
+}
+afterAll(() => { for (const pid of livePids) endTree(pid); });
+async function stopInstalls(root) {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) await stopInstalls(path);
+    else if (entry.name.endsWith(".pid")) {
+      const pid = Number((await readFile(path, "utf8").catch(() => "")).trim());
+      if (pid) endTree(pid);
+    }
+  }
+}
 const quote = (value) => `'${String(value).replace(/'/g, "''")}'`;
 const pauses = (command, args) => command === "sleep" || (args ?? []).some((arg) => String(arg).includes("Start-Sleep"));
 const fetches = (command) => command === "curl" || command === "curl.exe";
@@ -166,7 +198,10 @@ async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = 
   oldKeys["layout:kanso"]["cmd-d"] = "kanso-strip.old-right";
   delete oldKeys["layout:kanso"]["cmd-shift-w"];
   await mkdir(join(site, "v1.0.0/kanso/layouts"), { recursive: true });
-  await writeFile(join(site, "v1.0.0/kanso/keys.json"), JSON.stringify(oldKeys));
+  // Windows reads keys.windows.json. The same bytes stand in for this fixture.
+  const oldKeymap = JSON.stringify(oldKeys);
+  await writeFile(join(site, "v1.0.0/kanso/keys.json"), oldKeymap);
+  await writeFile(join(site, "v1.0.0/kanso/keys.windows.json"), oldKeymap);
   await writeFile(join(site, "v1.0.0/kanso/layouts/kanso.json"), layoutChanged ? '{"root":{"id":"old"}}' : shippedLayout);
 
   // v1.1.0: this repository's kanso/ with version.json saying 1.1.0.
@@ -178,7 +213,9 @@ async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = 
   assert.equal(made.code, 0, made.stderr);
   // And its raw files, which decide the keys and the layout before the download.
   await mkdir(join(site, "v1.1.0/kanso/layouts"), { recursive: true });
-  await writeFile(join(site, "v1.1.0/kanso/keys.json"), await readFile(new URL("keys.json", repo), "utf8"));
+  const newKeymap = await readFile(new URL("keys.json", repo), "utf8");
+  await writeFile(join(site, "v1.1.0/kanso/keys.json"), newKeymap);
+  await writeFile(join(site, "v1.1.0/kanso/keys.windows.json"), newKeymap);
   await writeFile(join(site, "v1.1.0/kanso/layouts/kanso.json"), shippedLayout);
 
   // Herdr's `herdr-app check`, faked: it notes each mod, and on a file's say holds open-with
@@ -206,6 +243,8 @@ async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = 
   };
   const checks = async () => (await readFile(join(root, "checks"), "utf8").catch(() => "")).split("\n").filter(Boolean);
   const flag = (name) => writeFile(join(root, name), "");
+  let closed = false;
+  t.after(async () => { closed = true; await stopInstalls(root); });
   // A window: its own shared state and toasts, the same Herdr home as every other. Its exec
   // kills what runs past `limit`, as Herdr's does at 30 s. `abandon` plays the copy replaced by
   // the swap: from its next pause on, it never runs again.
@@ -227,6 +266,7 @@ async function fixture(t, { layoutChanged = true, homeName = "O'Brien home" } = 
       writeTextFile: async (p, text) => { await writeFile(p, text); return null; },
       window: nativeWindow,
       exec: async (command, args, options) => {
+        if (closed) return { code: 1, stdout: "", stderr: "" };
         if (command === "git") return { code: 0, stdout: "x\trefs/tags/v1.0.0\ny\trefs/tags/v1.1.0\n", stderr: "" };
         if (ctl.abandon && pauses(command, args)) { ctl.stuck += 1; return new Promise(() => {}); }
         if (ctl.holdCurl && fetches(command)) { ctl.held += 1; await gate.promise; }
@@ -257,15 +297,15 @@ function pickCommand(commands) {
   }
   return commands.at(-1);
 }
-const stopProcess = (pid) => { try { process.kill(windows ? pid : -pid, "SIGKILL"); } catch {} };
 async function holder(t, f) {
   await mkdir(updates(f.home), { recursive: true });
   const spec = f.updater.host.holdArgs(join(updates(f.home), "lock"));
-  const child = spawn(pickCommand(spec.commands), spec.args, { detached: true, stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+  const child = trackedSpawn(pickCommand(spec.commands), spec.args, { detached: true, stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
   const ended = new Promise((resolve) => child.once("exit", resolve));
-  t.after(() => stopProcess(child.pid));
+  const kill = async () => { endTree(child.pid); await ended; };
+  t.after(() => endTree(child.pid));
   const got = await Promise.race([new Promise((resolve) => child.stdout.once("data", () => resolve(true))), ended.then(() => false)]);
-  return { got, pid: child.pid, kill: async () => { stopProcess(child.pid); await ended; } };
+  return { got, pid: child.pid, kill };
 }
 const version = async (home) => JSON.parse(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8")).version;
 const told = (toasts) => toasts.filter((n) => n.title === "kansō is already being updated");
@@ -511,6 +551,7 @@ test("A swap that fails on its last mod puts back every one before it: the old v
 // mods, for running INSTALL_SCRIPT itself many times.
 async function small(t) {
   const root = await temporary(t);
+  t.after(() => stopInstalls(root));
   const site = join(root, "site"), base = join(root, "base");
   const mod = async (dir, name, v) => {
     await mkdir(join(dir, name, "icons"), { recursive: true });
@@ -589,7 +630,7 @@ async function recovered(s, home, at) {
   return end;
 }
 
-test("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one, and the next install goes through", async (t) => {
+test("Killed after any step of the swap or of its undoing, recovery ends at the whole old install or the whole new one, and the next install goes through", { timeout: 180_000 }, async (t) => {
   const s = await small(t);
   assert.equal(s.after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
   assert.equal(s.after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
@@ -1016,8 +1057,8 @@ test("A pid file names a live process or a dead one", async (t) => {
   const dir = await temporary(t);
   const { host } = await hostFor(nativePlatform);
   const live = join(dir, "live.pid");
-  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
-  t.after(() => { try { child.kill("SIGKILL"); } catch {} });
+  const child = trackedSpawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
+  t.after(() => endTree(child.pid));
   await writeFile(live, `${child.pid}\n`);
   assert.equal((await host.alive(live)).code, 0, `step alive, file ${live}`);
   child.kill("SIGKILL");
@@ -1058,8 +1099,13 @@ test("The Windows updater script keeps the same contract and PowerShell 5.1", as
   assert.match(windowsRecoverScript(home, dir, join(dir, "recover.ps1")), /FileShare\]::None/);
   const held = host.holdArgs(join(dir, "lock"));
   assert.deepEqual([...held.commands], ["pwsh", "powershell"]);
-  assert.match(held.args.at(-1), /O''Brien home/);
-  assert.match(held.args.at(-1), /WriteLine\('held'\)/);
+  const heldArgs = [...held.args];
+  assert.deepEqual(heldArgs.slice(0, 3), ["-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+  assert.equal(heldArgs.some((arg) => /[\r\n]/.test(arg)), false, "step one command, file hold script");
+  const heldScript = Buffer.from(heldArgs.at(-1), "base64").toString("utf16le");
+  assert.match(heldScript, /O''Brien home/);
+  assert.match(heldScript, /WriteLine\('held'\)/);
+  assert.match(heldScript, /Start-Sleep -Seconds 60/);
 });
 
 test("The Windows installer copies nothing before the app home exists", async () => {
@@ -1088,7 +1134,7 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
   const home = await s.fresh("in-use");
   const locked = join(home, "mods", "kanso-chrome", "main.js");
   const release = join(s.root, "release-lock");
-  const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
+  const child = trackedSpawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", [
     "$ErrorActionPreference = 'Stop'",
     `$s = [IO.File]::Open(${quote(locked)}, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)`,
     "[Console]::Out.WriteLine('held')",
@@ -1096,7 +1142,7 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
     `while (-not (Test-Path -LiteralPath ${quote(release)})) { Start-Sleep -Milliseconds 100 }`,
     "$s.Dispose()",
   ].join("; ")], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-  t.after(() => { writeFile(release, "").catch(() => {}); try { child.kill(); } catch {} });
+  t.after(() => { try { writeFileSync(release, "go"); } catch { /* the tree is already gone */ } endTree(child.pid); });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`step lock, file ${locked}`)), 15000);
     child.stdout.once("data", () => { clearTimeout(timer); resolve(); });
@@ -1105,7 +1151,7 @@ windowsOnly("A file in use is retried, then the update is undone and the file is
   const how = await s.run(home, 0, { env: { KANSO_UPDATE_RETRY_MS: "600" } });
   assert.match(how, /could not put kanso-chrome in place/, how);
   assert.ok(how.includes("kanso-chrome"), how);
-  assert.equal((await tree(home))["mods/kanso-chrome/version.json"], '{ "version": "1.0.0" }\n', how);
+  assert.equal(await readFile(join(home, "mods/kanso-chrome/version.json"), "utf8"), '{ "version": "1.0.0" }\n', how);
   await writeFile(release, "go");
 });
 

@@ -19,6 +19,18 @@ export function utf8Base64(text) {
   }).join("");
 }
 
+const encodeCommand = (script) => {
+  const bytes = [...script].flatMap((ch) => {
+    const code = ch.charCodeAt(0);
+    return [code & 255, (code >> 8) & 255];
+  });
+  return Array.from({ length: Math.ceil(bytes.length / 3) }, (_, i) => {
+    const a = bytes[i * 3], b = bytes[i * 3 + 1], c = bytes[i * 3 + 2];
+    const n = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
+    return B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + (b == null ? "=" : B64[(n >> 6) & 63]) + (c == null ? "=" : B64[n & 63]);
+  }).join("");
+};
+
 const driveRoot = (value) => {
   const text = String(value).replace(/\//g, "\\");
   const drive = /^[A-Za-z]:/.exec(text);
@@ -100,6 +112,10 @@ const LIB = [
   "  $rootTo = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($(if ($parent) { $parent } else { $To })))",
   "  if ($rootFrom.ToUpperInvariant() -ne $rootTo.ToUpperInvariant()) { throw ('another drive ' + $From) }",
   "}",
+  "function Test-There([string]$Path) {",
+  "  if (-not $Path) { return $false }",
+  "  try { return Test-Path -LiteralPath $Path -ErrorAction Stop } catch { return $true }",
+  "}",
   "function Move-Update([string]$From, [string]$To) {",
   "  Assert-Volume $From $To",
   "  Clear-Readonly $From",
@@ -110,9 +126,23 @@ const LIB = [
   "  while ($true) {",
   "    try { Move-Item -LiteralPath $From -Destination $To -Force; return }",
   "    catch {",
+  "      if ((Test-There $From) -and (Test-There $To)) {",
+  "        $kids = @(Get-ChildItem -LiteralPath $To -Force -ErrorAction SilentlyContinue)",
+  "        if ($kids.Count -eq 0) { Remove-Item -LiteralPath $To -Force -ErrorAction SilentlyContinue }",
+  "      }",
   "      if ((Test-Sharing $_) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 100; continue }",
   "      throw",
   "    }",
+  "  }",
+  "}",
+  "function Try-Move([string]$From, [string]$To) {",
+  "  try { Move-Update $From $To; return $true } catch {",
+  "    Unlock-Tree $From",
+  "    if (Test-There $To) {",
+  "      Unlock-Tree $To",
+  "      if (Test-There $From) { Remove-Item -LiteralPath $To -Recurse -Force -ErrorAction SilentlyContinue }",
+  "    }",
+  "    try { Move-Update $From $To; return $true } catch { return $false }",
   "  }",
   "}",
   "function Step {",
@@ -162,11 +192,11 @@ const LIB = [
   "}",
   "function Swap([string]$Had, [string]$Name) {",
   "  Set-Slot $Name",
-  "  if ($Had -eq '1' -and (Test-Path -LiteralPath $script:S) -and (Test-Path -LiteralPath $script:L) -and -not (Test-Path -LiteralPath $script:B)) {",
+  "  if ($Had -eq '1' -and (Test-There $script:S) -and (Test-There $script:L) -and -not (Test-There $script:B)) {",
   "    try { Move-Update $script:L $script:B } catch { Fail-Put $Name $script:L ([string]$_.Exception.Message); return $false }",
   "    Step",
   "  }",
-  "  if ((Test-Path -LiteralPath $script:S) -and -not (Test-Path -LiteralPath $script:L)) {",
+  "  if ((Test-There $script:S) -and -not (Test-There $script:L)) {",
   "    try { Move-Update $script:S $script:L } catch { Fail-Put $Name $script:S ([string]$_.Exception.Message); return $false }",
   "    Step",
   "  }",
@@ -188,17 +218,21 @@ const LIB = [
   "}",
   "function Undo([string]$Had, [string]$Name) {",
   "  Set-Slot $Name",
-  "  if (-not (Test-Path -LiteralPath $script:S) -and (Test-Path -LiteralPath $script:L)) {",
-  "    Move-Update $script:L $script:S",
+  "  if (-not (Test-There $script:S) -and (Test-There $script:L)) {",
+  "    if (-not (Try-Move $script:L $script:S)) { return $false }",
   "    Step",
   "  }",
-  "  if ($Had -eq '1' -and (Test-Path -LiteralPath $script:B) -and -not (Test-Path -LiteralPath $script:L)) {",
-  "    Move-Update $script:B $script:L",
+  "  if ($Had -eq '1' -and (Test-There $script:B) -and (Test-There $script:L) -and (Test-There $script:S)) {",
+  "    Unlock-Tree $script:L",
+  "    Remove-Item -LiteralPath $script:L -Recurse -Force -ErrorAction SilentlyContinue",
+  "  }",
+  "  if ($Had -eq '1' -and (Test-There $script:B) -and -not (Test-There $script:L)) {",
+  "    if (-not (Try-Move $script:B $script:L)) { return $false }",
   "    Step",
   "  }",
-  "  $sOk = Test-Path -LiteralPath $script:S",
-  "  $lOk = Test-Path -LiteralPath $script:L",
-  "  $bOk = Test-Path -LiteralPath $script:B",
+  "  $sOk = Test-There $script:S",
+  "  $lOk = Test-There $script:L",
+  "  $bOk = Test-There $script:B",
   "  if (-not ($sOk -and (($Had -eq '0') -or ($lOk -and -not $bOk)))) { return $false }",
   "  $line = $Had + ' ' + $Name",
   "  $left = @()",
@@ -239,6 +273,7 @@ const LIB = [
   "}",
   "function Settle {",
   "  try {",
+  "    Unlock-Tree $script:st",
   "    $slots = Join-Path $script:st 'slots'",
   "    if (Test-Path -LiteralPath $slots) {",
   "      if (Test-Path -LiteralPath (Join-Path $script:st 'committed')) { if (-not (Keep)) { return $false } }",
@@ -567,7 +602,7 @@ function windowsHost(run, writeTextFile) {
       return runPowershellFile(run, file, options);
     },
     holdArgs(lockPath) {
-      return { commands: ["pwsh", "powershell"], args: ["-NoProfile", "-NonInteractive", "-Command", windowsHoldScript(lockPath)] };
+      return { commands: ["pwsh", "powershell"], args: ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodeCommand(windowsHoldScript(lockPath))] };
     },
   };
 }
