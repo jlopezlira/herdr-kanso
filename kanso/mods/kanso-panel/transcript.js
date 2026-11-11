@@ -1,4 +1,4 @@
-import { localService } from "./platform-host.js";
+import { serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { transcriptApi } from "./platform-transcripts.js";
@@ -42,20 +42,20 @@ export async function frontOf(address) {
   return front?.pid ? { pid: front.pid, program: paths.basename(String(front.argv?.[0] ?? "")).replace(/\.(?:exe|cmd|bat)$/i, "") } : null;
 }
 
-export async function sessionOf(address, homeDir, front = null) {
+export async function sessionOf(address, homeDir, front = null, on = null) {
   // The record is Claude Code's: another program with a pid Claude had must not read Claude's conversation.
   const pid = front?.program === "claude" ? front.pid : null;
   if (!pid) return null;
-  const record = parsed(await readTextFile(sessionPath(homeDir, pid)).catch(() => null));
+  const record = parsed(await readTextFile(sessionPath(homeDir, pid), { on }).catch(() => null));
   if (record?.pid !== pid || !record.sessionId) return null;
   // Nor is a record of an earlier Claude that had this pid: the process must have started when the record says.
-  const started = await localService(processApi).startTime(pid).catch(() => NaN);
+  const started = await (await serviceOn(processApi, on)).startTime(pid).catch(() => NaN);
   return sessionLive(record, pid, started) ? record : null;
 }
 
 // One transcript file from a stored offset. `code` 3: nothing new and whole. `mark` is the cksum of the bytes read.
-export async function scanFile(file, from = "0", mark = "") {
-  const r = await localService(transcriptApi).scan(file, from ?? "0", mark ?? "", PATTERN, EXT, MOST, LONGEST).catch(() => null);
+export async function scanFile(file, from = "0", mark = "", on = null) {
+  const r = await (await serviceOn(transcriptApi, on)).scan(file, from ?? "0", mark ?? "", PATTERN, EXT, MOST, LONGEST).catch(() => null);
   if (r?.code === 3) return { code: 3, size: String(from ?? "0"), from: String(from ?? "0"), mark: String(mark ?? ""), paths: [] };
   if (!r || r.code !== 0) return { code: r?.code ?? 1, size: null, from: null, mark: "", paths: [] };
   const [size, start, got, ...lines] = String(r.stdout).split("\n");
@@ -66,12 +66,12 @@ export async function scanFile(file, from = "0", mark = "") {
 // `before` (the last answer) is read on from when it is this file; otherwise `recall` (what was stored) is.
 // Comes back as it was while no new whole line was appended. `replaced`: the file shrank or its prefix changed,
 // so it was read whole. `failed`: the read did not happen. None without a conversation.
-export async function transcriptPaths(address, homeDir, before = null, recall = null) {
+export async function transcriptPaths(address, homeDir, before = null, recall = null, on = null) {
   const front = await frontOf(address);
-  const file = transcriptPath(await sessionOf(address, homeDir, front), homeDir);
+  const file = transcriptPath(await sessionOf(address, homeDir, front, on), homeDir);
   if (!file) return { front, file: null, size: null, from: null, mark: "", paths: [], rows: [], replaced: false, failed: false };
   const known = before?.file === file ? before : (await recall?.(file)) ?? { paths: [], size: "0", rows: [], mark: "" };
-  const r = await scanFile(file, known.size ?? "0", known.mark ?? "");
+  const r = await scanFile(file, known.size ?? "0", known.mark ?? "", on);
   const rows = known.rows ?? [];
   if (r.code === 3) return { front, file, size: known.size, from: String(known.size ?? "0"), mark: known.mark ?? "", paths: known.paths ?? [], rows, replaced: false, failed: false };
   if (r.code !== 0) return { front, file, size: known.size ?? null, from: null, mark: known.mark ?? "", paths: known.paths ?? [], rows, replaced: false, failed: true };

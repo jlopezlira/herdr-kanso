@@ -7,8 +7,11 @@ import { fileApi } from "./platform-files.js";
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-files; one of the kanso-panel mod's panels.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
-import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared } from "herdr";
+import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
 import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
+import { kindOf } from "./kinds.js";
+import { walkLayout } from "./layout.js";
+import { listFailure, remoteDue } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { readingLines } from "./doc.js";
@@ -33,7 +36,8 @@ export class Files {
       if (back.context === key()) { this.context = back.context; ({ cwd: this.root, on: this.on } = location()); this.folders = new Set(back.folders ?? []); }
     }
     this.refresh(cx);
-    cx.timer.every(10000, cx => this.refresh(cx));
+    cx.timer.every(10000, (cx) => { if (!this.on) this.refresh(cx); });
+    cx.timer.every(5000, (cx) => { if (remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) this.refresh(cx); });
   }
 
   saveState() {
@@ -114,7 +118,7 @@ export class Files {
         if (key() !== context) return;
         this.marks = marks; this.rev = this.rev + 1; this.error = null; this.watch(cwd, cx);
         if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
-      } catch (e) { if (key() === context) this.error = String(e); }
+      } catch (e) { if (key() === context) this.error = listFailure(e, this.on); }
       finally { this.loading = false; cx.notify(); }
     });
   }
@@ -132,7 +136,7 @@ export class Files {
         this.pending = new Set([...this.pending, path]);
         cx.spawn(async cx => {
           try { await this.loadFolder(path, context); }
-          catch (e) { if (key() === context) this.error = String(e); }
+          catch (e) { if (key() === context) this.error = listFailure(e, this.on); }
           finally { this.pending = new Set([...this.pending].filter((p) => p !== path)); cx.notify(); }
         });
       }
@@ -230,7 +234,7 @@ export class Files {
               const item = items.find((item) => item.path === path);
               if (!item) return;
               if (item.entry.dir) this.toggle(path, cx);
-              else if (isMarkdown(path)) this.read(path);
+              else if (isMarkdown(path) || kindOf(path) === "image") this.read(path);
               else this.show(path, cx);
             })
             .on_item_secondary_click((path) => {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
@@ -72,16 +73,21 @@ test("A note to the agent names the file and where each pin sits on the picture"
 // The panel in a fake Herdr: agent t1 whose screen shows `screen`, a shell t2, and the files in `files`.
 // `copy(args)`: what cp answers, a promise a test can hold back.
 async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/images/hero.jpg", "/repo/docs/plan.md"], status = "idle", focus = "t1",
-  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [] } = {}) {
+  copy = async () => ({ code: 0, stdout: "" }), session = null, transcript = "", appHome = "/app", bad = [], remote = null, statText = "4 1700000000\n" } = {}) {
   if (appHome !== "/app") dirs.push(appHome);
-  const calls = [], store = {};
+  const calls = [], ons = [], store = {};
+  const address = remote ? `${remote}/${focus}` : focus;
   // A pin's note, as the prompt dialog answers it: `say(text)` is what you typed, null is Cancel.
   const say = (text, token = calls.findLast((c) => c[0] === "openOverlay")?.[1].props.token) => { store["kanso.look.note"] = { ...(store["kanso.look.note"] ?? {}), [token]: { text, at: Date.now() } }; };
   // What Herdr reports, changed by a test as the agent ends.
   const world = {
-    focus, screen, files, bad,
-    terminals: [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
-    panes: [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
+    focus: remote ? address : focus, screen, files, bad, statText,
+    terminals: remote
+      ? [{ address, cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }]
+      : [{ address: "t1", cwd: "/repo", status, labels: { "kanso.shown": "web agent" } }, { address: "t2", cwd: "/repo", status: null, labels: {} }],
+    panes: remote
+      ? [{ pane: "p1", terminal: address, program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }]
+      : [{ pane: "p1", terminal: "t1", program: { name: "Claude", agent: true } }, { pane: "p2", terminal: "t2", program: { name: "zsh", shell: true } }],
     session,
   };
   const sipsPath = (args) => { const at = args.indexOf("--out"); return at > 0 ? args[at - 1] : args.at(-1); };
@@ -98,9 +104,19 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (args[0] === "get") return { code: 0, stdout: JSON.stringify({ address: args[1], foreground: world.session ? { pid: world.session.pid, argv: world.session.argv ?? ["claude"] } : null }) };
       return { code: 0, stdout: "" };
     },
-    readTextFile: async (path) => (world.session && path === posix.join("/home/me", ".claude", "sessions", `${world.session.pid}.json`) ? JSON.stringify(world.session) : null),
-    exec: async (cmd, args, options) => {
+    readTextFile: async (path, options) => {
+      if (options?.on) ons.push(["readTextFile", options.on, path]);
+      return world.session && (path === posix.join("/home/me", ".claude", "sessions", `${world.session.pid}.json`) || path.endsWith(`/${world.session.pid}.json`)) ? JSON.stringify(world.session) : null;
+    },
+    writeFile, mkdir, readdir, unlink, stat,
+    exec: async (cmd, args = [], options) => {
       calls.push([cmd, ...args]);
+      if (options?.on) ons.push([cmd, options.on, ...args]);
+      if (options?.on && (cmd === "pwsh" || cmd === "powershell")) return { code: 127, stdout: "", stderr: "" };
+      if (options?.on && cmd === "uname") return { code: 0, stdout: "Darwin\n" };
+      if (options?.on && cmd === "stat") return { code: 0, stdout: world.statText };
+      if (options?.on && cmd === "base64") return { code: 0, stdout: "AQIDBA==\n" };
+      if (options?.on && cmd === "sh" && String(args[1]).includes("printf %s")) return { code: 0, stdout: "/home/light\n" };
       if (cmd === "sqlite3") return run(cmd, args, options);
       if (cmd === "mkdir") return fileApi(nativePlatform, run).mkdir(args.at(-1), options);
       if (cmd === "ps") return { code: 0, stdout: world.session?.etime ?? "00:05" };
@@ -126,7 +142,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   const look = new Look(new Kdb());
   look.init({ ...cx, timer: { every() {}, after() {} }, focus_handle: () => ({}) }, {});
   await drain();
-  return { look, cx, drain, calls, say, store, world };
+  return { look, cx, drain, calls, ons, say, store, world };
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
@@ -663,4 +679,35 @@ test("a picture that failed to open is tried again the next time Images opens", 
   assert.deepEqual(clone(first.look.list().map((i) => i.path)), [good], "this session hides the one sips could not convert");
   const again = await panel({ screen: "", files: [good, heic], session, transcript: `${good}\n${heic}\n`, appHome: dir });
   assert.deepEqual(clone(again.look.list().map((i) => i.path)), [heic, good], "the next open tries that path again");
+});
+
+test("Images reads an agent on another computer there, and draws a copy from this one", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const session = { pid: 7, sessionId: "07e8cebe-420b-47d2-9fba-a76c2e4dd30d", cwd: "/repo", startedAt: Date.now() - 5000 };
+  const file = "/repo/shots/a.png";
+  const { look, calls, ons } = await panel({ remote: "light", screen: "", files: [file], session, transcript: `${file}\n`, appHome: dir });
+  assert.equal(look.agent(), "light/t1");
+  assert.deepEqual(clone(calls[0]), ["hc", "read", "light/t1", "--lines", "400"]);
+  assert.equal(look.list()[0].path, file);
+  assert.match(look.shown.image, /^data\/kanso-panel\/look\//);
+  const onOf = (cmd) => ons.filter((c) => c[0] === cmd).map((c) => c[1]);
+  for (const cmd of ["readTextFile", "stat", "base64", "sips"]) assert.deepEqual([...new Set(onOf(cmd))], ["light"], cmd);
+  assert.ok(ons.some((c) => c[0] === "sh" && c[1] === "light" && String(c[3]).includes("printf %s")), "the home is that computer's");
+  assert.ok(ons.some((c) => c[0] === "sh" && c[1] === "light" && String(c[3]).startsWith('f="$1"')), "the conversation is read from the byte stored last time");
+  assert.ok(ons.some((c) => c[0] === "sh" && c[1] === "light" && String(c[3]).startsWith("for f;")), "the file is checked there");
+  assert.equal(ons.some((c) => c[0] === "cp"), false, "the drawing copy stays on this computer");
+  const copied = calls.find((c) => c[0] === "cp");
+  assert.match(copied[2], /data\/kanso-panel\/remote\//);
+  assert.match(copied[3], /data\/kanso-panel\/look\//);
+});
+
+test("a picture on a computer that does not answer stays listed and says why", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "kanso-look-"));
+  dirs.push(dir);
+  const file = "/repo/tests/shot.png";
+  const { look } = await panel({ remote: "light", files: [file], appHome: dir, statText: `${20 * 1024 * 1024 + 1} 1\n` });
+  assert.equal(look.list().some((i) => i.path === file), true);
+  assert.equal(look.shown, null);
+  assert.match(look.note.text, /over 20 MB/);
 });

@@ -1,16 +1,25 @@
-import { div, svg } from "gpui-kit";
+import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
-import { readTextFile, watchFolder, theme, openOverlay } from "herdr";
+import { readTextFile, watchFolder, theme, openOverlay, window, layout, appHome } from "herdr";
+import { localService, serviceOn } from "./platform-host.js";
+import { paths } from "./platform-paths.js";
+import { fileApi } from "./platform-files.js";
+import { imageApi } from "./platform-images.js";
 import { codeState, isMarkdown, showPanel } from "./lib.js";
+import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines } from "./doc.js";
 import { skeleton } from "./ui.js";
-import { tryOrAsync } from "./pure.js";
+import { tryOrAsync, extOf } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
+import { walkLayout } from "./layout.js";
+import { bring, appRelative, svgPixels, copyFailure, remoteDue, fileId } from "./remote-file.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
+const PREVIEW_DIR = "data/kanso-panel/preview";
 // The panels that send a file here, and get it back.
 const BACK = { files: "Back to Files", look: "Back to Look" };
+export const previewKind = (path) => isMarkdown(path) ? "markdown" : kindOf(path) === "image" ? "picture" : "text";
 
 export class Preview {
   init(cx, p) {
@@ -20,6 +29,9 @@ export class Preview {
     this.back = BACK[p.back] ? p.back : (kept?.back && BACK[kept.back] ? kept.back : null);
     this.handle = cx.focus_handle();
     this.open(p.path || kept?.path || "", cx);
+    if (this.on) cx.timer.every(5000, (cx) => {
+      if (this.path && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) this.load(cx);
+    });
   }
 
   saveState() {
@@ -31,6 +43,13 @@ export class Preview {
   async restoreState(state) {
     const path = typeof state?.path === "string" ? state.path : "";
     if (!path) return false;
+    if (previewKind(path) === "picture") {
+      const ok = await (await serviceOn(fileApi, state.on ?? null)).test(path).catch(() => false);
+      const next = ok ? fileMemory(state, () => true) : null;
+      if (!next) return false;
+      this.kept = next;
+      return true;
+    }
     const text = await tryOrAsync(() => readTextFile(path, { on: state.on ?? null }));
     if (text == null || String(text).includes("\0")) return false;
     const next = fileMemory(state, () => true);
@@ -42,9 +61,10 @@ export class Preview {
   open(path, cx) {
     this.path = path;
     this.doc?.release(); this.doc = null;
-    this.code?.release(); this.code = null; this.error = null;
+    this.code?.release(); this.code = null; this.error = null; this.picture = null; this.pixels = null;
     if (!path) { cx.notify(); return; }
-    if (isMarkdown(path)) this.doc = new MarkdownDoc(path, this.on, (to) => this.follow(to, cx));
+    if (previewKind(path) === "markdown") this.doc = new MarkdownDoc(path, this.on, (to) => this.follow(to, cx));
+    else if (previewKind(path) === "picture") this.picture = { busy: true };
     this.load(cx);
     this.watch(cx);
     cx.notify();
@@ -64,6 +84,7 @@ export class Preview {
 
   load(cx) {
     if (this.doc) { this.doc.load(cx); return; }
+    if (this.picture || previewKind(this.path) === "picture") { this.loadPicture(cx); return; }
     const path = this.path;
     cx.spawn(async (cx) => {
       try {
@@ -75,6 +96,36 @@ export class Preview {
       } catch (e) { this.error = `Cannot read this file: ${e?.message ?? e}`; }
       finally { cx.notify(); }
     });
+  }
+
+  loadPicture(cx) {
+    const path = this.path, on = this.on;
+    this.picture = { busy: true }; this.error = null;
+    cx.spawn(async (cx) => {
+      try {
+        const absolute = on ? (await bring(path, on)).path : await this.stage(path);
+        if (this.path !== path) return;
+        const rel = appRelative(absolute, appHome());
+        if (!rel) throw new Error("Cannot read this file");
+        const pixels = extOf(path) === "svg" ? svgPixels(await readTextFile(absolute)) : await localService(imageApi).pixels(absolute).catch(() => null);
+        if (this.path !== path) return;
+        this.picture = { image: rel }; this.pixels = pixels; this.error = null;
+      } catch (e) {
+        if (this.path !== path) return;
+        this.picture = null;
+        this.error = on ? copyFailure(e, on) : `Cannot read this file: ${e?.message ?? e}`;
+      } finally { cx.notify(); }
+    });
+  }
+
+  async stage(file) {
+    const dir = paths.join(appHome(), PREVIEW_DIR);
+    const id = fileId("here", file);
+    await localService(imageApi).fresh(dir, id);
+    const out = paths.join(dir, `${id}-${Date.now()}.${extOf(file) || "img"}`);
+    const made = await localService(fileApi).copy(file, out);
+    if (made.code !== 0) throw new Error(made.stderr || "Cannot read this file");
+    return out;
   }
 
   // Watched via the folder (this computer only): any change there re-reads the file.
@@ -113,13 +164,14 @@ export class Preview {
         .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx))))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
           .child(div().truncate().font_semibold().text_size(13).child(nameOf(this.path)))
-          .child(div().truncate().text_size(11).text_color(t.dim).child(tildePath(folderOf(this.path), this.on))))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}`)))
         .children(this.doc ? this.doc.controls(t, "preview") : [])
         .child(button("preview-open-with", "open-with", "Open with…", () => this.openWith()))
         .when(!this.doc?.editing, (el) => el.child(button("preview-refresh", "refresh", "Read again", (cx) => this.load(cx))))
         .child(button("preview-close", "close", "Close", (cx) => this.leave(cx, () => showPanel(null)))))
       .child(this.doc ? this.doc.body(t, "preview-md")
         : this.error ? div().p(12).text_color(t.dim).child(this.error)
+        : this.picture?.image ? v_flex().id("preview-picture").flex_1().min_h(0).p(16).items_center().justify_center().child(image(this.picture.image).w_full())
         : this.code ? Editor.new(this.code).flex_1().min_h(0)
         : this.path ? readingLines(t) : div().flex_1());
   }

@@ -3,6 +3,8 @@
 
 export const range = (n, from = 0) => Array.from({ length: Math.max(0, n) }, (_, i) => from + i);
 
+export const extOf = (path) => (/\.([^./\\]+)$/.exec(String(path)) ?? [])[1]?.toLowerCase() ?? "";
+
 export const tryOr = (fn, fallback = null) => {
   try { return fn(); } catch { return fallback; }
 };

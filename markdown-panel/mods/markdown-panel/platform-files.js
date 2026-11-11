@@ -77,6 +77,21 @@ test -d "$1"`;
   const size = async (path) => platform === "windows"
     ? Number(checked(await ps(`$bytes=(Get-ChildItem -LiteralPath ${psQuote(path)} -Recurse -Force -File | Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } | Measure-Object -Property Length -Sum).Sum; [Math]::Ceiling($bytes/1024)`)).stdout.trim())
     : Number(checked(await run("du", ["-sk", path])).stdout.trim().split(/\s+/)[0]);
+  const stat = async (path, options) => {
+    const r = platform === "windows"
+      ? checked(await ps(`$i=Get-Item -LiteralPath ${psQuote(path)}; '{0} {1}' -f $i.Length, ([DateTimeOffset]$i.LastWriteTimeUtc).ToUnixTimeSeconds()`, options))
+      : checked(await run("stat", platform === "macos" ? ["-f", "%z %m", path] : ["-c", "%s %Y", path], options));
+    const [size, mtime] = r.stdout.trim().split(/\s+/).map(Number);
+    return { size, mtime };
+  };
+  const encode = (path, range, options) => {
+    const whole = !range || (range.offset === 0 && range.length == null);
+    if (platform === "windows") return whole
+      ? ps(`[Convert]::ToBase64String([IO.File]::ReadAllBytes(${psQuote(path)}))`, options)
+      : ps(`$s=[IO.File]::OpenRead(${psQuote(path)}); try { [void]$s.Seek(${Number(range.offset)}, 'Begin'); $b=New-Object byte[] ${Number(range.length)}; $n=$s.Read($b,0,$b.Length); [Convert]::ToBase64String($b,0,$n) } finally { $s.Dispose() }`, options);
+    if (!whole) return run("python3", ["-c", "import sys,base64; f=open(sys.argv[1],'rb'); f.seek(int(sys.argv[2])); sys.stdout.write(base64.b64encode(f.read(int(sys.argv[3]))).decode())", path, String(range.offset), String(range.length)], options);
+    return platform === "macos" ? run("base64", ["-i", path], options) : run("base64", [path], options);
+  };
   const touch = async (paths) => {
     if (platform === "windows") return ps(`foreach ($file in @(${paths.map(psQuote).join(",")})) { [IO.File]::WriteAllText($file,'') }`);
     if (!paths.length) return { code: 0, stdout: "" };
@@ -92,5 +107,5 @@ test -d "$1"`;
   const migrate = (from, to) => platform === "windows"
     ? ps(`$from=${psQuote(from)}; $to=${psQuote(to)}; if (-not (Test-Path -LiteralPath (Join-Path $to 'store.json')) -and (Test-Path -LiteralPath $from -PathType Container)) { [IO.Directory]::CreateDirectory($to) | Out-Null; Get-ChildItem -LiteralPath $from -Force | Copy-Item -Destination $to -Recurse -Force; Get-ChildItem -LiteralPath $to -Filter '*.lock' -Force | Remove-Item -Force -Recurse }`)
     : run("sh", ["-c", 'if [ ! -e "$2/store.json" ] && [ -d "$1" ]; then mkdir -p "$2" && cp -R "$1/." "$2/" && rm -rf "$2"/*.lock; fi', "sh", from, to]);
-  return { recent, migrate, mkdir, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch };
+  return { recent, migrate, mkdir, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch, stat, encode };
 }
