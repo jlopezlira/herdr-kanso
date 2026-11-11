@@ -42,8 +42,8 @@ export class SinceStore {
     return rows;
   }
 
-  touch(project, now = Date.now()) {
-    return this.db.run(`UPDATE since_focus SET focused_at=MAX(focused_at,${now}) WHERE project=${q(project)};`);
+  touch(project, now = Date.now(), prune = false) {
+    return this.db.run(`BEGIN;UPDATE since_focus SET focused_at=MAX(focused_at,${now}) WHERE project=${q(project)};${prune ? pruneSinceSql(now, LOG_LIMITS) : ""}COMMIT;`);
   }
 
   touchSources(sources, now) {

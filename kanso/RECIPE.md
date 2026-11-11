@@ -420,14 +420,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
-- **Since you left**: after 5 minutes away, up to three sidebar lines under
-  the project show blocked agents, errors, PR updates, then finishes. +N
-  expands inline; Enter/click jumps, a target seen or Dismiss clears it.
-  Focus and dismissal persist in kanso.db. Local events expire after 7 days,
-  capped at 500. No events, loading or a failed read: nothing. No extra fetches.
+- **Since you left**: after 5 minutes away, a "While you were away" head under
+  the project lists up to three rows: a mark, the Kanso name, and the age.
+  The agent in front is left out; one row per agent. +N expands inline;
+  Enter or a click jumps and dismisses. Dismissal persists in kanso.db.
+  Events expire after 7 days, capped at 500. Nothing, loading or a failed
+  read: nothing. No extra fetches.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
-  Count opens project/name/reason/age; click/Enter focuses. Empty: "Nobody is waiting";
+  The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
   loading: kit; unavailable: error. Status shares this queue.
   Strip checks panes each 1.5 s; leaving
   `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
@@ -468,7 +469,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
   rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
-  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), Sync shares token spend when both are on this version, and skips one the sidebar turned off, What's new the log, Credits who.
+  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new the log, Credits who.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
@@ -481,17 +482,20 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     the automatic name), so it survives a restart and the pane header, the
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
-  - With another machine, each has a header: a 17 monitor or server icon in
-    `foreground` and the name at 15 semibold (this computer's is its host
-    name). The switch says on or off; a mark shows only while loading,
-    unavailable, or waiting for a login. Off stores the target, name, via,
-    session and temporary flag, then `hc machine rm` (terminals there keep
-    running) and leaves one dim row: nothing under it is listed or read. On
-    is `hc machine add` with those values, never `--install`; the row is
-    dropped once `hc machine ls` shows it connected. A login says Needs a
-    login, then the command, with Copy. Unavailable has Retry. Alone, this
-    computer has no header and no switch. `hc machine ls` runs every 30 s
-    in front and every 2 min behind.
+  - With another machine, each is one project-height row: monitor or server
+    icon, medium name (`foreground` connected, `dim` off or unreachable;
+    this computer's host name). Small `dim`: Off, Unreachable, Needs login;
+    a breathing line while loading. Hover or keyboard: power, Retry when
+    unreachable, + when connected; a chevron folds it. Needs login copies
+    `hc machine login <name>` from the tooltip (power's place). Off stores
+    target, name, via, session and temporary, then `hc machine rm`
+    (terminals keep running); nothing under it is listed or read. `false`
+    and `null` are none, so add never sends an empty `--via`. On is
+    `hc machine add` with those, never `--install`; dropped once
+    `hc machine ls` shows it connected. If the save fails after the remove,
+    or add keeps failing, it stays with Retry; the hint is the state's
+    tooltip. This computer has no power. Alone, no header.
+    `hc machine ls`: 30 s in front, 2 min behind.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
     order button (kanso.db `spaces.order`): last update, needs you, kind,
@@ -503,7 +507,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     working, waiting on you, or since it finished ("<1m", "4m", "2h", "3d";
     seen/idle: none). Done and idle are one phase, so looking at a finished
     agent keeps its time. Stamps are kept in kanso.db `spaces.since`
-    (address -> state and ms), taken every 0.5 s outside render; an agent
+    (address -> state and ms), taken every 2 s outside render; an agent
     first seen after a start takes its tab's `working_since` or
     `changed_at`, else shows no time. On hover the pin takes the time's
     place. Under the name, a second line (12px `muted`; every agent's row
@@ -521,7 +525,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     of an agent that isn't working, a count in a pill (18 tall, `foreground`
     at 12%) when something still runs under it: the direct children of its
     process (`foreground.pid`, else its shell's one child) from one `ps
-    -axo pid=,ppid=,etime=,command=` every 5 s in front, 30 s behind, less
+    -axo pid=,ppid=,etime=,command=` every 10 s in front, 30 s behind, less
     MCP servers and caffeinate; the commands (Claude Code's `eval '…'`
     wrapper unwrapped) and times in its tooltip (`tasksOf`).
   - Sub-agents (`terminals()` with a `parent`) are listed under their
@@ -576,7 +580,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `~/.codex/session_index.jsonl`; else the first thing you typed; else
     the row's name; a title you gave it (Rename thread, label
     `kanso.thread`) goes over all of them. Which conversation:
-    `hc get <terminal> --json` gives the foreground pid; Claude Code's
+    `terminals()` gives the foreground pid; Claude Code's
     `~/.claude/sessions/<pid>.json` gives `sessionId` and `cwd`, and the
     file is `~/.claude/projects/<cwd, each non-alphanumeric as ->/<id>.jsonl`;
     for Codex, `lsof` on the pid (or its children) finds the open
@@ -714,12 +718,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       weight 1), `strip-map` (`kanso-strip`, 180 px), `status-right`
       (`kanso-status` `{side: "right"}`, weight 1).
 - **Mods**:
-  - `kanso-spaces`: spaces, agents (`agents.js`), git per space via `exec`,
-    machines via `hc machine ls`, `add` and `rm`.
+  - `kanso-spaces`: tracks/2 s; sleeping/off skip reads. Live PIDs skip `ps`.
+    Threads: status/turn or 5 min; misses: 1-10 min/PID.
   - `kanso-tabs`: tabs, panel buttons and the on-demand panel mount via
     `layout.set`.
-  - `kanso-strip`: the canvas. The copy in the status row is the controller
-    and minimap; copies with `{edge, side, count, panes}` draw an edge rail. State per
+  - `kanso-strip`: canvas; the status row's controller/minimap samples native
+    sizes every 1 s at rest, 150 ms during `strip.drag`. Edge copies draw a rail. State per
     tab lives in shared `strip.state` (`{cols: [{panes, w, pin, hs}], vx,
     n}`; `hs` is each stacked pane's share of the height); the last chosen
     `n` is in shared `strip.n` for new tabs. Copies with `{ruler}` are the
@@ -823,11 +827,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
-  - Mods derive from Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
-  - Herdr loads a mod's files from its own folder only, so a file several
-    mods need (`layout.js`, `ui.js`, `share.js`, `marks.js`, `deliver.js`,
-    `kinds.js`...: `scripts/sync-share.mjs`) is copied into each by `npm run
-    sync:share`; a test fails when a copy differs.
+  - Mods: Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
+  - Own-folder imports only: `scripts/sync-share.mjs` copies shared files;
+    `npm run sync:share -- --check` detects drift. Kdb batches same-tick calls;
+    prefs/panel-state reads cache until a write or 30 s. Return touch/prune
+    share a call.
 - **Herdr functions**: `spaces`, `panes`, `agents`, `terminals`, `machines`,
   `layout`, `theme`, `shared`/`setShared`, `window`, `exec`, `hc`,
   `watchFolder`, `readTextFile`, `openOverlay`, `run`, `home`, `appHome`,

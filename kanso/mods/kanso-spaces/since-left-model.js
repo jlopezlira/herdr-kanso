@@ -2,7 +2,7 @@ export const AWAY_MS = 5 * 60_000;
 export const KEEP_MS = 7 * 86400_000;
 export const EVENT_CAP = 500;
 export const LINE_CAP = 3;
-export const MAINTENANCE_MS = 30_000;
+export const MAINTENANCE_MS = 120_000;
 export const LOG_LIMITS = { cap: EVENT_CAP, keepMs: KEEP_MS };
 export const targetOf = (kind, id) => `${kind}:${id}`;
 export function parseTarget(target) {
@@ -10,8 +10,8 @@ export function parseTarget(target) {
   return { kind, id: parts.join(":") };
 }
 export function sleepEvent(id, state) {
-  const facts = { stuck: ["sleep_failed", "could not sleep"], asleep: ["sleep_finished", "slept"] }[state];
-  return facts ? { ...LOG_LIMITS, target: targetOf("sleep", id), kind: facts[0], word: facts[1] } : null;
+  const kind = { stuck: "sleep_failed", asleep: "sleep_finished" }[state];
+  return kind ? { ...LOG_LIMITS, target: targetOf("sleep", id), kind } : null;
 }
 const PRIORITY = { blocked: 0, error: 1, sleep_failed: 1, pr: 2, finished: 3, sleep_finished: 3 };
 
@@ -20,9 +20,10 @@ export function changes(before, after) {
   if (after.type === "agent") {
     const newTurn = after.turn != null && before.turn != null && after.turn !== before.turn;
     if (before.status === after.status && !(after.status === "done" && newTurn)) return [];
-    if (after.status === "blocked") return [{ kind: "blocked", text: `${after.name} needs you` }];
-    if (after.status === "error") return [{ kind: "error", text: `${after.name} errored` }];
-    if ((after.status === "done" && before.status !== "idle") || (after.status === "idle" && before.status === "working")) return [{ kind: "finished", text: `${after.name} finished` }];
+    const name = after.name || "Agent";
+    if (after.status === "blocked") return [{ kind: "blocked", text: name }];
+    if (after.status === "error") return [{ kind: "error", text: name }];
+    if ((after.status === "done" && before.status !== "idle") || (after.status === "idle" && before.status === "working")) return [{ kind: "finished", text: name }];
     return [];
   }
   const words = [
@@ -50,6 +51,51 @@ export function lines(events, expanded = false) {
   return [...events.slice(0, LINE_CAP - 1), { more: events.length - LINE_CAP + 1 }];
 }
 
+export const RETURN_LABEL = "While you were away";
+const MARK = { blocked: "blocked", error: "error", sleep_failed: "error", finished: "done", sleep_finished: "asleep", pr: "pr" };
+const SPOKEN = /\s+(?:finished|needs you|errored|slept|could not sleep)$/;
+
+export function shownName(agent, seen, term) {
+  const given = String(term?.labels?.["kanso.name"] ?? seen?.given ?? "").trim();
+  if (given) return given;
+  const conversation = String(seen?.title ?? "").trim();
+  if (conversation) return conversation;
+  const named = String(seen?.name ?? "").trim();
+  if (named && !named.includes(" | ")) return named;
+  // Herdr's terminal title is "conversation | folder"; the folder is not the name.
+  const raw = String(agent?.title || term?.title || named || "").trim();
+  return raw.split(" | ")[0].trim() || "Agent";
+}
+
+export function eventName(event) {
+  const text = String(event?.text ?? "").trim();
+  if (event?.kind === "pr") return text;
+  return text.replace(SPOKEN, "").split(" | ")[0].trim() || "Agent";
+}
+
+export function collapsed(events) {
+  const kept = events.reduce((acc, event) => {
+    const key = String(event.target ?? "");
+    const prev = acc[key];
+    const newer = !prev || event.at > prev.at || (event.at === prev.at && (event.id ?? 0) > (prev.id ?? 0));
+    return newer ? { ...acc, [key]: event } : acc;
+  }, {});
+  return Object.values(kept);
+}
+
+export function rowOf(event, now, format) {
+  const at = Number(event.at);
+  return {
+    id: event.id, target: event.target, kind: event.kind, mark: MARK[event.kind] ?? null,
+    name: eventName(event), age: Number.isFinite(at) ? format(Math.max(0, now - at)) : "",
+  };
+}
+
+export function present(events, { now = 0, focus = null, expanded = false, format } = {}) {
+  const mine = ordered(collapsed((events ?? []).filter((event) => !focus || event.target !== focus)));
+  return { count: mine.length, rows: lines(mine, expanded).map((row) => (row.more ? { more: row.more } : rowOf(row, now, format))) };
+}
+
 export function focusedTarget(events, before, after) {
   return after != null && after !== before && events.some((event) => event.target === after);
 }
@@ -61,7 +107,7 @@ export function agentTargets(agent, seen, term) {
 export function agentSnapshot(agent, seen, term, project) {
   const target = agentTargets(agent, seen, term)[0];
   return { source: target, project, value: {
-    type: "agent", target, turn: term?.turn ?? null, name: seen?.name || agent.title || "Agent", status: term?.status === "error" ? "error" : agent.status,
+    type: "agent", target, turn: term?.turn ?? null, name: shownName(agent, seen, term), status: term?.status === "error" ? "error" : agent.status,
   } };
 }
 
@@ -89,7 +135,7 @@ export function returnSignature(list, terms, spaces, panes, seen, assigned) {
     fields(list, [(a) => a.address, (a) => a.space, (a) => a.status, (a) => a.title, identity,
       (a) => seen?.get(a.address)?.name, (a) => assigned?.get(identity(a))?.project]),
     fields(terms, [(t) => t.address, (t) => t.status, (t) => t.turn, (t) => t.created_ms, (t) => t.parent,
-      (t) => t.program?.agent, (t) => t.title, (t) => t.name, (t) => t.labels?.["kanso.id"],
+      (t) => t.program?.agent, (t) => t.title, (t) => t.name, (t) => t.labels?.["kanso.name"], (t) => t.labels?.["kanso.id"],
       (t) => seen?.get(t.address)?.conversation, (t) => seen?.get(t.address)?.name,
       (t) => assigned?.get(identity(t) || t.labels?.["kanso.id"] || `${t.address}:${t.created_ms ?? ""}`)?.project]),
     fields(spaces, [(s) => s.id, (s) => s.machine, (s) => s.folder, (s) => (s.tabs ?? []).map((t) => t.id).join("\t")]),

@@ -17,6 +17,25 @@ release.
 
 - Sync in settings is off until you turn a computer on. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then, Settings and Spend say Update kanso there. A computer turned off from the sidebar is not asked and shows as off. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
 
+## [3.22.3] - 2026-11-10
+
+### Fixed
+
+- A remote machine is one quiet row, the same height as a project. Off, unreachable, and needs login say so on that row, and it can be turned off, retried, or given a space from there. One that cannot be reached stays in the list. Turning one off no longer forgets how to connect it.
+
+## [3.22.2] - 2026-11-10
+
+### Fixed
+
+- While you were away has a heading, with how many changes and a dismiss. Each change is a row: the agent's mark, the name kansō uses, and how long ago. The agent you are looking at is left out, and one agent is one row.
+- Needs you shows its count only when someone is waiting. With nobody waiting it stays hidden, and Cmd+J still says so for a moment.
+
+## [3.22.1] - 2026-11-10
+
+### Changed
+
+- The sidebar reuses thread locations and live terminal PIDs, checks transcript sizes on status or turn changes with a five-minute fallback, backs off failed thread discovery, and checks folders less often. Unchanged sleeping rows are reused; sleeping projects and unavailable machines skip background reads. Database maintenance waits for changes or a slower fallback; calls share processes and cache preferences. The strip reads divider sizes less often at rest.
+
 ## [3.22.0] - 2026-11-10
 
 ### Added

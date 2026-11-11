@@ -10,8 +10,6 @@ export const H = { control: 30, compact: 24 };
 export const R = { control: 6, card: 8 };
 export const T = { page: 20, card: 13.5, title: 15, metric: 22, value: 12.5, body: 11.5, small: 10.5, label: 9.5 };
 export const ICON = 15;
-// A machine header is a step larger than a row glyph.
-export const HEADER_ICON = 17;
 export const EASE = { duration: 180, easing: "ease-out" };
 /** A second press within this long confirms a removal. */
 export const ARM_MS = 4000;
