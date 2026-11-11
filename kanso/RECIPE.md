@@ -718,12 +718,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       weight 1), `strip-map` (`kanso-strip`, 180 px), `status-right`
       (`kanso-status` `{side: "right"}`, weight 1).
 - **Mods**:
-  - `kanso-spaces`: spaces, agents (`agents.js`), git per space via `exec`,
-    machines via `hc machine ls`.
+  - `kanso-spaces`: tracks every 2 s; sleeping/off projects skip reads.
+    Reused sleep/needs-you rows. Git via `exec`; machines via `hc`.
   - `kanso-tabs`: tabs, panel buttons and the on-demand panel mount via
     `layout.set`.
-  - `kanso-strip`: the canvas. The copy in the status row is the controller
-    and minimap; copies with `{edge, side, count, panes}` draw an edge rail. State per
+  - `kanso-strip`: canvas; the status row's controller/minimap samples native
+    sizes every 1 s at rest, 150 ms during `strip.drag`. Edge copies draw a rail. State per
     tab lives in shared `strip.state` (`{cols: [{panes, w, pin, hs}], vx,
     n}`; `hs` is each stacked pane's share of the height); the last chosen
     `n` is in shared `strip.n` for new tabs. Copies with `{ruler}` are the
@@ -827,11 +827,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
-  - Mods derive from Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
-  - Herdr loads a mod's files from its own folder only, so a file several
-    mods need (`layout.js`, `ui.js`, `share.js`, `marks.js`, `deliver.js`,
-    `kinds.js`...: `scripts/sync-share.mjs`) is copied into each by `npm run
-    sync:share`; a test fails when a copy differs.
+  - Mods: Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
+  - Own-folder imports only: `scripts/sync-share.mjs` copies shared files;
+    `npm run sync:share -- --check` detects drift. Kdb batches same-tick calls;
+    prefs/panel-state reads cache until a write or 30 s. Return touch/prune
+    share a call.
 - **Herdr functions**: `spaces`, `panes`, `agents`, `terminals`, `machines`,
   `layout`, `theme`, `shared`/`setShared`, `window`, `exec`, `hc`,
   `watchFolder`, `readTextFile`, `openOverlay`, `run`, `home`, `appHome`,

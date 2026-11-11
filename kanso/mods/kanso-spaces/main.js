@@ -18,11 +18,12 @@ import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, is
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
+import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
 import { skeleton, breathe, H, G } from "./ui.js";
-import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
+import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
@@ -118,9 +119,13 @@ const label = (address, key, value) => hc(["label", address, `${key}=${value ?? 
 const registry = () => { const rows = shared(REGISTRY); return Array.isArray(rows) ? rows : []; };
 async function publishRegistry(kdb) {
   const list = await kdb.projects();
-  const missing = await missingFolders(list.filter((p) => !p.machine).map((p) => p.folder));
+  const sleeping = new Set((shared("kanso.asleep") ?? []).filter((s) => s.state !== "undoing").map((s) => s.from));
+  const awake = new Set(spaces().map((s) => keyOfSpace(s, home())));
+  const quiet = (p) => sleeping.has(keyOfProject(p)) && !awake.has(keyOfProject(p));
+  const missing = await missingFolders(list.filter((p) => !p.machine && !quiet(p)).map((p) => p.folder));
+  const previous = new Map(registry().map((p) => [p.id, p.missing]));
   // Only this computer's folders are looked at: another machine's project is never called gone from here.
-  const shown = list.map((p) => ({ id: p.id, name: p.name, folder: p.folder, machine: p.machine ?? "", agent: p.agent ?? null, missing: !p.machine && missing.has(p.folder) }));
+  const shown = list.map((p) => ({ id: p.id, name: p.name, folder: p.folder, machine: p.machine ?? "", agent: p.agent ?? null, missing: quiet(p) ? (previous.get(p.id) ?? false) : !p.machine && missing.has(p.folder) }));
   if (JSON.stringify(shown) !== JSON.stringify(registry())) setShared(REGISTRY, shown);
   return shown;
 }
@@ -204,7 +209,6 @@ export default class Spaces extends View {
       this.loadAsleep().catch(() => {});
     });
     this.sleepWork.start(cx);
-    cx.timer.every(1000, (cx) => { if ((shared("kanso.sleep.kick") ?? 0) > this.sleepWork.kicked) this.sleepWork.start(cx); });
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
     cx.spawn(async (cx) => {
@@ -482,6 +486,17 @@ export default class Spaces extends View {
     }
   }
 
+  background() {
+    const sleeps = withAway(shared("kanso.asleep") ?? [], shared("kanso.sleep.away")), layouts = machines();
+    return { sleeps, layouts, allows: (address, thread = null) => pollable(address, sleeps, layouts, thread) };
+  }
+
+  pollingPlaces(sp = spaces(), ps = panes(), places = placesOf(sp, ps)) {
+    const background = this.background();
+    const allowed = activePlaces(sp, ps, background.sleeps, background.layouts, home());
+    return new Map([...places].filter(([id]) => allowed.has(id)));
+  }
+
   refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
     const list = agents(), layouts = machines();
     const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
@@ -491,8 +506,10 @@ export default class Spaces extends View {
     this.needsSignature = signature;
     this.needsThreads = this.threads;
     this.needsLayoutSignature = layoutSignature;
-    const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
-    const named = () => list.map((a) => ({ ...a, name: this.nameOf({ ...a, name: names.get(a.address) }) }));
+    const named = () => {
+      const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
+      return list.map((a) => ({ ...a, name: this.nameOf({ ...a, name: names.get(a.address) }) }));
+    };
     const previous = this.needsQueue ?? shared(NEEDS_YOU);
     const rows = changed ? waitingQueue(named(), terms, asleep.dozing, previous?.rows) : previous.rows;
     const next = queueState(rows, layouts);
@@ -623,7 +640,8 @@ export default class Spaces extends View {
     const now = Date.now();
     if (!this.psFree(now) || window().platform === "windows" || this.shownView() === "threads") return;
     if (!window().active && now - (this.psAt ?? 0) < 30000) return;
-    const mine = terminals().filter((k) => k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
+    const background = this.background();
+    const mine = terminals().filter((k) => background.allows(k.address) && k.state === "live" && k.status && !k.address.includes("/") && (k.foreground?.pid ?? k.pid));
     if (!mine.length) { if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); } return; }
     this.psAt = now;
     const pids = pidsOf(this.threads);
@@ -715,6 +733,7 @@ export default class Spaces extends View {
   }
 
   checkNew(cx) {
+    if (this.sleepWork && (shared("kanso.sleep.kick") ?? 0) > this.sleepWork.kicked) this.sleepWork.start(cx);
     const now = Date.now();
     const active = window().active;
     if (!active && now - (this.lastLook ?? 0) < 5000) return;
@@ -743,7 +762,9 @@ export default class Spaces extends View {
 
   trackReturn(sp, ps, active, now, cx) {
     if (this.sinceLeft.busy) return;
-    const focus = focused(), list = agents(), rawTerms = terminals();
+    const background = this.background();
+    const allowed = activePlaces(sp, ps, background.sleeps, background.layouts, home());
+    const focus = focused(), list = agents().filter((a) => allowed.has(a.space)), rawTerms = terminals().filter((k) => background.allows(k.address));
     const signature = returnSignature(list, rawTerms, sp, ps, this.seenNow, this.panel.agents);
     const changed = signature !== this.returnSignature;
     const terms = changed ? new Map(rawTerms.map((term) => [term.address, term])) : null;
@@ -754,7 +775,7 @@ export default class Spaces extends View {
       return { ...snapshot, project: assigned ?? snapshot.project };
     }) : undefined;
     const targets = changed ? new Map(live.map((agent, index) => [agent.address, snapshots[index].value.target])) : this.returnTargets;
-    const project = active && focus ? sp.find((space) => space.id === focus.space) : null;
+    const project = active && focus ? sp.find((space) => space.id === focus.space && allowed.has(space.id)) : null;
     const pr = shared("kanso.pr.seen");
     const seenTarget = pr && pr.at > (this.prSeenAt ?? 0) ? targetOf("pr", pr.url) : null;
     this.sinceLeft.update({ project: project ? projectKey(project) : null, target: targets?.get(focus?.terminal) ?? null, seenTarget, snapshots, now }, cx).then(() => {
@@ -791,7 +812,7 @@ export default class Spaces extends View {
   // other windows' names left as they are while their terminals live.
   keepSeen(now) {
     const seen = this.seenNow;
-    if (!seen) return;
+    if (!seen?.size) return;
     if (this.panelReady) {
       this.panel.remember(seen, this.seenAt ?? now);
       // A name a wake could not put back on its new terminal: put back now, every 30 s until it is.
@@ -898,7 +919,8 @@ export default class Spaces extends View {
   }
 
   trackAgents(now, sp, cx) {
-    const list = agents();
+    const background = this.background();
+    const list = agents().filter((a) => background.allows(a.address, this.threads?.[a.address]));
     const tabs = new Map(sp.flatMap((s) => s.tabs ?? []).map((tb) => [tb.id, tb]));
     const next = track(this.since, list, now, (id) => tabs.get(id));
     // An agent came or went: read the conversations now, so it shows by its name at once rather than in a minute.
@@ -933,7 +955,7 @@ export default class Spaces extends View {
 
   due(now, sp, ps, places, active) {
     // Moved there: what it knew of that place may be old.
-    const all = [...places];
+    const all = [...this.pollingPlaces(sp, ps, places)];
     const at = Object.fromEntries(all.map(([id, { key }]) => [id, key]));
     const found = all.filter(([, { cwd }]) => cwd);
     const keys = new Set(found.map(([, { key }]) => key)), onOf = new Map(found.map(([, { key, on }]) => [key, on]));
@@ -985,7 +1007,8 @@ export default class Spaces extends View {
         this.pending.clear();
         for (const key of keys) await this.check(key, cx);
       }
-      const used = new Set(Object.values(this.git).filter(Boolean).map((g) => JSON.parse(g.repo)).filter(([on]) => !on).map(([, repo]) => repo));
+      const keys = new Set([...this.pollingPlaces().values()].map((place) => place.key));
+      const used = new Set(Object.entries(this.git).filter(([key, value]) => keys.has(key) && value).map(([, value]) => value).map((g) => JSON.parse(g.repo)).filter(([on]) => !on).map(([, repo]) => repo));
       for (const repo of this.watching) if (!used.has(repo)) this.watching.delete(repo);
       this.refreshing = false;
       cx.notify();
@@ -994,6 +1017,7 @@ export default class Spaces extends View {
 
   async check(key, cx) {
     const [on, cwd] = JSON.parse(key);
+    if (![...this.pollingPlaces().values()].some((place) => place.key === key)) return;
     this.checked[key] = Date.now();
     this.unsure.delete(key);
     try {
@@ -1035,7 +1059,9 @@ export default class Spaces extends View {
         while (this.watching.has(repo)) {
           await watchFolder(repo);
           const mine = JSON.stringify([null, repo]);
-          if (this.watching.has(repo)) this.refreshGit(Object.keys(this.git).filter((k) => this.git[k]?.repo === mine), cx);
+          const keys = [...this.pollingPlaces().values()].filter((place) => this.git[place.key]?.repo === mine).map((place) => place.key);
+          if (!keys.length) this.watching.delete(repo);
+          else if (this.watching.has(repo)) this.refreshGit(keys, cx);
         }
       } catch { this.watching.delete(repo); }
     });
@@ -1186,7 +1212,15 @@ export default class Spaces extends View {
     return { name: a.asleep.spaceName || key.slice(key.indexOf(":") + 1).split("/").at(-1) || "~", fill: t.muted };
   }
 
-  sleepingNow(sp, terms) { return sleepingNow(sp, terms, withAway(shared("kanso.asleep") ?? [], shared("kanso.sleep.away")), () => home()); }
+  sleepingNow(sp, terms) {
+    const asleep = shared("kanso.asleep") ?? [], away = shared("kanso.sleep.away"), here = home();
+    const signature = sleepingSignature(sp, terms, asleep, away, here);
+    if (signature !== this.sleepingSignature) {
+      this.sleepingRows = sleepingNow(sp, terms, withAway(asleep, away), () => here);
+      this.sleepingSignature = signature;
+    }
+    return this.sleepingRows;
+  }
 
   // Each sleeping row goes back at the place it had, so it stays where it was.
   spaceRows(id, ctx) {
@@ -1543,7 +1577,8 @@ export default class Spaces extends View {
   // Its own `ps` only when checkTasks' table has not answered lately (threads.js ALIVE_MS).
   // A look is stamped when it starts, so one that fails waits its turn instead of trying every half second.
   checkAlive(cx, now = Date.now(), active = window().active) {
-    const pids = pidsOf(this.threads);
+    const background = this.background();
+    const pids = pidsOf(Object.fromEntries(Object.entries(this.threads ?? {}).filter(([address, thread]) => background.allows(address, thread))));
     if (!this.psFree(now) || !pids.length) return;
     const sig = pids.join(","), every = active && shared("sidebar.collapsed") !== true ? ALIVE_MS : ALIVE_BEHIND_MS;
     if (!aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every)) return;
@@ -1567,7 +1602,9 @@ export default class Spaces extends View {
     if (this.readingThreads) return;
     this.readingThreads = true;
     // Agents on this computer (another machine's files are not here).
-    const list = agents().filter((a) => !a.address.includes("/")).map((a) => ({ address: a.address, app: a.app }));
+    const background = this.background();
+    const list = agents().filter((a) => !a.address.includes("/") && background.allows(a.address, this.threads?.[a.address])).map((a) => ({ address: a.address, app: a.app }));
+    if (!list.length) { this.readingThreads = false; return; }
     cx.spawn(async (cx) => {
       try { this.threads = await findThreads(list, this.threads ?? {}); } catch { this.threads ??= {}; }
       finally { this.readingThreads = false; }

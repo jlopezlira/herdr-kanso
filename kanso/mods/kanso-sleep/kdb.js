@@ -104,14 +104,20 @@ export function layoutWithout(layout, ids) {
   return { ...layout, cols: cols.map((c) => ({ ...c, w: total > 0 ? (Number(c.w) || 0) / total : 1 / cols.length })) };
 }
 
-const connections = new Map();
 const CACHE_MS = 30_000;
+class Connections {
+  constructor() { this.files = new Map(); }
+  get(file) {
+    if (!this.files.has(file)) this.files.set(file, { ready: null, chain: Promise.resolve(), queue: [], cache: new Map(), cachedAt: Date.now() });
+    return this.files.get(file);
+  }
+}
+const connections = new Connections();
 
 export class Kdb {
   constructor(dir = `${appHome()}/${DIR}`) {
     this.dir = dir;
     this.file = `${dir}/kanso.db`;
-    if (!connections.has(this.file)) connections.set(this.file, { ready: null, chain: Promise.resolve(), queue: [], cache: new Map(), cachedAt: Date.now() });
     this.connection = connections.get(this.file);
   }
 
@@ -142,14 +148,14 @@ export class Kdb {
 
   enqueue(text) {
     return new Promise((resolve, reject) => {
-      const queue = this.connection.queue;
-      queue.push({ text, resolve, reject });
-      if (queue.length === 1) Promise.resolve().then(() => this.flush());
+      this.connection.queue = [...this.connection.queue, { text, resolve, reject }];
+      if (this.connection.queue.length === 1) Promise.resolve().then(() => this.flush());
     });
   }
 
   flush() {
-    const batch = this.connection.queue.splice(0);
+    const batch = this.connection.queue;
+    this.connection.queue = [];
     const work = () => this.sendBatch(batch);
     this.connection.chain = this.connection.chain.then(work, work);
   }
@@ -159,18 +165,12 @@ export class Kdb {
     try {
       const text = batch.flatMap((call, i) => [...statements(call.text), `.print ${marker}:${i}`]);
       const result = await this.execute(text);
-      const output = String(result.stdout ?? "").split(/\r?\n/);
-      const completed = { at: 0, lines: [] };
-      for (const line of output) {
-        if (line === `${marker}:${completed.at}`) {
-          batch[completed.at].resolve(rowsOfOutput(completed.lines.join("\n")));
-          completed.at += 1;
-          completed.lines = [];
-        } else completed.lines.push(line);
-      }
-      if (completed.at === batch.length) return;
-      batch[completed.at].reject(new Error((result.stderr || "sqlite3 failed").trim().split("\n")[0]));
-      if (completed.at + 1 < batch.length) await this.sendBatch(batch.slice(completed.at + 1));
+      const chunks = String(result.stdout ?? "").split(new RegExp(`^${marker}:[0-9]+\\r?$`, "gm"));
+      const completed = chunks.length - 1;
+      chunks.slice(0, completed).forEach((chunk, i) => batch[i].resolve(rowsOfOutput(chunk)));
+      if (completed === batch.length) return;
+      batch[completed].reject(new Error((result.stderr || "sqlite3 failed").trim().split("\n")[0]));
+      if (completed + 1 < batch.length) await this.sendBatch(batch.slice(completed + 1));
     } catch (error) { for (const call of batch) call.reject(error); }
   }
 
@@ -187,13 +187,12 @@ export class Kdb {
   async read(text) { await this.open(); return this.enqueue(text); }
 
   async cached(text) {
-    const state = this.connection;
-    if (Date.now() - state.cachedAt >= CACHE_MS) this.invalidate();
-    if (!state.cache.has(text)) {
-      const result = this.read(text).catch((error) => { if (state.cache.get(text) === result) state.cache.delete(text); throw error; });
-      state.cache.set(text, result);
+    if (Date.now() - this.connection.cachedAt >= CACHE_MS) this.invalidate();
+    if (!this.connection.cache.has(text)) {
+      const result = this.read(text).catch((error) => { if (this.connection.cache.get(text) === result) this.connection.cache.delete(text); throw error; });
+      this.connection.cache.set(text, result);
     }
-    return (await state.cache.get(text)).map((row) => ({ ...row }));
+    return (await this.connection.cache.get(text)).map((row) => ({ ...row }));
   }
 
   // The migrated marker is checked inside the write lock by every statement, so two windows never both take the old data in.

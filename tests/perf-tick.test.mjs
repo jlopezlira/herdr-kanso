@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
 async function tickHost() {
-  const state = { now: 0, focus: null, tracking: 0, panes: 0, reads: 0, notices: 0 };
+  const state = { now: 0, focus: null, tracking: 0, panes: 0, reads: 0, notices: 0, kick: 0, starts: 0 };
   class Clock extends Date { static now() { return state.now; } }
   const projects = [{ id: "a", folder: "/a", machine: "", name: "A" }];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    Date: Clock, props: () => ({}), window: () => ({ active: true }), shared: () => projects,
+    Date: Clock, props: () => ({}), window: () => ({ active: true }), shared: (key) => key === "kanso.sleep.kick" ? state.kick : projects,
     spaces: () => [{ id: "new", tabs: [] }], panes: () => { state.panes += 1; return []; },
     focused: () => ({ terminal: state.focus }), agents: () => { state.reads += 1; return [{ address: "a", focused: true, status: "idle" }]; },
   });
@@ -44,4 +44,17 @@ test("registry comparisons detect every published field and order without serial
   for (const field of Object.keys(row)) assert.equal(sameProjects([row], [{ ...row, [field]: "changed" }]), false, field);
   const other = { ...row, id: "b" };
   assert.equal(sameProjects([row, other], [other, row]), false);
+});
+
+test("the existing sidebar tick picks up each sleep kick once without its own timer", async () => {
+  const { state, view, cx } = await tickHost();
+  view.sleepWork = { kicked: 0, start() { this.kicked = state.kick; state.starts += 1; } };
+  state.kick = 1;
+  view.checkNew(cx);
+  view.checkNew(cx);
+  assert.equal(state.starts, 1);
+  state.now = 500;
+  state.kick = 2;
+  view.checkNew(cx);
+  assert.equal(state.starts, 2, "a kick is handled before the expensive tracking throttle");
 });

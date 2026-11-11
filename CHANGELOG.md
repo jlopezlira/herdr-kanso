@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.21.2] - 2026-11-10
+
+### Changed
+
+- The sidebar tracks agents less often, reuses unchanged sleeping rows, and skips background reads for sleeping projects and unavailable machines. Database calls share processes and cache preferences; the strip reads divider sizes less often at rest.
+
 ## [3.21.1] - 2026-11-10
 
 ### Fixed

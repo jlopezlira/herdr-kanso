@@ -37,7 +37,7 @@ async function sidebar({ latency = 0, active = true, collapsed = false, view = "
     threads: { t1: { pid: 101, file: "/a.jsonl" }, t2: { pid: 202, file: "/b.jsonl" } },
   });
   // Only the liveness part of checkNew runs here; the rest has its own tests.
-  for (const name of ["takeMoves", "trackAgents", "trackReturn", "refreshThreads", "keepSeen", "prune"]) v[name] = () => {};
+  for (const name of ["takeMoves", "trackFocus", "trackAgents", "trackReturn", "refreshThreads", "keepSeen", "prune"]) v[name] = () => {};
   v.due = () => new Set();
   const cx = { notify() {}, spawn(fn) { fn(cx); } };
   const settle = async () => {
@@ -81,11 +81,11 @@ test("with the sidebar collapsed, a minute between looks when nothing else asks"
   assert.deepEqual(own(h).map((x) => x.at), [0, 60000, 120000], "it was two a second");
 });
 
-test("a new set of processes is asked at once, whatever the cadence", async () => {
+test("a new set of processes is asked on the next two-second tracking pass", async () => {
   const { h, v } = await sidebar({ view: "threads" });
   h.live.add(303);
   await h.run(15000, (t) => { if (t === 2500) v.threads = { ...v.threads, t3: { pid: 303, file: "/c.jsonl" } }; });
-  assert.deepEqual(own(h).map((x) => x.at), [0, 2500, 12500], "at once, then 10 s on from there");
+  assert.deepEqual(own(h).map((x) => x.at), [0, 4000, 14000], "within 2 seconds, then 10 seconds between liveness looks");
   assert.ok(v.alive.has(303));
 });
 
@@ -109,8 +109,8 @@ test("a slow `ps` is never asked again before it answers, from either check", as
     if (t === 21000) { v.view = "threads"; v.threads = { t1: v.threads.t1 }; }
   });
   assert.equal(h.most, 1, "one in flight at a time");
-  // 303 came while the first was out: asked once it answered. The table at 15 s was asked for three, so one goes again for the one left.
-  assert.deepEqual(h.ps.map((x) => [x.at, x.whole]), [[0, false], [7500, false], [15000, true], [22500, false], [32500, false], [42500, false], [52500, false]]);
+  // Each finished read is picked up by the next two-second tracking pass.
+  assert.deepEqual(h.ps.map((x) => [x.at, x.whole]), [[0, false], [8000, false], [18000, false], [26000, false], [36000, false], [46000, false], [56000, false]]);
 });
 
 test("one table for every terminal: each `ps -axo` is parsed once, and tasksOf walks its index", async () => {
@@ -159,7 +159,7 @@ test("a `ps` that never answers is given up on, and a late answer changes nothin
   // checkTasks' table at 5 s hangs: liveness asks on its own at 15 s, the table again at 20 s.
   const tasks = await sidebar({ rows: ["1011 101 00:05 npm run dev"], plan: (n) => (n === 1 ? "hang" : null) });
   await tasks.h.run(20000);
-  assert.deepEqual(tasks.h.ps.map((x) => [x.at, x.whole]), [[0, false], [5000, true], [15000, false], [20000, true]]);
+  assert.deepEqual(tasks.h.ps.map((x) => [x.at, x.whole]), [[0, false], [5000, true], [15000, true], [20000, true]]);
   assert.deepEqual(Object.keys(tasks.v.tasks), ["t1"]);
 });
 
