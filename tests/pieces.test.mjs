@@ -38,7 +38,22 @@ test("the registry ids are unique and each default is one of its states", () => 
   assert.equal(pieceOf("panel.workflow").job, null);
   for (const id of LEFT_OUT) assert.equal(PIECES.some((row) => row.id === id), false, id);
   assert.equal(PIECES.some((row) => row.id === "sidebar.away"), true);
-  assert.equal(PIECES.find((row) => row.id === "sidebar.needs").default, "needed");
+  assert.equal(PIECES.find((row) => row.id === "sidebar.needs").default, "hide");
+});
+
+test("Needs you stays hidden until someone chooses it, and a stored choice stays", () => {
+  const id = "sidebar.needs";
+  assert.equal(choice(id, {}), "hide");
+  assert.equal(shown(id, true, {}), false);
+  assert.equal(choice(id, { [id]: "show" }), "show");
+  assert.equal(shown(id, false, { [id]: "show" }), true);
+  assert.equal(choice(id, { [id]: "needed" }), "needed");
+  assert.equal(shown(id, true, { [id]: "needed" }), true);
+  assert.equal(shown(id, false, { [id]: "needed" }), false);
+  assert.equal(shown(id, true, { [id]: "hide" }), false);
+  assert.deepEqual(setPiece({}, id, "hide"), {});
+  assert.deepEqual(setPiece({}, id, "needed"), { [id]: "needed" });
+  assert.deepEqual(setPiece({ [id]: "show" }, id, "show"), { [id]: "show" });
 });
 
 test("shown follows show, when needed and hide, with and without something to say", () => {

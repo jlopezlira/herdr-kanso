@@ -26,6 +26,8 @@ import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
+import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
+import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW } from "./sidebar-rows.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed, segmented } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
@@ -168,6 +170,8 @@ export default class Spaces extends View {
     this.asleepApplied = 0;
     this.loadAsleep().catch(() => {});
     this.handle = cx.focus_handle(); // the list by keyboard (enterList)
+    this.armed = new Armed();
+    this.pulling = false;
     this.needsScroll = ScrollHandle.new();
     if (shared("kanso.list")) setShared("kanso.list", null); // a reload: nothing is on the list
     this.git = {}; // place key -> { name, branch, ahead, behind, repo, linked }, null: not a repo
@@ -745,8 +749,12 @@ export default class Spaces extends View {
   }
 
   navRow(a, row) {
-    // Asleep: no pane to open; Enter opens its menu (Wake).
-    const go = () => (a.asleep ? this.openMenu(a) : a.pane ? run("pane.focus", { pane: a.pane }) : run("terminal.peek", { terminal: a.address }));
+    const open = enterOpens(a);
+    const go = () => {
+      if (open?.wake) wakeRow(open.wake);
+      else if (open?.focus) run("pane.focus", { pane: open.focus });
+      else if (open?.peek) run("terminal.peek", { terminal: open.peek });
+    };
     return this.navMark(`agent:${a.address}`, go, Boolean(a.focused)) ? { ...(row ?? {}), kbd: true } : row;
   }
 
@@ -1522,10 +1530,7 @@ export default class Spaces extends View {
     const open = this.asleepOpenOf(group.id);
     const id = `asleep-${group.id}`;
     if (!this.unfolded(id, open, ctx.now)) return { els: [], h: 0 };
-    const drawn = group.rows.map((a) => {
-      const more = this.more({ a, lines: [] }, ctx);
-      return { h: agentRowH(a, more), el: agentRow(a, indent, t, this.navRow(a, this.rowFor(a)), more) };
-    });
+    const drawn = group.rows.map((a) => ({ h: ASLEEP_ROW, el: this.asleepLine(a, indent, t) }));
     const h = drawn.reduce((n, r) => n + r.h + 1, 0);
     return { els: this.foldBox(id, open, drawn.map((r) => r.el), ctx.now), h: Math.max(0, h - 1) };
   }
@@ -1580,8 +1585,9 @@ export default class Spaces extends View {
 
   seen(sp, ctx) { return seenNow(sp, ctx, this.threads, this.panel?.agents ?? new Map(), (a) => this.nameOf(a), this.since ?? {}); }
 
-  zzActions(a) {
-    return a.asleep.busy || a.asleep.quiet ? [] : [{ id: "wake", icon: "sun", tip: "Wake", act: () => wakeRow(a.asleep.id) }];
+  asleepLine(a, indent, t) {
+    const row = this.navRow(a, this.rowFor(a));
+    return asleepRow(a, AGENT_PAD + indent, t, row, row.wake, agentLabel(a));
   }
 
   // Each item() adds itself to menuActs as it draws: the keyboard walks the items in screen order.
@@ -1771,7 +1777,7 @@ export default class Spaces extends View {
     const key = (w) => places.get(w.id).key;
     const ready = (w) => this.shown.has(w.id) || key(w) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
-    const list = sp.map((w, i) => ({ w, i, g: this.git[key(w)] ?? null })).filter((r) => this.shown.has(r.w.id));
+    const list = sp.map((w, i) => ({ w, i, g: this.git[key(w)] ?? null, place: places.get(w.id) })).filter((r) => this.shown.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
     const tops = list.filter((r) => !nested(r));
@@ -1794,7 +1800,11 @@ export default class Spaces extends View {
     const keys = entries.map(colOf);
     const starts = keys.flatMap((key, i) => (i === 0 || !keys[i - 1] || key !== keys[i - 1] ? [i] : []));
     const runs = starts.map((i, k) => {
-      const rows = entries.slice(i, starts[k + 1] ?? entries.length).map((e) => { const m = this.more(e, ctx); return { a: e.a, h: agentRowH(e.a, m), el: agentRow(e.a, indent, t, this.navRow(e.a, e.a.asleep ? this.rowFor(e.a) : e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null), m) }; });
+      const rows = entries.slice(i, starts[k + 1] ?? entries.length).map((e) => {
+        if (e.a.asleep) return { a: e.a, h: ASLEEP_ROW, el: this.asleepLine(e.a, indent, t) };
+        const m = this.more(e, ctx);
+        return { a: e.a, h: agentRowH(e.a, m), el: agentRow(e.a, indent, t, this.navRow(e.a, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null), m) };
+      });
       return { key: keys[i], rows, slab: keys[i] && rows.length > 1 };
     });
     // Down the rows: where each starts, 1px apart, a slab's touching, with 1px after it.
@@ -1811,10 +1821,6 @@ export default class Spaces extends View {
   more(e, ctx, project = null) {
     const a = e.a, show = this.showActivity !== false && !a.sub;
     const timed = (value) => (this.showTime === false ? null : value);
-    if (a.asleep) {
-      const quiet = a.asleep.quiet || null;
-      return { lines: e.lines, label: a.name, time: timed(quiet ? (a.asleep.asOf ?? "") : a.asleep.busy ? "\u2026" : since(a.asleep.saved)), activity: quiet, project, steady: show && !quiet, oneLine: this.narrow };
-    }
     return {
       label: this.nameOf(a),
       lines: e.lines,
@@ -1831,7 +1837,6 @@ export default class Spaces extends View {
 
   extras(a, ctx, show = true) {
     return {
-      faint: a.status === "idle",
       step: show ? stepOf(a, this.steps, ctx.now) : null,
       tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
     };
@@ -1992,11 +1997,10 @@ export default class Spaces extends View {
       const gap = r.tree || r === rows[0] ? [] : [item(div().h(10).flex_none(), 10)];
       // The space's row before its agents': the keyboard's path (navMark) goes in screen order.
       const head = item(this.row(r, t, whole ? [] : entries.map((e) => e.a), whole), rowHeight(r), r.w.active ? spaceMark(rowHeight(r)) : null);
-      const returned = r.w.active ? this.returnRows(t, r.w) : [];
       if (whole) {
         const agents = this.asleepAgents(whole, t, ctx, indent);
         const box = agents.els.map((el) => item(el, this.asleepOpenOf(whole.id) ? ((this.foldH ?? {})[`asleep-${whole.id}`] ?? agents.h) : 0));
-        return [...gap, head, ...returned, ...box];
+        return [...gap, head, ...box];
       }
       const show = this.unfolded(r.w.id, open, ctx.now);
       const st = show ? this.stacked(entries, split.live, indent, t, r.w.id, ctx) : null;
@@ -2007,7 +2011,7 @@ export default class Spaces extends View {
       const inner = [...(st?.out ?? []), ...tabs];
       const box = (inner.length ? this.foldBox(r.w.id, open, inner, ctx.now) : [])
         .map((el) => item(el, open ? ((this.foldH ?? {})[r.w.id] ?? st?.h ?? 0) : 0, open && st?.focus != null ? agentMark(st.focus, st.focusH) : null));
-      return [...gap, head, ...returned, ...box];
+      return [...gap, head, ...box];
     };
     const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...(this.machines ?? []).map((row) => row.name), ...(this.parked ?? []).map((row) => row.name)])].filter(Boolean).toSorted();
     const loading = m => {
@@ -2113,7 +2117,7 @@ export default class Spaces extends View {
       .when(!collapsed, (el) => el.child(icon)
         .child(div().flex_1().min_w(0).truncate().text_size(T.card).font_medium().text_color(ink).child(title))
         .when(phase === "loading", (row) => row.child(breathe(skeleton(tokens(t)).line(G.xl * 3).id(`machine-loading-${key}`))))
-        .when(Boolean(word), (row) => row.child(div().flex_none().text_size(T.small).text_color(t.dim).when(Boolean(hint), (el) => el.tooltip(hint)).child(word)))
+        .when(Boolean(word), (row) => row.child(div().flex_none().text_size(T.body).text_color(t[machineWordTone(phase)]).when(Boolean(hint), (el) => el.tooltip(hint)).child(word)))
         .when(tools.length > 0, (row) => tools.reduce((el, tool) => el.child(tool), row))
         .when(connected, (row) => row.child(svg(`mods/kanso-chrome/icons/chevron-${folded ? "right" : "down"}.svg`).size(ICON).flex_none().text_color(t.dim))));
   }
@@ -2133,25 +2137,14 @@ export default class Spaces extends View {
     return [headItem, ...(mine.length ? mine.flatMap(draw) : asleep ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
   }
 
-  // Only a worktree row drops the branch: its name already is the branch.
-  gitTail(g, tree, name, t) {
-    const same = (a) => a.toLowerCase() === name.toLowerCase();
-    const branch = tree ? "" : (g.branch ?? "detached");
-    const repo = tree || same(g.name) ? "" : g.name;
-    return h_flex()
-      .flex_1()
-      .min_w(0)
-      .gap(5)
-      .justify_end()
-      .items_center()
-      .text_size(11.5)
-      .text_color(t.dim)
-      .when(Boolean(repo), (el) => el.child(div().min_w(0).truncate().child(repo)))
-      .when(Boolean(branch), (el) => el
-        .child(svg("mods/kanso-chrome/icons/branch.svg").size(12).flex_none().text_color(t.muted))
-        .child(div().min_w(0).truncate().text_color(t.muted).child(branch)))
-      .when(g.ahead > 0, (el) => el.child(div().flex_none().text_color(t.ansi2).child(`\u2191${g.ahead}`)))
-      .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
+  confirmPull(place, cx) {
+    if (!place?.cwd || this.pulling) return;
+    const key = pullKey(place.cwd, place.on);
+    this.armed.press(key, cx, () => {
+      if (this.pulling) return;
+      this.pulling = key;
+      cx.spawn((spawnCx) => runPull(exec, notify, { folder: place.cwd, on: place.on }).catch(() => null).then((result) => { this.pulling = false; if (result?.code === 0) this.refreshGit(new Set([place.key]), spawnCx); spawnCx.notify(); }));
+    });
   }
 
   // The last child's line stops at the bend.
@@ -2217,8 +2210,10 @@ export default class Spaces extends View {
       .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13));
   }
 
-  row({ w, i, g, tree }, t, mine = [], group = null) {
+  row({ w, i, g, tree, place }, t, mine = [], group = null) {
     const on = w.active;
+    const spot = placeOfSpace(w);
+    const controls = projectControls({ active: on, hovered: this.hoverSpace === w.id, place: spot });
     // A wash of the text color, never a theme accent; under the space you are in it is the list's pill.
     const washHover = t.foreground + "0c";
     const asleep = Boolean(group);
@@ -2264,9 +2259,10 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
-          .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, this.armed, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.confirmPull(place, cx), open: () => openAhead(w) }) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, group)))
-          .when(this.hoverSpace === w.id, (el) => el.child(this.plus(`space-plus-${w.id}`, t, placeOfSpace(w))).child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
+          .when(controls.plus, (el) => el.child(this.plus(`space-plus-${w.id}`, t, spot)))
+          .when(controls.dots, (el) => el.child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
           .when(!asleep && mine.length > 0, (el) => el.child(this.fold(w, mine, t))),
       );
     return row;
@@ -2298,7 +2294,8 @@ export default class Spaces extends View {
         this.toggleFold(id, !open, cx);
       }, s.id === "other" ? null : statusMark(t, s.id), s.label, count, s.id === "blocked" ? t.blocked : t.foreground);
       const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, ctx) : s.entries.map((e) => {
-        const m = this.more(e, ctx, e.lines.length ? null : project(e.a.space) ?? (e.a.asleep ? this.zzProject(e.a, t) : null)), rh = agentRowH(e.a, m);
+        if (e.a.asleep) return { focused: false, rh: ASLEEP_ROW, el: this.asleepLine(e.a, FLUSH, t) };
+        const m = this.more(e, ctx, e.lines.length ? null : project(e.a.space)), rh = agentRowH(e.a, m);
         return { focused: e.a.focused, rh, el: agentRow(e.a, FLUSH, t, this.navRow(e.a, this.rowFor(e.a)), m) };
       })) : [];
       const { h, focus, focusH } = laid.reduce((acc, r) => ({ h: acc.h + r.rh + 1, focus: r.focused ? acc.h : acc.focus, focusH: r.focused ? r.rh : acc.focusH }), { h: 0, focus: null, focusH: 0 });
@@ -2364,7 +2361,8 @@ export default class Spaces extends View {
       hovered: this.hoverRow === a.address,
       hover: (h, cx) => { if (h ? this.hoverRow !== a.address : this.hoverRow === a.address) { this.hoverRow = h ? a.address : null; cx.notify(); } },
       menu: () => this.openMenu(a, extra),
-      actions: a.asleep ? actions ?? this.zzActions(a) : actions,
+      wake: canWake(a) ? () => wakeRow(a.asleep.id) : null,
+      actions,
     };
   }
 
@@ -2509,23 +2507,24 @@ export default class Spaces extends View {
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
     const row = ({ a, th }, nested = false) => {
+      if (a.asleep) return { rh: ASLEEP_ROW, el: this.asleepLine(a, nested ? NESTED : FLUSH, t) };
       const when = (this.threadOrder === "started" ? th?.began : th?.said ?? th?.at) ?? this.since?.[a.address]?.at;
       const unread = isUnread(a.labels), up = woke(a, ctx.now), settled = Boolean(settledOf(a.labels)) && !backFromSettled(a);
       const snoozed = snoozedUntil(a.labels) > ctx.now;
       const free = a.status !== "working" && a.status !== "blocked";
-      const actions = a.asleep ? this.zzActions(a) : [
+      const actions = [
         settled ? { id: "unsettle", icon: "undo", tip: "Bring back", act: () => label(a.address, SETTLED_LABEL) }
           : free && a.pin == null ? { id: "settle", icon: "check", tip: "Settle", act: () => label(a.address, SETTLED_LABEL, `${Date.now()}:${a.turn ?? 0}`) } : null,
         { id: "pin", icon: "pin", tip: a.pin != null ? "Unpin" : "Pin to the top", act: () => this.pinThread(a) },
       ].filter(Boolean);
       const more = {
         label: this.nameOf(a),
-        time: this.showTime === false ? null : snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : a.asleep?.quiet ? (a.asleep.asOf || null) : when ? duration(Math.max(0, ctx.now - when)) : null,
+        time: this.showTime === false ? null : snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : when ? duration(Math.max(0, ctx.now - when)) : null,
         badge: up ? "Woke" : null,
         strong: unread || up,
         project: nested ? null : project(a.space),
         // What the agent says it is on, or said last; else the last thing you wrote.
-        activity: a.asleep ? (a.asleep.quiet || (a.asleep.stuck ? `Stuck: ${a.asleep.stuck}` : a.asleep.busy ? "On its way" : `Asleep since ${since(a.asleep.saved)}`)) : this.threads[a.address]?.unavailable ?? said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
+        activity: this.threads[a.address]?.unavailable ?? said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         roomy: true,
         oneLine: this.narrow,
         ...this.extras(a, ctx),
@@ -2746,8 +2745,8 @@ export default class Spaces extends View {
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
       .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
-      .child(this.needsOpen ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
-        ...(!collapsed && view !== "spaces" ? this.returnRows(t, active) : []),
+      .child(this.needsOpen && shown("sidebar.needs", true, map) ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
+        ...(!collapsed ? this.returnRows(t, active) : []),
         ...(view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx))]));
     this.nav = this.navNext;

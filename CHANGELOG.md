@@ -29,6 +29,13 @@ release.
 - When memory is low, the notice says "Memory N% free", the same words as the status bar.
 - When a sleep cannot finish, the notice and the Asleep line say the same sentence. Retry and undo stay on that line.
 - Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
+- Needs you stays out of the sidebar until you choose it. A finished agent is not listed there.
+- On the project you are in, + stays visible. On the others it shows when you point at the row.
+- A count behind the branch asks Press again, then says Pulling… until git answers. A count ahead goes to that project and opens the pull request panel.
+- While you were away sits at the top of Projects, as it does on Status and Threads.
+- A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
+- An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
+- An asleep row shows Wake. Enter wakes it. A click opens its menu.
 
 ### Fixed
 
