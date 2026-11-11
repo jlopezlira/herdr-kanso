@@ -13,7 +13,7 @@
 
 <p align="center"><b>More agents. Less babysitting.</b></p>
 
-<p align="center">A layout for the <a href="https://herdr.dev">Herdr</a> desktop app, not the Herdr TUI. It runs on macOS, Windows and Linux. The iOS simulator and the Markdown file handler are macOS only.</p>
+<p align="center">Every agent in a readable pane, the one waiting on you first, and a machine that lasts weeks. A layout for <a href="https://herdr.dev">Herdr</a>.</p>
 
 <p align="center">
   <a href="https://jlopezlira.github.io/herdr-kanso/">
@@ -25,6 +25,8 @@
 - Sleep a project and wake it on the same conversations.
 - Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks. Spend adds up across your computers once Sync is on.
 - A Simulator sits beside the agent. kansō works on a space that lives on another computer.
+
+For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS simulator and the Markdown file handler are macOS only.
 
 <p align="center">
   <a href="https://jlopezlira.github.io/herdr-kanso/">Website</a> ·
