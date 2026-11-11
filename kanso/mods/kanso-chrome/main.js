@@ -93,7 +93,6 @@ export default class WorkspaceChrome extends View {
         .on_click(action).child(svg(icon).size(17).flex_none())
         .when(collapsed, el => el.w(34).justify_center().tooltip(label))
         .when(!collapsed, el => el.px(10).gap(10).child(div().flex_1().child(label)));
-      const dot = () => div().size(6).rounded_full().bg(t.accent).flex_none();
       const who = basename(home()) || "me";
       const n = agents().length;
       const count = `${n} ${n === 1 ? "agent" : "agents"}`;
@@ -112,12 +111,8 @@ export default class WorkspaceChrome extends View {
       return v_flex().size_full().bg(t.chrome).px(collapsed ? 0 : 8).pt(8).pb(12).gap(2).text_size(13).justify_end()
         .when(collapsed, el => el.items_center())
         .when(Boolean(kanso), el => el.child(row("kanso-update", "mods/kanso-chrome/icons/refresh.svg", kansoLabel,
-          (_e, cx) => this.updater.install(cx))
-          .when(!busy && !collapsed, el => el.child(dot()))
-          .when(!busy && collapsed, el => el.child(dot().absolute().top(6).right(6)))))
-        .child(row("settings", "mods/kanso-chrome/icons/settings.svg", ready ? "Settings · update ready" : "Settings", () => run("app.settings"))
-          .when(ready && !collapsed, el => el.child(dot()))
-          .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
+          (_e, cx) => this.updater.install(cx))))
+        .child(row("settings", "mods/kanso-chrome/icons/settings.svg", ready ? "Settings · update ready" : "Settings", () => run("app.settings")))
         // A server, not a second "+": the rail already has one for New space.
         .when(shown("footer.machine", true, pieces(shared)), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add computer", () => run("mod.open", { name: "machine-add" }))))
         .child(div().h(8).flex_none())

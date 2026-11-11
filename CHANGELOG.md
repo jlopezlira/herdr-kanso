@@ -31,6 +31,12 @@ release.
 - An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
 - An asleep row shows Wake. Enter wakes it. A click opens its menu.
 - Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
+- A finished agent's row shows what it last said. Files, commits and the pull request stay on the pane header.
+- An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
+- What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
+- When memory is low, the notice says "Memory N% free", the same words as the status bar.
+- When a sleep cannot finish, the notice and the Asleep line say the same sentence. Retry and undo stay on that line.
+- Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
 
 ### Fixed
 

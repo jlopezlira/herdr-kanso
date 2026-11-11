@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
-const NAMES = ["track", "elapsed", "duration", "digestLine", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "segmentAt", "unwrap"];
+const NAMES = ["track", "elapsed", "duration", "activityOf", "nest", "bySection", "subStatus", "said", "trackSteps", "stepOf", "tasksOf", "segmentAt", "unwrap"];
 const lib = () => load("kanso-spaces/agents.js", NAMES);
 const MIN = 60000;
 
@@ -37,21 +37,18 @@ test("The time beside a row: working, waiting on you or since it finished", asyn
 });
 
 test("What a row says under its name", async () => {
-  const { activityOf, digestLine } = await lib();
+  const { activityOf } = await lib();
   const program = { key: "claude", name: "Claude Code" };
+  const digest = { files: 2, add: 12, del: 3, ahead: 1, pr: { number: 41, checks: "failing" } };
   assert.equal(activityOf({ status: "working", name: "Lead", title: "✳ Release notes 2.3", program }), "Release notes 2.3",
     "named by you: its own title is what it is on");
   assert.equal(activityOf({ status: "working", title: "Release notes 2.3", program }), null, "unnamed: the title already is the name");
   assert.equal(activityOf({ status: "blocked", name: "Lead", title: "~/Apps/fluenty", program }), null, "a path tells nothing");
   assert.equal(activityOf({ status: "working", name: "Lead", title: "Claude Code", program }), null, "nor the program's name");
   assert.equal(activityOf({ status: "working", name: "Fury", title: "fury", program }), null, "nor the name again in other letters");
-  assert.equal(activityOf({ status: "done" }, { files: 2, add: 12, del: 3, ahead: 1, pr: null }), "+12 −3 · 1 commit");
-  assert.equal(activityOf({ status: "idle" }, { files: 2, add: 12, del: 3 }), null, "once seen, one line");
-  assert.equal(activityOf({ status: "done" }, { files: 0, ahead: 0, pr: null }), null, "it left nothing");
-  assert.equal(digestLine({ files: 1, add: 0, del: 0, ahead: 2, pr: { number: 41, state: "OPEN", mergeStateStatus: "UNSTABLE", fail: 1, failed: "test / unit" } }), "1 file · 2 commits · PR #41 · test / unit failed");
-  assert.equal(digestLine({ pr: { number: 575, state: "OPEN", mergeStateStatus: "BLOCKED", reviewDecision: "REVIEW_REQUIRED", fail: 0, pending: 0 } }), "PR #575 · review required");
-  assert.equal(digestLine({ pr: { number: 9, state: "OPEN", mergeStateStatus: "CLEAN", fail: 0, pending: 0 } }), "PR #9");
-  assert.equal(/ready/i.test(digestLine({ pr: { number: 9, state: "OPEN", mergeStateStatus: "CLEAN", fail: 0, pending: 0 } })), false);
+  assert.equal(activityOf({ status: "done" }, digest), null, "finished: its last words, never the header's digest");
+  assert.equal(activityOf({ status: "idle" }, digest), null, "once seen, one line");
+  assert.equal(activityOf({ status: "done", msg: "" }, digest), null, "no words: still not the digest");
 });
 
 test("What the agent says it is on comes first, its first line", async () => {
@@ -61,8 +58,8 @@ test("What the agent says it is on comes first, its first line", async () => {
   assert.equal(said({ msg: "   " }), null);
   assert.equal(activityOf({ status: "working", title: "Release notes", program, msg: "Running the tests" }), "Running the tests", "over its title");
   assert.equal(activityOf({ status: "done", msg: "Gallery updated at the same link. Awaiting your word." }, { files: 2, add: 12, del: 3 }),
-    "Gallery updated at the same link. Awaiting your word.", "its last words over the digest");
-  assert.equal(activityOf({ status: "done", msg: "" }, { files: 2, add: 12, del: 3 }), "+12 −3", "no words: the digest");
+    "Gallery updated at the same link. Awaiting your word.", "its last words, not the digest");
+  assert.equal(activityOf({ status: "done", msg: "" }, { files: 2, add: 12, del: 3 }), null, "no words: the header keeps the digest");
   assert.equal(activityOf({ status: "idle", msg: "All green." }), "All green.", "resting: what it said last");
 });
 

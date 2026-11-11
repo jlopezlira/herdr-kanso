@@ -17,7 +17,7 @@ import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace, seenRow, restDue, machinesToAsk, asOfText, kansoDir } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, awayShown, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
-import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway, homePlace } from "./sleepwork.js";
+import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway, homePlace, couldNotSleep } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
@@ -40,6 +40,10 @@ import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOver
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
   "spaces.shelvesOpen", "spaces.custom", "spaces.view", "spaces.sections", "spaces.since"];
+
+const noteStuck = (row) => {
+  if (row?.state === "stuck") notify({ title: couldNotSleep(row), level: "error" });
+};
 
 // `ps`: panes(), read once by the caller: each read copies every pane.
 function placesOf(sp, ps) {
@@ -200,7 +204,7 @@ export default class Spaces extends View {
     // Sleeps are this sidebar's work (sleepwork.js): taken up on the next timer turn (what a restart cut short goes on),
     // on the dialog's kick and with the 30 s look; the heartbeat keeps a long step's row this window's.
     this.sleepWork = new SleepWork(this.leftNavStore().kdb, (row) => {
-      if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
+      noteStuck(row);
       this.loadAsleep().catch(() => {});
     }, null, () => awayShown(pieces(shared)));
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
@@ -506,7 +510,7 @@ export default class Spaces extends View {
     const had = this.remoteWorkers.get(machine);
     if (had) return had;
     const worker = new SleepWork(store.kdb, (row) => {
-      if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
+      noteStuck(row);
       if (row?.state === "asleep") this.markRemoteAsleep(machine, row);
       this.loadAsleep().catch(() => {});
     }, null, () => awayShown(pieces(shared)));
@@ -1495,7 +1499,11 @@ export default class Spaces extends View {
 
   asleepTail(t, group, { mark = true, count = true } = {}) {
     if (!group) return [];
-    const why = group.why ? div().id(`asleep-why-${group.id}`).max_w(140).flex_none().truncate().text_size(11).text_color(t.dim).child(group.why) : null;
+    const asleepOf = (row) => row?.asleep ?? row?.a?.asleep ?? null;
+    const held = (group.rows ?? []).map(asleepOf).find((z) => z && typeof z.stuck === "string" && !z.quiet);
+    // asleep.tab is the sleep's name, the same one the notice uses.
+    const sentence = held ? couldNotSleep({ name: held.tab, why: held.stuck }) : group.why;
+    const why = sentence ? div().id(`asleep-why-${group.id}`).max_w(140).flex_none().truncate().text_size(11).text_color(t.dim).child(sentence) : null;
     return [
       ...(mark ? [this.asleepMark(t, group)] : []),
       ...(count ? [div().id(`asleep-n-${group.id}`).flex_none().text_size(11).text_color(t.dim).child(String(group.rows.length))] : []),
@@ -1818,7 +1826,7 @@ export default class Spaces extends View {
       lines: e.lines,
       time: timed(a.sub ? null : elapsed(a, this.since ?? {}, ctx.now)),
       // A message sent to it from Send and not seen yet: who it is from.
-      activity: show ? (fromOf(a) ? `Message from ${fromOf(a)}` : activityOf(a, ctx.digests[a.pane])) : null,
+      activity: show ? (fromOf(a) ? `Message from ${fromOf(a)}` : activityOf(a)) : null,
       // An agent's row keeps its second line, so the list never jumps.
       steady: show && Boolean(a.status),
       ...this.extras(a, ctx, show),
@@ -2702,7 +2710,7 @@ export default class Spaces extends View {
     const switchShown = this.showSwitch !== false;
     // Collapsed, the rail keeps the view you chose: projects as avatars, agents and threads as tiles.
     const view = switchShown ? this.view : "spaces";
-    const read = { terms: terminals(), alive: this.alive, digests: shared("kanso.digest") ?? {}, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
+    const read = { terms: terminals(), alive: this.alive, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
     // Each terminal now: a conversation read from another process in it is not this one's.
     this.termBy = new Map(read.terms.map((k) => [k.address, k]));
     // Every row built once per draw, for every view.

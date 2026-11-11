@@ -220,6 +220,14 @@ export function undoStep(a, seen, now) {
   return { write: null, act: "free" };
 }
 
+export function couldNotSleep(row) {
+  const name = String(row?.name ?? "").trim() || "Agent";
+  const why = String(row?.why ?? "").trim();
+  if (!why || why === "stuck" || why === `${name} could not sleep`) return `${name} could not sleep`;
+  if (why.startsWith(`${name} could not sleep`)) return why;
+  return `${name} could not sleep. ${why}`;
+}
+
 // The row's next move: { state, why } to change it, { agent } to move one agent (one at a time, in order),
 // { close } once all left, { finish } once an undo is done, { watch } for a stuck row's agents.
 export function sleepStep(row, agents) {

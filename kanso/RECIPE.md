@@ -39,11 +39,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - An account chip: a 32 avatar (28 when collapsed) with the home folder
       name's first letter, then the name and "N agents".
     - Collapsed, each item is a centred square with its label as a tooltip.
-      When an app update is ready, a 6 `accent` dot shows on Settings.
     - Kanso's own release (`update.js`). What's new
       chooses Stable (default) or Early. Stable offers a newer `vX.Y.Z`.
       Early offers the newest beta, rc or stable, never an older one.
-      The row "Update kansō to X" (refresh icon, 6 `accent` dot) names
+      The row "Update kansō to X" (refresh icon) names
       that tag; the footer grows to 192 while it shows (back to 156
       after; a size you set is kept). `version.json` stays `X.Y.Z`; the
       download uses the tag and the check wants `X.Y.Z`. The tab bar
@@ -285,8 +284,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     the step it is on while it works and its last words when it finishes;
     at rest, those last words in `dim`). Without one: while working or
     blocked, the agent's own title when the row shows a name you gave it
-    (else the title is the name already); when done, the pane's digest from
-    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 · test / unit failed", or "PR #575 · review required"). After the
+    (else the title is the name already). Finished: those last words only. After the
     line, a working agent three minutes on the same step shows its time
     (`dim`; past fifteen, `blocked`), counted from when the `msg` changed
     or was first seen (`trackSteps`, `stepOf`; `status_ms` is not it). Before the mark
@@ -575,7 +573,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
-    home (not `~/Library`) with none is "No pane runs it". Read every 10 s
+    home (not `~/Library`) with none says "no pane". Read every 10 s
     in front; Stop: SIGTERM on a second press, then SIGKILL.
     `look.js` (Images, panel id `look`, `eye.svg`): no mod hears a click on
     a terminal's link, so it reads the terminal in focus (`hc read --lines

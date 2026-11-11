@@ -6,7 +6,7 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSyn
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tryOr, parseOr, retry, findAsync, mapSeries, reduceSeries } from "./pure.js";
+import { tryOr, parseOr, retry, findAsync, mapSeries, reduceSeries, memoryFree } from "./pure.js";
 // The same rebuild Sleep wakes an agent with: an agent Sleep can resume, Memory can recycle.
 import { resumeArgv, promptEmpty } from "./resume.js";
 import { etimeSecs } from "./procs.js";
@@ -654,13 +654,14 @@ function writeNow(snap, state, helpers) {
 }
 
 async function pressure(snap, state) {
-  const { freePct, swapMB } = snap.machine;
+  const { freePct } = snap.machine;
   if (!isLow(snap.machine)) return state;
   if (state.lowNoticed && Date.now() - state.lowNoticed < limits.noticeEveryMin * MIN) return state;
   const noticed = { ...state, lowNoticed: Date.now() };
   const top = snap.heaviest.slice(0, 4).map((p) => `${p.name} ${p.mb} MB`).join(", ");
-  event("low", `Memory low: ${freePct}% free, ${swapMB} MB ${host.swapLabel}. Heaviest: ${top}`);
-  await notify(`Memory low: ${freePct}% free, ${(swapMB / 1024).toFixed(1)} GB ${host.swapLabel}`, `Heaviest: ${top}`);
+  const words = memoryFree(freePct);
+  event("low", words);
+  await notify(words, `Heaviest: ${top}`);
   return noticed;
 }
 
