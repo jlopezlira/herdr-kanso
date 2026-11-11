@@ -2711,7 +2711,7 @@ export default class Spaces extends View {
     const switchShown = this.showSwitch !== false;
     // Collapsed, the rail keeps the view you chose: projects as avatars, agents and threads as tiles.
     const view = switchShown ? this.view : "spaces";
-    const read = { terms: terminals(), alive: this.alive, digests: shared("kanso.digest") ?? {}, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
+    const read = { terms: terminals(), alive: this.alive, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now() };
     // Each terminal now: a conversation read from another process in it is not this one's.
     this.termBy = new Map(read.terms.map((k) => [k.address, k]));
     // Every row built once per draw, for every view.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { load, temporary, exec, nativeWindow } from "./helpers.mjs";
+import { load, clone, temporary, exec, nativeWindow } from "./helpers.mjs";
 
 const { insideRoot } = await load("kanso-panel/lib.js", ["insideRoot"]);
 
@@ -93,21 +93,44 @@ test("Files virtual rows use list-level handlers for open, expand and context me
   });
   const panel = new Files();
   Object.assign(panel, { context: "fixture", root: "/repo", folders: new Set(), marks: {},
-    entries: new Map([["", [{ name: "directory", dir: true }, { name: "file.txt", dir: false }, { name: "PLAN.md", dir: false }]]]),
+    entries: new Map([["", [
+      { name: "directory", dir: true }, { name: "file.txt", dir: false }, { name: "PLAN.md", dir: false },
+      { name: "Dockerfile", dir: false }, { name: "Makefile", dir: false }, { name: ".gitignore", dir: false },
+      { name: ".env.local", dir: false }, { name: "LICENSE", dir: false },
+    ]]]),
   });
   const actions = [];
   panel.toggle = (path) => actions.push(["toggle", path]);
-  panel.show = (path) => actions.push(["show", path]);
   panel.openWith = (path) => actions.push(["openWith", path]);
   panel.read = (path) => actions.push(["read", path]);
   panel.render({});
   deferred = true;
-  assert.equal(list.render({ start: 0, end: list.count }).length, 3);
+  assert.equal(list.render({ start: 0, end: list.count }).length, 8);
   deferred = false;
-  list.el.handlers.on_item_click(list.key(0), {});
-  list.el.handlers.on_item_click(list.key(1), {});
-  list.el.handlers.on_item_click(list.key(2), {});
+  for (let i = 0; i < 8; i += 1) list.el.handlers.on_item_click(list.key(i), {});
   list.el.handlers.on_item_secondary_click(list.key(0), {}, {});
   list.el.handlers.on_item_secondary_click(list.key(1), {}, {});
-  assert.deepEqual(actions, [["toggle", "directory"], ["show", "file.txt"], ["read", "PLAN.md"], ["openWith", "file.txt"]]);
+  assert.deepEqual(actions, [
+    ["toggle", "directory"], ["read", "file.txt"], ["read", "PLAN.md"], ["read", "Dockerfile"],
+    ["read", "Makefile"], ["read", ".gitignore"], ["read", ".env.local"], ["read", "LICENSE"],
+    ["openWith", "file.txt"],
+  ]);
+});
+
+test("changed files are the marked paths under this folder, flat", async () => {
+  const { changedFiles, Files } = await load("kanso-panel/files.js", ["changedFiles", "Files"], { window: nativeWindow });
+  const marks = { "/repo/src/b.js": "M", "/repo/a.js": "A", "/repo-extra/c.js": "D", "/repo/src/nested/d.js": "U" };
+  const row = (path, mark) => ({ path, entry: { name: path, dir: false }, depth: 0, mark });
+  assert.deepEqual(clone(changedFiles(marks, "/repo")), [row("a.js", "A"), row("src/b.js", "M"), row("src/nested/d.js", "U")]);
+  assert.deepEqual(clone(changedFiles(marks, "/repo/")), clone(changedFiles(marks, "/repo")));
+  assert.deepEqual(clone(changedFiles(marks, "/repo/src")), [row("b.js", "M"), row("nested/d.js", "U")]);
+  assert.deepEqual(clone(changedFiles({ "C:\\repo\\a.js": "M" }, "C:\\repo")), [row("a.js", "M")]);
+  assert.deepEqual(clone(changedFiles({}, "/repo")), []);
+  assert.deepEqual(clone(changedFiles(marks, "")), []);
+  assert.deepEqual(clone(changedFiles(null, null)), []);
+  const panel = new Files();
+  Object.assign(panel, { changed: true, root: "/repo", marks, entries: new Map([["", [{ name: "other.txt", dir: false }]]]), folders: new Set(), rev: 0 });
+  assert.deepEqual(clone(panel.rows()).map((item) => item.path), ["a.js", "src/b.js", "src/nested/d.js"]);
+  panel.changed = false;
+  assert.deepEqual(clone(panel.rows()).map((item) => item.path), ["other.txt"]);
 });

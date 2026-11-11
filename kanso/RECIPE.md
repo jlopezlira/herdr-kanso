@@ -196,13 +196,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
   loading: kit; unavailable: error. The bar names the oldest blocked one from this queue.
-  Strip checks panes each 1.5 s; leaving
-  `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
-  commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
-  (open only; checks and merge state) in shared `kanso.digest`
-  by pane, cleared when it works again or closes. The header shows it
-  after the branch: files, +/-, commits, #number. A blocked one is not
-  green and the tooltip names why. Send opens `kanso-send`.
+  Leaving `working` stores files, commits and the open pull request in
+  `kanso.digest` (kept while it works; dropped when the pane closes).
+  Files, commits and `#N` open the diff, the unpushed work and the
+  section the verdict names. Files and commits dim while working.
+  Sleep and Send stay on the focused finished pane; no Send while it waits on you.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
   status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
@@ -556,23 +554,22 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
-    (a failure says why), git marks, code in place, Markdown or a picture to
+    (a failure says why), git marks; a file that is not a directory opens in
     `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
-    again only when that file changed, with Open with, read-again and close:
-    code read-only, a picture (png jpg jpeg gif webp svg, name and pixel size when known), Markdown as `doc.js` `MarkdownDoc`
-    (embedded pictures on another computer), formatted
-    and edited in place (a double-click opens one block, a table as cells;
-    saved after 700 ms, only when the file on disk is still what was read,
-    else a conflict you resolve; "Source" edits the whole file; links to
-    other Markdown files open here). `blocks.js` splits and joins the
-    blocks. kanso-tabs watches `data/kanso-open` and shows the newest path
-    left there (`markdown-handler.sh install`, macOS: makes a small app
-    the `.md` handler). The markdown-panel mod is its copy in a window, by
-    sync:share); `lib.js` holds what they share (where the focused pane is,
-    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState`,
-    `markdownView` is `TextView.markdown`; and `showPanel`, which mounts a block in `panel-body`). A panel
+    again when that file changed, with Open with and close:
+    any file that is not a picture, edited when the read has no NUL and fits in 1 MiB
+    (Save, Cmd+S; Ctrl+S on Windows), on this computer or another,
+    a picture (png jpg jpeg gif webp svg), Markdown as `doc.js` `MarkdownDoc`
+    (a double-click opens one block, a table as cells; on this computer, saved after 700 ms;
+    on another, Save, that key, or leaving writes it, and it does not save while you type;
+    a conflict when the file on disk changed; "Source" edits the whole file).
+    Over 1 MiB stays a view. `blocks.js` splits and joins the blocks.
+    kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
+    The markdown-panel mod is that copy, by sync:share); `lib.js` shares
+    `codeState` (an `EditorState`, read-only when the file is not text)
+    and `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
