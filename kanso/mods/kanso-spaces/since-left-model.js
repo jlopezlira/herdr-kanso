@@ -1,3 +1,5 @@
+import { runs } from "./pieces.js";
+
 export const AWAY_MS = 5 * 60_000;
 export const KEEP_MS = 7 * 86400_000;
 export const EVENT_CAP = 500;
@@ -6,7 +8,7 @@ export const MAINTENANCE_MS = 120_000;
 export const LOG_LIMITS = { cap: EVENT_CAP, keepMs: KEEP_MS };
 export const DID_CAP = 200;
 export const AWAY_PIECE = "sidebar.away";
-export const awayShown = (hidden) => !(Array.isArray(hidden) && hidden.includes(AWAY_PIECE));
+export const awayShown = (map) => runs(AWAY_PIECE, map);
 export function oneLine(text) {
   const line = String(text ?? "").split(/\r?\n/).find((l) => l.trim()) ?? "";
   const flat = line.replace(/\s+/g, " ").trim();

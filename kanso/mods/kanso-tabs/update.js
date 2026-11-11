@@ -4,6 +4,7 @@ import { paths } from "./platform-paths.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, readTextFile, appHome, shared, setShared, notify, layout, run } from "herdr";
 import { tryOr, tryOrAsync } from "./pure.js";
+import { pieces, runs, shown, hiddenSet } from "./pieces.js";
 import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease } from "./release.js";
 
 export const SOURCE = {
@@ -275,7 +276,7 @@ export class Updater {
   installs() { return this.state().installs ?? {}; }
   mark(id, patch) { this.setState({ installs: { ...this.installs(), [id]: { ...this.installs()[id], ...patch } } }); }
   unmark(id) { this.setState({ installs: Object.fromEntries(Object.entries(this.installs()).filter(([k]) => k !== id)) }); }
-  autoCheckEnabled() { return this.state().autoCheck !== false; }
+  autoCheckEnabled() { return this.state().autoCheck !== false && runs("update.check", pieces(shared)); }
   channel() { return channelOf(this.state().channel); }
   // The tag written when an install landed, or version.json when that tag is absent or no longer matches.
   current() { return installedRelease(this.installed, this.state().tag); }
@@ -321,7 +322,7 @@ export class Updater {
       const channel = this.channel();
       const changed = this.seenChannel != null && this.seenChannel !== channel;
       this.seenChannel = channel;
-      const now = JSON.stringify([shared("kanso.hidden") ?? [], this.state().latest ?? null, channel]);
+      const now = JSON.stringify([pieces(shared), this.state().latest ?? null, channel]);
       if (now !== this.hiddenSeen) { this.hiddenSeen = now; this.fit(); }
       if (changed) cx.spawn((cx) => this.check(cx, true));
     });
@@ -332,7 +333,7 @@ export class Updater {
     const found = tryOr(() => ({ size: findNode(layout()?.root ?? layout(), FOOTER)?.size?.px }));
     if (!found) return;
     const { size } = found;
-    const hidden = new Set(tryOr(() => (Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []), []));
+    const hidden = tryOr(() => hiddenSet(pieces(shared)), new Set());
     const want = footerPx(hidden, Boolean(this.available()));
     if (size !== want && OURS(size)) run("layout.resize", { id: FOOTER, px: want });
   }
@@ -343,7 +344,7 @@ export class Updater {
     if (!done) return;
     this.setState({ done: null });
     if (done.version !== this.installed) return;
-    notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
+    if (shown("toast.update", true, pieces(shared))) notify({ title: `kansō updated to ${done.version}`, body: done.notes || undefined, level: "success" });
   }
 
   async check(cx, force = false, report = false) {
@@ -367,7 +368,7 @@ export class Updater {
     if (report && v && this.state().notified === v) this.setState({ notified: null }); // an explicit check re-notifies for the same version
     if (v && this.state().notified !== v) {
       this.setState({ notified: v });
-      notify({
+      if (report || shown("toast.update", true, pieces(shared))) notify({
         title: `kansō ${v} is available`,
         body: `You have ${have}. Click to update; Herdr's own updates stay under Settings.`,
         action: { name: "kanso-tabs.update" },

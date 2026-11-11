@@ -9,6 +9,7 @@ import { stateMark } from "./marks.js";
 import { afterMount, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
 import { MEMORY_MS, computerOf, needsItem, questionOf, memoryLow } from "./model.js";
+import { pieces, shown } from "./pieces.js";
 
 const GUARD_NOW = ["data", "kanso-guard", "now.json"];
 
@@ -61,12 +62,12 @@ export default class WorkspaceStatus extends View {
     const act = (el, id, tip, command) => el.id(id).cursor_pointer().tooltip(tip)
       .hover((s) => s.bg(t.foreground + "0a")).on_click(() => run(command));
     const mac = window()?.platform === "macos";
-    const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+    const map = pieces(shared);
     const agentsText = list.length === 0 ? "No agents"
       : working > 0 ? `${working} of ${list.length} working` : `${list.length} ${list.length === 1 ? "agent" : "agents"} idle`;
     return h_flex().size_full().px(12).gap(18).items_center().text_size(11.5).text_color(t.muted)
       .when(right && !left, (el) => el.justify_end())
-      .when(left, (el) => el.child(computer.command
+      .when(left && shown("status.computer", true, map), (el) => el.child(computer.command
         ? act(chip(computer.icon, computer.words).text_color(t[computer.tone]), "status-computer", computer.tooltip, computer.command)
         : chip(computer.icon, computer.words))
         .when(Boolean(space?.branch), (row) => row.child(chip("branch", space.branch))))
@@ -78,10 +79,10 @@ export default class WorkspaceStatus extends View {
         .when(needs.more, (row) => row.child(div().flex_none().text_color(t[needs.moreTone]).child(needs.more)))))
       .when(right && low, (el) => el.child(act(h_flex().gap(6).items_center().text_color(t[low.tone]), "status-memory", low.tooltip, low.command)
         .child(low.words)))
-      .when(right && !hidden.has("status.agents"), (el) => el.child(h_flex().gap(6).items_center()
+      .when(right && shown("status.agents", true, map), (el) => el.child(h_flex().gap(6).items_center()
         .child(stateMark(t, working > 0 ? "working" : "idle", 12, { idle: true }))
         .child(agentsText)))
-      .when(right && !hidden.has("status.palette"), (el) => el.child(act(div().px(6).py(2).rounded(6), "palette", "Command palette", "app.palette")
+      .when(right && shown("status.palette", true, map), (el) => el.child(act(div().px(6).py(2).rounded(6), "palette", "Command palette", "app.palette")
         .child(mac ? "⌘⇧P" : "Ctrl+Shift+P")));
   }
 }
