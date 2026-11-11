@@ -494,7 +494,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `hc machine add` with those, never `--install`; dropped once
     `hc machine ls` shows it connected. If the save fails after the remove,
     or add keeps failing, it stays with Retry; the hint is the state's
-    tooltip. This computer has no power button. Alone, no header.
+    tooltip. This computer has no power. Alone, no header.
     `hc machine ls` every 30 s in front, every 2 min behind.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
