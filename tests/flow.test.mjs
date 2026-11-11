@@ -8,7 +8,7 @@ import { load, clone, temporary, exec, singleUse } from "./helpers.mjs";
 const HOME = "/Users/me";
 
 test("The digest reads changed files, lines, commits and checks", async () => {
-  const { parseShortstat, checksOf, digestTip } = await load("kanso-strip/main.js", ["parseShortstat", "checksOf", "digestTip"]);
+  const { parseShortstat, checksOf, digestSegments } = await load("kanso-strip/main.js", ["parseShortstat", "checksOf", "digestSegments"]);
   assert.deepEqual(clone(parseShortstat(" 3 files changed, 120 insertions(+), 30 deletions(-)\n")), { add: 120, del: 30 });
   assert.deepEqual(clone(parseShortstat(" 1 file changed, 1 insertion(+)\n")), { add: 1, del: 0 });
   assert.deepEqual(clone(parseShortstat("")), { add: 0, del: 0 });
@@ -19,12 +19,12 @@ test("The digest reads changed files, lines, commits and checks", async () => {
   assert.equal(checksOf([{ conclusion: "SKIPPED" }, { conclusion: "NEUTRAL" }]), "passing");
   assert.equal(checksOf([{ status: "COMPLETED", conclusion: "STALE" }]), "failing", "stale is not a pass");
   assert.equal(checksOf([{ status: "COMPLETED", conclusion: "SUCCESS" }, { status: "COMPLETED", conclusion: "NEW_VALUE" }]), "unknown", "never passing by elimination");
-  assert.equal(digestTip({ files: 0, ahead: 0, pr: null }), "");
-  assert.equal(digestTip({ files: 2, add: 5, del: 1, ahead: 1, pushed: true, pr: { number: 41, state: "OPEN", checks: "failing" } }),
-    "In its folder now: 2 changed files (+5 −1); 1 commit not pushed; pull request #41, checks failing.");
-  assert.equal(digestTip({ files: 0, ahead: 0, pr: { number: 575, state: "OPEN", checks: "passing", hold: "Review required" } }),
-    "In its folder now: pull request #575, review required.");
-  assert.equal(/ready/i.test(digestTip({ files: 0, ahead: 0, pr: { number: 575, checks: "passing", hold: "Review required" } })), false);
+  assert.deepEqual(clone(digestSegments({ files: 0, ahead: 0, pr: null })), []);
+  const segs = clone(digestSegments({ files: 2, add: 5, del: 1, ahead: 1, pushed: true, pr: { number: 41, state: "OPEN", mergeStateStatus: "UNSTABLE", fail: 1, failed: "test / unit", pending: 0 } }));
+  assert.deepEqual(segs.map((s) => s.tip), ["Open the diff", "1 commit not on GitHub", "test / unit failed"]);
+  const review = digestSegments({ files: 0, ahead: 0, pr: { number: 575, state: "OPEN", mergeStateStatus: "BLOCKED", reviewDecision: "REVIEW_REQUIRED", fail: 0, pending: 0 } });
+  assert.equal(review[0].tip, "review required");
+  assert.equal(/ready/i.test(JSON.stringify(review)), false);
 });
 
 test("The header digest names why a blocked pull request cannot merge", async () => {
