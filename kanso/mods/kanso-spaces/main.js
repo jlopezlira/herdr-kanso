@@ -10,7 +10,7 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
-import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
+import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
@@ -25,7 +25,8 @@ import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
 import { tryOrAsync } from "./pure.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed, segmented } from "./ui.js";
+import { loadPieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { readSync, saveSync } from "./sync-row.js";
@@ -194,7 +195,7 @@ export default class Spaces extends View {
     this.sleepWork = new SleepWork(this.leftNavStore().kdb, (row) => {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
-    }, null, () => awayShown(shared("kanso.hidden")));
+    }, null, () => awayShown(loadPieces(shared, setShared)));
     this.pollSleepWork(cx);
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
@@ -205,7 +206,7 @@ export default class Spaces extends View {
     });
     this.orderOpen = false;
     this.threads = null; // terminal -> its conversation (threads.js), once read
-    // A pre-2.7 hide choice moves to kanso.hidden once.
+    // A pre-2.7 hide choice moves into the pieces map once.
     for (const [key, id] of [["switch", "sidebar.switch"], ["activity", "sidebar.activity"]]) {
       if (localStorage.getItem(`spaces.${key}`) === "off") { this.hide(id, true); localStorage.removeItem(`spaces.${key}`); }
     }
@@ -498,7 +499,7 @@ export default class Spaces extends View {
     const worker = new SleepWork(store.kdb, (row) => {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
-    }, null, () => awayShown(shared("kanso.hidden")));
+    }, null, () => awayShown(loadPieces(shared, setShared)));
     this.remoteWorkers.set(machine, worker);
     return worker;
   }
@@ -785,8 +786,15 @@ export default class Spaces extends View {
     const sig = pids.join(","), every = active ? ALIVE_MS : ALIVE_BEHIND_MS;
     if (pids.length && !pending.length) this.sawAlive(confirmed, sig, now, cx);
     const due = pending.length && aliveDue({ sig: this.aliveSig, at: this.aliveAt }, sig, now, every);
-    if (!mine.some((k) => k.status === "working") && !due) {
+    const map = loadPieces(shared, setShared);
+    const tasksOn = runs("sidebar.tasks", map);
+    const working = mine.some((k) => k.status === "working");
+    if (!working && !due) {
       if (!mine.length && Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
+      return;
+    }
+    if (!asksPs(map, { working, alive: Boolean(due) })) {
+      if (!tasksOn && Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
       return;
     }
     if (now - (this.psAt ?? -Infinity) < every) return;
@@ -794,6 +802,10 @@ export default class Spaces extends View {
     if (pids.length) { this.aliveSig = sig; this.aliveAt = now; }
     cx.spawn((cx) => this.psRun(now, (table) => {
       if (pids.length) this.sawAlive(new Set([...confirmed, ...aliveIn(table.byPid, pending)]), sig, now, cx);
+      if (!tasksOn) {
+        if (Object.keys(this.tasks).length) { this.tasks = {}; cx.notify(); }
+        return;
+      }
       const next = Object.fromEntries(mine.flatMap((k) => {
         const had = this.tasks[k.address] ?? [];
         const list = tasksOf(table, k.foreground?.pid ?? k.pid, Boolean(k.foreground?.pid))
@@ -905,13 +917,13 @@ export default class Spaces extends View {
     this.keepSeen(now);
     // Git shows on space rows only: the Agents and Threads views don't ask.
     const due = this.due(now, sp, ps, placesOf(sp, ps), active);
-    if (due.size && this.shownView() === "spaces") this.refreshGit(due, cx);
+    if (due.size && this.shownView() === "spaces" && runs("sidebar.git", loadPieces(shared, setShared))) this.refreshGit(due, cx);
     if (now - (this.prunedAt ?? 0) > 30000) { this.prunedAt = now; this.prune(sp, now); }
   }
 
   trackReturn(sp, ps, active, now, cx) {
     if (this.sinceLeft.busy) return;
-    if (this.showAway === false) { this.returnSignature = null; this.sinceLeft.leave(); return; }
+    if (!runs("sidebar.away", loadPieces(shared, setShared))) { this.returnSignature = null; this.sinceLeft.leave(); return; }
     const background = this.background();
     const allowed = activePlaces(sp, ps, background.sleeps, background.layouts, home());
     const off = this.offNames();
@@ -939,7 +951,7 @@ export default class Spaces extends View {
   }
 
   returnRows(t, space) {
-    if (this.showAway === false || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
+    if (!runs("sidebar.away", loadPieces(shared, setShared)) || !space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
     const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.returnGo(row),
       (label, count, dismiss) => this.bareHead(t, "since-left", label, count, t.foreground, dismiss));
     return this.sinceLeft.showing ? [item(view, this.sinceLeft.blockHeight())] : [];
@@ -1181,6 +1193,7 @@ export default class Spaces extends View {
 
   // One look at a time: a herdr-core that hangs must not stack them up.
   refreshMachines(cx, repeat = false) {
+    if (!runs("sidebar.computers", loadPieces(shared, setShared))) { this.holdAwake(cx); return; }
     if (this.machinesBusy || repeat && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
     this.machinesBusy = true;
     cx.spawn(async (cx) => {
@@ -1291,6 +1304,7 @@ export default class Spaces extends View {
 
   // One look at a time, each place once however often it was asked for meanwhile.
   refreshGit(keys, cx) {
+    if (!runs("sidebar.git", loadPieces(shared, setShared))) return;
     for (const k of keys) this.pending.add(k);
     if (this.refreshing) return;
     this.refreshing = true;
@@ -1309,6 +1323,7 @@ export default class Spaces extends View {
   }
 
   async check(key, cx) {
+    if (!runs("sidebar.git", loadPieces(shared, setShared))) return;
     const [on, cwd] = JSON.parse(key);
     if (on && this.offNames().has(on)) return;
     if (![...this.pollingPlaces().values()].some((place) => place.key === key)) return;
@@ -1777,14 +1792,15 @@ export default class Spaces extends View {
 
   more(e, ctx, project = null) {
     const a = e.a, show = this.showActivity !== false && !a.sub;
+    const timed = (value) => (this.showTime === false ? null : value);
     if (a.asleep) {
       const quiet = a.asleep.quiet || null;
-      return { lines: e.lines, label: a.name, time: quiet ? (a.asleep.asOf ?? "") : a.asleep.busy ? "\u2026" : since(a.asleep.saved), activity: quiet, project, steady: show && !quiet, oneLine: this.narrow };
+      return { lines: e.lines, label: a.name, time: timed(quiet ? (a.asleep.asOf ?? "") : a.asleep.busy ? "\u2026" : since(a.asleep.saved)), activity: quiet, project, steady: show && !quiet, oneLine: this.narrow };
     }
     return {
       label: this.nameOf(a),
       lines: e.lines,
-      time: a.sub ? null : elapsed(a, this.since ?? {}, ctx.now),
+      time: timed(a.sub ? null : elapsed(a, this.since ?? {}, ctx.now)),
       // A message sent to it from Send and not seen yet: who it is from.
       activity: show ? (fromOf(a) ? `Message from ${fromOf(a)}` : activityOf(a, ctx.digests[a.pane])) : null,
       // An agent's row keeps its second line, so the list never jumps.
@@ -1799,7 +1815,7 @@ export default class Spaces extends View {
     return {
       faint: a.status === "idle",
       step: show ? stepOf(a, this.steps, ctx.now) : null,
-      tasks: a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
+      tasks: this.showTasks === false || a.sub ? [] : (this.tasks[a.address] ?? []).map((x) => ({ command: x.command, time: duration(Math.max(0, ctx.now - x.start)) })),
     };
   }
 
@@ -1868,11 +1884,12 @@ export default class Spaces extends View {
     cx.notify();
   }
 
-  // A piece on or off the `kanso.hidden` list (Kanso settings keeps the same list).
+  // Hide stores hide; showing again stores the piece's default.
   hide(id, off) {
-    const set = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
-    if (off === set.has(id)) return;
-    setShared("kanso.hidden", off ? [...set, id] : [...set].filter((x) => x !== id));
+    const map = loadPieces(shared, setShared);
+    const next = setPiece(map, id, off ? "hide" : (pieceOf(id)?.default ?? "show"));
+    if (JSON.stringify(next) === JSON.stringify(map)) return;
+    setShared(STORE, next);
   }
 
   setView(view, cx) {
@@ -1990,7 +2007,11 @@ export default class Spaces extends View {
       const box = agents.els.map((el) => item(el, this.asleepOpenOf(group.id) ? ((this.foldH ?? {})[`asleep-${group.id}`] ?? agents.h) : 0));
       return [item(div().h(10).flex_none(), 10), item(this.closedRow(t, c, names, group), rowHeight({ tree: null })), ...box];
     });
-    if (!remote.length) return loading(null) && !rows.length && !this.closedOn(null, ctx).length ? [loadingRow(null)] : [...rows.flatMap(draw), ...closed(null)];
+    const heads = shown("sidebar.computers", true, loadPieces(shared, setShared));
+    if (!remote.length || !heads) {
+      const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
+      return loading(null) && !rows.length && !shut.length ? [loadingRow(null)] : [...rows.flatMap(draw), ...shut];
+    }
     const block = { t, collapsed, rows, draw, closed, loading, loadingRow, ctx, layouts: live };
     return [null, ...remote].flatMap((m) => this.machineBlock(m, block));
   }
@@ -2225,7 +2246,7 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
-          .child(g && !asleep ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .child(g && !asleep && shown("sidebar.git", true, loadPieces(shared, setShared)) ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, group)))
           .when(this.hoverSpace === w.id, (el) => el.child(this.plus(`space-plus-${w.id}`, t, placeOfSpace(w))).child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
           .when(!asleep && mine.length > 0, (el) => el.child(this.fold(w, mine, t))),
@@ -2451,25 +2472,11 @@ export default class Spaces extends View {
 
   viewSwitch(t, sp) {
     const asks = sp.some((s) => s.status === "blocked");
-    const views = Object.keys(VIEWS);
-    const at = this.switchW ? segmentAt(this.switchW, views.indexOf(this.view), views.length) : null;
-    const seg = (view) => {
-      const on = this.view === view;
-      return h_flex().id(`spaces-view-${view}`).flex_1().h(28).gap(6).items_center().justify_center().rounded(7).cursor_pointer()
-        .text_size(12.5).font_medium().text_color(on ? t.foreground : t.muted)
-        .when(on && !at, (el) => el.bg(t.raised ?? t.selected).border_1().border_color(t.border))
-        .when(!on, (el) => el.hover((s) => s.text_color(t.foreground)))
-        .on_click((_e, cx) => { this.setView(view, cx); cx.notify(); })
-        .child(div().child(VIEWS[view].label))
-        .when(view === "agents" && asks && !on, (el) => el.child(div().size(6).rounded_full().bg(t.blocked)));
-    };
-    const thumb = at ? div().id("spaces-view-thumb").absolute().top(3).left(at.left).w(at.width).h(28).rounded(7)
-      .bg(t.raised ?? t.selected).border_1().border_color(t.border)
-      .transition("left", { duration: 200, easing: "ease-out" }) : null;
-    return h_flex().relative().mx(18).mt(4).mb(14).p(3).gap(2).flex_none().rounded(10).bg(t.foreground + "0a")
-      .on_size_change((s, cx) => { if (Math.abs((this.switchW ?? 0) - s.width) >= 1) { this.switchW = s.width; cx.notify(); } })
-      .when(Boolean(thumb), (el) => el.child(thumb))
-      .children(views.map(seg));
+    const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label }));
+    return segmented("spaces-view", items, this.view, (view, cx) => { this.setView(view, cx); cx.notify(); }, t, {
+      width: this.switchW, dot: asks ? "agents" : null,
+      sized: (width, cx) => { if (Math.abs((this.switchW ?? 0) - width) >= 1) { this.switchW = width; cx.notify(); } },
+    }).mx(18).mt(4).mb(14);
   }
 
   threadsView(t, sp, ps, ctx) {
@@ -2495,7 +2502,7 @@ export default class Spaces extends View {
       ].filter(Boolean);
       const more = {
         label: this.nameOf(a),
-        time: snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : a.asleep?.quiet ? (a.asleep.asOf || null) : when ? duration(Math.max(0, ctx.now - when)) : null,
+        time: this.showTime === false ? null : snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : a.asleep?.quiet ? (a.asleep.asOf || null) : when ? duration(Math.max(0, ctx.now - when)) : null,
         badge: up ? "Woke" : null,
         strong: unread || up,
         project: nested ? null : project(a.space),
@@ -2677,10 +2684,12 @@ export default class Spaces extends View {
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(17));
     const active = sp.find((p) => p.active);
     // Read once per draw: each read copies every record.
-    const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
-    this.showSwitch = !hidden.has("sidebar.switch");
-    this.showActivity = !hidden.has("sidebar.activity");
-    this.showAway = !hidden.has(AWAY_PIECE);
+    const map = loadPieces(shared, setShared);
+    this.showSwitch = shown("sidebar.switch", true, map);
+    this.showActivity = shown("sidebar.activity", true, map);
+    this.showAway = runs("sidebar.away", map);
+    this.showTime = shown("sidebar.time", true, map);
+    this.showTasks = runs("sidebar.tasks", map);
     const switchShown = this.showSwitch !== false;
     // Collapsed, the rail keeps the view you chose: projects as avatars, agents and threads as tiles.
     const view = switchShown ? this.view : "spaces";
@@ -2718,7 +2727,7 @@ export default class Spaces extends View {
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
-      .when(queue.rows.length > 0 || this.needsEmpty, (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
+      .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
       .child(this.needsOpen ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
         ...(!collapsed && view !== "spaces" ? this.returnRows(t, active) : []),
         ...(view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))

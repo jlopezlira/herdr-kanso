@@ -490,12 +490,13 @@ test("a sleep that could not finish keeps why with its event", async (t) => {
 
 test("While you were away is a piece: off, nothing is recorded, read or drawn", async (t) => {
   assert.equal(awayShown(undefined), true);
-  assert.equal(awayShown(["sidebar.activity"]), true);
-  assert.equal(awayShown([AWAY_PIECE]), false);
+  assert.equal(awayShown({ "sidebar.activity": "hide" }), true);
+  assert.equal(awayShown({ [AWAY_PIECE]: "hide" }), false);
   const { cx } = context();
   const reads = [], runs = [];
   const db = { read: async (sql) => { reads.push(sql); return []; }, run: async (sql) => { runs.push(sql); } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"]);
+  const hidden = { "kanso.pieces.migrated": true, "kanso.pieces": { [AWAY_PIECE]: "hide" } };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { shared: (key) => hidden[key], setShared: (key, value) => { hidden[key] = value; } });
   const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
   const view = new Spaces();
   Object.assign(view, { showAway: false, returnSignature: "x", sinceLeft: Object.assign(new SinceLeft(db), { project: project, rows: [event(1)] }) });

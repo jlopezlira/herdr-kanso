@@ -5,7 +5,7 @@ import { fileApi } from "./platform-files.js";
 // Derived from the `tabs` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: segmented tab pill, outlined Files and Changes buttons, no bar background.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-tabs; a Specs panel button with the pending count and a needs-you dot (sdd.badge).
-// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs and Changes dropped; panel buttons are icons with their name on hover, dragged into any order, and turned on or off in a Panels popup (right-click one); trackpad scrolling moves one tab per swipe.
+// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-tabs; tabs and panel buttons without outlines; side panels mounted on demand (only the open one exists); Spend and Worktrees built in, Specs and Changes dropped; panel buttons are icons with their name on hover, dragged into any order, and hidden from Pieces (right-click one); trackpad scrolling moves one tab per swipe.
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -17,6 +17,7 @@ import { tryOr, tryOrAsync } from "./pure.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { DEFAULTED, ENV_NAMES, PROBE_MS, applySimDefault, probeTools, readNamedEnv } from "./sim-register.js";
+import { loadPieces, runs, shown, setPiece, STORE, panelOff } from "./pieces.js";
 
 function storedObject(key) {
   try {
@@ -49,8 +50,8 @@ export function shownTabs(tabs, hidden) {
   return (tabs ?? []).filter((c) => !c.settled && !away.has(c.id));
 }
 
-// Both shared, so the Panels popup and every bar agree.
-const ORDER = "kanso.panels.order", OFF = "kanso.panels.off";
+// Both shared, so every bar agrees. A panel set to Hide is not mounted.
+const ORDER = "kanso.panels.order";
 const ICON = "mods/kanso-chrome/icons/";
 const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const BUILTIN = [
@@ -70,9 +71,9 @@ const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filte
 // Panels you never placed keep their catalog place after the ones you dragged.
 function panelList() {
   const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
-  const order = list(ORDER), off = new Set(list(OFF));
+  const order = list(ORDER), map = loadPieces(shared, setShared);
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
-  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: !off.has(p.id) }));
+  return all.toSorted((a, b) => rank.get(a.id) - rank.get(b.id)).map((p) => ({ ...p, on: runs(`panel.${p.id}`, map) }));
 }
 
 function movePanel(from, to) {
@@ -82,8 +83,7 @@ function movePanel(from, to) {
 }
 
 function setPanelOn(id, on) {
-  const off = new Set(list(OFF));
-  setShared(OFF, on ? [...off].filter((x) => x !== id) : [...new Set([...off, id])]);
+  setShared(STORE, setPiece(loadPieces(shared, setShared), `panel.${id}`, on ? "show" : "hide"));
 }
 
 const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
@@ -134,7 +134,10 @@ export default class Tabs extends View {
           const name = String(next.c).replace(/^kanso-tabs\./, "");
           if (name === "update") this.updater.install(cx);
           else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
-          else if (name === "settings" || name.startsWith("settings-")) openSettings(name.slice(9) || "keys"); // settings-mods, -news, -credits
+          else if (name === "settings" || name.startsWith("settings-")) {
+            const asked = name.slice(9);
+            openSettings(!asked || asked === "mods" ? "pieces" : asked);
+          }
           else this.command(name);
           cx.notify();
         }
@@ -145,12 +148,14 @@ export default class Tabs extends View {
   defaultSimulator(cx) {
     if (shared(DEFAULTED)) return;
     const platform = window()?.platform ?? "macos";
-    const before = JSON.stringify(list(OFF));
+    const before = JSON.stringify(panelOff(loadPieces(shared, setShared)));
     this.simSettled = false;
     const finish = (off) => {
       if (this.simSettled) return;
       this.simSettled = true;
-      if (off && JSON.stringify(list(OFF)) === before) setShared(OFF, off);
+      if (off && JSON.stringify(panelOff(loadPieces(shared, setShared))) === before) {
+        setShared(STORE, off.reduce((map, id) => setPiece(map, `panel.${id}`, "hide"), loadPieces(shared, setShared)));
+      }
       if (!shared(DEFAULTED)) setShared(DEFAULTED, true);
       cx.notify();
     };
@@ -159,7 +164,7 @@ export default class Tabs extends View {
       try {
         const env = await readNamedEnv(platform, exec, ENV_NAMES, powershell);
         const tools = await probeTools({ platform, home: home(), env, run: exec, api: pathApi(platform) });
-        if (JSON.stringify(list(OFF)) !== before) { finish(null); return; }
+        if (JSON.stringify(panelOff(loadPieces(shared, setShared))) !== before) { finish(null); return; }
         const next = applySimDefault(JSON.parse(before), tools, false);
         finish(JSON.stringify(next.off) === before ? null : next.off);
       } catch { finish(null); }
@@ -309,7 +314,7 @@ export default class Tabs extends View {
   render() {
     const t = theme();
     const space = spaces().find(p => p.active);
-    const shown = shownTabs(space?.tabs, shared("kanso.sleep.hidden"));
+    const openTabs = shownTabs(space?.tabs, shared("kanso.sleep.hidden"));
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();
     const tree = layout();
@@ -318,12 +323,12 @@ export default class Tabs extends View {
       .on_mouse_down("left", stop).on_click(action).child(label);
     // The pill under the chosen tab glides to it; tab widths are measured as they draw.
     this.tabW ??= {};
-    for (const id of Object.keys(this.tabW)) if (!shown.some((c) => c.id === id)) delete this.tabW[id];
-    const { at } = shown.reduce((acc, c) => {
+    for (const id of Object.keys(this.tabW)) if (!openTabs.some((c) => c.id === id)) delete this.tabW[id];
+    const { at } = openTabs.reduce((acc, c) => {
       const w = this.tabW[c.id];
       return { at: c.active && w ? { left: acc.x, width: w } : acc.at, x: acc.x + (w ?? 0) + 2 };
     }, { at: null, x: 0 });
-    const tabPill = at && shown.every((c) => this.tabW[c.id])
+    const tabPill = at && openTabs.every((c) => this.tabW[c.id])
       ? div().id("tab-pill").absolute().top(0).left(at.left).w(at.width).h(TAB_H).rounded(6).bg(t.foreground + "12").transition("left", GLIDE).transition("width", GLIDE)
       : null;
     const item = (c, i) => {
@@ -338,14 +343,14 @@ export default class Tabs extends View {
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {
           const from = this.pressed; this.pressed = null;
-          if (from !== null && from !== i) run("tab.move", { id: shown[from].id, index: space.tabs.findIndex(x => x.id === c.id) + 1 });
+          if (from !== null && from !== i) run("tab.move", { id: openTabs[from].id, index: space.tabs.findIndex(x => x.id === c.id) + 1 });
           else run("tab.select", { id: c.id });
         })
         .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }))
         .when(Boolean(program?.icon), el => el.child(programIcon(program, 15, t.muted).opacity(c.active ? 1 : 0.8)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
         .when(["working", "blocked", "done"].includes(c.status), el => el.child(stateMark(t, c.status)))
-        .when(c.active && shown.length > 1, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).hover(s => s.text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/kanso-chrome/icons/close.svg").size(13))));
+        .when(c.active && openTabs.length > 1, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).hover(s => s.text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/kanso-chrome/icons/close.svg").size(13))));
     };
     const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");
     const now = this.openPanel(panel, body);
@@ -359,7 +364,7 @@ export default class Tabs extends View {
     // Kanso settings lists the panels from here (it can't import this file).
     const roster = allPanels.map((p) => ({ id: p.id, label: p.label, icon: p.icon ?? null, on: p.on }));
     if (JSON.stringify(roster) !== JSON.stringify(shared("kanso.panels.all") ?? null)) setShared("kanso.panels.all", roster);
-    const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+    const map = loadPieces(shared, setShared);
     const update = this.updater?.available() ?? null;
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
@@ -390,7 +395,7 @@ export default class Tabs extends View {
           else if (from === p.id) this.mount(on ? null : p.id);
           cx.notify();
         })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openSettings("mods"); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openSettings("pieces"); })
         .when(Boolean(p.icon), (el) => el.child(svg(p.icon).size(15)))
         .child(name);
     };
@@ -402,10 +407,10 @@ export default class Tabs extends View {
       .on_mouse_up("left", () => { this.pressed = null; this.dragPanel = null; })
       .on_scroll_wheel(e => this.wheel(e))
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(6).overflow_x_scrollbar()
-        .child(h_flex().flex_none().gap(2).items_center().relative().when(Boolean(tabPill), (el) => el.child(tabPill)).children(shown.map(item)))
+        .child(h_flex().flex_none().gap(2).items_center().relative().when(Boolean(tabPill), (el) => el.child(tabPill)).children(openTabs.map(item)))
         .child(button("tab-new", svg("mods/kanso-chrome/icons/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
           .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }))
-        .when(!hidden.has("tabs.arrange"), (el) => el.child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
+        .when(shown("tabs.arrange", true, map), (el) => el.child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
           .tooltip(window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements"))))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Help and settings, alike and side by side: not panels, never dragged nor turned off.
@@ -414,7 +419,7 @@ export default class Tabs extends View {
         // The dot means a release waits.
         .child(button("kanso-settings", div().relative().child(svg("mods/kanso-chrome/icons/settings.svg").size(15))
             .when(Boolean(update), (el) => el.child(div().absolute().top(-2).right(-3).size(6).rounded_full().bg(t.accent))),
-          () => openSettings(update ? "news" : "keys"))
+          () => openSettings(update ? "news" : "pieces"))
           .tooltip(update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,")))
       .when(window()?.buttons, el => el.child(button("minimize", "−", () => run("window.minimize")))
         .child(button("maximize", "□", () => run("window.maximize")))

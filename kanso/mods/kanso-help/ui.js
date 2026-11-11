@@ -5,7 +5,8 @@ import { h_flex, Button, Toggle } from "gpui-base";
 
 export const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
 /** Control heights keep toolbars, inputs and buttons on one line. */
-export const H = { control: 30, compact: 24 };
+export const H = { control: 30, compact: 24, row: 40 };
+export const SEG = { two: 188, three: 280 };
 /** Radii: controls stay tighter than cards. */
 export const R = { control: 6, card: 8 };
 export const T = { page: 20, card: 13.5, title: 15, metric: 22, value: 12.5, body: 11.5, small: 10.5, label: 9.5 };
@@ -127,4 +128,32 @@ export function toggleSwitch(id, checked, onChange, c, { label = "Toggle" } = {}
 export function controlInput(el, c) {
   return el.h(H.control).px(8).rounded(R.control).border_1().border_color(c.input).bg(c.canvas)
     .text_size(T.body).text_color(c.text).focus((s) => s.border_color(c.accent));
+}
+
+export function segmentAt(width, i, n, pad = 3, gap = 2) {
+  const w = (width - 2 * pad - gap * (n - 1)) / n;
+  return { left: pad + i * (w + gap), width: w };
+}
+
+export function segmented(id, items, value, onChange, c, { width = null, dot = null, sized = null } = {}) {
+  const ink = c.foreground ?? c.text;
+  const wash = c.raised ?? c.selected;
+  const at = width ? segmentAt(width, Math.max(0, items.findIndex((item) => item.key === value)), items.length) : null;
+  const thumb = at ? div().id(`${id}-thumb`).absolute().top(3).left(at.left).w(at.width).h(28).rounded(7)
+    .bg(wash).border_1().border_color(c.border)
+    .transition("left", { duration: 200, easing: "ease-out" }) : null;
+  const seg = (item) => {
+    const on = value === item.key;
+    return h_flex().id(`${id}-${item.key}`).flex_1().h(28).gap(6).items_center().justify_center().rounded(7).cursor_pointer()
+      .text_size(T.value).font_medium().text_color(on ? ink : c.muted)
+      .when(on && !at, (el) => el.bg(wash).border_1().border_color(c.border))
+      .when(!on, (el) => el.hover((s) => s.text_color(ink)))
+      .on_click((_e, cx) => { if (value !== item.key) onChange(item.key, cx); })
+      .child(div().child(item.label))
+      .when(dot === item.key && !on, (el) => el.child(div().size(6).rounded_full().bg(c.blocked ?? c.red)));
+  };
+  return h_flex().id(id).relative().p(3).gap(2).flex_none().rounded(10).bg(ink + "0a")
+    .when(Boolean(sized), (el) => el.on_size_change((s, cx) => sized(s.width, cx)))
+    .when(Boolean(thumb), (el) => el.child(thumb))
+    .children(items.map(seg));
 }

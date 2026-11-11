@@ -4,9 +4,10 @@ import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, Input, InputState } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, tokens, quietTabs, toggleSwitch, quietLink, skeleton, breathe, Armed } from "./ui.js";
+import { G, H, T, SEG, tokens, quietTabs, quietLink, skeleton, breathe, Armed, controlInput, section, segmented } from "./ui.js";
+import { loadPieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LABEL, STORE } from "./pieces.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
 import { DEFAULT_KEYS } from "./defaults.js";
@@ -14,7 +15,7 @@ import { shippedKeymap } from "./platform-keymap.js";
 import { parseChangelog, plain, compare } from "./changelog.js";
 import { tryOrAsync } from "./pure.js";
 
-const PAGES = [{ key: "keys", label: "Keys" }, { key: "mods", label: "Mods" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
+const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" }, { key: "news", label: "What's new" }, { key: "credits", label: "Credits" }];
 const PLACES = [
   { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
   { id: "kanso", name: "kansō", note: "Source, releases and issues", url: "https://github.com/jlopezlira/herdr-kanso" },
@@ -29,27 +30,15 @@ const PEOPLE = [
 ];
 // image() reads only the app's folder: GitHub avatars are downloaded there; prints the logins that have one.
 const AVATARS_DIR = "data/kanso-settings/avatars";
-export const HIDDEN = "kanso.hidden";
-// The pieces of Kanso a switch can hide; each mod reads `kanso.hidden`.
-export const PIECES = [
-  { id: "sidebar.switch", label: "Projects, Status and Threads", note: "The switch at the top of the sidebar; without it the sidebar stays on Projects" },
-  { id: "sidebar.activity", label: "What each agent is on", note: "The line under each agent in the sidebar" },
-  { id: "sidebar.away", label: "While you were away", note: "What finished, failed or needs you since you last looked" },
-  { id: "tabs.arrange", label: "Arrangements", note: "The button in the tab bar; the key still opens them" },
-  { id: "footer.machine", label: "Add computer", note: "In the sidebar's footer" },
-  { id: "status.agents", label: "Agents at work", note: "The count in the status bar" },
-  { id: "status.palette", label: "Command palette key", note: "In the status bar" },
-  { id: "strip.minimap", label: "Minimap", note: "The columns in the status bar" },
-];
 const CHANGELOG_URL = "https://raw.githubusercontent.com/jlopezlira/herdr-kanso/main/CHANGELOG.md";
 const MODIFIERS = new Set(["shift", "control", "ctrl", "alt", "option", "cmd", "platform", "function", "fn", "capslock"]);
-const hiddenSet = () => new Set(Array.isArray(shared(HIDDEN)) ? shared(HIDDEN) : []);
 
 export default class Settings extends View {
   init(_props, cx) {
     this.handle = cx.focus_handle();
     this.handle.focus();
-    this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
+    const asked = props()?.page === "mods" ? "pieces" : props()?.page;
+    this.page = PAGES.some((p) => p.key === asked) ? asked : "pieces";
     this.capture = null; // { key, section, row, old }: the row waiting for a press
     this.conflict = null; // { chord, taken }: the press that needs a second one
     this.armed = new Armed();
@@ -57,6 +46,8 @@ export default class Settings extends View {
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
     this.avatars = null;
+    this.find = typeof InputState === "undefined" ? null : InputState.new({ placeholder: "Find" });
+    this.find?.on("change", (_e, cx) => cx.notify());
     if (this.page === "credits") this.readAvatars(cx);
     cx.spawn(async (cx) => {
       try { this.installed = JSON.parse(await readTextFile(paths.join(appHome(), "mods", "kanso-chrome", "version.json")) ?? "{}").version ?? null; } catch {}
@@ -204,33 +195,38 @@ export default class Settings extends View {
       .children(rows);
   }
 
-  modsPage(t, c) {
-    const off = new Set(Array.isArray(shared("kanso.panels.off")) ? shared("kanso.panels.off") : []);
-    const panels = Array.isArray(shared("kanso.panels.all")) ? shared("kanso.panels.all") : [];
-    const hidden = hiddenSet();
-    const row = (id, label, note, on, flip, order = null) => h_flex().id(`mod-${id}`).w_full().py(G.sm).gap(G.md).items_center()
-      .child(v_flex().flex_1().min_w(0).gap(2)
-        .child(div().truncate().text_size(13).text_color(c.text).child(label))
-        .when(Boolean(note), (el) => el.child(div().truncate().text_size(11.5).text_color(c.dim).child(note))))
-      .when(Boolean(order), (el) => el.child(h_flex().flex_none().gap(2).children(order)))
-      .child(toggleSwitch(`toggle-${id}`, on, (next) => flip(next), c, { label }));
-    // `kanso.panels.order`: the same list the bar's drag writes.
-    const ids = panels.map((p) => p.id);
-    const step = (id, by, glyph) => {
-      const i = ids.indexOf(id), j = i + by, can = j >= 0 && j < ids.length;
-      return div().id(`order-${id}-${by}`).size(22).flex_none().rounded(4).flex().items_center().justify_center().text_size(12)
-        .text_color(can ? c.muted : c.border).when(can, (el) => el.cursor_pointer().hover((s) => s.bg(c.input).text_color(c.text))
-          .on_click(() => setShared("kanso.panels.order", ids.with(i, ids[j]).with(j, ids[i]))))
-        .child(glyph);
+  query() {
+    const value = this.find && typeof this.find.value === "function" ? this.find.value() : "";
+    return String(value ?? "");
+  }
+
+  findField(c) {
+    if (!this.find || typeof Input === "undefined") return div().id("pieces-find").w_full().h(H.control);
+    return controlInput(Input.new(this.find).w_full(), c).id("pieces-find");
+  }
+
+  piecesPage(t, c) {
+    this.armed ??= new Armed();
+    const map = loadPieces(shared, setShared);
+    const groups = groupsOf(filterPieces(this.query(), withRoster(shared("kanso.panels.all"))));
+    const row = (piece) => {
+      const items = piece.states.map((key) => ({ key, label: STATE_LABEL[key] }));
+      return h_flex().id(`piece-row-${piece.id}`).w_full().h(H.row).gap(G.md).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(piece.label))
+        .when(piece.stops === "work" && piece.job, (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(piece.job)))
+        .child(segmented(`piece-${piece.id}`, items, choice(piece.id, map), (state, cx) => {
+          setShared(STORE, setPiece(loadPieces(shared, setShared), piece.id, state));
+          cx.notify();
+        }, c, { width: items.length > 2 ? SEG.three : SEG.two }));
     };
+    const armed = this.armed.is("reset");
     return v_flex().w_full()
-      .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("What kansō shows, and in what order. The arrows move a panel's button along the tab bar; a panel or piece turned off leaves its place at once, and comes back the same way."))
-      .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child("Side panels"))
-      .when(!panels.length, (el) => el.child(div().py(G.sm).text_size(12).text_color(c.dim).child("The tab bar lists the panels once it has drawn.")))
-      .children(panels.map((p) => row(p.id, p.label, null, !off.has(p.id), (on) => setShared("kanso.panels.off", on ? [...off].filter((x) => x !== p.id) : [...new Set([...off, p.id])]),
-        [step(p.id, -1, "\u2191"), step(p.id, 1, "\u2193")])))
-      .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child("Pieces"))
-      .children(PIECES.map((p) => row(p.id, p.label, p.note, !hidden.has(p.id), (on) => { const was = [...hiddenSet()]; setShared(HIDDEN, on ? was.filter((x) => x !== p.id) : [...new Set([...was, p.id])]); })));
+      .child(this.findField(c))
+      .when(!groups.length, (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("None")))
+      .children(groups.map((group) => v_flex().w_full().pt(G.lg).child(section(c, group.name)).children(group.rows.map(row))))
+      .child(h_flex().w_full().justify_end().pt(G.lg).child(quietLink("pieces-reset", armed ? "Press again" : "Reset all", (cx) => {
+        this.armed.press("reset", cx, () => { setShared(STORE, {}); cx.notify(); });
+      }, c, { color: armed ? c.accent : c.muted })));
   }
 
   async readNews(cx) {
@@ -263,8 +259,6 @@ export default class Settings extends View {
   newsPage(t, c) {
     const { entries, error, from } = this.news;
     const have = this.installed;
-    const updateState = shared("kanso.update") ?? {};
-    const autoCheck = updateState.autoCheck !== false;
     const entry = (e) => {
       const rel = have ? compare(e.version, have) : null;
       const tag = rel === 0 ? "installed" : rel > 0 ? "newer than yours" : null;
@@ -283,11 +277,6 @@ export default class Settings extends View {
     const latest = shared("kanso.update")?.latest ?? null;
     const waiting = have && latest && compare(latest, have) > 0 ? latest : null;
     return v_flex().w_full()
-      .child(h_flex().w_full().gap(G.md).items_center()
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(div().text_size(13).text_color(c.text).child("Check for updates automatically"))
-          .child(div().text_size(11.5).text_color(c.dim).child("Checks on start and every few minutes; updates are only installed when you choose.")))
-        .child(toggleSwitch("auto-update-check", autoCheck, (next) => setShared("kanso.update", { ...(shared("kanso.update") ?? {}), autoCheck: next }), c, { label: "Check for updates automatically" })))
       .child(h_flex().w_full().pt(G.sm).items_center()
         .child(
           div().id("check-kanso-update").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
@@ -332,7 +321,7 @@ export default class Settings extends View {
 
   render() {
     const t = theme(), c = tokens(t), p = props() ?? {};
-    const page = this.page === "mods" ? this.modsPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.keysPage(t, c);
+    const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.piecesPage(t, c);
     // The same window as kansō help, in its place: each leads to the other, so you can always go back.
     return v_flex().id("kanso-settings").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
