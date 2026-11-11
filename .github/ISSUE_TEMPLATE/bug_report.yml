@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in kansō did not do what you expected.
+body:
+  - type: input
+    id: kanso-version
+    attributes:
+      label: kansō version
+      description: The version kansō shows, or the version in kanso/mods/kanso-chrome/version.json.
+      placeholder: 3.29.0
+    validations:
+      required: true
+  - type: input
+    id: herdr-version
+    attributes:
+      label: Herdr version
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: did
+    attributes:
+      label: What you did
+    validations:
+      required: true
+  - type: textarea
+    id: saw
+    attributes:
+      label: What you saw
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: dropdown
+    id: remote-space
+    attributes:
+      label: Is the space on another computer?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true

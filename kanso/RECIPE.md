@@ -1,8 +1,9 @@
 # Kanso
 
-More agents. Less babysitting. Terminals open side by side at their own width.
-Repos, worktrees, diffs, PR checks and threads stay close; Cmd+Shift+O opens
-the folder in your editor, over SSH too. Warm greys, color for agent state.
+Agents sit side by side at their own width, and the one waiting on you comes first.
+Sleep a project and wake it on the same conversations. Memory, on macOS and Windows, recycles idle Claude sessions so the machine lasts weeks.
+Spend adds up across computers once Sync is on. A Simulator sits beside the agent.
+It works on a space that lives on another computer, and it runs on macOS, Windows and Linux.
 
 ![Kanso](preview.png)
 
