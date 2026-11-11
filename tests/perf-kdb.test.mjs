@@ -14,14 +14,14 @@ async function database(t) {
   const db = new Kdb();
   await db.open();
   calls.length = 0;
-  return { db, calls, clock, another: () => new Kdb() };
+  return { db, calls, clock };
 }
 
 test("kdb batches same-tick reads and writes, keeping empty and multiline results with their caller", async (t) => {
-  const { db, calls, another } = await database(t);
+  const { db, calls } = await database(t);
   const results = await Promise.all([
     db.read("SELECT 'first' AS value; SELECT 'line' || char(10) || 'two' AS value;"),
-    another().read("SELECT 1 WHERE 0;"),
+    db.read("SELECT 1 WHERE 0;"),
     db.setPref("a", "b"),
     db.read("SELECT value FROM prefs WHERE key='a';"),
   ]);
@@ -43,20 +43,20 @@ test("kdb rejects only the failing caller and rolls back its transaction before 
   assert.deepEqual(clone(await db.read("SELECT 3 AS next;")), [{ next: 3 }]);
 });
 
-test("kdb caches preferences and panel state across handles until a write or the 30-second reload", async (t) => {
-  const { db, calls, clock, another } = await database(t);
+test("kdb caches preferences and panel state until a write or the 30-second reload", async (t) => {
+  const { db, calls, clock } = await database(t);
   await db.setPref("view", "spaces");
   await db.savePanelState("A", "files", { cwd: "/a" });
   const prefs = await db.prefs();
   await db.panelState("A", "files");
   calls.length = 0;
   prefs[0].value = "changed by caller";
-  assert.equal((await another().prefs())[0].value, "spaces");
-  assert.equal((await another().panelState("A", "files")).cwd, "/a");
+  assert.equal((await db.prefs())[0].value, "spaces");
+  assert.equal((await db.panelState("A", "files")).cwd, "/a");
   assert.equal(calls.length, 0);
-  await another().setPref("view", "threads");
+  await db.setPref("view", "threads");
   assert.equal((await db.prefs())[0].value, "threads");
-  await another().clearPanelState("A", "files");
+  await db.clearPanelState("A", "files");
   assert.equal(await db.panelState("A", "files"), undefined);
   await db.prefs();
   calls.length = 0;

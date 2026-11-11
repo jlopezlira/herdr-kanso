@@ -11,7 +11,7 @@ import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_
 import { parseProcesses } from "./procs.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace } from "./kdb.js";
+import { spaceFor, inPlace } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway } from "./sleepwork.js";
@@ -274,7 +274,6 @@ export default class Spaces extends View {
   // A popup of this mod: what it shows that has to be read first is read here.
   openPopup(cx) {
     const p = props();
-    this.kdb = new Kdb();
     if (p.newProject) {
       this.projectName = InputState.new({ placeholder: "Its name" });
       this.projectName.on("submit", (_e, cx) => this.createProject(cx));
@@ -340,7 +339,7 @@ export default class Spaces extends View {
   }
 
   // The sidebar's own database handle; a popup has its own.
-  db() { return this.kdb ?? this.leftNavStore().kdb; }
+  db() { return this.leftNavStore().kdb; }
 
   // A project's name and folder, asked in a dialog; `start`: a conversation begins in it once made.
   addProject(start = false) {
@@ -366,8 +365,8 @@ export default class Spaces extends View {
     this.creating = true;
     cx.spawn(async (cx) => {
       try {
-        const { row, existed } = await this.kdb.addProject({ name: name || folderName(folder), folder, machine: "" });
-        await this.publishRegistry(this.kdb);
+        const { row, existed } = await this.db().addProject({ name: name || folderName(folder), folder, machine: "" });
+        await this.publishRegistry(this.db());
         const open = spaces().find((w) => keyOfSpace(w, home()) === keyOfProject(row));
         if (existed) notify({ title: `${row.name} is already one of your projects`, level: "info", timeout: 4000 });
         closeOverlay(props().overlay);
@@ -1494,13 +1493,13 @@ export default class Spaces extends View {
 
   // A popup's write finishes before the popup closes: closed first, the write could be cut off with it.
   thenClose(write, after = () => {}) {
-    Promise.resolve(write).then(() => this.publishRegistry(this.kdb)).catch(() => {})
+    Promise.resolve(write).then(() => this.publishRegistry(this.db())).catch(() => {})
       .finally(() => { after(); closeOverlay(props().overlay); });
   }
 
   // Removing a project you have open closes its space too (asked first, with how many tabs go), so it really goes.
   removeProject(project, w) {
-    this.thenClose(project ? this.kdb.removeProject(project.id) : null, () => { if (w) run("space.close", { id: w.id }); });
+    this.thenClose(project ? this.db().removeProject(project.id) : null, () => { if (w) run("space.close", { id: w.id }); });
   }
 
   spaceMenuView(t) {
@@ -1534,10 +1533,10 @@ export default class Spaces extends View {
       .when((w?.tabs?.length ?? 0) > 1, (el) => el.child(item("sleep-project", "Sleep the whole project\u2026", () => sleepProject(w.id), { icon: "moon" })))
       .when(Boolean(w), (el) => el.child(item("space-options", "Project options\u2026", () => openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } }), { icon: "settings" })))
       .when(keepable, (el) => el.child(item("keep-project", "Keep as a project", () => {
-        this.thenClose(this.kdb.addProject({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }));
+        this.thenClose(this.db().addProject({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }));
       }, { icon: "pin", keep: true })))
       .when(Boolean(project?.missing) && !project?.machine, (el) => el.child(item("locate", "Locate folder\u2026", () => {
-        pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.kdb.relocateProject(project.id, trimmed(folder)))
+        pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.db().relocateProject(project.id, trimmed(folder)))
           .catch((e) => notify({ title: "The folder was not changed", body: String(e?.message ?? e), level: "error" }))
           .finally(() => this.thenClose(null));
       }, { icon: "file", keep: true })))
@@ -1559,7 +1558,7 @@ export default class Spaces extends View {
       this.starting = true;
       if (place.tree) openAt(place, place.tree.folder, a?.run ?? null, place.tree.branch);
       else startIn(place, a?.run ?? null);
-      this.thenClose(project && a ? this.kdb.setProjectAgent(project.id, a.key) : null);
+      this.thenClose(project && a ? this.db().setProjectAgent(project.id, a.key) : null);
     };
     return this.menuFrame(t)
       .child(this.menuTitle(t, `New in ${place.tree?.branch ?? place.name ?? "this project"}`))

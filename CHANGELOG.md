@@ -11,7 +11,11 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [Unreleased]
+## [3.22.5] - 2026-11-10
+
+### Fixed
+
+- Panels load again after switching project or restarting. A side panel, Files or any other, no longer stays on its placeholder until Herdr restarts.
 
 ### Changed
 
