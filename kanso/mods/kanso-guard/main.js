@@ -141,6 +141,7 @@ export default class Memory extends View {
       const installFailure = installing ? installError(await tryOrAsync(() => readTextFile(paths.join(dir, "install.json"))), installing.at) : null;
       this.reading = false;
       if (this.closed || !this.awake) return;
+      const before = this.picture();
       this.now = now;
       this.digest = digest;
       this.batch = batch && batch.at !== this.batchSeen ? batch : null;
@@ -149,8 +150,12 @@ export default class Memory extends View {
       // One follow-up timer at most, never a chain per read.
       try { this.batchTimer?.cancel(); } catch { /* already gone */ }
       this.batchTimer = this.batch && !this.batch.finished ? readCx.timer.after(4000, (timerCx) => { this.batchTimer = null; this.read(timerCx); }) : null;
-      readCx.notify();
+      if (this.picture() !== before) readCx.notify();
     });
+  }
+
+  picture() {
+    return JSON.stringify([this.now, this.digest, this.batch, this.actionError, this.busy]);
   }
 
   settle() {

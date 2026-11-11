@@ -3,7 +3,7 @@ import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
 import { systemApi } from "./platform-system.js";
-import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
+import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel, listFailure, sweepLook } from "./remote-file.js";
 // Images (the panel is "look" inside): pictures an agent made, beside it, and notes pinned to the spots
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
@@ -18,10 +18,10 @@ import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
 import { walkLayout } from "./layout.js";
 import { lookMemory } from "./panel-state.js";
+import { Front } from "./front.js";
 import { transcriptPaths, MOST } from "./transcript.js";
 
 const LINES = 400;
-const READ_MS = 4000; // a terminal's text is read at most this often
 const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
 const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept while the panel is closed
@@ -47,6 +47,7 @@ export class Look {
     this.kept = new Map(); // unsent pins, by agent and picture, until Send
     this.blind = new Set(); // this session: a file that will not open stays out of the row
     this.readAt = 0; this.reading = false; this.sending = false; this.note = null; this.watching = null;
+    this.front = new Front(() => this.screenDue());
     this.poll = pollStart(); this.stamp = null; this.pendingStamp = null; this.fresh = null; this.held = null; this.arm = null; this.pullFailed = false;
     this.homeOn = null; this.homeDir = null;
     this.asking = null; // { id, token, path, who }: the pin a dialog asks about, and which dialog
@@ -97,9 +98,53 @@ export class Look {
       cx.notify();
     }
     const on = machineOf(this.agent());
-    if (!on) { if (Date.now() - this.readAt >= READ_MS) this.read(cx); return; }
+    if (!on) {
+      if (!this.screenDue()) { this.front.rest(); return; }
+      const woke = this.front.woke();
+      if (this.readAt === 0) { this.read(cx); return; }
+      if (woke) { this.probeLocal(cx); return; }
+      this.armLocal(cx);
+      return;
+    }
     if (this.readAt === 0) { this.read(cx); return; }
     this.armCheck(cx);
+  }
+
+  screenDue() { return window()?.active !== false && !this.paneHidden(); }
+
+  armWhen(cx, due, probe) {
+    if (this.arm || !due) return;
+    const file = this.transcript?.address === this.agent() ? this.transcript.file : null;
+    if (!file) { this.poll = pollNext(this.poll, "same"); new ArmPoll(this).start(cx, (tick) => this.read(tick)); return; }
+    new ArmPoll(this).start(cx, probe);
+  }
+
+  armLocal(cx) { this.armWhen(cx, this.screenDue(), (tick) => this.probeLocal(tick)); }
+
+  probeLocal(cx) {
+    const address = this.agent();
+    const file = this.transcript?.address === address ? this.transcript.file : null;
+    if (!this.screenDue()) return;
+    if (!file) { this.read(cx); return; }
+    cx.spawn(async (cx) => {
+      const outcome = await this.take(address, () => localService(fileApi).stat(file), listFailure(new Error("timed out"), null));
+      if (!outcome) return;
+      if (outcome === "changed") this.read(cx);
+      else { this.poll = pollNext(this.poll, outcome); this.armLocal(cx); if (outcome === "failed") cx.notify(); }
+    });
+  }
+
+  async take(address, stat, failure) {
+    const { outcome, next } = await takeStamp(stat, this.stamp);
+    if (this.agent() !== address) return null;
+    if (outcome === "seen") this.stamp = next;
+    if (outcome === "changed") this.pendingStamp = next;
+    if (outcome === "failed") {
+      const view = staleView(this.items.length > 0 || Boolean(this.shown?.image || this.shown?.deferred), this.fresh, Date.now(), failure);
+      if (view.keep) this.held = view.hold;
+      else if (!this.note) this.note = { error: true, text: view.error };
+    }
+    return outcome;
   }
 
   paneHidden() {
@@ -110,10 +155,7 @@ export class Look {
   // No screen read on a timer: one stat of the conversation, and a read only when it changed.
   armCheck(cx) {
     const on = machineOf(this.agent());
-    if (!on || this.arm || !remoteDue(on, window()?.active, this.paneHidden())) return;
-    const file = this.transcript?.address === this.agent() ? this.transcript.file : null;
-    if (!file) { this.poll = pollNext(this.poll, "same"); new ArmPoll(this).start(cx, (tick) => this.read(tick)); return; }
-    new ArmPoll(this).start(cx, (tick) => this.probe(tick));
+    this.armWhen(cx, Boolean(on) && remoteDue(on, window()?.active, this.paneHidden()), (tick) => this.probe(tick));
   }
 
   probe(cx) {
@@ -121,15 +163,8 @@ export class Look {
     const file = this.transcript?.address === address ? this.transcript.file : null;
     if (!file || !remoteDue(on, window()?.active, this.paneHidden())) return;
     cx.spawn(async (cx) => {
-      const { outcome, next } = await takeStamp(async () => (await serviceOn(fileApi, on)).stat(file), this.stamp);
-      if (this.agent() !== address) return;
-      if (outcome === "seen") this.stamp = next;
-      if (outcome === "changed") this.pendingStamp = next;
-      if (outcome === "failed") {
-        const view = staleView(this.items.length > 0 || Boolean(this.shown?.image || this.shown?.deferred), this.fresh, Date.now(), copyFailure(new Error("timed out"), on));
-        if (view.keep) this.held = view.hold;
-        else if (!this.note) this.note = { error: true, text: view.error };
-      }
+      const outcome = await this.take(address, async () => (await serviceOn(fileApi, on)).stat(file), copyFailure(new Error("timed out"), on));
+      if (!outcome) return;
       if (outcome === "changed") this.read(cx);
       else { this.poll = pollNext(this.poll, outcome); this.armCheck(cx); }
       cx.notify();
@@ -329,6 +364,7 @@ export class Look {
     const name = `${key}-${Date.now()}.${item.kind === "image" ? ext : "png"}`, out = paths.join(dir, name);
     await localService(imageApi).fresh(dir, key);
     const made = item.kind === "image" ? (await localService(fileApi).copy(source, out)).code === 0 : await toPng(source, out);
+    if (made) await sweepLook(dir, key, name);
     return made ? { image: `${DIR}/${name}`, picture: item.kind === "image" ? item.path : out } : null;
   }
 
@@ -508,7 +544,8 @@ export class Look {
     return div();
   }
 
-  render() {
+  render(cx) {
+    if (!machineOf(this.agent())) this.front?.wake(cx, (wakeCx) => this.tick(wakeCx));
     const c = tokens(theme()), item = this.selected, address = this.agent();
     const who = address ? this.who(address) : null;
     const list = this.list();

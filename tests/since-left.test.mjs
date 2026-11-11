@@ -375,6 +375,18 @@ test("an unseen digest adds the next absence's events and skips events from the 
   assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_focus;"))[0].n, 1);
 });
 
+test("pruning the log also forgets a conversation with no project and a project gone for 7 days", async (t) => {
+  const { db, store } = await database(t);
+  const now = KEEP_MS * 2;
+  await db.observe([{ conversation: "c-free", given: "free", space: "s", pos: 0, status: "idle", terminal: "t1" }], 1);
+  await db.observe([], KEEP_MS);
+  await db.syncSpaces([{ id: "old", name: "old", folder: "/old", machine: null }], 1);
+  await db.run(`UPDATE spaces SET gone=${now - KEEP_MS - 1} WHERE id='old';`);
+  await store.prune(now);
+  assert.equal((await db.read("SELECT id FROM agents WHERE id='c-free'")).length, 0);
+  assert.equal((await db.read("SELECT id FROM spaces WHERE id='old'")).length, 0);
+});
+
 test("targets round trip ids containing colons", () => {
   for (const [kind, id] of [["pr", "https://ghe.example/o/r/pull/1"], ["agent", "t1:123"], ["sleep", "s1"]]) {
     assert.deepEqual(parseTarget(targetOf(kind, id)), { kind, id });

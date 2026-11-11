@@ -146,7 +146,10 @@ agent unless you press Send, and share images carry totals only.
 A change to what kansō installs adds its entries to the next version's section
 in [CHANGELOG.md](CHANGELOG.md), and raises
 `kanso/mods/kanso-chrome/version.json` only when that category needs a bigger
-bump than the section already has. `npm run check:version` checks it. A push
+bump than the section already has. `npm run check:version` checks it. `npm test` also checks each mod's imports
+against the Herdr names in `tests/herdr-api.json` (`node scripts/herdr-api.mjs`
+rewrites that file from this machine's declarations), and `npm run check:mods`
+runs `herdr-app check` on every mod when the app is installed. A push
 to `develop` publishes `vX.Y.Z-beta.N` when what kansō installs changed since
 the last beta or the newest stable tag. Running the Release candidate workflow
 on `develop` publishes `vX.Y.Z-rc.N`. Merging `develop` into `main` publishes

@@ -17,6 +17,7 @@ import { Share } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
 import { portsMemory } from "./panel-state.js";
+import { Front } from "./front.js";
 
 // The guard's files: change the name here if it is installed under another.
 const GUARD = "kanso-guard";
@@ -104,6 +105,7 @@ export class Ports {
     this.hist = null; // parsePorts(): { state, data }
     this.digest = null; // what the history draws, worked out once per read
     this.histAt = 0; this.range = this.keptPorts?.range ?? "day"; this.tab = this.keptPorts?.tab ?? null; this.showAll = this.keptPorts?.showAll ?? false; this.busy = {};
+    this.front = new Front();
     this.refresh(cx);
     cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }
@@ -157,15 +159,22 @@ export class Ports {
   }
 
   refresh(cx, { history = false, then = null } = {}) {
+    if (this.front.behind()) { this.front.rest(); return; }
+    this.front.woke();
     if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
     cx.spawn(async (cx) => {
+      const before = this.picture();
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
         this.list = await this.read(); this.note = this.attribution;
       } catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list = this.list ?? []; }
-      finally { this.reading = false; then?.(); cx.notify(); }
+      finally { this.reading = false; then?.(); if (this.picture() !== before) cx.notify(); }
     });
+  }
+
+  picture() {
+    return JSON.stringify([this.list, this.note, this.digest, [...(this.stopping ?? [])]]);
   }
 
   async guardReady() {
@@ -378,6 +387,7 @@ export class Ports {
   }
 
   render(cx) {
+    this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
     const c = tokens(theme()), narrow = (this.width || 368) < 560;
     const list = this.list ?? [];
     const state = this.hist?.state;

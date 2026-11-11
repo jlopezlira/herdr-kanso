@@ -486,7 +486,21 @@ test("The sidebar keeps its state in the left nav's database: prefs moved from l
   last.kdb.observe = (list, at) => { writes.push(list.length); return observe(list, at); };
   await last.remember(new Map(), 400 + 61_000);
   assert.deepEqual(writes, [0]);
-  assert.equal((await last.kdb.read("SELECT status FROM agents WHERE id='c1'"))[0].status, "gone", "not seen for a while: gone");
+  assert.equal((await last.kdb.read("SELECT id FROM agents WHERE id='c1'")).length, 0, "not seen for a while, and never moved: forgotten");
+  assert.equal(last.agents.has("c1"), false, "the sidebar drops it too");
+  last.agents.set("c-gone", { name: "x" });
+  last.sent.set("c-gone", { a: {}, at: 1 });
+  last.agents.set("c-moved", { projectAt: 5, name: "kept" });
+  last.sent.set("c-moved", { a: {}, at: 1 });
+  last.agents.set("c-restore", { restore: "Old" });
+  const seenOne = new Map([["t9", { conversation: "c-live", given: "n", name: "n", title: null, said: null, space: null, tab: null, pos: 0, program: null, status: "idle", terminal: "t9" }]]);
+  await last.remember(seenOne, 400 + 61_000 + 20_000);
+  assert.equal(last.agents.has("c-gone"), false, "a sighting drops one that left, with no project and no name to put back");
+  assert.equal(last.sent.has("c-gone"), false);
+  assert.equal(last.agents.get("c-moved")?.projectAt, 5, "one moved to a project stays without another read");
+  assert.equal(last.sent.has("c-moved"), true);
+  assert.equal(last.agents.get("c-restore")?.restore, "Old");
+  assert.equal(last.agents.get("c-live")?.name, "n");
 });
 
 test("Send reaches any agent of any model by the name and project Kanso gives it, grouped by project, yours first", async () => {

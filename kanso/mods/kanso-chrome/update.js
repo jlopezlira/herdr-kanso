@@ -331,8 +331,8 @@ export class Updater {
       this.fit();
       cx.notify();
     }));
-    // A footer row turned on or off in Kanso's settings, or a release the poller found: the footer takes its new height at once.
-    cx.timer.every(1500, () => {
+    // The polling copy fits the footer when a row is turned on or off, or a release is found. The other copy fits on start and on its slow tick.
+    if (polls) cx.timer.every(1500, () => {
       const now = JSON.stringify([shared("kanso.hidden") ?? [], this.state().latest ?? null]);
       if (now !== this.hiddenSeen) { this.hiddenSeen = now; this.fit(); }
     });

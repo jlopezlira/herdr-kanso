@@ -582,11 +582,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
     home (not `~/Library`) with none is "No pane runs it". Read every 10 s
-    while shown; Stop: SIGTERM on a second press, then SIGKILL.
+    in front; Stop: SIGTERM on a second press, then SIGKILL.
     `look.js` (Images, panel id `look`, `eye.svg`): no mod hears a click on
     a terminal's link, so it reads the terminal in focus (`hc read --lines
     400` when that file changes; pinnable) and a session's transcript
-    (`transcript.js`). Elsewhere it is checked before a read, drawn from a copy here. Over 2 MB waits, and a note still sends. Pictures already found are rows in `kanso.db`
+    (`transcript.js`). It is checked before a read, drawn from a copy here. Over 2 MB waits, and a note still sends. Pictures already found are rows in `kanso.db`
     (path, first-seen order, color, there) with the offset of the last whole
     line; the next read greps only new whole lines, and a rewritten file is
     read once and replaces its rows. A missing file, or one that will not
@@ -598,7 +598,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     at}}`, read on render; Cancel drops a new pin). ⌘↩ sends "About <path>:"
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
-  - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
+  - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` in front.
   - Mods: Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
   - Own-folder imports only: `scripts/sync-share.mjs` copies shared files;
     `npm run sync:share -- --check` detects drift. Kdb batches same-tick calls;
