@@ -17,6 +17,10 @@ release.
 
 - A remote machine that is on stays awake. The hold renews while it stays connected and ends after it is turned off or drops. A closed lid still sleeps, and a machine that is already asleep is not woken.
 
+### Changed
+
+- The recipe keeps complete panel briefs in separate linked parts, with size checks that leave room for future changes and keep it in the gallery.
+
 ## [3.22.3] - 2026-11-10
 
 ### Fixed
