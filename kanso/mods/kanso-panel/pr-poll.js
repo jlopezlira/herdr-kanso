@@ -4,9 +4,6 @@ export const QUIET_MS = 58_000;
 export const AUTH_MS = 10 * 60_000;
 export const CALL_MS = 30_000;
 
-// Herdr can leave an exec promise unsettled; this is the result the timer settles instead.
-export const LATE = Object.freeze({ late: true, code: 1, stdout: "", stderr: "timed out" });
-
 export const readDue = (loadedAt, now, pending) => Boolean(pending) || now - (loadedAt ?? 0) > QUIET_MS;
 
 // In front: the window is not behind others and this panel is not hidden.
@@ -49,10 +46,4 @@ export function waitLine(retryAt) {
 
 export function heldView(hasPr, freshAt, now) {
   return hasPr ? { keep: true, text: asOfAge(freshAt ?? now, now) } : { keep: false, text: null };
-}
-
-export function bounded(promise, timer, ms = CALL_MS) {
-  if (!timer?.after) return promise;
-  const deadline = new Promise((resolve) => { timer.after(ms, () => resolve(LATE)); });
-  return Promise.race([promise, deadline]);
 }
