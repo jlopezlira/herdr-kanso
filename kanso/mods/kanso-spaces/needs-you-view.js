@@ -10,7 +10,9 @@ export function queueLabel(queue, collapsed, empty) {
 }
 
 export function queueControl(t, queue, collapsed, empty, toggle) {
-  const c = tokens(t), count = queue.rows.length, spoken = `Needs you: ${count}`;
+  const count = queue.rows.length;
+  if (!count && !empty) return div();
+  const c = tokens(t), spoken = `Needs you: ${count}`;
   return h_flex().flex_none().px(G.sm).child(quietLink("needs-you-count", queueLabel(queue, collapsed, empty), toggle, c,
     { size: T.body, label: spoken, color: count ? c.text : c.dim }).tooltip(spoken));
 }
