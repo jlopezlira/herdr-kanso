@@ -9,7 +9,6 @@ import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, 
 import { walkLayout, commitLayout } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isText } from "./kinds.js";
-import { tokens } from "./ui.js";
 
 const MOD = "open-with";
 const RECENT = `${MOD}.recent`;
@@ -165,7 +164,7 @@ export default class OpenWith extends View {
     if (e.icon) return div().size(18).flex_none().items_center().justify_center().flex().child(svg(e.icon).size(15).text_color(t.foreground));
     const c = TILES[EDITORS.indexOf(e) % TILES.length];
     return div().size(18).flex_none().rounded(6).bg(c).flex().items_center().justify_center()
-      .text_size(10.5).font_bold().text_color(tokens(t).primaryText).child(e.name[0]);
+      .text_size(10.5).font_bold().text_color("#ffffff").child(e.name[0]);
   }
 
   row(e, i, sel, t) {

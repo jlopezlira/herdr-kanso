@@ -105,15 +105,18 @@ export default class Settings extends View {
     const chords = row.family ? familyChords(chord) : [chord];
     if (!chords) { this.message = "Press a key with a digit from 1 to 9: N takes its place."; cx.notify(); return; }
     const taken = chords.flatMap((c) => conflictsOf(keys(), c, row.family ? `${row.family}${c.slice(-1)}` : row.action));
-    if (taken.length) {
-      this.take = false;
-      this.armed.press(chord, cx, () => { this.take = true; });
-      if (!this.take) { this.conflict = { chord, taken }; cx.notify(); return; }
+    const apply = () => {
+      this.armed.clear();
+      const set = Object.fromEntries(chords.map((c) => [c, row.family ? `${row.family}${c.slice(-1)}` : row.action]));
+      const drop = old ? (row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old]) : [];
+      this.change(cx, (doc) => rebound(doc, section, { drop, set }));
+    };
+    if (taken.length && !this.armed.is(chord)) {
+      this.conflict = { chord, taken };
+      this.armed.press(chord, cx, apply);
+      return;
     }
-    this.armed.clear();
-    const set = Object.fromEntries(chords.map((c) => [c, row.family ? `${row.family}${c.slice(-1)}` : row.action]));
-    const drop = old ? (row.family ? familyChords(old.replace(/N$/, "1")) ?? [] : [old]) : [];
-    this.change(cx, (doc) => rebound(doc, section, { drop, set }));
+    apply();
   }
 
   reset(row, section, cx) {

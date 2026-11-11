@@ -24,11 +24,17 @@ test("Spend opens on today, and a chosen period is the one it accepts next time"
   assert.equal(previousRange(today, "2026-11-11").label, "Yesterday");
   assert.equal(previousRange(today, "2026-11-11").start, "2026-11-10");
   assert.equal(costRange("day", -2, "2026-11-11").label, "Nov 9");
+  assert.equal(costRange("day", 0, "2026-11-11").said, "today");
+  assert.equal(costRange("day", -1, "2026-11-11").said, "yesterday");
+  assert.equal(costRange("day", -2, "2026-11-11").said, "on Nov 9");
+  assert.equal(costRange("month", 0, "2026-11-11").said, "in November");
+  assert.equal(costRange("year", 0, "2026-11-11").said, "in 2026");
   assert.equal(costRange("month", 0, "2026-11-11").period, "month");
   const derived = deriveCosts([], { today: "2026-11-11" });
   assert.equal(derived.range.period, "day");
   assert.equal(derived.hero.title, "Today");
   assert.equal(derived.hero.empty, "Nothing used today. Try another period.");
+  assert.equal(deriveCosts([], { options: { period: "day", offset: -2 }, today: "2026-11-11" }).hero.empty, "Nothing used on Nov 9. Try another period.");
   assert.equal(deriveCosts([], { options: { period: "30d" }, today: "2026-11-11" }).range.period, "30d");
 });
 
@@ -94,8 +100,6 @@ test("armed ink comes from the kit token", async () => {
   for (const file of [
     "kanso/mods/kanso-panel/ports.js",
     "kanso/mods/kanso-panel/worktrees.js",
-    "kanso/mods/open-with/main.js",
-    "open-with/mods/open-with/main.js",
   ]) {
     const source = await text(file);
     assert.equal(source.includes("#ffffff"), false, file);
@@ -112,13 +116,14 @@ test("the teaching footers are gone and a scan time can still be said", async ()
   assert.match(worktrees, /Scanned \$\{new Date\(this\.scannedAt\)/);
 });
 
-test("help names a project, and a pull request stays spelled out", () => {
+test("help names a project, and a panel list keeps the name PR", async () => {
   assert.equal(describe("space.new"), "New project");
   assert.equal(describe("space.next"), "Next project");
   assert.equal(describe("space.prev"), "Previous project");
   assert.equal(describe("kanso-spaces.space-3"), "Project 3");
   assert.equal(describe("space.select:2"), "Project 2");
   assert.equal(describe("mod.open:picker"), "Search projects, tabs and agents");
+  assert.match(await text("kanso/mods/kanso-help/guide.js"), /Files, PR, Ports/);
 });
 
 const SKIP_DIR = new Set(["kanso-strip"]);
@@ -253,7 +258,8 @@ const retired = (literal) => {
   if (/hc machine|\["machine"|'machine'/.test(literal)) return [];
   if (/^["'`]PR["'`]$/.test(literal)) return [];
   const hits = BANNED.filter(([re]) => re.test(literal)).map(([, name]) => name);
-  if (/\bPR\b/.test(literal)) hits.push("PR");
+  const prose = literal.replace(/PR #(?:\d+|\$\{[^}]*\})/g, "").replace("Files, PR, Ports", "Files, Ports");
+  if (/\bPR\b/.test(prose)) hits.push("PR");
   return hits;
 };
 

@@ -24,7 +24,7 @@ export function guideSections(bindings, platform, home) {
       `Go to the next agent that needs you, in any project${hint(["kanso-spaces.needs-you.next"])}.`,
     ]],
     ["Panels", [
-      `The icons at the top right open a panel beside the strip: Files, pull requests, Ports, Memory, Spend and more. Open them by place${family("kanso-tabs.panel-")}.`,
+      `The icons at the top right open a panel beside the strip: Files, PR, Ports, Memory, Spend and more. Open them by place${family("kanso-tabs.panel-")}.`,
     ]],
     ["Sleep and Arrangements", [
       "Sleep puts a tab, or a whole project, away: its agents exit and keep their conversations; Wake brings them back on the same ones. Right-click a project, or the moon in a pane's header.",
