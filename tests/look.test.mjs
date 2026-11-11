@@ -4,6 +4,7 @@ import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
+import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
 import { load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform } from "./helpers.mjs";
 
@@ -704,8 +705,8 @@ test("Images reads an agent on another computer there, and draws a copy from thi
   assert.ok(ons.some((c) => c[0] === "sh" && c[1] === "light" && String(c[3]).startsWith("for f;")), "the file is checked there");
   assert.equal(ons.some((c) => c[0] === "cp"), false, "the drawing copy stays on this computer");
   const copied = calls.find((c) => c[0] === "cp");
-  assert.match(copied[2], /data\/kanso-panel\/remote\//);
-  assert.match(copied[3], /data\/kanso-panel\/look\//);
+  assert.equal(paths.dirname(copied[2]), paths.join(dir, "data/kanso-panel/remote"));
+  assert.equal(paths.dirname(copied[3]), paths.join(dir, "data/kanso-panel/look"));
 });
 
 test("a picture on a computer that does not answer stays listed and says why", async () => {
