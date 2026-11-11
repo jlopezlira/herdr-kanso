@@ -4,13 +4,13 @@ import { paths } from "./platform-paths.js";
 // Asleep is a status of an agent in the left nav's database (the sidebar owns it); shared "kanso.asleep" is a copy of what it read.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, terminals, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile } from "herdr";
+import { spaces, panes, terminals, machines, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile } from "herdr";
 import { Store, idle, done, shownOf } from "./store.js";
-import { spaceFor, inPlace } from "./kdb.js";
+import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
-import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway } from "./sleepwork.js";
+import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway, homeOf } from "./sleepwork.js";
 import { retry, tryOr, tryOrAsync, mapSeries, reduceSeries } from "./pure.js";
 import { skeleton, breathe } from "./ui.js";
 
@@ -70,6 +70,9 @@ export default class Sleep extends View {
     const ask = props() ?? {};
     this.space = spaces().find((s) => s.id === ask.sleep?.space) ?? spaces().find((s) => s.active) ?? null;
     this.store = new Store();
+    this.remotes = new Map();
+    this.kept = new Map();
+    this.keptAt = new Map();
     if (ask.sleep) this.startSleep(cx, ask.sleep.scope === "project", ask.sleep.tab, ask.sleep.scope === "agent" ? ask.sleep.pane : null);
     // What is on its way or stuck, while the list shows.
     cx.timer.every(3000, (cx) => {
@@ -87,19 +90,57 @@ export default class Sleep extends View {
     });
   }
 
+  async storeFor(machine) {
+    if (!machine) return this.store;
+    const had = this.remotes.get(machine);
+    if (had) return had;
+    const dir = kansoDir(await homeOf(machine));
+    const store = new Store(new Kdb(dir, machine));
+    this.remotes.set(machine, store);
+    return store;
+  }
+
   // A read overtaken by a newer "kanso.asleep.at" stamp (here or the sidebar's) is not published.
   async refresh(strict = false) {
     const started = Date.now();
-    const read = await settled(() => this.store.asleep(true));
+    const read = await settled(() => this.asleepNow(started));
     if (!read.ok) { if (strict) throw read.error; return; }
     const all = read.value;
     // The list shows what can wake now; the sidebar also what is on its way.
-    this.asleep = all.filter((a) => idle(a, started));
+    this.asleep = all.filter((a) => idle(a, started) || a.quiet);
     // On its way, stuck or coming back: the sidebar has it.
-    this.work = all.filter((a) => !done(a));
+    this.work = all.filter((a) => !done(a) && !a.quiet);
     if ((shared("kanso.asleep.at") ?? 0) > started) return;
     setShared("kanso.asleep.at", started);
-    setShared("kanso.asleep", all.map((a) => shownOf(a, started)));
+    setShared("kanso.asleep", all.map((a) => a.shown));
+  }
+
+  async remotePart(machine, now) {
+    const layout = machines().find((m) => m.name === machine)?.layout ?? null;
+    if (layout === "unavailable") return this.stale(machine, "Unreachable", now);
+    try {
+      const rows = await (await this.storeFor(machine)).asleep(true, null, now);
+      this.kept.set(machine, rows);
+      this.keptAt.set(machine, now);
+      return { machine, rows, quiet: null, asOf: now };
+    } catch (error) { return this.stale(machine, String(error?.message ?? error), now); }
+  }
+
+  async asleepNow(now) {
+    const names = [...new Set(spaces().map((s) => s.machine).filter(Boolean))];
+    const local = await this.store.asleep(true, null, now);
+    const remote = await names.reduce(async (acc, machine) => [...(await acc), await this.remotePart(machine, now)], Promise.resolve([]));
+    const parts = [{ machine: null, rows: local, quiet: null, asOf: null }, ...remote];
+    return parts.flatMap(({ machine, rows, quiet, asOf }) => rows.map((row) => {
+      const seen = seenRow(row, machine);
+      const shown = machine || quiet ? { ...seenRow(shownOf(row, now), machine), ...(machine ? { machine } : {}), ...(quiet ? { quiet, asOf } : {}) } : shownOf(row, now);
+      return { ...seen, machine, quiet, asOf, shown };
+    }));
+  }
+
+  stale(machine, quiet, now) {
+    const at = this.keptAt.get(machine) ?? null;
+    return { machine, rows: this.kept.get(machine) ?? [], quiet, asOf: at ? asOfText(at, now) : null };
   }
 
   // Each Claude agent's conversation is its session record, ~/.claude/sessions/<pid>.json.
@@ -115,7 +156,7 @@ export default class Sleep extends View {
     const claudes = [...recs].filter(([, r]) => { const fg = r.foreground; return fg?.pid && isClaude(fg.argv); });
     const agents = await mapSeries(claudes, async ([term, r]) => {
       const fg = r.foreground;
-      const ses = await tryOrAsync(async () => JSON.parse(await readTextFile(paths.join(home(), ".claude", "sessions", `${fg.pid}.json`)))); // null: reported below
+      const ses = await tryOrAsync(async () => JSON.parse(await this.sessionText(fg.pid))); // null: reported below
       // It sleeps under the name the sidebar shows it by.
       const who = shared("kanso.names")?.[term] || r.labels?.["kanso.name"] || ses?.name || r.title || term;
       const again = ses?.sessionId ? resumeArgv(fg.argv, ses.sessionId) : null;
@@ -131,7 +172,6 @@ export default class Sleep extends View {
       : captureTab(shared("strip.state")?.[tab.id], tabPanes, recs, extra);
     // The first thing that stops it, in this order.
     const error = [
-      this.space?.machine ? "Sleep works on this computer's agents for now" : null,
       ...unread,
       ...agents.map((g) => g.problem),
       this.onlyPane && !capture.cols[0]?.panes[0]?.pid ? "only a Claude agent can sleep on its own; this pane runs something else" : null,
@@ -140,6 +180,12 @@ export default class Sleep extends View {
     // What ran in front of each terminal at the read: after the sleep, only that process (still there) is this sleep's to end.
     const fronts = new Map([...recs].map(([t, x]) => [t, atPrompt(x) ? 0 : x?.foreground?.pid ?? null]));
     return { tab, capture, fronts, blocker: sleepBlocker(recs), error };
+  }
+
+  async sessionText(pid) {
+    const machine = this.space?.machine ?? null;
+    const path = paths.join(machine ? await homeOf(machine) : home(), ".claude", "sessions", `${pid}.json`);
+    return machine ? readTextFile(path, { on: machine }) : readTextFile(path);
   }
 
   async readTabs(tabs) {
@@ -229,7 +275,11 @@ export default class Sleep extends View {
           this.error = stop ? `It can't sleep now: ${stop.blocker || stop.error}.` : "The tabs changed since this opened; here they are as they are now.";
           return;
         }
-        const was = await settled(async () => new Set((await this.store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)));
+        const machine = this.space?.machine ?? null;
+        const down = machine && machines().find((m) => m.name === machine)?.layout === "unavailable" ? "Unreachable" : null;
+        if (down) { this.reveal(); this.view = "sleep"; this.error = `It can't sleep now: ${down}.`; return; }
+        const store = await this.storeFor(machine);
+        const was = await settled(async () => new Set((await store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)));
         if (!was.ok) { this.reveal(); this.view = "sleep"; this.error = String(was.error?.message ?? was.error); return; }
         // Each tab under a name no other tab asleep in the project has (nor one before it here).
         const named = list.reduce(({ out, taken }, r) => {
@@ -239,7 +289,7 @@ export default class Sleep extends View {
         // A tab that can't be written stops the ones after it; those written go on.
         const out = await reduceSeries(named, async (acc, r) => {
           if (acc.error) return acc;
-          const w = await settled(() => this.store.sleep(project, this.intentOf(r)));
+          const w = await settled(() => store.sleep(project, this.intentOf(r)));
           if (!w.ok) return { ...acc, error: w.error };
           setShared("kanso.sleep.hidden", claimHide(shared("kanso.sleep.hidden"), r.tab.id, w.value));
           return { ...acc, ids: [...acc.ids, w.value] };
@@ -264,11 +314,13 @@ export default class Sleep extends View {
   // (after the sleep, only that process, still there, is the sleep's to end).
   intentOf(r) {
     const cap = r.capture;
-    const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, given: p.given ?? null, terminal: p.terminal ?? null,
-      tab: r.tab.id, front: r.fronts?.get(p.terminal) ?? null, ...(p.pid ? { pid: p.pid } : {}) });
-    return { name: r.name, space: this.space ? { id: this.space.id, name: this.space.name } : null, per: cap.per, saved: Date.now(), tab: r.tab.id,
+    const machine = this.space?.machine ?? null;
+    const own = (id) => (machine ? localAddress(id, machine) : id);
+    const kept = (p) => ({ argv: p.argv, cwd: p.cwd, resume: p.resume ?? null, wake: p.wake ?? null, name: p.name ?? null, given: p.given ?? null, terminal: own(p.terminal),
+      tab: own(r.tab.id), front: r.fronts?.get(p.terminal) ?? null, ...(p.pid ? { pid: p.pid } : {}) });
+    return { name: r.name, space: this.space ? { id: own(this.space.id), name: this.space.name } : null, per: cap.per, saved: Date.now(), tab: own(r.tab.id),
       cols: cap.cols.map((c) => ({ w: c.w, panes: c.panes.map(kept) })),
-      ...(this.onlyPane ? { into: { tab: r.tab.named ? r.tab.name : null, tabId: r.tab.id } } : {}) };
+      ...(this.onlyPane ? { into: { tab: r.tab.named ? r.tab.name : null, tabId: own(r.tab.id) } } : {}) };
   }
 
   // Retry or undo a sleep the sidebar holds as stuck (undo also stops one on its way).
@@ -278,7 +330,11 @@ export default class Sleep extends View {
       if (this.hidden && (this.hidden.tabs ?? []).every((t) => !left.has(t))) this.hidden = null;
     }
     cx.spawn(async (cx) => {
-      const r = await settled(() => (how === "retry" ? this.store.retry(id) : this.store.undo(id)));
+      const row = [...(this.asleep ?? []), ...(this.work ?? [])].find((a) => a.id === id);
+      if (row?.quiet) { this.error = row.quiet; cx.notify(); return; }
+      const got = await settled(() => this.storeFor(row?.machine ?? null));
+      if (!got.ok) { this.error = String(got.error?.message ?? got.error); cx.notify(); return; }
+      const r = await settled(() => (how === "retry" ? got.value.retry(id) : got.value.undo(id)));
       this.error = !r.ok ? String(r.error?.message ?? r.error) : !r.value ? "It moved on meanwhile; here it is as it is now." : null;
       if (r.ok && r.value) setShared("kanso.sleep.kick", Date.now());
       await this.refresh();
@@ -292,10 +348,15 @@ export default class Sleep extends View {
     const how = wakeMidFlight(shown?.state);
     if (how === "cancel") { this.act(cx, shown.id, "undo"); return; }
     if (how === "wait") return;
+    if (shown?.quiet) { this.error = shown.quiet; cx.notify(); return; }
     if (this.busy) return;
     this.busy = `Waking ${shown.name}`; this.error = null; cx.notify();
+    const machine = shown?.machine ?? null;
     cx.spawn(async (cx) => {
-      const claimed = await settled(() => this.store.claim(shown.id));
+      const got = machine ? await settled(() => this.storeFor(machine)) : { ok: true, value: this.store };
+      if (!got.ok) { this.busy = null; this.error = `${shown.name} could not be woken: ${String(got.error?.message ?? got.error)}`; cx.notify(); return; }
+      const store = got.value;
+      const claimed = await settled(() => store.claim(shown.id));
       if (!claimed.ok) { this.busy = null; this.error = `${shown.name} could not be woken: ${String(claimed.error?.message ?? claimed.error)}`; cx.notify(); return; }
       const a = claimed.value;
       if (!a) {
@@ -304,19 +365,21 @@ export default class Sleep extends View {
       }
       await this.refresh(); // the sidebar shows it waking
       // A sleep that stopped half way left its row pending: an agent that never left may still run in p.check.
+      const see = (id) => seenAddress(id, machine);
       const mayRun = async (p) => {
         if (!p.check) return [];
-        const gone = !terminals().some((t) => t.address === p.check);
-        const g = gone ? null : await hc(["get", p.check, "--json"]).catch(() => null);
+        const address = see(p.check);
+        const gone = !address || !terminals().some((t) => t.address === address);
+        const g = gone ? null : await hc(["get", address, "--json"]).catch(() => null);
         const x = tryOr(() => (g?.code === 0 ? JSON.parse(g.stdout) : null)); // null: below
         const idleShell = atPrompt(x);
-        return !gone && !idleShell ? [`${p.name ?? "an agent"} may still run in ${p.check}`] : [];
+        return !gone && !idleShell ? [`${p.name ?? "an agent"} may still run in ${address}`] : [];
       };
       // Already running anywhere (brought back by a stopped sleep, or by hand): never a second one.
       const runsAlready = async (p) => {
         const look = await settled(async () => {
-          const pid = await runningOn(p.resume);
-          return { pid, term: pid ? null : await runningIn(p.resume) };
+          const pid = await runningOn(p.resume, machine);
+          return { pid, term: pid ? null : await runningIn(p.resume, machine) };
         });
         if (!look.ok) return [`whether ${p.name ?? "an agent"} already runs could not be checked (${String(look.error?.message ?? look.error)})`];
         const { pid, term } = look.value;
@@ -324,17 +387,17 @@ export default class Sleep extends View {
           ...(term ? [`${p.name ?? "an agent"} is starting on its conversation in ${term}`] : [])];
       };
       // An older sleep's row kept no conversation: match its old pid by program and start time.
-      const stillRuns = async (p) => (a.pending && p.pid && (await stillThere(p.pid, a.saved)) ? [`${p.name ?? "an agent"} still runs (pid ${p.pid})`] : []);
+      const stillRuns = async (p) => (a.pending && p.pid && (await stillThere(p.pid, a.saved, Date.now(), machine)) ? [`${p.name ?? "an agent"} still runs (pid ${p.pid})`] : []);
       const still = (await mapSeries(a.cols.flatMap((c) => c.panes), async (p) => [...(await mayRun(p)), ...(p.resume ? await runsAlready(p) : await stillRuns(p))])).flat();
       if (still.length) {
-        await this.store.release(a.id, a.token).catch(() => {});
+        await store.release(a.id, a.token).catch(() => {});
         await this.refresh();
         this.busy = null; this.error = `${a.name} can't wake yet: ${still.join("; ")}. End ${still.length === 1 ? "it" : "them"} there, then wake.`; cx.notify(); return;
       }
       // From here this wake holds the row: whatever stops it lets the row go.
-      const woke = await settled(() => this.wakeHeld(a, cx));
+      const woke = await settled(() => this.wakeHeld(a, cx, store, machine));
       if (!woke.ok) {
-        await this.store.release(a.id, a.token).catch(() => {});
+        await store.release(a.id, a.token).catch(() => {});
         await this.refresh();
         this.busy = null; this.error = `${a.name} could not be woken: ${String(woke.error?.message ?? woke.error)}`; this.view = "list"; cx.notify(); return;
       }
@@ -345,37 +408,38 @@ export default class Sleep extends View {
   }
 
   // If another window took the row meanwhile, what this wake opened ends: nothing runs twice.
-  async wakeHeld(a, cx) {
+  async wakeHeld(a, cx, store = this.store, machine = null) {
     const startedAt = Date.now();
+    const own = (id) => (machine ? localAddress(id, machine) : id);
     // replacing: this wake makes the space in place of a gone one.
     const where = async () => {
       const first = spaceFor({ spaceId: a.spaceId, spaceName: a.space, project: a.from }, spaces(), home());
       if (first || !a.spaceId) return { space: first, replacing: false };
       // One window at a time makes the replacement; a wake that waits takes the one made.
-      const made = async () => { const to = await this.store.kdb.replacement(a.spaceId); return to ? spaces().find((w) => w.id === to) ?? null : null; };
+      const made = async () => { const to = await store.kdb.replacement(a.spaceId); return to ? spaceFor({ spaceId: to }, spaces(), home()) : null; };
       const found = await made();
       if (found) return { space: found, replacing: false };
-      if (!(await this.store.kdb.replacing(a.spaceId, a.token))) {
+      if (!(await store.kdb.replacing(a.spaceId, a.token))) {
         const waited = await retry(30, async () => { await cx.sleep(500); return made(); });
         if (!waited) throw new Error("another window is making its space; wake it again in a moment");
         return { space: waited, replacing: false };
       }
       // Made by another between the look and the hold: that one, not a second.
       const late = await made();
-      if (late) { await this.store.kdb.unreplacing(a.spaceId, a.token).catch(() => {}); return { space: late, replacing: false }; }
+      if (late) { await store.kdb.unreplacing(a.spaceId, a.token).catch(() => {}); return { space: late, replacing: false }; }
       return { space: null, replacing: true };
     };
     const { space, replacing } = await where();
-    const folder = folderOfKey(a.from), machine = String(a.from).slice(0, String(a.from).indexOf(":")) || undefined;
+    const folder = folderOfKey(a.from);
     const create = space ? null : { name: a.space || base(folder) || "~", folder, key: a.from, ...(machine ? { machine } : {}) };
-    const intoTab = a.into && space ? (space.tabs ?? []).find((x) => x.id === a.into.tabId) ?? (a.into.tab ? (space.tabs ?? []).find((x) => x.name === a.into.tab) : null) : null;
+    const intoTab = a.into && space ? (space.tabs ?? []).find((x) => own(x.id) === a.into.tabId) ?? (a.into.tab ? (space.tabs ?? []).find((x) => x.name === a.into.tab) : null) : null;
     // Renew the hold last, so it still holds when the pane opens; the first throw stops the whole opening.
     const ahead = (lost) => async (p) => {
-      const pid = p?.resume ? await runningOn(p.resume) : null;
+      const pid = p?.resume ? await runningOn(p.resume, machine) : null;
       if (pid) throw new Error(`${p.name ?? "an agent"} already runs on its conversation (pid ${pid})`);
-      const term = p?.resume ? await runningIn(p.resume) : null;
+      const term = p?.resume ? await runningIn(p.resume, machine) : null;
       if (term) throw new Error(`${p.name ?? "an agent"} is starting on its conversation in ${term}`);
-      if (!(await this.store.renew(a.id, a.token))) { lost(); throw new Error("another window woke it meanwhile"); }
+      if (!(await store.renew(a.id, a.token))) { lost(); throw new Error("another window woke it meanwhile"); }
     };
     const opening = await telling(async (lost) => {
       if (intoTab) {
@@ -397,7 +461,7 @@ export default class Sleep extends View {
     const tabOf = flat.map((x) => x.pane && panes().find((q) => q.pane === x.pane)?.tab).find(Boolean);
     const nowIn = space?.id ?? (tabOf ? spaces().find((w) => (w.tabs ?? []).some((tb) => tb.id === tabOf))?.id ?? null : null);
     // Its space was gone and one was made for it: what else slept there wakes there too.
-    if (replacing) await (nowIn && !lostOpening ? this.store.kdb.moveSpace(a.spaceId, nowIn, a.token) : this.store.kdb.unreplacing(a.spaceId, a.token)).catch(() => {});
+    if (replacing) await (nowIn && !lostOpening ? store.kdb.moveSpace(a.spaceId, own(nowIn), a.token) : store.kdb.unreplacing(a.spaceId, a.token)).catch(() => {});
     // owner: what this wake started per terminal; only that, or a terminal back at its prompt, is ever ended by it.
     const endIfOurs = async (owner, term, p) => {
       const g = await hc(["get", term, "--json"]).catch(() => null);
@@ -406,7 +470,7 @@ export default class Sleep extends View {
       const [x] = got;
       const fg = x.foreground;
       const mine = atPrompt(x) || (owner.has(term) && fg.pid === owner.get(term))
-        || (!p?.resume && !owner.has(term) && JSON.stringify(fg?.argv ?? null) === JSON.stringify(wakeArgv(p)) && ((await procOf(fg.pid))?.start ?? 0) >= startedAt - 2000);
+        || (!p?.resume && !owner.has(term) && JSON.stringify(fg?.argv ?? null) === JSON.stringify(wakeArgv(p)) && ((await procOf(fg.pid, Date.now(), machine))?.start ?? 0) >= startedAt - 2000);
       if (mine) run("terminal.kill", { terminal: term });
       return mine;
     };
@@ -416,14 +480,14 @@ export default class Sleep extends View {
       if (!term) return { ...st, missed: [...st.missed, p] };
       if (!p.resume) return st;
       this.busy = `Checking ${p.name ?? "an agent"} is on its conversation`; cx.notify();
-      const lost = st.lost || !(await this.store.renew(a.id, a.token).catch(() => true));
+      const lost = st.lost || !(await store.renew(a.id, a.token).catch(() => true));
       // The first claude seen there on this conversation since the wake began is this wake's, unless one was already there.
       const saw = async (fg, mine) => {
         if (st.owner.has(term) || mine || !fg?.pid || !(fg.argv ?? []).map(String).includes(p.resume)) return mine;
-        const proc = await procOf(fg.pid);
+        const proc = await procOf(fg.pid, Date.now(), machine);
         return proc?.comm === "claude" && proc.start >= startedAt - 2000 ? fg.pid : mine;
       };
-      const seen = await resumed(term, p.resume, cx, saw);
+      const seen = await resumed(term, p.resume, cx, saw, machine);
       const back = seen.pid, ours = back || seen.mine || st.owner.get(term);
       const owner = ours ? new Map([...st.owner, [term, ours]]) : st.owner;
       if (back) {
@@ -444,10 +508,10 @@ export default class Sleep extends View {
       return term && !(await endIfOurs(owner, term, p)) ? [term] : [];
     })).flat();
     // Never awake and still claimable at once: what this wake started ends if the write can't land.
-    const missedNow = missed.map(({ check, checkNow, ...p }) => (checkNow ? { ...p, check: checkNow } : p));
-    const write = () => (!opened && !late ? this.store.release(a.id, a.token)
-      : missed.length ? this.store.narrow(a.id, colsOf(missedNow), a.token, { space: nowIn, restores, wait: late > 0 })
-      : this.store.woke(a.id, a.token, restores));
+    const missedNow = missed.map(({ check, checkNow, ...p }) => (checkNow ? { ...p, check: own(checkNow) } : p));
+    const write = () => (!opened && !late ? store.release(a.id, a.token)
+      : missed.length ? store.narrow(a.id, colsOf(missedNow), a.token, { space: own(nowIn), restores, wait: late > 0 })
+      : store.woke(a.id, a.token, restores));
     const saved = lost ? { held: false, error: null } : await retry(4, async () => {
       const w = await settled(write);
       if (w.ok) return { done: true, held: w.value, error: null };
@@ -581,20 +645,22 @@ export default class Sleep extends View {
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
     const row = (a) => {
       const id = `${a.from}:${a.name}`, key = `forget:${id}`, armed = this.armed === key;
+      const when = a.quiet ? (a.asOf ?? "") : `since ${since(a.saved)}`;
       return h_flex().id(`zz-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
+        .when(a.quiet, (el) => el.opacity(0.55))
         .when(a.id === atId, (el) => el.bg(t.selected))
-        .when(!this.busy, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.wake(a, cx)))
+        .when(!this.busy && !a.quiet, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.wake(a, cx)))
         .child(svg("mods/kanso-chrome/icons/moon.svg").size(15).flex_none().text_color(t.muted))
         .child(v_flex().flex_1().min_w(0).gap(2)
           .child(h_flex().min_w(0).gap(8).items_baseline()
-            .child(div().flex_shrink_1().min_w(0).truncate().text_size(13).text_color(t.foreground).child(a.name))
-            .child(div().flex_none().text_size(11.5).text_color(t.dim).child(`since ${since(a.saved)}`)))
-          .child(div().truncate().text_size(11.5).text_color(t.dim).child(sleepers(a))))
-        .when(!this.busy, (el) => el.child(div().id(`zz-wake-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(t.foreground)
+            .child(div().flex_shrink_1().min_w(0).truncate().text_size(13).text_color(a.quiet ? t.dim : t.foreground).child(a.name))
+            .child(div().flex_none().text_size(11.5).text_color(t.dim).child(when)))
+          .child(div().truncate().text_size(11.5).text_color(t.dim).child(a.quiet || sleepers(a))))
+        .when(!this.busy && !a.quiet, (el) => el.child(div().id(`zz-wake-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(t.foreground)
           .hover((s) => s.opacity(0.8)).on_click((_e, cx) => { cx.stop_propagation(); this.wake(a, cx); }).child("Wake")))
-        .when(!this.busy, (el) => el.child(div().id(`zz-rm-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(armed ? t.blocked : t.dim)
+        .when(!this.busy && !a.quiet, (el) => el.child(div().id(`zz-rm-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(armed ? t.blocked : t.dim)
           .hover((s) => s.text_color(armed ? t.blocked : t.foreground))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.arm(key, cx, (cx) => cx.spawn(async (cx) => { try { await this.store.forget(a.id); } catch (e) { this.error = String(e?.message ?? e); } await this.refresh(); cx.notify(); })); })
+          .on_click((_e, cx) => { cx.stop_propagation(); this.arm(key, cx, (cx) => cx.spawn(async (cx) => { try { await (await this.storeFor(a.machine ?? null)).forget(a.id); } catch (e) { this.error = String(e?.message ?? e); } await this.refresh(); cx.notify(); })); })
           .child(armed ? "Press again to forget it" : "Forget")));
     };
     return shell
@@ -608,7 +674,7 @@ export default class Sleep extends View {
           .child(div().text_size(11.5).line_height(1.45).text_color(t.dim).child("Put a tab you are waiting on to sleep: its agents stop holding memory, and wake on their conversations when you need them."))))
         .children(groups.map(([from, tabs]) => v_flex().gap(2)
           .child(h_flex().items_center().child(div().flex_1().child(label(spaceName(from, tabs))))
-            .when(tabs.length > 1 && !this.busy, (el) => el.child(div().id(`zz-all-${from}`).px(10).pt(8).text_size(11.5).text_color(t.foreground).cursor_pointer()
+            .when(tabs.length > 1 && !this.busy && tabs.every((a) => !a.quiet), (el) => el.child(div().id(`zz-all-${from}`).px(10).pt(8).text_size(11.5).text_color(t.foreground).cursor_pointer()
               .hover((s) => s.opacity(0.8)).on_click((_e, cx) => this.wake(tabs[0], cx, tabs.slice(1))).child(`Wake all ${tabs.length}`))))
           .children(tabs.map(row))))))
       .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))

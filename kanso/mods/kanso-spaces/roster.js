@@ -50,7 +50,7 @@ export function sleepingNow(sp, terms, asleep, home = () => "") {
     return { address: `zz:${p.resume ?? `${s.id}:${i}`}`, pane: null, tab: null, space, status: "asleep", labels: {}, pin: null, seq: 0, turn: 0,
       name: p.name, title: p.title ?? null, program,
       asleep: { id: s.id, from: s.from, tab: s.name, n: (s.agents ?? []).length, saved: s.saved, busy: Boolean(s.busy), going: going(s) && !s.stuck, stuck: s.stuck ?? null, spaceName: s.space ?? null,
-        at: p.at ?? null, said: p.said ?? null, resume: p.resume ?? null } };
+        at: p.at ?? null, said: p.said ?? null, resume: p.resume ?? null, ...(s.quiet ? { quiet: s.quiet, asOf: s.asOf ?? null } : {}) } };
   });
   return { rows, dozing };
 }
@@ -70,9 +70,9 @@ export function asleepGroups(rows, { asleepOf = (row) => row.asleep ?? null, key
   const live = tagged.filter((x) => !x.z).map((x) => x.row);
   const pack = (id, name, whole, list) => ({
     id, name, whole, rows: list.map((x) => x.row),
-    stuck: [...new Set(list.filter((x) => x.z.stuck).map((x) => x.z.id))],
-    going: [...new Set(list.filter((x) => x.z.going && !x.z.stuck).map((x) => x.z.id))],
-    why: list.map((x) => x.z.stuck).find((s) => typeof s === "string") ?? null,
+    stuck: [...new Set(list.filter((x) => x.z.stuck && !x.z.quiet).map((x) => x.z.id))],
+    going: [...new Set(list.filter((x) => x.z.going && !x.z.stuck && !x.z.quiet).map((x) => x.z.id))],
+    why: list.map((x) => (x.z.quiet ? x.z.quiet : typeof x.z.stuck === "string" ? x.z.stuck : null)).find((s) => typeof s === "string") ?? null,
   });
   if (!live.length) {
     const z = asleep[0].z;

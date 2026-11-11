@@ -1,8 +1,9 @@
-import { localService } from "./platform-host.js";
+import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { killApi } from "./platform-kill.js";
 import { openApi } from "./platform-open.js";
+import { systemApi } from "./platform-system.js";
 import { sleepEvent } from "./since-left-model.js";
 // Sleep as work the sidebar does, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // This is the source copy; `npm run sync:share` copies it into kanso-sleep, and a test fails when a copy differs.
@@ -17,7 +18,7 @@ import { hc, run, panes, terminals, readTextFile, home } from "herdr";
 import { promptEmpty, asksToExit, base } from "./resume.js";
 import { SHELLS, spaceBeside } from "./tabkit.js";
 import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries, parseOr } from "./pure.js";
-import { LEASE_MS } from "./kdb.js";
+import { LEASE_MS, CALL_MS, seenAddress, localAddress } from "./kdb.js";
 
 export const LONG_MS = 5 * 60_000; // a row whose terminals this window can't see is taken anyway once left this long
 export const SAVE_MS = 30_000; // a terminal that can't be read this long is stuck
@@ -267,29 +268,50 @@ export const terminalsOf = (row) => (parseOr(row.layout, { cols: [] })?.cols ?? 
 
 // --- Processes and terminals. ---
 
+const timed = (run) => (cmd, args, options = {}) => run(cmd, args, { timeout: CALL_MS, ...options });
+const apiOn = (factory, machine) => (machine ? serviceOn((platform, run) => factory(platform, timed(run)), machine) : Promise.resolve(localService(factory)));
+class Homes {
+  constructor() { this.dirs = new Map(); }
+  get(machine) { return this.dirs.get(machine); }
+  put(machine, dir) { this.dirs.set(machine, dir); }
+}
+const homes = new Homes();
+export async function homeOf(machine) {
+  if (!machine) return home();
+  const had = homes.get(machine);
+  if (had) return had;
+  const dir = await (await apiOn(systemApi, machine)).userHome();
+  if (dir) homes.put(machine, dir);
+  return dir;
+}
+const sessionText = async (pid, machine) => {
+  const path = paths.join(await homeOf(machine), ".claude", "sessions", `${pid}.json`);
+  return machine ? readTextFile(path, { on: machine }) : readTextFile(path);
+};
+
 // true, false, or null when the check itself failed (a failed exec is no sighting of anything).
-export const alive = async (pid) => { if (!pid) return null; return localService(processApi).exists(pid).catch(() => null); };
+export const alive = async (pid, machine = null) => { if (!pid) return null; return (await apiOn(processApi, machine)).exists(pid).catch(() => null); };
 
 // The pid still on conversation `session`, matched by start time (a reused pid is not it); throws when it can't tell: never "none" for what it could not see.
-export const runningOn = (session) => localService(processApi).runningSession(session, home());
+export const runningOn = (session, machine = null) => apiOn(processApi, machine).then(async (api) => api.runningSession(session, await homeOf(machine)));
 
 // At its own shell's prompt: another shell in front (a script, say) counts as running.
 export const atPrompt = (x) => Boolean(x) && (!x.foreground?.pid || x.foreground.pid === x.pid);
 
-export async function procOf(pid, now = Date.now()) {
-  const proc = await localService(processApi).identity(pid, now).catch(() => null);
+export async function procOf(pid, now = Date.now(), machine = null) {
+  const proc = await (await apiOn(processApi, machine)).identity(pid, now).catch(() => null);
   return proc ? { ...proc, comm: base(proc.comm) } : null;
 }
 // A pid given to another process since is not it: the start time must match.
-export async function stillThere(pid, before, now = Date.now()) {
-  const p = await procOf(pid, now);
+export async function stillThere(pid, before, now = Date.now(), machine = null) {
+  const p = await procOf(pid, now, machine);
   return p?.comm === "claude" && p.start <= before + 2000;
 }
 
 // A claude resuming `session` names it in its argv even before its session record exists;
 // throws when a live terminal can't be read, never "none" for what it could not see.
-export async function runningIn(session) {
-  const live = terminals().filter((k) => !(k.state && k.state !== "live") && !String(k.address).includes("/"));
+export async function runningIn(session, machine = null) {
+  const live = terminals().filter((k) => !(k.state && k.state !== "live") && localAddress(k.address, machine) != null);
   const k = await findAsync(live, async (t) => {
     const g = await hc(["get", t.address, "--json"]).catch(() => null);
     const x = tryOr(() => JSON.parse(g.stdout));
@@ -313,7 +335,7 @@ export async function frontOf(terminal) {
 // { pid } once a Claude is back on `session` and has stayed a moment: up to 30 s while nothing of it runs yet, and
 // up to 90 s while a Claude on it is starting (a long conversation, many MCP servers take their time).
 // saw(fg, mine) sees each front process meanwhile and answers the next `mine`.
-export async function resumed(terminal, session, cx, saw = async (_fg, mine) => mine) {
+export async function resumed(terminal, session, cx, saw = async (_fg, mine) => mine, machine = null) {
   const look = async ({ mine }, k) => {
     await cx.sleep(1000);
     const g = await hc(["get", terminal, "--json"]).catch(() => null);
@@ -321,14 +343,14 @@ export async function resumed(terminal, session, cx, saw = async (_fg, mine) => 
     const seen = await saw(fg, mine);
     const starting = Boolean(fg?.pid) && !SHELLS.has(base(fg.argv?.[0])) && (fg.argv ?? []).map(String).includes(session);
     if (!fg?.pid || SHELLS.has(base(fg.argv?.[0]))) return { pid: null, mine: seen, stop: k >= 29 };
-    const record = await tryOrAsync(async () => JSON.parse(await readTextFile(paths.join(home(), ".claude", "sessions", `${fg.pid}.json`)))); // null: none
+    const record = await tryOrAsync(async () => JSON.parse(await sessionText(fg.pid, machine))); // null: none
     return { pid: isResumed(fg, record, session) ? fg.pid : null, mine: seen, stop: k >= 29 && !starting };
   };
   return reduceSeries(range(90), (st, k) => (st.pid || st.stop ? st : look(st, k)), { pid: null, mine: null, stop: false });
 }
 
 // `only`: stop that pid alone; anything else running there now (it ended and you started something) is left, and counts as stopped.
-export async function stopIn(terminal, cx, only = null) {
+export async function stopIn(terminal, cx, only = null, machine = null) {
   const front = async () => {
     const g = await hc(["get", terminal, "--json"]).catch(() => null);
     try { const x = JSON.parse(g.stdout); const fg = x.foreground; return !fg?.pid || fg.pid === x.pid || SHELLS.has(base(fg.argv?.[0])) ? 0 : fg.pid; } catch { return null; }
@@ -338,7 +360,7 @@ export async function stopIn(terminal, cx, only = null) {
     const pid = await front();
     if (pid === 0 || (only && pid !== only && pid != null)) return true;
     if (pid == null) return false;
-    await localService(killApi).stop(pid, { force: sig === "-KILL" }).catch(() => null);
+    await (await apiOn(killApi, machine)).stop(pid, { force: sig === "-KILL" }).catch(() => null);
     return (await retry(10, async () => { await cx.sleep(300); return (await front()) === 0; })) ? true : null;
   };
   return (await reduceSeries(["-TERM", "-KILL"], async (got, sig) => (got === null ? signal(sig) : got), null)) === true;
@@ -347,8 +369,8 @@ export async function stopIn(terminal, cx, only = null) {
 // "back" when it is again on its conversation, "here" when the one that was to leave never did (so it is on it still),
 // "out" when nothing of it runs, "unsure" when something it started could not be stopped.
 // The terminal must be at its prompt right before the line goes, and only what that line started is ever stopped.
-export async function comeBack(p, cx, onBack = () => {}) {
-  const line = localService(openApi).terminalLine(p.cwd || home(), p.wake);
+export async function comeBack(p, cx, onBack = () => {}, machine = null) {
+  const line = (await apiOn(openApi, machine)).terminalLine(p.cwd || await homeOf(machine), p.wake);
   const front = async () => {
     const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
     try { const x = JSON.parse(g.stdout); return { x, idle: atPrompt(x) }; } catch { return null; }
@@ -363,7 +385,7 @@ export async function comeBack(p, cx, onBack = () => {}) {
   if (!f?.idle) return f?.x?.foreground?.pid === p.pid ? "here" : "out";
   await cx.sleep(800);
   // Started elsewhere meanwhile: never a second one here; what can't be checked is not started either.
-  try { if ((await runningOn(p.resume)) || (await runningIn(p.resume))) return "out"; } catch { return "unsure"; }
+  try { if ((await runningOn(p.resume, machine)) || (await runningIn(p.resume, machine))) return "out"; } catch { return "unsure"; }
   // The last look, right before the line goes.
   const last = await front();
   if (!last?.idle) return last?.x?.foreground?.pid === p.pid ? "here" : "out";
@@ -372,57 +394,59 @@ export async function comeBack(p, cx, onBack = () => {}) {
   // mine: the first process seen there since, on this resume and started after the line went; only that one is ever stopped.
   const check = async (fg, mine) => {
     if (mine || !fg?.pid || !(fg.argv ?? []).map(String).includes(p.resume)) return mine;
-    const proc = await procOf(fg.pid);
+    const proc = await procOf(fg.pid, Date.now(), machine);
     return proc?.comm === "claude" && proc.start >= sentAt - 2000 ? fg.pid : mine;
   };
-  const { pid, mine: ours } = await resumed(p.terminal, p.resume, cx, check);
+  const { pid, mine: ours } = await resumed(p.terminal, p.resume, cx, check, machine);
   if (pid) { onBack(pid); return "back"; }
   // Not back: end only what it started; anything else there is yours and a wake looks at that terminal first.
   const now = await front();
   if (!now) return "unsure";
   if (now.idle) return "out";
-  if (ours && now.x.foreground?.pid === ours) return (await stopIn(p.terminal, cx, ours)) ? "out" : "unsure";
+  if (ours && now.x.foreground?.pid === ours) return (await stopIn(p.terminal, cx, ours, machine)) ? "out" : "unsure";
   return "unsure";
 }
 
 // A return a restart cut short: a claude already on the conversation in its terminal is waited for, nothing is sent again.
 // The one that was to leave is "here", never "back", though its argv and record name the conversation too.
-export async function returnAgain(p, cx) {
+export async function returnAgain(p, cx, machine = null) {
   const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
   const fg = tryOr(() => JSON.parse(g.stdout).foreground ?? null);
   if (p.pid && fg?.pid === p.pid) return "here";
-  if (!(fg?.argv ?? []).map(String).includes(p.resume)) return comeBack(p, cx);
-  const { pid } = await resumed(p.terminal, p.resume, cx);
+  if (!(fg?.argv ?? []).map(String).includes(p.resume)) return comeBack(p, cx, undefined, machine);
+  const { pid } = await resumed(p.terminal, p.resume, cx, undefined, machine);
   return !pid ? "unsure" : pid === p.pid ? "here" : "back";
 }
 
 // --- The worker: one per sidebar. ---
 
 // What one look at an agent's terminal shows; `screen` and `record` only when its step reads them.
-async function see(a) {
-  const there = Boolean(a.terminal) && terminals().some((t) => t.address === a.terminal);
-  const g = there ? await hc(["get", a.terminal, "--json"]).catch(() => null) : null;
+async function see(a, machine = null) {
+  const terminal = seenAddress(a.terminal, machine);
+  const there = Boolean(a.terminal) && terminals().some((t) => t.address === terminal);
+  const g = there ? await hc(["get", terminal, "--json"]).catch(() => null) : null;
   const x = tryOr(() => (g?.code === 0 ? JSON.parse(g.stdout) : null));
   const fg = x?.foreground ?? null;
   const front = x ? (fg?.pid ?? 0) : null;
   const reads = ["clearing", "exiting"].includes(a.step) || a.sent_at != null;
-  const shot = x && reads ? await hc(["read", a.terminal]).catch(() => null) : null;
-  const record = x && a.step === "saving" && fg?.pid ? await tryOrAsync(async () => JSON.parse(await readTextFile(paths.join(home(), ".claude", "sessions", `${fg.pid}.json`)))) : null;
-  return { alive: await alive(a.pid), front, state: x?.status?.state ?? null, screen: shot?.code === 0 ? shot.stdout : null, record, title: x?.title ?? null, cwd: fg?.cwd ?? null };
+  const shot = x && reads ? await hc(["read", terminal]).catch(() => null) : null;
+  const record = x && a.step === "saving" && fg?.pid ? await tryOrAsync(async () => JSON.parse(await sessionText(fg.pid, machine))) : null;
+  return { alive: await alive(a.pid, machine), front, state: x?.status?.state ?? null, screen: shot?.code === 0 ? shot.stdout : null, record, title: x?.title ?? null, cwd: fg?.cwd ?? null };
 }
 
-const ACTS = {
-  interrupt: (a) => hc(["keys", a.terminal, "ctrl+c"]),
-  exit: (a) => hc(["send", a.terminal, "/exit"]),
-  enter: (a) => hc(["keys", a.terminal, "enter"]),
-};
+const acts = (machine) => ({
+  interrupt: (a) => hc(["keys", seenAddress(a.terminal, machine), "ctrl+c"]),
+  exit: (a) => hc(["send", seenAddress(a.terminal, machine), "/exit"]),
+  enter: (a) => hc(["keys", seenAddress(a.terminal, machine), "enter"]),
+});
 
 export class SleepWork {
   // kdb: the sidebar's database; changed(row): a row changed state (`row` as it is now when this window moved it), for the sidebar to read again.
-  constructor(kdb, changed = () => {}, me = null, records = () => true) {
+  constructor(kdb, changed = () => {}, me = null, records = () => true, machine = null) {
     this.kdb = kdb;
     this.records = records;
     this.changed = changed;
+    this.machine = machine || kdb?.machine || null;
     this.me = me || keptOwner();
     this.held = new Set();
     this.pending = new Set();
@@ -462,7 +486,7 @@ export class SleepWork {
     const moved = (await mapSeries(watching, (r) => this.watch(r))).some(Boolean);
     const rows = moved ? await this.kdb.sleeps() : first;
     const live = new Set(terminals().map((t) => t.address));
-    const seesOf = (r) => terminalsOf(r).some((t) => live.has(t));
+    const seesOf = (r) => terminalsOf(r).some((t) => live.has(seenAddress(t, this.machine)));
     const stranded = rows.filter((r) => onLoad(r, this.me, now, seesOf(r)) === "stuck");
     if (stranded.length) {
       await Promise.all(stranded.map(async (r) => {
@@ -484,7 +508,7 @@ export class SleepWork {
   // True when the row goes on.
   async watch(row) {
     const plan = sleepStep(row, agentsOf(row));
-    const gone = (await mapSeries(plan.watch ?? [], async (a) => ((await alive(a.pid)) === false ? a : null))).filter(Boolean);
+    const gone = (await mapSeries(plan.watch ?? [], async (a) => ((await alive(a.pid, this.machine)) === false ? a : null))).filter(Boolean);
     const went = plan.state ? [await this.kdb.unstick(row.id).catch(() => false)] : await mapSeries(gone, (a) => this.kdb.unstick(row.id, a.conversation).catch(() => false));
     if (went.some(Boolean)) this.changed();
     return went.some(Boolean);
@@ -502,7 +526,7 @@ export class SleepWork {
     if (plan.finish) return this.finish(row, agents);
     if (!plan.agent) return;
     const a = plan.agent;
-    const seen = await see(a);
+    const seen = await see(a, this.machine);
     const next = plan.undo ? undoStep(a, seen, now) : leaveStep(a, seen, now);
     const returning = ["return", "again"].includes(next.act);
     const key = JSON.stringify([row.id, a.conversation, returning ? "return" : next.act]);
@@ -513,7 +537,7 @@ export class SleepWork {
     if (next.act && !next.write && !(await this.kdb.stillMine(row.id, this.me, row.state))) return;
     if (next.act === "free") { await this.kdb.freeAgent(row.id, this.me, a.conversation); return; }
     if (next.act) this.startAct(key, cx, (cx) => returning
-      ? this.returnAgent(row, a, next.act === "again", cx) : ACTS[next.act](a));
+      ? this.returnAgent(row, a, next.act === "again", cx) : acts(this.machine)[next.act](a));
   }
 
   startAct(key, cx, act) {
@@ -524,8 +548,8 @@ export class SleepWork {
   }
 
   async returnAgent(row, a, again, cx) {
-    const p = { ...a.pane, terminal: a.terminal, resume: a.conversation, pid: a.pid };
-    const how = !p.wake ? "out" : await (again ? returnAgain(p, cx) : comeBack(p, cx)).catch(() => "unsure");
+    const p = { ...a.pane, terminal: seenAddress(a.terminal, this.machine), resume: a.conversation, pid: a.pid };
+    const how = !p.wake ? "out" : await (again ? returnAgain(p, cx, this.machine) : comeBack(p, cx, () => {}, this.machine)).catch(() => "unsure");
     // An original process told to exit may still leave after the undo.
     const kept = how === "here" && a.sent_at != null ? "unsure" : how;
     if (kept === "back" || kept === "here") await this.kdb.freeAgent(row.id, this.me, a.conversation);
@@ -537,19 +561,26 @@ export class SleepWork {
     const layout = parseOr(row.layout, { cols: [] });
     const known = [...new Set(terminalsOf(row))];
     const fronts = new Map((layout.cols ?? []).flatMap((c) => c.panes ?? []).map((p) => [p.terminal, p.front ?? null]));
+    const seen = (id) => seenAddress(id, this.machine);
     const looked = await mapSeries(known, async (t) => {
-      const now = terminals().some((k) => k.address === t) ? await frontOf(t) : 0;
+      const address = seen(t);
+      const now = terminals().some((k) => k.address === address) ? await frontOf(address) : 0;
       return { t, idle: now === 0 || (now != null && now === fronts.get(t)) };
     });
     const tab = layout.tab ?? null;
-    const fresh = !tab || panes().some((p) => p.tab === tab && p.terminal && !known.includes(p.terminal));
+    const knownSeen = new Set(known.map(seen));
+    const fresh = !tab || panes().some((p) => p.tab === seen(tab) && p.terminal && !knownSeen.has(p.terminal));
     const plan = closePlan(looked, fresh);
     // Held still, and still sleeping (an undo meanwhile keeps the tab), right before anything closes.
     if (!(await this.kdb.stillMine(row.id, this.me, "sleeping"))) return;
     const open = new Set(panes().map((p) => p.terminal));
-    if (plan.closeTab) run("tab.close", { id: tab, confirmed: true });
-    for (const t of plan.kill) if (!plan.closeTab || !open.has(t)) run("terminal.kill", { terminal: t });
-    const why = plan.busy.length ? `${plan.busy.join(", ")} ${plan.busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${plan.busy.length === 1 ? "stays" : "stay"} open.` : null;
+    if (plan.closeTab) run("tab.close", { id: seen(tab), confirmed: true });
+    for (const t of plan.kill) {
+      const address = seen(t);
+      if (!plan.closeTab || !open.has(address)) run("terminal.kill", { terminal: address });
+    }
+    const busy = plan.busy.map(seen);
+    const why = busy.length ? `${busy.join(", ")} ${busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${busy.length === 1 ? "stays" : "stay"} open.` : null;
     if (await this.kdb.finishSleep(row.id, this.me, why, Date.now(), this.fact(row.id, "asleep", why))) this.changed();
   }
 
