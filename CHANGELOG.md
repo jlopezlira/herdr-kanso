@@ -38,6 +38,7 @@ release.
 
 ### Fixed
 
+- Putting a tab to sleep no longer stays on the dialog with only Cancel. While it goes to sleep the dialog says so. If a step does not answer, the tab comes back and one sentence says what did not answer.
 - A computer that never answers no longer freezes the machine list, the sidebar keys, or keeping that computer awake. The first look cannot hold up the sidebar's first draw.
 - The pull request panel stays on this branch. Reviews waiting on you stay on the "N to review" pill.
 - Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
