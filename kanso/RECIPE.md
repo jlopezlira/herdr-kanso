@@ -43,19 +43,21 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       name's first letter, then the name and "N agents".
     - Collapsed, each item is a centred square with its label as a tooltip.
       When an app update is ready, a 6 `accent` dot shows on Settings.
-    - Kanso's own release, apart from Herdr's (`update.js`): when a newer
-      `vX.Y.Z` tag than `version.json` exists, an "Update Kanso to X" row
-      (refresh icon, 6 `accent` dot) sits above Settings and the footer
-      grows to 192 while it shows (back to 156 after; a size you set is kept).
-      The tab bar reads tags (`git ls-remote`) on start, every 5 min (if
-      on in settings) and on `kanso-tabs.check`; one 30 s toast per version
-      runs `kanso-tabs.update`; a dot on the gear. Keys merge three-way (yours
-      stay); the layout is replaced only if the release changed it (old kept
-      as `kanso.json.old-<time>`). A detached shell holding a kernel lock
+    - Kanso's own release (`update.js`). What's new
+      chooses Stable (default) or Early. Stable offers a newer `vX.Y.Z`.
+      Early offers the newest beta, rc or stable, never an older one.
+      The row "Update kansō to X" (refresh icon, 6 `accent` dot) names
+      that tag; the footer grows to 192 while it shows (back to 156
+      after; a size you set is kept). `version.json` stays `X.Y.Z`; the
+      download uses the tag and the check wants `X.Y.Z`. The tab bar
+      reads tags (`git ls-remote`) on start, every 5 min (if on) and on
+      `kanso-tabs.check`; one 30 s toast names the tag and runs
+      `kanso-tabs.update`. Keys merge three-way; the
+      layout is replaced only when the release changed it
+      (`kanso.json.old-<time>`). A detached shell holds a kernel lock,
       downloads into `.kanso-updates/<id>/`, checks `version.json` and
-      `herdr-app check`, swaps each file and mod in turn, `kanso-chrome`
-      last (all put back if it fails or dies), writes `<id>.status`; the tab
-      bar toasts "Kanso updated to X".
+      `herdr-app check`, swaps each mod, `kanso-chrome` last (put back if
+      it fails or dies), writes `<id>.status`.
 - **Corners**: two radii and nothing else. Surfaces (panes, cards, popovers,
   menus) are 8; controls and rows (buttons, tabs, list rows, tiles, chips,
   fields) are 6; dots are circles.
@@ -234,7 +236,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Pieces
   shows, shows when it has something to say, or hides each piece (`kanso.pieces`;
   hiding stops its work). Keys rebinds Kanso-only keys (never Herdr's). What's new
-  is the log, Credits who. Panel order stays `kanso.panels.order`.
+  is the log (Updates: Stable or Early). Credits who. Panel order stays `kanso.panels.order`.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.

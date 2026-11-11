@@ -44,19 +44,25 @@ for pid in "$@"; do
   if [ -f "$f" ]; then cat "$f" || true; fi
   printf '\n%s\n' "${LOOK_END}"
 done`;
-const windowsLook = (ids) => `$home = $env:USERPROFILE
-Write-Output ('home=' + $home)
+const windowsLook = (ids) => `$userHome = $env:USERPROFILE
+Write-Output ('home=' + $userHome)
 foreach ($id in @(${ids.join(",")})) {
   $alive = ''
-  try { Get-Process -Id $id -ErrorAction Stop | Out-Null; $alive = '1' } catch {
-    if ($_.Exception.Message -match 'permission|not permitted|access denied') { throw }
-    $alive = '0'
+  try {
+    $proc = Get-Process -Id $id -ErrorAction Stop
+    if ($proc) { $alive = '1' }
+  } catch {
+    $msg = ''
+    if ($_.Exception) { $msg = [string]$_.Exception.Message }
+    if ($msg -and $msg -notmatch 'permission|not permitted|access denied') { $alive = '0' }
   }
   Write-Output ('pid=' + $id)
   Write-Output ('alive=' + $alive)
   Write-Output 'record'
-  $file = Join-Path (Join-Path $home '.claude\\sessions') ([string]$id + '.json')
-  if (Test-Path -LiteralPath $file) { [IO.File]::ReadAllText($file) }
+  try {
+    $file = [IO.Path]::Combine($userHome, '.claude', 'sessions', ([string]$id + '.json'))
+    if ([IO.File]::Exists($file)) { [IO.File]::ReadAllText($file) }
+  } catch { }
   Write-Output '${LOOK_END}'
 }`;
 const readRecord = (body) => {

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { compareReleases, parseRelease } from "../kanso/mods/kanso-chrome/release.js";
+import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease, stableStay } from "../kanso/mods/kanso-chrome/release.js";
 import { planRelease } from "../scripts/release-plan.mjs";
 
 const order = ["1.0.0-beta.1", "1.0.0-beta.2", "1.0.0-beta.10", "1.0.0-rc.1", "1.0.0-rc.2", "1.0.0", "1.0.1-beta.1", "1.1.0-rc.1", "1.1.0", "2.0.0-beta.1", "2.0.0"];
@@ -83,4 +83,59 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.match(pages, /branches: \[main\]/);
   assert.match(pages, /the site deploys only from main/);
   assert.doesNotMatch(pages, /develop/);
+});
+
+const remote = (tags) => tags.map((tag, i) => `${i}\trefs/tags/${/^\d/.test(tag) ? `v${tag}` : tag}`).join("\n");
+const mixed = remote(["3.29.0", "3.30.0-beta.1", "3.30.0-beta.2", "3.30.0-rc.1", "3.30.0", "3.31.0-beta.1", "nightly", "v2.0.0-beta"]);
+
+test("Stable takes the newest finished release, and Early takes the newest of beta, rc and stable", () => {
+  assert.equal(newestTag(mixed), "3.30.0");
+  assert.equal(newestTag(mixed, "stable"), "3.30.0");
+  assert.equal(newestTag(mixed, "beta"), "3.31.0-beta.1");
+  assert.equal(newestTag(mixed, "nightly"), "3.30.0");
+  assert.equal(newestTag(""), null);
+  assert.equal(newestTag(remote(["3.30.0-beta.2", "3.30.0-rc.1"]), "stable"), null);
+});
+
+test("Early walks beta, then rc, then stable, and offers the newest when later tags exist", () => {
+  const offer = (tags, have) => offerRelease(newestTag(remote(tags), "beta"), have, "beta");
+  assert.equal(offer(["3.30.0-beta.1", "3.30.0-beta.2"], "3.30.0-beta.1"), "3.30.0-beta.2");
+  assert.equal(offer(["3.30.0-beta.1", "3.30.0-beta.2", "3.30.0-rc.1"], "3.30.0-beta.2"), "3.30.0-rc.1");
+  assert.equal(offer(["3.30.0-beta.2", "3.30.0-rc.1", "3.30.0"], "3.30.0-rc.1"), "3.30.0");
+  assert.equal(offer(["3.30.0-beta.1", "3.30.0-beta.2", "3.30.0-rc.1", "3.30.0", "3.31.0-beta.1"], "3.30.0-beta.1"), "3.31.0-beta.1");
+});
+
+test("Stable ignores prereleases, and a beta already installed is offered only a stable that reaches it", () => {
+  assert.equal(offerRelease("3.31.0-beta.1", "3.30.0", "stable"), null);
+  assert.equal(offerRelease(newestTag(mixed, "stable"), "3.30.0-beta.2", "stable"), "3.30.0");
+  assert.equal(offerRelease(newestTag(remote(["3.30.0-beta.2", "3.30.0", "3.31.0"]), "stable"), "3.30.0-beta.2", "stable"), "3.31.0");
+  assert.equal(offerRelease(newestTag(remote(["3.29.0", "3.30.0-beta.2"]), "stable"), "3.30.0-beta.2", "stable"), null);
+});
+
+test("Nothing older is offered, on either channel", () => {
+  assert.equal(offerRelease(newestTag(remote(["3.30.0-beta.1", "3.30.0-beta.2", "3.30.0"]), "beta"), "3.30.0", "beta"), null);
+  assert.equal(offerRelease(newestTag(remote(["3.30.0", "3.31.0-beta.1"]), "stable"), "3.31.0-beta.1", "stable"), null);
+  assert.equal(offerRelease(newestTag(remote(["3.30.0-beta.1", "3.30.0-beta.2"]), "beta"), "3.30.0-rc.1", "beta"), null);
+  assert.equal(offerRelease("3.29.0", "3.30.0-beta.2", "stable"), null);
+  assert.equal(offerRelease("3.30.0-beta.2", "3.30.0-beta.2", "beta"), null);
+  assert.equal(stableStay("3.30.0", "3.30.0-beta.2", "3.29.0"), "You stay on 3.30.0-beta.2 until Stable reaches it");
+  assert.equal(stableStay("3.30.0", "3.30.0-beta.2", "3.30.0"), null);
+  assert.equal(stableStay("3.30.0", "3.30.0-beta.2", "3.31.0"), null);
+  assert.equal(stableStay("3.30.0", null, "3.29.0"), null);
+});
+
+test("An install is downloaded by its tag and checked as X.Y.Z, and the channel defaults to stable", () => {
+  assert.deepEqual(hostInstall("3.30.0-beta.2", "3.30.0"), { tag: "3.30.0-beta.2", want: "3.30.0", from: "3.30.0" });
+  assert.deepEqual(hostInstall("v3.30.0-rc.1"), { tag: "3.30.0-rc.1", want: "3.30.0", from: null });
+  assert.deepEqual(hostInstall("3.30.0", "3.29.0"), { tag: "3.30.0", want: "3.30.0", from: "3.29.0" });
+  assert.equal(hostInstall("nightly"), null);
+  assert.equal(hostInstall("3.30.0-beta"), null);
+  for (const value of [undefined, null, "", "nightly", "Stable", "early", "stable"]) assert.equal(channelOf(value), "stable");
+  assert.equal(channelOf("beta"), "beta");
+  assert.equal(installedRelease("3.30.0", null), "3.30.0");
+  assert.equal(installedRelease("3.30.0", "3.30.0-beta.2"), "3.30.0-beta.2");
+  assert.equal(installedRelease("v3.30.0", "v3.30.0-beta.2"), "3.30.0-beta.2");
+  assert.equal(installedRelease("3.31.0", "3.30.0-beta.2"), "3.31.0");
+  assert.equal(installedRelease("3.30.0", "nope"), "3.30.0");
+  assert.equal(installedRelease("3.30.0-beta.2", null), null);
 });

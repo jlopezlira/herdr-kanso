@@ -23,7 +23,7 @@ const COMMON = [
   // screen, unlike the sidebar) checks, tells you and installs from the toast.
   { source: "kanso/mods/kanso-chrome/update.js", copies: ["kanso/mods/kanso-tabs/update.js"] },
   // Order of a beta, a release candidate and a stable tag, shared with that updater.
-  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js"] },
+  { source: "kanso/mods/kanso-chrome/release.js", copies: ["kanso/mods/kanso-tabs/release.js", "kanso/mods/kanso-settings/release.js"] },
   // A pull request's checks, read one way in the PR panel and the header's digest.
   { source: "kanso/mods/kanso-panel/ghchecks.js", copies: ["kanso/mods/kanso-strip/ghchecks.js"] },
   // The key a second Cmd+F or Ctrl+F uses to select the query in the open bar.

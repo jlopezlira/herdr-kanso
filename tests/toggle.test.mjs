@@ -190,7 +190,11 @@ test("Settings and Spend keep each switch on its row and flip the same way", asy
   assert.ok(find(none, "pieces-none").calls.some((call) => call[0] === "child" && call[1] === "No piece matches."));
 
   const news = settings.newsPage(theme, theme);
-  assert.equal(find(news, "auto-update-check"), null);
+  const auto = find(news, "auto-update-check");
+  centered(auto);
+  assert.equal(arg(auto, "accessibility_label"), "Check for updates automatically");
+  arg(auto, "on_change")(false, { notify() {} });
+  assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.update", { autoCheck: false }]));
   assert.ok(find(news, "check-kanso-update"));
 
   const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], desk);
