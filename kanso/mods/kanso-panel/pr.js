@@ -2,14 +2,14 @@
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
-import { exec, knownAgents, notify, openOverlay, run, theme } from "herdr";
+import { exec, knownAgents, notify, openOverlay, run, theme, setShared } from "herdr";
 import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./ghchecks.js";
 import { Kdb } from "./kdb.js";
 import { readyProviders } from "./pr-providers.js";
-import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql } from "./pr-inbox.js";
+import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
 
 const ICON = "mods/kanso-chrome/icons/";
@@ -112,7 +112,7 @@ const TASK_NAMES = { explain: "Explain", feedback: "Feedback", conflicts: "Confl
 export class PullRequest {
   constructor() { this.armed = new Armed(); } // Merge asks for a second press
 
-  init(cx) {
+  init(cx, props = {}) {
     this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
     this.expanded = { checks: false, files: false, body: false }; this.width = 368;
     this.openPrs = []; this.selected = null; // a pull request's URL; null: the branch's own, else the newest
@@ -123,6 +123,7 @@ export class PullRequest {
     this.picker = null; this.candidates = null; this.query = "";
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
+    this.jumpUrl = props.url ?? null;
     this.refresh(cx);
     cx.timer.every(20000, (cx) => {
       if (this.picker) return;
@@ -167,11 +168,12 @@ export class PullRequest {
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
-      this.openPrs = []; this.selected = this.keptUrl ?? null; this.remembered = Boolean(this.keptUrl);
+      this.openPrs = []; this.selected = this.jumpUrl ?? this.keptUrl ?? null; this.remembered = !this.jumpUrl && Boolean(this.keptUrl);
       this.home = null; this.branchUrl = null; this.outside = false;
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.fallback = false; this.listing = false; this.tab = "open"; this.closedPrs = null;
-      this.inboxOn = false; this.inbox = null; this.inboxOpen = null; this.inboxTab = "needs"; this.inboxForce = false;
+      this.inboxOn = false; this.inbox = null; this.inboxOpen = this.jumpUrl ? false : null; this.inboxTab = "needs"; this.inboxForce = false;
+      this.jumpUrl = null;
       this.permission = null; this.permissionRepo = null;
     }
     if (this.listing && this.tab === "closed") this.loadClosed(cx);
@@ -262,6 +264,7 @@ export class PullRequest {
   }
 
   async noteSeen(url) {
+    if (url && this.inboxOpen !== true) setShared("kanso.pr.seen", { url, at: Date.now() });
     if (!url || this.inboxOpen !== false || !this.inboxDb) return;
     const now = Date.now();
     try { await this.inboxDb.run(seenSql(url, now)); }
@@ -280,6 +283,10 @@ export class PullRequest {
     if (up?.code !== 0 || !up.stdout.trim().startsWith("refs/remotes/") || counts?.code !== 0) return "unpushed";
     const [behind, ahead] = String(counts.stdout).trim().split(/\s+/).map(Number);
     return ahead !== 0 || Number.isNaN(ahead) ? "unpushed" : behind !== 0 ? "behind" : "pushed";
+  }
+
+  async keepPrFacts(items) {
+    return tryOrAsync(() => recordPrFacts(this.inboxDb ??= new Kdb(), items));
   }
 
   async readShown(context, want, list) {
@@ -301,6 +308,10 @@ export class PullRequest {
       const sorted = tryOr(() => JSON.parse(open.stdout).toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
       if (sorted !== null) this.openPrs = sorted;
     }
+    await this.keepPrFacts([
+      ...(asked.view.code === 0 ? [JSON.parse(asked.view.stdout)] : []),
+      ...(this.openPrs ?? []).map((pr) => ({ ...pr, state: "OPEN" })),
+    ]);
     // `gh pr view` also finds the branch's merged or closed one; that counts as none.
     const done = (v) => tryOr(() => ["MERGED", "CLOSED"].includes(JSON.parse(v.stdout).state), false);
     const branchHasNone = !want && (asked.view.code !== 0 ? NO_PR.test(asked.view.stderr || asked.view.stdout) : done(asked.view));
@@ -322,6 +333,7 @@ export class PullRequest {
       return;
     }
     const pr = JSON.parse(view.stdout);
+    if (view !== asked.view) await this.keepPrFacts([pr]);
     if (this.remembered && !prMemory({ url: pr.url }, () => (pr.state === "OPEN" ? "open" : "closed"))) { this.dropRemembered(); return; }
     this.remembered = false;
     if (this.pr?.url !== pr.url) { this.diffs = null; this.openFile = null; this.expanded = { ...this.expanded, body: false }; }
@@ -362,6 +374,7 @@ export class PullRequest {
         const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
         if (r.code === 0 && key() === context) {
           const when = (p) => Date.parse(p.mergedAt || p.closedAt || p.updatedAt) || 0;
+          await this.keepPrFacts(JSON.parse(r.stdout));
           this.closedPrs = JSON.parse(r.stdout).toSorted((a, b) => when(b) - when(a));
         }
       } catch { }

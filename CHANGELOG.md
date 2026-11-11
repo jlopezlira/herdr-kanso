@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.20.0] - 2026-11-10
+
+### Added
+
+- Returning to a project after five minutes shows up to three quiet lines of local changes: agents waiting, errors, pull request updates, finished turns and sleeps. Click or press Enter to jump, expand +N for the rest, or dismiss; seen changes stay dismissed.
+
 ## [3.19.2] - 2026-11-10
 
 ### Fixed

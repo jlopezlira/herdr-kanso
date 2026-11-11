@@ -37,7 +37,7 @@ async function sidebar({ latency = 0, active = true, collapsed = false, view = "
     threads: { t1: { pid: 101, file: "/a.jsonl" }, t2: { pid: 202, file: "/b.jsonl" } },
   });
   // Only the liveness part of checkNew runs here; the rest has its own tests.
-  for (const name of ["takeMoves", "trackAgents", "refreshThreads", "keepSeen", "prune"]) v[name] = () => {};
+  for (const name of ["takeMoves", "trackAgents", "trackReturn", "refreshThreads", "keepSeen", "prune"]) v[name] = () => {};
   v.due = () => new Set();
   const cx = { notify() {}, spawn(fn) { fn(cx); } };
   const settle = async () => {
