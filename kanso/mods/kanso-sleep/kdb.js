@@ -104,24 +104,31 @@ export function layoutWithout(layout, ids) {
   return { ...layout, cols: cols.map((c) => ({ ...c, w: total > 0 ? (Number(c.w) || 0) / total : 1 / cols.length })) };
 }
 
+const connections = new Map();
+const CACHE_MS = 30_000;
+
 export class Kdb {
   constructor(dir = `${appHome()}/${DIR}`) {
     this.dir = dir;
     this.file = `${dir}/kanso.db`;
-    this.ready = null;
-    this.chain = Promise.resolve();
+    if (!connections.has(this.file)) connections.set(this.file, { ready: null, chain: Promise.resolve(), queue: [], cache: new Map(), cachedAt: Date.now() });
+    this.connection = connections.get(this.file);
   }
 
   // Each statement its own argument: -bail then stops at the first failure; in one argument, statements would run on past an error up to the COMMIT.
+  execute(text) {
+    return exec("sqlite3", ["-bail", "-cmd", ".timeout 5000", "-json", this.file, ...statements(text)]);
+  }
+
   async sql(text) {
-    const r = await exec("sqlite3", ["-bail", "-cmd", ".timeout 5000", "-json", this.file, ...statements(text)]);
+    const r = await this.execute(text);
     if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
     return rowsOfOutput(r.stdout);
   }
 
   // Ready once; a failure is tried again on the next call, never kept.
   open() {
-    return (this.ready ??= (async () => {
+    return (this.connection.ready ??= (async () => {
       const ok = await exec("sqlite3", ["-version"]).catch(() => null);
       if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
       await exec("mkdir", ["-p", this.dir]);
@@ -130,18 +137,64 @@ export class Kdb {
       const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name), picture_scans: (await this.sql("PRAGMA table_info(picture_scans);")).map((c) => c.name) };
       const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
       if (missing.length) await this.sql(missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`).join(""));
-    })().catch((e) => { this.ready = null; throw e; }));
+    })().catch((e) => { this.connection.ready = null; throw e; }));
   }
 
-  // In order, one after the other (a failed one fails its caller only).
-  run(text) {
-    const done = this.chain.then(() => this.open()).then(() => this.sql(text));
-    this.chain = done.catch(() => {});
-    return done;
+  enqueue(text) {
+    return new Promise((resolve, reject) => {
+      const queue = this.connection.queue;
+      queue.push({ text, resolve, reject });
+      if (queue.length === 1) Promise.resolve().then(() => this.flush());
+    });
   }
-  // True when the statement that returns rows touched one.
+
+  flush() {
+    const batch = this.connection.queue.splice(0);
+    const work = () => this.sendBatch(batch);
+    this.connection.chain = this.connection.chain.then(work, work);
+  }
+
+  async sendBatch(batch) {
+    const marker = `kanso-${newId()}`;
+    try {
+      const text = batch.flatMap((call, i) => [...statements(call.text), `.print ${marker}:${i}`]);
+      const result = await this.execute(text);
+      const output = String(result.stdout ?? "").split(/\r?\n/);
+      const completed = { at: 0, lines: [] };
+      for (const line of output) {
+        if (line === `${marker}:${completed.at}`) {
+          batch[completed.at].resolve(rowsOfOutput(completed.lines.join("\n")));
+          completed.at += 1;
+          completed.lines = [];
+        } else completed.lines.push(line);
+      }
+      if (completed.at === batch.length) return;
+      batch[completed.at].reject(new Error((result.stderr || "sqlite3 failed").trim().split("\n")[0]));
+      if (completed.at + 1 < batch.length) await this.sendBatch(batch.slice(completed.at + 1));
+    } catch (error) { for (const call of batch) call.reject(error); }
+  }
+
+  invalidate() {
+    this.connection.cache.clear();
+    this.connection.cachedAt = Date.now();
+  }
+
+  run(text) {
+    if (/\b(?:prefs|panel_state)\b/i.test(Array.isArray(text) ? text.join(" ") : text)) this.invalidate();
+    return this.read(text);
+  }
   async held(text) { return (await this.run(text)).length > 0; }
-  async read(text) { await this.open(); return this.sql(text); }
+  async read(text) { await this.open(); return this.enqueue(text); }
+
+  async cached(text) {
+    const state = this.connection;
+    if (Date.now() - state.cachedAt >= CACHE_MS) this.invalidate();
+    if (!state.cache.has(text)) {
+      const result = this.read(text).catch((error) => { if (state.cache.get(text) === result) state.cache.delete(text); throw error; });
+      state.cache.set(text, result);
+    }
+    return (await state.cache.get(text)).map((row) => ({ ...row }));
+  }
 
   // The migrated marker is checked inside the write lock by every statement, so two windows never both take the old data in.
   migrate({ sleeps = [], prefs = [] } = {}) {
@@ -396,7 +449,7 @@ export class Kdb {
   }
   setProjectAgent(id, agent) { return this.run(`UPDATE projects SET agent=${q(agent)} WHERE id=${q(id)};`); }
 
-  prefs() { return this.read("SELECT key, value FROM prefs;"); }
+  prefs() { return this.cached("SELECT key, value FROM prefs;"); }
   setPref(key, value) { return this.run(`INSERT INTO prefs(key,value) VALUES(${q(key)},${q(value)}) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`); }
 
   // Images keeps what a transcript already said, so the next read starts at `size`. `mark` is the cksum of those bytes.
@@ -417,7 +470,7 @@ export class Kdb {
 
   // One row per project and panel. No row reads as undefined; a closed panel is `{ id: null }`.
   async panelState(project, panel) {
-    const rows = await this.read(`SELECT state_json FROM panel_state WHERE project=${q(project)} AND panel=${q(panel)};`);
+    const rows = await this.cached(`SELECT state_json FROM panel_state WHERE project=${q(project)} AND panel=${q(panel)};`);
     if (!rows.length) return undefined;
     const parsed = parseOr(rows[0].state_json, null);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
