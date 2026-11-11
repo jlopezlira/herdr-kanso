@@ -15,7 +15,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
 import { MarkdownDoc, tildePath } from "./doc.js";
 import { afterMount } from "./pure.js";
-import { pollStart, pollNext, takeStamp, armPoll, asOf } from "./remote-file.js";
+import { pollStart, pollNext, takeStamp, ArmPoll, asOf } from "./remote-file.js";
 
 const ICONS = "mods/markdown-panel/icons";
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
@@ -161,7 +161,7 @@ export default class MarkdownPanel extends View {
       return;
     }
     this.poll = pollStart(); this.stamp = null; this.arm = null;
-    armPoll.call(this, cx, (tick) => this.probeDoc(doc, path, tick));
+    new ArmPoll(this).start(cx, (tick) => this.probeDoc(doc, path, tick));
   }
 
   probeDoc(doc, path, cx) {
@@ -174,7 +174,7 @@ export default class MarkdownPanel extends View {
       if (outcome === "failed" && this.doc?.saved != null) this.doc.held = { at: this.doc.fresh ?? Date.now() };
       this.poll = pollNext(this.poll, outcome);
       this.arm = null;
-      if (this.doc === doc) armPoll.call(this, cx, (tick) => this.probeDoc(doc, path, tick));
+      if (this.doc === doc) new ArmPoll(this).start(cx, (tick) => this.probeDoc(doc, path, tick));
       cx.notify();
     });
   }

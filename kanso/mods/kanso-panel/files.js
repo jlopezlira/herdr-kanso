@@ -11,7 +11,7 @@ import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared,
 import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
 import { walkLayout } from "./layout.js";
-import { listFailure, remoteDue, parseTree, pollStart, pollNext, armPoll, takeStamp, staleView, asOf } from "./remote-file.js";
+import { listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeStamp, staleView, asOf } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { readingLines } from "./doc.js";
@@ -118,7 +118,7 @@ export class Files {
         this.poll = pollNext(this.poll, "failed");
       } finally {
         this.loading = false;
-        if (this.on && key() === context) armPoll.call(this, cx, (tick) => this.probe(tick));
+        if (this.on && key() === context) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
         cx.notify();
       }
     });
@@ -175,7 +175,7 @@ export class Files {
           else if (!this.error) this.error = view.error;
         }
         this.poll = pollNext(this.poll, outcome);
-        armPoll.call(this, cx, (tick) => this.probe(tick));
+        new ArmPoll(this).start(cx, (tick) => this.probe(tick));
         cx.notify();
       }
     });
@@ -280,7 +280,7 @@ export class Files {
 
   render(cx) {
     if (key() !== this.context) this.refresh(cx);
-    if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) armPoll.call(this, cx, (tick) => this.probe(tick));
+    if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     const t = theme();
     const items = this.file ? [] : this.rows();
     return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)

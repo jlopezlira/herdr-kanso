@@ -3,7 +3,7 @@ import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
 import { systemApi } from "./platform-system.js";
-import { bring, machineOf, copyFailure, drawablePath, remoteDue, armPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
+import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 // Images (the panel is "look" inside): pictures an agent made, beside it, and notes pinned to the spots
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
@@ -112,8 +112,8 @@ export class Look {
     const on = machineOf(this.agent());
     if (!on || this.arm || !remoteDue(on, window()?.active, this.paneHidden())) return;
     const file = this.transcript?.address === this.agent() ? this.transcript.file : null;
-    if (!file) { this.poll = pollNext(this.poll, "same"); armPoll.call(this, cx, (tick) => this.read(tick)); return; }
-    armPoll.call(this, cx, (tick) => this.probe(tick));
+    if (!file) { this.poll = pollNext(this.poll, "same"); new ArmPoll(this).start(cx, (tick) => this.read(tick)); return; }
+    new ArmPoll(this).start(cx, (tick) => this.probe(tick));
   }
 
   probe(cx) {

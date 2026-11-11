@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
@@ -116,6 +116,11 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       if (options?.on && cmd === "uname") return { code: 0, stdout: "Darwin\n" };
       if (options?.on && cmd === "stat") return { code: 0, stdout: world.statText };
       if (options?.on && cmd === "base64") return { code: 0, stdout: "AQIDBA==\n" };
+      if (cmd === "base64" && args[0] === "-D") {
+        const text = await readFile(args[2], "utf8");
+        await writeFile(args[4], Buffer.from(String(text).replace(/\s/g, ""), "base64"));
+        return { code: 0, stdout: "", stderr: "" };
+      }
       if (options?.on && cmd === "sh" && String(args[1]).includes("printf %s")) return { code: 0, stdout: "/home/light\n" };
       if (cmd === "sqlite3") return run(cmd, args, options);
       if (cmd === "mkdir") return fileApi(nativePlatform, run).mkdir(args.at(-1), options);

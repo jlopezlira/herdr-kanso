@@ -12,6 +12,19 @@ export const clone = (value) => JSON.parse(JSON.stringify(value));
 export const nativePlatform = ({ darwin: "macos", win32: "windows" })[process.platform] ?? "linux";
 export const nativeWindow = () => ({ platform: nativePlatform });
 const mods = new URL("../kanso/mods/", import.meta.url);
+const ban = (name) => {
+  const fail = () => { throw new Error(`${name} is not available to a mod`); };
+  return new Proxy(function banned() { fail(); }, { get: fail, apply: fail, construct: fail });
+};
+
+// The mod runtime has none of these. Using one throws, even when a fixture passed the real one in.
+export function modSandbox(host = {}) {
+  const sandbox = vm.createContext({ ...host });
+  sandbox.TextDecoder = ban("TextDecoder");
+  sandbox.atob = ban("atob");
+  sandbox.Buffer = ban("Buffer");
+  return sandbox;
+}
 
 // Load the actual mod logic (its own-folder imports included) with the
 // desktop host supplied by each fixture.
@@ -29,7 +42,7 @@ export async function load(file, names, host = {}, root = mods) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, TextDecoder, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host });
+  return vm.runInContext(`${source}\n;({ ${names.join(", ")} });`, modSandbox({ View: class {}, join, basename, shared() {}, setShared() {}, writeTextFile: (path, text) => writeFile(path, text, { flag: "wx" }), exec: async () => { throw new Error("Unexpected command in fixture"); }, window: host.exec === exec ? nativeWindow : () => ({ platform: "macos" }), ...host }));
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.

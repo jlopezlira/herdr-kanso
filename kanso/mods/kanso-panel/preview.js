@@ -12,7 +12,7 @@ import { skeleton, quietLink, tokens } from "./ui.js";
 import { tryOrAsync, extOf } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 import { walkLayout } from "./layout.js";
-import { bring, appRelative, svgPixels, copyFailure, remoteDue, fileId, armPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
+import { bring, appRelative, svgPixels, copyFailure, remoteDue, fileId, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 
 const folderOf = (path) => path.replace(/[\\/][^\\/]*$/, "") || "/";
 const nameOf = (path) => path.split(/[\\/]/).at(-1);
@@ -66,7 +66,7 @@ export class Preview {
     else if (previewKind(path) === "picture") this.picture = { busy: true };
     this.load(cx);
     this.watch(cx);
-    if (this.on) armPoll.call(this, cx, (tick) => this.probe(tick));
+    if (this.on) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     cx.notify();
   }
 
@@ -149,7 +149,7 @@ export class Preview {
         else if (!this.error) this.error = view.error;
       }
       this.poll = pollNext(this.poll, outcome);
-      armPoll.call(this, cx, (tick) => this.probe(tick));
+      new ArmPoll(this).start(cx, (tick) => this.probe(tick));
       cx.notify();
     });
   }
@@ -190,7 +190,7 @@ export class Preview {
   }
 
   render(cx) {
-    if (this.on && this.path && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) armPoll.call(this, cx, (tick) => this.probe(tick));
+    if (this.on && this.path && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     const t = theme();
     const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
       .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { action(cx); })

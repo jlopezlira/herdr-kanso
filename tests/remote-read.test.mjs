@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import vm from "node:vm";
 import { mkdtemp, readdir, readFile, rm, stat, unlink, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
-import { load, context, clone } from "./helpers.mjs";
+import { load, context, clone, modSandbox } from "./helpers.mjs";
 
-const NAMES = ["bring", "copiedBytes", "copyName", "fileId", "dropCopies", "tooBig", "BYTE_CAP", "ASK_BYTES", "CHECK_MS", "SLOW_MS", "CHUNK", "slices", "cutShort", "decodeBase64", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts", "pollStart", "pollNext", "checkOutcome", "asOf", "staleView", "askPicture", "bytesLabel", "parseTree"];
+const NAMES = ["bring", "copyName", "fileId", "dropCopies", "tooBig", "BYTE_CAP", "ASK_BYTES", "CHECK_MS", "SLOW_MS", "CHUNK", "slices", "cutShort", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts", "pollStart", "pollNext", "checkOutcome", "asOf", "staleView", "askPicture", "bytesLabel", "parseTree"];
 const pure = await load("kanso-panel/remote-file.js", NAMES, { appHome: () => "/app", window: () => ({ platform: "macos" }) });
 
 test("a remote copy is named by machine, path and mtime, and old copies go", () => {
@@ -23,7 +24,7 @@ test("a remote copy is named by machine, path and mtime, and old copies go", () 
   ], { id, keep: `${id}-2-4.png`, now, maxAge: 86_400_000 }), [`${id}-1-4.png`, "stale.png"]);
 });
 
-test("a copy stops at 20 MB, rejects a cut-short read, and decodes base64", async () => {
+test("a copy stops at 20 MB and rejects a cut-short read", () => {
   assert.equal(pure.tooBig(pure.BYTE_CAP), false);
   assert.equal(pure.tooBig(pure.BYTE_CAP + 1), true);
   assert.equal(pure.tooBig(Number.NaN), true);
@@ -33,21 +34,15 @@ test("a copy stops at 20 MB, rejects a cut-short read, and decodes base64", asyn
   assert.equal(pure.cutShort({ truncated: true }), true);
   assert.equal(pure.cutShort({ stdout: "truncated by the host" }), true);
   assert.equal(pure.cutShort({ stdout: "AQIDBA==" }), false);
-  assert.deepEqual([...pure.decodeBase64("AQID\nBA==")], [1, 2, 3, 4]);
-  assert.throws(() => pure.decodeBase64("!!!!"), /cut short/);
-  const ranges = [];
-  const small = await pure.copiedBytes(async (range) => { ranges.push(range ?? "whole"); return { code: 0, stdout: "AQIDBA==" }; }, 4);
-  assert.deepEqual(ranges, ["whole"]);
-  assert.deepEqual([...small], [1, 2, 3, 4]);
-  const parts = [];
-  const bytes = await pure.copiedBytes(async (range) => {
-    parts.push(range);
-    return { code: 0, stdout: Buffer.from([9, 8]).toString("base64") };
-  }, 4, 2);
-  assert.deepEqual(clone(parts), [{ offset: 0, length: 2 }, { offset: 2, length: 2 }]);
-  assert.deepEqual([...bytes], [9, 8, 9, 8]);
-  await assert.rejects(pure.copiedBytes(async () => ({ code: 0, stdout: "output truncated" }), 4), /cut short/);
-  await assert.rejects(pure.copiedBytes(async () => ({ code: 0, stdout: "AQ==" }), 4), /cut short/);
+});
+
+test("the mod host fails on TextDecoder, atob, and Buffer", async () => {
+  const sandbox = modSandbox({ Buffer: { from() { return "leaked"; } }, atob: () => "leaked", TextDecoder: class { decode() { return "leaked"; } } });
+  assert.throws(() => vm.runInContext("new TextDecoder().decode('')", sandbox), /TextDecoder is not available/);
+  assert.throws(() => vm.runInContext("atob('YQ==')", sandbox), /atob is not available/);
+  assert.throws(() => vm.runInContext("Buffer.from('a')", sandbox), /Buffer is not available/);
+  const source = await readFile(new URL("../kanso/mods/kanso-panel/remote-file.js", import.meta.url), "utf8");
+  assert.equal(/TextDecoder|\batob\b|decodeBase64\(/.test(source), false);
 });
 
 test("a failure says whether the computer is quiet or the folder cannot be read", () => {
@@ -103,13 +98,13 @@ test("a quiet check backs off, and a failed check keeps the last view", () => {
   assert.equal(pure.askPicture(pure.ASK_BYTES), false);
   assert.equal(pure.askPicture(pure.ASK_BYTES + 1), true);
   assert.equal(pure.bytesLabel(3 * 1024 * 1024), "3 MB");
-  const row = " M src/a.js";
-  const tree = ["\x055 1700000000", "\x01", "./a.txt", "./dir", "./dir", "\x02", "\x03/repo", Buffer.from(`${row}\0`).toString("base64"), "\x04"].join("\0") + "\0";
+  const rows = [" M src/a.js", "?? b.txt"];
+  const tree = ["\x055 1700000000", "\x01", "./a.txt", "./dir", "./dir", "\x02", "\x03/repo", `${rows.join("\n")}\n`, "\x04"].join("\0") + "\0";
   const snap = pure.parseTree(tree);
   assert.deepEqual(clone(snap.stamp), { size: 5, mtime: 1700000000 });
   assert.deepEqual(clone(snap.folders), [{ rel: "", entries: [{ name: "a.txt", dir: false }, { name: "dir", dir: true }] }]);
   assert.equal(snap.top, "/repo");
-  assert.deepEqual(clone(snap.rows), [row]);
+  assert.deepEqual(clone(snap.rows), rows);
   const win = pure.parseTree(["\x051 2", "\x01sub", "f\tnote.txt", "d\tfolder", "\x02", "\x03", "\x04"].join("\0") + "\0");
   assert.equal(win.top, null);
   assert.deepEqual(clone(win.folders), [{ rel: "sub", entries: [{ name: "note.txt", dir: false }, { name: "folder", dir: true }] }]);
@@ -128,13 +123,16 @@ for (const platform of ["macos", "linux", "windows"]) {
     if (platform === "windows") {
       assert.equal(calls[0][0], "pwsh");
       assert.match(script, /Get-ChildItem/);
-      assert.match(script, /ToBase64String/);
+      assert.match(script, /ReadToEnd\(\)\.Replace/);
+      assert.equal(script.includes("ToBase64String"), false);
       assert.equal(script.includes("sh "), false);
     } else {
       assert.equal(calls[0][0], "sh");
       assert.match(script, platform === "macos" ? /stat -f '%z %m'/ : /stat -c '%s %Y'/);
       assert.match(script, /find -H/);
       assert.match(script, /status --porcelain=v1 -z/);
+      assert.match(script, /tr '\\000' '\\n'/);
+      assert.equal(script.includes("base64"), false);
       assert.deepEqual(calls[0][1].slice(3), ["/repo", "", "src"]);
     }
   });
@@ -146,7 +144,8 @@ for (const platform of ["macos", "linux", "windows"]) {
       const script = String(args?.at?.(-1) ?? "");
       if (cmd === "stat") return { code: 0, stdout: "4 1700000000\n", stderr: "" };
       if (cmd === "base64" || cmd === "python3") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
-      if (cmd === "pwsh") return { code: 0, stdout: script.includes("ToBase64String") ? "AQIDBA==\n" : "4 1700000000\n", stderr: "" };
+      if (cmd === "sh" && String(args?.[1] ?? "").includes("base64 -d")) return { code: 0, stdout: "", stderr: "" };
+      if (cmd === "pwsh") return { code: 0, stdout: script.includes("ToBase64String") || script.includes("WriteAllBytes") ? "AQIDBA==\n" : "4 1700000000\n", stderr: "" };
       return { code: 1, stdout: "", stderr: cmd };
     };
     const api = fileApi(platform, run);
@@ -166,16 +165,40 @@ for (const platform of ["macos", "linux", "windows"]) {
       assert.ok(scripts.some((script) => script.includes("OpenRead") && script.includes("Seek") && !script.includes("sh ")));
       assert.equal(calls.some((c) => c[0] === "sh" || c[0] === "base64"), false);
     }
+    await api.decodeBase64File("/tmp/in.b64", "/tmp/out.bin");
+    if (platform === "macos") assert.deepEqual(calls.filter((c) => c[0] === "base64" && c[1][0] === "-D").map((c) => c[1]), [["-D", "-i", "/tmp/in.b64", "-o", "/tmp/out.bin"]]);
+    if (platform === "linux") {
+      const decode = calls.find((c) => c[0] === "sh" && String(c[1][1]).includes("base64 -d"));
+      assert.deepEqual(decode[1], ["-c", "base64 -d \"$1\" > \"$2\"", "b64", "/tmp/in.b64", "/tmp/out.bin"]);
+    }
+    if (platform === "windows") {
+      const scripts = calls.filter((c) => c[0] === "pwsh").map((c) => String(c[1].at(-1)));
+      assert.ok(scripts.some((script) => script.includes("[IO.File]::WriteAllBytes(") && script.includes("[Convert]::FromBase64String(") && script.includes("ReadAllText(")));
+      assert.equal(calls.some((c) => c[0] === "sh" || c[0] === "base64"), false);
+    }
   });
 }
 
 async function remoteBring(platform) {
   const dir = await mkdtemp(join(tmpdir(), "kanso-remote-"));
   const calls = [];
+  const writes = [];
   const state = { stat: "4 1700000000\n", stdout: "AQIDBA==\n", fail: null };
-  const exec = async (cmd, args = []) => {
-    calls.push([cmd, args]);
-    if (state.fail) throw state.fail;
+  const note = async (path, data, ...rest) => { writes.push(typeof data); return writeFile(path, data, ...rest); };
+  const exec = async (cmd, args = [], options = {}) => {
+    calls.push([cmd, args, options.on ?? null]);
+    if (cmd === "base64" && args[0] === "-D") {
+      const text = await readFile(args[2], "utf8");
+      await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));
+      return { code: 0, stdout: "", stderr: "" };
+    }
+    if (cmd === "sh" && String(args[1] ?? "").includes(">>")) {
+      const extra = await readFile(args[3]);
+      const prior = await readFile(args[4]).catch(() => Buffer.alloc(0));
+      await writeFile(args[4], Buffer.concat([prior, extra]));
+      return { code: 0, stdout: "", stderr: "" };
+    }
+    if (state.fail && options.on) throw state.fail;
     const script = String(args.at(-1) ?? "");
     if (cmd === "pwsh" || cmd === "powershell") {
       if (platform !== "windows") return { code: 127, stdout: "", stderr: "" };
@@ -186,13 +209,14 @@ async function remoteBring(platform) {
     }
     if (cmd === "uname") return { code: 0, stdout: platform === "macos" ? "Darwin\n" : "Linux\n", stderr: "" };
     if (cmd === "stat") return { code: 0, stdout: state.stat, stderr: "" };
+    if (cmd === "python3") return { code: 0, stdout: state.stdout, stderr: "" };
     if (cmd === "base64") return { code: 0, stdout: state.stdout, stderr: "" };
     return { code: 1, stdout: "", stderr: cmd };
   };
   const loaded = await load("kanso-panel/remote-file.js", ["bring"], {
-    appHome: () => dir, window: () => ({ platform: "macos" }), exec, writeFile, mkdir, readdir, unlink, stat,
+    appHome: () => dir, window: () => ({ platform: "macos" }), exec, writeFile: note, mkdir, readdir, unlink, stat,
   });
-  return { ...loaded, dir, calls, state, done: () => rm(dir, { recursive: true, force: true }) };
+  return { ...loaded, dir, calls, writes, state, done: () => rm(dir, { recursive: true, force: true }) };
 }
 
 test("a file here is not copied, and one elsewhere is kept until its mtime changes", async () => {
@@ -200,8 +224,11 @@ test("a file here is not copied, and one elsewhere is kept until its mtime chang
   try {
     assert.deepEqual(clone(await box.bring("/here/a.png", null)), { path: "/here/a.png" });
     const first = await box.bring("/remote/a.png", "light");
-    const encodes = () => box.calls.filter((call) => call[0] === "base64").length;
+    const encodes = () => box.calls.filter((call) => call[0] === "base64" && call[2] === "light").length;
     assert.equal(encodes(), 1);
+    assert.equal(box.writes.every((kind) => kind === "string"), true);
+    assert.ok(box.calls.some((call) => call[0] === "base64" && call[1][0] === "-D" && call[2] == null));
+    assert.deepEqual([...(await readFile(first.path))], [1, 2, 3, 4]);
     assert.equal((await box.bring("/remote/a.png", "light")).path, first.path);
     assert.equal(encodes(), 1);
     box.state.stat = "4 1700000001\n";
@@ -228,8 +255,11 @@ test("a picture over 2 MB is not copied until it is asked for", async () => {
     box.state.stat = `${big} 9\n`;
     assert.deepEqual(clone(await box.bring("/remote/big.png", "light")), { deferred: true, size: big, mtime: 9 });
     assert.equal(box.calls.some((call) => call[0] === "base64" || call[0] === "python3"), false);
-    await assert.rejects(box.bring("/remote/big.png", "light", { ask: true }));
-    assert.equal(box.calls.some((call) => call[0] === "base64" || call[0] === "python3"), true);
+    await assert.rejects(box.bring("/remote/big.png", "light", { ask: true }), /cut short/);
+    assert.equal(box.calls.some((call) => call[0] === "python3"), true);
+    assert.ok(box.calls.some((call) => call[0] === "sh" && String(call[1][1]).includes(">>")));
+    assert.ok(box.calls.some((call) => call[0] === "base64" && call[1][0] === "-D"));
+    assert.equal((await readdir(join(box.dir, "data/kanso-panel/remote"))).some((name) => name.includes(".b64")), false);
     box.state.stat = `${pure.ASK_BYTES} 8\n`;
     const before = box.calls.filter((call) => call[0] === "base64").length;
     await assert.rejects(box.bring("/remote/exact.png", "light"), /cut short/);
@@ -252,10 +282,11 @@ test("linux and windows copies use that computer's encoder and never a shell on 
   const windows = await remoteBring("windows");
   try {
     await linux.bring("/remote/a.png", "light");
-    assert.ok(linux.calls.some((call) => call[0] === "base64" && call[1][0] === "/remote/a.png"));
-    assert.equal(linux.calls.some((call) => call[0] === "sh"), false);
+    assert.ok(linux.calls.some((call) => call[0] === "base64" && call[1][0] === "/remote/a.png" && call[2] === "light"));
+    assert.equal(linux.calls.filter((call) => call[2] === "light").some((call) => call[0] === "sh"), false);
     const got = await windows.bring("C:\\pics\\a.png", "light");
-    assert.ok(windows.calls.every((call) => call[0] === "pwsh" || call[0] === "powershell"));
+    assert.ok(windows.calls.filter((call) => call[2] === "light").every((call) => call[0] === "pwsh" || call[0] === "powershell"));
+    assert.ok(windows.calls.some((call) => call[2] == null && call[0] === "base64" && call[1][0] === "-D"));
     assert.ok(windows.calls.some((call) => String(call[1].at(-1)).includes("ReadAllBytes")));
     assert.equal((await readFile(got.path)).length, 4);
   } finally { await linux.done(); await windows.done(); }
@@ -477,7 +508,12 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
       div: view, svg: view, image: (src) => { seen.push(src); return view(); }, h_flex: view, v_flex: view,
       TextView: { markdown: () => view() }, Textarea: { new: view }, Editor: { new: view },
       EditorState: { new: () => ({}) }, TextareaState: { new: () => ({ set_auto_grow() {}, on() {}, focus() {}, release() {} }) },
-      exec: async (cmd) => {
+      exec: async (cmd, args = []) => {
+        if (cmd === "base64" && args[0] === "-D") {
+          const text = await readFile(args[2], "utf8");
+          await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));
+          return { code: 0, stdout: "", stderr: "" };
+        }
         if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
         if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
         if (cmd === "stat") return { code: 0, stdout: "4 3\n", stderr: "" };

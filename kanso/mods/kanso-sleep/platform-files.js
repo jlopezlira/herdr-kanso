@@ -22,7 +22,7 @@ const unixTree = (platform) => {
     "done",
     "top=$(git -C \"$root\" rev-parse --show-toplevel 2>/dev/null) || top=",
     "printf '\\003%s\\000' \"$top\"",
-    "if [ -n \"$top\" ]; then git -C \"$root\" status --porcelain=v1 -z --no-renames --untracked-files=normal 2>/dev/null | base64 | tr -d '\\n'; printf '\\000'; fi",
+    "if [ -n \"$top\" ]; then git -C \"$root\" status --porcelain=v1 -z --no-renames --untracked-files=normal 2>/dev/null | tr '\\000' '\\n'; printf '\\000'; fi",
     "printf '\\004\\000'",
   ].join("\n");
 };
@@ -50,13 +50,13 @@ if ($top) {
   $psi.FileName = 'git'
   $psi.Arguments = '-C ' + ${windowsArg(root)} + ' status --porcelain=v1 -z --no-renames --untracked-files=normal'
   $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
+  $psi.RedirectStandardError = $false
   $psi.UseShellExecute = $false
+  $psi.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
   $proc = [System.Diagnostics.Process]::Start($psi)
-  $ms = New-Object System.IO.MemoryStream
-  $proc.StandardOutput.BaseStream.CopyTo($ms)
+  $text = $proc.StandardOutput.ReadToEnd().Replace([char]0, [char]10)
   $proc.WaitForExit()
-  [Console]::Out.Write([Convert]::ToBase64String($ms.ToArray()))
+  [Console]::Out.Write($text)
 }
 [Console]::Out.Write([string][char]0 + [char]4 + [char]0)
 `;
@@ -149,6 +149,22 @@ test -d "$1"`;
     if (!whole) return run("python3", ["-c", "import sys,base64; f=open(sys.argv[1],'rb'); f.seek(int(sys.argv[2])); sys.stdout.write(base64.b64encode(f.read(int(sys.argv[3]))).decode())", path, String(range.offset), String(range.length)], options);
     return platform === "macos" ? run("base64", ["-i", path], options) : run("base64", [path], options);
   };
+  const decodeBase64File = async (from, to, options = {}) => {
+    const { append: extra, ...rest } = options;
+    if (extra) {
+      const appended = platform === "windows"
+        ? await ps(`[IO.File]::AppendAllText(${psQuote(from)}, [IO.File]::ReadAllText(${psQuote(extra)}))`, rest)
+        : await run("sh", ["-c", "cat \"$1\" >> \"$2\"", "cat", extra, from], rest);
+      checked(appended);
+    }
+    if (to == null) return;
+    const decoded = platform === "windows"
+      ? await ps(`[IO.File]::WriteAllBytes(${psQuote(to)}, [Convert]::FromBase64String(([IO.File]::ReadAllText(${psQuote(from)}) -replace '\\s','')))`, rest)
+      : platform === "macos"
+        ? await run("base64", ["-D", "-i", from, "-o", to], rest)
+        : await run("sh", ["-c", "base64 -d \"$1\" > \"$2\"", "b64", from, to], rest);
+    checked(decoded);
+  };
   const touch = async (paths) => {
     if (platform === "windows") return ps(`foreach ($file in @(${paths.map(psQuote).join(",")})) { [IO.File]::WriteAllText($file,'') }`);
     if (!paths.length) return { code: 0, stdout: "" };
@@ -164,5 +180,5 @@ test -d "$1"`;
   const migrate = (from, to) => platform === "windows"
     ? ps(`$from=${psQuote(from)}; $to=${psQuote(to)}; if (-not (Test-Path -LiteralPath (Join-Path $to 'store.json')) -and (Test-Path -LiteralPath $from -PathType Container)) { [IO.Directory]::CreateDirectory($to) | Out-Null; Get-ChildItem -LiteralPath $from -Force | Copy-Item -Destination $to -Recurse -Force; Get-ChildItem -LiteralPath $to -Filter '*.lock' -Force | Remove-Item -Force -Recurse }`)
     : run("sh", ["-c", 'if [ ! -e "$2/store.json" ] && [ -d "$1" ]; then mkdir -p "$2" && cp -R "$1/." "$2/" && rm -rf "$2"/*.lock; fi', "sh", from, to]);
-  return { recent, migrate, mkdir, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch, stat, encode, tree };
+  return { recent, migrate, mkdir, remove, copy, move, test, directory, existing, legacyStatus, drain, read, walk, size, touch, stat, encode, tree, decodeBase64File };
 }

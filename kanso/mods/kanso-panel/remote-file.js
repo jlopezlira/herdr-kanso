@@ -19,7 +19,6 @@ const QUIET = /unreachable|did not answer|timed out|timeout|econnrefused|connect
 const DENIED = /permission denied|access is denied|eacces/i;
 const MISSING = /no such file|cannot find (the )?path|not found|enoent/i;
 const IMAGE = /!\[([^\]]*)\]\(([^)\s]+)\)|<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
-const B64 = Object.fromEntries([..."ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"].map((c, i) => [c, i]));
 
 export const fileId = (machine, path) => [...`${machine}\0${path}`].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261).toString(36);
 
@@ -36,21 +35,6 @@ export const cutShort = (result) => Boolean(result?.truncated) || /truncat/i.tes
 export const dropCopies = (entries, { id, keep, now, maxAge = DAY }) => entries
   .filter((entry) => entry.name !== keep && (entry.name.startsWith(`${id}-`) || now - entry.mtime > maxAge))
   .map((entry) => entry.name);
-
-export function decodeBase64(text) {
-  const clean = String(text).replace(/\s/g, "");
-  if (!clean || clean.length % 4 === 1 || /[^A-Za-z0-9+/=]/.test(clean)) throw new Error("The copy was cut short");
-  const bytes = Array.from({ length: clean.length / 4 }, (_, i) => {
-    const quad = [0, 1, 2, 3].map((k) => clean[i * 4 + k]);
-    const raw = quad.map((ch) => (ch === "=" ? 0 : B64[ch]));
-    if (raw.some((n) => n == null) || quad[0] === "=" || quad[1] === "=") throw new Error("The copy was cut short");
-    const v = (raw[0] << 18) | (raw[1] << 12) | (raw[2] << 6) | raw[3];
-    return [(v >> 16) & 255, ...(quad[2] === "=" ? [] : [(v >> 8) & 255]), ...(quad[3] === "=" ? [] : [v & 255])];
-  }).flat();
-  return Uint8Array.from(bytes);
-}
-
-export const concat = (parts) => Uint8Array.from(parts.flatMap((part) => [...part]));
 
 export const said = (error) => String(error?.message ?? error ?? "").replace(/^Error:\s*/, "").trim();
 
@@ -106,12 +90,16 @@ export const bytesLabel = (size) => {
   return `${text} MB`;
 };
 
-export function armPoll(cx, probe) {
-  if (this.arm) return;
-  this.arm = cx.timer.after((this.poll ?? pollStart()).wait, (cx) => {
-    this.arm = null;
-    probe(cx);
-  });
+export class ArmPoll {
+  constructor(host) { this.host = host; }
+  start(cx, probe) {
+    if (this.host.arm) return;
+    const wait = (this.host.poll ?? pollStart()).wait;
+    this.host.arm = cx.timer.after(wait, (tick) => {
+      this.host.arm = null;
+      probe(tick);
+    });
+  }
 }
 
 export async function takeStamp(stat, previous) {
@@ -137,10 +125,10 @@ const foldTree = (state, chunk) => {
   }
   if (chunk.startsWith("\x01")) return { ...state, rel: chunk.slice(1), names: [], mode: "list" };
   if (chunk === "\x02") return { ...state, folders: [...state.folders, { rel: state.rel ?? "", entries: entriesOf(state.names) }], names: [], mode: null };
-  if (chunk.startsWith("\x03")) return { ...state, mode: "git", git: chunk.length > 1 ? { top: chunk.slice(1), b64: "" } : null };
+  if (chunk.startsWith("\x03")) return { ...state, mode: "git", git: chunk.length > 1 ? { top: chunk.slice(1), text: "" } : null };
   if (chunk === "\x04") return { ...state, mode: null };
   if (state.mode === "list") return { ...state, names: [...state.names, chunk] };
-  if (state.mode === "git" && state.git && chunk) return { ...state, git: { ...state.git, b64: chunk } };
+  if (state.mode === "git" && state.git && chunk) return { ...state, git: { ...state.git, text: state.git.text + chunk } };
   return state;
 };
 
@@ -148,7 +136,8 @@ export function parseTree(stdout) {
   const text = String(stdout ?? "");
   const chunks = text.endsWith("\0") ? text.slice(0, -1).split("\0") : text.split("\0");
   const state = chunks.reduce(foldTree, { folders: [], names: [], rel: null, mode: null, stamp: null, git: null });
-  const rows = state.git?.b64 ? new TextDecoder().decode(decodeBase64(state.git.b64)).split("\0").filter(Boolean) : [];
+  // Porcelain is already text: the shell turned its NULs into newlines.
+  const rows = state.git ? state.git.text.split(/\r?\n/).filter(Boolean) : [];
   return { folders: state.folders, stamp: state.stamp, top: state.git?.top ?? null, rows };
 }
 
@@ -193,21 +182,36 @@ export const markdownParts = (text) => {
   return [...parts.map(({ end: _end, ...part }) => part), ...(rest ? [{ kind: "text", text: rest }] : [])];
 };
 
-export async function copiedBytes(encode, size, chunk = CHUNK) {
-  const parts = slices(size, chunk);
-  if (!parts) throw new Error("The copy was cut short");
-  const chunks = await parts.reduce(async (acc, slice) => {
-    const prior = await acc;
-    const encoded = await encode(parts.length === 1 ? undefined : slice);
-    if (!encoded || cutShort(encoded) || encoded.code !== 0) throw new Error(encoded?.stderr || "The copy was cut short");
-    return [...prior, decodeBase64(encoded.stdout)];
-  }, Promise.resolve([]));
-  const bytes = concat(chunks);
-  if (bytes.length !== size) throw new Error("The copy was cut short");
-  return bytes;
-}
-
 const aged = async (root) => Promise.all((await readdir(root).catch(() => [])).map(async (name) => ({ name, mtime: await stat(paths.join(root, name)).then((s) => s.mtimeMs).catch(() => 0) })));
+
+// QuickJS has no JIT: the base64 stays text and this computer's own tool writes the bytes.
+const place = async (files, file, info, dest) => {
+  const here = await serviceOn(fileApi, null);
+  const parts = slices(info.size);
+  if (!parts) throw new Error("The copy was cut short");
+  const temp = `${dest}.b64`;
+  try {
+    if (!parts.length) { await writeFile(dest, ""); return; }
+    await parts.reduce(async (acc, slice, index) => {
+      await acc;
+      const encoded = await files.encode(file, parts.length === 1 ? undefined : slice);
+      if (!encoded || cutShort(encoded) || encoded.code !== 0) throw new Error(encoded?.stderr || "The copy was cut short");
+      const text = String(encoded.stdout ?? "");
+      if (index === 0) await writeFile(temp, text);
+      else {
+        const part = `${temp}.${index}`;
+        await writeFile(part, text);
+        await here.decodeBase64File(temp, null, { append: part });
+        await unlink(part);
+      }
+    }, Promise.resolve());
+    await here.decodeBase64File(temp, dest);
+    const wrote = await stat(dest).then((row) => row.size).catch(() => -1);
+    if (wrote !== info.size) { await unlink(dest).catch(() => {}); throw new Error("The copy was cut short"); }
+  } finally {
+    await unlink(temp).catch(() => {});
+  }
+};
 
 export async function bring(file, on, { ask = false } = {}) {
   if (!on) return { path: file };
@@ -221,7 +225,7 @@ export async function bring(file, on, { ask = false } = {}) {
     await mkdir(root, { recursive: true });
     const have = await stat(dest).then((s) => s.size === info.size).catch(() => false);
     if (!have && !ask && askPicture(info.size)) return { deferred: true, size: info.size, mtime: info.mtime };
-    if (!have) await writeFile(dest, await copiedBytes((range) => files.encode(file, range), info.size));
+    if (!have) await place(files, file, info, dest);
     await Promise.all(dropCopies(await aged(root), { id: fileId(on, file), keep: name, now: Date.now() }).map((old) => unlink(paths.join(root, old)).catch(() => {})));
     return { path: dest, size: info.size, mtime: info.mtime };
   } catch (e) {
