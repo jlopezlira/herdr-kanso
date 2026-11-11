@@ -224,12 +224,14 @@ test("The status bar reads the sidebar queue rather than counting a different se
   const ui = tape();
   const rows = waitingQueue([agent("a"), agent("b", "done")], []);
   const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], { ...ui.host,
-    theme: () => ({}), spaces: () => [], agents: () => [], props: () => ({ side: "right" }),
+    theme: () => ({}), spaces: () => [], agents: () => [], terminals: () => [], props: () => ({ side: "right" }),
     window: () => ({ platform: "windows" }), shared: (key) => key === NEEDS_YOU ? { rows } : [],
     stateMark: () => null,
   });
   new WorkspaceStatus().render();
-  assert.ok(ui.texts.includes("2 agents need you"));
+  assert.ok(ui.texts.includes("a"));
+  assert.equal(ui.texts.includes("b"), false);
+  assert.equal(ui.texts.includes("2 agents need you"), false);
 });
 
 test("The kit renders every queue state with single-use elements", async () => {

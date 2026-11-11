@@ -15,7 +15,7 @@ release.
 
 ### Changed
 
-- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
+- The status bar names the agent that is waiting and what it asks. When more wait, it shows how many more. A click goes to that agent. An unreachable computer says so, and a click retries it. When memory is low it says how much is free, and a click opens Memory.
 - Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
 - Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
 - A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.
@@ -29,14 +29,18 @@ release.
 - Images on this computer skips a conversation whose size has not changed, and does not read while the window is behind or the panel is hidden. Files, with a folder watch, asks git once a minute instead of every 10 seconds. Ports and Containers do nothing while the window is behind, and read as soon as it is in front. Containers no longer asks for usage and compose files in the same moment.
 - The footer measures its height from one timer. Battery and the memory warning are read every 2 minutes.
 - Conversations that have left and were never moved to a project are forgotten, and a project gone for 7 days is forgotten. Picture copies on this computer are kept for a day, the same as copies from another computer.
+- Sleeping or waking a tab on another computer asks that computer less often, so a slow connection waits less. What it promises is the same: one owner, no second copy of an agent, and nothing saved when that computer does not answer.
+- A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
 
 ### Fixed
 
+- A computer that never answers no longer freezes the machine list, the sidebar keys, or keeping that computer awake. The first look cannot hold up the sidebar's first draw.
 - The pull request panel stays on this branch. Reviews waiting on you stay on the "N to review" pill.
 - Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
 - The pane header does not call a pull request ready before it knows you can merge it.
 - A missed answer from GitHub keeps the pull request on screen, with how long ago it was read and Retry, instead of a blank error or a spinner that never ends.
 - Opening an iOS simulator reads the stream's address without a function Herdr does not promise to have.
+- Asleep tabs on another computer stay in the list and can be woken when no project is open there.
 
 ## [3.29.0] - 2026-11-11
 
