@@ -27,6 +27,7 @@ import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layou
 import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk } from "./machines.js";
+import { createAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
@@ -213,6 +214,7 @@ export default class Spaces extends View {
     this.folding = null;
     this.foldH = {};
     this.migrate();
+    this.awake = createAwake({ now: () => Date.now(), run: (call) => exec(call.command, call.args, { on: call.on, timeout: call.timeout }) });
     this.refreshMachines(cx);
     cx.spawn(async (cx) => {
       const rev = this.parkRev ?? 0;
@@ -1079,7 +1081,22 @@ export default class Spaces extends View {
     cx.spawn(async (cx) => {
       try { await this.readMachines(); } catch { /* the last list stands */ }
       finally { this.machinesBusy = false; }
+      this.holdAwake(cx);
       cx.notify();
+    });
+  }
+
+  // The list is read every two minutes behind; the hold still renews on time.
+  holdAwake(cx) {
+    if (!this.awake) return;
+    const rows = (this.machines ?? []).map((row) => ({ name: row.name, phase: this.phaseOf(row.name) }));
+    const token = (this.awakeToken ?? 0) + 1;
+    this.awakeToken = token;
+    cx.spawn(async (cx) => {
+      await this.awake.sync(rows);
+      const wait = this.awake.nextWait();
+      if (wait == null || this.awakeToken !== token) return;
+      cx.timer.after(wait, (cx) => { if (this.awakeToken === token) this.holdAwake(cx); });
     });
   }
 
@@ -1130,10 +1147,11 @@ export default class Spaces extends View {
     this.powerBusy.add(name);
     this.clearFlags(name);
     this.parked = [...(this.parked ?? []).filter((row) => row.name !== name), record];
+    this.holdAwake(cx);
     cx.notify();
     cx.spawn(async (cx) => {
       try { await this.settleOff(name, record, live, rev); }
-      finally { this.powerBusy.delete(name); cx.notify(); }
+      finally { this.powerBusy.delete(name); this.holdAwake(cx); cx.notify(); }
     });
   }
 
@@ -1143,6 +1161,7 @@ export default class Spaces extends View {
     this.powerBusy.add(name);
     this.clearFlags(name);
     this.waking.add(name);
+    this.holdAwake(cx);
     cx.notify();
     cx.spawn(async (cx) => {
       try {
@@ -1152,6 +1171,7 @@ export default class Spaces extends View {
         this.markFailed(name, why);
       } finally {
         this.powerBusy.delete(name);
+        this.holdAwake(cx);
         cx.notify();
       }
     });

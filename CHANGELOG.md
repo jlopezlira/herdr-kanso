@@ -11,11 +11,17 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.22.7] - 2026-11-10
+## [3.23.1] - 2026-11-10
 
 ### Changed
 
 - System operations share macOS, Linux and Windows implementations. Windows reports when Herdr cannot supply a process's working directory or open files.
+
+## [3.23.0] - 2026-11-10
+
+### Added
+
+- A remote machine that is on stays awake. The hold renews while it stays connected and ends after it is turned off or drops. A closed lid still sleeps, and a machine that is already asleep is not woken.
 
 ## [3.22.6] - 2026-11-10
 
