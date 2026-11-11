@@ -2,7 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { load } from "./helpers.mjs";
 import {
   PIECES, GROUPS, STATE_LABEL, STORE, MIGRATED, pieceOf, choice, shown, runs, setPiece,
@@ -112,41 +113,37 @@ test("find matches a label or an id and keeps the window order", () => {
   assert.equal(roster.filter((row) => row.id === "panel.files").length, 1);
 });
 
+// A URL pathname keeps a leading slash, so Windows reads D:\D:\...
+const modsRoot = fileURLToPath(new URL("../kanso/mods", import.meta.url));
+
+function walk(dir, visit) {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) { walk(path, visit); continue; }
+    if (name.endsWith(".js")) visit(path, readFileSync(path, "utf8"));
+  }
+}
+
 function callsOf(root) {
   const calls = new Set();
   let panels = false;
-  const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const path = join(dir, name);
-      if (statSync(path).isDirectory()) { walk(path); continue; }
-      if (!name.endsWith(".js")) continue;
-      const text = readFileSync(path, "utf8");
-      for (const match of text.matchAll(/(?:shown|runs)\(\s*["']([^"']+)["']/g)) calls.add(match[1]);
-      if (/runs\(\s*`panel\.\$\{/.test(text)) panels = true;
-    }
-  };
-  walk(root);
+  walk(root, (_path, text) => {
+    for (const match of text.matchAll(/(?:shown|runs)\(\s*["']([^"']+)["']/g)) calls.add(match[1]);
+    if (/runs\(\s*`panel\.\$\{/.test(text)) panels = true;
+  });
   return { calls, panels };
 }
 
 test("the shared map is migrated from one start, and a draw only reads it", () => {
-  const root = new URL("../kanso/mods", import.meta.url).pathname;
   const sites = [];
-  const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const path = join(dir, name);
-      if (statSync(path).isDirectory()) { walk(path); continue; }
-      if (!name.endsWith(".js")) continue;
-      const text = readFileSync(path, "utf8");
-      if (/(?<!function )loadPieces\s*\(/.test(text)) sites.push(path.split("/").slice(-2).join("/"));
-    }
-  };
-  walk(root);
-  assert.deepEqual(sites, ["kanso-chrome/main.js"]);
+  walk(modsRoot, (path, text) => {
+    if (/(?<!function )loadPieces\s*\(/.test(text)) sites.push(join(basename(dirname(path)), basename(path)));
+  });
+  assert.deepEqual(sites, [join("kanso-chrome", "main.js")]);
 });
 
 test("every shown or runs id is in the registry, and every registry id is read", () => {
-  const { calls, panels } = callsOf(new URL("../kanso/mods", import.meta.url).pathname);
+  const { calls, panels } = callsOf(modsRoot);
   assert.equal(panels, true, "a panel id is read as panel.<id>");
   for (const id of calls) assert.ok(pieceOf(id), id);
   for (const row of PIECES) {
