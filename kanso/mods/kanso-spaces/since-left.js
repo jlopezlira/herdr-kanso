@@ -35,7 +35,7 @@ export class SinceLeft {
         this.observed = now;
       }
       if (project !== this.project) {
-        if (this.project) await this.store.touch(this.project, now);
+        if (this.project) await this.touch(this.project, now);
         this.rows = [];
         this.expanded = false;
         this.showing = false;
@@ -50,10 +50,16 @@ export class SinceLeft {
       } else if (project) {
         if (this.showing && (focusedTarget(this.rows, this.target, target) || this.rows.some((row) => row.target === seenTarget))) await this.dismiss(cx);
         this.target = target;
-        if (now - this.touched >= MAINTENANCE_MS) { await this.store.touch(project, now); this.touched = now; }
+        if (now - this.touched >= MAINTENANCE_MS) { await this.touch(project, now); this.touched = now; }
       }
       if ((project || this.sources?.length) && now - (this.pruned ?? 0) >= MAINTENANCE_MS) { await this.store.prune(now); this.pruned = now; }
     } finally { this.busy = false; }
+  }
+
+  async touch(project, now) {
+    const prune = now - (this.pruned ?? 0) >= MAINTENANCE_MS;
+    await this.store.touch(project, now, prune);
+    if (prune) this.pruned = now;
   }
 
   async dismiss(cx) {

@@ -263,6 +263,11 @@ test("The kit renders every queue state with single-use elements", async () => {
   kit.queueList({}, { rows: [], state: "unavailable" }, () => ({}), () => "");
   assert.ok(ui.texts.includes("Nobody is waiting"));
   assert.ok(ui.texts.includes("Queue unavailable"));
+  ui.texts.length = 0;
+  kit.queueControl({}, { rows: [], state: "ready" }, false, false, () => {});
+  kit.queueControl({}, { rows: [], state: "ready" }, true, false, () => {});
+  assert.equal(ui.texts.includes("Needs you · 0"), false);
+  assert.equal(ui.texts.length, 0);
 });
 
 test("The count label distinguishes normal, collapsed, empty and unavailable states", async () => {

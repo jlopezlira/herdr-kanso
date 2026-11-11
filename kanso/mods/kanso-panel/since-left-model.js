@@ -2,7 +2,7 @@ export const AWAY_MS = 5 * 60_000;
 export const KEEP_MS = 7 * 86400_000;
 export const EVENT_CAP = 500;
 export const LINE_CAP = 3;
-export const MAINTENANCE_MS = 30_000;
+export const MAINTENANCE_MS = 120_000;
 export const LOG_LIMITS = { cap: EVENT_CAP, keepMs: KEEP_MS };
 export const targetOf = (kind, id) => `${kind}:${id}`;
 export function parseTarget(target) {

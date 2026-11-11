@@ -428,7 +428,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   read: nothing. No extra fetches.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
-  Count opens project/name/reason/age; click/Enter focuses. Empty: "Nobody is waiting";
+  The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
   loading: kit; unavailable: error. Status shares this queue.
   Strip checks panes each 1.5 s; leaving
   `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
@@ -504,7 +504,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     working, waiting on you, or since it finished ("<1m", "4m", "2h", "3d";
     seen/idle: none). Done and idle are one phase, so looking at a finished
     agent keeps its time. Stamps are kept in kanso.db `spaces.since`
-    (address -> state and ms), taken every 0.5 s outside render; an agent
+    (address -> state and ms), taken every 2 s outside render; an agent
     first seen after a start takes its tab's `working_since` or
     `changed_at`, else shows no time. On hover the pin takes the time's
     place. Under the name, a second line (12px `muted`; every agent's row
@@ -522,7 +522,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     of an agent that isn't working, a count in a pill (18 tall, `foreground`
     at 12%) when something still runs under it: the direct children of its
     process (`foreground.pid`, else its shell's one child) from one `ps
-    -axo pid=,ppid=,etime=,command=` every 5 s in front, 30 s behind, less
+    -axo pid=,ppid=,etime=,command=` every 10 s in front, 30 s behind, less
     MCP servers and caffeinate; the commands (Claude Code's `eval '…'`
     wrapper unwrapped) and times in its tooltip (`tasksOf`).
   - Sub-agents (`terminals()` with a `parent`) are listed under their
@@ -577,7 +577,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `~/.codex/session_index.jsonl`; else the first thing you typed; else
     the row's name; a title you gave it (Rename thread, label
     `kanso.thread`) goes over all of them. Which conversation:
-    `hc get <terminal> --json` gives the foreground pid; Claude Code's
+    `terminals()` gives the foreground pid; Claude Code's
     `~/.claude/sessions/<pid>.json` gives `sessionId` and `cwd`, and the
     file is `~/.claude/projects/<cwd, each non-alphanumeric as ->/<id>.jsonl`;
     for Codex, `lsof` on the pid (or its children) finds the open
@@ -715,12 +715,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       weight 1), `strip-map` (`kanso-strip`, 180 px), `status-right`
       (`kanso-status` `{side: "right"}`, weight 1).
 - **Mods**:
-  - `kanso-spaces`: spaces, agents (`agents.js`), git per space via `exec`,
-    machines via `hc machine ls`, `add` and `rm`.
+  - `kanso-spaces`: tracks/2 s; sleeping/off skip reads. Live PIDs skip `ps`.
+    Threads: status/turn or 5 min; misses: 1-10 min/PID.
   - `kanso-tabs`: tabs, panel buttons and the on-demand panel mount via
     `layout.set`.
-  - `kanso-strip`: the canvas. The copy in the status row is the controller
-    and minimap; copies with `{edge, side, count, panes}` draw an edge rail. State per
+  - `kanso-strip`: canvas; the status row's controller/minimap samples native
+    sizes every 1 s at rest, 150 ms during `strip.drag`. Edge copies draw a rail. State per
     tab lives in shared `strip.state` (`{cols: [{panes, w, pin, hs}], vx,
     n}`; `hs` is each stacked pane's share of the height); the last chosen
     `n` is in shared `strip.n` for new tabs. Copies with `{ruler}` are the
@@ -824,11 +824,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
-  - Mods derive from Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
-  - Herdr loads a mod's files from its own folder only, so a file several
-    mods need (`layout.js`, `ui.js`, `share.js`, `marks.js`, `deliver.js`,
-    `kinds.js`...: `scripts/sync-share.mjs`) is copied into each by `npm run
-    sync:share`; a test fails when a copy differs.
+  - Mods: Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
+  - Own-folder imports only: `scripts/sync-share.mjs` copies shared files;
+    `npm run sync:share -- --check` detects drift. Kdb batches same-tick calls;
+    prefs/panel-state reads cache until a write or 30 s. Return touch/prune
+    share a call.
 - **Herdr functions**: `spaces`, `panes`, `agents`, `terminals`, `machines`,
   `layout`, `theme`, `shared`/`setShared`, `window`, `exec`, `hc`,
   `watchFolder`, `readTextFile`, `openOverlay`, `run`, `home`, `appHome`,
