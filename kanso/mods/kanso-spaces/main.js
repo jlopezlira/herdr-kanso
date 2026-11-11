@@ -5,7 +5,7 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
 import { findThreads, pidsOf, pidsListed, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { parseProcesses } from "./procs.js";
@@ -22,6 +22,8 @@ import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
 import { skeleton, breathe, H, G } from "./ui.js";
+import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
+import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -174,6 +176,7 @@ export default class Spaces extends View {
     this.asleepApplied = 0;
     this.loadAsleep().catch(() => {});
     this.handle = cx.focus_handle(); // the list by keyboard (enterList)
+    this.needsScroll = ScrollHandle.new();
     if (shared("kanso.list")) setShared("kanso.list", null); // a reload: nothing is on the list
     this.git = {}; // place key -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {};
@@ -464,6 +467,8 @@ export default class Spaces extends View {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (c === "needs-you.next") this.nextNeeds(cx);
+    else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "list") this.enterList(cx);
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
     else if (c === "add-project") this.addProject();
@@ -475,6 +480,65 @@ export default class Spaces extends View {
       // Not on the list any more: the flag was stale; the strip takes it.
       else { setShared("kanso.list", null); run(`kanso-strip.go-${c === "list-up" ? "up" : "down"}`); }
     }
+  }
+
+  refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
+    const list = agents(), layouts = machines();
+    const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
+    const layoutSignature = layouts.map((m) => m.layout).join(",");
+    const changed = signature !== this.needsSignature || this.threads !== this.needsThreads;
+    if (!changed && layoutSignature === this.needsLayoutSignature) return this.needsQueue;
+    this.needsSignature = signature;
+    this.needsThreads = this.threads;
+    this.needsLayoutSignature = layoutSignature;
+    const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
+    const named = () => list.map((a) => ({ ...a, name: this.nameOf({ ...a, name: names.get(a.address) }) }));
+    const previous = this.needsQueue ?? shared(NEEDS_YOU);
+    const rows = changed ? waitingQueue(named(), terms, asleep.dozing, previous?.rows) : previous.rows;
+    const next = queueState(rows, layouts);
+    this.needsQueue = previous;
+    if (sameQueue(next, previous)) return previous;
+    this.needsQueue = next;
+    setShared(NEEDS_YOU, next);
+    return this.needsQueue;
+  }
+
+  jumpNeeds(row, cx) {
+    const live = this.refreshNeeds().rows.find((a) => a.address === row.address && a.pane === row.pane);
+    if (!live) return;
+    this.needsCursor = live;
+    this.leaveList(cx, false);
+    run("agent.focus", { terminal: live.address });
+  }
+
+  nextNeeds(cx) {
+    const row = nextWaiting(this.refreshNeeds().rows, this.needsCursor);
+    if (row) { this.jumpNeeds(row, cx); return; }
+    this.needsCursor = null;
+    this.needsEmpty = true;
+    const at = (this.needsEmptyAt ?? 0) + 1;
+    this.needsEmptyAt = at;
+    cx.timer.after(EMPTY_NOTICE_MS, (cx) => { if (this.needsEmptyAt === at) { this.needsEmpty = false; cx.notify(); } });
+    cx.notify();
+  }
+
+  toggleNeeds(cx) {
+    this.needsOpen = !this.needsOpen;
+    if (this.needsOpen) {
+      if (shared("sidebar.collapsed") === true) this.openRail();
+      this.listFrom = focused()?.pane ?? null;
+      this.kbd = true;
+      this.navKey = `agent:${this.refreshNeeds().rows[0]?.address}`;
+      this.handle.focus();
+    } else this.leaveList(cx);
+    cx.notify();
+  }
+
+  needsList(t, queue, now) {
+    return queueList(t, queue, (row) => {
+      const go = (cx) => this.jumpNeeds(row, cx);
+      return { go, selected: this.navMark(`agent:${row.address}`, go) };
+    }, (row) => duration(Math.max(0, now - row.at)), this.needsScroll);
   }
 
   // Rows add themselves as they draw (navMark), in screen order; Esc goes back to the pane you came from.
@@ -532,7 +596,9 @@ export default class Spaces extends View {
       cx.notify();
       return;
     }
-    this.navKey = nav[moveTo(move, at, nav.length)]?.key ?? this.navKey;
+    const next = moveTo(move, at, nav.length);
+    this.navKey = nav[next]?.key ?? this.navKey;
+    if (this.needsOpen) this.needsScroll?.scroll_to_item(next);
     cx.notify();
   }
 
@@ -2176,7 +2242,7 @@ export default class Spaces extends View {
     if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;
     // The keyboard left (a click on a pane, say): the ring goes too.
-    if (this.kbd && (collapsed || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
+    if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
     const sp = spaces();
     const ps = panes();
@@ -2203,6 +2269,7 @@ export default class Spaces extends View {
     const asleep = this.sleepingNow(sp, read.terms);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
+    const queue = this.refreshNeeds(sp, read.terms, asleep);
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
     // In Projects, + adds a project; in Status and Threads, it starts a conversation in a project you pick.
@@ -2229,7 +2296,8 @@ export default class Spaces extends View {
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
-      .child(this.list(t, collapsed, view, [
+      .child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)))
+      .child(this.needsOpen ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
         ...(!collapsed && view !== "spaces" ? this.returnRows(t, active) : []),
         ...(view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx))]));

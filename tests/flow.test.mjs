@@ -7,19 +7,6 @@ import { load, clone, temporary, exec, singleUse } from "./helpers.mjs";
 
 const HOME = "/Users/me";
 
-test("Cmd+J goes to a blocked agent first, then one that finished, and moves on from the focused one", async () => {
-  const { nextNeedsYou } = await load("kanso-strip/main.js", ["nextNeedsYou"]);
-  const a = (address, status) => ({ address, status });
-  const list = [a("t1", "working"), a("t2", "done"), a("t3", "blocked"), a("t4", "idle"), a("t5", "blocked"), a("t6", "done")];
-  assert.equal(nextNeedsYou(list, "t1").address, "t3", "blocked before done");
-  assert.equal(nextNeedsYou(list, "t3").address, "t5", "the next blocked one after the focused one");
-  assert.equal(nextNeedsYou(list, "t5").address, "t3", "wraps round");
-  const one = [a("t1", "blocked"), a("t2", "done"), a("t3", "done")];
-  assert.equal(nextNeedsYou(one, "t1").address, "t2", "the focused blocked one is never its own next: the done ones come");
-  assert.equal(nextNeedsYou(one, "t2").address, "t1");
-  assert.equal(nextNeedsYou([a("t1", "working"), a("t2", "idle")], "t1"), null, "nobody needs you");
-});
-
 test("The digest reads changed files, lines, commits and checks", async () => {
   const { parseShortstat, checksOf, digestTip } = await load("kanso-strip/main.js", ["parseShortstat", "checksOf", "digestTip"]);
   assert.deepEqual(clone(parseShortstat(" 3 files changed, 120 insertions(+), 30 deletions(-)\n")), { add: 120, del: 30 });
