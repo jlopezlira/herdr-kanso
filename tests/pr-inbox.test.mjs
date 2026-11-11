@@ -167,7 +167,7 @@ async function panelFor(t, { gh, git, dir }) {
     if (command === "gh" || hosted) return gh(forwarded, hosted ? args[0] : "");
     return { code: 1, stdout: "", stderr: "" };
   };
-  const host = { ...ui, exec, appHome: () => dir, key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }) };
+  const host = { ...ui, exec, appHome: () => dir, home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }) };
   const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], host);
   const { Kdb } = await load("kanso-panel/kdb.js", ["Kdb"], host);
   const panel = new PullRequest(new Kdb());
