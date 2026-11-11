@@ -1,4 +1,7 @@
 import { runs } from "./pieces.js";
+import { DID_CAP, oneLine } from "./pure.js";
+
+export { DID_CAP, oneLine };
 
 export const AWAY_MS = 5 * 60_000;
 export const KEEP_MS = 7 * 86400_000;
@@ -6,14 +9,8 @@ export const EVENT_CAP = 500;
 export const LINE_CAP = 3;
 export const MAINTENANCE_MS = 120_000;
 export const LOG_LIMITS = { cap: EVENT_CAP, keepMs: KEEP_MS };
-export const DID_CAP = 200;
 export const AWAY_PIECE = "sidebar.away";
 export const awayShown = (map) => runs(AWAY_PIECE, map);
-export function oneLine(text) {
-  const line = String(text ?? "").split(/\r?\n/).find((l) => l.trim()) ?? "";
-  const flat = line.replace(/\s+/g, " ").trim();
-  return flat.length > DID_CAP ? `${flat.slice(0, DID_CAP - 1)}\u2026` : flat || null;
-}
 export const targetOf = (kind, id) => `${kind}:${id}`;
 export function parseTarget(target) {
   const [kind, ...parts] = String(target ?? "").split(":");

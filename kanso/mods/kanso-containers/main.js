@@ -403,7 +403,7 @@ export default class Containers extends View {
     }
     if (this.groups === null) return this.skeleton(c);
     const all = this.groups.flatMap((g) => g.containers);
-    const running = all.filter((k) => k.health === "running").length, failed = all.filter((k) => k.health === "failed").length;
+    const running = all.filter((k) => k.health === "running").length;
     const armedQuit = this.armed.is("quit"), remote = Boolean(this.context?.remote);
     // What Docker costs this computer comes first: its VM keeps memory even with nothing running.
     const hero = v_flex().gap(G.md)
@@ -417,7 +417,6 @@ export default class Containers extends View {
       .child(h_flex().items_center().gap(G.md).flex_wrap()
         .child(div().text_size(13).text_color(c.text).child(`${running} running`))
         .child(div().text_size(13).text_color(c.dim).child(`${all.length - running} stopped`))
-        .when(failed > 0, (el) => el.child(div().text_size(13).text_color(c.red).child(`${failed} failed`)))
         .when(!remote, (el) => el.child(quietLink("ct-quit", armedQuit ? "Press again to quit Docker" : running ? `Quit Docker (stops ${running})` : "Quit Docker",
           (cx) => this.armed.press("quit", cx, (cx) => this.quitDocker(cx)), c, { size: 12.5, color: armedQuit ? c.red : c.muted }))));
     const space = this.spaceView(c);

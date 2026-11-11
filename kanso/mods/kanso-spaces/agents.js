@@ -140,20 +140,10 @@ export function elapsed(a, since, now) {
   return at == null ? null : duration(Math.max(0, now - at));
 }
 
-export function digestLine(d) {
-  if (!d) return null;
-  const parts = [
-    d.files ? (d.add || d.del ? `+${d.add ?? 0} −${d.del ?? 0}` : `${d.files} ${d.files === 1 ? "file" : "files"}`) : null,
-    d.ahead ? `${d.ahead} ${d.ahead === 1 ? "commit" : "commits"}` : null,
-    d.pr?.number ? `PR #${d.pr.number}${d.pr.hold ? `, ${d.pr.hold[0].toLowerCase()}${d.pr.hold.slice(1)}` : d.pr.checks === "failing" ? " failing" : ""}` : null,
-  ].filter((x) => x !== null);
-  return parts.length ? parts.join(" · ") : null;
-}
-
 // `msg` is OSC 7501: Claude Code sends the step it is on while it works, its last words when it finishes.
 export const said = (a) => oneLine(a.msg);
 
-export function activityOf(a, digest) {
+export function activityOf(a) {
   const msg = said(a);
   if (msg) return msg;
   if (a.status === "working" || a.status === "blocked") {
@@ -162,7 +152,6 @@ export function activityOf(a, digest) {
     const same = (x, y) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "") === y.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
     return live && !same(live, a.name) ? live : null;
   }
-  if (a.status === "done") return digestLine(digest);
   return null;
 }
 

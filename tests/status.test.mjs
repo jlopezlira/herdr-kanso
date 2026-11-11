@@ -26,7 +26,7 @@ test("A question is what the agent said, or a title that says more than its name
   assert.equal(questionOf({ msg: "", title: "Add the countdown?" }), null);
   assert.equal(questionOf({}), null);
   const long = "x".repeat(250);
-  assert.equal(ask(long, "Other"), long);
+  assert.equal(ask(long, "Other"), `${"x".repeat(199)}\u2026`);
 });
 
 test("Needs you names the oldest blocked agent, and nothing when nobody waits", async () => {
