@@ -11,11 +11,23 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.22.0] - 2026-11-10
+
+### Added
+
+- Each remote machine in the sidebar has a switch that turns its connection off and back on with the setup already saved. Off leaves one dim row and is remembered; work already running on that machine keeps running. This computer has no switch. When another machine is present, each machine has a header with its name. A mark shows only while it is loading, unavailable, or waiting for a login. Unavailable can be retried, and a login Herdr asks for can be copied. With only this computer, the list is unchanged.
+
+## [3.21.1] - 2026-11-10
+
+### Fixed
+
+- Find is a quiet bar. It lists nothing until you type, then only the matching turns, newest first and grouped by day, and leaves out a tool's delivery note. Arrows, Enter and Shift+Enter move; a click opens that turn as the same markdown a file shows; Escape clears the query and the next Escape closes. The last query for each agent comes back selected.
+
 ## [3.21.0] - 2026-11-10
 
 ### Added
 
-- Each remote machine in the sidebar has a switch that turns its connection off and back on with the setup already saved. Off leaves one dim row and is remembered; work already running on that machine keeps running. This computer has no switch. When another machine is present, each machine has a header with its name and connection. Unavailable can be retried, and a login Herdr asks for can be copied. With only this computer, the list is unchanged.
+- Needs you in the sidebar lists waiting agents across projects, with their name, reason and waiting time. Cmd+J cycles through blocked agents first, then unseen finished turns, oldest first. Click a row or press Enter to focus its pane. Sleeping agents stay out.
 
 ## [3.20.0] - 2026-11-10
 

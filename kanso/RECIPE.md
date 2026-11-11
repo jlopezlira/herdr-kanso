@@ -404,8 +404,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `kanso-status`, text 11.5 `muted`:
     - At the left, the machine (monitor or server icon, "This computer") and
       the branch.
-    - At the right, "N agent(s) need you" in `blocked` with a dot (only when
-      some agent is blocked), then a dot and "X of N working" (or "N agents
+    - At the right, "N agent(s) need you" in `blocked` with a dot (blocked or unseen done), then "X of N working" (or "N agents
       idle" / "No agents"), then the palette shortcut "⌘⇧P" with the tooltip
       "Command palette".
 - **Themes**: `kanso` (dark) and `kanso-day` (light), in `themes/`.
@@ -426,10 +425,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   expands inline; Enter/click jumps, a target seen or Dismiss clears it.
   Focus and dismissal persist in kanso.db. Local events expire after 7 days,
   capped at 500. No events, loading or a failed read: nothing. No extra fetches.
-- **Cmd+J and the digest** (`kanso-strip`): `next-needs-you` picks,
-  from `agents()`, the next blocked agent after the focused one (else
-  the next done one) and runs `agent.focus`; none posts "No agent needs
-  you". The controller checks panes every 1.5 s; one that leaves
+- **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
+  blocked then unseen done, oldest first. Native status owns seen; no sleepers.
+  Count opens project/name/reason/age; click/Enter focuses. Empty: "Nobody is waiting";
+  loading: kit; unavailable: error. Status shares this queue.
+  Strip checks panes each 1.5 s; leaving
   `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
   commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
   (open only; checks and merge state) in shared `kanso.digest`
@@ -465,7 +465,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Keys** (keys.json `layout:kanso`): ⌃1-9 a space (guarded), ⌃⇧1-9 a
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
-  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent finds its conversation, ignoring case and accents, and shows it.
+  (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
 - **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
   rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
   `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new the log, Credits who.
@@ -482,16 +482,16 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
   - With another machine, each has a header: a 17 monitor or server icon in
-    `foreground`, the name at 15 semibold (this computer's is its host name),
-    and a plug for the connection (a spinning refresh while it loads). A
-    remote header's switch turns that connection off and on. Off stores the
-    target, name, via, session and temporary flag, then `hc machine rm`
-    (terminals there keep running) and leaves one dim row: nothing under it
-    is listed or read. On is `hc machine add` with those values, never
-    `--install`; the row is dropped once `hc machine ls` shows it connected.
-    A login Herdr asks for is shown there, with Copy. Unavailable has Retry.
-    Alone, this computer has no header and no switch. `hc machine ls` runs
-    every 30 s in front and every 2 min behind.
+    `foreground` and the name at 15 semibold (this computer's is its host
+    name). The switch says on or off; a mark shows only while loading,
+    unavailable, or waiting for a login. Off stores the target, name, via,
+    session and temporary flag, then `hc machine rm` (terminals there keep
+    running) and leaves one dim row: nothing under it is listed or read. On
+    is `hc machine add` with those values, never `--install`; the row is
+    dropped once `hc machine ls` shows it connected. A login says Needs a
+    login, then the command, with Copy. Unavailable has Retry. Alone, this
+    computer has no header and no switch. `hc machine ls` runs every 30 s
+    in front and every 2 min behind.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
     order button (kanso.db `spaces.order`): last update, needs you, kind,
@@ -779,7 +779,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
     Cmd+Shift+O (`mod.open:open-with`, in `keys.json`) opens it.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
-  - `kanso-status`: status bar; "N agents need you" runs `kanso-strip.next-needs-you`.
+  - `kanso-status`: status bar; "N agents need you" runs `kanso-spaces.needs-you.next`.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: lazy file tree via
     `sh`, git status marks, a file shown in place as read-only code, a
@@ -823,8 +823,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and a line per noted pin (`deliver.js`).
     `herdr-app do 'kanso-tabs.look <path>'` (or `.gallery`) opens one.
   - `kanso-containers` (own mod): `docker ps -a`, `images`, `stats` while shown.
-  - All are derived from Herdr's shipped mods (Apache-2.0) through the 0OZ
-    and minimalistic forks, and all use `"place": "none"`.
+  - Mods derive from Herdr (Apache-2.0) via 0OZ/minimalistic; `"place": "none"`.
   - Herdr loads a mod's files from its own folder only, so a file several
     mods need (`layout.js`, `ui.js`, `share.js`, `marks.js`, `deliver.js`,
     `kinds.js`...: `scripts/sync-share.mjs`) is copied into each by `npm run

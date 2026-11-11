@@ -3,7 +3,8 @@
 import { exec, hc, readTextFile } from "herdr";
 import { KINDS } from "./kinds.js";
 import { etimeMs } from "./procs.js";
-import { projectDir, transcriptPath, START_SLACK, sessionLive } from "./find.js";
+import { basename } from "path";
+import { projectDir, transcriptPath, sessionPath, START_SLACK, sessionLive } from "./find.js";
 
 export { projectDir, transcriptPath, START_SLACK };
 export const MOST = 2000; // the latest distinct paths kept from a conversation: a long one names a thousand after a picture
@@ -60,14 +61,14 @@ const parsed = (text) => { try { return JSON.parse(text); } catch { return null;
 export async function frontOf(address) {
   const got = await hc(["get", address, "--json"]).catch(() => null);
   const front = got?.code === 0 ? parsed(got.stdout)?.foreground : null;
-  return front?.pid ? { pid: front.pid, program: String(front.argv?.[0] ?? "").split("/").at(-1) } : null;
+  return front?.pid ? { pid: front.pid, program: basename(String(front.argv?.[0] ?? "")) } : null;
 }
 
 export async function sessionOf(address, homeDir, front = null) {
   // The record is Claude Code's: another program with a pid Claude had must not read Claude's conversation.
   const pid = front?.program === "claude" ? front.pid : null;
   if (!pid) return null;
-  const record = parsed(await readTextFile(`${homeDir}/.claude/sessions/${pid}.json`).catch(() => null));
+  const record = parsed(await readTextFile(sessionPath(homeDir, pid)).catch(() => null));
   if (record?.pid !== pid || !record.sessionId) return null;
   // Nor is a record of an earlier Claude that had this pid: the process must have started when the record says.
   const up = await exec("ps", ["-o", "etime=", "-p", String(pid)]).catch(() => null);

@@ -85,6 +85,13 @@ export function machinePhase({ name, stored, live, layout, asking, login, failed
   return "loading";
 }
 
+// The switch already says on and off. A mark is only a phase with something left to say.
+export const machineMarks = {
+  loading: { tip: "Loading", color: "muted", icon: "refresh" },
+  unavailable: { tip: "Unavailable", color: "blocked", icon: "plug" },
+  login: { tip: "Needs a login", color: "blocked", icon: "plug" },
+};
+
 export function powerId(name) {
   return name ? `machine-power-${name}` : null;
 }

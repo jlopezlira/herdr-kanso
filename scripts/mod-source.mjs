@@ -10,7 +10,7 @@
 // where a name the host also provides (a test's stand-in) wins over the
 // file's own. Imports from "herdr" and the SDK are dropped (the host provides
 // them), and the outer file's own `export` keywords are stripped.
-const IMPORT = /^import\s+(?:(\{[^}]*\})\s+from\s+)?["']([^"']+)["'];\n/gm;
+const IMPORT = /^import\s+(?:(\{[^}]*\})\s+from\s+)?["']([^"']+)["'];\r?\n/gm;
 const EXPORTED = /^export\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
 const EXPORT_LIST = /^export\s+\{([^}]*)\};?/gm;
 const PRELUDE = "const __pick = (mod, names) => Object.fromEntries(names.map((n) => [n, typeof globalThis[n] !== \"undefined\" ? globalThis[n] : mod[n]]));\n";

@@ -5,7 +5,7 @@
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, segmentAt, mostUrgent } from "./agents.js";
 import { findThreads, pidsOf, pidsListed, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { parseProcesses } from "./procs.js";
@@ -21,8 +21,10 @@ import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThr
 import { listKey, moveTo } from "./listkeys.js";
 import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
 import { tryOrAsync, parseOr } from "./pure.js";
-import { skeleton, breathe, H, G, T, R, toggleSwitch, tokens, quietLink } from "./ui.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys } from "./machines.js";
+import { skeleton, breathe, H, G, T, R, ICON, HEADER_ICON, toggleSwitch, tokens, quietLink } from "./ui.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineMarks } from "./machines.js";
+import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
+import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -175,6 +177,7 @@ export default class Spaces extends View {
     this.asleepApplied = 0;
     this.loadAsleep().catch(() => {});
     this.handle = cx.focus_handle(); // the list by keyboard (enterList)
+    this.needsScroll = ScrollHandle.new();
     if (shared("kanso.list")) setShared("kanso.list", null); // a reload: nothing is on the list
     this.git = {}; // place key -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {};
@@ -488,6 +491,8 @@ export default class Spaces extends View {
     const space = /^space-(\d)$/.exec(c), view = /^view-(spaces|agents|threads)$/.exec(c);
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
+    else if (c === "needs-you.next") this.nextNeeds(cx);
+    else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "list") this.enterList(cx);
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
     else if (c === "add-project") this.addProject();
@@ -499,6 +504,65 @@ export default class Spaces extends View {
       // Not on the list any more: the flag was stale; the strip takes it.
       else { setShared("kanso.list", null); run(`kanso-strip.go-${c === "list-up" ? "up" : "down"}`); }
     }
+  }
+
+  refreshNeeds(sp = spaces(), terms = terminals(), asleep = this.sleepingNow(sp, terms)) {
+    const list = agents(), layouts = machines();
+    const signature = waitingSignature(list, terms, asleep.dozing, NAME_LABEL);
+    const layoutSignature = layouts.map((m) => m.layout).join(",");
+    const changed = signature !== this.needsSignature || this.threads !== this.needsThreads;
+    if (!changed && layoutSignature === this.needsLayoutSignature) return this.needsQueue;
+    this.needsSignature = signature;
+    this.needsThreads = this.threads;
+    this.needsLayoutSignature = layoutSignature;
+    const names = new Map(terms.map((term) => [term.address, term.labels?.[NAME_LABEL]]));
+    const named = () => list.map((a) => ({ ...a, name: this.nameOf({ ...a, name: names.get(a.address) }) }));
+    const previous = this.needsQueue ?? shared(NEEDS_YOU);
+    const rows = changed ? waitingQueue(named(), terms, asleep.dozing, previous?.rows) : previous.rows;
+    const next = queueState(rows, layouts);
+    this.needsQueue = previous;
+    if (sameQueue(next, previous)) return previous;
+    this.needsQueue = next;
+    setShared(NEEDS_YOU, next);
+    return this.needsQueue;
+  }
+
+  jumpNeeds(row, cx) {
+    const live = this.refreshNeeds().rows.find((a) => a.address === row.address && a.pane === row.pane);
+    if (!live) return;
+    this.needsCursor = live;
+    this.leaveList(cx, false);
+    run("agent.focus", { terminal: live.address });
+  }
+
+  nextNeeds(cx) {
+    const row = nextWaiting(this.refreshNeeds().rows, this.needsCursor);
+    if (row) { this.jumpNeeds(row, cx); return; }
+    this.needsCursor = null;
+    this.needsEmpty = true;
+    const at = (this.needsEmptyAt ?? 0) + 1;
+    this.needsEmptyAt = at;
+    cx.timer.after(EMPTY_NOTICE_MS, (cx) => { if (this.needsEmptyAt === at) { this.needsEmpty = false; cx.notify(); } });
+    cx.notify();
+  }
+
+  toggleNeeds(cx) {
+    this.needsOpen = !this.needsOpen;
+    if (this.needsOpen) {
+      if (shared("sidebar.collapsed") === true) this.openRail();
+      this.listFrom = focused()?.pane ?? null;
+      this.kbd = true;
+      this.navKey = `agent:${this.refreshNeeds().rows[0]?.address}`;
+      this.handle.focus();
+    } else this.leaveList(cx);
+    cx.notify();
+  }
+
+  needsList(t, queue, now) {
+    return queueList(t, queue, (row) => {
+      const go = (cx) => this.jumpNeeds(row, cx);
+      return { go, selected: this.navMark(`agent:${row.address}`, go) };
+    }, (row) => duration(Math.max(0, now - row.at)), this.needsScroll);
   }
 
   // Rows add themselves as they draw (navMark), in screen order; Esc goes back to the pane you came from.
@@ -556,7 +620,9 @@ export default class Spaces extends View {
       cx.notify();
       return;
     }
-    this.navKey = nav[moveTo(move, at, nav.length)]?.key ?? this.navKey;
+    const next = moveTo(move, at, nav.length);
+    this.navKey = nav[next]?.key ?? this.navKey;
+    if (this.needsOpen) this.needsScroll?.scroll_to_item(next);
     cx.notify();
   }
 
@@ -939,9 +1005,7 @@ export default class Spaces extends View {
       const drop = new Set(done);
       this.parked = (this.parked ?? []).filter((row) => !drop.has(row.name));
       for (const name of done) {
-        this.waking.delete(name);
-        this.login.delete(name);
-        this.failed.delete(name);
+        this.clearFlags(name);
         await this.db().forgetMachine(name).catch(() => {});
       }
     }
@@ -970,6 +1034,17 @@ export default class Spaces extends View {
     else this.turnOff(name, cx);
   }
 
+  clearFlags(name) {
+    this.login.delete(name);
+    this.failed.delete(name);
+    this.waking.delete(name);
+  }
+
+  async unpark(name) {
+    this.parked = (this.parked ?? []).filter((row) => row.name !== name);
+    await this.db().forgetMachine(name).catch(() => {});
+  }
+
   // hc machine rm forgets it here; work already running there keeps running.
   turnOff(name, cx) {
     const live = (this.machines ?? []).find((row) => row.name === name) ?? null;
@@ -979,9 +1054,7 @@ export default class Spaces extends View {
     this.parkRev = (this.parkRev ?? 0) + 1;
     const rev = this.parkRev;
     this.powerBusy.add(name);
-    this.login.delete(name);
-    this.failed.delete(name);
-    this.waking.delete(name);
+    this.clearFlags(name);
     this.parked = [...(this.parked ?? []).filter((row) => row.name !== name), record];
     cx.notify();
     cx.spawn(async (cx) => {
@@ -990,13 +1063,9 @@ export default class Spaces extends View {
         if (!live || (this.parkRev ?? 0) !== rev) return;
         const result = await hc(rmArgs(name));
         if ((this.parkRev ?? 0) !== rev || result.code === 0) return;
-        this.parked = (this.parked ?? []).filter((row) => row.name !== name);
-        await this.db().forgetMachine(name).catch(() => {});
+        await this.unpark(name);
       } catch {
-        if (live && (this.parkRev ?? 0) === rev) {
-          this.parked = (this.parked ?? []).filter((row) => row.name !== name);
-          await this.db().forgetMachine(name).catch(() => {});
-        }
+        if (live && (this.parkRev ?? 0) === rev) await this.unpark(name);
       } finally {
         this.powerBusy.delete(name);
         cx.notify();
@@ -1008,8 +1077,7 @@ export default class Spaces extends View {
     const record = (this.parked ?? []).find((row) => row.name === name);
     if (!canRestore(record)) return;
     this.powerBusy.add(name);
-    this.failed.delete(name);
-    this.login.delete(name);
+    this.clearFlags(name);
     this.waking.add(name);
     cx.notify();
     cx.spawn(async (cx) => {
@@ -1712,14 +1780,15 @@ export default class Spaces extends View {
       return [item(div().h(10).flex_none(), 10), item(this.closedRow(t, c, names, group), rowHeight({ tree: null })), ...box];
     });
     if (!remote.length) return loading(null) && !rows.length && !this.closedOn(null, ctx).length ? [loadingRow(null)] : [...rows.flatMap(draw), ...closed(null)];
-    return [null, ...remote].flatMap((m) => this.machineBlock(m, t, collapsed, rows, draw, closed, loading, loadingRow, ctx, live));
+    const block = { t, collapsed, rows, draw, closed, loading, loadingRow, ctx, layouts: live };
+    return [null, ...remote].flatMap((m) => this.machineBlock(m, block));
   }
 
   machineMark(t, phase) {
-    const tip = { connected: "Connected", loading: "Loading", unavailable: "Unavailable", off: "Off", login: "Needs a login" }[phase] ?? "Connected";
-    const color = phase === "connected" ? t.ansi2 : phase === "unavailable" || phase === "login" ? t.blocked : phase === "off" ? t.dim : t.muted;
-    const glyph = svg(`mods/kanso-chrome/icons/${phase === "loading" ? "refresh" : "plug"}.svg`).size(15).flex_none().text_color(color).tooltip(tip);
-    return phase === "loading" ? glyph.spin(900) : glyph;
+    const mark = machineMarks[phase];
+    if (!mark) return null;
+    const glyph = svg(`mods/kanso-chrome/icons/${mark.icon}.svg`).size(ICON).flex_none().text_color(t[mark.color]).tooltip(mark.tip);
+    return mark.icon === "refresh" ? glyph.spin(900) : glyph;
   }
 
   machineSwitch(m, phase, t, collapsed) {
@@ -1729,10 +1798,10 @@ export default class Spaces extends View {
     const ring = this.navMark(`machine-power:${m}`, (cx) => this.setPower(m, this.phaseOf(m) === "off", cx));
     const stop = (el) => el.on_mouse_down("left", (_e, cx) => cx.stop_propagation());
     if (collapsed) {
-      return stop(div().id(id).size(15).flex_none().cursor_pointer().tooltip(on ? "On" : "Off"))
+      return stop(div().id(id).size(ICON).flex_none().cursor_pointer().tooltip(on ? "On" : "Off"))
         .when(ring, (el) => el.border_1().border_color(t.accent))
         .on_click((_e, cx) => { cx.stop_propagation(); this.setPower(m, !on, cx); })
-        .child(svg("mods/kanso-chrome/icons/plug.svg").size(15).text_color(on ? t.foreground : t.muted));
+        .child(svg("mods/kanso-chrome/icons/plug.svg").size(ICON).text_color(on ? t.foreground : t.muted));
     }
     return stop(toggleSwitch(id, on, (next, cx) => this.setPower(m, next, cx), tokens(t), { label: on ? `Disconnect ${m}` : `Connect ${m}` }))
       .when(ring, (el) => el.border_color(t.accent));
@@ -1743,6 +1812,7 @@ export default class Spaces extends View {
     const off = phase === "off";
     const connected = phase === "connected";
     const ink = off ? t.dim : t.foreground;
+    const mark = this.machineMark(t, phase);
     const go = (cx) => {
       if (off && m) { this.setPower(m, true, cx); return; }
       if (!connected) return;
@@ -1752,7 +1822,7 @@ export default class Spaces extends View {
     };
     const ring = this.navMark(`machine:${m ?? "local"}`, go);
     const power = this.machineSwitch(m, phase, t, collapsed);
-    const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(17).flex_none().text_color(ink);
+    const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(HEADER_ICON).flex_none().text_color(ink);
     return h_flex().id(`machine-${m ?? "local"}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
       .px(collapsed ? 0 : G.sm).gap(collapsed ? G.xs : G.sm).items_center().justify_center().text_color(ink)
       .when(!collapsed, (el) => el.justify_start())
@@ -1761,11 +1831,11 @@ export default class Spaces extends View {
       .on_click((_e, cx) => go(cx))
       .when(collapsed, (el) => el.tooltip(phase === "login" ? `${title}: ${loginLine(m)}` : title).child(icon).when(Boolean(power), (row) => row.child(power)))
       .when(!collapsed, (el) => el.child(icon)
-        .child(div().flex_1().min_w(0).truncate().text_size(15).font_semibold().text_color(ink).child(title))
-        .when(connected, (row) => row.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(6)
+        .child(div().flex_1().min_w(0).truncate().text_size(T.title).font_semibold().text_color(ink).child(title))
+        .when(connected, (row) => row.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(G.xs).rounded(R.control)
           .hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", { machine: m ?? "" }); }).child("+")))
-        .child(this.machineMark(t, phase))
+        .when(mark, (row) => row.child(mark))
         .when(Boolean(power), (row) => row.child(power))
         .when(connected, (row) => row.child(svg(`mods/kanso-chrome/icons/chevron-${folded ? "right" : "down"}.svg`).size(12).flex_none().text_color(t.dim))));
   }
@@ -1773,9 +1843,9 @@ export default class Spaces extends View {
   machineDown(m, t, collapsed) {
     const retry = (cx) => this.retryMachine(m, cx);
     if (collapsed) {
-      return div().id(`machine-retry-${m}`).size(15).flex_none().cursor_pointer().tooltip("Unavailable")
+      return div().id(`machine-retry-${m}`).size(ICON).flex_none().cursor_pointer().tooltip("Unavailable")
         .on_click((_e, cx) => retry(cx))
-        .child(svg("mods/kanso-chrome/icons/refresh.svg").size(15).text_color(t.blocked));
+        .child(svg("mods/kanso-chrome/icons/refresh.svg").size(ICON).text_color(t.blocked));
     }
     return h_flex().id(`machine-unavailable-${m}`).h(H.compact).flex_none().px(G.sm).gap(G.sm).items_center()
       .child(div().text_size(T.body).text_color(t.blocked).child("Unavailable"))
@@ -1786,12 +1856,12 @@ export default class Spaces extends View {
     const line = loginLine(m);
     const onCopy = (_e, cx) => { cx.stop_propagation(); cx.write_to_clipboard?.(line); this.copiedLogin = line; cx.notify(); };
     if (collapsed) {
-      return div().id(`machine-login-copy-${m}`).size(15).flex_none().cursor_pointer().tooltip(line)
+      return div().id(`machine-login-copy-${m}`).size(ICON).flex_none().cursor_pointer().tooltip(line)
         .on_click(onCopy)
-        .child(svg("mods/kanso-chrome/icons/copy.svg").size(15).text_color(t.foreground));
+        .child(svg("mods/kanso-chrome/icons/copy.svg").size(ICON).text_color(t.foreground));
     }
     return v_flex().id(`machine-login-${m}`).px(G.sm).gap(G.xs).flex_none()
-      .child(div().text_size(T.small).text_color(t.blocked).child("needs a login: run"))
+      .child(div().text_size(T.small).text_color(t.blocked).child("Needs a login"))
       .child(h_flex().gap(G.xs).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(t.muted).child(line))
         .child(div().id(`machine-login-copy-${m}`).flex_none().px(G.xs).rounded(R.control).cursor_pointer()
@@ -1801,7 +1871,8 @@ export default class Spaces extends View {
           .child(this.copiedLogin === line ? "Copied" : "Copy")));
   }
 
-  machineBlock(m, t, collapsed, rows, draw, closed, loading, loadingRow, ctx, layouts) {
+  machineBlock(m, block) {
+    const { t, collapsed, rows, draw, closed, loading, loadingRow, ctx, layouts } = block;
     const phase = this.phaseOf(m, layouts);
     const folded = phase === "connected" && (this.folded ?? new Set()).has(m);
     const mine = rows.filter((r) => (r.w.machine ?? null) === m);
@@ -1810,7 +1881,7 @@ export default class Spaces extends View {
     if (phase === "loading") return [headItem, loadingRow(m)];
     if (phase === "unavailable") return [headItem, item(this.machineDown(m, t, collapsed), collapsed ? RAIL_MARK : H.compact)];
     if (phase === "login") return [headItem, item(this.machineLogin(m, t, collapsed), collapsed ? RAIL_MARK : H.compact * 2)];
-    const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(6)
+    const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(R.control)
       .text_size(12).text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_click(() => run("space.new", { machine: m ?? "" }))
       .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New space");
@@ -2385,7 +2456,7 @@ export default class Spaces extends View {
     if (this.sinceLeft) this.sinceLeft.showing = false;
     this.narrow = !collapsed && (this.width ?? SIDEBAR_W) < ONE_LINE_W;
     // The keyboard left (a click on a pane, say): the ring goes too.
-    if (this.kbd && (collapsed || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
+    if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
     const sp = visibleSpaces(spaces(), this.offNames());
     const ps = panes();
@@ -2412,6 +2483,7 @@ export default class Spaces extends View {
     const asleep = this.sleepingNow(sp, read.terms);
     const rowsCtx = { ...read, asleep, spaces: sp, registry: registry(), spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, read.terms).filter((a) => !asleep.dozing.has(a.address)) };
     const ctx = { ...rowsCtx, rowsBy: new Map(sp.map((w) => [w.id, this.spaceRows(w.id, rowsCtx)])), project: this.projectOf(sp, t) };
+    const queue = this.refreshNeeds(sp, read.terms, asleep);
     this.seenNow = this.seen(sp, ctx);
     this.seenAt = ctx.now; // when it was seen: a later write of it is no newer
     // In Projects, + adds a project; in Status and Threads, it starts a conversation in a project you pick.
@@ -2438,7 +2510,8 @@ export default class Spaces extends View {
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
-      .child(this.list(t, collapsed, view, [
+      .child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)))
+      .child(this.needsOpen ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
         ...(!collapsed && view !== "spaces" ? this.returnRows(t, active) : []),
         ...(view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
           : view === "threads" ? (collapsed ? this.threadsRail(t, sp, ctx) : this.threadsView(t, sp, ps, ctx)) : this.grouped(t, collapsed, sp, ps, ctx))]));

@@ -32,6 +32,19 @@ test("a login Herdr asks for is told apart from a missing install", async () => 
   assert.equal(loginLine("dark"), "hc machine login dark");
 });
 
+test("a mark is only for a phase the switch does not already say", async () => {
+  const { machineMarks } = await load("kanso-spaces/machines.js", ["machineMarks"]);
+  assert.deepEqual(Object.keys(machineMarks).toSorted(), ["loading", "login", "unavailable"]);
+  for (const mark of Object.values(machineMarks)) {
+    assert.equal(typeof mark.tip, "string");
+    assert.equal(typeof mark.color, "string");
+    assert.equal(typeof mark.icon, "string");
+  }
+  assert.equal(machineMarks.loading.icon, "refresh");
+  assert.equal(machineMarks.connected, undefined);
+  assert.equal(machineMarks.off, undefined);
+});
+
 test("off hides that machine, and this computer has no switch", async () => {
   const { isOff, namesOff, heldNames, connectedNames, pollKeys, visibleSpaces, visibleAgents, machinePhase, powerId, machineTitle } = await load(
     "kanso-spaces/machines.js",
@@ -70,12 +83,14 @@ test("off hides that machine, and this computer has no switch", async () => {
 async function sidebar(state) {
   const ids = [];
   const texts = [];
+  const tips = [];
   const node = () => {
     const proxy = new Proxy({}, {
       get(_target, prop) {
         if (prop === "then") return undefined;
         if (prop === "id") return (id) => { ids.push(id); return proxy; };
         if (prop === "child") return (value) => { if (typeof value === "string") texts.push(value); return proxy; };
+        if (prop === "tooltip") return (value) => { if (typeof value === "string") tips.push(value); return proxy; };
         if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
         return () => proxy;
       },
@@ -97,7 +112,7 @@ async function sidebar(state) {
     powerBusy: new Set(), hostName: state.hostName ?? "macbook", orderPicker: node,
   });
   view.render();
-  return { view, ids, texts };
+  return { view, ids, texts, tips };
 }
 
 const local = { id: "home", name: "~", folder: "/Users/me", machine: null, active: true, tabs: [] };
@@ -118,6 +133,8 @@ test("the sidebar draws an off machine as one row, and this computer has no swit
   assert.equal(off.ids.includes("space-dark-sp"), false, "its projects are not listed");
   assert.equal(off.texts.includes("macbook"), true);
   assert.equal(off.texts.includes("dark"), true);
+  assert.equal(off.tips.includes("Off"), false, "off is the switch, not a second mark");
+  assert.equal(off.tips.includes("Connected"), false);
   assert.ok(off.view.nav.some((row) => row.key === "machine-power:dark"), "the switch is on the sidebar list");
 
   const back = await sidebar({
@@ -127,6 +144,7 @@ test("the sidebar draws an off machine as one row, and this computer has no swit
   });
   assert.equal(back.ids.includes("space-dark-sp"), true, "on: its project is back");
   assert.equal(back.ids.includes("machine-power-dark"), true);
+  assert.equal(back.tips.includes("Connected"), false, "on is the switch, not a second mark");
 });
 
 test("a machine that is loading, unavailable, or waiting for a login says so in its row", async () => {
@@ -136,6 +154,7 @@ test("a machine that is loading, unavailable, or waiting for a login says so in 
   });
   assert.equal(loading.ids.includes("machine-loading-dark"), true);
   assert.equal(loading.ids.includes("space-dark-sp"), false);
+  assert.equal(loading.tips.includes("Loading"), true);
 
   const down = await sidebar({
     spaces: [local, remote],
@@ -145,6 +164,7 @@ test("a machine that is loading, unavailable, or waiting for a login says so in 
   assert.equal(down.ids.includes("machine-unavailable-dark"), true);
   assert.equal(down.ids.includes("machine-retry-dark"), true);
   assert.equal(down.texts.includes("Unavailable"), true);
+  assert.equal(down.tips.includes("Unavailable"), true);
   assert.equal(down.ids.includes("space-dark-sp"), false);
 
   const login = await sidebar({
@@ -152,8 +172,10 @@ test("a machine that is loading, unavailable, or waiting for a login says so in 
   });
   assert.equal(login.ids.includes("machine-login-dark"), true);
   assert.equal(login.ids.includes("machine-login-copy-dark"), true);
-  assert.equal(login.texts.includes("needs a login: run"), true);
+  assert.equal(login.texts.includes("Needs a login"), true);
+  assert.equal(login.texts.includes("needs a login: run"), false);
   assert.equal(login.texts.includes("hc machine login dark"), true);
+  assert.equal(login.tips.includes("Needs a login"), true);
   assert.equal(login.ids.includes("space-dark-sp"), false);
 });
 
