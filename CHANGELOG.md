@@ -17,6 +17,13 @@ release.
 
 - A remote machine is one quiet row, the same height as a project. Off, unreachable, and needs login say so on that row, and it can be turned off, retried, or given a space from there. One that cannot be reached stays in the list. Turning one off no longer forgets how to connect it.
 
+## [3.22.2] - 2026-11-10
+
+### Fixed
+
+- While you were away has a heading, with how many changes and a dismiss. Each change is a row: the agent's mark, the name kansō uses, and how long ago. The agent you are looking at is left out, and one agent is one row.
+- Needs you shows its count only when someone is waiting. With nobody waiting it stays hidden, and Cmd+J still says so for a moment.
+
 ## [3.22.1] - 2026-11-10
 
 ### Changed

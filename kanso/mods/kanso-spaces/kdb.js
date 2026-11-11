@@ -417,7 +417,7 @@ export class Kdb {
   }
   sinceSleep(id, fact, guard, now) {
     if (!fact) return "";
-    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,${q(fact.target)},${q(fact.kind)},name || ${q(` ${fact.word}`)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
+    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,${q(fact.target)},${q(fact.kind)},name,${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
   }
   // An undo's agent that is back (or never left) is awake.
   freeAgent(id, me, conversation) {

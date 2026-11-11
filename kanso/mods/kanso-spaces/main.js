@@ -844,8 +844,9 @@ export default class Spaces extends View {
 
   returnRows(t, space) {
     if (!space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
-    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.jumpReturn(row));
-    return [item(view, this.sinceLeft.lineCount() * H.control + G.sm)];
+    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.jumpReturn(row),
+      (label, count, dismiss) => this.bareHead(t, "since-left", label, count, t.foreground, dismiss));
+    return this.sinceLeft.showing ? [item(view, this.sinceLeft.blockHeight())] : [];
   }
 
   jumpReturn(row) {
@@ -2117,17 +2118,21 @@ export default class Spaces extends View {
     });
   }
 
+  bareHead(t, id, name, count, ink, extra) {
+    return this.sectionHead(t, id, 0, false, null, null, name, count, ink, { extra, lift: 0, chevron: false });
+  }
+
   // `lift`: the space above the header (12 under an earlier section).
-  sectionHead(t, id, i, open, toggle, mark, name, count, ink, extra = null, lift = i ? 12 : 0) {
-    return h_flex().id(id).h(32 + lift).pt(lift).px(12).flex_none().gap(10).items_center()
-      .cursor_pointer().text_size(13).font_semibold().text_color(ink)
-      .on_click((_e, cx) => { toggle(cx); cx.notify(); })
+  sectionHead(t, id, i, open, toggle, mark, name, count, ink, { extra = null, lift = i ? 12 : 0, chevron = true } = {}) {
+    const row = h_flex().id(id).h(32 + lift).pt(lift).px(12).flex_none().gap(10).items_center()
+      .text_size(13).font_semibold().text_color(ink)
+      .when(chevron, (el) => el.cursor_pointer().on_click((_e, cx) => { toggle(cx); cx.notify(); }))
       .when(Boolean(mark), (el) => el.child(mark))
       .child(div().child(name))
       .when(count != null, (el) => el.child(div().font_normal().text_color(t.dim).child(String(count))))
       .child(div().flex_1())
-      .when(Boolean(extra), (el) => el.child(extra))
-      .child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim));
+      .when(Boolean(extra), (el) => el.child(extra));
+    return chevron ? row.child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim)) : row;
   }
 
   machineBones(t, collapsed, m) {
@@ -2396,7 +2401,7 @@ export default class Spaces extends View {
       // A project starts after a wider breath than the gap inside it, so each reads as one group.
       const lift = i ? (p ? 18 : 12) : 0;
       const headName = p ? p.name : whole ? this.zzProject(whole.rows[0].a, t).name : (s.label ?? "Active");
-      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, s.rows.length, folds ? t.muted : t.foreground, extra, lift), 32 + lift)];
+      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, s.rows.length, folds ? t.muted : t.foreground, { extra, lift }), 32 + lift)];
       const body = whole ? s.rows : split.live;
       const show = this.unfolded(foldId, open, ctx.now);
       const laid = show ? body.map((r) => row(r, Boolean(s.project))) : [];
@@ -2561,7 +2566,7 @@ export default class Spaces extends View {
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .child(add)
       .when(!collapsed && switchShown, (el) => el.child(this.viewSwitch(t, sp)))
-      .child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx)))
+      .when(queue.rows.length > 0 || this.needsEmpty, (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
       .child(this.needsOpen ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [
         ...(!collapsed && view !== "spaces" ? this.returnRows(t, active) : []),
         ...(view === "agents" ? (collapsed ? this.agentsRail(t, sp, ctx) : this.agentsView(t, sp, ps, ctx))
