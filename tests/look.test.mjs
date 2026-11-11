@@ -114,9 +114,10 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
       calls.push([cmd, ...args]);
       if (options?.on) ons.push([cmd, options.on, ...args]);
       if (options?.on && (cmd === "pwsh" || cmd === "powershell")) return { code: 127, stdout: "", stderr: "" };
+      const name = cmd.startsWith("/usr/bin/") ? cmd.slice("/usr/bin/".length) : cmd;
       if (options?.on && cmd === "uname") return { code: 0, stdout: "Darwin\n" };
-      if (options?.on && cmd === "stat") return { code: 0, stdout: world.statText };
-      if (cmd === "stat") {
+      if (options?.on && name === "stat") return { code: 0, stdout: world.statText };
+      if (name === "stat") {
         const info = await stat(args.at(-1)).catch(() => null);
         if (info) return { code: 0, stdout: `${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`, stderr: "" };
       }
@@ -124,8 +125,8 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
         await rename(args.at(-2), args.at(-1));
         return { code: 0, stdout: "", stderr: "" };
       }
-      if (options?.on && cmd === "base64") return { code: 0, stdout: "AQIDBA==\n" };
-      if (cmd === "base64" && args[0] === "-D") {
+      if (options?.on && name === "base64") return { code: 0, stdout: "AQIDBA==\n" };
+      if (name === "base64" && args[0] === "-D") {
         const text = await readFile(args[2], "utf8");
         await writeFile(args[4], Buffer.from(String(text).replace(/\s/g, ""), "base64"));
         return { code: 0, stdout: "", stderr: "" };
@@ -710,7 +711,7 @@ test("Images reads an agent on another computer there, and draws a copy from thi
   assert.equal(look.list()[0].path, file);
   assert.match(look.shown.image, /^data\/kanso-panel\/look\//);
   const onOf = (cmd) => ons.filter((c) => c[0] === cmd).map((c) => c[1]);
-  for (const cmd of ["readTextFile", "stat", "base64", "sips"]) assert.deepEqual([...new Set(onOf(cmd))], ["light"], cmd);
+  for (const cmd of ["readTextFile", "/usr/bin/stat", "/usr/bin/base64", "sips"]) assert.deepEqual([...new Set(onOf(cmd))], ["light"], cmd);
   assert.ok(ons.some((c) => c[0] === "sh" && c[1] === "light" && String(c[3]).includes("printf %s")), "the home is that computer's");
   assert.ok(ons.some((c) => c[0] === "sh" && c[1] === "light" && String(c[3]).startsWith('f="$1"')), "the conversation is read from the byte stored last time");
   assert.ok(ons.some((c) => c[0] === "sh" && c[1] === "light" && String(c[3]).startsWith("for f;")), "the file is checked there");
@@ -738,6 +739,6 @@ test("a picture over 2 MB on another computer waits until it is asked for", asyn
   assert.equal(look.list().some((i) => i.path === file), true);
   assert.equal(look.shown?.deferred, true);
   assert.equal(look.shown.size, 3 * 1024 * 1024);
-  assert.equal(ons.some((c) => c[0] === "base64"), false);
+  assert.equal(ons.some((c) => c[0] === "/usr/bin/base64"), false);
   assert.equal(look.note, null);
 });
