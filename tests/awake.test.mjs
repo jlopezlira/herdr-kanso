@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
-const names = ["holdCommand", "shouldHold", "osOf", "createAwake", "LEASE_S", "RENEW_MS", "EXEC_TIMEOUT_MS"];
+const names = ["holdCommand", "shouldHold", "osOf", "createAwake", "keepAwake", "LEASE_S", "RENEW_MS", "EXEC_TIMEOUT_MS"];
 let api;
 const loadApi = async () => api ??= await load("kanso-spaces/awake.js", names);
 
@@ -18,6 +18,7 @@ function world(reply) {
     now: () => now,
     run: (call) => {
       calls.push({ ...call, at: now });
+      if (reply.hang && call.command === "uname") return new Promise(() => {});
       if (call.command === "uname") {
         if (reply.uname instanceof Error) return Promise.reject(reply.uname);
         return Promise.resolve(reply.uname ?? { code: 0, stdout: "Darwin\n", stderr: "" });
@@ -203,6 +204,35 @@ test("the system is probed once per connection, and a probe that cannot start is
   await odd.awake.sync([row("bsd", "connected")]);
   assert.equal(odd.calls.filter((call) => call.command === "uname").length, 3);
   assert.equal(holds(odd.calls).length, 0);
+});
+
+test("a failed probe and a probe that never settles both leave the next wait", async () => {
+  await loadApi();
+  const failed = world({ uname: Object.assign(new Error("the machine is unreachable"), { code: "ETIMEDOUT" }) });
+  const failedWait = await api.keepAwake(failed.awake, [row("dark", "connected")], { after() {} });
+  assert.equal(failedWait, api.RENEW_MS);
+  assert.equal(failed.awake.slot("dark").arming, false);
+
+  const hung = world({ hang: true });
+  let fire = null;
+  const pending = api.keepAwake(hung.awake, [row("dark", "connected")], { after(_ms, fn) { fire = fn; } }, 1000);
+  assert.equal(hung.awake.slot("dark").arming, true);
+  fire();
+  assert.equal(await pending, api.RENEW_MS);
+  assert.equal(hung.awake.slot("dark").arming, false);
+
+  const again = world({ hang: true });
+  again.awake.put("dark", { gen: 0, os: null, skip: false, arming: false, nextAt: 0 });
+  again.at(api.RENEW_MS);
+  let againFire = null;
+  const retry = api.keepAwake(again.awake, [row("dark", "connected")], { after(_ms, fn) { againFire = fn; } }, 1000);
+  assert.equal(again.awake.slot("dark").arming, true);
+  againFire();
+  assert.equal(await retry, api.RENEW_MS);
+  assert.equal(again.awake.slot("dark").arming, false);
+
+  const thrown = { async sync() { throw new Error("probe failed"); }, follow() { return api.RENEW_MS; } };
+  assert.equal(await api.keepAwake(thrown, [], { after() {} }), api.RENEW_MS);
 });
 
 test("a probe that throws without a missing command is tried again at the renew time", async () => {
