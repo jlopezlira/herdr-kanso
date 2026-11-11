@@ -711,9 +711,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - `status-row` (row, 26 px): `status` (`kanso-status` `{side: "left"}`,
       weight 1), `strip-map` (`kanso-strip`, 180 px), `status-right`
       (`kanso-status` `{side: "right"}`, weight 1).
-- **Platform**: shared `platform-*.js` services use injected runners.
-  SQLite moves large queries to a temporary SQL file, removes it after use,
-  and stops at the first error so an unfinished transaction rolls back.
+- **Platform**: shared `platform-*.js` services take injected runners.
+  Large SQLite queries use temporary files, cleaned even on error; failures
+  roll back unfinished transactions. Windows access errors propagate.
 - **Mods**:
   - `kanso-spaces`: spaces, agents (`agents.js`), git per space via `exec`,
     machines via `hc machine ls`, `add` and `rm`.

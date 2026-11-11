@@ -10,9 +10,9 @@ import { clipboardApi } from "../kanso/mods/kanso-panel/platform-clipboard.js";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { powershell, psQuote } from "../kanso/mods/kanso-panel/platform-command.js";
 
-function runner(output = "", code = 0) {
+function runner(output = "", code = 0, stderr = code ? "Access denied" : "") {
   const calls = [];
-  return { calls, run: async (program, args, options) => { calls.push({ program, args, options }); return { code, stdout: output, stderr: code ? "Access denied" : "" }; } };
+  return { calls, run: async (program, args, options) => { calls.push({ program, args, options }); return { code, stdout: output, stderr }; } };
 }
 
 for (const name of ["macos", "linux", "windows"]) {
@@ -90,7 +90,8 @@ for (const name of ["macos", "linux", "windows"]) {
     await api.mkdir(target); await api.copy(target, "next"); await api.move(target, "next"); await api.remove([target], { recursive: true });
     assert.equal(r.calls.length, 4);
     assert.equal(await api.test(target), true);
-    assert.equal(await fileApi(name, runner("", 1).run).test(target), false);
+    assert.equal(await fileApi(name, runner("", 1, "").run).test(target), false);
+    if (name === "windows") await assert.rejects(fileApi(name, runner("", 1).run).test(target), /Access denied/);
     await assert.rejects(fileApi(name, runner("", 5).run).test(target), /Access denied/);
     if (name === "windows") assert.ok(r.calls.every(({ args }) => args.at(-1).includes(psQuote(target))));
     else assert.deepEqual(r.calls[0].args, ["-p", target]);

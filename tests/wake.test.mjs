@@ -4,10 +4,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
 import { load, clone, temporary, exec, psMissing, nativeWindow } from "./helpers.mjs";
 
 const HOME = "/nonexistent-home";
 const C1 = "00000000-0000-4000-8000-000000000001";
+const withSessionLookup = (runningSession) => (platform, run) => ({ ...processApi(platform, run), runningSession });
 
 // Herdr as far as a wake needs it: three spaces under one folder, tabs and
 // panes that appear when asked for, the strip placing each pane, and a
@@ -413,18 +415,20 @@ test("a space made for a wake is never closed, nor its starter tab, once you use
   assert.deepEqual(made.filter(([cmd]) => cmd === "tab.close"), [], "woke: its starter tab stays, as you use it");
 });
 
-test("an agent brought back gets nothing typed into a program you start while its conversation is looked for", async (t) => {
-  const dir = await temporary(t);
-  const world = herdr(dir);
-  const sent = [];
-  let fg = null;
-  world.host.hc = async (args) => (args[0] === "send" ? (sent.push(args), { code: 0, stdout: "" })
-    : args[0] === "get" ? { code: 0, stdout: JSON.stringify({ pid: 1, foreground: fg }) } : { code: 0, stdout: "" });
-  world.host.exec = async (c, a, o) => { if (c === "sh") fg = { pid: 4242, argv: ["vim"] }; return exec(c, a, o); };
-  const mod = await load("kanso-sleep/sleepwork.js", ["comeBack", "stopIn"], world.host);
-  assert.equal(await mod.comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
-  assert.deepEqual(sent, []);
-});
+for (const platform of ["macos", "linux", "windows"]) {
+  test(`an agent brought back gets nothing typed into a program you start while its conversation is looked for on ${platform}`, async (t) => {
+    const world = herdr(await temporary(t));
+    const sent = [];
+    let fg = null;
+    world.host.window = () => ({ platform });
+    world.host.hc = async (args) => (args[0] === "send" ? (sent.push(args), { code: 0, stdout: "" })
+      : args[0] === "get" ? { code: 0, stdout: JSON.stringify({ pid: 1, foreground: fg }) } : { code: 0, stdout: "" });
+    world.host.processApi = withSessionLookup(async () => { fg = { pid: 4242, argv: ["vim"] }; return null; });
+    const { comeBack } = await load("kanso-sleep/sleepwork.js", ["comeBack"], world.host);
+    assert.equal(await comeBack({ terminal: "t1", cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Alice" }, { sleep: async () => {} }), "out");
+    assert.deepEqual(sent, []);
+  });
+}
 
 test("a wake that could neither prove an agent back nor end it keeps its terminal to look at: the next wake waits for it", async (t) => {
   let blind = true;
@@ -589,23 +593,15 @@ test("ending an agent brought back stops that process only, never what you start
 });
 
 test("a wake that can't tell whether its conversation runs does not wake", async (t) => {
-  const { world, store } = await asleepInKanso(t);
-  const { mkdir, chmod } = await import("node:fs/promises");
-  const home = await temporary(t);
-  await mkdir(join(home, ".claude", "sessions"), { recursive: true });
-  await chmod(join(home, ".claude", "sessions"), 0o000);
-  t.after(() => chmod(join(home, ".claude", "sessions"), 0o755).catch(() => {}));
-  world.host.home = () => home;
+  let denied = true;
+  const { world, store } = await asleepInKanso(t, (w) => {
+    w.host.processApi = withSessionLookup(async () => {
+      if (denied) throw new Error("Session lookup denied");
+      return null;
+    });
+  });
   const mod = await load("kanso-sleep/main.js", ["Sleep", "runningOn"], world.host);
-  await assert.rejects(mod.runningOn(C1), /can't read/);
-  // A folder above it that can't be gone into is not "nothing there" either.
-  const deep = await temporary(t);
-  await mkdir(join(deep, ".claude", "sessions"), { recursive: true });
-  await chmod(join(deep, ".claude"), 0o000);
-  t.after(() => chmod(join(deep, ".claude"), 0o755).catch(() => {}));
-  const blocked = await load("kanso-sleep/main.js", ["runningOn"], { ...world.host, home: () => deep });
-  await assert.rejects(blocked.runningOn(C1), /can't look at/);
-  await chmod(join(deep, ".claude"), 0o755);
+  await assert.rejects(mod.runningOn(C1), /Session lookup denied/);
   const v = new mod.Sleep();
   Object.assign(v, { store, busy: null, error: null, view: "list" });
   const [shown] = await store.asleep();
@@ -614,6 +610,6 @@ test("a wake that can't tell whether its conversation runs does not wake", async
   await drain();
   assert.match(String(v.error), /could not be checked/);
   assert.equal(world.ran.filter(([cmd]) => cmd === "tab.new").length, 0, "nothing opened");
-  await chmod(join(home, ".claude", "sessions"), 0o755);
+  denied = false;
   assert.equal(await mod.runningOn(C1), null, "readable and none there: none runs");
 });

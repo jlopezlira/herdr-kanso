@@ -149,6 +149,15 @@ test("Windows session recovery verifies process identity before claiming an exis
   assert.equal(await processApi("windows", r.run).runningSession("different", "C:\\Users\\me"), null);
 });
 
+test("Windows session lookup keeps directory access failures distinct from an absent session", async () => {
+  for (const phase of ["lookup", "read"]) {
+    const r = stub((_program, args) => phase === "lookup" || args.at(-1).includes("Get-ChildItem") ? { code: 1, stdout: "", stderr: "Access denied" } : "");
+    await assert.rejects(processApi("windows", r.run).runningSession("session", "C:\\Users\\me"), /Access denied/);
+  }
+  const missing = stub(() => ({ code: 1, stdout: "", stderr: "" }));
+  assert.equal(await processApi("windows", missing.run).runningSession("session", "C:\\Users\\me"), null);
+});
+
 test("Windows Markdown waiting records survive inspection errors and remove only departed owners", async () => {
   const r = stub((_program, args) => {
     const script = args.at(-1);

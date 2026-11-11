@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, rm, writeFile, stat } from "node:fs/promises";
+import { mkdir, rm, writeFile, stat, realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { load, context, temporary, clone, exec } from "./helpers.mjs";
@@ -155,7 +155,7 @@ test("Worktrees asks your agent to explain, never to change anything", async () 
 });
 
 test("Worktrees finds every kind in a real repository and cleans up the safe ones", async (t) => {
-  const dir = await temporary(t), root = join(dir, "Apps"), repo = join(root, "acme"), far = join(dir, "far");
+  const dir = await realpath(await temporary(t)), root = join(dir, "Apps"), repo = join(root, "acme"), far = join(dir, "far");
   await mkdir(repo, { recursive: true }); await mkdir(far);
   await git(repo, "init", "-q", "-b", "main");
   await writeFile(join(repo, "a.txt"), "a\n"); await git(repo, "add", "."); await git(repo, "commit", "-qm", "a");
@@ -189,6 +189,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   // can't read it, and nothing it says about it is true.
   const moved = await add("moved", "-b", "moved");
   await writeFile(join(moved, "wip.txt"), "unsaved\n");
+  await rm(join(moved, ".git"));
   await writeFile(join(moved, ".git"), `gitdir: ${join(dir, "old-place/.git/worktrees/moved")}\n`);
   // A folder whose worktree record was deleted under it.
   const orphan = join(root, "leftover");
@@ -206,7 +207,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   const busy = new Worktrees();
   busy.init(cx); await drain();
   assert.deepEqual(clone(busy.plan().map((w) => basename(w.path)).sort()), ["gone", "reused"]);
-  assert.equal(stateOf(busy.groups[0].items.find((w) => w.path.endsWith("/merged"))), "recent");
+  assert.equal(stateOf(busy.groups[0].items.find((w) => basename(w.path) === "merged")), "recent");
 
   settings["kanso.worktrees.idleHours"] = 0;
   const panel = new Worktrees();
@@ -246,7 +247,7 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.equal(again.hist.kb, after.kb, "the history is read back, not counted twice");
   assert.ok(![merged, squashed, unmerged, detached].some((p) => existsSync(p)), "folders removed");
   assert.ok(await exists(dirty) && await exists(lost) && await exists(open), "the rest stay");
-  const branches = (await git(repo, "branch", "--format=%(refname:short)")).split("\n").sort();
+  const branches = (await git(repo, "branch", "--format=%(refname:short)")).split(/\r?\n/).sort();
   assert.deepEqual(branches, ["dirty", "gone", "late", "main", "moved", "open", "reused", "unmerged"], "merged branches go; the others keep their commits");
 
   assert.ok(!(await git(repo, "worktree", "list")).includes("/gone"), "pruned");

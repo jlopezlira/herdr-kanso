@@ -12,7 +12,7 @@ export function fileApi(platform, run) {
     const r = platform === "windows"
       ? await ps(`if (${kind === "nonempty" ? `(Test-Path -LiteralPath ${psQuote(path)} -PathType Leaf) -and (Get-Item -LiteralPath ${psQuote(path)}).Length -gt 0` : `Test-Path -LiteralPath ${psQuote(path)}${kind === "directory" ? " -PathType Container" : kind === "file" ? " -PathType Leaf" : ""}`}) { exit 0 } else { exit 1 }`, options)
       : await run("test", [kind === "directory" ? "-d" : kind === "nonempty" ? "-s" : kind === "file" ? "-f" : "-e", path], options);
-    if (r.code !== 0 && r.code !== 1) checked(r);
+    if (r.code !== 0 && (r.code !== 1 || platform === "windows" && r.stderr?.trim())) checked(r);
     return r.code === 0;
   };
   const directory = async (path, options) => {
