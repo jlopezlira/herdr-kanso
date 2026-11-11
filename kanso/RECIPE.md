@@ -43,19 +43,21 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       name's first letter, then the name and "N agents".
     - Collapsed, each item is a centred square with its label as a tooltip.
       When an app update is ready, a 6 `accent` dot shows on Settings.
-    - Kanso's own release, apart from Herdr's (`update.js`): when a newer
-      `vX.Y.Z` tag than `version.json` exists, an "Update Kanso to X" row
-      (refresh icon, 6 `accent` dot) sits above Settings and the footer
-      grows to 192 while it shows (back to 156 after; a size you set is kept).
-      The tab bar reads tags (`git ls-remote`) on start, every 5 min (if
-      on in settings) and on `kanso-tabs.check`; one 30 s toast per version
-      runs `kanso-tabs.update`; a dot on the gear. Keys merge three-way (yours
-      stay); the layout is replaced only if the release changed it (old kept
-      as `kanso.json.old-<time>`). A detached shell holding a kernel lock
+    - Kanso's own release (`update.js`). What's new
+      chooses Stable (default) or Early. Stable offers a newer `vX.Y.Z`.
+      Early offers the newest beta, rc or stable, never an older one.
+      The row "Update kansō to X" (refresh icon, 6 `accent` dot) names
+      that tag; the footer grows to 192 while it shows (back to 156
+      after; a size you set is kept). `version.json` stays `X.Y.Z`; the
+      download uses the tag and the check wants `X.Y.Z`. The tab bar
+      reads tags (`git ls-remote`) on start, every 5 min (if on) and on
+      `kanso-tabs.check`; one 30 s toast names the tag and runs
+      `kanso-tabs.update`. Keys merge three-way; the
+      layout is replaced only when the release changed it
+      (`kanso.json.old-<time>`). A detached shell holds a kernel lock,
       downloads into `.kanso-updates/<id>/`, checks `version.json` and
-      `herdr-app check`, swaps each file and mod in turn, `kanso-chrome`
-      last (all put back if it fails or dies), writes `<id>.status`; the tab
-      bar toasts "Kanso updated to X".
+      `herdr-app check`, swaps each mod, `kanso-chrome` last (put back if
+      it fails or dies), writes `<id>.status`.
 - **Corners**: two radii and nothing else. Surfaces (panes, cards, popovers,
   menus) are 8; controls and rows (buttons, tabs, list rows, tiles, chips,
   fields) are 6; dots are circles.
@@ -166,11 +168,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     "− n +" control: fewer or more panes per view, and the number itself
     evens the columns out to 1/n.
     `kanso-status`, text 11.5 `muted`:
-    - At the left, the machine (monitor or server icon, "This computer") and
-      the branch.
-    - At the right, "N agent(s) need you" in `blocked` with a dot (blocked or unseen done), then "X of N working" (or "N agents
-      idle" / "No agents"), then the palette shortcut "⌘⇧P" with the tooltip
-      "Command palette".
+    - Left: computer icon, "This computer" or its name, then the branch.
+      Unreachable: "<name> · unreachable" in `blocked`; a click retries.
+    - Right, while someone waits: mark, name, question (260) and +N; a click
+      runs `kanso-spaces.needs-you.next`. "Memory N% free" in `blocked` when
+      under the guard's floor; a click opens Memory. Then the working count
+      and "⌘⇧P".
 - **Themes**: `kanso` (dark) and `kanso-day` (light), in `themes/`.
   - Dark: background `#1b1b19`, foreground `#d8d4cb`, chrome and canvas
     `#161615`, border `#272725`, input `#353430`, muted `#949086`, dim
@@ -196,7 +199,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
-  loading: kit; unavailable: error. Status shares this queue.
+  loading: kit; unavailable: error. The bar names the oldest blocked one from this queue.
   Strip checks panes each 1.5 s; leaving
   `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
   commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
@@ -216,8 +219,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `icons/working.svg`), in `working`, turning once every 0.9 s
     (`.spin(900)`). No other spinner for an agent's state.
   - Blocked: a solid `blocked` disc with a bold `chrome` "!". The pane
-    header adds the text "Needs you", the status bar says "N agent(s) need
-    you", and a project in the collapsed rail shows it.
+    header adds "Needs you", and a project in the collapsed rail shows it.
   - Done: the circle closed, in `done`.
   - Idle: a thin even ring in `idle` at 70%, on sidebar rows (and in the
     status bar when nothing works); nothing on the tab or header.
@@ -234,9 +236,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
-- **Kanso settings** (kanso-settings, the fixed gear after the panels): Keys
-  rebinds Kanso-only keys (never Herdr's), Mods orders (arrows,
-  `kanso.panels.order`) and hides panels (`.off`) and pieces (`kanso.hidden`), What's new the log, Credits who.
+- **Kanso settings** (kanso-settings, the gear): Keys rebinds Kanso-only keys
+  (never Herdr's), Mods orders and hides panels and pieces, What's new the
+  log (Updates: Stable or Early), Credits who.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
@@ -555,7 +557,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     and Zed (`ssh://<machine>/<path>`); the rest show "local only".
     Cmd+Shift+O (`mod.open:open-with`, in `keys.json`) opens it.
   - `kanso-chrome`: the top strip's mark and the sidebar footer, plus the icon set.
-  - `kanso-status`: status bar; "N agents need you" runs `kanso-spaces.needs-you.next`.
+  - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
     (a failure says why), git marks, code in place, Markdown or a picture to
@@ -713,8 +715,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - With the panel closed, no process started by Files or Insights is
   running.
 - A working agent shows the same turning arc on its tab, header,
-  agent row and the status bar. A blocked one shows "Needs you" in its header and in the
-  status bar.
+  agent row and the status bar. A blocked one shows "Needs you" in its header.
 - Collapsed, the sidebar is 76 wide, its edge does not drag, and the traffic
   lights sit inside it. Opened, it drags between 200 and 480 and reopens at
   the width you left.

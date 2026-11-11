@@ -37,7 +37,7 @@
 
 <h2>What reaches the network, and when</h2>
 <ul>
-  <li><strong>Updates.</strong> kansō asks GitHub for its newest release tag every few minutes, and downloads a release from GitHub when you update.</li>
+  <li><strong>Updates.</strong> kansō asks GitHub for its newest release tag every few minutes, and downloads a release from GitHub when you update. Stable looks at the finished releases. Early, if you turn it on, also looks at a beta or a release candidate.</li>
   <li><strong>The pull request panel and Shipped</strong>, only while they are shown, talk to GitHub through your own GitHub CLI (<code>gh</code>). Shipped keeps a private gist in your account, "Kanso Shipped stats", with commit counts and sizes: no messages, file names or code.</li>
   <li><strong>Spend</strong> downloads OpenRouter's public model price list once a day.</li>
   <li><strong>Simulator</strong> uses only this computer's Xcode and Android SDK tools. It installs nothing. Screenshots stay in its local data folder, replacing older frames. Pictures and Android input stay on this computer; the iOS screen is a view, touched in Apple's Simulator. No pictures are taken while the panel is hidden or the window is behind.</li>

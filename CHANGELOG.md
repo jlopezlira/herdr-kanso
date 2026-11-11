@@ -6,16 +6,22 @@ Removed changes is a major version, one that lists Added or Deprecated is a
 minor version, anything else is a patch. The format follows
 [Keep a Changelog](https://keepachangelog.com). `npm run check:version`
 checks all of this, and merging to main releases the version in
-`kanso/mods/kanso-chrome/version.json`, which is what the updater offers.
+`kanso/mods/kanso-chrome/version.json`, the stable release the updater
+offers unless Early is on.
 Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.29.1] - 2026-11-11
+## [3.30.0] - 2026-11-11
+
+### Added
+
+- What's new lets you choose Stable or Early. Stable is the release everyone gets. Early gets changes before they are tested by everyone, and nothing is required. Going back to Stable keeps the version you have until Stable reaches it.
 
 ### Changed
 
 - Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
+- The status bar names the agent that is waiting and what it asks. When more wait, it shows how many more. A click goes to that agent. An unreachable computer says so, and a click retries it. When memory is low it says how much is free, and a click opens Memory.
 - Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
 - Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
 - A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request in a sentence; a fact stays PR #12.

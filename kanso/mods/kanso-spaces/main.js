@@ -624,6 +624,7 @@ export default class Spaces extends View {
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
     else if (c === "needs-you.next") this.nextNeeds(cx);
+    else if (c.startsWith("retry-machine:") && c.length > "retry-machine:".length) this.retryMachine(c.slice("retry-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "list") this.enterList(cx);
