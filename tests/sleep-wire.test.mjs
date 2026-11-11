@@ -19,10 +19,12 @@ function lookText(pids, alive) {
 }
 
 function wireOf(calls, reads, hcLog, machine) {
-  const exec = calls.filter((c) => c.on === machine).length;
+  const mine = calls.filter((c) => c.on === machine);
+  const exec = mine.length;
+  const sqlite = mine.filter((c) => c.c === "sqlite3").length;
   const files = reads.filter((r) => r.on === machine).length;
   const hc = hcLog.filter((args) => String(args[1] ?? "").startsWith(`${machine}/`)).length;
-  return { exec, files, hc, trips: exec + files + hc };
+  return { exec, sqlite, files, hc, trips: exec + files + hc };
 }
 
 export async function sleepWire(t, { machine = "light", agent = "idle" } = {}) {
@@ -127,8 +129,8 @@ export async function sleepWire(t, { machine = "light", agent = "idle" } = {}) {
 }
 
 function table(rows) {
-  const line = (label, row) => `${label.padEnd(8)} ${String(row.exec).padStart(5)} ${String(row.files).padStart(5)} ${String(row.hc).padStart(5)} ${String(row.trips).padStart(5)}`;
-  return ["tick      exec files    hc trips", ...rows.map((row, i) => line(String(i + 1), row))].join("\n");
+  const line = (label, row) => `${label.padEnd(8)} ${String(row.exec).padStart(5)} ${String(row.sqlite ?? 0).padStart(6)} ${String(row.files).padStart(5)} ${String(row.hc).padStart(5)} ${String(row.trips).padStart(5)}`;
+  return ["tick      exec sqlite files    hc trips", ...rows.map((row, i) => line(String(i + 1), row))].join("\n");
 }
 
 test("a remote sleep and wake of one idle agent, counted across the wire", async (t) => {
@@ -142,29 +144,37 @@ test("a remote sleep and wake of one idle agent, counted across the wire", async
   assert.equal(run.rowState, "asleep");
 });
 
-test("a local sleep's exec count, for the baseline", async (t) => {
+test("a local sleep and wake of one idle agent, counted on this computer", async (t) => {
   const dir = await temporary(t);
-  const calls = [];
+  const calls = [], reads = [], hcLog = [];
   const alive = new Set([11]);
   const terms = { t1: { shell: 101, fg: { pid: 11, argv: ["claude"], cwd: "/w" }, screen: EMPTY } };
   const leave = () => { alive.delete(11); terms.t1.fg = { pid: 101, argv: ["/bin/zsh"] }; terms.t1.screen = "$ "; };
   const host = {
     window: () => ({ platform: "macos" }), home: () => "/nonexistent-home", appHome: () => dir,
     terminals: () => [{ address: "t1" }], panes: () => [{ pane: "p1", terminal: "t1", tab: "tb1" }], run() {},
-    exec: async (c, a, o) => { calls.push(c); return c === "kill" && a[0] === "-0" ? { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "" } : realExec(c, a, o); },
+    exec: async (c, a, o) => {
+      calls.push({ c, a: [...(a ?? [])], on: o?.on ?? null });
+      if (c === "sh" && String(a?.[1] ?? "").includes("kanso-look-end")) return { code: 0, stdout: lookText(a.slice(3), alive).replace("home=/Users/remote", "home=/nonexistent-home"), stderr: "" };
+      if (c === "kill" && a?.[0] === "-0") return { code: alive.has(Number(a[1])) ? 0 : 1, stdout: "", stderr: "" };
+      return realExec(c, a, o);
+    },
     hc: async (args) => {
+      hcLog.push([...args]);
       const [verb, , arg] = args;
       const x = terms.t1;
       if (verb === "get") return { code: 0, stdout: JSON.stringify({ pid: x.shell, foreground: x.fg, status: { state: "idle" }, title: "on it" }) };
       if (verb === "read") return { code: 0, stdout: x.screen };
       if (verb === "keys" && arg === "ctrl+c") { x.screen = EMPTY; return { code: 0, stdout: "" }; }
       if (verb === "send" && arg === "/exit") { leave(); return { code: 0, stdout: "" }; }
+      if (verb === "send" && String(arg).includes(C1)) { x.fg = { pid: 21, argv: ["claude", "--resume", C1], cwd: "/w" }; alive.add(21); return { code: 0, stdout: "" }; }
       return { code: 0, stdout: "" };
     },
-    readTextFile: async (path) => {
+    readTextFile: async (path, options) => {
+      reads.push({ path, on: options?.on ?? null });
       const pid = Number(/(\d+)\.json$/.exec(path)?.[1]);
-      if (pid !== 11) throw new Error("ENOENT");
-      return JSON.stringify({ pid: 11, sessionId: C1 });
+      if (pid !== 11 && pid !== 21) throw new Error("ENOENT");
+      return JSON.stringify({ pid, sessionId: C1 });
     },
   };
   const layout = { per: null, tab: "tb1", cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Ada", terminal: "t1", tab: "tb1", front: 11, pid: 11 }] }] };
@@ -173,11 +183,33 @@ test("a local sleep's exec count, for the baseline", async (t) => {
   const kdb = new Kdb(join(dir, "kanso"));
   await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true });
   const at = calls.length;
-  const cx = { sleep: async () => {}, spawn: (fn) => fn(cx) };
+  const tasks = [];
+  const cx = { sleep: async () => {}, spawn: (fn) => { const task = fn(cx); tasks.push(task); return task; } };
+  const drain = async () => { while (tasks.length) await tasks.shift(); };
   const w = new SleepWork(kdb, () => {}, "win-a");
-  for (let i = 0; i < 40; i++) if (!(await w.tick(cx))) break;
-  console.log(`local exec during sleep ${calls.length - at}: ${calls.slice(at).join(",")}`);
-  assert.equal(calls.length - at, 21);
+  for (let i = 0; i < 40; i++) {
+    if (!(await w.tick(cx))) break;
+    await drain();
+  }
+  const sleepCalls = calls.slice(at);
+  const sleep = { exec: sleepCalls.length, sqlite: sleepCalls.filter((c) => c.c === "sqlite3").length, files: reads.length, hc: hcLog.length };
+  console.log(`local sleep exec ${sleep.exec} sqlite ${sleep.sqlite} files ${sleep.files} hc ${sleep.hc}: ${sleepCalls.map((c) => c.c).join(",")}`);
+  const row = (await kdb.sleeps())[0];
+  assert.equal(row?.state, "asleep");
+  const wakeFrom = calls.length;
+  const wakeReads = reads.length;
+  const wakeHc = hcLog.length;
+  await kdb.run(`UPDATE sleeps SET state='undoing',pending=NULL,pending_at=${Date.now()} WHERE id='${row.id}';
+    UPDATE agents SET step='left',sent_at=${Date.now() - 60_000} WHERE sleep_id='${row.id}';`);
+  w.kicked = Date.now();
+  for (let i = 0; i < 30; i++) {
+    if (!(await w.tick(cx))) break;
+    await drain();
+  }
+  const wakeCalls = calls.slice(wakeFrom);
+  const wake = { exec: wakeCalls.length, sqlite: wakeCalls.filter((c) => c.c === "sqlite3").length, files: reads.length - wakeReads, hc: hcLog.length - wakeHc };
+  console.log(`local wake exec ${wake.exec} sqlite ${wake.sqlite} files ${wake.files} hc ${wake.hc}: ${wakeCalls.map((c) => c.c).join(",")}`);
+  assert.ok(sleep.exec > 0 && wake.exec > 0);
 });
 
 test("a step is looked at again only when its timer is due", async () => {
@@ -193,6 +225,7 @@ test("a step is looked at again only when its timer is due", async () => {
   assert.equal(lookDue({ step: "requested" }, 1, null), false);
   assert.equal(lookDue({ step: "left" }, 1, null), false);
   assert.equal(lookDue(clearing, 1, { step: "saving" }), true);
+  assert.equal(lookDue(saving, 1000, { step: "saving" }, true), true, "this computer looks on every tick");
 });
 
 test("a remote claim takes a free row, leaves a fresh lease, and sticks one that went quiet unseen", async (t) => {
