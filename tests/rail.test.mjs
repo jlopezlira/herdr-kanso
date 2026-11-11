@@ -93,3 +93,18 @@ test("a drag that folds the sidebar remembers the width you had, not an older on
   view.sized(159, cx, 30016);
   assert.equal(state["sidebar.width"], 300);
 });
+
+test("kanso-spaces.sidebar folds an open sidebar to the rail and opens a folded one", async () => {
+  const state = { "sidebar.width": 300 }, sizes = [];
+  let tree = { id: "root", resizable: true, children: [{ id: "sidebar", min: 120 }, { id: "strip-map" }] };
+  const { view } = await spaces({
+    shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
+    layout: () => clone(tree), window: () => ({ platform: "macos" }),
+    run: (command, args) => { if (command === "layout.set") tree = clone(args.layout); if (command === "layout.resize") sizes.push(args.px); },
+  });
+  view.width = 280;
+  view.command("sidebar");
+  assert.deepEqual([state["sidebar.collapsed"], state["sidebar.width"], sizes.at(-1)], [true, 280, 76]);
+  view.command("sidebar");
+  assert.deepEqual([state["sidebar.collapsed"], sizes.at(-1)], [false, 280]);
+});

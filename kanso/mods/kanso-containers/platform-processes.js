@@ -41,14 +41,9 @@ for f in "$d"/*.json; do
 done
 exit 0`;
 export function processApi(platform, run) {
-  const list = async ({ pids, on, onlyIds = false } = {}) => {
+  const list = async ({ pids, on } = {}) => {
     if (pids) pids.forEach(validPid);
     const options = on ? { on } : undefined;
-    if (platform !== "windows" && onlyIds && pids) {
-      const result = await run("ps", ["-o", "pid=", "-p", pids.join(",")], options);
-      if (result.code !== 0 && result.code !== 1) checked(result);
-      return processTable(String(result.stdout).trim().split(/\s+/).filter((pid) => /^\d+$/.test(pid)).map((pid) => ({ pid: Number(pid) })));
-    }
     const rows = platform === "windows"
       ? windowsProcesses(checked(await powershell(run, "$ErrorActionPreference='Stop'; @(Get-CimInstance Win32_Process | ForEach-Object { @{pid=$_.ProcessId;ppid=$_.ParentProcessId;command=$_.CommandLine;name=$_.Name;created=$(if ($_.CreationDate) {$_.CreationDate.ToUniversalTime().ToString('o')} else {$null})} }) | ConvertTo-Json -Compress", options)).stdout)
       : unixProcesses(checked(await run("ps", ["-axo", "pid=,ppid=,etime=,command="], options)).stdout);

@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
 // Kept on its own: the trigger body has its own ";".
+// hc once stored the words false and null for a plain ssh machine.
+const CLEAN_OFF = `UPDATE machines_off SET via=CASE WHEN via IN ('false','null') THEN '' ELSE via END, session=CASE WHEN session IN ('false','null') THEN '' ELSE session END WHERE via IN ('false','null') OR session IN ('false','null');`;
+
 export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents
   WHEN OLD.sleep_id IS NOT NULL AND NEW.sleep_id IS NOT NULL AND OLD.sleep_id != NEW.sleep_id
   BEGIN SELECT RAISE(ABORT, 'that agent is already asleep'); END;`;
@@ -109,46 +112,112 @@ export function layoutWithout(layout, ids) {
   return { ...layout, cols: cols.map((c) => ({ ...c, w: total > 0 ? (Number(c.w) || 0) / total : 1 / cols.length })) };
 }
 
+const CACHE_MS = 30_000;
+// Files whose schema is in place. Plain values only: a view's queue and cache die with the view.
+class Schemas {
+  constructor() { this.files = new Set(); }
+  has(file) { return this.files.has(file); }
+  made(file) { this.files.add(file); }
+}
+const schemas = new Schemas();
+
 export class Kdb {
   constructor(dir = paths.join(appHome(), DIR)) {
     this.dir = dir;
     this.file = paths.join(dir, "kanso.db");
     this.ready = null;
     this.chain = Promise.resolve();
+    this.queue = [];
+    this.cache = new Map();
+    this.cachedAt = Date.now();
+  }
+
+  execute(text) {
+    return localService(sqliteApi).unchecked(this.file, statements(text), { json: true });
   }
 
   async sql(text) {
-    const r = await localService(sqliteApi).execute(this.file, statements(text), { json: true });
+    const r = await this.execute(text);
+    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
     return rowsOfOutput(r.stdout);
   }
 
-  // Ready once; a failure is tried again on the next call, never kept.
+  // Ready once per file; a failure is tried again on the next call, never kept.
   open() {
-    return (this.ready ??= (async () => {
-      const ok = await exec("sqlite3", ["-version"]).catch(() => null);
-      if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-      await localService(fileApi).mkdir(this.dir);
-      await this.sql([...statements(SCHEMA), ONE_SLEEP]);
-      // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
-      const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name), picture_scans: (await this.sql("PRAGMA table_info(picture_scans);")).map((c) => c.name) };
-      const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
-      if (missing.length) await this.sql(missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`).join(""));
-    })().catch((e) => { this.ready = null; throw e; }));
+    return (this.ready ??= schemas.has(this.file) ? Promise.resolve() : this.create().then(() => schemas.made(this.file), (e) => { this.ready = null; throw e; }));
   }
 
-  // In order, one after the other (a failed one fails its caller only).
-  run(text) {
-    const done = this.chain.then(() => this.open()).then(() => this.sql(text));
-    this.chain = done.catch(() => {});
-    return done;
+  async create() {
+    const ok = await exec("sqlite3", ["-version"]).catch(() => null);
+    if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
+    await localService(fileApi).mkdir(this.dir);
+    await this.sql([...statements(SCHEMA), ONE_SLEEP]);
+    // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
+    const has = { agents: (await this.sql("PRAGMA table_info(agents);")).map((c) => c.name), sleeps: (await this.sql("PRAGMA table_info(sleeps);")).map((c) => c.name), picture_scans: (await this.sql("PRAGMA table_info(picture_scans);")).map((c) => c.name) };
+    const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
+    if (missing.length) await this.sql(missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`).join(""));
   }
-  // True when the statement that returns rows touched one.
+
+  enqueue(text) {
+    return new Promise((resolve, reject) => {
+      this.queue = [...this.queue, { text, resolve, reject }];
+      if (this.queue.length === 1) Promise.resolve().then(() => this.flush());
+    });
+  }
+
+  flush() {
+    const batch = this.queue;
+    this.queue = [];
+    const work = () => this.sendBatch(batch);
+    this.chain = this.chain.then(work, work);
+  }
+
+  async sendBatch(batch) {
+    const marker = `kanso-${newId()}`;
+    try {
+      const text = batch.flatMap((call, i) => [...statements(call.text), `.print ${marker}:${i}`]);
+      const result = await this.execute(text);
+      const chunks = String(result.stdout ?? "").split(new RegExp(`^${marker}:[0-9]+\\r?$`, "gm"));
+      const completed = chunks.length - 1;
+      chunks.slice(0, completed).forEach((chunk, i) => batch[i].resolve(rowsOfOutput(chunk)));
+      if (completed === batch.length) return;
+      batch[completed].reject(new Error((result.stderr || "sqlite3 failed").trim().split("\n")[0]));
+      if (completed + 1 < batch.length) await this.sendBatch(batch.slice(completed + 1));
+    } catch (error) { for (const call of batch) call.reject(error); }
+  }
+
+  // Drops a call the host lost, so later calls start afresh instead of waiting behind it.
+  abandon() {
+    this.ready = null;
+    this.queue = [];
+    this.chain = Promise.resolve();
+    this.invalidate();
+  }
+
+  invalidate() {
+    this.cache.clear();
+    this.cachedAt = Date.now();
+  }
+
+  run(text) {
+    if (/\b(?:prefs|panel_state)\b/i.test(Array.isArray(text) ? text.join(" ") : text)) this.invalidate();
+    return this.read(text);
+  }
   async held(text) { return (await this.run(text)).length > 0; }
-  async read(text) { await this.open(); return this.sql(text); }
+  async read(text) { await this.open(); return this.enqueue(text); }
+
+  async cached(text) {
+    if (Date.now() - this.cachedAt >= CACHE_MS) this.invalidate();
+    if (!this.cache.has(text)) {
+      const result = this.read(text).catch((error) => { if (this.cache.get(text) === result) this.cache.delete(text); throw error; });
+      this.cache.set(text, result);
+    }
+    return (await this.cache.get(text)).map((row) => ({ ...row }));
+  }
 
   // Enough to add a remote machine back. hc machine rm forgets it here; its terminals keep running there.
   machinesOff() {
-    return this.read("SELECT name, target, via, session, temporary FROM machines_off ORDER BY name;").then((rows) => rows.map((row) => ({
+    return this.run(CLEAN_OFF).then(() => this.read("SELECT name, target, via, session, temporary FROM machines_off ORDER BY name;")).then((rows) => rows.map((row) => ({
       name: row.name, target: row.target ?? "", via: row.via ?? "", session: row.session ?? "", temporary: Boolean(row.temporary),
     })));
   }
@@ -364,7 +433,7 @@ export class Kdb {
   }
   sinceSleep(id, fact, guard, now) {
     if (!fact) return "";
-    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,${q(fact.target)},${q(fact.kind)},name || ${q(` ${fact.word}`)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
+    return `INSERT INTO since_events(project,target,kind,text,at) SELECT project,${q(fact.target)},${q(fact.kind)},name,${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
   }
   // An undo's agent that is back (or never left) is awake.
   freeAgent(id, me, conversation) {
@@ -381,9 +450,11 @@ export class Kdb {
     return this.held(`BEGIN;${end}COMMIT;`);
   }
 
-  async sleeps() {
-    await this.open();
-    const [rows, agents] = [await this.sql("SELECT * FROM sleeps;"), await this.sql("SELECT * FROM agents WHERE sleep_id IS NOT NULL;")];
+  async sleeps(spaces = null, now = Date.now()) {
+    const [, rows, agents] = await Promise.all([
+      spaces ? this.syncSpaces(spaces, now) : Promise.resolve(),
+      this.read("SELECT * FROM sleeps;"), this.read("SELECT * FROM agents WHERE sleep_id IS NOT NULL;"),
+    ]);
     return rows.map((r) => ({ ...r, agents: agents.filter((a) => a.sleep_id === r.id) }));
   }
 
@@ -412,7 +483,7 @@ export class Kdb {
   }
   setProjectAgent(id, agent) { return this.run(`UPDATE projects SET agent=${q(agent)} WHERE id=${q(id)};`); }
 
-  prefs() { return this.read("SELECT key, value FROM prefs;"); }
+  prefs() { return this.cached("SELECT key, value FROM prefs;"); }
   setPref(key, value) { return this.run(`INSERT INTO prefs(key,value) VALUES(${q(key)},${q(value)}) ON CONFLICT(key) DO UPDATE SET value=excluded.value;`); }
 
   // Images keeps what a transcript already said, so the next read starts at `size`. `mark` is the cksum of those bytes.
@@ -433,7 +504,7 @@ export class Kdb {
 
   // One row per project and panel. No row reads as undefined; a closed panel is `{ id: null }`.
   async panelState(project, panel) {
-    const rows = await this.read(`SELECT state_json FROM panel_state WHERE project=${q(project)} AND panel=${q(panel)};`);
+    const rows = await this.cached(`SELECT state_json FROM panel_state WHERE project=${q(project)} AND panel=${q(panel)};`);
     if (!rows.length) return undefined;
     const parsed = parseOr(rows[0].state_json, null);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;

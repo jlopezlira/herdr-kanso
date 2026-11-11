@@ -9,7 +9,6 @@ import { location, key, diffRows, monoFont } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost } from "./ui.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, mergeReadiness } from "./ghchecks.js";
-import { Kdb } from "./kdb.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
@@ -112,7 +111,7 @@ const PROMPTS = {
 const TASK_NAMES = { explain: "Explain", feedback: "Feedback", conflicts: "Conflicts" };
 
 export class PullRequest {
-  constructor() { this.armed = new Armed(); } // Merge asks for a second press
+  constructor(db) { this.armed = new Armed(); this.db = db; } // Merge asks for a second press
 
   init(cx, props = {}) {
     this.pr = null; this.threads = []; this.diffs = null; this.openFile = null;
@@ -228,7 +227,7 @@ export class PullRequest {
     if (key() !== context) return;
     if (!ready.length) { this.inboxOn = false; this.inbox = null; this.inboxOpen = null; return; }
     if (!this.inboxDb) {
-      try { this.inboxDb = new Kdb(); await this.inboxDb.open(); }
+      try { await this.db.open(); this.inboxDb = this.db; }
       catch (e) {
         this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`;
         this.inboxOn = false; this.inboxOpen = null;
@@ -288,7 +287,7 @@ export class PullRequest {
   }
 
   async keepPrFacts(items) {
-    return tryOrAsync(() => recordPrFacts(this.inboxDb ??= new Kdb(), items));
+    return tryOrAsync(() => recordPrFacts(this.inboxDb ??= this.db, items));
   }
 
   async readShown(context, want, list) {

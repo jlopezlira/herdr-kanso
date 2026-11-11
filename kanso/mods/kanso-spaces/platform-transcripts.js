@@ -247,7 +247,7 @@ export function transcriptApi(platform, run) {
       const file = paths.join(home, ".claude", "sessions", `${pid}.json`);
       return { state: "ok", ...(await ps(`if (Test-Path -LiteralPath ${psQuote(file)} -PathType Leaf) { [Console]::Write('claude'+[char]9+[IO.File]::ReadAllText(${psQuote(file)}).Replace([string][char]10,'')) }`)) };
     },
-    size: async (file) => platform === "windows" ? Number((await ps(`(Get-Item -LiteralPath ${psQuote(file)}).Length`)).stdout.trim()) : Number((await run("sh", ["-c", 'wc -c < "$1"', "sh", file])).stdout.trim()),
+    size: async (file) => platform === "windows" ? Number((await ps(`(Get-Item -LiteralPath ${psQuote(file)}).Length`)).stdout.trim()) : Number((await run("wc", ["-c", file])).stdout.trim().split(/\s+/)[0]),
     thread: (file) => platform === "windows" ? ps(`$file=${psQuote(file)}; `+WINDOWS_THREAD) : run("sh", ["-c", READ, "sh", file]),
     slice: (file, from, budget, longest) => platform === "windows" ? ps(`$file=${psQuote(file)}; $from=${Number(from)}; $budget=${Number(budget)}; $longest=${Number(longest)}; `+WINDOWS_SLICE) : unixSlice(run, file, from, budget, longest),
   };

@@ -11,11 +11,54 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.22.1] - 2026-11-10
+## [3.22.7] - 2026-11-10
 
 ### Changed
 
 - System operations share macOS, Linux and Windows implementations. Windows reports when Herdr cannot supply a process's working directory or open files.
+
+## [3.22.6] - 2026-11-10
+
+### Fixed
+
+- A switch is a short pill beside its label. Off keeps the knob at the left and on at the right, and the space around the pill still takes the click.
+- A machine that is off, unreachable, or needs a login keeps its name readable, and turn on, Retry, or copy stays on that row. Turn off and a new space still appear only while the pointer or the keyboard is on a connected machine.
+
+## [3.22.5] - 2026-11-10
+
+### Fixed
+
+- Panels load again after switching project or restarting. A side panel, Files or any other, no longer stays on its placeholder until Herdr restarts.
+
+## [3.22.4] - 2026-11-10
+
+### Fixed
+
+- ⌘B hides the sidebar to its rail, as Hide sidebar does, instead of removing it. The tab bar no longer slides under the window buttons, and ⌘J and the sidebar's keys keep working. A sidebar hidden from the command palette comes back as the rail.
+
+### Changed
+
+- The recipe keeps complete panel briefs in separate linked parts, with size checks that leave room for future changes and keep it in the gallery.
+
+## [3.22.3] - 2026-11-10
+
+### Fixed
+
+- A remote machine is one quiet row, the same height as a project. Off, unreachable, and needs login say so on that row, and it can be turned off, retried, or given a space from there. One that cannot be reached stays in the list. Turning one off no longer forgets how to connect it.
+
+## [3.22.2] - 2026-11-10
+
+### Fixed
+
+- While you were away has a heading, with how many changes and a dismiss. Each change is a row: the agent's mark, the name kansō uses, and how long ago. The agent you are looking at is left out, and one agent is one row.
+- Needs you shows its count only when someone is waiting. With nobody waiting it stays hidden, and Cmd+J still says so for a moment.
+
+## [3.22.1] - 2026-11-10
+
+### Changed
+
+- The sidebar reuses thread locations and live terminal PIDs, checks transcript sizes on status or turn changes with a five-minute fallback, backs off failed thread discovery, and checks folders less often. Unchanged sleeping rows are reused; sleeping projects and unavailable machines skip background reads. Database maintenance waits for changes or a slower fallback; calls share processes and cache preferences. The strip reads divider sizes less often at rest.
+
 ## [3.22.0] - 2026-11-10
 
 ### Added

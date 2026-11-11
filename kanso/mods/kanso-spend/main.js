@@ -9,7 +9,7 @@ import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, l
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 
 const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
@@ -106,7 +106,7 @@ export default class TokenSpend extends View {
     this.awake = false;
 
     // Herdr starts hidden copies too, so wake only when this one is on screen.
-    if (!hiddenInLayout()) this.wake(cx);
+    if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
     this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {

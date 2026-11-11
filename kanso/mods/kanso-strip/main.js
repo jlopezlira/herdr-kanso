@@ -178,13 +178,7 @@ export default class Strip extends View {
     this.sets = [];
     this.seq = 0; // bumped by whatever changes the model outside render (see render's key)
     cx.timer.every(WRITE_MS / 2, (cx) => { if (this.dirty) { this.dirty = false; this.seq += 1; cx.notify(); } });
-    // A drag on one of Herdr's dividers changes the tree without telling us.
-    cx.timer.every(150, (cx) => {
-      // A pane let go over a gutter is held until the next press or move over a pane; failing those, it ends here.
-      const held = shared("strip.drag");
-      if (held && Date.now() - held.at > DRAG_MAX) endDrag();
-      if (this.adopt()) { this.seq += 1; cx.notify(); }
-    });
+    cx.timer.every(150, (cx) => this.pollAdopt(cx));
     this.lastStatus = new Map();
     this.digesting = new Set();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
@@ -764,6 +758,14 @@ export default class Strip extends View {
     ]));
   }
   isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge") && !id.startsWith("strip-ruler"); }
+
+  pollAdopt(cx) {
+    const now = Date.now(), held = shared("strip.drag");
+    if (held && now - held.at > DRAG_MAX) endDrag();
+    if (!held && now - (this.adoptedAt ?? -Infinity) < 1000) return;
+    this.adoptedAt = now;
+    if (this.adopt()) { this.seq += 1; cx.notify(); }
+  }
 
   adopt() {
     const tab = this.tab(), st = tab && this.state[tab];

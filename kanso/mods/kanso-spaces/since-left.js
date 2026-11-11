@@ -1,8 +1,16 @@
-import { div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { G, H, R, T, tokens, quietLink, iconButton } from "./ui.js";
-import { lines, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
+import { div, svg } from "gpui-kit";
+import { h_flex, v_flex } from "gpui-base";
+import { G, R, T, ICON, iconButton, tokens } from "./ui.js";
+import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
+import { statusMark, AGENT_PAD, agentRowH, duration } from "./agents.js";
+
+const ROW_GAP = 1; // the sidebar list's gap; the kit has no token for it
+
+// An error has no glyph; the sidebar draws the blocked disc for a failed agent.
+const lead = (t, mark) => (mark === "pr"
+  ? svg("mods/kanso-chrome/icons/pull-request.svg").size(ICON).flex_none().text_color(t.muted)
+  : statusMark(t, mark === "error" ? "blocked" : mark));
 
 export class SinceLeft {
   constructor(db) {
@@ -10,6 +18,8 @@ export class SinceLeft {
     this.project = null;
     this.rows = [];
     this.expanded = false;
+    this.visible = 0;
+    this.headed = false;
   }
 
   async update({ project, target, seenTarget, snapshots, now }, cx) {
@@ -25,7 +35,7 @@ export class SinceLeft {
         this.observed = now;
       }
       if (project !== this.project) {
-        if (this.project) await this.store.touch(this.project, now);
+        if (this.project) await this.touch(this.project, now);
         this.rows = [];
         this.expanded = false;
         this.showing = false;
@@ -40,10 +50,16 @@ export class SinceLeft {
       } else if (project) {
         if (this.showing && (focusedTarget(this.rows, this.target, target) || this.rows.some((row) => row.target === seenTarget))) await this.dismiss(cx);
         this.target = target;
-        if (now - this.touched >= MAINTENANCE_MS) { await this.store.touch(project, now); this.touched = now; }
+        if (now - this.touched >= MAINTENANCE_MS) { await this.touch(project, now); this.touched = now; }
       }
       if ((project || this.sources?.length) && now - (this.pruned ?? 0) >= MAINTENANCE_MS) { await this.store.prune(now); this.pruned = now; }
     } finally { this.busy = false; }
+  }
+
+  async touch(project, now) {
+    const prune = now - (this.pruned ?? 0) >= MAINTENANCE_MS;
+    await this.store.touch(project, now, prune);
+    if (prune) this.pruned = now;
   }
 
   async dismiss(cx) {
@@ -54,23 +70,45 @@ export class SinceLeft {
     cx.notify();
   }
 
-  lineCount() { return lines(this.rows, this.expanded).length; }
+  viewOf(now = Date.now()) {
+    return { now, focus: this.target ?? null, expanded: this.expanded, format: duration };
+  }
 
-  render(t, project, nav, jump) {
-    this.showing = project === this.project && this.rows.length > 0;
+  lineCount() { return present(this.rows, this.viewOf()).rows.length; }
+
+  blockHeight() {
+    const n = this.visible;
+    if (!n) return 0;
+    const row = agentRowH({}, {});
+    const items = n + (this.headed ? 1 : 0);
+    return items * row + (items - 1) * ROW_GAP;
+  }
+
+  dismissControl(t) {
+    return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, tokens(t));
+  }
+
+  render(t, project, nav, jump, head = null) {
+    const shown = present(this.rows, this.viewOf());
+    this.showing = project === this.project && shown.count > 0;
+    this.visible = this.showing ? shown.rows.length : 0;
+    this.headed = Boolean(head) && this.showing;
     if (!this.showing) return div();
-    const c = tokens(t);
-    const action = (id, text, go) => {
-      const selected = nav(id, go);
-      return quietLink(id, text, go, c, { size: T.body }).w_full().min_w(0).overflow_hidden().tooltip(text).justify_start().px(G.sm).rounded(R.control)
-        .when(selected, (el) => el.bg(c.selected));
-    };
-    return v_flex().px(G.sm).pb(G.sm).children(lines(this.rows, this.expanded).map((row, index) => {
+    const line = (row) => {
       const go = row.more ? (cx) => { this.expanded = true; cx.notify(); }
         : (cx) => { if (jump(row) !== false) this.dismiss(cx).catch(() => {}); };
-      return h_flex().h(H.control).items_center().min_w(0)
-        .child(action(`since-${row.id ?? "more"}`, row.more ? `+${row.more}` : row.text, go).flex_1())
-        .when(index === 0, (el) => el.child(iconButton("since-dismiss", "close", "Dismiss", (cx) => this.dismiss(cx).catch(() => {}), c)));
-    }));
+      const selected = nav(`since-${row.id ?? "more"}`, go);
+      return h_flex().id(`since-${row.id ?? "more"}`).h(agentRowH({}, {})).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card).cursor_pointer()
+        .hover((s) => s.bg(t.foreground + "0c"))
+        .when(selected, (el) => el.border_1().border_color(t.accent))
+        .on_click((_e, cx) => go(cx))
+        .when(!row.more, (el) => el.child(lead(t, row.mark)))
+        .child(div().flex_1().min_w(0).truncate().text_size(row.more ? T.body : T.card).text_color(row.more ? t.dim : t.foreground)
+          .when(!row.more, (el) => el.font_medium())
+          .child(row.more ? `+${row.more}` : row.name))
+        .when(Boolean(row.age) && !row.more, (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
+    };
+    const body = shown.rows.map(line);
+    return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(t)), ...body] : body);
   }
 }

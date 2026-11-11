@@ -81,3 +81,6 @@ export async function missingFolders(folders) {
   const existing = new Set(await localService(fileApi).existing(folders, "directory"));
   return new Set(folders.filter((folder) => !existing.has(folder)));
 }
+
+const PROJECT_FIELDS = ["id", "name", "folder", "machine", "agent", "missing"];
+export const sameProjects = (a, b) => Array.isArray(b) && a.length === b.length && a.every((row, i) => PROJECT_FIELDS.every((key) => row[key] === b[i][key]));

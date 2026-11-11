@@ -193,7 +193,10 @@ test("Status and Threads keep the return digest when the needs-you list opens an
     ui.texts.length = 0;
     view.render();
     assert.ok(ui.texts.includes("Needs you · 2"));
+    assert.ok(ui.texts.includes("While you were away"));
+    assert.ok(ui.texts.includes("1"));
     assert.ok(ui.texts.includes(returned.rows[0].text));
+    assert.equal(typeof ui.handlers.get("since-dismiss"), "function");
     assert.ok(view.nav.some((row) => row.key === "since-7"));
     assert.equal(returned.showing, true);
     view.needsOpen = true;
@@ -260,6 +263,11 @@ test("The kit renders every queue state with single-use elements", async () => {
   kit.queueList({}, { rows: [], state: "unavailable" }, () => ({}), () => "");
   assert.ok(ui.texts.includes("Nobody is waiting"));
   assert.ok(ui.texts.includes("Queue unavailable"));
+  ui.texts.length = 0;
+  kit.queueControl({}, { rows: [], state: "ready" }, false, false, () => {});
+  kit.queueControl({}, { rows: [], state: "ready" }, true, false, () => {});
+  assert.equal(ui.texts.includes("Needs you · 0"), false);
+  assert.equal(ui.texts.length, 0);
 });
 
 test("The count label distinguishes normal, collapsed, empty and unavailable states", async () => {

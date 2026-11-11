@@ -29,7 +29,7 @@ const writers = [
   ["kanso-tabs/main.js", "Tabs", (x) => new x.Tabs().mount("pr")],
   ["kanso-panel/lib.js", "showPanel", (x) => x.showPanel("pr", { mod: "kanso-panel" })],
   ["open-with/main.js", "showPreview", (x) => x.showPreview("/repo/readme.md", null)],
-  ["kanso-spaces/main.js", "setRail", (x) => x.setRail(false, 76)],
+  ["kanso-spaces/layout.js", "setRail", (x) => x.setRail(false, 76)],
 ];
 for (const [file, name, write] of writers) {
   test(`${file} preserves native column and stack resizing`, async () => {
@@ -248,7 +248,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   ];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, svg: node, image: node, h_flex: node, v_flex: node,
-    Popover: { new: node }, Toggle: { new: node }, Button: { new: node },
+    Popover: { new: node }, Toggle: { new: node }, Button: { new: (id) => { const el = node(); return id ? el.id(id) : el; } },
     ORDERS: { updated: "Updated" }, DEFAULT_ORDER: "updated", NAME_LABEL: "kanso.name", PIN_LABEL: "kanso.pin",
     orderSessions: (l) => l, withTerminals: () => [], terminals: () => [], nest: () => [], bySection: () => [],
     track: () => null, elapsed: () => null, activityOf: () => null, agentLabel: () => "", duration: () => "", findThreads: async () => ({}),
@@ -265,11 +265,14 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
     machines: [{ name: "odin", state: "connected", target: "odin.example" }], folded: new Set(), agentsFolded: new Set(),
     orderPicker: node,
   });
+  view.hoverMachine = "local";
   view.render();
 
   const cx = { stop_propagation() {}, notify() {} };
   clicks["machine-add-local"]({}, cx);
   clicks["machine-new-local"]({}, cx);
+  view.hoverMachine = "odin";
+  view.render();
   clicks["machine-add-odin"]({}, cx);
 
   // The top + is no longer a bare space: it adds a project (tests/projects.test.mjs).
@@ -319,4 +322,52 @@ test("the latest project choice wins, whichever key it was made under, and a cle
   assert.equal(where(), "sp-b", "moved to B after its conversation was put in A: B");
   at([[C, { project: "sp-a", projectAt: 3 }], ["term:t1-5", { project: null, projectAt: 6 }]]);
   assert.equal(where(), "sp-f", "then back to where it runs: there, not A");
+});
+
+// Herdr's own sidebar key hides the node, and kanso-spaces with it: Kanso's hidden sidebar is the rail.
+const kansoTree = (sidebar) => ({ id: "root", children: [{ id: "sidebar", ...sidebar }, { id: "strip-map" }] });
+
+test("A hidden sidebar comes back as the rail, once per hiding", async () => {
+  const { sidebarBack } = await load("kanso-tabs/layout.js", ["sidebarBack"], {});
+  const hidden = kansoTree({ hidden: true, min: 120 });
+  assert.deepEqual(clone(sidebarBack(hidden, false)), { acted: true, fold: true });
+  assert.deepEqual(clone(sidebarBack(hidden, true)), { acted: true, fold: false }, "the same hiding is not acted on twice");
+  assert.deepEqual(clone(sidebarBack(kansoTree({ min: 120 }), false)), { acted: false, fold: false }, "shown open");
+  assert.deepEqual(clone(sidebarBack(kansoTree({ min: 76 }), true)), { acted: false, fold: false }, "the rail, already folded");
+  assert.deepEqual(clone(sidebarBack({ id: "root", children: [{ id: "sidebar", hidden: true }] }, false)), { acted: false, fold: false }, "another layout's sidebar");
+});
+
+test("Folding a hidden sidebar shows it at the rail's width, marked collapsed", async () => {
+  let tree = kansoTree({ hidden: true, min: 120 });
+  tree.resizable = true;
+  const state = {}, sent = [];
+  const host = {
+    shared: (key) => clone(state[key] ?? null), setShared: (key, value) => { state[key] = clone(value); },
+    layout: () => clone(tree), window: () => ({ platform: "macos" }),
+    run: (command, args) => { sent.push(command); if (command === "layout.set") tree = clone(args.layout); else if (command === "layout.resize") tree.children[0].size = { px: args.px }; },
+  };
+  const { foldSidebar } = await load("kanso-tabs/layout.js", ["foldSidebar"], host);
+  foldSidebar();
+  assert.equal(state["sidebar.collapsed"], true);
+  assert.deepEqual(sent, ["layout.set", "layout.resize"]);
+  assert.deepEqual(clone(tree.children[0]), { id: "sidebar", hidden: false, min: 76, size: { px: 76 } });
+  assert.equal(tree.resizable, false);
+  sent.length = 0;
+  foldSidebar();
+  assert.deepEqual(sent, ["layout.resize"], "a shown rail is not set again");
+});
+
+test("A layout write keeps the sidebar shown", async () => {
+  const state = { "kanso.layout": { rail: { open: false, min: 44 } } };
+  const { paintLayout } = await load("kanso-tabs/layout.js", ["paintLayout"], { shared: (key) => clone(state[key] ?? null) });
+  assert.equal(paintLayout(kansoTree({ hidden: true })).children[0].hidden, false);
+});
+
+test("The tab bar brings a hidden sidebar back once, and again after the next hiding", async () => {
+  const folds = [];
+  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], { setShared: (key, value) => folds.push([key, value]), shared: () => null, layout: () => null, window: () => ({ platform: "macos" }), run: () => {} });
+  const tabs = new Tabs();
+  const hidden = kansoTree({ hidden: true }), shown = kansoTree({});
+  for (const tree of [hidden, hidden, shown, hidden]) tabs.keepRail(tree);
+  assert.equal(folds.filter(([key]) => key === "sidebar.collapsed").length, 2);
 });

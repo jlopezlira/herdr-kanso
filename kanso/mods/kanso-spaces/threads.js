@@ -2,8 +2,8 @@ import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { transcriptApi } from "./platform-transcripts.js";
 // Kanso only reads what already lives on this computer, only while the Threads view is open, and never sends the agent anything.
-import { hc, home } from "herdr";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { home } from "herdr";
+import { tryOr } from "./pure.js";
 
 export const claudeFile = (home, cwd, session) => paths.join(home, ".claude", "projects", String(cwd ?? "").replace(/[^A-Za-z0-9]/g, "-"), `${session}.jsonl`);
 
@@ -55,54 +55,70 @@ export function readThread(kind, titleLine, head, recent, tail, name = null) {
   };
 }
 
+export class ThreadLocator {
+  constructor() { this.missing = new Map(); }
+
+  retain(list) {
+    const addresses = new Set(list.map((item) => item.address));
+    this.missing = new Map([...this.missing].filter(([address]) => addresses.has(address)));
+  }
+
+  async locate({ address, pid, kind, home }, known) {
+    if (!pid || known?.pid === pid) { this.missing.delete(address); return pid ? known : null; }
+    const previous = this.missing.get(address), now = Date.now();
+    if (previous?.pid === pid && now < previous.next) return null;
+    const located = await localService(transcriptApi).locate(pid, kind, home);
+    if (located.state === "unavailable") return { pid, unavailable: located.reason };
+    const where = parseLocated(located.stdout, home);
+    if (where) { this.missing.delete(address); return where; }
+    const wait = Math.min(previous?.pid === pid ? previous.wait * 2 : 60000, 600000);
+    this.missing.set(address, { pid, wait, next: now + wait });
+    return null;
+  }
+}
+
 // `pid` ties the reading to the process it came from, so a program started later in the same terminal is never taken for it.
-async function findThread({ address, app }, known, home) {
-  const got = await tryOrAsync(async () => {
-    const r = await hc(["get", address, "--json"]);
-    return r.code === 0 ? JSON.parse(r.stdout) : null;
-  });
+async function findThread({ address, app }, known, home, got, locator) {
   const pid = got?.foreground?.pid;
-  if (!pid) return null;
-  const kind = app === "codex" || /codex/.test(got.foreground.argv?.[0] ?? "") ? "codex" : "claude";
-  const located = await localService(transcriptApi).locate(pid, kind, home);
-  if (located.state === "unavailable") return { pid, unavailable: located.reason };
-  const where = parseLocated(located.stdout, home);
-  if (!where) return null;
+  const checked = { at: Date.now(), status: got?.status, turn: got?.turn };
+  if (pid && known?.pid === pid && known.checked?.status === checked.status && known.checked?.turn === checked.turn && checked.at - (known.checked?.at ?? -Infinity) < 300000) return known;
+  const kind = app === "codex" || /codex/.test(got?.foreground?.argv?.[0] ?? "") ? "codex" : "claude";
+  const where = await locator.locate({ address, pid, kind, home }, known);
+  if (!where?.file) return where?.unavailable ? where : null;
   const size = await localService(transcriptApi).size(where.file);
   if (!size) return null;
-  if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return known;
+  if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return { ...known, checked };
   const r = await localService(transcriptApi).thread(where.file);
   if (r.code !== 0 && !r.stdout) return null;
   const [titleLine, head, recent, tail] = r.stdout.split("\n\u001e\n");
-  return { kind, file: where.file, name: where.name, size, pid, ...readThread(kind, titleLine, head, recent, tail, where.name) };
+  return { kind, file: where.file, name: where.name, size, pid, checked, ...readThread(kind, titleLine, head, recent, tail, where.name) };
 }
 
-// How many terminals are looked at at once: each takes three or four processes.
+// Read up to four terminals concurrently.
 const AT_ONCE = 4;
 
-export async function findThreads(list, known = {}) {
-  const homeDir = home();
+export async function findThreads(list, known = {}, terms = [], locator = new ThreadLocator()) {
+  locator.retain(list);
+  const byAddress = new Map(terms.map((term) => [term.address, term]));
+  const here = home();
   const queue = list.values();
   const lane = async (got = []) => {
     const { value: item, done } = queue.next();
     if (done) return got;
-    return lane([...got, [item.address, await findThread(item, known[item.address], homeDir)]]);
+    return lane([...got, [item.address, await findThread(item, known[item.address], here, byAddress.get(item.address), locator)]]);
   };
   const found = await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, lane));
   return Object.fromEntries(found.flat().filter(([, thread]) => thread));
 }
 
-// Whether each conversation's process still runs. Conversations are found every 15-60 s, so asking every 10 s
-// (every minute behind other windows or with the sidebar collapsed) misses nothing; a new set of pids is asked at once.
+// Conversation liveness shares the task process table.
 export const ALIVE_MS = 10000;
-export const ALIVE_BEHIND_MS = 60000;
+export const ALIVE_BEHIND_MS = 30000;
 
 // Sorted, so the same processes always give the same signature.
 export const pidsOf = (threads) => [...new Set(Object.values(threads ?? {}).map((th) => th?.pid).filter((p) => Number.isInteger(p) && p > 0))]
   .toSorted((a, b) => a - b);
 
-// What `ps -o pid= -p` lists: one pid a line.
-export const pidsListed = (text) => new Set(String(text ?? "").split("\n").map((line) => Number(line.trim())).filter((p) => p > 0));
 // `listed`: anything with has(pid), that Set or checkTasks' table by pid, so neither is read twice.
 export const aliveIn = (listed, pids) => new Set(pids.filter((p) => listed.has(p)));
 
