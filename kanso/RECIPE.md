@@ -487,14 +487,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     this computer's host name). Small `dim`: Off, Unreachable, Needs login;
     a breathing line while loading. Hover or keyboard: power, Retry when
     unreachable, + when connected; a chevron folds it. Needs login copies
-    `hc machine login <name>` from the tooltip (power's place). Off stores
+    `hc machine login <name>`. Off stores
     target, name, via, session and temporary, then `hc machine rm`
     (terminals keep running); nothing under it is listed or read. `false`
-    and `null` are none, so add never sends an empty `--via`. On is
-    `hc machine add` with those, never `--install`; dropped once
-    `hc machine ls` shows it connected. If the save fails after the remove,
-    or add keeps failing, it stays with Retry; the hint is the state's
-    tooltip. This computer has no power. Alone, no header.
+    and `null` are none, so add omits an empty `--via`. On is
+    `hc machine add` with those, never `--install`, dropped once
+    `hc machine ls` shows it connected. A failed save or add stays on Retry.
+    This computer has no power. Alone, no header. On keeps it awake and
+    renews that hold; a closed lid still sleeps, and an asleep machine is
+    not woken.
     `hc machine ls`: 30 s in front, 2 min behind.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
