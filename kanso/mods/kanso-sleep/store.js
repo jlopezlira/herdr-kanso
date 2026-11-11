@@ -87,7 +87,7 @@ export class Store {
   open() {
     return (this.ready ??= (async () => {
       await this.kdb.open();
-      if (await this.kdb.migrated()) return;
+      if (this.kdb.machine || await this.kdb.migrated()) return;
       const sleeps = await legacyRows(`${this.legacy}/kanso-sleep/sleep.db`, "asleep", "SELECT project, name, layout, saved FROM asleep;");
       const prefs = await legacyRows(`${this.legacy}/kanso-spaces/panel.db`, "prefs", "SELECT key, value FROM prefs;");
       await this.kdb.migrate({ sleeps: planMigration(sleeps), prefs: prefs ?? [] });

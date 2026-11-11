@@ -117,6 +117,29 @@ test("a wake that stalled past its hold opens nothing: the other window's wake i
   assert.equal((await store.asleep(true)).length, 1);
 });
 
+// The space in front belongs to `front`. A project is this computer when its machine is "".
+async function spaceForProject(create, front) {
+  const made = [];
+  const sp = [{ id: "front", name: "shop", folder: "/shop", machine: front, active: true, tabs: [{ id: "tb", name: "Tab 1" }] }];
+  const host = { home: () => HOME, spaces: () => sp, panes: () => [], terminals: () => [], shared: () => null, setShared: () => {},
+    run: (cmd, args) => { made.push([cmd, args]); if (cmd === "space.new") sp.push({ id: "made", name: args.name, folder: args.folder, tabs: [{ id: "s1" }] }); } };
+  const { openTab } = await load("kanso-arrange/tabkit.js", ["openTab"], host);
+  await assert.rejects(openTab({ name: "x", cols: [{ w: 1, panes: [{ argv: ["claude"] }] }] }, { sleep: async () => {} }, { create }), /did not open the tab/);
+  return made;
+}
+
+test("a space opened for a local project names this computer, even while another computer's space is in front", async () => {
+  const made = await spaceForProject({ name: "herdr-kanso", folder: "/f", key: ":/f", machine: "" }, "odin");
+  assert.equal(made.find(([cmd]) => cmd === "space.new")[1].machine, "");
+  assert.equal(made.find(([cmd]) => cmd === "tab.new")[1].space, "made");
+});
+
+test("a space opened for a project on another computer names that computer", async () => {
+  const made = await spaceForProject({ name: "shop", folder: "/shop", key: "loki:/shop", machine: "loki" }, "odin");
+  assert.equal(made.find(([cmd]) => cmd === "space.new")[1].machine, "loki");
+  assert.equal(made.find(([cmd]) => cmd === "tab.new")[1].space, "made");
+});
+
 test("a space made for a wake is found by a name only it has; another window's of the same name is never taken or closed", async () => {
   const made = [];
   const sp = [];
@@ -162,6 +185,19 @@ test("a conversation check that outlasts the hold opens nothing: the hold is ren
   await drain();
   assert.match(String(view.error), /another window woke it meanwhile/);
   assert.equal(world.ran.filter(([cmd]) => cmd === "tab.new").length, 0, "never opened, not even for a moment");
+});
+
+test("a tab woken while another computer's space is in front is made on this computer", async (t) => {
+  const { world, view, store } = await asleepInKanso(t);
+  world.spaces.splice(2, 1);
+  Object.assign(world.spaces[0], { machine: "odin", active: true });
+  const shown = (await store.asleep()).find((x) => x.name === "Hashiko");
+  const { c, drain } = cx();
+  view.wake(shown, c);
+  await drain();
+  assert.equal(view.error, null, String(view.error));
+  assert.equal(world.ran.find(([cmd]) => cmd === "space.new")[1].machine, "");
+  assert.deepEqual(world.ran.filter(([cmd]) => cmd === "tab.new").map(([, a]) => a.space), ["sp-made"]);
 });
 
 test("an agent whose space is gone wakes in a space made for it, never in another of that name and folder", async (t) => {

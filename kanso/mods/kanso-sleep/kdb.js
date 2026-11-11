@@ -1,11 +1,11 @@
 import { sqliteApi } from "./platform-sqlite.js";
-import { localService } from "./platform-host.js";
-import { paths } from "./platform-paths.js";
+import { serviceFor, serviceOn } from "./platform-host.js";
+import { paths, pathApi, appHomeDir } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Kanso's one database, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
-import { exec, appHome } from "herdr";
+import { appHome } from "herdr";
 import { mapSeries, parseOr } from "./pure.js";
 
 export const DIR = "data/kanso";
@@ -14,6 +14,8 @@ export const STALE_MS = 10 * 60_000; // a wake's hold not renewed this long stop
 export const ABANDON_MS = 3 * 60_000; // a sleep's: it renews its hold before each agent leaves, and one leaves in under a minute
 export const GONE_MS = 60_000; // an agent not seen this long, and not asleep, is gone
 export const LEASE_MS = 20_000; // a sleep's owner (sleepwork.js) not heard from this long is gone: another window takes the row
+export const CALL_MS = 15_000; // one remote statement; past this the machine did not answer
+export const REST_MS = 60_000; // a remote database, while this window is in front and nothing was ordered
 
 export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}'`);
 const n = (x) => (x != null && Number.isFinite(Number(x)) ? String(Math.round(Number(x))) : "NULL");
@@ -23,6 +25,48 @@ export const pruneSinceSql = (now, { cap, keepMs }) => `DELETE FROM since_events
   DELETE FROM since_observed WHERE at < ${n(now - keepMs)};`;
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 export const projectKey = (w, home = "") => `${w?.machine ?? ""}:${w?.folder || home}`;
+// The other computer's default app home plus data/kanso. A custom HERDR_APP_HOME there is not followed.
+export const kansoDir = (home, platform) => {
+  const api = pathApi(platform === "windows" ? "windows" : "macos");
+  return api.join(appHomeDir(platform, home), DIR);
+};
+
+// What this window calls a terminal ("light/t90") and what that computer stores ("t90").
+export function seenAddress(local, machine) {
+  if (local == null || local === "") return local ?? null;
+  return machine ? `${machine}/${local}` : String(local);
+}
+export function localAddress(seen, machine) {
+  if (seen == null || seen === "") return seen ?? null;
+  const text = String(seen);
+  if (!machine) return text.includes("/") ? null : text;
+  const prefix = `${machine}/`;
+  return text.startsWith(prefix) ? text.slice(prefix.length) : null;
+}
+const mapId = (value, machine, fn) => (value == null || value === "" ? value ?? null : fn(value, machine));
+const mapPane = (pane, machine, fn) => (pane ? { ...pane, ...(pane.terminal != null ? { terminal: mapId(pane.terminal, machine, fn) } : {}), ...(pane.tab != null ? { tab: mapId(pane.tab, machine, fn) } : {}), ...(pane.check != null ? { check: mapId(pane.check, machine, fn) } : {}) } : pane);
+const mapAgent = (agent, machine, fn) => (agent ? { ...agent, ...(agent.terminal != null ? { terminal: mapId(agent.terminal, machine, fn) } : {}), ...(agent.tab != null ? { tab: mapId(agent.tab, machine, fn) } : {}), ...(agent.tab_id != null ? { tab_id: mapId(agent.tab_id, machine, fn) } : {}), ...(agent.spaceId != null ? { spaceId: mapId(agent.spaceId, machine, fn) } : {}), ...(agent.space_id != null ? { space_id: mapId(agent.space_id, machine, fn) } : {}) } : agent);
+export function mapSleep(row, machine, fn) {
+  if (!row || typeof row !== "object") return row;
+  const into = row.into ? { ...row.into, ...(row.into.tabId != null ? { tabId: mapId(row.into.tabId, machine, fn) } : {}) } : row.into;
+  return { ...row, ...(row.spaceId != null ? { spaceId: mapId(row.spaceId, machine, fn) } : {}), ...(row.space_id != null ? { space_id: mapId(row.space_id, machine, fn) } : {}), ...(typeof row.tab === "string" ? { tab: mapId(row.tab, machine, fn) } : {}), ...(row.into !== undefined ? { into } : {}), ...(row.agents ? { agents: row.agents.map((agent) => mapAgent(agent, machine, fn)) } : {}), ...(row.cols ? { cols: row.cols.map((col) => ({ ...col, panes: (col.panes ?? []).map((pane) => mapPane(pane, machine, fn)) })) } : {}) };
+}
+export const seenRow = (row, machine) => mapSleep(row, machine, seenAddress);
+export const localRow = (row, machine) => mapSleep(row, machine, localAddress);
+
+// A remote database is read once when its spaces show, on this window's own order, and every minute in front.
+export function restDue({ readAt = null, ordered = false, now = 0, active = false, showing = false } = {}) {
+  if (!showing || (!ordered && !active)) return false;
+  if (ordered || readAt == null) return true;
+  return now - readAt >= REST_MS;
+}
+export function asOfText(at, now) {
+  if (at == null) return null;
+  const sec = Math.max(0, Math.round((now - at) / 1000));
+  if (sec < 60) return `as of ${sec}s`;
+  const min = Math.round(sec / 60);
+  return min < 60 ? `as of ${min} min` : `as of ${Math.round(min / 60)} h`;
+}
 // A conversation's id from its file (Claude's <id>.jsonl, Codex's rollout-…-<id>.jsonl).
 export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/)?.[1] ?? null;
 
@@ -86,7 +130,7 @@ export const rowsOfOutput = (out) => (out.trim() ? JSON.parse(`[${out.trim().rep
 
 // By id only: a space of the same folder and name may have stood beside it; pre-id rows match only when exactly one fits.
 export function spaceFor(place, spaces, home = "") {
-  if (place.spaceId) return spaces.find((w) => w.id === place.spaceId) ?? null;
+  if (place.spaceId) return spaces.find((w) => w.id === place.spaceId || localAddress(w.id, w.machine ?? null) === place.spaceId) ?? null;
   const same = spaces.filter((w) => projectKey(w, home) === place.project);
   const named = place.spaceName ? same.filter((w) => w.name === place.spaceName) : same;
   return named.length === 1 ? named[0] : null;
@@ -122,9 +166,10 @@ class Schemas {
 const schemas = new Schemas();
 
 export class Kdb {
-  constructor(dir = paths.join(appHome(), DIR)) {
+  constructor(dir = paths.join(appHome(), DIR), machine = null) {
     this.dir = dir;
     this.file = paths.join(dir, "kanso.db");
+    this.machine = machine || null;
     this.ready = null;
     this.chain = Promise.resolve();
     this.queue = [];
@@ -133,7 +178,8 @@ export class Kdb {
   }
 
   execute(text) {
-    return localService(sqliteApi).unchecked(this.file, statements(text), { json: true });
+    const sql = statements(text);
+    return serviceFor(sqliteApi, this.machine, CALL_MS, serviceOn).then((api) => api.unchecked(this.file, sql, { json: true }));
   }
 
   async sql(text) {
@@ -143,14 +189,17 @@ export class Kdb {
   }
 
   // Ready once per file; a failure is tried again on the next call, never kept.
+  schemaKey() { return this.machine ? `${this.machine}\0${this.file}` : this.file; }
+
   open() {
-    return (this.ready ??= schemas.has(this.file) ? Promise.resolve() : this.create().then(() => schemas.made(this.file), (e) => { this.ready = null; throw e; }));
+    const key = this.schemaKey();
+    return (this.ready ??= schemas.has(key) ? Promise.resolve() : this.create().then(() => schemas.made(key), (e) => { this.ready = null; throw e; }));
   }
 
   async create() {
-    const ok = await exec("sqlite3", ["-version"]).catch(() => null);
+    const ok = await serviceFor((_platform, run) => run("sqlite3", ["-version"]), this.machine, CALL_MS, serviceOn).catch(() => null);
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-    await localService(fileApi).mkdir(this.dir);
+    await (await serviceFor(fileApi, this.machine, CALL_MS, serviceOn)).mkdir(this.dir);
     await this.sql([...statements(SCHEMA), ONE_SLEEP]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));

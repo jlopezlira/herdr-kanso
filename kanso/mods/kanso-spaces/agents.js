@@ -434,6 +434,7 @@ export function agentRow(a, indent, t, row, more = {}) {
   const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
   return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
     .items_center().rounded(8).cursor_pointer()
+    .when(Boolean(a.asleep?.quiet), (el) => el.opacity(0.55))
     // The focused row's wash is the list's pill (main.js), which glides here.
     .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
     .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))

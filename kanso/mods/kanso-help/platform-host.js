@@ -24,3 +24,9 @@ class RemoteServices {
 }
 const remoteServices = new RemoteServices();
 export const serviceOn = (factory, on) => remoteServices.get(factory, on);
+// Timeout only when `machine` is set: a local service keeps today's runner.
+export function serviceFor(factory, machine = null, timeout = null, remote = null) {
+  if (!machine) return Promise.resolve(localService(factory));
+  const timed = (run) => (cmd, args, options = {}) => run(cmd, args, { timeout, ...options });
+  return (remote ?? serviceOn)((platform, run) => factory(platform, timeout == null ? run : timed(run)), machine);
+}

@@ -536,11 +536,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     strip's columns; opening (tabkit.js, shared with kanso-sleep) runs
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
-  - `kanso-sleep`: a dialog (520 wide); asleep is a status in `kanso.db`.
-    Sleep hides it; a last tab selects a neighbour (Undo
-    returns), or stays shown when alone. Worker: saving, clearing, exiting,
-    left or stuck (Retry/Undo). Acts never hold ticks or repeat while pending.
-    One owner (20 s). Wake mid-flight cancels; else resume.
+  - `kanso-sleep`: a dialog (520 wide); asleep is a status in that computer's
+    `kanso.db`. Sleep hides it; a last tab selects a neighbour (Undo returns),
+    or stays shown when alone. One owner (20 s). Another computer's space
+    sleeps there; while it is silent its rows stay grey and Wake waits.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With
