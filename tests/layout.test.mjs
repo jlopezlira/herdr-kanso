@@ -221,7 +221,7 @@ test("kanso-tabs.sim toggles the Simulator panel", async () => {
   assert.deepEqual(panelBody().children, []);
 });
 
-test("Simulator is absent without native tools, present with either, and respects its off switch", async () => {
+test("Simulator is absent without native tools, present with either, and hidden like any panel", async () => {
   const f = await layoutFixture();
   const { Tabs, panelList } = await load("kanso-tabs/main.js", ["Tabs", "panelList"], f.host);
   const tabs = new Tabs();
@@ -232,11 +232,11 @@ test("Simulator is absent without native tools, present with either, and respect
   for (const tools of [{ ios: true }, { adb: "/sdk/adb" }]) {
     f.host.setShared("kanso.sim.tools", tools);
     assert.equal(listed().on, true);
-    f.host.setShared("kanso.panels.off", ["sim"]);
+    f.host.setShared("kanso.pieces", { "panel.sim": "hide" });
     assert.equal(listed().on, false);
     tabs.command("sim"); f.flush();
     assert.deepEqual(f.body().children.find((node) => node.id === "panel-body").children, []);
-    f.host.setShared("kanso.panels.off", []);
+    f.host.setShared("kanso.pieces", {});
   }
 });
 

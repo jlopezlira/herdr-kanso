@@ -7,6 +7,7 @@ import { checked } from "./platform-command.js";
 import { G, H, R, T, tokens, quietLink, skeleton } from "./ui.js";
 import { Front } from "./front.js";
 import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
+import { pieces, runs } from "./pieces.js";
 import { iosCommand } from "./ios.js";
 import { adbCommand, readDevices, startDevice, deviceSize, captureDevice } from "./devices.js";
 import { BEAT_MS, FRAME_MS, BOOT_MS, FrameLoop, TextBatch, canStart, canRotate, bootState, age, pictureSize, fitPicture, sizeDue, screenPoint, gesture, keyInput, textParts, CONTROLS, panelShown } from "./model.js";
@@ -34,7 +35,7 @@ export default class Simulator extends View {
     cx.timer.after(0, (next) => this.tick(next));
   }
 
-  inFront() { return !this.closed && window()?.active !== false && panelShown(layout()); }
+  inFront() { return !this.closed && window()?.active !== false && panelShown(layout()) && runs("panel.sim", pieces(shared)); }
 
   close() {
     this.closed = true;

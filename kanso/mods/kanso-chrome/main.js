@@ -10,11 +10,11 @@ import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 import { tryOrAsync } from "./pure.js";
+import { loadPieces, pieces, shown } from "./pieces.js";
 
 const basename = (path) => paths.basename(path);
 const SAMPLE_MS = 120_000;
-const openSettings = (page = "keys") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
-const hidden = () => new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
+const openSettings = (page = "pieces") => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 
 // The runtime out of memory says so, or, with no room left for the error itself, throws null:
 // a mod then "did not load: Null "null"".
@@ -24,6 +24,8 @@ export default class WorkspaceChrome extends View {
   // Only the footer copy has an Updater (update.js), and it does not poll: the tab bar,
   // always on screen, looks for releases; the footer shows what it found and installs on a click.
   init(_props, cx) {
+    // The one migration. A later read must not write, or every mod draws again.
+    loadPieces(shared, setShared);
     if (!props()?.footer) return;
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
@@ -36,7 +38,7 @@ export default class WorkspaceChrome extends View {
         if (c === "update") this.updater.install(cx);
         else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
         else if (c === "settings") openSettings();
-        else if (c === "settings-mods") openSettings("mods");
+        else if (c === "settings-mods") openSettings("pieces");
         else if (c === "settings-news") openSettings("news");
         else if (c === "restart") this.restart();
       }
@@ -70,6 +72,7 @@ export default class WorkspaceChrome extends View {
       if (!errors.some(exhausted)) { this.warned = false; return; }
       if (this.warned) return;
       this.warned = true;
+      if (!shown("toast.memory", true, pieces(shared))) return;
       notify({ title: "Herdr's mod runtime is out of memory", level: "error", action: { name: "kanso-chrome.restart" },
         body: "Panels and bars won't load again until the window restarts. Click to restart it now; your terminals and agents stay in herdr-core." });
     });
@@ -116,7 +119,7 @@ export default class WorkspaceChrome extends View {
           .when(ready && !collapsed, el => el.child(dot()))
           .when(ready && collapsed, el => el.child(dot().absolute().top(6).right(6))))
         // A server, not a second "+": the rail already has one for New space.
-        .when(!hidden().has("footer.machine"), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add computer", () => run("mod.open", { name: "machine-add" }))))
+        .when(shown("footer.machine", true, pieces(shared)), el => el.child(row("machine", "mods/kanso-chrome/icons/server.svg", "Add computer", () => run("mod.open", { name: "machine-add" }))))
         .child(div().h(8).flex_none())
         .child(chip);
     }

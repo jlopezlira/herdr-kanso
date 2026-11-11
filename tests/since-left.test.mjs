@@ -490,12 +490,13 @@ test("a sleep that could not finish keeps why with its event", async (t) => {
 
 test("While you were away is a piece: off, nothing is recorded, read or drawn", async (t) => {
   assert.equal(awayShown(undefined), true);
-  assert.equal(awayShown(["sidebar.activity"]), true);
-  assert.equal(awayShown([AWAY_PIECE]), false);
+  assert.equal(awayShown({ "sidebar.activity": "hide" }), true);
+  assert.equal(awayShown({ [AWAY_PIECE]: "hide" }), false);
   const { cx } = context();
   const reads = [], runs = [];
   const db = { read: async (sql) => { reads.push(sql); return []; }, run: async (sql) => { runs.push(sql); } };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"]);
+  const hidden = { "kanso.pieces.migrated": true, "kanso.pieces": { [AWAY_PIECE]: "hide" } };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { shared: (key) => hidden[key], setShared: (key, value) => { hidden[key] = value; } });
   const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
   const view = new Spaces();
   Object.assign(view, { showAway: false, returnSignature: "x", sinceLeft: Object.assign(new SinceLeft(db), { project: project, rows: [event(1)] }) });
@@ -532,7 +533,9 @@ test("with While you were away off, a pull request read records no fact", async 
   await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
   await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
   const observed = async (hidden) => {
-    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], { exec, shared: () => hidden });
+    const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], {
+      exec, shared: (key) => (key === "kanso.pieces" ? Object.fromEntries(hidden.map((id) => [id, "hide"])) : null),
+    });
     await new PullRequest(db).keepPrFacts([{ url: "https://github.com/o/r/pull/4", number: 4, state: "OPEN" }]);
     return (await db.read("SELECT COUNT(*) AS n FROM since_observed;"))[0].n;
   };

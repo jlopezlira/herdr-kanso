@@ -6,7 +6,7 @@
   "type": "module",
   "engines": { "node": ">=22.15" },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test --test-timeout=180000 --test-force-exit",
     "bench": "node benchmarks/macos.mjs",
     "bench:report": "node benchmarks/summarize.mjs",
     "check:version": "node scripts/check-version.mjs",

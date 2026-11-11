@@ -153,12 +153,10 @@ test("Enter, Backspace and arrows map to Android keys without swallowing shortcu
   assert.deepEqual(model.CONTROLS, [["Back", 4], ["Home", 3], ["Recents", 187], ["Power", 26], ["Volume up", 24], ["Volume down", 25]]);
 });
 
-test("Simulator availability and the panel preference are separate", async () => {
-  const { available, simOn } = await load("kanso-sim/registration.js", ["available", "simOn"]);
+test("Simulator availability is simctl or adb on this computer", async () => {
+  const { available } = await load("kanso-sim/registration.js", ["available"]);
   for (const tools of [null, {}, { emulator: "/sdk/emulator" }]) assert.equal(available(tools), false);
-  for (const tools of [{ ios: true }, { adb: "/sdk/adb" }, { ios: true, adb: "/sdk/adb" }]) {
-    assert.equal(simOn(tools), true); assert.equal(simOn(tools, ["sim"]), false);
-  }
+  for (const tools of [{ ios: true }, { adb: "/sdk/adb" }, { ios: true, adb: "/sdk/adb" }]) assert.equal(available(tools), true);
 });
 
 test("Tab availability probes once per panel-list rebuild and a deadline ignores late answers", async () => {
@@ -182,7 +180,7 @@ test("Tab availability probes once per panel-list rebuild and a deadline ignores
   tabs.probeSimulator(cx); await Promise.all(pending);
   assert.equal(commands.filter((cmd) => cmd === "xcode-select").length, 2);
   assert.equal(store["kanso.sim.tools"].ios, SIMCTL);
-  assert.equal(store["kanso.panels.off"], undefined, "the probe never changes a person's off switch");
+  assert.equal(store["kanso.pieces"], undefined, "the probe never writes the piece");
 });
 
 test("SDK folders follow environment precedence and platform defaults", async () => {

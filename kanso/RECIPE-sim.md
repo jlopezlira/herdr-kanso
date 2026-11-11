@@ -10,10 +10,11 @@ Panel id `sim`, mod `kanso-sim`, icon
 binding stays: Cmd+Shift+S, Ctrl+Shift+M on Windows.
 
 The tab bar probes once after mount and when the panel catalog or its saved
-order or switches change. A deadline bounds the probe. Cached plain tool
-paths and capabilities live in shared `kanso.sim.tools`; pending work belongs
-to each view. No simctl and no SDK with adb means no button or message.
-The panel's saved off switch remains independent of tool availability.
+order changes, and only while the Simulator piece is not hidden. A deadline
+bounds the probe. Cached plain tool paths and capabilities live in shared
+`kanso.sim.tools`; pending work belongs to each view. No simctl and no SDK
+with adb means the button is not listed. Hiding the piece stops the probe
+and the frames. That choice stays separate from whether the tools are there.
 
 `registration.js` is copied to kanso-tabs as `sim-registration.js` by
 sync:share. Platform services, the kit and front.js are copied the same way.

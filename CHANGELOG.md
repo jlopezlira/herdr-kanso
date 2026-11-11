@@ -12,6 +12,17 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.31.0] - 2026-11-11
+
+### Added
+
+- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
+
+### Changed
+
+- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
+
 ## [3.30.0] - 2026-11-11
 
 ### Added
@@ -20,7 +31,6 @@ release.
 
 ### Changed
 
-- Simulator is kansō's own panel. It uses only Xcode's and Android's tools and installs nothing. The iOS screen is a view: touch it in Apple's Simulator. Android keeps touch and keys, with Rotate for emulators.
 - The status bar names the agent that is waiting and what it asks. When more wait, it shows how many more. A click goes to that agent. An unreachable computer says so, and a click retries it. When memory is low it says how much is free, and a click opens Memory.
 - Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
 - Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
@@ -44,6 +54,7 @@ release.
 - Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
 - The pane header does not call a pull request ready before it knows you can merge it.
 - A missed answer from GitHub keeps the pull request on screen, with how long ago it was read and Retry, instead of a blank error or a spinner that never ends.
+- Opening an iOS simulator reads the stream's address without a function Herdr does not promise to have.
 - Asleep tabs on another computer stay in the list and can be woken when no project is open there.
 
 ## [3.29.0] - 2026-11-11

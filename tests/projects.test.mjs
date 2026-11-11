@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, stat, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { load, clone, temporary, exec, until } from "./helpers.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
@@ -227,7 +227,7 @@ test("Remove project takes it out for good, closes its open space, and only then
   const { row } = await kdb.addProject({ name: "fury", folder: "/Users/me/fury" });
   const view = Object.assign(new Spaces(), { navStore: { kdb } });
   view.removeProject(row, { id: "sp-fury" });
-  await new Promise((r) => setTimeout(r, 300));
+  await until(() => calls.length === 2);
   assert.deepEqual(calls, [["space.close", { id: "sp-fury" }], ["close", "ov1"]], "the space goes, then the menu");
   assert.deepEqual(clone(await kdb.projects()), []);
   assert.deepEqual(clone(shared.get("kanso.registry") ?? []), [], "every view draws it gone");

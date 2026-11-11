@@ -10,6 +10,8 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
   // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
   { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js", "kanso/mods/kanso-help/ui.js", "kanso/mods/kanso-dojo/ui.js", "kanso/mods/kanso-containers/ui.js", "kanso/mods/kanso-spaces/ui.js", "kanso/mods/kanso-sleep/ui.js", "kanso/mods/kanso-arrange/ui.js", "kanso/mods/kanso-sim/ui.js", "markdown-panel/mods/markdown-panel/ui.js"] },
+  // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
+  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sleep", "kanso-sim"].map((m) => `kanso/mods/${m}/pieces.js`) },
   // An agent's state mark, program icon and name, the same in the tabs, headers, status bar, sidebar and Send.
   { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-tabs/marks.js", "kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js"] },
   // Text for an agent, delivered the same from Send and from Look.

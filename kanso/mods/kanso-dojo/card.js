@@ -1,7 +1,7 @@
 // hjkl dōjō's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { postText } from "./share.js";
 import { LEVELS } from "./dojo.js";
-import { range } from "./pure.js";
+import { range, plural } from "./pure.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY = 86_400_000;
@@ -25,8 +25,6 @@ export function calendar(days, now = Date.now(), weeks = 53) {
       .map(([k, d]) => ({ weekday: k, contributionLevel: set.has(ymd(d)) ? "FOURTH_QUARTILE" : "NONE" })),
   }));
 }
-
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // `figure`: your pet, drawn beside the best round (from Companion.figure).
 export function dojoShare(totals, now = Date.now(), figure = null) {
