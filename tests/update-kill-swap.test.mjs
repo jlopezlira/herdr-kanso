@@ -2,19 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { exec } from "./helpers.mjs";
-import { windows, test, updates, small, tree, stages, recovered, sweep } from "./update-harness.mjs";
-
-test("Killed after any step of the swap, recovery ends at the whole old install or the whole new one, and the next install goes through", { timeout: 170_000 }, async (t) => {
-  const s = await small(t);
-  assert.equal(s.after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
-  assert.equal(s.after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
-  assert.equal(s.after["themes/kanso-day.json"], '{"theme":"1.1.0"}\n');
-  // Forward, slot by slot, each aside and in: keys, layout, picture, theme (8), open-with in (1),
-  // kanso-tabs and kanso-chrome (4); then the commit, the layout you had kept, the journal gone.
-  const forward = await sweep(s);
-  assert.deepEqual(forward.kills, [...Array(13).fill("old"), ...Array(3).fill("new")]);
-  assert.deepEqual(forward.end, s.after);
-});
+import { windows, test, updates, small, tree, stages, recovered } from "./update-harness.mjs";
 
 test("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
   const s = await small(t);

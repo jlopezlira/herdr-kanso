@@ -99,6 +99,9 @@ test("A swap that fails on its last mod puts back every one before it: the old v
   assert.equal(await readFile(join(f.home, "layouts/kanso.json"), "utf8"), '{"root":{"id":"live"}}', "your layout as it was");
   assert.deepEqual(await readdir(join(f.home, "themes")), [], "the release's themes taken back too");
   assert.deepEqual(await staged(f.home), [], "backups removed only once everything is back");
-  took(await holder(t, f), "the lock went with its process");
+  const free = await holder(t, f);
+  took(free, "the lock went with its process");
+  // A held lock file on Windows makes the temporary folder's removal retry without end.
+  await free.kill();
   assert.equal(f.updater.available(), "1.1.0", "and the update is offered again");
 });

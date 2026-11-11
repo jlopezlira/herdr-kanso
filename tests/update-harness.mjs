@@ -347,7 +347,7 @@ export async function recovered(s, home, at) {
 
 // Kills an install after each step from `first` to `last` and checks the recovery from each. It
 // ends at the first step the install gets past: `end` is then the home that install left.
-export async function sweep(s, { sabotage = false, first = 1, last = 60 } = {}) {
+async function sweep(s, { sabotage = false, first = 1, last = 60 } = {}) {
   const kills = [];
   for (let stop = first; stop <= last; stop += 1) {
     const home = await s.fresh(`${sabotage ? "s" : "k"}${stop}`);
@@ -363,6 +363,24 @@ export async function sweep(s, { sabotage = false, first = 1, last = 60 } = {}) 
   }
   return { kills, end: null };
 }
+
+// Forward, slot by slot, each aside and in: keys, layout, picture, theme (8), open-with in (1),
+// kanso-tabs and kanso-chrome (4); then the commit, the layout you had kept, the journal gone.
+// Undone (kanso-chrome cannot go in): 12 steps forward, then back in reverse, each slot's renames
+// and its line out of the journal (19), then the journal gone. A file holds 8 steps of either.
+export const sweepTest = ({ sabotage = false, first, last = 60, kills, end = null }) => test(
+  `Killed after any of ${last === 60 ? `steps ${first} on` : `steps ${first} to ${last}`} of ${sabotage ? "an undone swap" : "a swap"}, recovery ends at the whole old install or the whole new one, and the next install goes through`,
+  { timeout: 170_000 },
+  async (t) => {
+    const s = await small(t);
+    assert.equal(s.after["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
+    assert.equal(s.after["layouts/kanso.json.old-20261108-1200"], '{"root":{"id":"yours"}}\n');
+    assert.equal(s.after["themes/kanso-day.json"], '{"theme":"1.1.0"}\n');
+    const got = await sweep(s, { sabotage, first, last });
+    assert.deepEqual(got.kills, kills);
+    assert.deepEqual(got.end, end && s[end], end ? `the swap ends ${end === "before" ? "undone in full" : "in place"}` : `still under way at step ${last}`);
+  },
+);
 
 // The first window's install, killed after its `stop`-th step and never heard from again: its
 // copy is replaced by the swap, so nothing in that window recovers it.
