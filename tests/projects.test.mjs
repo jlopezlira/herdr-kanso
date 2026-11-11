@@ -190,14 +190,15 @@ test("a local folder that is gone marks only this computer's project, never anot
 test("New project with a conversation: the name you give it, its folder, then which agent, asked", async (t) => {
   const dir = await temporary(t);
   const calls = [], closed = [], shared = new Map(), overlays = [];
-  const { Spaces, Kdb } = await load("kanso-spaces/main.js", ["Spaces", "Kdb"], {
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
     props: () => ({ newProject: { start: true }, overlay: "ov1" }), closeOverlay: (id) => closed.push(id),
     shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v), notify: () => {},
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
   });
   const view = new Spaces();
-  Object.assign(view, { kdb: new Kdb(join(dir, "kanso")), projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
+  Object.assign(view, { navStore: { kdb: new Kdb(join(dir, "kanso")) }, projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
   const { cx, drain } = (await import("./helpers.mjs")).context();
   view.createProject(cx);
   await drain();
@@ -207,7 +208,7 @@ test("New project with a conversation: the name you give it, its folder, then wh
   assert.deepEqual(clone(shared.get("kanso.registry").map((p) => [p.name, p.folder])), [["Fury", "/Users/me/Apps/fury-api"]]);
 
   const noFolder = new Spaces();
-  Object.assign(noFolder, { kdb: view.kdb, projectFolder: null, projectName: { value: () => "x" } });
+  Object.assign(noFolder, { navStore: view.navStore, projectFolder: null, projectName: { value: () => "x" } });
   noFolder.createProject(cx);
   assert.equal(noFolder.projectError, "Choose its folder.");
 });
@@ -215,7 +216,8 @@ test("New project with a conversation: the name you give it, its folder, then wh
 test("Remove project takes it out for good, closes its open space, and only then closes the menu", async (t) => {
   const dir = await temporary(t);
   const calls = [], shared = new Map();
-  const { Spaces, Kdb } = await load("kanso-spaces/main.js", ["Spaces", "Kdb"], {
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     exec, appHome: () => dir, home: () => "/Users/me", spaces: () => [], machines: () => [],
     props: () => ({ overlay: "ov1" }), closeOverlay: (id) => calls.push(["close", id]),
     shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v),
@@ -223,7 +225,7 @@ test("Remove project takes it out for good, closes its open space, and only then
   });
   const kdb = new Kdb(join(dir, "kanso"));
   const { row } = await kdb.addProject({ name: "fury", folder: "/Users/me/fury" });
-  const view = Object.assign(new Spaces(), { kdb });
+  const view = Object.assign(new Spaces(), { navStore: { kdb } });
   view.removeProject(row, { id: "sp-fury" });
   await new Promise((r) => setTimeout(r, 300));
   assert.deepEqual(calls, [["space.close", { id: "sp-fury" }], ["close", "ov1"]], "the space goes, then the menu");
