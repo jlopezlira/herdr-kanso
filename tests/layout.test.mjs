@@ -198,6 +198,17 @@ test("kanso-tabs shows its panels in the order you drag them, without the ones y
   assert.equal(ids().at(-1), "workflow", "a custom panel you never placed comes last");
 });
 
+test("kanso-tabs.memory opens Memory and a second call leaves it open", async () => {
+  const f = await layoutFixture();
+  const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
+  const tabs = new Tabs();
+  const panelBody = () => f.body().children.find((node) => node.id === "panel-body");
+  tabs.command("memory"); f.flush();
+  assert.equal(panelBody().children[0].content.mod, "kanso-guard");
+  tabs.command("memory"); f.flush();
+  assert.equal(panelBody().children[0].content.mod, "kanso-guard");
+});
+
 test("kanso-tabs.sim toggles the Simulator panel", async () => {
   const f = await layoutFixture();
   const { Tabs } = await load("kanso-tabs/main.js", ["Tabs"], f.host);
