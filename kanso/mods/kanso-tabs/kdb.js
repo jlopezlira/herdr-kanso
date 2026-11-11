@@ -102,6 +102,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
 CREATE TABLE IF NOT EXISTS picture_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL, mark TEXT);
 CREATE TABLE IF NOT EXISTS pictures(file TEXT NOT NULL, path TEXT NOT NULL, ord INTEGER NOT NULL, color TEXT, there INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(file, path));
 CREATE INDEX IF NOT EXISTS pictures_ord ON pictures(file, ord);
+CREATE TABLE IF NOT EXISTS named_scans(file TEXT PRIMARY KEY, size INTEGER NOT NULL, mark TEXT);
+CREATE TABLE IF NOT EXISTS named_paths(file TEXT NOT NULL, path TEXT NOT NULL, ord INTEGER NOT NULL, PRIMARY KEY(file, path));
 CREATE TABLE IF NOT EXISTS pr_providers(provider TEXT NOT NULL, host TEXT NOT NULL, login TEXT, status TEXT NOT NULL, detail TEXT, checked_at INTEGER NOT NULL, PRIMARY KEY(provider, host));
 CREATE TABLE IF NOT EXISTS pr_repos(id TEXT PRIMARY KEY, provider TEXT NOT NULL, host TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL, project_id TEXT, folder TEXT, machine TEXT, remote TEXT, seen_at INTEGER);
 CREATE INDEX IF NOT EXISTS pr_repos_project ON pr_repos(project_id);
@@ -584,11 +586,25 @@ export class Kdb {
     const rows = await this.read(`SELECT path, ord, color, there FROM pictures WHERE file=${q(file)} ORDER BY ord;`);
     return { size: scan ? String(scan.size) : "0", mark: scan?.mark ?? "", rows };
   }
+  replacePaths(table, scan, file, size, mark, paths, line) {
+    const drop = notIn("path", paths);
+    const writes = paths.map((path, ord) => line(path, ord)).join("");
+    return this.run(`BEGIN;DELETE FROM ${table} WHERE file=${q(file)} AND ${drop};${writes}INSERT INTO ${scan}(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
+  }
   savePictures(file, size, rows, mark = null) {
-    const drop = notIn("path", rows.map((r) => r.path));
-    const writes = rows.map((r) => `INSERT INTO pictures(file,path,ord,color,there) VALUES(${q(file)},${q(r.path)},${n(r.ord)},${q(r.color)},1)
-      ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord,there=1,color=COALESCE(pictures.color,excluded.color);`).join("");
-    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND ${drop};${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
+    return this.replacePaths("pictures", "picture_scans", file, size, mark, rows.map((r) => r.path), (_path, ord) => {
+      const r = rows[ord];
+      return `INSERT INTO pictures(file,path,ord,color,there) VALUES(${q(file)},${q(r.path)},${n(r.ord)},${q(r.color)},1) ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord,there=1,color=COALESCE(pictures.color,excluded.color);`;
+    });
+  }
+  async named(file) {
+    const scan = (await this.read(`SELECT size, mark FROM named_scans WHERE file=${q(file)};`))[0];
+    const rows = await this.read(`SELECT path FROM named_paths WHERE file=${q(file)} ORDER BY ord;`);
+    return { size: scan ? String(scan.size) : "0", mark: scan?.mark ?? "", paths: rows.map((r) => r.path) };
+  }
+  saveNamed(file, size, paths, mark = "") {
+    return this.replacePaths("named_paths", "named_scans", file, size, mark, paths ?? [], (path, ord) =>
+      `INSERT INTO named_paths(file,path,ord) VALUES(${q(file)},${q(path)},${n(ord)}) ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord;`);
   }
   setPictureColor(file, path, color) {
     return this.run(`UPDATE pictures SET color=${q(color)} WHERE file=${q(file)} AND path=${q(path)};`);

@@ -561,7 +561,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
     (a failure says why), git marks, code in place, Markdown or a picture to
-    `preview.js` with `back: "files"`; `changes.js`:
+    `preview.js` with `back: "files"`. Files puts the files that agent named
+    at the top, newest first, at most eight, only while it is open and the
+    window is in front; hiding that stops the read. `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
     again only when that file changed, with Open with, read-again and close:
@@ -673,12 +675,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   The strip also records `sizesBefore`: other writers preserve new native
   divider sizes while its adopt timer catches up, but replay pending strip
   width commands over the old sizes they were based on.
-- On Unix, Files lists a folder with one `find -print0` and no shell: a
-  directory is printed twice in a row (no name repeats in a folder), so its
-  type costs no extra call, and NUL separators keep names with newlines
-  whole. It keeps 501 entries and displays 500, the extra one only to detect
-  truncation. If `find` can't run or its output passes exec's 8 MiB, it falls
-  back to Bash reading the same `find` with a bounded loop.
+- On Unix, Files lists a folder with one `find -print0`: a directory is
+  printed twice, so its type is free and a name with a newline stays whole.
+  It shows 500 and keeps one more only to see truncation, and falls back to a
+  bounded Bash loop if `find` cannot.
 
 - Never use `.spin()` for a busy state. It redraws the whole window about
   30 times a second while any agent works, and every redraw repaints every

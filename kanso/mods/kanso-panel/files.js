@@ -7,7 +7,7 @@ import { fileApi } from "./platform-files.js";
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-files; one of the kanso-panel mod's panels.
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, v_virtual_list, Scrollbar } from "gpui-base";
-import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
+import { exec, readTextFile, watchFolder, theme, openOverlay, shared, setShared, window, layout, focused, panes, terminals, home } from "herdr";
 import { location, key, codeState, markdownView, isMarkdown, insideRoot, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
 import { walkLayout } from "./layout.js";
@@ -15,8 +15,12 @@ import { listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeSt
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
 import { readingLines } from "./doc.js";
-import { skeleton, breathe, quietLink, tokens } from "./ui.js";
+import { skeleton, breathe, quietLink, tokens, section, T } from "./ui.js";
 import { Front } from "./front.js";
+import { systemApi } from "./platform-system.js";
+import { resolvePath } from "./look-model.js";
+import { nameOf, givenNames } from "./marks.js";
+import { agentAddress, namedList, namedShown, transcriptPaths, NAMED } from "./transcript.js";
 
 const PER_FOLDER = 500, TOTAL = 5000, WATCHED_MS = 60_000;
 const RETURN = "kanso.files.return";
@@ -29,10 +33,11 @@ async function directory(path, on) {
 }
 
 export class Files {
-  constructor() { this.rev = 0; } // bumped whenever the rows would differ; the tree is rebuilt only then
+  constructor(db) { this.rev = 0; this.db = db ?? null; } // bumped whenever the rows would differ; the tree is rebuilt only then
 
   init(cx) {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
+    this.named = []; this.note = ""; this.transcript = null; this.homeOn = null; this.homeDir = null;
     // Returning from the preview: the folders that were open, for the same place.
     const back = shared(RETURN);
     if (back) {
@@ -108,7 +113,8 @@ export class Files {
       this.context = context; this.root = cwd; this.on = on; this.entries = new Map();
       this.folders = new Set(mem?.folders ?? []);
       this.pendingFile = mem?.file ?? null;
-      this.pending = new Set(); this.marks = {}; this.show(null); this.watched = null; this.error = null; this.limited = false;
+      this.pending = new Set(); this.marks = {}; this.named = []; this.note = ""; this.transcript = null; this.homeOn = null; this.homeDir = null;
+      this.show(null); this.watched = null; this.error = null; this.limited = false;
       this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
       this.rev = this.rev + 1;
     }
@@ -146,6 +152,7 @@ export class Files {
     if (key() !== context) return;
     this.marks = status?.code === 0 ? marksFrom(top.stdout.trim(), status.stdout.split("\0")) : {};
     this.rev = this.rev + 1; this.error = null; this.listedAt = Date.now(); this.watch(cwd, cx);
+    await this.readNamed(cwd, on, context);
     if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
   }
 
@@ -167,6 +174,7 @@ export class Files {
     this.fresh = Date.now(); this.held = null; this.error = null;
     this.poll = pollNext(this.poll, "changed");
     this.rev = this.rev + 1;
+    await this.readNamed(cwd, this.on, context);
     if (this.pendingFile) { const file = this.pendingFile; this.pendingFile = null; this.show(file, cx, true); }
   }
 
@@ -195,6 +203,65 @@ export class Files {
     this.poll = pollStart();
     this.arm = null;
     this.refresh(cx);
+  }
+
+  namedDue() {
+    return namedShown(shared("kanso.hidden")) && window()?.active !== false && walkLayout(layout(), "panel-body")?.hidden !== true;
+  }
+
+  async homeOf(on) {
+    if (!on) return home();
+    if (this.homeOn === on && this.homeDir) return this.homeDir;
+    const dir = await (await serviceOn(systemApi, on)).userHome();
+    this.homeOn = on; this.homeDir = dir;
+    return dir;
+  }
+
+  async recallNamed(file) {
+    if (!this.db) return null;
+    try {
+      const got = await this.db.named(file);
+      return got ? { file, size: got.size, mark: got.mark ?? "", paths: got.paths ?? [] } : null;
+    } catch { return null; }
+  }
+
+  async readNamed(cwd, on, context) {
+    try {
+      if (!this.namedDue() || key() !== context) return;
+      const address = agentAddress(focused(), terminals(), panes());
+      if (!address) { this.named = []; this.note = ""; return; }
+      const homeDir = await this.homeOf(on);
+      if (!homeDir || key() !== context) return;
+      const before = this.transcript?.address === address ? this.transcript : null;
+      const written = await transcriptPaths(address, homeDir, before, (file) => this.recallNamed(file), on, NAMED);
+      if (key() !== context || agentAddress(focused(), terminals(), panes()) !== address) return;
+      if (written.failed) return;
+      if (!written.file) { this.named = []; this.note = ""; this.transcript = null; return; }
+      const term = terminals().find((item) => item.address === address);
+      const who = nameOf(term ?? { terminal: address }, givenNames());
+      const raw = written.paths ?? [];
+      const inside = [...new Set(raw.map((p) => resolvePath(p, cwd, homeDir)).filter((p) => p && paths.relative(cwd, p)))];
+      const there = inside.length ? await (await serviceOn(fileApi, on)).existing(inside, "file") : [];
+      if (key() !== context || agentAddress(focused(), terminals(), panes()) !== address) return;
+      this.named = namedList(raw, { root: cwd, cwd, homeDir, files: there });
+      this.note = who === "Pane" ? "" : who;
+      this.transcript = { address, file: written.file, size: written.size, mark: written.mark ?? "", paths: raw };
+      if (this.db && written.size != null) {
+        try { await this.db.saveNamed(written.file, written.size, raw, written.mark ?? ""); } catch { /* the next read stores it */ }
+      }
+    } catch { /* the tree stays; the next refresh tries again */ }
+  }
+
+  openFile(path, cx) {
+    if (isMarkdown(path) || kindOf(path) === "image") this.read(path);
+    else this.show(path, cx);
+  }
+
+  act(item, cx, secondary = false) {
+    if (!item) return;
+    if (secondary) { if (!item.entry.dir) this.openWith(item.path); return; }
+    if (item.entry.dir) this.toggle(item.path, cx);
+    else this.openFile(item.path, cx);
   }
 
   toggle(path, cx) {
@@ -266,13 +333,22 @@ export class Files {
     });
   }
 
-  row({ path, entry, depth, mark }, t) {
+  row({ path, entry, depth, mark, folder, id }, t) {
     const open = this.folders.has(path);
-    return h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer().hover(s => s.bg(t.hover))
+    return h_flex().id(id ?? `file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().rounded(6).cursor_pointer().hover(s => s.bg(t.hover))
       .child(entry.dir ? svg(`mods/kanso-panel/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
       .child(svg(`mods/kanso-panel/${entry.dir ? "folder" : "file"}.svg`).size(14).flex_none().text_color(t.muted))
-      .child(div().flex_1().min_w(0).truncate().child(entry.name))
+      .child(div().min_w(0).truncate().when(!folder, (el) => el.flex_1()).child(entry.name))
+      .when(Boolean(folder), (el) => el.child(div().min_w(0).flex_1().truncate().text_size(T.body).text_color(t.dim).child(folder)))
       .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark)));
+  }
+
+  namedRows(t) {
+    if (!namedShown(shared("kanso.hidden"))) return [];
+    return (this.named ?? []).map((item) => this.row({
+      path: item.path, entry: { name: item.name, dir: false }, depth: 0, folder: item.folder, id: `named-${item.path}`,
+      mark: this.marks?.[paths.join(this.root ?? "", item.path)],
+    }, t).on_click((_e, cx) => this.openFile(item.path, cx)));
   }
 
   listBones(c) {
@@ -296,6 +372,7 @@ export class Files {
     }
     if (this.on && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));
     const t = theme();
+    const named = this.file ? [] : this.namedRows(t);
     const items = this.file ? [] : this.rows();
     return v_flex().id("files").size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
@@ -306,20 +383,14 @@ export class Files {
           .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => this.openWith(this.file))
           .child(svg("mods/kanso-chrome/icons/open-with.svg").size(14)))))
       .when(!this.file, el => el.child(v_flex().id("files-tree").flex_1().min_h(0).p(6)
+        .when(named.length > 0, (el) => el.child(v_flex().id("files-named").flex_none().w_full()
+          .child(section(tokens(t), "Named in this conversation", this.note ?? ""))
+          .children(named)))
         .when(items.length > 0, (el) => el.child(div().flex_1().min_h(0).relative()
           .child(v_virtual_list("files-rows", items.length, 28, (i) => items[i].path, (range) => items.slice(range.start, range.end).map((item) => this.row(item, t)))
             // Item renderers run during native layout, where per-row handlers are forbidden.
-            .on_item_click((path, cx) => {
-              const item = items.find((item) => item.path === path);
-              if (!item) return;
-              if (item.entry.dir) this.toggle(path, cx);
-              else if (isMarkdown(path) || kindOf(path) === "image") this.read(path);
-              else this.show(path, cx);
-            })
-            .on_item_secondary_click((path) => {
-              const item = items.find((item) => item.path === path);
-              if (item && !item.entry.dir) this.openWith(path);
-            }).size_full())
+            .on_item_click((path, cx) => this.act(items.find((item) => item.path === path), cx))
+            .on_item_secondary_click((path) => this.act(items.find((item) => item.path === path), null, true)).size_full())
           .child(Scrollbar.vertical("files-rows").absolute().inset_0())))
         .when(Boolean(this.held), (el) => el.child(h_flex().id("files-stale").px(8).py(4).gap(8).items_center()
           .child(div().text_size(12).text_color(t.dim).child(asOf(this.held.at, Date.now())))

@@ -517,6 +517,25 @@ test("a transcript's pictures stay, a color already stored is kept, and one left
   assert.equal(none.mark, "333");
 });
 
+test("a conversation's named files stay from the offset, and a save that names nothing drops them", async (t) => {
+  const { db } = await database(t);
+  const file = "/home/me/.claude/projects/-repo/07e8cebe-420b-47d2-9fba-a76c2e4dd30d.jsonl";
+  await db.saveNamed(file, 40, ["src/a.js", "src/b.js"], "m1");
+  const got = await db.named(file);
+  assert.equal(got.size, "40");
+  assert.equal(got.mark, "m1");
+  assert.deepEqual(clone(got.paths), ["src/a.js", "src/b.js"]);
+  await db.saveNamed(file, 48, ["src/b.js", "src/c.js"], "m2");
+  const next = await db.named(file);
+  assert.deepEqual(clone(next.paths), ["src/b.js", "src/c.js"]);
+  assert.equal(next.size, "48");
+  assert.equal(next.mark, "m2");
+  await db.saveNamed(file, 48, [], "m3");
+  const none = await db.named(file);
+  assert.deepEqual(clone(none.paths), []);
+  assert.equal(none.mark, "m3");
+});
+
 test("an older picture index gains the prefix mark", async (t) => {
   const { db, dir } = await database(t);
   const file = join(dir, "kanso", "kanso.db");
