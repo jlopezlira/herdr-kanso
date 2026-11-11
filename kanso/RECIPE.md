@@ -23,15 +23,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       Search and Hide sidebar at the right. Each is a 32 square with a 17 icon
       in `muted` that turns `foreground` on hover over a `foreground`+`12`
       wash.
-    - Space rows are 32 tall with radius 6, no avatar: the name, then,
-      right-aligned, the repo, branch and ahead/behind counts in 11.5.
-    - The active space has a `foreground`+`14` wash; hover shows
-      `foreground`+`0c`.
+    - Space rows are 36 tall, radius 8: name 13.5 semibold, repo, branch
+      and counts 11.5. + stays on the active project; + and … on hover.
+      ↓N asks twice, then Pulling…; ↑N goes to the project and opens the
+      panel. Active `foreground`+`14`, hover `foreground`+`0c`.
     - Worktree spaces nest under their repo on 1px `input` guide lines.
-    - A space's agents are listed under it in 28-tall rows: program icon 15,
-      title 12.5, status mark at the right. The focused agent is in full ink
-      over a `foreground`+`0c` wash; the others are `muted`, and idle ones
-      `dim`.
+    - Agents under a space: icon 15, title 12.5, status mark.
     - Collapsed (76 wide): the + and Hide buttons, stacked, then one mark
       per group (project, status, shelf): a project's initial in its color,
       no square (else an icon), under it the most urgent state and count.
@@ -42,11 +39,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - An account chip: a 32 avatar (28 when collapsed) with the home folder
       name's first letter, then the name and "N agents".
     - Collapsed, each item is a centred square with its label as a tooltip.
-      When an app update is ready, a 6 `accent` dot shows on Settings.
     - Kanso's own release (`update.js`). What's new
       chooses Stable (default) or Early. Stable offers a newer `vX.Y.Z`.
       Early offers the newest beta, rc or stable, never an older one.
-      The row "Update kansō to X" (refresh icon, 6 `accent` dot) names
+      The row "Update kansō to X" (refresh icon) names
       that tag; the footer grows to 192 while it shows (back to 156
       after; a size you set is kept). `version.json` stays `X.Y.Z`; the
       download uses the tag and the check wants `X.Y.Z`. The tab bar
@@ -154,8 +150,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       The Worktrees brief, in this one's order: [RECIPE-worktrees.md](RECIPE-worktrees.md).
       The Shipped brief, in this one's order: [RECIPE-shipped.md](RECIPE-shipped.md).
       The PR brief, in this one's order: [RECIPE-pr.md](RECIPE-pr.md).
-      Simulator (`kanso-sim`) is the device beside the agent.
-      Its brief: [RECIPE-sim.md](RECIPE-sim.md).
+      Simulator uses Xcode and Android tools only:
+      [RECIPE-sim.md](RECIPE-sim.md).
   - **Status bar**, 26 tall: `kanso-status` with `{side: "left"}`, a
     180-wide minimap (`kanso-strip`) exactly in the middle, and
     `kanso-status` with `{side: "right"}`. The minimap is a centred row of
@@ -184,26 +180,24 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
-- **Since you left**: after 5 minutes away, a "While you were away" head under
-  the project lists up to three rows: mark, name, outcome (Finished, Needs you,
-  Failed, Went to sleep, Could not sleep, a PR's state) and age; under it, dim,
-  the agent's line when it happened (`did`, kept with the event). The agent in
-  front is left out; one row per agent. +N expands inline. Enter or a click
-  goes to the agent's pane, a sleeper's Wake menu or the PR, and dismisses; a
-  gone agent's row is dim and inert. Dismissal persists in kanso.db. Events
-  expire after 7 days, capped at 500. Piece `sidebar.away`: off, no event is
-  written or read. Nothing, loading or a failed read: nothing.
+- **Since you left**: after 5 minutes away, "While you were away" sits above
+  the projects, and on Status and Threads. Up to three rows: mark, name,
+  outcome (Finished, Needs you, Failed, Went to sleep, Could not sleep, a
+  PR's state) and age; under it, dim, the line then (`did`, kept with the
+  event). The agent in front is left out; one row per agent. +N expands
+  inline. Enter or a click goes to the pane, a sleeper's Wake menu or the
+  PR, and dismisses; a gone row is dim and inert. Dismissal stays in
+  kanso.db. Events expire after 7 days, capped at 500. Piece `sidebar.away`
+  off: nothing is written or read. Nothing, loading or a failed read: nothing.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
-  blocked then unseen done, oldest first. Native status owns seen; no sleepers.
+  agents who wait on you, oldest first. Off until chosen. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
   loading: kit; unavailable: error. The bar names the oldest blocked one from this queue.
-  Strip checks panes each 1.5 s; leaving
-  `working` gets `git status --porcelain`, `git diff --shortstat HEAD`,
-  commits ahead of `@{upstream}` (else `origin/HEAD`) and `gh pr view`
-  (open only; checks and merge state) in shared `kanso.digest`
-  by pane, cleared when it works again or closes. The header shows it
-  after the branch: files, +/-, commits, #number. A blocked one is not
-  green and the tooltip names why. Send opens `kanso-send`.
+  Leaving `working` stores files, commits and the open pull request in
+  `kanso.digest` (kept while it works; dropped when the pane closes).
+  Files, commits and `#N` open the diff, the unpushed work and the
+  section the verdict names. Files and commits dim while working.
+  Sleep and Send stay on the focused finished pane; no Send while it waits on you.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
   status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
@@ -250,14 +244,15 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     edge tabs and the drop cards show the same name.
     Right-click opens the shipped space menu.
   - With another machine, each is one project-height row: monitor or server
-    icon, medium name (`foreground` connected, `muted` off, unreachable,
-    or needs login; this computer's host name, or a name you give it).
+    icon, medium name (`foreground` connected or loading, else `muted`;
+    this computer's host name, or a name you give it).
     Right-click or double-click the name; empty brings the old name
-    back. It is kept on that computer and shows on the others. Small
-    `dim`: Off, Unreachable, Needs login; a breathing line.
-    Turn on, Retry, and copy stay visible; hover or keyboard shows turn off
-    and + only when connected; a chevron folds it. Copy is `hc machine login <name>`.
-    Off stores target, name, via, session and temporary, then `hc machine rm`
+    back. It is kept on that computer and shows on the others.
+    State 11.5: Off and Needs login `dim`,
+    Unreachable `blocked`. A breathing line while loading. Turn on, Retry and copy stay
+    visible; hover or keyboard shows turn off and + only when connected; a
+    chevron folds it. Copy is `hc machine login <name>`. Off stores
+    target, name, via, session and temporary, then `hc machine rm`
     (terminals keep running); nothing under it is listed or read. `false`
     and `null` are none, so add never sends an empty `--via`. On is
     `hc machine add` with those, never `--install`; dropped once
@@ -290,8 +285,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     the step it is on while it works and its last words when it finishes;
     at rest, those last words in `dim`). Without one: while working or
     blocked, the agent's own title when the row shows a name you gave it
-    (else the title is the name already); when done, the pane's digest from
-    shared `kanso.digest` ("+12 −3 · 1 commit · PR #41 failing", or "PR #575, review required" when the merge is blocked). After the
+    (else the title is the name already). Finished: those last words only. After the
     line, a working agent three minutes on the same step shows its time
     (`dim`; past fifteen, `blocked`), counted from when the `msg` changed
     or was first seen (`trackSteps`, `stepOf`; `status_ms` is not it). Before the mark
@@ -322,8 +316,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     to 3.2 s, its own pace per agent), so a glint passes over the letters
     in place; after it three dots count (`.frames`, "", ".", "..", "...",
     380 ms). Nothing in the row is laid out again. A row waiting on you sits on
-    `blocked` at 8%; the focused one on `foreground` at 7%. Projects:
-    space rows 36 tall, the name 13.5px semibold, 10px between projects.
+    `blocked` at 8%; the focused one on `foreground` at 7%. 10px between
+    projects. Asleep rows are 32 tall: dim moon and name, Wake when it
+    can. A click opens the menu; Enter wakes. Second line: full ink waiting, quiet working, dim
+    finished or idle.
   - Projects | Status | Threads: a switch under the top row (three
     segments, 28 tall, in a 3px-padded `foreground` 4% track, radius 10,
     14px of space under it;
@@ -558,28 +554,27 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
-    (a failure says why), git marks, code in place, Markdown or a picture to
+    (a failure says why), git marks; a file that is not a directory opens in
     `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
-    again only when that file changed, with Open with, read-again and close:
-    code read-only, a picture (png jpg jpeg gif webp svg, name and pixel size when known), Markdown as `doc.js` `MarkdownDoc`
-    (embedded pictures on another computer), formatted
-    and edited in place (a double-click opens one block, a table as cells;
-    saved after 700 ms, only when the file on disk is still what was read,
-    else a conflict you resolve; "Source" edits the whole file; links to
-    other Markdown files open here). `blocks.js` splits and joins the
-    blocks. kanso-tabs watches `data/kanso-open` and shows the newest path
-    left there (`markdown-handler.sh install`, macOS: makes a small app
-    the `.md` handler). The markdown-panel mod is its copy in a window, by
-    sync:share); `lib.js` holds what they share (where the focused pane is,
-    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState`,
-    `markdownView` is `TextView.markdown`; and `showPanel`, which mounts a block in `panel-body`). A panel
+    again when that file changed, with Open with and close:
+    any file that is not a picture, edited when the read has no NUL and fits in 1 MiB
+    (Save, Cmd+S; Ctrl+S on Windows), on this computer or another,
+    a picture (png jpg jpeg gif webp svg), Markdown as `doc.js` `MarkdownDoc`
+    (a double-click opens one block, a table as cells; on this computer, saved after 700 ms;
+    on another, Save, that key, or leaving writes it, and it does not save while you type;
+    a conflict when the file on disk changed; "Source" edits the whole file).
+    Over 1 MiB stays a view. `blocks.js` splits and joins the blocks.
+    kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
+    The markdown-panel mod is that copy, by sync:share); `lib.js` shares
+    `codeState` (an `EditorState`, read-only when the file is not text)
+    and `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a
     terminal's shell pid (`hc get`) is in that pane, one in a folder of
-    home (not `~/Library`) with none is "No pane runs it". Read every 10 s
+    home (not `~/Library`) with none says "no pane". Read every 10 s
     in front; Stop: SIGTERM on a second press, then SIGKILL.
     `look.js` (Images, panel id `look`, `eye.svg`): no mod hears a click on
     a terminal's link, so it reads the terminal in focus (`hc read --lines

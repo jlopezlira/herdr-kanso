@@ -3,8 +3,8 @@ import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover, Input, InputState, TextView } from "gpui-base";
-import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals } from "herdr";
+import { v_flex, h_flex, Button, Popover, Input, InputState, TextView, ScrollHandle } from "gpui-base";
+import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
@@ -14,7 +14,7 @@ import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
 import { VIEW } from "./pr-body.js";
-import { drawHero, drawEmpty, footOf, listedRow } from "./pr-view.js";
+import { drawHero, drawEmpty, footOf, listedRow, heroPieces } from "./pr-view.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
@@ -107,6 +107,21 @@ function splitDiff(text) {
   }));
 }
 
+const PLACED = { draft: "hero", behind: "hero", conflicts: "hero", review: "people", threads: "threads", checks: "checks" };
+
+export function sectionIndex(section, ids) {
+  const id = PLACED[section];
+  if (!id) return null;
+  const at = (ids ?? []).indexOf(id);
+  return at < 0 ? null : at;
+}
+
+export function checksFirst(checks, name) {
+  if (!name) return checks;
+  const named = checks.filter((c) => c.name === name);
+  return named.length ? [...named, ...checks.filter((c) => c.name !== name)] : checks;
+}
+
 export class PullRequest {
   constructor(db) { this.armed = new Armed(); this.db = db; } // Merge asks for a second press
 
@@ -120,7 +135,14 @@ export class PullRequest {
     this.picker = null; this.candidates = null; this.query = "";
     this.search = InputState.new({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
-    this.jumpUrl = props.url ?? null;
+    this.section = props.section ?? null;
+    this.check = props.check ?? null;
+    this.asked = props.at ?? null;
+    this.placed = null;
+    this.landed = null;
+    this.scroll = ScrollHandle.new();
+    this.jumpUrl = props.section === "push" ? null : (props.url ?? null);
+    if (props.section) this.keptUrl = null;
     this.refresh(cx);
     cx.timer.every(TICK_MS, (cx) => this.onPoll(cx));
   }
@@ -242,7 +264,7 @@ export class PullRequest {
     if (context !== this.context) {
       this.context = context; this.root = null; this.branch = null; this.pr = null; this.threads = []; this.diffs = null;
       this.openFile = null; this.error = null; this.note = null; this.none = false; this.armed.clear(); this.picker = null;
-      this.openPrs = []; this.selected = this.jumpUrl ?? this.keptUrl ?? null; this.remembered = !this.jumpUrl && Boolean(this.keptUrl);
+      this.openPrs = []; this.selected = this.jumpUrl ?? (this.section === "push" ? null : this.keptUrl) ?? null; this.remembered = !this.jumpUrl && this.section !== "push" && Boolean(this.keptUrl);
       this.home = null; this.branchUrl = null; this.outside = false;
       this.missing = null; this.pushed = false; this.behind = false; this.base = undefined;
       this.listing = false; this.tab = "open"; this.closedPrs = null;
@@ -1050,7 +1072,7 @@ export class PullRequest {
 
   checksList(c) {
     const checks = this.checks();
-    const sorted = checks.toSorted((a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state));
+    const sorted = checksFirst(checks.toSorted((a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state)), this.check);
     const open = this.expanded.checks, shown = open ? sorted : sorted.slice(0, 5);
     const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
@@ -1191,18 +1213,72 @@ export class PullRequest {
     return drawEmpty(this, c);
   }
 
+  nodes(c, narrow) {
+    const header = ["header", this.header(c, narrow).id("header")];
+    if ((this.inboxOn && this.inboxOpen) || this.listing || this.sceneKind() !== "pr") return [header, ["body", this.body(c, narrow)]];
+    return [header, ...heroPieces(this, c)];
+  }
+
+  noteAsk(cx) {
+    const given = props() ?? {};
+    if (given.at == null || given.at === this.asked) return;
+    this.asked = given.at;
+    this.section = given.section ?? null;
+    this.check = given.check ?? null;
+    this.landed = null;
+    this.placed = null;
+    if (given.section !== "push") return;
+    this.selected = null;
+    this.jumpUrl = null;
+    this.keptUrl = null;
+    this.refresh(cx);
+  }
+
+  // The named check sits inside Details, so the fold is open before this render builds it.
+  openAsked(cx) {
+    const section = this.section;
+    const needs = section === "checks" || section === "review" || section === "threads";
+    const id = this.detailsKey();
+    if (!needs || !id) return;
+    const mark = `${this.asked ?? ""}:${section}:${id}`;
+    if (this.placed === mark) return;
+    this.placed = mark;
+    if (section === "checks") this.expanded = { ...this.expanded, checks: true };
+    if (this.detailsOn()) return;
+    const all = shared("kanso.pr.details") ?? {};
+    setShared("kanso.pr.details", { ...all, [id]: true });
+    if (cx.timer?.after) cx.timer.after(0, (next) => this.loadOthers(next));
+    else this.loadOthers(cx);
+  }
+
+  land(ids) {
+    if (!this.pr) return;
+    const mark = `${this.pr.number}:${this.section ?? ""}:${this.check ?? ""}`;
+    if (this.landed === mark) return;
+    const at = sectionIndex(this.section, ids);
+    if (at == null) {
+      if (!this.loading) this.landed = mark;
+      return;
+    }
+    this.landed = mark;
+    this.scroll.scroll_to_item(at);
+  }
+
   render(cx) {
     this.comeForward(cx);
+    this.noteAsk(cx);
     if (key() !== this.context) this.refresh(cx);
+    this.openAsked(cx);
     const c = tokens(theme());
     const narrow = (this.width || 368) < 560;
-    const body = this.body(c, narrow);
-
+    const nodes = this.nodes(c, narrow);
+    if (this.pr && !(this.inboxOn && this.inboxOpen) && !this.listing && this.sceneKind() === "pr") this.land(nodes.map(([id]) => id));
+    const padX = narrow ? G.lg : 32;
+    const padY = narrow ? G.lg : 28;
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(G.lg)
-          .child(this.header(c, narrow))
-          .child(body)));
+      .pt(padY).pb(padY).gap(G.lg).track_scroll(this.scroll)
+      .children(nodes.map(([, el]) => h_flex().flex_none().w_full().justify_center().px(padX)
+        .child(v_flex().w_full().max_w(1080).child(el))));
   }
 }

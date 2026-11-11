@@ -2,7 +2,7 @@
 import { appHome, shared } from "herdr";
 import { exists, mkdir, readFile, readdir, unlink, writeFile } from "fs/promises";
 import { localService, serviceOn } from "./platform-host.js";
-import { fileApi, pairEntries } from "./platform-files.js";
+import { fileApi, pairEntries, CHUNK } from "./platform-files.js";
 import { paths } from "./platform-paths.js";
 import { aliasText, extOf, machineTitle } from "./pure.js";
 
@@ -11,8 +11,7 @@ export const ASK_BYTES = 2 * 1024 * 1024;
 export const CHECK_MS = 5000;
 export const SLOW_MS = 30000;
 export const QUIET_LIMIT = 3;
-// 2097150 is a multiple of 3, so only the last slice's base64 is padded, and it stays under the exec cap.
-export const CHUNK = 2097150;
+export { CHUNK };
 export const REMOTE_DIR = "data/kanso-panel/remote";
 const DAY = 86400000;
 const QUIET = /unreachable|did not answer|timed out|timeout|econnrefused|connection refused|offline|no route|was lost/i;
@@ -51,6 +50,11 @@ export const sweepLook = async (root, id, keep) => {
 export const said = (error) => String(error?.message ?? error ?? "").replace(/^Error:\s*/, "").trim();
 
 const aliasName = (machine) => aliasText(shared("kanso.alias"), machine);
+
+export const quietError = (error) => {
+  const text = said(error);
+  return !text || QUIET.test(text);
+};
 
 export const copyFailure = (error, machine) => {
   const text = said(error);

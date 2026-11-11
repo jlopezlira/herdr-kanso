@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone, temporary, exec } from "./helpers.mjs";
 
-const names = ["aliasOf", "renameTo", "placeAlias", "bookOf", "selfOf", "publishNames", "deliversNow", "catchUp", "mergeBooks", "takeAsks", "askedAlias"];
+const names = ["aliasOf", "renameTo", "placeAlias", "bookOf", "selfOf", "publishNames", "deliversNow", "catchUp", "mergeBooks", "takeAsks", "askedAlias", "Names"];
 const alias = await load("kanso-spaces/alias.js", names);
 
 const gap = 5 * 60 * 1000;
@@ -85,7 +85,7 @@ async function database(t) {
 
 const sqlOf = (call) => (call?.[1] ?? []).join("\n");
 
-test("a computer Herdr lists is asked even with nothing open, and one it no longer lists is not", async (t) => {
+test("a computer Herdr lists stays listed with nothing open, and one it no longer lists does not", async (t) => {
   const { machinesToAsk, restDue } = await database(t);
   assert.deepEqual(clone(machinesToAsk([{ name: "light" }, { name: "dark", layout: "unavailable" }, { name: null }], [])), ["light", "dark"]);
   assert.deepEqual(clone(machinesToAsk([{ name: "dark", layout: "ready" }, { name: null }], [])), ["dark"]);
@@ -106,6 +106,30 @@ test("the alias rides the sleep read, and a write in that read is still one proc
   assert.match(sqlOf(calls[0]), /INSERT INTO computer_alias/);
   assert.equal(db.seenAlias.find((row) => row.route === "").name, "Cave");
   assert.equal((await db.read("SELECT name FROM computer_alias WHERE route='';"))[0].name, "Cave");
+  calls.length = 0;
+  await db.sleeps(null, now, [{ route: "", name: "Cave", at: now, pending: 0 }, { route: "dark", name: "Night", at: now, pending: 0 }]);
+  assert.equal(calls.length, 1, `two rows inside the read started ${calls.length} processes`);
+  assert.equal(db.seenAlias.find((row) => row.route === "dark").name, "Night");
+});
+
+test("a failed local save stays pending and the next read writes it", async () => {
+  const bag = { "kanso.alias.ask": { local: { text: "Studio", at: 10 } } };
+  const { Names } = await load("kanso-spaces/alias.js", ["Names"], {
+    shared: (key) => bag[key],
+    setShared: (key, value) => { bag[key] = value; },
+  });
+  const names = new Names({
+    hostName: "macbook",
+    phaseOf: () => "connected",
+    db: () => ({ saveAlias: () => Promise.reject(new Error("disk")) }),
+  });
+  names.take({ notify() {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(names.book[""].pending, 1);
+  assert.deepEqual(clone(names.pending()), [{ route: "", name: "Studio", at: 10, pending: 0 }]);
+  names.absorb([{ route: "", name: "Studio", at: 10, pending: 0 }], 10);
+  assert.equal(names.book[""].pending, 0);
+  assert.equal(names.pending(), null);
 });
 
 test("a row five minutes ahead keeps its later time and still takes the name written now", async (t) => {

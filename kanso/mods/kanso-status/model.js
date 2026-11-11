@@ -1,5 +1,5 @@
 // What the status bar says, and where a click goes. No host calls.
-import { machineTitle, parseOr } from "./pure.js";
+import { machineTitle, parseOr, oneLine, memoryFree } from "./pure.js";
 
 export const QUESTION_W = 260;
 export const MEMORY_MS = 60_000;
@@ -8,17 +8,11 @@ export const MEMORY_STALE_MS = 3 * 60_000;
 export const NEEDS_COMMAND = "kanso-spaces.needs-you.next";
 export const MEMORY_COMMAND = "kanso-tabs.memory";
 
-const firstLine = (text) => {
-  const line = String(text ?? "").split(/\r?\n/).find((part) => part.trim()) ?? "";
-  const flat = line.replace(/\s+/g, " ").trim();
-  return flat || null;
-};
-
 const clean = (text) => (text ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 const sameName = (a, b) => a.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "") === b.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
 export function questionOf({ msg, title, name, program } = {}) {
-  const said = firstLine(msg);
+  const said = oneLine(msg);
   if (said) return said;
   if (!name) return null;
   const live = clean(title), raw = String(title ?? "").trim();
@@ -68,7 +62,7 @@ export function memoryLow(text, now = Date.now()) {
   const free = raw.machine?.freePct, floor = raw.limits?.lowFreePct;
   if (typeof free !== "number" || !Number.isFinite(free)) return null;
   if (typeof floor !== "number" || !Number.isFinite(floor) || !(free < floor)) return null;
-  const words = `Memory ${Math.round(free)}% free`;
+  const words = memoryFree(free);
   return { words, tone: "blocked", command: MEMORY_COMMAND, tooltip: words };
 }
 

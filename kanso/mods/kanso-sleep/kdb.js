@@ -555,8 +555,11 @@ export class Kdb {
   saveAlias(row, now = Date.now()) { return this.run(this.aliasSql(row, now)); }
 
   async sleeps(spaces = null, now = Date.now(), write = null) {
+    const list = write == null ? [] : (Array.isArray(write) ? write : [write]);
+    // One statement, so a retry of several rows stays in this read's process.
+    const sql = list.map((row) => this.aliasSql({ ...row, route: row.route ?? "" }, now)).join("");
     const batch = await Promise.all([
-      write ? this.saveAlias({ ...write, route: write.route ?? "" }, now) : Promise.resolve([]),
+      sql ? this.run(sql) : Promise.resolve([]),
       spaces ? this.syncSpaces(spaces, now) : Promise.resolve([]),
       this.read("SELECT * FROM sleeps;"),
       this.read("SELECT * FROM agents WHERE sleep_id IS NOT NULL;"),

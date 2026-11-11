@@ -31,6 +31,7 @@ const LIST_ROWS = 12;
 
 
 const EVERY_MS = 10000;
+export const NO_PANE = "no pane";
 
 // lsof's -F output: each "p" line (pid) and the field lines after it; lines before the first are no one's.
 function byProcess(text) {
@@ -258,7 +259,7 @@ export class Ports {
         .child(div().flex_none().text_size(11.5).text_color(c.dim).tooltip(`Since ${clock(since)}`).child(age(s.secs))))
       .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
         .child(div().size(6).flex_none().rounded_full().bg(owner ? c.green : c.yellow))
-        .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : "No pane runs it"))
+        .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : NO_PANE))
         .when(Boolean(s.cwd || s.project || s.cwdReason), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(s.cwd ? tilde(s.cwd) : s.project || s.cwdReason))))
       .child(h_flex().flex_wrap().gap_x(G.lg)
         .child(quietLink(`pt-open-${s.pid}`, "Open in the browser", (cx) => cx.open_url(`http://localhost:${s.ports[0]}`), c, { color: c.text }))
@@ -273,7 +274,7 @@ export class Ports {
     const held = list.reduce((t, s) => t + (typeof s.mb === "number" ? s.mb : 0), 0);
     const st = this.digest?.stats;
     const stats = [
-      { value: String(loose.length), unit: "with no pane", hot: loose.length > 0 },
+      { value: String(loose.length), unit: NO_PANE, hot: loose.length > 0 },
       held > 0 ? { value: size(held), unit: "held now" } : null,
       st ? { value: String(st.openedToday), unit: "opened today" } : null,
       st ? { value: String(st.stopped), unit: "stopped by you", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
@@ -294,7 +295,7 @@ export class Ports {
           .bg(armedAll ? c.red : c.primary).hover((s) => s.opacity(0.85))
           .on_click((_e, cx) => this.armed.press("all", cx, (cx) => this.stop(loose, cx)))
           .child(div().text_size(12).font_medium().text_color(c.primaryText)
-            .child(armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} with no pane`)))
+            .child(armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} ${NO_PANE}`)))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
   }
 
@@ -330,7 +331,7 @@ export class Ports {
         .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
         .child(h_flex().gap(G.xs).items_center()
           .child(div().text_size(10).text_color(c.dim).child("Servers"))
-          .when(anyLoose, (el) => el.child(div().size(5).ml(G.sm).rounded_full().bg(c.yellow)).child(div().text_size(10).text_color(c.dim).child("no pane"))))
+          .when(anyLoose, (el) => el.child(div().size(5).ml(G.sm).rounded_full().bg(c.yellow)).child(div().text_size(10).text_color(c.dim).child(NO_PANE))))
         .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
   }
 

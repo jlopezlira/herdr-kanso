@@ -23,7 +23,6 @@ const PAGES = [{ key: "pieces", label: "Pieces" }, { key: "keys", label: "Keys" 
 const PLACES = [
   { id: "herdr", name: "Herdr", note: "The app kansō runs in", url: "https://herdr.dev" },
   { id: "kanso", name: "kansō", note: "Source, releases and issues", url: REPO },
-  { id: "herdr-sim", name: "herdr-sim", note: "The simulator, by Robert Soriano (MIT)", url: "https://github.com/wobsoriano/herdr-sim" },
   { id: "lucide", name: "Lucide", note: "Toolbar icons (ISC)", url: "https://lucide.dev" },
 ];
 const PEOPLE = [

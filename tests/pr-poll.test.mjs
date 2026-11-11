@@ -342,6 +342,8 @@ test("the timer returns while the window is behind or the panel is hidden, and r
     window: () => ({ active }),
     layout: () => ({ id: "panel-body", hidden }),
     InputState: { new: () => ({ on() {} }) },
+    ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+    props: () => ({}),
   });
   const panel = new PullRequest();
   panel.init(cx);

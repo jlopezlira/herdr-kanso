@@ -105,23 +105,38 @@ function writeRow(panel, c, writes) {
   return h_flex().w_full().gap(G.lg).flex_wrap().children((writes ?? []).map((action) => quietAction(panel, c, action)));
 }
 
-function fold(panel, c, view) {
+function detailsButton(panel, c, view) {
   const on = panel.detailsOn();
   const label = view.id === "none" || view.id === "base" ? "Other open pull requests" : "Details";
-  return v_flex().w_full().gap(G.lg)
-    .child(Button.new("pr-details").w_full().h(H.compact).gap(G.sm).items_center().cursor_pointer()
-      .accessibility_label(label)
-      .on_click((_e, cx) => panel.setDetails(cx))
-      .child(svg(`${ICON}chevron-${on ? "down" : "right"}.svg`).size(VIEW.meta).text_color(c.muted))
-      .child(div().flex_none().text_size(T.value).text_color(c.muted).child(label))
-      .child(div().flex_1())
-      .child(div().min_w(0).truncate().text_size(T.value).text_color(c.dim).child(view.detailsNote ?? "")))
-    .when(on && panel.pr, (el) => el.child(panel.description(c)).child(panel.people(c))
-      .when(panel.checks().length > 0, (row) => row.child(panel.checksList(c)))
-      .when(panel.threads.length > 0, (row) => row.child(panel.discussion(c)))
-      .child(panel.files(c)).child(otherPrs(panel, c, false))
-      .when(Boolean(view.writes?.length), (row) => row.child(writeRow(panel, c, view.writes))))
-    .when(on && !panel.pr, (el) => el.child(otherPrs(panel, c, true)));
+  return Button.new("pr-details").w_full().h(H.compact).gap(G.sm).items_center().cursor_pointer()
+    .accessibility_label(label)
+    .on_click((_e, cx) => panel.setDetails(cx))
+    .child(svg(`${ICON}chevron-${on ? "down" : "right"}.svg`).size(VIEW.meta).text_color(c.muted))
+    .child(div().flex_none().text_size(T.value).text_color(c.muted).child(label))
+    .child(div().flex_1())
+    .child(div().min_w(0).truncate().text_size(T.value).text_color(c.dim).child(view.detailsNote ?? ""));
+}
+
+function detailParts(panel, c, view) {
+  if (!view.details) return [];
+  const on = panel.detailsOn();
+  const open = on && Boolean(panel.pr);
+  const checks = open && panel.checks().length > 0 ? [["checks", panel.checksList(c).id("checks")]] : [];
+  const threads = open && panel.threads.length > 0 ? [["threads", panel.discussion(c).id("threads")]] : [];
+  const writes = open && view.writes?.length ? [["writes", writeRow(panel, c, view.writes).id("writes")]] : [];
+  const rest = open ? [
+    ["description", panel.description(c).id("description")],
+    ["people", panel.people(c).id("people")],
+    ...checks, ...threads,
+    ["files", panel.files(c).id("files")],
+    ["others", otherPrs(panel, c, false).id("others")],
+    ...writes,
+  ] : on ? [["others", otherPrs(panel, c, true).id("others")]] : [];
+  return [["details", v_flex().w_full().id("details").child(detailsButton(panel, c, view))], ...rest];
+}
+
+function fold(panel, c, view) {
+  return v_flex().w_full().gap(G.lg).children(detailParts(panel, c, view).map((part) => part[1]));
 }
 
 function footnote(panel, c) {
@@ -132,12 +147,10 @@ function footnote(panel, c) {
     .when(line.retry, (el) => el.child(quietLink("pr-retry", "Retry", (cx) => panel.again(cx), c)));
 }
 
-export function drawHero(panel, c) {
-  const view = panel.view();
+function heroTop(panel, c, view) {
   const scope = scopeRow(panel, c);
   const card = verdictCard(c, view.body);
   const preview = panel.sendShown && panel.sendFor ? String(panel.sendFor).split("\n") : null;
-  const foot = footnote(panel, c);
   const ink = toneColor(c, view.tone);
   const body = v_flex().w_full().gap(G.lg)
     .when(Boolean(view.facts), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(view.facts)))
@@ -147,9 +160,7 @@ export function drawHero(panel, c) {
       .children(preview.map((line) => div().text_size(T.body).text_color(c.text).child(line || " ")))))
     .child(h_flex().w_full().gap(G.lg).items_center().flex_wrap()
       .when(Boolean(view.primary), (row) => row.child(actionButton(panel, c, view.primary)))
-      .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet))))
-    .when(view.details, (el) => el.child(fold(panel, c, view)))
-    .when(Boolean(panel.note), (el) => el.child(div().text_size(T.value).text_color(c.red).child(panel.note)));
+      .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet))));
   return v_flex().w_full().gap(G.lg)
     .when(Boolean(scope), (el) => el.child(scope))
     .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(VIEW.titleMax).overflow_hidden().text_size(VIEW.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
@@ -157,8 +168,26 @@ export function drawHero(panel, c) {
       .child(div().size(VIEW.dot).flex_none().rounded_full().bg(ink))
       .child(div().text_size(T.card).font_medium().text_color(ink).child(view.text)))
     .when(Boolean(view.note), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(view.note)))
-    .child(view.dimmed ? body.opacity(VIEW.stale) : body)
-    .when(Boolean(foot), (el) => el.child(foot));
+    .child(view.dimmed ? body.opacity(VIEW.stale) : body);
+}
+
+// The fold's blocks are siblings of the verdict, so a scroll can land on the checks.
+export function heroPieces(panel, c) {
+  const view = panel.view();
+  const veil = (el) => view.dimmed ? el.opacity(VIEW.stale) : el;
+  const note = panel.note ? [["remark", veil(div().text_size(T.value).text_color(c.red).child(panel.note)).id("remark")]] : [];
+  const foot = footnote(panel, c);
+  const tail = foot ? [["foot", foot.id("foot")]] : [];
+  return [
+    ["hero", heroTop(panel, c, view).id("hero")],
+    ...detailParts(panel, c, view).map(([id, el]) => [id, veil(el)]),
+    ...note,
+    ...tail,
+  ];
+}
+
+export function drawHero(panel, c) {
+  return v_flex().w_full().gap(G.lg).children(heroPieces(panel, c).map((part) => part[1]));
 }
 
 export function drawEmpty(panel, c) {

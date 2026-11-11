@@ -16,6 +16,18 @@ export const parseOr = (text, fallback = null) => tryOr(() => JSON.parse(text), 
 
 export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+export const DID_CAP = 200;
+
+export function oneLine(text) {
+  const line = String(text ?? "").split(/\r?\n/).find((l) => l.trim()) ?? "";
+  const flat = line.replace(/\s+/g, " ").trim();
+  return flat.length > DID_CAP ? `${flat.slice(0, DID_CAP - 1)}\u2026` : flat || null;
+}
+
+export function memoryFree(pct) {
+  return `Memory ${Math.round(Number(pct))}% free`;
+}
+
 // A panel's first command waits one timer turn: Herdr can lose one started in a remounted view's init turn.
 export const afterMount = (cx, start) => cx.timer.after(0, start);
 
