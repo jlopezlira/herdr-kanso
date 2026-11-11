@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { load, clone, temporary, exec, singleUse } from "./helpers.mjs";
-import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, sleepEvent, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents } from "../kanso/mods/kanso-spaces/since-left-model.js";
+import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, sleepEvent, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const project = ":C:\\work\\kanso";
 const event = (id, kind = "finished", at = id) => ({ id, project, target: `agent:${id}`, kind, text: `Agent ${id}`, at });
@@ -59,7 +59,9 @@ test("agent facts distinguish blocked and errors and count a finished turn once"
   const base = { type: "agent", name: "Padme", status: "working" };
   assert.deepEqual(changes(null, { ...base, status: "done" }), []);
   for (const [status, kind] of [["blocked", "blocked"], ["error", "error"], ["done", "finished"], ["idle", "finished"]]) {
-    assert.equal(changes(base, { ...base, status })[0].kind, kind);
+    const fact = changes(base, { ...base, status })[0];
+    assert.equal(fact.kind, kind);
+    assert.equal(fact.text, "Padme");
   }
   assert.deepEqual(changes({ ...base, status: "done" }, { ...base, status: "idle" }), []);
   assert.deepEqual(changes({ ...base, status: "idle" }, { ...base, status: "done" }), []);
@@ -69,6 +71,10 @@ test("agent facts distinguish blocked and errors and count a finished turn once"
   assert.equal(first.value.status, "error");
   assert.notEqual(first.source, agentSnapshot(agent, null, { created_ms: 2 }, project).source);
   assert.equal(agentSnapshot(agent, { conversation: "c1", name: "Luke" }, {}, project).value.name, "Luke");
+  const titled = { address: "t1", status: "done", title: "Implement performance budget CI | herdr-kanso" };
+  assert.equal(agentSnapshot(titled, { name: titled.title }, { labels: { "kanso.name": "Kylo-ren" } }, project).value.name, "Kylo-ren");
+  assert.equal(agentSnapshot(titled, { title: "Compatibilizar Kanso con Windows", name: titled.title }, {}, project).value.name, "Compatibilizar Kanso con Windows");
+  assert.equal(agentSnapshot(titled, null, null, project).value.name, "Implement performance budget CI");
 });
 
 test("PR facts include approval, requested changes, failed checks, and merges without guessing disappearance", () => {
@@ -128,8 +134,8 @@ test("sleep completion and failure log only a transition held by its owner", asy
   await db.run("UPDATE sleeps SET state='sleeping',pending='owner' WHERE id='s1';");
   assert.equal(await db.finishSleep("s1", "other", null, 13, sleepEvent("s1", "asleep")), false);
   assert.equal(await db.finishSleep("s1", "owner", null, 14, sleepEvent("s1", "asleep")), true);
-  assert.deepEqual(clone(await db.read("SELECT kind, target FROM since_events ORDER BY id;")), [
-    { kind: "sleep_failed", target: "sleep:s1" }, { kind: "sleep_finished", target: "sleep:s1" },
+  assert.deepEqual(clone(await db.read("SELECT kind, target, text FROM since_events ORDER BY id;")), [
+    { kind: "sleep_failed", target: "sleep:s1", text: "Padme" }, { kind: "sleep_finished", target: "sleep:s1", text: "Padme" },
   ]);
 });
 
@@ -161,7 +167,9 @@ test("the return view expands inline, never focuses a handle, and stays silent w
   view.project = project;
   view.rows = Array.from({ length: 4 }, (_, i) => event(i + 1));
   const register = (id, go) => { nav.push({ id, go }); return false; };
-  view.render({}, project, register, () => true);
+  const heads = [];
+  view.render({}, project, register, () => true, (label, count) => { heads.push([label, count]); return {}; });
+  assert.deepEqual(heads, [[RETURN_LABEL, 4]]);
   assert.equal(nav.length, 3);
   nav.at(-1).go(cx);
   assert.equal(view.lineCount(), 4);
@@ -175,8 +183,94 @@ test("the return view expands inline, never focuses a handle, and stays silent w
 
 test("a second finished turn is recorded even when both observed states are done", () => {
   const before = { type: "agent", name: "Padme", status: "done", turn: 1 };
-  assert.equal(changes(before, { ...before, turn: 2 })[0].kind, "finished");
+  const fact = changes(before, { ...before, turn: 2 })[0];
+  assert.equal(fact.kind, "finished");
+  assert.equal(fact.text, "Padme");
   assert.deepEqual(changes(before, { ...before, name: "Luke" }), []);
+});
+
+test("a return row is a mark, a name and an age, and one agent keeps its latest state", async () => {
+  const { duration } = await load("kanso-spaces/agents.js", ["duration"]);
+  const now = 10 * 60_000;
+  const row = (id, target, kind, text, at) => ({ id, target, kind, text, at });
+  const events = [
+    row(1, "agent:a", "finished", "Kylo-ren finished", now - 4 * 60_000),
+    row(2, "agent:a", "blocked", "Kylo-ren needs you", now - 60_000),
+    row(3, "agent:b", "error", "Implement performance budget CI | herdr-kanso errored", now - 3_600_000),
+    row(4, "pr:https://x/pull/12", "pr", "PR #12 approved", now - 60_000),
+    row(5, "sleep:s", "sleep_finished", "Rey slept", now - 2 * 60_000),
+    row(6, "sleep:t", "sleep_failed", "Finn could not sleep", now),
+  ];
+  const shown = present(events, { now, expanded: true, format: duration });
+  assert.equal(shown.count, 5);
+  const by = Object.fromEntries(shown.rows.map((item) => [item.target, item]));
+  assert.deepEqual(shown.rows.map((item) => item.target), ["agent:a", "sleep:t", "agent:b", "pr:https://x/pull/12", "sleep:s"]);
+  assert.equal(by["agent:a"].mark, "blocked");
+  assert.equal(by["agent:a"].name, "Kylo-ren");
+  assert.equal(by["agent:a"].age, "1m");
+  assert.equal(by["agent:b"].mark, "error");
+  assert.equal(by["agent:b"].name, "Implement performance budget CI");
+  assert.equal(by["agent:b"].age, "1h");
+  assert.equal(by["pr:https://x/pull/12"].mark, "pr");
+  assert.equal(by["pr:https://x/pull/12"].name, "PR #12 approved");
+  assert.equal(by["pr:https://x/pull/12"].age, duration(60_000));
+  assert.equal(by["sleep:s"].mark, "asleep");
+  assert.equal(by["sleep:s"].name, "Rey");
+  assert.equal(by["sleep:s"].age, "2m");
+  assert.equal(by["sleep:t"].mark, "error");
+  assert.equal(by["sleep:t"].name, "Finn");
+  assert.equal(by["sleep:t"].age, "<1m");
+  const away = present(events, { now, focus: "agent:a", format: duration });
+  assert.equal(away.count, 4);
+  assert.equal(away.rows.some((item) => item.target === "agent:a"), false);
+});
+
+test("more than three agents stay at three rows, the last of them +N", async () => {
+  const { duration } = await load("kanso-spaces/agents.js", ["duration"]);
+  const events = [1, 2, 3, 4].map((id) => ({ id, target: `agent:${id}`, kind: "finished", text: `Agent ${id}`, at: id }));
+  const compact = present(events, { now: 10, format: duration });
+  assert.equal(compact.count, 4);
+  assert.equal(compact.rows.length, 3);
+  assert.equal(compact.rows.at(-1).more, 2);
+  assert.equal(present(events, { now: 10, format: duration, expanded: true }).rows.length, 4);
+  assert.equal(present(events, { now: 10, focus: "agent:1", format: duration }).rows.length, 3);
+});
+
+test("the return head shows the count and its dismiss clears the rows", async (t) => {
+  const { db } = await database(t);
+  const texts = [], clicks = new Map();
+  const node = (initial = null) => {
+    const self = { id: initial };
+    const el = new Proxy({}, { get(_target, key) {
+      if (key === "then") return undefined;
+      if (key === "id") return (value) => { self.id = value; return el; };
+      if (key === "child") return (value) => { if (typeof value === "string" || typeof value === "number") texts.push(String(value)); return el; };
+      if (key === "children") return (list) => list;
+      if (key === "when") return (on, apply) => (on ? apply(el) : el);
+      if (key === "on_click") return (fn) => { clicks.set(self.id, fn); return el; };
+      return () => el;
+    } });
+    return el;
+  };
+  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], { div: node, svg: node, h_flex: node, v_flex: node });
+  const view = new SinceLeft(db);
+  view.project = project;
+  view.target = "agent:1";
+  view.rows = [
+    { id: 1, target: "agent:1", kind: "finished", text: "Kylo-ren finished", at: 1 },
+    { id: 2, target: "agent:2", kind: "blocked", text: "Implement performance budget CI | herdr-kanso needs you", at: 2 },
+  ];
+  const heads = [];
+  view.render({ foreground: "#fff", dim: "#666", muted: "#888", done: "#9a9", blocked: "#c99" }, project, () => false, () => true,
+    (label, count, dismiss) => { heads.push([label, count, dismiss]); return dismiss; });
+  assert.deepEqual(heads.map(([label, count]) => [label, count]), [[RETURN_LABEL, 1]]);
+  assert.equal(texts.includes("Kylo-ren"), false);
+  assert.equal(texts.includes("Kylo-ren finished"), false);
+  assert.ok(texts.includes("Implement performance budget CI"));
+  assert.equal(texts.includes("needs you"), false);
+  assert.equal(texts.includes("finished"), false);
+  await clicks.get("since-dismiss")(null, { ...cx, stop_propagation() {} });
+  assert.equal(view.rows.length, 0);
 });
 
 test("return tracking holds the initial focus, dismisses on a later target, and retries a failed load silently", async () => {
@@ -307,7 +401,8 @@ test("the return signature changes with event facts and project assignment", () 
   const before = signature();
   assert.equal(signature({ ...agent }, { ...term }, { ...space }), before);
   for (const next of [signature({ ...agent, status: "done" }), signature(agent, { ...term, turn: 2 }), signature(agent, term, { ...space, machine: "remote" }),
-    signature(agent, term, space, new Map([["t1", { conversation: "c1" }]])), signature(agent, term, space, new Map(), new Map([["t1:1", { project: "other" }]]))]) assert.notEqual(next, before);
+    signature(agent, term, space, new Map([["t1", { conversation: "c1" }]])), signature(agent, term, space, new Map(), new Map([["t1:1", { project: "other" }]])),
+    signature(agent, { ...term, labels: { "kanso.name": "Kylo-ren" } }, space)]) assert.notEqual(next, before);
 });
 
 test("unchanged return polling skips snapshots and sleeping projects never read the log", async () => {

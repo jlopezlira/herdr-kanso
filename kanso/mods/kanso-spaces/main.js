@@ -788,8 +788,9 @@ export default class Spaces extends View {
 
   returnRows(t, space) {
     if (!space || !this.sinceLeft?.rows.length || this.sinceLeft.project !== projectKey(space)) return [];
-    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.jumpReturn(row));
-    return [item(view, this.sinceLeft.lineCount() * H.control + G.sm)];
+    const view = this.sinceLeft.render(t, projectKey(space), (key, go) => this.navMark(key, go), (row) => this.jumpReturn(row),
+      (label, count, dismiss) => this.sectionHead(t, "since-left", 0, false, () => {}, null, label, count, t.foreground, dismiss, 0, false));
+    return this.sinceLeft.showing ? [item(view, this.sinceLeft.blockHeight())] : [];
   }
 
   jumpReturn(row) {
@@ -2067,16 +2068,16 @@ export default class Spaces extends View {
   }
 
   // `lift`: the space above the header (12 under an earlier section).
-  sectionHead(t, id, i, open, toggle, mark, name, count, ink, extra = null, lift = i ? 12 : 0) {
-    return h_flex().id(id).h(32 + lift).pt(lift).px(12).flex_none().gap(10).items_center()
-      .cursor_pointer().text_size(13).font_semibold().text_color(ink)
-      .on_click((_e, cx) => { toggle(cx); cx.notify(); })
+  sectionHead(t, id, i, open, toggle, mark, name, count, ink, extra = null, lift = i ? 12 : 0, chevron = true) {
+    const row = h_flex().id(id).h(32 + lift).pt(lift).px(12).flex_none().gap(10).items_center()
+      .text_size(13).font_semibold().text_color(ink)
+      .when(chevron, (el) => el.cursor_pointer().on_click((_e, cx) => { toggle(cx); cx.notify(); }))
       .when(Boolean(mark), (el) => el.child(mark))
       .child(div().child(name))
       .when(count != null, (el) => el.child(div().font_normal().text_color(t.dim).child(String(count))))
       .child(div().flex_1())
-      .when(Boolean(extra), (el) => el.child(extra))
-      .child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim));
+      .when(Boolean(extra), (el) => el.child(extra));
+    return chevron ? row.child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim)) : row;
   }
 
   machineBones(t, collapsed, m) {

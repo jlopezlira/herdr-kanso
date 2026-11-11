@@ -420,11 +420,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
-- **Since you left**: after 5 minutes away, up to three sidebar lines under
-  the project show blocked agents, errors, PR updates, then finishes. +N
-  expands inline; Enter/click jumps, a target seen or Dismiss clears it.
-  Focus and dismissal persist in kanso.db. Local events expire after 7 days,
-  capped at 500. No events, loading or a failed read: nothing. No extra fetches.
+- **Since you left**: after 5 minutes away, a "While you were away" head under
+  the project lists up to three rows: a mark, the Kanso name, and the age.
+  The agent in front is left out; one row per agent. +N expands inline;
+  Enter or a click jumps and dismisses. Dismissal persists in kanso.db.
+  Events expire after 7 days, capped at 500. Nothing, loading or a failed
+  read: nothing. No extra fetches.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   Count opens project/name/reason/age; click/Enter focuses. Empty: "Nobody is waiting";
