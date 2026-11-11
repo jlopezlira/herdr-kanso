@@ -1,6 +1,7 @@
 // Find in a conversation: capitals and accents do not matter, newest match first, and a shell keeps the terminal's Find.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { exec, temporary } from "./helpers.mjs";
@@ -8,6 +9,8 @@ import {
   fold, foldSpan, searchTurns, matchSpan, partsOf, placeOf, countLabel, enterMatch, retarget, extendIndex,
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
   resolveFind, locateConversation, kindOf, sessionLive,
+  blankQuery, layOut, chooseMatch, indexTurns, readable, dayLabel, keptQuery, withQuery, findChord,
+  wordsByLine, sessionPath, transcriptPath, projectDir, FIND,
 } from "../kanso/mods/kanso-panel/find.js";
 
 const line = (row) => JSON.stringify(row);
@@ -42,7 +45,7 @@ test("A phrase matches as typed, newest first, and Enter moves without skipping 
   assert.equal(placeOf(2, 12), "3 of 12");
   assert.equal(countLabel("alpha", 2, 12), "3 of 12");
   assert.equal(countLabel("   ", 0, 0), "");
-  assert.equal(countLabel("missing", 0, 0), "0");
+  assert.equal(countLabel("missing", 0, 0), "No matches");
   assert.equal(searchTurns([{ text: "foo bar" }], "foo bar").length, 1);
   assert.equal(searchTurns([{ text: "foo  bar" }], "foo bar").length, 0);
   assert.equal(searchTurns([{ text: "foobar" }], "foo bar").length, 0);
@@ -66,6 +69,94 @@ test("A phrase matches as typed, newest first, and Enter moves without skipping 
   const held = retarget(grown, back.query, kept);
   assert.equal(held.hits[held.at].turn, 3, "a new match does not take the one you are on");
   assert.equal(held.hits.length, 3);
+});
+
+test("An empty query lays out nothing, and a query lays out only its matches", () => {
+  const turns = [{ text: "alpha one" }, { text: "beta alone" }, { text: "alpha two" }];
+  assert.equal(blankQuery(""), true);
+  assert.equal(blankQuery("   "), true);
+  assert.equal(layOut(searchTurns(turns, ""), 0).items.length, 0);
+  assert.equal(layOut(searchTurns(turns, "   "), 0).items.length, 0);
+  const hits = searchTurns(turns, "alpha");
+  const laid = layOut(hits, 0);
+  assert.equal(laid.items.length, 2);
+  assert.deepEqual(laid.items.map((item) => item.hit.turn), [2, 0]);
+  assert.ok(laid.items.every((item) => item.kind === "hit"));
+  assert.equal(searchTurns(turns, "beta").length, 1);
+});
+
+test("Find lays out the matches nearest the selection, then more as it moves", () => {
+  const turns = Array.from({ length: 80 }, (_, i) => ({ text: `hit ${i} ${"pad ".repeat(40)}` }));
+  const hits = searchTurns(turns, "hit");
+  assert.equal(hits.length, 80);
+  const top = layOut(hits, 0);
+  assert.equal(top.items.length, 50);
+  assert.equal(top.end - top.start, 50);
+  assert.equal(top.start, 0);
+  const mid = layOut(hits, 60);
+  assert.equal(mid.items.length, 50);
+  assert.ok(mid.start <= 60 && 60 < mid.end);
+  assert.ok(mid.start > top.start);
+  assert.equal(mid.items[mid.focus].kind, "hit");
+  assert.equal(mid.items[mid.focus].index, 60);
+});
+
+test("Arrows and Enter move, and a click opens that turn", () => {
+  const turns = [{ text: "one alpha" }, { text: "two alpha here" }, { text: "three alpha" }];
+  const index = indexTurns(turns);
+  let box = chooseMatch({ pending: "alpha", query: "", hits: [], at: 0, open: false }, index, { key: "type" });
+  assert.equal(box.open, false);
+  assert.equal(box.hits.length, 3);
+  assert.equal(box.at, 0);
+  box = { ...box, pending: "alpha" };
+  const moved = chooseMatch(box, index, { key: "enter" });
+  assert.equal(moved.open, false);
+  assert.equal(moved.at, 1);
+  const back = chooseMatch({ ...moved, pending: "alpha" }, index, { key: "shift" });
+  assert.equal(back.at, 0);
+  assert.equal(back.open, false);
+  const down = chooseMatch({ ...back, pending: "alpha" }, index, { key: "down" });
+  assert.equal(down.at, 1);
+  const up = chooseMatch({ ...down, pending: "alpha" }, index, { key: "up" });
+  assert.equal(up.at, 0);
+  const clicked = chooseMatch(up, index, { key: "click", at: 2 });
+  assert.equal(clicked.at, 2);
+  assert.equal(clicked.open, true);
+  const followed = chooseMatch({ ...clicked, pending: "alpha" }, index, { key: "enter" });
+  assert.equal(followed.open, true);
+  assert.equal(followed.at, 0);
+  const shut = chooseMatch(followed, index, { key: "back" });
+  assert.equal(shut.open, false);
+  const closed = chooseMatch({ ...shut, pending: "nope" }, index, { key: "type" });
+  assert.equal(closed.open, false);
+  assert.equal(closed.hits.length, 0);
+});
+
+test("A day label shows only when the day changes, and the last query is kept per agent", () => {
+  const now = Date.parse("2026-11-10T16:00:00");
+  const turns = [
+    { text: "alpha morning", at: Date.parse("2026-11-10T09:00:00") },
+    { text: "alpha noon", at: Date.parse("2026-11-10T12:00:00") },
+    { text: "alpha yesterday", at: Date.parse("2026-11-09T18:00:00") },
+  ];
+  const hits = searchTurns(turns, "alpha");
+  const laid = layOut(hits, 0, 50, (hit) => turns[hit.turn].at, now);
+  assert.deepEqual(laid.items.filter((item) => item.kind === "day").map((item) => item.label), ["Yesterday", "Today"]);
+  assert.equal(laid.items.filter((item) => item.kind === "hit").length, 3);
+  assert.equal(dayLabel(Date.parse("2026-11-10T08:00:00"), now), "Today");
+  assert.equal(dayLabel(Date.parse("2025-11-10T08:00:00"), now), "Nov 10, 2025");
+  const kept = withQuery(withQuery({}, "t1", "alpha"), "t2", "beta");
+  assert.equal(keptQuery({ queries: kept }, "t1"), "alpha");
+  assert.equal(keptQuery({ queries: withQuery(kept, "t1", "  ") }, "t1"), "");
+  assert.equal(keptQuery({ queries: withQuery(kept, "t1", "") }, "t2"), "beta");
+});
+
+test("An excerpt stops at a word and keeps the match whole", () => {
+  const text = "hi wonderful day";
+  const hit = searchTurns([{ text }], "wonderful")[0];
+  const parts = partsOf(text, hit, 4);
+  assert.equal(parts.find((p) => p.mark).text, "wonderful");
+  assert.ok(parts.every((p) => !p.text.includes("wonder") || p.text.includes("wonderful")));
 });
 
 test("The part around a match keeps the word itself and who said it", () => {
@@ -97,6 +188,24 @@ test("Claude's transcript yields what was said and the tool's reply, not its thi
   assert.equal(searchTurns(turns, "codigo").length, 1);
   assert.equal(searchTurns(turns, "secret").length, 0);
   assert.equal(searchTurns(turns, "ignore").length, 0);
+});
+
+test("A tool's delivery note and an empty output are left out", () => {
+  const noise = readTurns([
+    line({ type: "user", message: { content: "ship it" }, timestamp: at }),
+    line({ type: "assistant", message: { content: [{ type: "text", text: "On its way" }, { type: "tool_use", id: "s", name: "SendUserMessage" }, { type: "tool_use", id: "g", name: "git status" }] }, timestamp: at }),
+    line({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "s", content: "Message delivered to user." }, { type: "tool_result", tool_use_id: "g", content: "clean" }, { type: "tool_result", tool_use_id: "e", content: "  \n" }] }, timestamp: at }),
+  ].join("\n"));
+  assert.equal(readable({ role: "tool", text: "Message delivered to user." }), false);
+  assert.equal(readable({ role: "tool", text: "   " }), false);
+  assert.equal(readable({ role: "user", text: "ship it" }), true);
+  assert.deepEqual(noise.map((t) => [t.role, t.text]), [
+    ["user", "ship it"],
+    ["assistant", "On its way"],
+    ["tool", "clean"],
+  ]);
+  assert.equal(searchTurns(noise, "delivered").length, 0);
+  assert.equal(searchTurns(noise, "clean").length, 1);
 });
 
 test("A Codex conversation prefers the completed items and does not count the copy twice", () => {
@@ -156,7 +265,29 @@ test("A slice keeps whole lines, skips a pasted picture, and a missing file is n
   const skipped = await readSlice(exec, picture, 0, 80, 60);
   assert.equal(readTurns(skipped.body).map((turn) => turn.text).join(""), "after");
   assert.equal(await readSlice(exec, join(dir, "missing.jsonl"), 0), null);
+  const crlf = join(dir, "crlf.jsonl");
+  await writeFile(crlf, `${line({ type: "user", message: { content: "win" } })}\r\n`);
+  const win = await readSlice(exec, crlf, 0, 10000, 60);
+  assert.deepEqual(readTurns(win.body).map((turn) => turn.text), ["win"]);
   assert.equal(applySlice({ ...freshRead(), size: 50 }, { end: 10, size: 10, body: "" }).reset, true);
+  const calls = [];
+  const fake = async (cmd) => {
+    calls.push(cmd);
+    if (cmd === "python3") return { code: 127, stdout: "" };
+    return { code: 0, stdout: "4 4\n" };
+  };
+  const fallen = await readSlice(fake, join(dir, "c.jsonl"), 0);
+  assert.deepEqual(calls, ["python3", "python"]);
+  assert.equal(fallen.end, 4);
+  const once = [];
+  const missingPy = async (cmd) => { once.push(cmd); return { code: 2, stdout: "" }; };
+  assert.equal(await readSlice(missingPy, join(dir, "gone.jsonl"), 0), null);
+  assert.deepEqual(once, ["python3"]);
+});
+
+test("Find opens from Cmd+F", () => {
+  const keys = JSON.parse(readFileSync(new URL("../kanso/keys.json", import.meta.url), "utf8"));
+  assert.equal(keys.terminal["cmd-f"], "kanso-strip.find");
 });
 
 test("No conversation, a shell, or a remote terminal falls back to the terminal's Find", async () => {
@@ -165,7 +296,13 @@ test("No conversation, a shell, or a remote terminal falls back to the terminal'
   assert.equal(resolveFind({ file: "/tmp/a.jsonl", kind: "codex" }).action, "find");
   assert.equal(kindOf("node", "claude-code"), "claude");
   assert.equal(kindOf("/Applications/Codex.app/codex", ""), "codex");
+  assert.equal(kindOf("C:\\Program Files\\Codex\\codex.exe", ""), "codex");
   assert.equal(kindOf("zsh", ""), null);
+  assert.equal(findChord({ platform: true }), true);
+  assert.equal(findChord({ control: true }), true);
+  assert.equal(findChord({ meta: true }), true);
+  assert.equal(findChord({ shift: true }), false);
+  assert.equal(findChord(null), false);
   assert.equal(sessionLive({ pid: 7, sessionId: "s", startedAt: 1000 }, 7, 1000), true);
   assert.equal(sessionLive({ pid: 7, sessionId: "s", startedAt: 1000 }, 7, 1000 + 120001), false);
   assert.equal(sessionLive({ pid: 8, sessionId: "s", startedAt: 1000 }, 7, 1000), false);
@@ -188,18 +325,34 @@ test("No conversation, a shell, or a remote terminal falls back to the terminal'
     session: { pid: 9, sessionId: "abc", cwd: "/repo", startedAt: Date.now() - 4000 },
   }), "t1", "claude-code");
   assert.equal(live.kind, "claude");
-  assert.equal(live.file, "/home/me/.claude/projects/-repo/abc.jsonl");
+  assert.equal(live.file, join("/home/me", ".claude", "projects", "-repo", "abc.jsonl"));
   const codex = await locateConversation(host({ argv: ["codex"], pid: 4, rollout: "/home/me/.codex/sessions/rollout-1.jsonl" }), "t1", "");
   assert.deepEqual(codex, { kind: "codex", file: "/home/me/.codex/sessions/rollout-1.jsonl" });
   const none = await locateConversation(host({ argv: ["codex"], pid: 4, rollout: "" }), "t1", "");
   assert.equal(none.file, null);
 });
 
+test("An excerpt keeps marked words on their line, and a transcript is joined under the home folder", () => {
+  assert.equal(FIND, "kanso.find");
+  assert.equal(readFileSync(new URL("../kanso/mods/kanso-strip/find-key.js", import.meta.url), "utf8"), readFileSync(new URL("../kanso/mods/kanso-panel/find-key.js", import.meta.url), "utf8"));
+  assert.equal(readFileSync(new URL("../kanso/mods/kanso-strip/main.js", import.meta.url), "utf8").includes('"kanso.find"'), false);
+  assert.equal(readFileSync(new URL("../kanso/mods/kanso-panel/find-view.js", import.meta.url), "utf8").includes('"kanso.find"'), false);
+  assert.deepEqual(wordsByLine([{ text: "hola mundo", mark: false }, { text: "lindo", mark: true }]), [[
+    { w: "hola", mark: false }, { w: "mundo", mark: false }, { w: "lindo", mark: true },
+  ]]);
+  assert.deepEqual(wordsByLine([{ text: "a\nb", mark: true }]), [[{ w: "a", mark: true }], [{ w: "b", mark: true }]]);
+  assert.deepEqual(wordsByLine([]), [[]]);
+  assert.equal(sessionPath("/home/me", 9), join("/home/me", ".claude", "sessions", "9.json"));
+  assert.equal(transcriptPath({ sessionId: "abc", cwd: "/repo" }, "/home/me"), join("/home/me", ".claude", "projects", "-repo", "abc.jsonl"));
+  assert.equal(transcriptPath({ pid: 7 }, "/home/me"), null);
+  assert.equal(projectDir("C:\\repo"), "C--repo");
+});
+
 function host({ argv = ["zsh"], pid = 1, etime = "00:01", session = null, rollout = null } = {}) {
   return {
     home: () => "/home/me",
     hc: async () => ({ code: 0, stdout: JSON.stringify({ foreground: { pid, argv } }) }),
-    readTextFile: async (path) => (session && path.endsWith(`/${pid}.json`) ? JSON.stringify(session) : null),
+    readTextFile: async (path) => (session && path === sessionPath("/home/me", pid) ? JSON.stringify(session) : null),
     exec: async (cmd, args) => {
       if (cmd === "ps") return { code: 0, stdout: `${etime}\n` };
       if (rollout) return { code: 0, stdout: `${rollout}\n` };

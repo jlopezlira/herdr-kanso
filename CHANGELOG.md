@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.21.1] - 2026-11-10
+
+### Fixed
+
+- Find is a quiet bar. It lists nothing until you type, then only the matching turns, newest first and grouped by day, and leaves out a tool's delivery note. Arrows, Enter and Shift+Enter move; a click opens that turn as the same markdown a file shows; Escape clears the query and the next Escape closes. The last query for each agent comes back selected.
+
 ## [3.21.0] - 2026-11-10
 
 ### Added
