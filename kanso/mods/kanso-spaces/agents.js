@@ -5,6 +5,8 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { segmentAt } from "./ui.js";
+export { segmentAt };
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { activityTone } from "./sidebar-rows.js";
@@ -31,10 +33,6 @@ export function agentRowH(a, more = {}) {
   return two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
 }
 
-export function segmentAt(width, i, n, pad = 3, gap = 2) {
-  const w = (width - 2 * pad - gap * (n - 1)) / n;
-  return { left: pad + i * (w + gap), width: w };
-}
 // A row flush with the list's 10px inset (the Status and Threads views).
 export const FLUSH = 10 - AGENT_PAD;
 // A row nested under its project's name: the Threads view's conversations, indented as a Projects view's agents are.
@@ -383,7 +381,7 @@ const ROW = 32, TWO = 50, ROOMY = 64;
 export function agentRow(a, indent, t, row, more = {}) {
   const project = more.project ?? null;
   const pic = programIcon(a.program, a.sub ? 13 : 15, t.foreground);
-  const zz = a.status === "asleep" || Boolean(a.dozing);
+  const zz = Boolean(a.dozing);
   const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
   const ink = zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
@@ -435,17 +433,12 @@ export function agentRow(a, indent, t, row, more = {}) {
   const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
   return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
     .items_center().rounded(8).cursor_pointer()
-    .when(Boolean(a.asleep?.quiet), (el) => el.opacity(0.55))
     // The focused row's wash is the list's pill (main.js), which glides here.
     .when(a.status === "blocked" && !a.focused, (el) => el.bg(t.blocked + "14"))
     .when(Boolean(row?.kbd), (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
-    .on_click((_e, cx) => {
-      if (a.asleep) { row?.wake?.(cx); return; }
-      if (a.pane) run("pane.focus", { pane: a.pane });
-      else run("terminal.peek", { terminal: a.address });
-    })
-    .on_mouse_down("left", (e) => { if (e.click_count === 2 && !a.asleep) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
+    .on_click((_e, cx) => { if (a.pane) run("pane.focus", { pane: a.pane }); else run("terminal.peek", { terminal: a.address }); })
+    .on_mouse_down("left", (e) => { if (e.click_count === 2) renameTerminal(a.address, more.label ?? agentLabel(a)); else drag?.down(); })
     .when(Boolean(drag), (el) => el.on_mouse_up("left", (_e, cx) => drag.up(cx)))
     .when(Boolean(row?.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))
     .when(Boolean(row?.menu), (el) => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); }))

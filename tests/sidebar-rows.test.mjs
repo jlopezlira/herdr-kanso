@@ -3,9 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ASLEEP_ROW, showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
-  aheadOpen, gitControls, runPull, showAwayList, activityTone, machineWordTone, canWake, enterOpens, asleepControls,
+  aheadOpen, gitControls, runPull, activityTone, machineWordTone, canWake, enterOpens, asleepControls,
 } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
-import { clone, load } from "./helpers.mjs";
 
 const place = { cwd: "/work/app", on: "dark", key: "[dark]" };
 const git = { branch: "feat", ahead: 2, behind: 3 };
@@ -26,6 +25,8 @@ test("a count behind arms Press again and the second press pulls with git on tha
   assert.equal(pullLabel(0, false), null);
   assert.equal(pullLabel(3, false), "\u21933");
   assert.equal(pullLabel(3, true), "Press again to pull 3");
+  assert.equal(pullLabel(3, false, true), "Pulling\u2026");
+  assert.equal(pullLabel(3, true, true), "Pulling\u2026");
   assert.equal(pullKey("/work/app", "dark"), "pull:dark:/work/app");
   assert.equal(pullKey("/work/app", null), "pull::/work/app");
   assert.deepEqual(pullCommand("/work/app", "dark"), { command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], on: "dark" });
@@ -35,6 +36,11 @@ test("a count behind arms Press again and the second press pulls with git on tha
   const armed = gitControls(git, { folder: place.cwd, on: place.on, armed: true });
   assert.equal(armed.find((item) => item.kind === "behind").label, "Press again to pull 3");
   assert.deepEqual(armed.find((item) => item.kind === "behind").command, pullCommand(place.cwd, place.on));
+  const pulling = gitControls(git, { folder: place.cwd, on: place.on, armed: true, pulling: true });
+  const behind = pulling.find((item) => item.kind === "behind");
+  assert.equal(behind.label, "Pulling\u2026");
+  assert.equal(behind.armed, false);
+  assert.equal(behind.command, null);
 });
 
 test("a refusal shows git's own first line and a clean pull says nothing", async () => {
@@ -58,22 +64,14 @@ test("a refusal shows git's own first line and a clean pull says nothing", async
   assert.equal(await runPull(async () => { throw new Error("ran"); }, notify, { folder: "", on: "dark" }), null);
 });
 
-test("a count ahead opens the pull request panel for that branch and that computer", () => {
-  assert.equal(aheadOpen(0, { branch: "feat", folder: "/work/app", on: "dark" }), null);
-  assert.equal(aheadOpen(2, { branch: "feat", folder: "", on: "dark" }), null);
-  assert.deepEqual(aheadOpen(2, { branch: "feat", folder: "/work/app", on: "dark" }), { panel: "pr", branch: "feat", folder: "/work/app", on: "dark" });
-  assert.deepEqual(aheadOpen(2, { branch: "", folder: "/work/app", on: null }), { panel: "pr", branch: null, folder: "/work/app", on: null });
-  const controls = gitControls(git, { folder: "/work/app", on: "dark", armed: false });
-  assert.deepEqual(controls.find((item) => item.kind === "ahead").open, { panel: "pr", branch: "feat", folder: "/work/app", on: "dark" });
+test("a count ahead goes to that project and opens the pull request panel", () => {
+  assert.equal(aheadOpen(0, { folder: "/work/app", id: "app", active: false }), null);
+  assert.equal(aheadOpen(2, { folder: "", id: "app", active: false }), null);
+  assert.deepEqual(aheadOpen(2, { folder: "/work/app", id: "app", active: false }), { panel: "pr", select: "app" });
+  assert.deepEqual(aheadOpen(2, { folder: "/work/app", id: "app", active: true }), { panel: "pr", select: null });
+  const controls = gitControls(git, { folder: "/work/app", on: "dark", id: "app", active: false, armed: false });
+  assert.deepEqual(controls.find((item) => item.kind === "ahead").open, { panel: "pr", select: "app" });
   assert.equal(controls.find((item) => item.kind === "ahead").label, "\u21912");
-});
-
-test("While you were away is drawn on Projects as well as Status and Threads", () => {
-  assert.equal(showAwayList("spaces", false), true);
-  assert.equal(showAwayList("agents", false), true);
-  assert.equal(showAwayList("threads", false), true);
-  assert.equal(showAwayList("spaces", true), false);
-  assert.equal(showAwayList("other", false), false);
 });
 
 test("an agent's second line is full ink while it waits, quiet while it works, and dim when it is finished", () => {
@@ -115,17 +113,4 @@ test("nothing is painted that cannot act", () => {
   assert.equal(gitControls(null, { folder: "/work/app", on: null }).length, 0);
 });
 
-test("the pull request panel keeps the folder a count ahead named", async () => {
-  const { pinnedPlace, placeKey, key } = await load("kanso-panel/lib.js", ["pinnedPlace", "placeKey", "key"], {
-    spaces: () => [{ id: "here", active: true, folder: "/focused", machine: null }],
-    panes: () => [],
-    focused: () => ({ cwd: "/focused", pane: "p" }),
-  });
-  const pinned = pinnedPlace({ panel: "pr", folder: "/work/app", on: "dark", branch: "feat", at: 9 });
-  assert.deepEqual(clone(pinned), { cwd: "/work/app", on: "dark", at: 9 });
-  assert.equal(placeKey(pinned), JSON.stringify({ cwd: "/work/app", on: "dark" }));
-  assert.equal(pinnedPlace({}), null);
-  assert.equal(pinnedPlace({ on: "dark", at: 9 }), null);
-  assert.equal(key(), JSON.stringify({ cwd: "/focused", on: null }));
-  assert.notEqual(placeKey(pinned), key());
-});
+

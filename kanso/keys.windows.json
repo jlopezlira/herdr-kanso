@@ -78,6 +78,9 @@
     "f5": "kanso-guard.refresh",
     "escape": "kanso-guard.back"
   },
+  "mod:kanso-panel": {
+    "ctrl-s": "kanso-panel.save"
+  },
   "terminal": {
     "ctrl-shift-f": "kanso-strip.find"
   }

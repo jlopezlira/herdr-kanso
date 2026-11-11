@@ -12,17 +12,27 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.30.1] - 2026-11-11
+## [3.31.0] - 2026-11-11
+
+### Added
+
+- Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
+- Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
 
 ### Changed
 
+- Needs you stays out of the sidebar until you choose it. A finished agent is not listed there.
 - On the project you are in, + stays visible. On the others it shows when you point at the row.
-- A count behind the branch asks Press again, then pulls on that computer. A count ahead opens that branch's pull request panel.
+- A count behind the branch asks Press again, then says Pulling… until git answers. A count ahead goes to that project and opens the pull request panel.
 - While you were away sits at the top of Projects, as it does on Status and Threads.
 - A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
 - An unreachable computer says Unreachable in the blocked color, and Retry stays on the row.
-- An asleep row shows Wake, and Enter wakes it.
+- An asleep row shows Wake. Enter wakes it. A click opens its menu.
 - The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
+
+### Fixed
+
+- Putting a tab to sleep no longer stays on the dialog with only Cancel. While it goes to sleep the dialog says so. If a step does not answer, the tab comes back and one sentence says what did not answer.
 
 ## [3.30.0] - 2026-11-11
 

@@ -4,7 +4,7 @@
 
 import { extOf } from "./pure.js";
 
-// Markdown rendered, the others as read-only text.
+// Markdown in its block editor; every other text file is edited in the panel.
 const TEXT = ["md", "markdown", "mdx", "txt", "text", "log", "json", "jsonc", "yaml", "yml", "toml", "csv", "tsv", "rst", "adoc", "org", "ini", "cfg", "conf", "env",
   "sh", "zsh", "bash", "fish", "js", "mjs", "cjs", "ts", "tsx", "jsx", "py", "rb", "go", "rs", "java", "kt", "swift", "c", "h", "cpp", "hpp", "cs", "php", "lua", "sql",
   "html", "css", "scss", "xml", "svg"];

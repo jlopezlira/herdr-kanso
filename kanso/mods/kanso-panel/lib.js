@@ -56,14 +56,7 @@ export function location() {
   return { cwd: pane?.cwd || f?.cwd || space?.folder, on, space: space?.id };
 }
 // A read's context is the folder and the machine, not the space.
-export const placeKey = (place) => JSON.stringify({ cwd: place?.cwd, on: place?.on ?? null });
-export const key = () => placeKey(location());
-
-// Set when a count ahead opens the panel on that folder. Absent, the panel follows the focused pane.
-export function pinnedPlace(props) {
-  if (!props?.folder) return null;
-  return { cwd: props.folder, on: props.on ?? null, at: props.at ?? 0 };
-}
+export const key = () => { const { cwd, on } = location(); return JSON.stringify({ cwd, on }); };
 
 // Each line is numbered once, so a frame only draws the rows on screen.
 export function diffRows(lines, { max, width } = {}) {
@@ -84,12 +77,18 @@ export const ext = (path) => (path.includes(".") ? path.split(".").at(-1).toLowe
 export const isMarkdown = (path) => ["md", "markdown", "mdx"].includes(ext(path));
 
 // Release the returned state when done.
-export function codeState(path, text) {
+export function codeState(path, text, options = {}) {
   const t = theme(), e = ext(path) || "txt";
-  return EditorState.new({ language: LANG[e] ?? e, readonly: true,
-    value: text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) + "\n… (file truncated)" : text,
+  const limit = options.limit ?? MAX_TEXT;
+  const big = text.length > limit;
+  const readonly = options.readonly !== false || big;
+  const state = EditorState.new({ language: LANG[e] ?? e, readonly,
+    value: big ? text.slice(0, limit) + "\n… (file truncated)" : text,
+    line_numbers: options.line_numbers !== false, folding: options.folding !== false,
     font_family: monoFont(), font_size: 12,
     syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
+  if (options.onChange && !readonly) state.on("change", (_e, cx) => options.onChange(state.value(), cx));
+  return state;
 }
 
 export function markdownView(id, text, t) {

@@ -10,9 +10,10 @@ export function projectControls({ active, hovered, place }) {
 
 export const pullKey = (folder, on) => `pull:${on ?? ""}:${folder ?? ""}`;
 
-export function pullLabel(n, armed) {
+export function pullLabel(n, armed, pulling = false) {
   const count = Number(n) || 0;
   if (count <= 0) return null;
+  if (pulling) return "Pulling\u2026";
   return armed ? `Press again to pull ${count}` : `\u2193${count}`;
 }
 
@@ -30,15 +31,15 @@ export function refusalLine(result) {
 export function aheadOpen(count, place) {
   const n = Number(count) || 0;
   if (n <= 0 || !place?.folder) return null;
-  return { panel: "pr", branch: place.branch || null, folder: place.folder, on: place.on ?? null };
+  return { panel: "pr", select: place.active ? null : place.id ?? null };
 }
 
-export function gitControls(git, { folder, on, armed } = {}) {
+export function gitControls(git, { folder, on, id, active, armed, pulling } = {}) {
   if (!git || !folder) return [];
-  const open = Number(git.ahead) > 0 ? aheadOpen(git.ahead, { branch: git.branch, folder, on }) : null;
-  const behindLabel = pullLabel(git.behind, armed);
+  const open = Number(git.ahead) > 0 ? aheadOpen(git.ahead, { folder, on, id, active }) : null;
+  const behindLabel = pullLabel(git.behind, armed, pulling);
   const ahead = open ? { kind: "ahead", label: `\u2191${git.ahead}`, open } : null;
-  const behind = behindLabel ? { kind: "behind", label: behindLabel, armed: Boolean(armed), command: pullCommand(folder, on) } : null;
+  const behind = behindLabel ? { kind: "behind", label: behindLabel, armed: Boolean(armed) && !pulling, pulling: Boolean(pulling), command: pulling ? null : pullCommand(folder, on) } : null;
   return [ahead, behind].filter(Boolean);
 }
 
@@ -50,8 +51,6 @@ export async function runPull(exec, notify, place) {
   if (line) notify({ title: line, level: "error" });
   return result;
 }
-
-export const showAwayList = (view, collapsed) => !collapsed && (view === "spaces" || view === "agents" || view === "threads");
 
 export function activityTone(status) {
   if (status === "blocked") return "foreground";

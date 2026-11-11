@@ -25,8 +25,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       wash.
     - Space rows are 36 tall, radius 8: name 13.5 semibold, repo, branch
       and counts 11.5. + stays on the active project; + and … on hover.
-      ↓N arms, then `git pull --ff-only` on that computer; ↑N opens its
-      pull request panel. Active `foreground`+`14`, hover `foreground`+`0c`.
+      ↓N asks twice, then Pulling…; ↑N goes to the project and opens the
+      panel. Active `foreground`+`14`, hover `foreground`+`0c`.
     - Worktree spaces nest under their repo on 1px `input` guide lines.
     - Agents under a space: icon 15, title 12.5, status mark.
     - Collapsed (76 wide): the + and Hide buttons, stacked, then one mark
@@ -77,12 +77,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
         (`transition("width")` and `transition("opacity")`, ease-out, run
         natively), and closes the same way. The open panel's button keeps
         its name showing. No tooltip. Pressing one and letting go on another moves it there.
-        Right-click opens the Panels popup (`kanso-tabs` again, as an
-        overlay with `props().arrange`): one 30 tall row per panel with a
-        grip, its icon, its name and a switch, dragged the same way into
-        order. The order is in shared `kanso.panels.order` and the panels
-        turned off in `kanso.panels.off`; a panel turned off while open
-        closes. Custom panels from `kanso.panels` join the list.
+        Right-click opens Pieces. Drag writes `kanso.panels.order`. A hidden
+        panel is not mounted, and one hidden while open closes. Custom panels
+        from `kanso.panels` join the list.
     - **Panes**: an endless canvas (`kanso-strip`). Panes sit side by side
       in columns. You choose how many fit in the view at once, 1 to 8
       (default 2): a new column takes 1/n of it, so on a wide screen you can
@@ -194,7 +191,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   kanso.db. Events expire after 7 days, capped at 500. Piece `sidebar.away`
   off: nothing is written or read. Nothing, loading or a failed read: nothing.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
-  blocked then unseen done, oldest first. Native status owns seen; no sleepers.
+  agents who wait on you, oldest first. Off until chosen. Native status owns seen; no sleepers.
   The count, from 1, opens project/name/reason/age; click/Enter focuses. With none waiting it stays hidden; Cmd+J still says "Nobody is waiting" briefly;
   loading: kit; unavailable: error. The bar names the oldest blocked one from this queue.
   Strip checks panes each 1.5 s; leaving
@@ -233,9 +230,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   panel by its place, ⌃⌥P/S/T a view, ⌃⌥1-9 a pane column, ⌃⇧, Kanso
   settings; ⌘⌥hjkl (⇧ moves) vim; left of column 1: sidebar list
   (`kanso-spaces.list`, `kanso.list`); lists: listkeys.js. ⌘F on an agent lists matching turns, newest first.
-- **Kanso settings** (kanso-settings, the gear): Keys rebinds Kanso-only keys
-  (never Herdr's), Mods orders and hides panels and pieces, What's new the
-  log (Updates: Stable or Early), Credits who.
+- **Kanso settings** (kanso-settings, the fixed gear after the panels): Pieces
+  shows, shows when it has something to say, or hides each piece (`kanso.pieces`;
+  hiding stops its work). Keys rebinds Kanso-only keys (never Herdr's). What's new
+  is the log (Updates: Stable or Early). Credits who. Panel order stays `kanso.panels.order`.
 - **Spaces**:
   - Click a space to select it. Clicking the space you are in folds or
     unfolds its agents; the folded state is kept.
@@ -268,7 +266,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `data/kanso-sync/config.json` and bumps
     `kanso.sync.kick`, so Spend exchanges at once.
     `hc machine ls`: 30 s in front, 2 min behind, and a hung one is given up.
-  - Click an agent row to focus its pane; asleep, it wakes when it can. Pinned agents come first (the
+  - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
     order button (kanso.db `spaces.order`): last update, needs you, kind,
     on screen, or your own drag order (`spaces.custom`). A drag stays in
@@ -323,7 +321,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     380 ms). Nothing in the row is laid out again. A row waiting on you sits on
     `blocked` at 8%; the focused one on `foreground` at 7%. 10px between
     projects. Asleep rows are 32 tall: dim moon and name, Wake when it
-    can, Enter wakes. Second line: full ink waiting, quiet working, dim
+    can. A click opens the menu; Enter wakes. Second line: full ink waiting, quiet working, dim
     finished or idle.
   - Projects | Status | Threads: a switch under the top row (three
     segments, 28 tall, in a 3px-padded `foreground` 4% track, radius 10,
@@ -559,23 +557,22 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - `kanso-status`: the status bar.
   - `kanso-panel`: the side panels in one mod, chosen by `props.panel`;
     each is a plain class in its own file (`files.js`: that computer's folder
-    (a failure says why), git marks, code in place, Markdown or a picture to
+    (a failure says why), git marks; a file that is not a directory opens in
     `preview.js` with `back: "files"`; `changes.js`:
     git diff and commit; `pr.js`: the pull request, and reviews across this
     machine's projects when `gh` is signed in; `preview.js`: one file by full path, `{path, on, back}`, read
-    again only when that file changed, with Open with, read-again and close:
-    code read-only, a picture (png jpg jpeg gif webp svg, name and pixel size when known), Markdown as `doc.js` `MarkdownDoc`
-    (embedded pictures on another computer), formatted
-    and edited in place (a double-click opens one block, a table as cells;
-    saved after 700 ms, only when the file on disk is still what was read,
-    else a conflict you resolve; "Source" edits the whole file; links to
-    other Markdown files open here). `blocks.js` splits and joins the
-    blocks. kanso-tabs watches `data/kanso-open` and shows the newest path
-    left there (`markdown-handler.sh install`, macOS: makes a small app
-    the `.md` handler). The markdown-panel mod is its copy in a window, by
-    sync:share); `lib.js` holds what they share (where the focused pane is,
-    diff rows, folders from home, the two file renderers: `codeState` is a read-only `EditorState`,
-    `markdownView` is `TextView.markdown`; and `showPanel`, which mounts a block in `panel-body`). A panel
+    again when that file changed, with Open with and close:
+    any file that is not a picture, edited when the read has no NUL and fits in 1 MiB
+    (Save, Cmd+S; Ctrl+S on Windows), on this computer or another,
+    a picture (png jpg jpeg gif webp svg), Markdown as `doc.js` `MarkdownDoc`
+    (a double-click opens one block, a table as cells; on this computer, saved after 700 ms;
+    on another, Save, that key, or leaving writes it, and it does not save while you type;
+    a conflict when the file on disk changed; "Source" edits the whole file).
+    Over 1 MiB stays a view. `blocks.js` splits and joins the blocks.
+    kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
+    The markdown-panel mod is that copy, by sync:share); `lib.js` shares
+    `codeState` (an `EditorState`, read-only when the file is not text)
+    and `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a

@@ -790,7 +790,7 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
 });
 
 test("With automatic checks off neither copy polls, and a Check from settings still looks once", async () => {
-  const store = { "kanso.update": { autoCheck: false } }, timers = [];
+  const store = { "kanso.pieces": { "update.check": "hide" }, "kanso.update": { autoCheck: false } }, timers = [];
   let asked = 0;
   const host = {
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
@@ -848,7 +848,7 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
 });
 
 test("Automatic update checks can be disabled while manual checks still work", async () => {
-  const store = { "kanso.update": { autoCheck: false } };
+  const store = { "kanso.pieces": { "update.check": "hide" }, "kanso.update": { autoCheck: false } };
   let asked = 0, tick = null;
   const host = {
     appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
@@ -874,7 +874,7 @@ test("Automatic update checks can be disabled while manual checks still work", a
 
 test("The footer is as tall as the rows it shows: one switched off in Kanso's settings gives its place back", async (t) => {
   const f = await fixture(t);
-  f.store["kanso.hidden"] = ["footer.machine"];
+  f.store["kanso.pieces"] = { "footer.machine": "hide" };
   f.footer.size = { px: 228 }; // as 3.9.1 sized it
   const { cx, drain } = context();
   cx.timer = { every() {} };
