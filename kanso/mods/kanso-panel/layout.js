@@ -1,7 +1,7 @@
 // Kanso's layout writers, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Herdr's layout.set replaces the whole tree and a set that hasn't landed still reads as the old one, so every writer keeps its piece in shared state and each write puts them all back.
 // Herdr loads a mod's files from its own folder only, so this file is copied byte for byte into each mod; `npm run sync:share` copies it and a test fails when a copy differs.
-import { layout, run, shared, setShared } from "herdr";
+import { layout, run, shared, setShared, window } from "herdr";
 
 export const LAYOUT_INTENT = "kanso.layout";
 export const STRIP_INTENT = "kanso.layout.strip";
@@ -85,7 +85,35 @@ function paintRail(tree, rail) {
   const kids = tree.children ?? [];
   const at = kids.findIndex((n) => n.id === "sidebar");
   if (at < 0) return tree;
-  return { ...tree, resizable: rail.open, children: kids.with(at, { ...kids[at], min: rail.min }) };
+  return { ...tree, resizable: rail.open, children: kids.with(at, { ...kids[at], min: rail.min, hidden: false }) };
+}
+
+export const OPEN_MIN = 120; // open, the edge drags this far, past where a drag folds it
+// The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
+export const railWidth = () => (window()?.platform === "macos" ? 76 : 44);
+
+export function setRail(open, width) {
+  const min = open ? OPEN_MIN : railWidth();
+  rememberLayout({ rail: { open, min } });
+  const tree = layout();
+  const sidebar = (tree?.children ?? []).find((n) => n.id === "sidebar");
+  if (!sidebar) return;
+  if (tree.resizable !== open || sidebar.min !== min || sidebar.hidden) {
+    const painted = paintLayout(tree);
+    if (isKansoTree(painted)) run("layout.set", { layout: painted });
+  }
+  run("layout.resize", { id: "sidebar", px: width });
+}
+
+export function foldSidebar() {
+  setShared("sidebar.collapsed", true);
+  setRail(false, railWidth());
+}
+
+// Herdr's own toggle hides the sidebar, and kanso-spaces with it: once per hiding, it comes back as the rail.
+export function sidebarBack(tree, acted) {
+  const hidden = isKansoTree(tree) && (tree.children ?? []).some((n) => n.id === "sidebar" && n.hidden === true);
+  return { acted: hidden, fold: hidden && !acted };
 }
 
 // A side panel's left border is Herdr's divider, which moves only the two nodes beside it, so a fixed-width neighbor pins it: while a panel shows, the strip's right edge rail stands after the panel instead of before it.

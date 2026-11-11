@@ -104,17 +104,24 @@ export class Armed {
   }
 }
 
+/** The one switch: track and knob, in px. */
+export const SWITCH = { w: 28, h: 16, knob: 12 };
+
 export function toggleSwitch(id, checked, onChange, c, { label = "Toggle" } = {}) {
-  // Toggle centers its child; justify pins the knob. The 1px border is inside the box.
-  const pad = G.xs, knob = H.compact - pad * 2 - 2;
-  return Toggle.new(id).w(knob * 2 + pad * 2 + 2).h(H.compact).p(pad).items_center()
+  // The 1px border sits inside the pill, so the knob meets its edge.
+  const pad = (SWITCH.h - SWITCH.knob - 2) / 2;
+  const pill = h_flex().w(SWITCH.w).h(SWITCH.h).p(pad).items_center()
     .justify_start().when(checked, (el) => el.justify_end())
     .rounded_full().bg(checked ? c.primary : c.raised).border_1().border_color(checked ? c.primary : c.input)
-    .cursor_pointer().pressed(checked)
+    .child(div().size(SWITCH.knob).flex_none().rounded_full().bg(checked ? c.primaryText : c.muted));
+  // Focus recolours this border; it stays clear until then.
+  return Toggle.new(id).h(H.compact).px(G.xs).items_center().cursor_pointer()
+    .rounded(R.control).border_1().border_color("#00000000")
+    .pressed(checked)
     .accessibility_label(label)
     .on_change((next, cx) => { onChange(next, cx); cx.notify(); })
     .focus((s) => s.border_color(c.accent))
-    .child(div().size(knob).flex_none().rounded_full().bg(checked ? c.primaryText : c.muted));
+    .child(pill);
 }
 
 export function controlInput(el, c) {

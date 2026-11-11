@@ -1,6 +1,8 @@
 // What a panel keeps for one project, and which panel is the open one.
 // A panel saves with saveState() and restores with restoreState(state).
 export const OPEN = "_open";
+export const STATE_MS = 1500;
+export const LATE = Symbol("late");
 
 const BACKS = new Set(["files", "look"]);
 const PERIODS = new Set(["day", "week", "month", "year"]);
@@ -38,6 +40,9 @@ export function takeState(panel) {
     return state;
   } catch { return undefined; }
 }
+
+// The saved state, or LATE once `ms` pass on cx.timer: a lost read never keeps a panel on its skeleton.
+export const stateWithin = (read, timer, ms = STATE_MS) => Promise.race([read, new Promise((resolve) => timer.after(ms, () => resolve(LATE)))]);
 
 export async function giveState(panel, state, cx) {
   if (state == null || typeof panel?.restoreState !== "function") return false;

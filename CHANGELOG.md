@@ -11,11 +11,30 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.23.0] - 2026-11-10
+## [3.24.0] - 2026-11-10
 
 ### Added
 
 - Sync is turned on from another computer's row in the sidebar. Its icon stays in sight while Sync is on, and its tooltip says when it last synced. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then the icon takes the warning tone and Spend says Update kanso there. A computer turned off from the sidebar is not asked. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
+
+## [3.22.6] - 2026-11-10
+
+### Fixed
+
+- A switch is a short pill beside its label. Off keeps the knob at the left and on at the right, and the space around the pill still takes the click.
+- A machine that is off, unreachable, or needs a login keeps its name readable, and turn on, Retry, or copy stays on that row. Turn off and a new space still appear only while the pointer or the keyboard is on a connected machine.
+
+## [3.22.5] - 2026-11-10
+
+### Fixed
+
+- Panels load again after switching project or restarting. A side panel, Files or any other, no longer stays on its placeholder until Herdr restarts.
+
+## [3.22.4] - 2026-11-10
+
+### Fixed
+
+- ⌘B hides the sidebar to its rail, as Hide sidebar does, instead of removing it. The tab bar no longer slides under the window buttons, and ⌘J and the sidebar's keys keep working. A sidebar hidden from the command palette comes back as the rail.
 
 ### Changed
 

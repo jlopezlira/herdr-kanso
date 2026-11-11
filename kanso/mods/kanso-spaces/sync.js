@@ -6,7 +6,7 @@ export const KINDS = ["spend"];
 export const EXCHANGE_MS = 180_000;
 export const BACKOFF_MAX_MS = 1_800_000;
 export const RETRY_FLOOR_MS = 15_000;
-export const MIN_VERSION = "3.23.0";
+export const MIN_VERSION = "3.24.0";
 export const PROTOCOL = 1;
 export const UPDATE_TEXT = "Update kanso there";
 // The sidebar bumps it after a save, so Spend exchanges at once.
@@ -247,11 +247,9 @@ const syncedText = (at, now) => {
 
 const CANNOT = new Map([["update", UPDATE_TEXT], ["unreachable", machineState("unavailable")]]);
 
-// A connected remote machine's sync icon in the sidebar: null when its row shows none.
-export function syncIcon({ name, phase, hot, config, status, now }) {
-  if (!name || phase !== "connected") return null;
+// The sidebar's sync icon for a machine; machineVisible decides whether the row shows it.
+export function syncIcon({ name, config, status, now }) {
   const on = peerOn(config, name);
-  if (!on && !hot) return null;
   const cannot = on ? CANNOT.get(status?.[name]?.reason) : null;
   const note = cannot ?? (on ? syncedText(status?.[name]?.synced_at, now) : "");
   return { state: cannot ? "cannot" : on ? "on" : "off", tip: note ? `Sync ${name}: ${note}` : `Sync ${name}` };

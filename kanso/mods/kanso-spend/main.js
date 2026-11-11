@@ -7,8 +7,9 @@ import { mkdir } from "fs/promises";
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
-import { clock, tryOr, tryOrAsync } from "./pure.js";
+import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
+import { Kdb } from "./kdb.js";
 import { EXCHANGE_MS, SYNC_KICK, configFrom, exchangeAll, holdsOf, identityFrom, joinUnder, periodKeyOf, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
 
 const MOD = "kanso-spend";
@@ -110,13 +111,14 @@ export default class TokenSpend extends View {
     this.menuOptions = null;
     this.syncHolds = [];
     this.syncStored = [];
+    this.db = new Kdb();
     this.syncKick = shared(SYNC_KICK);
 
     this.ticker = null;
     this.awake = false;
 
     // Herdr starts hidden copies too, so wake only when this one is on screen.
-    if (!hiddenInLayout()) this.wake(cx);
+    if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
     this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
@@ -310,7 +312,7 @@ export default class TokenSpend extends View {
     const periodKey = periodKeyOf(this.cost);
     const options = { today: this.options().today, cost: { period: this.cost.period, offset: Number(this.cost.offset) || 0, project: "all", model: "all" } };
     const self = this.costs?.syncSelf || identityFrom(await readTextFile(joinUnder(dir, "identity.json")).catch(() => null), () => "", "").id;
-    const power = await powerOf(this.syncStored);
+    const power = await powerOf(this.db, this.syncStored);
     if (!this.awake || this.closed) return;
     this.syncStored = power.stored;
     const out = await exchangeAll({ exec }, {

@@ -7,7 +7,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home } from "herdr";
 import { stateMark, programIcon } from "./marks.js";
-import { walkLayout, commitLayout } from "./layout.js";
+import { walkLayout, commitLayout, sidebarBack, foldSidebar } from "./layout.js";
 import { Updater } from "./update.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { Kdb, projectKey } from "./kdb.js";
@@ -193,6 +193,13 @@ export default class Tabs extends View {
     commitLayout({ panel: id ? { id, type: "block", content: block } : null });
   }
 
+  keepRail(tree) {
+    if (this.arrange) return;
+    const back = sidebarBack(tree, this.railBack);
+    this.railBack = back.acted;
+    if (back.fold) foldSidebar();
+  }
+
   // A change just sent hasn't landed yet: don't read the old state as a choice.
   inFlight(now) {
     return this.want !== undefined && now !== this.want && Date.now() - this.mountedAt < 1000;
@@ -356,7 +363,8 @@ export default class Tabs extends View {
         .child(name);
     };
     // No background and no line of its own: it sits on the frame.
-    return h_flex().size_full().min_w(0).px(12).gap(2).items_center()
+    return h_flex().id("tab-bar").size_full().min_w(0).px(12).gap(2).items_center()
+      .on_size_change(() => this.keepRail(layout()))
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
       .on_mouse_up("left", () => { this.pressed = null; this.dragPanel = null; })

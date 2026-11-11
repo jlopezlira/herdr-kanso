@@ -205,7 +205,7 @@ test("A computer on an older kansō says to update it, and nothing is written th
   const later = new Date(2026, 10, 10, 15, 4, 0);
   assert.equal(clock(day.toISOString(), later.getTime()), "09:05");
   assert.equal(clock(new Date(2026, 10, 9, 9, 5, 0).toISOString(), later.getTime()), "Nov 9 09:05");
-  const icon = sync.syncIcon({ name: "odin", phase: "connected", hot: false, config: on(), status: { odin: stale.status.odin }, now: later.getTime() });
+  const icon = sync.syncIcon({ name: "odin", config: on(), status: { odin: stale.status.odin }, now: later.getTime() });
   assert.deepEqual(icon, { state: "cannot", tip: "Sync odin: Update kanso there" });
 });
 
@@ -249,24 +249,18 @@ test("A machine with Sync on shares every kind, and one save turns it on", () =>
   assert.equal(sync.configText(enabled), `${JSON.stringify(enabled)}\n`);
 });
 
-test("The sidebar's sync icon shows on a connected remote machine only, and its tooltip says the state", () => {
+test("The sidebar's sync icon is on, off or cannot run, and its tooltip says when it last synced", () => {
   const at = (minutes) => new Date(NOW - minutes * 60_000).toISOString();
-  const icon = (phase, hot, config, status = {}) => sync.syncIcon({ name: "dark", phase, hot, config, status, now: NOW });
+  const icon = (config, status = {}) => sync.syncIcon({ name: "dark", config, status, now: NOW });
   const dark = on("dark");
-  for (const phase of ["off", "unavailable", "loading", "login"]) {
-    assert.equal(icon(phase, true, dark), null, phase);
-    assert.equal(icon(phase, false, dark), null, phase);
-  }
-  assert.equal(sync.syncIcon({ name: null, phase: "connected", hot: true, config: dark, status: {}, now: NOW }), null, "this computer has none");
-  assert.equal(icon("connected", false, {}), null, "off waits for the hover");
-  assert.deepEqual(icon("connected", true, {}), { state: "off", tip: "Sync dark" });
-  assert.deepEqual(icon("connected", false, dark), { state: "on", tip: "Sync dark" });
-  assert.deepEqual(icon("connected", false, dark, { dark: { synced_at: at(2) } }), { state: "on", tip: "Sync dark: synced 2 min ago" });
-  assert.equal(icon("connected", false, dark, { dark: { synced_at: at(0) } }).tip, "Sync dark: synced just now");
-  assert.match(icon("connected", false, dark, { dark: { synced_at: at(90) } }).tip, /^Sync dark: synced (\w{3} \d+ )?\d\d:\d\d$/);
-  assert.deepEqual(icon("connected", false, dark, { dark: { reason: "update" } }), { state: "cannot", tip: `Sync dark: ${sync.UPDATE_TEXT}` });
-  assert.deepEqual(icon("connected", false, dark, { dark: { reason: "unreachable" } }), { state: "cannot", tip: "Sync dark: Unreachable" });
-  assert.deepEqual(icon("connected", true, {}, { dark: { reason: "update" } }), { state: "off", tip: "Sync dark" }, "a failure from before it was off is not shown");
+  assert.deepEqual(icon({}), { state: "off", tip: "Sync dark" });
+  assert.deepEqual(icon(dark), { state: "on", tip: "Sync dark" });
+  assert.deepEqual(icon(dark, { dark: { synced_at: at(2) } }), { state: "on", tip: "Sync dark: synced 2 min ago" });
+  assert.equal(icon(dark, { dark: { synced_at: at(0) } }).tip, "Sync dark: synced just now");
+  assert.match(icon(dark, { dark: { synced_at: at(90) } }).tip, /^Sync dark: synced (\w{3} \d+ )?\d\d:\d\d$/);
+  assert.deepEqual(icon(dark, { dark: { reason: "update" } }), { state: "cannot", tip: `Sync dark: ${sync.UPDATE_TEXT}` });
+  assert.deepEqual(icon(dark, { dark: { reason: "unreachable" } }), { state: "cannot", tip: "Sync dark: Unreachable" });
+  assert.deepEqual(icon({}, { dark: { reason: "update" } }), { state: "off", tip: "Sync dark" }, "a failure from before it was off is not shown");
 });
 
 test("Paths are built with the other computer's path API", async () => {

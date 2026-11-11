@@ -12,6 +12,9 @@ export const tryOrAsync = async (fn, fallback = null) => {
 
 export const parseOr = (text, fallback = null) => tryOr(() => JSON.parse(text), fallback);
 
+// A panel's first command waits one timer turn: Herdr can lose one started in a remounted view's init turn.
+export const afterMount = (cx, start) => cx.timer.after(0, start);
+
 export async function retry(times, fn, { done = Boolean, between = async () => {} } = {}, k = 0) {
   const v = await fn(k);
   if (done(v) || k + 1 >= times) return v;

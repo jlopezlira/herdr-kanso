@@ -12,7 +12,6 @@ import { openPath, toPng } from "./share.js";
 import { mentions, resolvePath, itemOf, shows, arrived, pinFrom, aboutMessage, noted, keyOf, colorOf, indexRows } from "./look-model.js";
 import { lookMemory } from "./panel-state.js";
 import { transcriptPaths, MOST } from "./transcript.js";
-import { Kdb } from "./kdb.js";
 
 const LINES = 400;
 const READ_MS = 4000; // a terminal's text is read at most this often
@@ -47,6 +46,8 @@ function live(address) {
 }
 
 export class Look {
+  constructor(db) { this.db = db; }
+
   init(cx, p) {
     const kept = shared(KEPT) ?? {};
     this.pinned = live(kept.pinned);
@@ -62,7 +63,6 @@ export class Look {
     this.chains = new Map(); this.waiting = new Set(); // per file: its last draw, and the files with one not started yet
     this.draws = new Map(); // per file: its latest big draw (its copy is published only if still the latest)
     this.colors = new Map(); this.sampling = new Set();
-    this.db = new Kdb();
     this.handle = cx.focus_handle();
     if (p.path) this.ask(p.path, cx);
     else if (this.keptPath) { const path = this.keptPath; this.keptPath = null; this.ask(path, cx); }
