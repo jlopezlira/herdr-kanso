@@ -37,6 +37,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
       - name: Tests
+        timeout-minutes: 20
         run: npm test
   test:
     needs: platform
