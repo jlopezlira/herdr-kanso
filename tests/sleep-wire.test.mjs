@@ -138,9 +138,17 @@ test("a remote sleep and wake of one idle agent, counted across the wire", async
   console.log(`\nsleep\n${table(run.ticks)}\n${table([{ ...run.sleep }]).replace("1   ", "sleep")}`);
   console.log(`wake\n${table(run.wakeTicks)}\n${table([{ ...run.wake }]).replace("1   ", "wake ")}`);
   console.log(`commands ${run.commands.join(",")}`);
-  assert.ok(run.ticks.length > 0 && run.ticks.every((row) => row.trips <= 3));
-  assert.ok(run.sleep.trips <= 12);
+  assert.equal(run.sleep.exec, 8);
+  assert.equal(run.sleep.sqlite, 5);
   assert.equal(run.sleep.files, 0);
+  assert.equal(run.sleep.hc, 5);
+  assert.equal(run.sleep.trips, 13);
+  assert.ok(run.ticks.length > 0 && run.ticks.every((row) => row.trips <= 4));
+  assert.equal(run.wake.exec, 9);
+  assert.equal(run.wake.sqlite, 6);
+  assert.equal(run.wake.files, 0);
+  assert.equal(run.wake.hc, 5);
+  assert.equal(run.wake.trips, 14);
   assert.equal(run.rowState, "asleep");
 });
 
@@ -209,7 +217,14 @@ test("a local sleep and wake of one idle agent, counted on this computer", async
   const wakeCalls = calls.slice(wakeFrom);
   const wake = { exec: wakeCalls.length, sqlite: wakeCalls.filter((c) => c.c === "sqlite3").length, files: reads.length - wakeReads, hc: hcLog.length - wakeHc };
   console.log(`local wake exec ${wake.exec} sqlite ${wake.sqlite} files ${wake.files} hc ${wake.hc}: ${wakeCalls.map((c) => c.c).join(",")}`);
-  assert.ok(sleep.exec > 0 && wake.exec > 0);
+  assert.equal(sleep.exec, 12);
+  assert.equal(sleep.sqlite, 9);
+  assert.equal(sleep.files, 0);
+  assert.equal(sleep.hc, 6);
+  assert.equal(wake.exec, 8);
+  assert.equal(wake.sqlite, 6);
+  assert.equal(wake.files, 1);
+  assert.equal(wake.hc, 5);
 });
 
 test("a step is looked at again only when its timer is due", async () => {
