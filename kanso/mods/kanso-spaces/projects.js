@@ -96,3 +96,6 @@ export async function missingFolders(folders) {
   const r = await exec("sh", ["-c", 'for d; do [ -d "$d" ] || printf "%s\\n" "$d"; done', "sh", ...folders]).catch(() => null);
   return new Set(r?.code === 0 ? String(r.stdout ?? "").split("\n").filter(Boolean) : []);
 }
+
+const PROJECT_FIELDS = ["id", "name", "folder", "machine", "agent", "missing"];
+export const sameProjects = (a, b) => Array.isArray(b) && a.length === b.length && a.every((row, i) => PROJECT_FIELDS.every((key) => row[key] === b[i][key]));

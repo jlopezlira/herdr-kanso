@@ -7,6 +7,11 @@ export const REFRESH_MS = 20_000; // an unchanged agent is seen again this often
 const FIELDS = ["given", "title", "said", "space", "tab", "pos", "program", "status", "terminal", "cwd"];
 const same = (x, y) => Boolean(x && y) && FIELDS.every((f) => (x[f] ?? null) === (y[f] ?? null));
 
+export const sameSeen = (left, right) => left?.size === right.size && [...right].every(([address, row]) => {
+  const before = left.get(address);
+  return same(before, row) && before.conversation === row.conversation && before.pid === row.pid;
+});
+
 export class Panel {
   constructor(seed = [], store = null) {
     this.store = store;

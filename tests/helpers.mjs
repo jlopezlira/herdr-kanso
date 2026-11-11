@@ -13,9 +13,9 @@ const mods = new URL("../kanso/mods/", import.meta.url);
 
 // Load the actual mod logic (its own-folder imports included) with the
 // desktop host supplied by each fixture.
-export async function load(file, names, host = {}) {
+export async function load(file, names, host = {}, root = mods) {
   const dir = file.slice(0, file.lastIndexOf("/") + 1);
-  const read = async (name) => readFile(new URL(name, mods), "utf8");
+  const read = async (name) => readFile(new URL(name, root), "utf8");
   // Siblings are read up front: the inliner is synchronous.
   const sources = new Map([[file, await read(file)]]);
   const pending = [file];
