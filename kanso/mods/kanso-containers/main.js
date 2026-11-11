@@ -388,7 +388,7 @@ export default class Containers extends View {
     // What Docker costs this computer comes first: its VM keeps memory even with nothing running.
     const hero = v_flex().gap(G.md)
       .when(!remote, (el) => el.child(v_flex().gap(4)
-        .child(div().text_size(12.5).text_color(c.dim).child("Docker uses of this Mac's memory"))
+        .child(div().text_size(12.5).text_color(c.dim).child("Docker uses of this computer's memory"))
         .child(h_flex().items_end().gap(G.md).flex_wrap()
           .child(div().text_size(48).line_height(1).font_light().text_color(c.text).child(typeof this.held === "number" ? size(this.held) : "–"))
           .when(Boolean(this.limit), (el2) => el2.child(div().pb(6).text_size(13).text_color(c.dim).child(`can grow to ${size(this.limit)}`))))))
@@ -422,7 +422,6 @@ export default class Containers extends View {
           .child(header)
           .child(this.body(c))
           .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(c.red).child(this.error ?? "")))
-          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))
-          .child(div().text_size(10.5).text_color(c.dim).child("Docker on this computer, grouped by the Kanso project each container is for: its compose folder, else its name. Pulls, compose, shells and logs open in a tab."))));
+          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
   }
 }

@@ -39,7 +39,7 @@ export function changes(before, after) {
     ["review", "CHANGES_REQUESTED", "changes requested"], ["checks", "fail", "checks failed"],
   ];
   return words.filter(([key, value]) => after[key] === value && before[key] !== value)
-    .map(([, , word]) => ({ kind: "pr", text: `PR #${after.number} ${word}` }));
+    .map(([, , word]) => ({ kind: "pr", text: `pull request #${after.number} ${word}` }));
 }
 
 export function ordered(events) {
@@ -62,7 +62,7 @@ export function lines(events, expanded = false) {
 export const RETURN_LABEL = "While you were away";
 const MARK = { blocked: "blocked", error: "error", sleep_failed: "error", finished: "done", sleep_finished: "asleep", pr: "pr" };
 const OUTCOME = { blocked: "Needs you", error: "Failed", sleep_failed: "Could not sleep", finished: "Finished", sleep_finished: "Went to sleep" };
-const PR_TEXT = /^(PR #\d+)\s+(.+)$/;
+const PR_TEXT = /^((?:pull request|PR) #\d+)\s+(.+)$/;
 const SPOKEN = /\s+(?:finished|needs you|errored|slept|could not sleep)$/;
 
 export function shownName(agent, seen, term) {

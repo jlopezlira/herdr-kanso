@@ -4,6 +4,7 @@ import { parseOr, clock } from "./pure.js";
 export { clock };
 
 export const STALE_MS = 3 * 60_000;
+export const leaveShowAll = (showAll) => (showAll ? false : null);
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;

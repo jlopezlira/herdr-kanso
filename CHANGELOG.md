@@ -11,6 +11,16 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.29.1] - 2026-11-11
+
+### Changed
+
+- Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
+- Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
+- A project is called a project. This computer and another computer stay those words. Waking is Wake. A pull request is a pull request, and the tab stays PR.
+- Memory's Esc leaves the full list when that list is open, and otherwise does nothing.
+- The lines under Ports, Containers, Shipped and Worktrees that only explained the panel are gone. A scan time, a count and an error stay.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added

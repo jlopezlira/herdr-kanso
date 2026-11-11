@@ -198,6 +198,12 @@ export function costRange(period, offset, today, firstDay) {
     const months = (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth() + 1;
     return { period, start: dayKey(start), end: today, unit: "month", label: "All time", name: `since ${MONTHS_LONG[start.getMonth()]} ${start.getFullYear()}`, months };
   }
+  if (period === "day") {
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + shift);
+    const label = shift === 0 ? "Today" : shift === -1 ? "Yesterday" : dayLabelShort(end);
+    const name = shift === 0 ? "today" : shift === -1 ? "yesterday" : dayLabelShort(end);
+    return { period, start: dayKey(end), end: dayKey(end), unit: "day", label, name, months: 1 / 30.44 };
+  }
   const first = new Date(now.getFullYear(), now.getMonth() + shift, 1);
   const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
   return { period: "month", start: dayKey(first), end: dayKey(last), unit: "day", label: `${MONTHS_LONG[first.getMonth()]} ${first.getFullYear()}`, name: MONTHS_LONG[first.getMonth()] + (first.getFullYear() === now.getFullYear() ? "" : ` ${first.getFullYear()}`), months: 1 };
@@ -207,13 +213,14 @@ function dayLabelShort(d) {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
-function previousRange(range, today, firstDay) {
+export function previousRange(range, today, firstDay) {
   if (range.period === "all") return null;
   const now = parseDay(today);
   const start = parseDay(range.start);
   const offset = range.period === "year" ? start.getFullYear() - now.getFullYear() - 1
     : range.period === "month" ? (start.getFullYear() - now.getFullYear()) * 12 + start.getMonth() - now.getMonth() - 1
-      : Math.round((parseDay(range.end) - now) / (30 * 86400000)) - 1;
+      : range.period === "day" ? Math.round((start - now) / 86400000) - 1
+        : Math.round((parseDay(range.end) - now) / (30 * 86400000)) - 1;
   return costRange(range.period, offset, today, firstDay);
 }
 
@@ -381,7 +388,7 @@ function cleanTitle(text) {
 export function deriveCosts(rows, { catalog, overrides, labels, options = {}, today, live = null }) {
   const price = pricer(catalog ?? { rates: [] }, overrides ?? { models: {}, plans: [] }, rows);
   const firstDay = rows.reduce((min, row) => (!min || row.day < min ? row.day : min), null);
-  const range = costRange(options.period ?? "month", Number(options.offset) || 0, today, firstDay);
+  const range = costRange(options.period ?? "day", Number(options.offset) || 0, today, firstDay);
   const previous = previousRange(range, today, firstDay);
   const project = options.project && options.project !== "all" ? options.project : null;
   const model = options.model && options.model !== "all" ? options.model : null;
@@ -495,7 +502,7 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
       tip: `${usdText(total.usd, true)} at API list price`,
       title: range.period === "all" ? "All time" : range.period === "30d" ? "Last 30 days" : range.label,
       note,
-      empty: total.tokens === 0 ? `Nothing used in ${range.name}. Try another period.` : null,
+      empty: total.tokens === 0 ? `Nothing used ${range.period === "day" ? (range.name === "today" || range.name === "yesterday" ? range.name : `on ${range.name}`) : `in ${range.name}`}. Try another period.` : null,
       stats: [
         { value: intText(tasks.size), unit: tasks.size === 1 ? "task" : "tasks", tip: `${intText(sessions)} sessions` },
         { value: usdText(tasks.size ? total.usd / tasks.size : 0), unit: "per task", tip: "API value divided by tasks" },

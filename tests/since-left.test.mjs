@@ -81,7 +81,7 @@ test("PR facts include approval, requested changes, failed checks, and merges wi
   const base = { type: "pr", number: 14, state: "OPEN", review: "REVIEW_REQUIRED", checks: "pass" };
   for (const [field, value, word] of [["review", "APPROVED", "approved"], ["review", "CHANGES_REQUESTED", "changes requested"], ["checks", "fail", "checks failed"], ["state", "MERGED", "merged"]]) {
     const after = { ...base, [field]: value };
-    assert.deepEqual(changes(base, after), [{ kind: "pr", text: `PR #14 ${word}` }]);
+    assert.deepEqual(changes(base, after), [{ kind: "pr", text: `pull request #14 ${word}` }]);
     assert.deepEqual(changes(after, after), []);
   }
   assert.deepEqual(changes(base, { ...base, state: "CLOSED" }), []);
@@ -150,7 +150,7 @@ test("PR observations use only known local project mappings and keep check resul
   await recordPrFacts(db, [{ url: pr.url, number: 2, state: "MERGED" }], 3);
   await recordPrFacts(db, [{ ...pr, url: "https://github.com/unknown/r/pull/2" }], 4);
   const rows = await db.read("SELECT project, text FROM since_events ORDER BY id;");
-  assert.deepEqual(clone(rows), ["approved", "checks failed", "merged"].map((word) => ({ project, text: `PR #2 ${word}` })));
+  assert.deepEqual(clone(rows), ["approved", "checks failed", "merged"].map((word) => ({ project, text: `pull request #2 ${word}` })));
 });
 
 test("the return view expands inline, never focuses a handle, and stays silent while absent", async (t) => {
@@ -341,7 +341,7 @@ test("a first detailed PR read compares against the inbox cache, including a mer
   await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,review_decision,role,fetched_at) VALUES('https://github.com/o/r/pull/4','github','github.com','o','r',4,'Fix','OPEN','REVIEW_REQUIRED','author',1);");
   const { recordPrFacts } = await load("kanso-panel/pr-inbox.js", ["recordPrFacts"]);
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 2);
-  assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "PR #4 merged");
+  assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "pull request #4 merged");
   await recordPrFacts(db, [], 3);
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 4);
   assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n, 1);
@@ -400,7 +400,7 @@ test("PR facts reuse remote identities, sanitize URLs, and query only received P
   const pr = { url: "https://ghe.example/Group/sub/repo/pull/12", state: "OPEN" };
   await seedPrFacts(tracked, [pr], 1);
   await recordPrFacts(tracked, [{ ...pr, state: "MERGED" }], 2);
-  assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "PR #12 merged");
+  assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "pull request #12 merged");
   assert.ok(reads.filter((sql) => sql.includes("FROM pr_items")).every((sql) => sql.includes("WHERE url IN")));
   assert.ok(reads.filter((sql) => sql.includes("FROM since_observed")).every((sql) => sql.includes("WHERE source IN")));
 });
@@ -443,6 +443,7 @@ test("each kind of event says its outcome in words beside the name", () => {
   assert.deepEqual(["finished", "blocked", "error", "sleep_finished", "sleep_failed"].map((kind) => outcome(kind)),
     ["Finished", "Needs you", "Failed", "Went to sleep", "Could not sleep"]);
   assert.deepEqual(eventLabel({ kind: "pr", text: "PR #12 changes requested" }), { name: "PR #12", outcome: "Changes requested" });
+  assert.deepEqual(eventLabel({ kind: "pr", text: "pull request #12 changes requested" }), { name: "pull request #12", outcome: "Changes requested" });
   assert.equal(outcome("unknown"), null);
 });
 
