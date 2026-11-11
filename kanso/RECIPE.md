@@ -150,8 +150,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       The Worktrees brief, in this one's order: [RECIPE-worktrees.md](RECIPE-worktrees.md).
       The Shipped brief, in this one's order: [RECIPE-shipped.md](RECIPE-shipped.md).
       The PR brief, in this one's order: [RECIPE-pr.md](RECIPE-pr.md).
-      Simulator (`kanso-sim`) is the device beside the agent.
-      Its brief: [RECIPE-sim.md](RECIPE-sim.md).
+      Simulator uses Xcode and Android tools only:
+      [RECIPE-sim.md](RECIPE-sim.md).
   - **Status bar**, 26 tall: `kanso-status` with `{side: "left"}`, a
     180-wide minimap (`kanso-strip`) exactly in the middle, and
     `kanso-status` with `{side: "right"}`. The minimap is a centred row of

@@ -193,11 +193,11 @@
 
   <section class="block spotlight" id="simulator">
     <h2>The device, beside the agent that writes it</h2>
-    <p class="sub">Simulator, in the tab bar, shows an iOS simulator or an Android emulator on this computer: its screen, at the device's shape, and touch, typing, Home, Lock, volume and rotate. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. It stays off until this computer has Xcode's simctl or an Android SDK.</p>
+    <p class="sub">Simulator is kansō's own panel, using only Xcode's and Android's tools on this computer. It installs nothing. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. Its button appears when this computer has simctl or an Android SDK with adb.</p>
     <ul class="facts">
-      <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Boot, then the screen</strong>Pick a device by its name and OS. Boot starts one that is off. The picture is live while frames arrive, and Reconnect brings a stalled stream back.</div></li>
-      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>This computer only</strong>A space on another machine still shows the devices here. On Linux and Windows there is no iOS row. Closing the panel, or leaving the window behind, stops the stream.</div></li>
-      <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>Nothing downloaded until you say so</strong>iOS needs serve-sim. The panel names the missing tool, and one button runs <code>npx --yes serve-sim@0.1.49 --version</code>. Nothing is fetched before that press.</div></li>
+      <li><span class="ring ring-done" aria-hidden="true"></span><div><strong>Boot, then the screen</strong>Pick a device and press Start if it is off. Pictures arrive one at a time, at the device's proportions. A failed picture keeps the last one with its age.</div></li>
+      <li><span class="ring ring-working" aria-hidden="true"></span><div><strong>This computer only</strong>A project on another computer still shows the devices here. Only platforms present on this computer are listed. Closing the panel, or leaving the window behind, stops taking pictures.</div></li>
+      <li><span class="ring ring-blocked" aria-hidden="true"></span><div><strong>The controls each device supports</strong>Android keeps touch, typing and keys; emulators can Rotate. The iOS screen is a view, with appearance and URL controls. Open in Simulator lets you touch it in Apple's own window.</div></li>
     </ul>
   </section>
 

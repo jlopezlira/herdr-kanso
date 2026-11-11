@@ -278,7 +278,8 @@ test("header.pr hidden issues no gh command", async () => {
 });
 
 test("a hidden panel is not mounted", async () => {
-  const store = { [MIGRATED]: true, [STORE]: {} };
+  const { TOOLS } = await load("kanso-sim/registration.js", ["TOOLS"]);
+  const store = { [MIGRATED]: true, [STORE]: {}, [TOOLS]: { ios: true } };
   const { panelList } = await load("kanso-tabs/main.js", ["panelList"], {
     shared: (key) => store[key],
     setShared: (key, value) => { store[key] = value; },
@@ -291,6 +292,65 @@ test("a hidden panel is not mounted", async () => {
     store[STORE] = {};
     assert.equal(panelList().find((item) => item.id === panel.id).on, true, row.id);
   }
+});
+
+test("panel.sim hidden issues no probe and no frame", async () => {
+  const { TOOLS } = await load("kanso-sim/registration.js", ["TOOLS"]);
+  const store = { [MIGRATED]: true, [STORE]: { "panel.sim": "hide" }, [TOOLS]: { ios: "/simctl" } };
+  const commands = [];
+  const pending = [];
+  const host = {
+    shared: (key) => store[key] ?? null,
+    setShared: (key, value) => { store[key] = value; },
+    exec: async (cmd) => { commands.push(cmd); return { code: 0, stdout: "", stderr: "" }; },
+    home: () => "/home/me",
+    appHome: () => "/app",
+    window: () => ({ platform: "macos", active: true }),
+    layout: () => ({ id: "panel", hidden: false, children: [{ id: "sim" }] }),
+    theme: () => ({}),
+    spaces: () => [],
+    exists: async () => false,
+    InputState: { new: () => ({ on() {}, value: () => "", release() {} }) },
+  };
+  const cx = {
+    notify() {},
+    focus_handle: () => ({ focus() {}, release() {} }),
+    timer: { after() { return { cancel() {} }; } },
+    spawn(fn) { const task = fn(cx); pending.push(task); return task; },
+  };
+  const drain = async () => { while (pending.length) await pending.shift(); };
+  const { Tabs, panelList } = await load("kanso-tabs/main.js", ["Tabs", "panelList"], host);
+  assert.equal(panelList().find((item) => item.id === "sim").on, false);
+  const tabs = new Tabs();
+  tabs.probeSimulator(cx);
+  await drain();
+  assert.equal(commands.length, 0, "hidden: no probe");
+  store[STORE] = {};
+  tabs.probeSimulator(cx);
+  await drain();
+  assert.ok(commands.includes("xcode-select"), "shown: the probe runs");
+  commands.length = 0;
+  store[STORE] = { "panel.sim": "hide" };
+  tabs.probeSimulator(cx);
+  await drain();
+  assert.equal(commands.length, 0, "hidden again: no probe");
+  delete store[TOOLS];
+  assert.equal(panelList().some((item) => item.id === "sim"), false, "no tools: not listed");
+  store[TOOLS] = { adb: "adb" };
+  store[STORE] = {};
+  const { Simulator } = await load("kanso-sim/main.js", ["Simulator"], host);
+  const view = new Simulator();
+  view.init({}, cx);
+  view.devices = [{ id: "android:usb", platform: "android", state: "Booted", target: "usb" }];
+  view.selected = "android:usb";
+  view.tick(cx);
+  await drain();
+  assert.ok(commands.length > 0, "shown: the open panel reads the device");
+  commands.length = 0;
+  store[STORE] = { "panel.sim": "hide" };
+  view.tick(cx);
+  await drain();
+  assert.equal(commands.length, 0, "hidden: no frame");
 });
 
 test("update.check hidden does not poll, and Check still looks", async () => {
