@@ -1,4 +1,4 @@
-import { localService, serviceOn } from "./platform-host.js";
+import { serviceFor, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { killApi } from "./platform-kill.js";
@@ -268,21 +268,24 @@ export const terminalsOf = (row) => (parseOr(row.layout, { cols: [] })?.cols ?? 
 
 // --- Processes and terminals. ---
 
-const timed = (run) => (cmd, args, options = {}) => run(cmd, args, { timeout: CALL_MS, ...options });
-const apiOn = (factory, machine) => (machine ? serviceOn((platform, run) => factory(platform, timed(run)), machine) : Promise.resolve(localService(factory)));
 class Homes {
   constructor() { this.dirs = new Map(); }
   get(machine) { return this.dirs.get(machine); }
-  put(machine, dir) { this.dirs.set(machine, dir); }
+  put(machine, place) { this.dirs.set(machine, place); }
 }
 const homes = new Homes();
-export async function homeOf(machine) {
-  if (!machine) return home();
+const hosted = (factory, machine) => serviceFor(factory, machine, CALL_MS, serviceOn);
+// Home and system, from the service that already probed that computer.
+export async function homePlace(machine) {
+  if (!machine) return { home: home(), platform: null };
   const had = homes.get(machine);
   if (had) return had;
-  const dir = await (await apiOn(systemApi, machine)).userHome();
-  if (dir) homes.put(machine, dir);
-  return dir;
+  const place = await hosted(async (platform, run) => ({ home: await systemApi(platform, run).userHome(), platform }), machine);
+  if (place.home) homes.put(machine, place);
+  return place;
+}
+export async function homeOf(machine) {
+  return (await homePlace(machine)).home;
 }
 const sessionText = async (pid, machine) => {
   const path = paths.join(await homeOf(machine), ".claude", "sessions", `${pid}.json`);
@@ -290,16 +293,16 @@ const sessionText = async (pid, machine) => {
 };
 
 // true, false, or null when the check itself failed (a failed exec is no sighting of anything).
-export const alive = async (pid, machine = null) => { if (!pid) return null; return (await apiOn(processApi, machine)).exists(pid).catch(() => null); };
+export const alive = async (pid, machine = null) => { if (!pid) return null; return (await hosted(processApi, machine)).exists(pid).catch(() => null); };
 
 // The pid still on conversation `session`, matched by start time (a reused pid is not it); throws when it can't tell: never "none" for what it could not see.
-export const runningOn = (session, machine = null) => apiOn(processApi, machine).then(async (api) => api.runningSession(session, await homeOf(machine)));
+export const runningOn = (session, machine = null) => hosted(processApi, machine).then(async (api) => api.runningSession(session, await homeOf(machine)));
 
 // At its own shell's prompt: another shell in front (a script, say) counts as running.
 export const atPrompt = (x) => Boolean(x) && (!x.foreground?.pid || x.foreground.pid === x.pid);
 
 export async function procOf(pid, now = Date.now(), machine = null) {
-  const proc = await (await apiOn(processApi, machine)).identity(pid, now).catch(() => null);
+  const proc = await (await hosted(processApi, machine)).identity(pid, now).catch(() => null);
   return proc ? { ...proc, comm: base(proc.comm) } : null;
 }
 // A pid given to another process since is not it: the start time must match.
@@ -360,7 +363,7 @@ export async function stopIn(terminal, cx, only = null, machine = null) {
     const pid = await front();
     if (pid === 0 || (only && pid !== only && pid != null)) return true;
     if (pid == null) return false;
-    await (await apiOn(killApi, machine)).stop(pid, { force: sig === "-KILL" }).catch(() => null);
+    await (await hosted(killApi, machine)).stop(pid, { force: sig === "-KILL" }).catch(() => null);
     return (await retry(10, async () => { await cx.sleep(300); return (await front()) === 0; })) ? true : null;
   };
   return (await reduceSeries(["-TERM", "-KILL"], async (got, sig) => (got === null ? signal(sig) : got), null)) === true;
@@ -370,7 +373,7 @@ export async function stopIn(terminal, cx, only = null, machine = null) {
 // "out" when nothing of it runs, "unsure" when something it started could not be stopped.
 // The terminal must be at its prompt right before the line goes, and only what that line started is ever stopped.
 export async function comeBack(p, cx, onBack = () => {}, machine = null) {
-  const line = (await apiOn(openApi, machine)).terminalLine(p.cwd || await homeOf(machine), p.wake);
+  const line = (await hosted(openApi, machine)).terminalLine(p.cwd || await homeOf(machine), p.wake);
   const front = async () => {
     const g = await hc(["get", p.terminal, "--json"]).catch(() => null);
     try { const x = JSON.parse(g.stdout); return { x, idle: atPrompt(x) }; } catch { return null; }

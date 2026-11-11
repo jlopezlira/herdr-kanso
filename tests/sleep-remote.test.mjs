@@ -54,9 +54,10 @@ test("an address turns both ways the same on every system", async () => {
     assert.equal(seen.cols[0].panes[0].cwd, "/w");
     assert.equal(seen.from, "light:/w");
     assert.deepEqual(clone(localRow(seen, "light")), row);
-    assert.equal(kansoDir("/Users/jj"), "/Users/jj/.config/herdr-app/data/kanso");
-    assert.equal(kansoDir("/home/jj"), "/home/jj/.config/herdr-app/data/kanso");
-    assert.equal(kansoDir("C:\\Users\\jj"), "C:\\Users\\jj\\AppData\\Roaming\\herdr-app\\data\\kanso");
+    assert.equal(kansoDir("/Users/jj", "macos"), "/Users/jj/.config/herdr-app/data/kanso");
+    assert.equal(kansoDir("/home/jj", "linux"), "/home/jj/.config/herdr-app/data/kanso");
+    assert.equal(kansoDir("C:\\Users\\jj", "windows"), "C:\\Users\\jj\\AppData\\Roaming\\herdr-app\\data\\kanso");
+    assert.equal(kansoDir("C:\\Users\\jj", platform).includes("AppData"), platform === "windows");
   }
 });
 
@@ -73,6 +74,52 @@ test("a remote database sends every statement to that computer, and two reads le
   assert.match(argv, /SELECT 2 AS n/);
   assert.equal(one[0].n, 1);
   assert.equal(two[0].n, 2);
+});
+
+test("a local database and a local worker never call another computer", async (t) => {
+  const dir = await temporary(t);
+  const calls = [];
+  let asked = 0;
+  const host = {
+    exec: hostExec(calls), window: () => ({ platform: "macos" }), home: () => "/Users/local", appHome: () => dir,
+    terminals: () => [{ address: "t1" }], panes: () => [{ pane: "p1", terminal: "t1", tab: "tb1" }], run() {},
+    hc: async () => ({ code: 0, stdout: JSON.stringify({ pid: 1, foreground: { pid: 11, argv: ["claude"], cwd: "/w" }, status: { state: "idle" }, title: "on it" }) }),
+    readTextFile: async () => JSON.stringify({ pid: 11, sessionId: C1 }),
+    serviceOn: () => { asked += 1; throw new Error("serviceOn"); },
+  };
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
+  const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], host);
+  const kdb = new Kdb(join(dir, "kanso"));
+  await kdb.open();
+  await kdb.read("SELECT 1 AS n;");
+  await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true });
+  const cx = { sleep: async () => {}, spawn: (fn) => fn(cx) };
+  await new SleepWork(kdb, () => {}, "win-a").tick(cx, 1_000_000);
+  assert.equal(asked, 0);
+  assert.ok(calls.some((c) => c.c === "sqlite3"));
+  for (const c of calls) {
+    assert.equal(c.on, null, c.c);
+    assert.equal(c.timeout, null, c.c);
+  }
+});
+
+test("the database folder follows the computer's system, not the shape of its home", async () => {
+  const exec = async (c, a = [], o = {}) => {
+    assert.equal(o.on ?? null, "light", c);
+    if (c !== "uname" && c !== "pwsh" && c !== "powershell") assert.equal(o.timeout, 15000, c);
+    if (c === "pwsh" || c === "powershell") return { code: 1, stdout: "", stderr: "" };
+    if (c === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
+    if (c === "sh") return { code: 0, stdout: "C:\\Users\\jj\n", stderr: "" };
+    return { code: 0, stdout: "", stderr: "" };
+  };
+  const { homePlace } = await load("kanso-spaces/sleepwork.js", ["homePlace"], { exec, window: () => ({ platform: "linux" }), home: () => "/Users/local" });
+  const { kansoDir } = await load("kanso-spaces/kdb.js", ["kansoDir"], { window: () => ({ platform: "linux" }) });
+  const place = await homePlace("light");
+  assert.equal(place.platform, "macos");
+  assert.equal(place.home, "C:\\Users\\jj");
+  const dir = kansoDir(place.home, place.platform);
+  assert.equal(dir.includes(".config"), true);
+  assert.equal(dir.includes("AppData"), false);
 });
 
 test("a local database is unchanged: no machine and no timeout", async (t) => {

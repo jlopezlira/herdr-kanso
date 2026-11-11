@@ -17,7 +17,7 @@ import { Store, shownOf } from "./store.js";
 import { Kdb, spaceFor, inPlace, seenRow, restDue, asOfText, kansoDir } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, awayShown, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
-import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway, homeOf } from "./sleepwork.js";
+import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway, homePlace } from "./sleepwork.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
 import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
@@ -484,7 +484,8 @@ export default class Spaces extends View {
     this.remoteStores ??= new Map();
     const had = this.remoteStores.get(machine);
     if (had) return had;
-    const dir = kansoDir(await homeOf(machine));
+    const place = await homePlace(machine);
+    const dir = kansoDir(place.home, place.platform);
     const store = new Store(new Kdb(dir, machine));
     this.remoteStores.set(machine, store);
     return store;

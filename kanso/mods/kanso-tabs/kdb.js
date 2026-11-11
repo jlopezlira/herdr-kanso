@@ -1,11 +1,11 @@
 import { sqliteApi } from "./platform-sqlite.js";
-import { localService, serviceOn } from "./platform-host.js";
+import { serviceFor, serviceOn } from "./platform-host.js";
 import { paths, pathApi, appHomeDir } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Kanso's one database, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
-import { exec, appHome } from "herdr";
+import { appHome } from "herdr";
 import { mapSeries, parseOr } from "./pure.js";
 
 export const DIR = "data/kanso";
@@ -26,9 +26,9 @@ export const pruneSinceSql = (now, { cap, keepMs }) => `DELETE FROM since_events
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 export const projectKey = (w, home = "") => `${w?.machine ?? ""}:${w?.folder || home}`;
 // The other computer's default app home plus data/kanso. A custom HERDR_APP_HOME there is not followed.
-export const kansoDir = (home) => {
-  const platform = /^(?:[A-Za-z]:|\\\\)/.test(String(home ?? "")) ? "windows" : "macos";
-  return pathApi(platform).join(appHomeDir(platform, home), DIR);
+export const kansoDir = (home, platform) => {
+  const api = pathApi(platform === "windows" ? "windows" : "macos");
+  return api.join(appHomeDir(platform, home), DIR);
 };
 
 // What this window calls a terminal ("light/t90") and what that computer stores ("t90").
@@ -165,8 +165,6 @@ class Schemas {
 }
 const schemas = new Schemas();
 
-const timed = (run) => (cmd, args, options = {}) => run(cmd, args, { timeout: CALL_MS, ...options });
-
 export class Kdb {
   constructor(dir = paths.join(appHome(), DIR), machine = null) {
     this.dir = dir;
@@ -181,8 +179,7 @@ export class Kdb {
 
   execute(text) {
     const sql = statements(text);
-    if (!this.machine) return localService(sqliteApi).unchecked(this.file, sql, { json: true });
-    return serviceOn((platform, run) => sqliteApi(platform, timed(run)), this.machine).then((api) => api.unchecked(this.file, sql, { json: true }));
+    return serviceFor(sqliteApi, this.machine, CALL_MS, serviceOn).then((api) => api.unchecked(this.file, sql, { json: true }));
   }
 
   async sql(text) {
@@ -200,15 +197,9 @@ export class Kdb {
   }
 
   async create() {
-    if (this.machine) {
-      const ok = await exec("sqlite3", ["-version"], { on: this.machine, timeout: CALL_MS }).catch(() => null);
-      if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-      await (await serviceOn((platform, run) => fileApi(platform, timed(run)), this.machine)).mkdir(this.dir);
-    } else {
-      const ok = await exec("sqlite3", ["-version"]).catch(() => null);
-      if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-      await localService(fileApi).mkdir(this.dir);
-    }
+    const ok = await serviceFor((_platform, run) => run("sqlite3", ["-version"]), this.machine, CALL_MS, serviceOn).catch(() => null);
+    if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
+    await (await serviceFor(fileApi, this.machine, CALL_MS, serviceOn)).mkdir(this.dir);
     await this.sql([...statements(SCHEMA), ONE_SLEEP]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));

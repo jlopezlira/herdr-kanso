@@ -10,7 +10,7 @@ import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, a
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
-import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway, homeOf } from "./sleepwork.js";
+import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway, homeOf, homePlace } from "./sleepwork.js";
 import { retry, tryOr, tryOrAsync, mapSeries, reduceSeries } from "./pure.js";
 import { skeleton, breathe } from "./ui.js";
 
@@ -94,7 +94,8 @@ export default class Sleep extends View {
     if (!machine) return this.store;
     const had = this.remotes.get(machine);
     if (had) return had;
-    const dir = kansoDir(await homeOf(machine));
+    const place = await homePlace(machine);
+    const dir = kansoDir(place.home, place.platform);
     const store = new Store(new Kdb(dir, machine));
     this.remotes.set(machine, store);
     return store;
