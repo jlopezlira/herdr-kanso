@@ -13,6 +13,10 @@ release.
 
 ## [3.22.4] - 2026-11-10
 
+### Changed
+
+- The recipe keeps complete panel briefs in separate linked parts, with size checks that leave room for future changes and keep it in the gallery.
+
 ### Fixed
 
 - A switch is a short pill beside its label. Off keeps the knob at the left and on at the right, and the space around the pill still takes the click.
