@@ -11,10 +11,6 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.22.5] - 2026-11-10
-
-### Fixed
-
 ## [3.22.6] - 2026-11-10
 
 ### Fixed
