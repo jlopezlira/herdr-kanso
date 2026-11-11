@@ -20,13 +20,13 @@ import { stateMark } from "./marks.js";
 import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThread, readNow, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { isKansoTree, paintLayout, rememberLayout, commitLayout } from "./layout.js";
+import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
 import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk } from "./machines.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
-import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, layout, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
   "spaces.shelvesOpen", "spaces.custom", "spaces.view", "spaces.sections", "spaces.since"];
@@ -69,26 +69,10 @@ const FALLBACK = 60000;
 // A `ps` answers in milliseconds; one still out after this is taken for hung (psRun).
 const PS_GIVE_UP_MS = 10000;
 const SIDEBAR_W = 256;
-// The collapsed rail is as wide as the macOS traffic lights need, so they never spill over the tab bar.
-const collapsedW = () => (window()?.platform === "macos" ? 76 : 44);
 // Dragged narrower, rows keep one line under ONE_LINE_W, and under SNAP_W the sidebar folds to the rail as Hide sidebar does.
 const ONE_LINE_W = 240;
 const SNAP_W = 160;
-const OPEN_MIN = 120; // open, the edge drags this far, past SNAP_W, so a drag can fold it
 const HELD_MS = 400;
-
-function setRail(open, width) {
-  const min = open ? OPEN_MIN : collapsedW();
-  rememberLayout({ rail: { open, min } });
-  const tree = layout();
-  const sidebar = (tree?.children ?? []).find((n) => n.id === "sidebar");
-  if (!sidebar) return;
-  if (tree.resizable !== open || sidebar.min !== min) {
-    const painted = paintLayout(tree);
-    if (isKansoTree(painted)) run("layout.set", { layout: painted });
-  }
-  run("layout.resize", { id: "sidebar", px: width });
-}
 
 // The same avatar colors in every mod that draws them: one strong color per hue.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
@@ -520,6 +504,7 @@ export default class Spaces extends View {
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
     else if (c === "needs-you.next") this.nextNeeds(cx);
+    else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
     else if (c === "list") this.enterList(cx);
     // From a popup, which is gone once clicked: the sidebar asks for the folder.
@@ -752,7 +737,7 @@ export default class Spaces extends View {
       return;
     }
     // Applied on every start, so older layouts are brought in line.
-    if (collapsed) setRail(false, collapsedW());
+    if (collapsed) setRail(false, railWidth());
     else setRail(true, shared("sidebar.width") ?? SIDEBAR_W);
   }
 
@@ -766,8 +751,12 @@ export default class Spaces extends View {
   // Remembers how wide you left it open (`width`, when known), to open it the same width.
   foldRail(width) {
     if (width != null) setShared("sidebar.width", Math.round(width));
-    setShared("sidebar.collapsed", true);
-    setRail(false, collapsedW());
+    foldSidebar();
+  }
+
+  toggleRail() {
+    if (shared("sidebar.collapsed") === true) this.openRail();
+    else this.foldRail(this.width >= SNAP_W ? this.width : null);
   }
 
   // Herdr sizes the sidebar as its edge is dragged. Only a drag reaches OPEN_MIN to SNAP_W (a stale tree jumps to the
@@ -2520,7 +2509,6 @@ export default class Spaces extends View {
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click(action)
       .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(17));
-    const toggle = () => (collapsed ? this.openRail() : this.foldRail(this.width >= SNAP_W ? this.width : null));
     const active = sp.find((p) => p.active);
     // Read once per draw: each read copies every record.
     const hidden = new Set(Array.isArray(shared("kanso.hidden")) ? shared("kanso.hidden") : []);
@@ -2543,7 +2531,7 @@ export default class Spaces extends View {
     const plus = view === "spaces"
       ? quiet("space-new", "plus", "Add project", () => this.addProject())
       : quiet("space-new", "plus", "New conversation", () => this.newConversationMenu());
-    const hide = quiet("sidebar-toggle", "sidebar", collapsed ? "Show sidebar" : "Hide sidebar", toggle);
+    const hide = quiet("sidebar-toggle", "sidebar", collapsed ? "Show sidebar" : "Hide sidebar", () => this.toggleRail());
     const search = quiet("search", "search", "Search", () => run("mod.open", { name: "picker" }));
     // Collapsed, Herdr's mark sits here; open, kanso-chrome draws it in the top bar.
     const brand = image("frame/welcome/herdr.png").size(20).rounded(6).flex_none();

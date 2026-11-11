@@ -11,16 +11,22 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.22.4] - 2026-11-10
-
-### Changed
-
-- The recipe keeps complete panel briefs in separate linked parts, with size checks that leave room for future changes and keep it in the gallery.
+## [3.22.5] - 2026-11-10
 
 ### Fixed
 
 - A switch is a short pill beside its label. Off keeps the knob at the left and on at the right, and the space around the pill still takes the click.
 - A machine that is off, unreachable, or needs a login keeps its name readable, and turn on, Retry, or copy stays on that row. Turn off and a new space still appear only while the pointer or the keyboard is on a connected machine.
+
+## [3.22.4] - 2026-11-10
+
+### Fixed
+
+- ⌘B hides the sidebar to its rail, as Hide sidebar does, instead of removing it. The tab bar no longer slides under the window buttons, and ⌘J and the sidebar's keys keep working. A sidebar hidden from the command palette comes back as the rail.
+
+### Changed
+
+- The recipe keeps complete panel briefs in separate linked parts, with size checks that leave room for future changes and keep it in the gallery.
 
 ## [3.22.3] - 2026-11-10
 
