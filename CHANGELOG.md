@@ -12,6 +12,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.30.1] - 2026-11-11
+
+### Changed
+
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
+
 ## [3.30.0] - 2026-11-11
 
 ### Added
@@ -20,7 +26,6 @@ release.
 
 ### Changed
 
-- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
 - The status bar names the agent that is waiting and what it asks. When more wait, it shows how many more. A click goes to that agent. An unreachable computer says so, and a click retries it. When memory is low it says how much is free, and a click opens Memory.
 - Spend opens on today. Month, 30 days, year and all time stay beside it, and the period you pick is the one you see next time.
 - Removing a project, closing an agent or a terminal, taking a key that is already used, and forgetting a slept tab all ask for a second press, and that ask lasts four seconds.
