@@ -18,6 +18,10 @@ release.
 
 - Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
 
+### Changed
+
+- The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. A second press still confirms a write. The line that explained how often it rereads is gone.
+
 ## [3.30.0] - 2026-11-11
 
 ### Added

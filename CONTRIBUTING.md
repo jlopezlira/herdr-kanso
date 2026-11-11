@@ -15,7 +15,7 @@ From a clone, with Node 22.15 or newer, Git, Bash and sqlite3:
 
 Pull requests target `develop`. A change to what kansō installs adds its entries to the next version's section in [CHANGELOG.md](CHANGELOG.md), and raises `kanso/mods/kanso-chrome/version.json` only when its category needs a bigger bump than that section already has. What it installs is `kanso/mods`, `kanso/themes`, `kanso/layouts`, `kanso/keys.json` and `kanso/keys.windows.json`. Docs do not bump the version.
 
-A release that lists Breaking or Removed changes is a major version, one that lists Added or Deprecated is a minor version, anything else is a patch. `npm run check:version` checks this, a push to `develop` publishes a beta, the Release candidate workflow publishes a release candidate, and merging `develop` into `main` releases the version in `version.json`. Technical debt stays under `## [Unreleased]` and goes out with the next release.
+A release that lists Breaking or Removed changes is a major version, one that lists Added or Deprecated is a minor version, anything else is a patch. `npm run check:version` checks this, a push to `develop` publishes a beta once CI passes on all three platforms, the Release candidate workflow publishes a release candidate, and merging `develop` into `main` releases the version in `version.json`. Technical debt stays under `## [Unreleased]` and goes out with the next release.
 
 ## Shared files
 

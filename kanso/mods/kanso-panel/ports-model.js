@@ -1,6 +1,6 @@
 // Ports' history, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // No host calls here, so the tests load it as is.
-import { parseOr, clock } from "./pure.js";
+import { parseOr, clock, plural } from "./pure.js";
 export { clock };
 
 /** ports.json older than this means the guard stopped. */
@@ -11,8 +11,6 @@ const DAY = 24 * HOUR;
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const pad = (n) => String(n).padStart(2, "0");
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
 /** Takes MB. */
 export function size(mb) {
   const n = num(mb);
