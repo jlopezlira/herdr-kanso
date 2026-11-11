@@ -24,12 +24,13 @@ import { sleepingNow, asleepGroups, withAway, nameOf, seenNow, conversationOfThr
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
-import { tryOrAsync } from "./pure.js";
+import { afterMount } from "./pure.js";
+import { commandLoop, MachineRead } from "./sidebar.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed } from "./ui.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { syncIcon, peerOn, withPeer } from "./sync.js";
 import { readSync, saveSync } from "./sync-row.js";
-import { createAwake } from "./awake.js";
+import { createAwake, keepAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
@@ -74,6 +75,8 @@ const base = (path) => paths.basename(path);
 const FALLBACK = 60000;
 // A `ps` answers in milliseconds; one still out after this is taken for hung (psRun).
 const PS_GIVE_UP_MS = 10000;
+// Under the 30 s machine look, so a hung list is free before the next one.
+const MACHINE_READ_MS = 20_000;
 const SIDEBAR_W = 256;
 // Dragged narrower, rows keep one line under ONE_LINE_W, and under SNAP_W the sidebar folds to the rail as Hide sidebar does.
 const ONE_LINE_W = 240;
@@ -189,13 +192,12 @@ export default class Spaces extends View {
     this.panelReady = false;
     this.sinceLeft = new SinceLeft(this.leftNavStore().kdb);
     this.prSeenAt = shared("kanso.pr.seen")?.at ?? 0;
-    // Sleeps are this sidebar's work (sleepwork.js): taken up now (what a restart cut short goes on), on the dialog's
-    // kick and with the 30 s look; the heartbeat keeps a long step's row this window's.
+    // Sleeps are this sidebar's work (sleepwork.js): taken up on the next timer turn (what a restart cut short goes on),
+    // on the dialog's kick and with the 30 s look; the heartbeat keeps a long step's row this window's.
     this.sleepWork = new SleepWork(this.leftNavStore().kdb, (row) => {
       if (row?.state === "stuck") notify({ title: `${row.name} could not sleep`, body: `${row.why}. Retry or undo it from Asleep.`, level: "error" });
       this.loadAsleep().catch(() => {});
     }, null, () => awayShown(shared("kanso.hidden")));
-    this.pollSleepWork(cx);
     cx.timer.every(5000, () => { if (this.sleepWork.held.size) this.sleepWork.beat().catch(() => {}); });
     this.applyPrefs();
     cx.spawn(async (cx) => {
@@ -218,7 +220,8 @@ export default class Spaces extends View {
     this.foldH = {};
     this.migrate();
     this.awake = createAwake({ now: () => Date.now(), run: (call) => exec(call.command, call.args, { on: call.on, timeout: call.timeout }) });
-    this.refreshMachines(cx);
+    this.machineRead = new MachineRead();
+    afterMount(cx, (cx) => { this.pollSleepWork(cx); this.refreshMachines(cx); });
     cx.spawn(async (cx) => {
       const rev = this.parkRev ?? 0;
       try {
@@ -250,13 +253,12 @@ export default class Spaces extends View {
     // A sleep or wake that stopped half way shows again once old; another window's changes arrive.
     cx.timer.every(30000, (cx) => { this.loadAsleep(false).catch(() => {}); this.pollSleepWork(cx); });
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        this.command(String(next.c).replace(/^kanso-spaces\./, ""), cx);
-      }
-    });
+    cx.spawn((cx) => commandLoop(
+      () => nextCommand(),
+      () => cx.notify(),
+      (command) => this.command(String(command).replace(/^kanso-spaces\./, ""), cx),
+      cx.timer,
+    ));
   }
 
   leftNavStore() {
@@ -1180,16 +1182,12 @@ export default class Spaces extends View {
     }
   }
 
-  // One look at a time: a herdr-core that hangs must not stack them up.
+  // One look at a time. A read that never settles is given up, and the next look runs.
   refreshMachines(cx, repeat = false) {
-    if (this.machinesBusy || repeat && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
-    this.machinesBusy = true;
-    cx.spawn(async (cx) => {
-      try { await this.readMachines(); } catch { /* the last list stands */ }
-      finally { this.machinesBusy = false; }
-      this.holdAwake(cx);
-      cx.notify();
-    });
+    this.machineRead ??= new MachineRead();
+    if (repeat && !this.machineRead.busy && ![...(this.machines ?? []), ...(this.parked ?? []), ...machines()].some((row) => row.name)) return;
+    const job = this.machineRead.start(cx.timer, MACHINE_READ_MS, () => this.readMachines());
+    if (job) cx.spawn(async (cx) => { await job; this.holdAwake(cx); cx.notify(); });
   }
 
   // The list is read every two minutes behind; the hold still renews on time.
@@ -1199,8 +1197,7 @@ export default class Spaces extends View {
     const token = (this.awakeToken ?? 0) + 1;
     this.awakeToken = token;
     cx.spawn(async (cx) => {
-      await this.awake.sync(rows);
-      const wait = this.awake.nextWait();
+      const wait = await keepAwake(this.awake, rows, cx.timer);
       if (wait == null || this.awakeToken !== token) return;
       cx.timer.after(wait, (cx) => { if (this.awakeToken === token) this.holdAwake(cx); });
     });

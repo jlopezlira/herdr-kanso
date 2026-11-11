@@ -15,7 +15,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - **Top strip**, 48 tall: the macOS traffic lights (at `[12, 16]`) and,
     at its right end (14 in), Herdr's mark: its icon
     (`frame/welcome/herdr.png`, 20, radius 6) and "Herdr" (13, semibold,
-    `foreground`), so you know what you're in. It drags the window.
+    `foreground`). It drags the window.
     Collapsed, the strip is empty and the mark sits lower, over the rail's
     buttons.
   - **Spaces** (`kanso-spaces`), filling the middle.
@@ -221,8 +221,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   - Done: the circle closed, in `done`.
   - Idle: a thin even ring in `idle` at 70%, on sidebar rows (and in the
     status bar when nothing works); nothing on the tab or header.
-  - The 7px corner dots on the strip's edge tabs stay dots: a badge, too
-    small for a mark.
+  - The 7px corner dots on the strip's edge tabs stay dots: a badge.
 - **Motion**, native, and never stopped behind other windows (a still ring
   there reads as a stalled agent; what the window saves behind others is
   work: Git, machines, processes less often). The view switch's
@@ -263,13 +262,13 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `hc machine ls` shows it connected. If the save fails after the remove,
     or add keeps failing, it stays with Retry; the hint is the state's
     tooltip. This computer has no power. Alone, no header. On keeps it awake
-    and renews that hold; a closed lid still sleeps, and an asleep machine
-    is not woken. Connected, a remote row has Sync (`sync-row.js`): `text`
-    and always shown when on, `yellow` when it cannot run, `dim` on hover
-    when off; the tooltip has the words. A click saves
-    `data/kanso-sync/config.json` and bumps `kanso.sync.kick`, so Spend
-    exchanges at once.
-    `hc machine ls`: 30 s in front, 2 min behind.
+    and renews that hold after a missed answer; a closed lid still sleeps,
+    and an asleep machine is not woken. Connected, a remote row has Sync
+    (`sync-row.js`): `text` and always shown when on, `yellow` when it cannot
+    run, `dim` on hover when off; the tooltip has the words. A click saves
+    `data/kanso-sync/config.json` and bumps
+    `kanso.sync.kick`, so Spend exchanges at once.
+    `hc machine ls`: 30 s in front, 2 min behind, and a hung one is given up.
   - Click an agent row to focus its pane. Pinned agents come first (the
     `kanso.pin` label; drag them, or click the pin). The rest follow the
     order button (kanso.db `spaces.order`): last update, needs you, kind,

@@ -32,6 +32,7 @@ release.
 
 ### Fixed
 
+- A computer that never answers no longer freezes the machine list, the sidebar keys, or keeping that computer awake. The first look cannot hold up the sidebar's first draw.
 - The pull request panel stays on this branch. Reviews waiting on you stay on the "N to review" pill.
 - Merge is offered only when the pull request is ready to merge. Failing checks are shown without a Merge button.
 - The pane header does not call a pull request ready before it knows you can merge it.
