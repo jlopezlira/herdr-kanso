@@ -134,6 +134,8 @@ test("Memory starts the guard detached for an action and reads its files again",
   const drain = async () => { while (pending.length) await pending.shift(); };
   const view = new Memory();
   view.init({}, cx);
+  assert.deepEqual(timers.map(([ms]) => ms), [0], "nothing is read in init's own turn");
+  timers.shift()[1](cx);
   await drain();
   assert.equal(view.now.state, "ok");
   assert.equal(calls.length, 0, "reading runs no process");

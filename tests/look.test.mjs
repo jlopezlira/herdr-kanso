@@ -119,8 +119,9 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
     },
   };
   const { Look } = await load("kanso-panel/look.js", ["Look"], host);
+  const { Kdb } = await load("kanso-panel/kdb.js", ["Kdb"], host);
   const { cx, drain } = context();
-  const look = new Look();
+  const look = new Look(new Kdb());
   look.init({ ...cx, timer: { every() {}, after() {} }, focus_handle: () => ({}) }, {});
   await drain();
   return { look, cx, drain, calls, say, store, world };

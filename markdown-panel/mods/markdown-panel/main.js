@@ -8,6 +8,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
 import { MarkdownDoc, tildePath } from "./doc.js";
+import { afterMount } from "./pure.js";
 
 const ICONS = "mods/markdown-panel/icons";
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
@@ -64,8 +65,7 @@ export default class MarkdownPanel extends View {
     this.watchOpens(cx, OPEN_DIR, false);
     this.watchOpens(cx, REVIEW_DIR, true);
     this.watchReviews(cx);
-    this.list(cx);
-    this.findRecent(focused()?.terminal ?? null, cx);
+    afterMount(cx, (cx) => { this.list(cx); this.findRecent(focused()?.terminal ?? null, cx); });
   }
 
   findRecent(terminal, cx) {

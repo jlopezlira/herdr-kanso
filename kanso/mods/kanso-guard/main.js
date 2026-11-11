@@ -4,7 +4,7 @@ import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, appHome, theme, nextCommand, readTextFile, layout } from "herdr";
 import { G, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { memorySpec, memoryText } from "./memory-card.js";
 import { RANGES, size, span, clock, parseNow, agentsMB, agentMeta, limitsNote, sparkFor, digestHistory, groupAgents, freedEstimate, parseBatch, staleAgents, idleWords } from "./model.js";
 
@@ -61,7 +61,7 @@ export default class Memory extends View {
     this.timers = [];
     this.ticker = null;
 
-    if (!hiddenInLayout()) this.wake(cx);
+    if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
     this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
