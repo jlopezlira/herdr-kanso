@@ -104,16 +104,18 @@ export class ThreadLocator {
 // `pid` ties the reading to the process it came from, so a program started later in the same terminal is never taken for it.
 async function findThread({ address, app }, known, home, got, locator) {
   const pid = got?.foreground?.pid;
+  const checked = { at: Date.now(), status: got?.status, turn: got?.turn };
+  if (pid && known?.pid === pid && known.checked?.status === checked.status && known.checked?.turn === checked.turn && checked.at - (known.checked?.at ?? -Infinity) < 300000) return known;
   const kind = app === "codex" || /codex/.test(got?.foreground?.argv?.[0] ?? "") ? "codex" : "claude";
   const where = await locator.locate({ address, pid, kind, home }, known);
   if (!where) return null;
   const size = Number((await exec("wc", ["-c", where.file])).stdout.trim().split(/\s+/)[0]);
   if (!size) return null;
-  if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return known;
+  if (known?.file === where.file && known.size === size && known.name === where.name && known.pid === pid) return { ...known, checked };
   const r = await exec("sh", ["-c", READ, "sh", where.file]);
   if (r.code !== 0 && !r.stdout) return null;
   const [titleLine, head, recent, tail] = r.stdout.split(`\n${RS}\n`);
-  return { kind, file: where.file, name: where.name, size, pid, ...readThread(kind, titleLine, head, recent, tail, where.name) };
+  return { kind, file: where.file, name: where.name, size, pid, checked, ...readThread(kind, titleLine, head, recent, tail, where.name) };
 }
 
 // Read up to four terminals concurrently.

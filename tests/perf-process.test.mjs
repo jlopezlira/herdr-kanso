@@ -24,18 +24,19 @@ test("terminal identity labels use created_ms without another process read", asy
   assert.deepEqual(calls, [["label", "t1", "kanso.shown=Name", "kanso.id=t1-123"], ["label", "t2"]]);
 });
 
-test("a known pid reuses its location and an unchanged transcript is not read again", async () => {
+test("transcripts check size on status or turn changes and after five minutes", async () => {
   const calls = [];
-  let size = 123;
+  let size = 123, now = 0;
   const file = "/session folder/rollout-01234567-1234-1234-1234-0123456789ab.jsonl";
   const { findThreads } = await load("kanso-spaces/threads.js", ["findThreads"], {
+    Date: { now: () => now },
     home: () => "/home/me",
     exec: async (command, args) => {
       calls.push([command, clone(args)]);
       return { code: 0, stdout: command === "wc" ? `${size} ${file}\n` : args.length === 5 ? `codex\t${file}\t{}\n` : "" };
     },
   });
-  const list = [{ address: "t1", app: "codex" }], terms = [{ address: "t1", foreground: { pid: 101 } }];
+  const list = [{ address: "t1", app: "codex" }], terms = [{ address: "t1", status: "idle", turn: 1, foreground: { pid: 101 } }];
   const found = await findThreads(list, {}, terms);
   assert.deepEqual(calls.map(([command]) => command), ["sh", "wc", "sh"]);
   assert.deepEqual(calls[1], ["wc", ["-c", file]]);
@@ -43,13 +44,30 @@ test("a known pid reuses its location and an unchanged transcript is not read ag
   calls.length = 0;
   const again = await findThreads(list, found, terms);
   assert.equal(again.t1, found.t1);
+  assert.deepEqual(calls, []);
+  const working = [{ ...terms[0], status: "working" }];
+  now = 1000;
+  const checked = await findThreads(list, found, working);
   assert.deepEqual(calls.map(([command]) => command), ["wc"]);
-  size = 124;
   calls.length = 0;
-  const grown = await findThreads(list, found, terms);
+  await findThreads(list, checked, working);
+  assert.deepEqual(calls, [], "an unchanged size still records the latest status");
+  size = 124;
+  const nextTurn = [{ ...working[0], turn: 2 }];
+  const grown = await findThreads(list, checked, nextTurn);
   assert.equal(grown.t1.size, 124);
   assert.deepEqual(calls.map(([command]) => command), ["wc", "sh"]);
   calls.length = 0;
+  now = 300999;
+  await findThreads(list, grown, nextTurn);
+  assert.deepEqual(calls, []);
+  now = 301000;
+  const fallback = await findThreads(list, grown, nextTurn);
+  assert.deepEqual(calls.map(([command]) => command), ["wc"]);
+  calls.length = 0;
+  now += 1;
+  await findThreads(list, fallback, nextTurn);
+  assert.deepEqual(calls, [], "the fallback waits five minutes from the last size check");
   const replaced = await findThreads(list, found, [{ address: "t1", foreground: { pid: 202 } }]);
   assert.equal(replaced.t1.pid, 202);
   assert.deepEqual(calls.map(([command]) => command), ["sh", "wc", "sh"]);
