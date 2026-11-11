@@ -12,32 +12,40 @@ function within(promise, ms = SETTLE_LIMIT_MS) {
   return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("never settled")), ms); })]).finally(() => clearTimeout(timer));
 }
 
+// lose() makes the next command the one Herdr loses; it resolves once that command was asked for.
 async function views(t) {
-  const dir = await temporary(t), calls = [], host = { hang: false };
+  const dir = await temporary(t), calls = [], host = { lost: null };
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], {
     appHome: () => dir,
-    exec: (command, args) => { calls.push([command, args]); return host.hang ? never() : exec(command, args); },
+    exec: (command, args) => {
+      calls.push([command, args]);
+      if (!host.lost) return exec(command, args);
+      host.lost();
+      host.lost = null;
+      return never();
+    },
   });
-  return { Kdb, calls, host };
+  return { Kdb, calls, lose: () => new Promise((resolve) => { host.lost = resolve; }) };
 }
 
 test("a view gone while its call runs never holds up another view's calls", async (t) => {
-  const { Kdb, host } = await views(t);
+  const { Kdb, lose } = await views(t);
   const gone = new Kdb();
   await gone.open();
-  host.hang = true;
-  gone.read("SELECT 1;");
-  await turn();
-  host.hang = false;
+  const lost = lose();
+  gone.read("SELECT 1;").catch(() => {});
+  await lost;
   assert.deepEqual(clone(await within(new Kdb().read("SELECT 2 AS two;"))), [{ two: 2 }]);
 });
 
 test("a flush that never ran holds up only its own view", async (t) => {
   const { Kdb } = await views(t);
   const gone = new Kdb();
+  await gone.open();
   gone.flush = () => {};
-  gone.read("SELECT 1;");
+  gone.read("SELECT 1;").catch(() => {});
   await turn();
+  assert.equal(gone.queue.length, 1);
   assert.deepEqual(clone(await within(new Kdb().read("SELECT 2 AS two;"))), [{ two: 2 }]);
 });
 
@@ -50,13 +58,12 @@ test("the schema is opened once per file, whichever view opens it first", async 
 });
 
 test("an abandoned call no longer holds up its own view's next calls", async (t) => {
-  const { Kdb, host } = await views(t);
+  const { Kdb, lose } = await views(t);
   const db = new Kdb();
   await db.open();
-  host.hang = true;
-  db.read("SELECT 1;");
-  await turn();
-  host.hang = false;
+  const lost = lose();
+  db.read("SELECT 1;").catch(() => {});
+  await lost;
   db.abandon();
   assert.deepEqual(clone(await within(db.read("SELECT 2 AS two;"))), [{ two: 2 }]);
 });

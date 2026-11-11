@@ -56,6 +56,17 @@ export function needsLogin(error) {
   return /password|passphrase|host key|needs a login/i.test(String(error.message ?? ""));
 }
 
+// `hc machine ls --json`. A failed read is an empty list, so a saved off row stays off.
+export function listedMachines(result) {
+  if (!result || result.code !== 0) return [];
+  try {
+    const rows = JSON.parse(String(result.stdout ?? "")).machines;
+    return (Array.isArray(rows) ? rows : []).filter((row) => row && !row.temporary);
+  } catch {
+    return [];
+  }
+}
+
 export function heldNames(stored = []) {
   return new Set((stored ?? []).map((row) => row?.name).filter(Boolean));
 }
@@ -104,7 +115,7 @@ export function machineTip(title, phase, hint = "") {
   return word ? `${title}: ${note || word}` : title;
 }
 
-const HOT = ["machine", "machine-power", "machine-retry", "machine-login", "machine-add"];
+const HOT = ["machine", "machine-power", "machine-retry", "machine-login", "machine-add", "machine-sync"];
 
 export function machineHot(name, hover, kbd, navKey) {
   const key = name ?? "local";
@@ -113,14 +124,15 @@ export function machineHot(name, hover, kbd, navKey) {
   return HOT.some((prefix) => navKey === `${prefix}:${key}`);
 }
 
-// Parked rows keep one action. A connected row shows turn off and + only while hot.
+// Parked rows keep one action. A connected row shows turn off and + only while hot; a remote one keeps Sync while it is on.
 const PARKED_ACTION = { unavailable: ["retry"], off: ["power"], login: ["copy"] };
 
-export function machineVisible(phase, hot) {
+export function machineVisible(phase, hot, remote = false, syncing = false) {
   const parked = PARKED_ACTION[phase];
   if (parked) return [...parked];
-  if (phase === "connected" && hot) return ["power", "plus"];
-  return [];
+  if (phase !== "connected") return [];
+  const sync = remote && (hot || syncing) ? ["sync"] : [];
+  return hot ? ["power", "plus", ...sync] : sync;
 }
 
 export function machineInk(phase) {

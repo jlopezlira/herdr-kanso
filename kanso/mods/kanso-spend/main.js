@@ -1,15 +1,18 @@
-import { localService } from "./platform-host.js";
+import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
-import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout } from "herdr";
+import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared } from "herdr";
 import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
+import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
+import { powerOf } from "./sync-power.js";
+import { Kdb } from "./kdb.js";
+import { EXCHANGE_MS, SYNC_KICK, configFrom, exchangeAll, holdsOf, identityFrom, periodKeyOf, probeApi, rowFromCosts, rowsFrom, rowsText, statusFrom, statusText, syncDir, syncOn } from "./sync.js";
 
 const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
@@ -74,6 +77,13 @@ function formatTime(iso) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function metricLine(c, name, tokensText, value, { color = c.text, tip = "", medium = false } = {}) {
+  return h_flex().w_full().items_end().gap(G.md)
+    .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tip)).child(name))
+    .child(div().text_size(11).text_color(c.dim).child(tokensText))
+    .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(value));
+}
+
 export default class TokenSpend extends View {
   init(_props, cx) {
     this.closed = false;
@@ -101,6 +111,10 @@ export default class TokenSpend extends View {
     this.settingsNote = null;
     this.openMenu = null;
     this.menuOptions = null;
+    this.syncHolds = [];
+    this.syncStored = [];
+    this.db = new Kdb();
+    this.syncKick = shared(SYNC_KICK);
 
     this.ticker = null;
     this.awake = false;
@@ -137,6 +151,7 @@ export default class TokenSpend extends View {
         }
         const every = this.costs?.live?.length ? LIVE_REFRESH_MS : REFRESH_MS;
         if (Date.now() - this.lastSnapshotAt >= every) this.run("snapshot", tickCx);
+        this.exchange(tickCx, false);
       });
     }
     if (!this.nodeBinary && !this.runtimeError) {
@@ -151,13 +166,14 @@ export default class TokenSpend extends View {
         }
         this.runtimeTask = null;
         if (this.closed) return;
-        if (this.nodeBinary) this.run("snapshot", runtimeCx);
+        if (this.nodeBinary) { this.run("snapshot", runtimeCx); this.exchange(runtimeCx, true); }
         runtimeCx.notify();
       });
       return;
     }
     if (Date.now() - this.lastSnapshotAt >= REFRESH_MS) this.run("snapshot", cx);
     else if (!this.costs) this.run("prepare", cx);
+    this.exchange(cx, true);
     cx.notify();
   }
 
@@ -271,12 +287,56 @@ export default class TokenSpend extends View {
         });
       }
     }
+    if (this.awake && !this.closed) this.exchange(cx, true);
     cx.notify();
+  }
+
+  exchange(cx, force = false) {
+    if (this.closed || !this.awake || !this.nodeBinary) return;
+    if (this.syncing) { this.syncAgain = true; if (force) this.syncForce = true; return; }
+    this.syncing = true;
+    cx.spawn(async (syncCx) => {
+      try { await this.exchangeOnce(syncCx, force); } catch { /* the next open tries again; saved figures stay */ }
+      this.syncing = false;
+      if (this.syncAgain && this.awake && !this.closed) { const again = this.syncForce; this.syncForce = false; this.syncAgain = false; this.exchange(syncCx, again); }
+    });
+  }
+
+  async exchangeOnce(cx, force = false) {
+    if (!this.awake || this.closed) return;
+    const now = Date.now();
+    if (!force && this.syncOffUntil > now) return;
+    const dir = syncDir(appHome());
+    const config = configFrom(await readTextFile(paths.join(dir, "config.json")).catch(() => null));
+    if (!syncOn(config)) { this.syncOffUntil = now + EXCHANGE_MS; this.syncHolds = []; return; }
+    this.syncOffUntil = 0;
+    const periodKey = periodKeyOf(this.cost);
+    const options = { today: this.options().today, cost: { period: this.cost.period, offset: Number(this.cost.offset) || 0, project: "all", model: "all" } };
+    const self = this.costs?.syncSelf || identityFrom(await readTextFile(paths.join(dir, "identity.json")).catch(() => null), () => "", "").id;
+    const power = await powerOf(this.db, this.syncStored);
+    if (!this.awake || this.closed) return;
+    this.syncStored = power.stored;
+    const out = await exchangeAll((on, payload) => serviceOn(probeApi, on).then((probe) => probe.exchange(payload)), {
+      config, peers: machines(), status: statusFrom(await readTextFile(paths.join(dir, "status.json")).catch(() => null)),
+      rows: rowsFrom(await readTextFile(paths.join(dir, "rows.json")).catch(() => null)),
+      self, own: self ? rowFromCosts(this.costs, self, new Date(now).toISOString(), options) : null,
+      now, periodKey, options, stored: power.stored, live: power.live,
+    });
+    if (!this.awake || this.closed) return;
+    this.syncHolds = holdsOf(out.status, power.stored, power.live);
+    if (!out.ran) return;
+    await localService(fileApi).mkdir(dir);
+    const rowsFile = paths.join(dir, "rows.json");
+    const statusFile = paths.join(dir, "status.json");
+    await writeTextFile(rowsFile, rowsText(out.rows), await readTextFile(rowsFile).catch(() => null));
+    await writeTextFile(statusFile, statusText(out.status), await readTextFile(statusFile).catch(() => null));
+    this.run("prepare", cx);
   }
 
   setCost(patch, cx) {
     this.cost = { ...this.cost, ...patch };
     this.run("prepare", cx);
+    this.exchange(cx, true);
     cx.notify();
   }
 
@@ -362,6 +422,14 @@ export default class TokenSpend extends View {
     cx.notify();
   }
 
+  // A machine just turned on or off in the sidebar: exchange now, outside the render pass.
+  kicked(cx) {
+    const kick = shared(SYNC_KICK);
+    if (kick === this.syncKick) return;
+    this.syncKick = kick;
+    cx.timer.after(0, (kickCx) => this.exchange(kickCx, true));
+  }
+
   render(cx) {
     // A space switch can restore the panel without a command: wake on the next tick, outside the render pass.
     if (!this.awake && !this.closed && !this.waking && !hiddenInLayout()) {
@@ -371,6 +439,7 @@ export default class TokenSpend extends View {
         if (!hiddenInLayout()) this.wake(wakeCx);
       });
     }
+    this.kicked(cx);
     const c = tokens(theme());
     const narrow = (this.width || 960) < 560;
     const top = this.stack[this.stack.length - 1];
@@ -395,7 +464,7 @@ export default class TokenSpend extends View {
   // Only the unfiltered totals are shared, so a filter or a detail view hides it.
   canShare() {
     return this.page === "home" && !this.stack.length && Boolean(this.costs?.hero?.value)
-      && this.cost.project === "all" && this.cost.model === "all";
+      && this.cost.project === "all" && this.cost.model === "all" && !(this.costs.machines?.length > 1);
   }
 
   shareCard() {
@@ -478,6 +547,11 @@ export default class TokenSpend extends View {
         .child(quietLink("spend-retry-inline", "Try again", (cx) => this.run("snapshot", cx), c))))
       .child(this.controls(c, Boolean(top)))
       .child(this.hero(c, data.hero, narrow))
+      .when(!top && (data.machines?.length ?? 0) > 1, (el) => el.child(this.machineSplit(c, data.machines)))
+      .when(!top && (this.syncHolds?.length ?? 0) > 0, (el) => el.child(v_flex().w_full().gap(G.xs).pt(G.sm)
+        .children(this.syncHolds.map((hold) => h_flex().w_full().items_center().gap(G.md)
+          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(hold.id))
+          .child(div().text_size(12).text_color(c.muted).child(hold.text))))))
       .when(!data.hero.empty, (el) => el
         .child(this.chart(c, data.chart))
         .when(!top && Array.isArray(data.live) && data.live.length > 0, (live) => live.child(this.live(c, data.live)))
@@ -609,6 +683,13 @@ export default class TokenSpend extends View {
         .child(div().text_size(10).text_color(c.dim).child(chart.last)));
   }
 
+  machineSplit(c, rows) {
+    const note = rows.length === 1 ? "1 computer" : `${rows.length} computers`;
+    return v_flex().w_full().gap(G.xs)
+      .child(section(c, "Machines", note))
+      .children(rows.map((row) => metricLine(c, row.name, row.tokensText, row.value, { tip: clock(row.updated_at) })));
+  }
+
   list(c, title, count, items, field) {
     const selected = this.cost[field];
     const open = Boolean(this.expanded[field]);
@@ -623,13 +704,9 @@ export default class TokenSpend extends View {
           .focus((style) => style.opacity(0.75))
           .accessibility_label(`${item.name}, ${item.usdText}`)
           .on_click((_event, cx) => this.openDetail(field, item, cx))
-          .child(h_flex().w_full().items_end().gap(G.md)
-            .child(div().flex_1().min_w(0).truncate().text_size(13)
-              .text_color(active || selected === "all" ? c.text : c.muted)
-              .when(active, (name) => name.font_medium())
-              .tooltip(item.detail).child(item.name))
-            .child(div().text_size(11).text_color(c.dim).child(item.tokensText))
-            .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(item.usdText)));
+          .child(metricLine(c, item.name, item.tokensText, item.usdText, {
+            color: active || selected === "all" ? c.text : c.muted, tip: item.detail, medium: active,
+          }));
       }))
       .when(items.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
         .child(quietLink(`ins-${field}-more`, open ? "Show fewer" : `Show ${items.length - LIST_ROWS} more`, (cx) => {

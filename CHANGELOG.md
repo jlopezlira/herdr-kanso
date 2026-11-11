@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.24.0] - 2026-11-10
+
+### Added
+
+- Sync is turned on from another computer's row in the sidebar. Its icon stays in sight while Sync is on, and its tooltip says when it last synced. Spend then adds that computer's token spend to the total and shows each computer's share, once that computer is on this version of kansō. Until then the icon takes the warning tone and Spend says Update kanso there. A computer turned off from the sidebar is not asked. A computer that is asleep or out of reach keeps the last figures it sent. With one computer, Spend looks as it did.
+
 ## [3.23.2] - 2026-11-10
 
 ### Changed

@@ -26,7 +26,9 @@ import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layout.js";
 import { tryOrAsync } from "./pure.js";
 import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton } from "./ui.js";
-import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk } from "./machines.js";
+import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineTitle, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
+import { syncIcon, peerOn, withPeer } from "./sync.js";
+import { readSync, saveSync } from "./sync-row.js";
 import { createAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
@@ -180,6 +182,7 @@ export default class Spaces extends View {
     this.failed = new Set();
     this.powerBusy = new Set();
     this.hints = {};
+    this.sync = { config: {}, status: {} };
     this.hostName = "";
     // The first frame uses localStorage's copy; the database's answer replaces it when it comes.
     this.panel = new Panel(PREFS, this.leftNavStore());
@@ -1048,7 +1051,8 @@ export default class Spaces extends View {
   async readMachines() {
     const result = await hc(["machine", "ls", "--json"]);
     if (result.code !== 0) return;
-    this.machines = (JSON.parse(result.stdout).machines ?? []).filter((row) => !row.temporary);
+    this.machines = listedMachines(result);
+    if (this.machines.length && !this.syncSaving) this.sync = await readSync();
     await this.settleParked();
   }
 
@@ -1869,10 +1873,10 @@ export default class Spaces extends View {
     return [null, ...remote].flatMap((m) => this.machineBlock(m, block));
   }
 
-  machineButton(nav, id, icon, tip, go, t) {
+  machineButton(nav, id, icon, tip, go, t, color = null) {
     const act = (cx) => { cx.stop_propagation?.(); go(cx); };
     const ring = this.navMark(nav, act);
-    return iconButton(id, icon, tip, act, tokens(t))
+    return iconButton(id, icon, tip, act, tokens(t), { color })
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .when(ring, (el) => el.border_1().border_color(t.accent));
   }
@@ -1886,8 +1890,31 @@ export default class Spaces extends View {
       power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", tip[phase] ?? "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
       retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t),
       plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New space", () => run("space.new", { machine: m ?? "" }), t),
+      sync: () => this.syncButton(m, t),
     };
-    return machineVisible(phase, hot).map((name) => button[name]()).filter(Boolean);
+    return machineVisible(phase, hot, Boolean(m), peerOn(this.sync.config, m)).map((name) => button[name]()).filter(Boolean);
+  }
+
+  syncButton(m, t) {
+    const icon = syncIcon({ name: m, ...this.sync, now: Date.now() });
+    const c = tokens(t);
+    const tone = { on: c.text, off: c.dim, cannot: c.yellow }[icon.state];
+    return this.machineButton(`machine-sync:${m}`, `machine-sync-${m}`, "sync", icon.tip, (cx) => this.toggleSync(m, cx), t, tone);
+  }
+
+  // The icon turns at once; a save that fails turns it back and says so.
+  toggleSync(m, cx) {
+    if (this.syncSaving) return;
+    const before = this.sync.config;
+    const on = !peerOn(before, m);
+    this.syncSaving = true;
+    this.sync = { ...this.sync, config: withPeer(before, m, on) };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try { this.sync = { ...this.sync, config: await saveSync(m, on) }; }
+      catch { this.sync = { ...this.sync, config: before }; notify({ title: `Sync ${m} was not changed`, level: "error" }); }
+      finally { this.syncSaving = false; cx.notify(); }
+    });
   }
 
   openMachine(m, phase, folded, cx) {

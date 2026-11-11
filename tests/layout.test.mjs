@@ -263,7 +263,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
   Object.assign(view, {
     git: {}, shown: new Set(["odin/sp1"]), born: {}, custom: {}, order: "updated",
     machines: [{ name: "odin", state: "connected", target: "odin.example" }], folded: new Set(), agentsFolded: new Set(),
-    orderPicker: node,
+    orderPicker: node, sync: { config: {}, status: {} },
   });
   view.hoverMachine = "local";
   view.render();

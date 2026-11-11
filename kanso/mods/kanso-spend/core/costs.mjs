@@ -490,6 +490,8 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     live: liveCosts(rows, live, price, labels),
     hero: {
       value: usdText(total.usd),
+      usd: total.usd,
+      tokens: total.tokens,
       tip: `${usdText(total.usd, true)} at API list price`,
       title: range.period === "all" ? "All time" : range.period === "30d" ? "Last 30 days" : range.label,
       note,

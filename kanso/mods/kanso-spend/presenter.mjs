@@ -12,6 +12,7 @@ import { demoData } from "./core/demo.mjs";
 import { existsSync } from "node:fs";
 import { tryOrAsync } from "./pure.js";
 import { ExitError, exitWith } from "./core/util.mjs";
+import { attachSync } from "./sync-spend.js";
 
 export const PAYLOAD_KIND = "kanso-spend-costs";
 export const PAYLOAD_VERSION = 1;
@@ -123,6 +124,11 @@ function payload(command, options, scan, costs, settings) {
   return `${JSON.stringify({ kind: PAYLOAD_KIND, version: PAYLOAD_VERSION, command, options, scan, costs, settings })}\n`;
 }
 
+async function answer(command, viewOptions, scan, costs, settings, storePath) {
+  const shown = await attachSync(costs, storePath, viewOptions);
+  return { exitCode: 0, stdout: payload(command, viewOptions, scan, shown, settings), stderr: "" };
+}
+
 export async function run(argv, environment = {}) {
   const { command, options } = parseArgs(argv);
   if (options.help || !command) return { exitCode: 0, stdout: "", stderr: `${usage()}\n` };
@@ -141,17 +147,13 @@ export async function run(argv, environment = {}) {
     const scan = { lastScanAt: new Date().toISOString(), partial: false, processed: 0, total: 0, errors: 0, warnings: 0 };
     // No store yet is fine: the settings then list no sources.
     const store = await tryOrAsync(async () => (await loadStore(storePath, { readOnly: true })).store, null);
-    return { exitCode: 0, stdout: payload(command, viewOptions, scan, costs, await settingsFor(store, storePath)), stderr: "" };
+    return answer(command, viewOptions, scan, costs, await settingsFor(store, storePath), storePath);
   }
 
   if (command === "prepare") {
     const loaded = await loadStore(storePath, { readOnly: true });
     const costs = await costsFor(snapshotRows(loaded.store), storePath, home, viewOptions, { store: loaded.store });
-    return {
-      exitCode: 0,
-      stdout: payload(command, viewOptions, scanState(null, loaded.store.lastScanAt), costs, await settingsFor(loaded.store, storePath)),
-      stderr: "",
-    };
+    return answer(command, viewOptions, scanState(null, loaded.store.lastScanAt), costs, await settingsFor(loaded.store, storePath), storePath);
   }
 
   const startedAt = Date.now();
@@ -168,7 +170,7 @@ export async function run(argv, environment = {}) {
     labels,
     store,
   });
-  return { exitCode: 0, stdout: payload(command, viewOptions, scanState(snapshot), costs, await settingsFor(store, storePath)), stderr: "" };
+  return answer(command, viewOptions, scanState(snapshot), costs, await settingsFor(store, storePath), storePath);
 }
 
 async function configureSources(storePath, home, sources) {

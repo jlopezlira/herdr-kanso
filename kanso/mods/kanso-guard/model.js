@@ -1,6 +1,7 @@
 // Memory, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // No host calls here, so the tests load it as is.
-import { parseOr } from "./pure.js";
+import { parseOr, clock } from "./pure.js";
+export { clock };
 
 export const STALE_MS = 3 * 60_000;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -25,13 +26,6 @@ export function span(min) {
   if (n < 60) return `${Math.round(n)} min`;
   if (n < 48 * 60) return `${Math.round(n / 60)} h`;
   return `${Math.round(n / 1440)} d`;
-}
-
-export function clock(ms, now = Date.now()) {
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "";
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  return new Date(now).toDateString() === d.toDateString() ? time : `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`;
 }
 
 export function parseNow(text, now = Date.now()) {
