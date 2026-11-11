@@ -6,7 +6,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, machines, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile } from "herdr";
 import { Store, idle, done, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText } from "./kdb.js";
+import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText, machinesToAsk } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
@@ -128,7 +128,7 @@ export default class Sleep extends View {
   }
 
   async asleepNow(now) {
-    const names = [...new Set(spaces().map((s) => s.machine).filter(Boolean))];
+    const names = machinesToAsk(machines(), spaces());
     const local = await this.store.asleep(true, null, now);
     const remote = await names.reduce(async (acc, machine) => [...(await acc), await this.remotePart(machine, now)], Promise.resolve([]));
     const parts = [{ machine: null, rows: local, quiet: null, asOf: null }, ...remote];

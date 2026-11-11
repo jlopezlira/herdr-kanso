@@ -14,7 +14,7 @@ import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTermin
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace, seenRow, restDue, asOfText, kansoDir } from "./kdb.js";
+import { Kdb, spaceFor, inPlace, seenRow, restDue, machinesToAsk, asOfText, kansoDir } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, awayShown, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway, homePlace } from "./sleepwork.js";
@@ -468,7 +468,7 @@ export default class Spaces extends View {
   }
 
   remoteNames(sp = spaces()) {
-    return [...new Set((sp ?? []).map((s) => s.machine).filter(Boolean))];
+    return machinesToAsk(machines(), sp);
   }
 
   inFront() {

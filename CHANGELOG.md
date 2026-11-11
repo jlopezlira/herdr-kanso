@@ -17,6 +17,10 @@ release.
 
 - Sleeping or waking a tab on another computer asks that computer less often, so a slow connection waits less. What it promises is the same: one owner, no second copy of an agent, and nothing saved when that computer does not answer.
 
+### Fixed
+
+- Asleep tabs on a computer with no space open stay in the list and can be woken.
+
 ## [3.29.0] - 2026-11-11
 
 ### Added

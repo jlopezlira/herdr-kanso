@@ -54,6 +54,12 @@ export function mapSleep(row, machine, fn) {
 export const seenRow = (row, machine) => mapSleep(row, machine, seenAddress);
 export const localRow = (row, machine) => mapSleep(row, machine, localAddress);
 
+// Computers Herdr lists, plus any that still have a space open. The sidebar and the dialog both ask this list.
+export function machinesToAsk(known, spaces) {
+  const names = [...(known ?? []).map((row) => row?.name), ...(spaces ?? []).map((row) => row?.machine)];
+  return [...new Set(names.filter(Boolean))];
+}
+
 // A remote database is read once when its spaces show, on this window's own order, and every minute in front.
 export function restDue({ readAt = null, ordered = false, now = 0, active = false, showing = false } = {}) {
   if (!showing || (!ordered && !active)) return false;

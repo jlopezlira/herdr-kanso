@@ -155,13 +155,13 @@ test("a remote store does not read this computer's old file", async () => {
 });
 
 test("a remote database is read once in front, again after a minute, and on an order, never from behind", async () => {
-  let now = 100000, active = false, kick = 0, reads = 0, layout = "ready", windows = 0;
+  let now = 100000, active = false, kick = 0, reads = 0, layout = "ready";
   let spaces = [];
   const row = { id: "z1", from: ":/w", name: "Notes", saved: 1, space: "Kanso", spaceId: "sp", state: "asleep", cols: [{ panes: [{ terminal: "t1", name: "Ada", resume: "c1", argv: ["claude"] }] }], agents: [] };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     Date: { now: () => now },
     spaces: () => spaces,
-    window: () => { windows += 1; return { platform: "macos", active }; },
+    window: () => ({ platform: "macos", active }),
     shared: (key) => (key === "kanso.sleep.kick" ? kick : 0),
     setShared() {},
     machines: () => [{ name: "light", layout }],
@@ -172,8 +172,7 @@ test("a remote database is read once in front, again after a minute, and on an o
     storeOn: async () => ({ asleep: async () => { reads += 1; return [row]; } }),
   });
   await view.loadAsleep(false);
-  assert.equal(reads, 0);
-  assert.equal(windows, 0, "no remote space asks whether this window is in front");
+  assert.equal(reads, 0, "behind, a computer with no space open is not read");
   spaces = [{ id: "light/sp", machine: "light", name: "Kanso", folder: "/w" }];
   await view.loadAsleep(false);
   assert.equal(reads, 0, "behind another window");
@@ -198,6 +197,119 @@ test("a remote database is read once in front, again after a minute, and on an o
   assert.equal(view.remoteShown[0].quiet, "Unreachable");
   assert.match(view.remoteShown[0].asOf, /^as of /);
   assert.equal(view.remoteShown[0].agents[0].terminal, "light/t1");
+});
+
+test("the computers to ask are the ones Herdr lists, plus any with a space still open", async () => {
+  const { machinesToAsk } = await load("kanso-spaces/kdb.js", ["machinesToAsk"], { window: () => ({ platform: "linux" }) });
+  assert.deepEqual(clone(machinesToAsk([{ name: "light" }, { name: "dark", layout: "unavailable" }, { name: null }, {}, { name: "" }], [])), ["light", "dark"]);
+  assert.deepEqual(clone(machinesToAsk([], [{ machine: "loop" }, { machine: "light" }, { machine: null }])), ["loop", "light"]);
+  assert.deepEqual(clone(machinesToAsk([{ name: "light" }], [{ machine: "light" }, { machine: "loop" }])), ["light", "loop"]);
+  assert.deepEqual(clone(machinesToAsk(null, null)), []);
+});
+
+test("a computer with no space open is read in front, shown, and left until the minute", async () => {
+  let now = 100000, active = true, kick = 0;
+  const reads = { light: 0, dark: 0 };
+  let layouts = [{ name: "light", layout: "ready" }, { name: "dark", layout: "unavailable" }];
+  const row = { id: "z1", from: "light:/w", name: "Notes", saved: 1, space: "Kanso", spaceId: "sp", state: "asleep", cols: [{ panes: [{ terminal: "t1", name: "Ada", resume: "c1", argv: ["claude"] }] }], agents: [] };
+  const bag = { list: null };
+  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+    Date: { now: () => now },
+    spaces: () => [],
+    window: () => ({ platform: "macos", active }),
+    shared: (key) => (key === "kanso.sleep.kick" ? kick : key === "kanso.asleep" ? bag.list : 0),
+    setShared: (key, value) => { if (key === "kanso.asleep") bag.list = value; },
+    machines: () => layouts,
+    home: () => "/Users/jj",
+  });
+  const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
+  const view = Object.assign(new Spaces(), {
+    asleepReads: 0, asleepApplied: 0, leftNavStore: () => ({ asleep: async () => [] }), loadProjects: async () => {}, settleHidden() {},
+    storeOn: async (name) => ({ asleep: async () => { reads[name] += 1; return name === "light" ? [row] : []; } }),
+  });
+  const shown = () => sleepingNow([], [], bag.list, () => "/Users/jj");
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 1, "in front, a computer with nothing open is read");
+  assert.equal(reads.dark, 0, "an unreachable computer is not asked");
+  assert.equal(view.remoteShown.find((item) => item.id === "z1").quiet ?? null, null);
+  assert.equal(shown().rows[0].asleep.id, "z1");
+  assert.equal(shown().rows[0].space ?? null, null);
+  assert.equal(view.closedOn("light", { asleep: shown(), registry: [], spaces: [] }).some((item) => item.list.some((entry) => entry.asleep.id === "z1")), true);
+  now = 130000;
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 1, "inside the minute it is not read again");
+  active = false;
+  now = 190000;
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 1, "behind, the minute does not read it");
+  active = true;
+  await view.loadAsleep(false);
+  assert.equal(reads.light, 2, "in front after a minute it is read again");
+  const kept = reads.light;
+  layouts = [{ name: "light", layout: "unavailable" }, { name: "dark", layout: "unavailable" }];
+  now += 60000;
+  await view.loadAsleep(false);
+  assert.equal(reads.light, kept, "an unreachable computer is not asked");
+  assert.equal(reads.dark, 0);
+  assert.equal(view.remoteShown.find((item) => item.id === "z1").quiet, "Unreachable");
+  assert.match(view.remoteShown.find((item) => item.id === "z1").asOf, /^as of /);
+  assert.equal(shown().rows[0].asleep.quiet, "Unreachable");
+  assert.equal(view.closedOn("light", { asleep: shown(), registry: [], spaces: [] }).some((item) => item.list.some((entry) => entry.asleep.id === "z1")), true);
+});
+
+test("the dialog wakes an asleep tab on a computer with no space open, and an unreachable one stays grey", async () => {
+  let layout = "ready", reads = 0;
+  const claims = [];
+  const row = { id: "z1", from: "light:/w", name: "Notes", saved: 1, space: "Kanso", spaceId: "sp", state: "asleep", cols: [{ panes: [{ terminal: "t1", name: "Ada", resume: "c1", argv: ["claude"] }] }], agents: [] };
+  const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], {
+    Date: { now: () => 1000 },
+    spaces: () => [],
+    machines: () => [{ name: "light", layout }],
+    home: () => "/Users/jj",
+    window: () => ({ platform: "macos" }),
+    shared: () => null,
+    setShared() {},
+    panes: () => [],
+    terminals: () => [],
+    props: () => ({}),
+    theme: () => ({}),
+    hc: async () => ({ code: 1, stdout: "" }),
+    exec: async () => ({ code: 1, stdout: "" }),
+    readTextFile: async () => { throw new Error("no"); },
+    run() {},
+    closeOverlay() {},
+  });
+  const remote = {
+    asleep: async () => { reads += 1; return [row]; },
+    claim: async (id) => { claims.push(id); return null; },
+  };
+  const view = Object.assign(new Sleep(), {
+    store: { asleep: async () => [] },
+    remotes: new Map(),
+    kept: new Map(),
+    keptAt: new Map(),
+    storeFor: async () => remote,
+  });
+  await view.refresh(true);
+  const found = view.asleep.find((item) => item.id === "z1");
+  assert.equal(found.quiet, null);
+  assert.equal(reads, 1);
+  assert.notEqual(view.error, "That tab is no longer asleep.");
+  let task = null;
+  const cx = { notify() {}, spawn(fn) { task = fn(cx); return task; } };
+  view.wake(found, cx);
+  await task;
+  assert.deepEqual(claims, ["z1"]);
+  const after = reads;
+  layout = "unavailable";
+  await view.refresh(true);
+  assert.equal(reads, after, "an unreachable computer is not asked again");
+  const grey = view.asleep.find((item) => item.id === "z1");
+  assert.equal(grey.quiet, "Unreachable");
+  assert.match(grey.asOf, /^as of /);
+  view.wake(grey, cx);
+  assert.equal(view.error, "Unreachable");
+  assert.deepEqual(claims, ["z1"], "Wake waits while the computer is unreachable");
 });
 
 test("rest is due in front after a minute, at once for an order, and never while behind", async () => {
