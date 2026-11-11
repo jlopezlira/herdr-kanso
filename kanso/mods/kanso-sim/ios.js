@@ -4,7 +4,7 @@
 import { exec } from "herdr";
 import { connectSocket } from "./host-io.js";
 import { commandError, SERVE_OFFLINE } from "./sim-register.js";
-import { TAG, frameBytes, lastJson, nextOrientation, parseSimctl } from "./model.js";
+import { TAG, frameBytes, lastJson, nextOrientation, parseSimctl, streamAddress } from "./model.js";
 
 const serveSim = async (args) => {
   const result = await exec("npx", [...SERVE_OFFLINE, ...args], { timeout: 60000 });
@@ -33,9 +33,9 @@ export async function openIos(device, onError, onOk) {
   const running = listed.running ? (listed.streams ?? [listed]).find((stream) => stream.device === device.id) : null;
   const helper = running ?? lastJson(await serveSim(["--detach", "-q", device.id]));
   if (!helper.streamUrl) throw new Error("serve-sim returned no stream");
-  const url = new URL(helper.streamUrl);
+  const { host, port, path } = streamAddress(helper.streamUrl);
   const base = helper.streamUrl.replace(/\/stream\.mjpeg$/, "");
-  return { device, host: url.hostname, port: Number(url.port), path: url.pathname, input: new Input(base, onError, onOk) };
+  return { device, host, port, path, input: new Input(base, onError, onOk) };
 }
 
 export class Input {
