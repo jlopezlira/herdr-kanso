@@ -248,8 +248,6 @@ test("spaces, sleep and arrangements show the shape they are about to draw", asy
   Object.assign(sleep, { handle: {}, space: { name: "App", folder: "/repo" }, busy: null, error: null, at: 0, armed: null, work: [] });
   sleep.view = "list"; sleep.asleep = null;
   assertSkeleton(sleep.render());
-  sleep.view = "progress"; sleep.progress = null;
-  assertSkeleton(sleep.render());
   sleep.view = "sleep"; sleep.sleepers = null; sleep.whole = false; sleep.onlyPane = false;
   assertSkeleton(sleep.render());
   sleep.view = "list"; sleep.asleep = []; sleep.work = [];

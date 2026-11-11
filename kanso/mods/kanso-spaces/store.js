@@ -16,7 +16,7 @@ export function rowsOf(rows) {
     const l = json(r.layout, null);
     if (!Array.isArray(l?.cols)) return [];
     return [{ id: r.id, from: r.project, name: r.name, per: l.per ?? null, cols: l.cols, saved: Number(r.saved) || 0, space: r.space_name ?? null, spaceId: r.space_id ?? null,
-      into: json(r.into_tab, null), agents: r.agents ?? [], state: r.state ?? null, why: r.why ?? null,
+      into: json(r.into_tab, null), agents: r.agents ?? [], state: r.state ?? null, tab: l.tab ?? null, why: r.why ?? null,
       ...(r.pending || r.pending_at ? { pending: Number(r.pending_at) || 0 } : {}), ...(r.waking ? { waking: Number(r.waking_at) || 0 } : {}) }];
   }).toSorted((a, b) => b.saved - a.saved);
 }
@@ -27,7 +27,7 @@ export const idle = (a, now = Date.now()) => done(a) && !busyAt(a.pending, now) 
 
 export function shownOf(a, now = Date.now()) {
   const kept = new Map((a.agents ?? []).map((g) => [g.id, g]));
-  return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, spaceId: a.spaceId ?? null, into: a.into ?? null, busy: !idle(a, now), pending: busyAt(a.pending, now) || !done(a),
+  return { id: a.id, from: a.from, name: a.name, saved: a.saved, space: a.space ?? null, spaceId: a.spaceId ?? null, into: a.into ?? null, state: a.state ?? null, tab: a.tab ?? null, busy: !idle(a, now), pending: busyAt(a.pending, now) || !done(a),
     stuck: a.state === "stuck" ? a.why || "stuck" : null,
     agents: a.cols.flatMap((c) => c.panes).map((p) => {
       const g = p.resume ? kept.get(p.resume) : null;

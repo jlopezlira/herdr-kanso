@@ -27,7 +27,7 @@ export async function load(file, names, host = {}) {
     }
   }
   const source = modScript(sources.get(file), (name) => sources.get(`${dir}${name.slice(2)}`));
-  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, ...host });
+  return vm.runInNewContext(`${source}\n;({ ${names.join(", ")} });`, { View: class {}, join, basename, setShared() {}, ...host });
 }
 
 // Tests that watch real processes need ps; a sandbox that denies it skips them, saying so, rather than failing.

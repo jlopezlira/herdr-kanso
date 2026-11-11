@@ -1,14 +1,8 @@
 # Kanso
 
-More agents. Less babysitting. Kanso puts terminals on a horizontal strip:
-a new agent opens beside the one you're in, at its own width, and the view
-slides to it. Nothing gets squeezed, so you can read what each one is doing.
-Next to them: your repos and worktrees, the diff, the pull request with its CI
-and open threads, an agent started on a PR's feedback in one click, and one key
-(Cmd+Shift+O) to open the folder in Cursor, VS Code, Zed or Neovim, over SSH
-too. Warm stone greys in light and dark; color only when an agent's state
-matters. The name is the Japanese principle of simplicity, removing what is not
-needed.
+More agents. Less babysitting. Terminals open side by side at their own width.
+Repos, worktrees, diffs, PR checks and threads stay close; Cmd+Shift+O opens
+the folder in your editor, over SSH too. Warm greys, color for agent state.
 
 ![Kanso](preview.png)
 
@@ -427,6 +421,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
+- **Since you left**: after 5 minutes away, up to three sidebar lines under
+  the project show blocked agents, errors, PR updates, then finishes. +N
+  expands inline; Enter/click jumps, a target seen or Dismiss clears it.
+  Focus and dismissal persist in kanso.db. Local events expire after 7 days,
+  capped at 500. No events, loading or a failed read: nothing. No extra fetches.
 - **Cmd+J and the digest** (`kanso-strip`): `next-needs-you` picks,
   from `agents()`, the next blocked agent after the focused one (else
   the next done one) and runs `agent.focus`; none posts "No agent needs
@@ -766,10 +765,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
   - `kanso-sleep`: a dialog (520 wide); asleep is a status in `kanso.db`.
-    The sidebar runs it (sleepwork.js): requested, saving, clearing,
-    exiting, left, or stuck (retry, undo); then the tab closes. One owner
-    per row (20 s). A sleeping project or tab is one row until clicked;
-    stuck keeps Retry and Undo. Wake: `claude --resume`.
+    Ordering hides it at once; the sidebar then runs saving, clearing,
+    exiting, left, or stuck (retry, undo). One owner (20 s). One row until
+    clicked, breathing while it goes; stuck keeps Retry and Undo. A wake
+    still going cancels it. Wake: `claude --resume`.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

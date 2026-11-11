@@ -29,7 +29,7 @@ export default class Panel extends View {
     this.project = projectNow();
     this.ready = false;
     this.saved = undefined;
-    const fresh = p.path != null && p.path !== "";
+    const fresh = Boolean(p.url) || p.path != null && p.path !== "";
     // Read this project's state before the panel starts, then write it when it changes.
     cx.spawn(async (cx) => {
       if (!fresh && this.project && typeof this.panel.restoreState === "function") {
