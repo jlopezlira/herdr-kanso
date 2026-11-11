@@ -11,6 +11,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.22.4] - 2026-11-10
+
+### Fixed
+
+- A switch is a short pill beside its label. Off keeps the knob at the left and on at the right, and the space around the pill still takes the click.
+
 ## [3.22.3] - 2026-11-10
 
 ### Fixed

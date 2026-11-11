@@ -1,21 +1,27 @@
-// The switch: the knob's end, in both states, from the element tree.
+// The switch: one size, the knob's end, and the rows that keep it.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
-function chain() {
-  const calls = [];
-  let knob;
-  const node = new Proxy({}, {
+function chain(tag) {
+  const state = { calls: [], kids: [], tag, parent: null };
+  const adopt = (child) => {
+    if (child && typeof child === "object") { child.parent = node; state.kids.push(child); }
+  };
+  const node = new Proxy(state, {
     get(_target, prop) {
-      if (prop === "calls") return calls;
-      if (prop === "knob") return knob;
+      if (prop === "calls" || prop === "kids" || prop === "tag" || prop === "parent") return state[prop];
       if (prop === "when") return (condition, build) => {
-        calls.push(["when", Boolean(condition)]);
+        state.calls.push(["when", Boolean(condition)]);
         return condition ? build(node) : node;
       };
-      if (prop === "child") return (child) => { calls.push(["child"]); knob = child; return node; };
-      return (...args) => { calls.push([String(prop), ...args]); return node; };
+      if (prop === "child") return (child) => { state.calls.push(["child"]); adopt(child); return node; };
+      if (prop === "children") return (list) => { state.calls.push(["children"]); for (const child of list ?? []) adopt(child); return node; };
+      return (...args) => { state.calls.push([String(prop), ...args]); return node; };
+    },
+    set(_target, prop, value) {
+      if (prop === "parent") { state.parent = value; return true; }
+      return false;
     },
   });
   return node;
@@ -23,10 +29,16 @@ function chain() {
 
 const host = () => ({
   div: () => chain(),
-  Toggle: { new: (id) => { const el = chain(); el.calls.push(["new", id]); return el; } },
+  h_flex: () => chain(),
+  v_flex: () => chain(),
+  svg: () => chain(),
+  image: () => chain(),
+  Button: { new: (id) => chain(id) },
+  Input: { new: () => chain() },
+  Toggle: { new: (id) => { const el = chain(id); el.calls.push(["new", id]); return el; } },
 });
 
-const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "H", "G"], host());
+const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "SWITCH", "H", "G"], host());
 
 const arg = (el, name) => {
   const found = el.calls.filter((call) => call[0] === name);
@@ -37,25 +49,36 @@ const arg = (el, name) => {
 const day = { primary: "#3c3934", primaryText: "#f4f1eb", raised: "#faf8f4", input: "#d4cec4", muted: "#7a756c", accent: "#b8405e" };
 const night = { primary: "#d8d4cb", primaryText: "#161615", raised: "#262624", input: "#353430", muted: "#949086", accent: "#da627d" };
 
-test("A switch parks its knob at the left when off and at the right when on", async () => {
-  const { toggleSwitch, H, G } = await kit();
-  const pad = G.xs;
-  const knob = H.compact - pad * 2 - 2;
-  const width = knob * 2 + pad * 2 + 2;
+test("A switch is one compact size, knob at the left when off and at the right when on", async () => {
+  const { toggleSwitch, SWITCH, H, G } = await kit();
+  const pad = (SWITCH.h - SWITCH.knob - 2) / 2;
+  assert.deepEqual(Object.keys(SWITCH).sort(), ["h", "knob", "w"]);
+  assert.equal(SWITCH.w, 28);
+  assert.equal(SWITCH.h, 16);
+  assert.equal(SWITCH.knob, 12);
+  assert.equal(SWITCH.w, SWITCH.knob * 2 + pad * 2 + 2);
   for (const [checked, end] of [[false, "justify_start"], [true, "justify_end"]]) {
-    const track = toggleSwitch("mods", checked, () => {}, night);
-    assert.equal(arg(track, "w"), width);
-    assert.equal(arg(track, "h"), H.compact);
+    const hit = toggleSwitch("mods", checked, () => {}, night);
+    const track = hit.kids[0];
+    const knob = track.kids[0];
+    assert.equal(arg(hit, "h"), H.compact);
+    assert.equal(arg(hit, "px"), G.xs);
+    assert.equal(hit.calls.filter((call) => call[0] === "items_center").length, 1);
+    assert.equal(arg(track, "w"), SWITCH.w);
+    assert.equal(arg(track, "h"), SWITCH.h);
     assert.equal(arg(track, "p"), pad);
     assert.equal(track.calls.filter((call) => call[0] === "items_center").length, 1);
     const justify = track.calls.filter((call) => call[0] === "justify_start" || call[0] === "justify_end").map((call) => call[0]);
     assert.equal(justify.at(-1), end);
-    assert.equal(arg(track.knob, "size"), knob);
-    assert.equal(track.knob.calls.some((call) => call[0] === "flex_none"), true);
-    assert.equal(track.knob.calls.some((call) => call[0] === "ml" || call[0] === "mr"), false);
+    assert.equal(arg(knob, "size"), SWITCH.knob);
+    assert.equal(knob.calls.some((call) => call[0] === "flex_none"), true);
+    assert.equal(knob.calls.some((call) => call[0] === "ml" || call[0] === "mr"), false);
     assert.equal(track.calls.filter((call) => call[0] === "bg").length, 1, "the track has one fill");
-    assert.equal(track.knob.calls.filter((call) => call[0] === "bg").length, 1, "the knob has one fill");
-    assert.equal(track.knob.calls.some((call) => call[0] === "border_1" || call[0] === "shadow_sm"), false);
+    assert.equal(knob.calls.filter((call) => call[0] === "bg").length, 1, "the knob has one fill");
+    assert.equal(knob.calls.some((call) => call[0] === "border_1" || call[0] === "shadow_sm"), false);
+    const cx = { stop_propagation() { cx.stopped = true; } };
+    arg(track, "on_click")({}, cx);
+    assert.equal(cx.stopped, true);
   }
 });
 
@@ -64,13 +87,15 @@ test("A switch fills from the theme when on and marks focus, in light and in dar
   for (const c of [day, night]) {
     for (const checked of [false, true]) {
       let handed;
-      const track = toggleSwitch("auto", checked, (next) => { handed = next; }, c, { label: "Check for updates automatically" });
+      const hit = toggleSwitch("auto", checked, (next) => { handed = next; }, c, { label: "Check for updates automatically" });
+      const track = hit.kids[0];
+      const knob = track.kids[0];
       assert.equal(arg(track, "bg"), checked ? c.primary : c.raised);
       assert.equal(arg(track, "border_color"), checked ? c.primary : c.input);
       assert.equal(track.calls.filter((call) => call[0] === "border_1").length, 1);
       assert.equal(arg(track, "pressed"), checked);
       assert.equal(arg(track, "accessibility_label"), "Check for updates automatically");
-      assert.equal(arg(track.knob, "bg"), checked ? c.primaryText : c.muted);
+      assert.equal(arg(knob, "bg"), checked ? c.primaryText : c.muted);
       const focus = chain();
       arg(track, "focus")(focus);
       assert.deepEqual(focus.calls, [["border_color", c.accent]]);
@@ -78,6 +103,97 @@ test("A switch fills from the theme when on and marks focus, in light and in dar
       arg(track, "on_change")(!checked, cx);
       assert.equal(handed, !checked);
       assert.equal(cx.notified, true);
+      handed = undefined;
+      cx.notified = false;
+      arg(hit, "on_click")({}, cx);
+      assert.equal(handed, !checked);
+      assert.equal(cx.notified, true);
     }
   }
+});
+
+const find = (root, id) => {
+  const seen = new Set();
+  const go = (node) => {
+    if (!node || typeof node !== "object" || seen.has(node)) return null;
+    seen.add(node);
+    if (node.tag === id) return node;
+    for (const kid of node.kids ?? []) {
+      const found = go(kid);
+      if (found) return found;
+    }
+    return null;
+  };
+  return go(root);
+};
+
+const centered = (toggle) => {
+  let row = toggle.parent;
+  while (row && !row.calls.some((call) => call[0] === "w_full")) row = row.parent;
+  assert.equal(row?.calls.some((call) => call[0] === "items_center"), true, toggle.tag);
+};
+
+test("Settings and Spend keep each switch on its row and flip the same way", async () => {
+  const store = {
+    "kanso.panels.off": [],
+    "kanso.panels.all": [{ id: "files", label: "Files" }],
+    "kanso.hidden": [],
+    "kanso.update": { autoCheck: true },
+  };
+  const written = [];
+  const theme = {
+    ...night, text: night.primary, dim: night.muted, border: night.input, canvas: "#161615",
+    subtle: night.raised, popover: "#201f1d", foreground: night.primary, accent: night.accent,
+  };
+  const desk = {
+    ...host(),
+    shared: (key) => store[key],
+    setShared: (key, value) => { written.push([key, value]); },
+    theme: () => theme,
+    keys: () => [],
+    props: () => ({}),
+    appHome: () => "/tmp/app",
+    home: () => "/tmp",
+  };
+  const { Settings } = await load("kanso-settings/main.js", ["Settings"], desk);
+  const settings = new Settings();
+  settings.news = { entries: [], error: null, from: null };
+  settings.installed = "3.22.3";
+  const mods = settings.modsPage(theme, theme);
+  const files = find(mods, "toggle-files");
+  const piece = find(mods, "toggle-sidebar.switch");
+  centered(files);
+  centered(piece);
+  assert.equal(arg(files, "accessibility_label"), "Files");
+  arg(files, "on_change")(false, { notify() {} });
+  assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.panels.off", ["files"]]));
+  written.length = 0;
+  arg(files.parent, "on_click")({}, { notify() {} });
+  assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.panels.off", ["files"]]));
+
+  const news = settings.newsPage(theme, theme);
+  const auto = find(news, "auto-update-check");
+  centered(auto);
+  assert.equal(arg(auto, "accessibility_label"), "Check for updates automatically");
+  arg(auto, "on_change")(false, { notify() {} });
+  assert.equal(JSON.stringify(written.at(-1)), JSON.stringify(["kanso.update", { autoCheck: false }]));
+
+  const { TokenSpend } = await load("kanso-spend/main.js", ["TokenSpend"], desk);
+  const spend = new TokenSpend();
+  spend.settings = { sources: [{ id: "pi", label: "Pi", enabled: true, roots: "~/.pi" }], pricesPath: "/tmp/prices.json" };
+  spend.planInputs = [];
+  spend.running = null;
+  spend.queuedSources = false;
+  spend.settingsNote = null;
+  const sources = spend.settingsView(theme);
+  const source = find(sources, "ins-source-pi");
+  centered(source);
+  assert.equal(arg(source, "accessibility_label"), "Pi: on");
+  const cx = { notify() { cx.notified = true; } };
+  arg(source, "on_change")(false, cx);
+  assert.equal(spend.settings.sources[0].enabled, false);
+  assert.equal(cx.notified, true);
+  spend.settings = { ...spend.settings, sources: spend.settings.sources.map((row) => ({ ...row, enabled: true })) };
+  arg(source.parent, "on_click")({}, cx);
+  assert.equal(spend.settings.sources[0].enabled, false);
 });
