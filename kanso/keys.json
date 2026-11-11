@@ -66,6 +66,7 @@
     "cmd-b": "kanso-spaces.sidebar",
     "ctrl-shift-b": "kanso-spaces.sidebar",
     "ctrl-shift-,": "kanso-tabs.settings",
+    "cmd-shift-s": "kanso-tabs.sim",
     "cmd-shift-/": "mod.open:kanso-help"
   },
   "mod:kanso-spend": {

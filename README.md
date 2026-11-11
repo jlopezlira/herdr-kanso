@@ -30,9 +30,10 @@
 Tell your agent: **`add herdr.dev/layouts/jlopezlira/herdr-kanso--kanso`**
 
 Or, from a clone: `sh ./scripts/local-install.sh`. You need the Herdr app;
-`gh` for the PR and Shipped panels; Node 22.15 or newer for Spend and Memory.
-Memory supports macOS and Windows; Windows uses its built-in PowerShell and
-Task Scheduler without administrator rights. kansō updates itself: a release shows as a row above Settings, and a click installs
+`gh` for the PR and Shipped panels; Node 22.15 or newer for Spend, Memory and
+Simulator. Memory supports macOS and Windows; Windows uses its built-in
+PowerShell and Task Scheduler without administrator rights. kansō updates
+itself: a release shows as a row above Settings, and a click installs
 it. `ctrl-shift-l` goes back to your previous layout.
 On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 `kanso/keys.json`.
@@ -62,6 +63,11 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   agents on the same conversation; the Memory panel shows what it sees.
 - **Spend and Shipped.** What your AI work is worth at list price, and what you
   delivered on GitHub, with share images that carry totals only.
+- **The device beside the agent.** Simulator shows an iOS simulator or an
+  Android emulator: its screen, and touch, typing, Home, Lock, volume and
+  rotate. Cmd+Shift+S opens it, and Ctrl+Shift+M on Windows. On Linux and
+  Windows there is no iOS row.
+  Nothing is downloaded until you press the button that installs serve-sim.
 - **Keys you can see.** Cmd+? draws your keys on a keyboard, layer by modifier,
   and opens the hjkl dōjō, a game for vim's moves with a pixel pet.
 - Two themes, `kanso` and `kanso-day`.
@@ -84,6 +90,7 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
 | Cmd+J | Next agent that needs you |
 | Cmd+Alt+H/J/K/L | Between panes, as vim; Shift moves the pane |
 | Cmd+? | kansō help, and the dōjō |
+| Cmd+Shift+S | Simulator |
 
 Every list answers j, k, gg, G, Enter, / and Esc. The gear at the end of the
 tab bar rebinds kansō's own keys and hides the panels you don't use.
@@ -91,10 +98,12 @@ tab bar rebinds kansō's own keys and hides the panels you don't use.
 ## Privacy
 
 Everything runs on your machine, and reads only the folders you work in:
-`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `docker` and
-Herdr's `hc`. Two things reach the network, only while their panel is shown:
-PR and Shipped through `gh` (Shipped keeps a private gist of your own
-statistics), and Spend's daily fetch of OpenRouter's price list. Threads and
+`git`, `gh`, `find`, `du`, `lsof`, `ps`, `sqlite3`, `node`, `npx`, `docker`,
+`xcrun`, `adb`, `emulator` and Herdr's `hc`. What reaches the network: PR and
+Shipped through `gh`, only while their panel is shown (Shipped keeps a private
+gist of your own statistics); Spend's daily fetch of OpenRouter's price list;
+and, only when you press the button, the install of `serve-sim` for Simulator.
+Simulator otherwise stays on this computer. Threads and
 Images read the agents' conversation files for the pictures
 they printed; Spend reads the session files your AI tools write, for tokens and
 prices. State lives under `~/.config/herdr-app/data/`. Nothing is sent to an

@@ -70,7 +70,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       - After the tabs, a + (16 icon, 28 square) opens the shipped
         `new-menu`.
       - At the right are the panel buttons: Files, Spend, PR,
-        Shipped, Worktrees, Ports, Containers, Memory, Look, as icons only (15, in a 26 square ghost
+        Shipped, Worktrees, Ports, Containers, Memory, Look, Simulator, as icons only (15, in a 26 square ghost
         button), and a wash when their panel is open. While the pointer is
         on one (`on_hover`), its name (12) opens beside the icon: the name's
         box eases from 0 to its width and fades in over 180 ms
@@ -150,10 +150,12 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     - **Side panel**, at the right of the panes: 368 wide (280 to 900),
       hidden by default. It holds whichever panel is open: `kanso-panel`
       told `files`, `pr`, `shipped` or `worktrees` (`props.panel`), `kanso-spend`
-      (Spend), `kanso-guard` (Memory).
+      (Spend), `kanso-guard` (Memory), `kanso-sim` (Simulator).
       The Worktrees brief, in this one's order: [RECIPE-worktrees.md](RECIPE-worktrees.md).
       The Shipped brief, in this one's order: [RECIPE-shipped.md](RECIPE-shipped.md).
       The PR brief, in this one's order: [RECIPE-pr.md](RECIPE-pr.md).
+      Simulator (`kanso-sim`) is the device beside the agent.
+      Its brief: [RECIPE-sim.md](RECIPE-sim.md).
   - **Status bar**, 26 tall: `kanso-status` with `{side: "left"}`, a
     180-wide minimap (`kanso-strip`) exactly in the middle, and
     `kanso-status` with `{side: "right"}`. The minimap is a centred row of

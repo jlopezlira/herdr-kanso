@@ -1,5 +1,6 @@
 import { localService } from "./platform-host.js";
-import { paths } from "./platform-paths.js";
+import { paths, pathApi } from "./platform-paths.js";
+import { powershell } from "./platform-command.js";
 import { fileApi } from "./platform-files.js";
 // Derived from the `tabs` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: segmented tab pill, outlined Files and Changes buttons, no bar background.
@@ -15,6 +16,7 @@ import { Updater } from "./update.js";
 import { tryOr, tryOrAsync } from "./pure.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
+import { DEFAULTED, ENV_NAMES, PROBE_MS, applySimDefault, probeTools, readNamedEnv } from "./sim-register.js";
 
 function storedObject(key) {
   try {
@@ -33,6 +35,7 @@ const PANELS = {
   containers: { mod: "kanso-containers" },
   insights: { mod: "kanso-spend" },
   memory: { mod: "kanso-guard" },
+  sim: { mod: "kanso-sim" },
 };
 
 function customPanels() {
@@ -60,6 +63,7 @@ const BUILTIN = [
   { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
   { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
   { id: "look", label: "Images", icon: `${ICON}eye.svg` },
+  { id: "sim", label: "Simulator", icon: `${ICON}smartphone.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
@@ -121,6 +125,7 @@ export default class Tabs extends View {
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
       this.updater.start(cx);
+      cx.timer.after(0, (cx) => this.defaultSimulator(cx));
       // keys.json: tab-N and panel-N arrive here as commands.
       cx.spawn(async (cx) => {
         for (;;) {
@@ -137,6 +142,30 @@ export default class Tabs extends View {
     }
   }
 
+  defaultSimulator(cx) {
+    if (shared(DEFAULTED)) return;
+    const platform = window()?.platform ?? "macos";
+    const before = JSON.stringify(list(OFF));
+    this.simSettled = false;
+    const finish = (off) => {
+      if (this.simSettled) return;
+      this.simSettled = true;
+      if (off && JSON.stringify(list(OFF)) === before) setShared(OFF, off);
+      if (!shared(DEFAULTED)) setShared(DEFAULTED, true);
+      cx.notify();
+    };
+    cx.timer.after(PROBE_MS, () => finish(null));
+    cx.spawn(async () => {
+      try {
+        const env = await readNamedEnv(platform, exec, ENV_NAMES, powershell);
+        const tools = await probeTools({ platform, home: home(), env, run: exec, api: pathApi(platform) });
+        if (JSON.stringify(list(OFF)) !== before) { finish(null); return; }
+        const next = applySimDefault(JSON.parse(before), tools, false);
+        finish(JSON.stringify(next.off) === before ? null : next.off);
+      } catch { finish(null); }
+    });
+  }
+
   command(name) {
     const tab = /^tab-(\d)$/.exec(name), panel = /^panel-(\d)$/.exec(name);
     // Herdr passes a mod command no arguments, so the path rides in its name: `herdr-app do 'kanso-tabs.look <path>'`.
@@ -146,11 +175,11 @@ export default class Tabs extends View {
     else if (tab) {
       const tabs = spaces().find((s) => s.active)?.tabs ?? [];
       if (Number(tab[1]) <= tabs.length) run("tab.select", { index: Number(tab[1]) });
-    } else if (panel) {
-      const p = panelList().filter((x) => x.on)[Number(panel[1]) - 1];
-      if (!p) return;
+    } else if (name === "sim" || panel) {
+      const id = panel ? panelList().filter((x) => x.on)[Number(panel[1]) - 1]?.id : "sim";
+      if (!id) return;
       const tree = layout(), now = this.openPanel(walkLayout(tree, "panel"), walkLayout(tree, "panel-body"));
-      this.mount(now === p.id ? null : p.id);
+      this.mount(now === id ? null : id);
     }
   }
 

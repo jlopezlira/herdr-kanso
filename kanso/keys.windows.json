@@ -65,6 +65,7 @@
     "ctrl-shift-h": "kanso-spaces.view-threads",
     "ctrl-shift-b": "kanso-spaces.sidebar",
     "ctrl-shift-,": "kanso-tabs.settings",
+    "ctrl-shift-m": "kanso-tabs.sim",
     "ctrl-shift-/": "mod.open:kanso-help",
     "ctrl-shift-?": "mod.open:kanso-help"
   },
