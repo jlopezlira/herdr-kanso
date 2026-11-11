@@ -502,7 +502,7 @@ test("two sleeps move at once: one terminal's slow read does not hold the other"
 });
 
 test("a reload that cannot see the terminals, once the owner's lease has run out, marks the sleep stuck", async (t) => {
-  const { world, mod, id, worker, row } = await setup(t);
+  const { world, mod, kdb, id, worker, row } = await setup(t);
   const a = worker("w-a");
   await a.tick(cx);
   for (const term of Object.keys(world.terms)) delete world.terms[term];
@@ -511,5 +511,6 @@ test("a reload that cannot see the terminals, once the owner's lease has run out
   const r = await row();
   assert.equal(r.state, "stuck");
   assert.equal(r.why, "The sleep stopped");
+  assert.deepEqual(clone(await kdb.read("SELECT kind,target FROM since_events;")), [{ kind: "sleep_failed", target: `sleep:${id}` }]);
   assert.equal(r.id, id);
 });

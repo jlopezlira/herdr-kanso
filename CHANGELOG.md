@@ -17,6 +17,12 @@ release.
 
 - Needs you in the sidebar lists waiting agents across projects, with their name, reason and waiting time. Cmd+J cycles through blocked agents first, then unseen finished turns, oldest first. Click a row or press Enter to focus its pane. Sleeping agents stay out.
 
+## [3.20.0] - 2026-11-10
+
+### Added
+
+- Returning to a project after five minutes shows up to three quiet lines of local changes: agents waiting, errors, pull request updates, finished turns and sleeps. Click or press Enter to jump, expand +N for the rest, or dismiss; seen changes stay dismissed.
+
 ## [3.19.2] - 2026-11-10
 
 ### Fixed

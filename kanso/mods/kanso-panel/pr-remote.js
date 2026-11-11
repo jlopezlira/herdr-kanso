@@ -32,6 +32,15 @@ export function parseRemote(url) {
   return scp ? place(scp[1], scp[2]) : null;
 }
 
+export function parsePullRequest(url) {
+  const clean = publicUrl(url);
+  const parsed = splitScheme(clean);
+  const parts = parsed?.path.split("/") ?? [];
+  if (parts.at(-2) !== "pull" || !/^\d+$/.test(parts.at(-1) ?? "")) return null;
+  const repo = place(parsed.host, parts.slice(0, -2).join("/"));
+  return repo ? { ...repo, number: Number(parts.at(-1)), url: clean } : null;
+}
+
 export function urlHost(url) {
   const raw = String(url ?? "").trim();
   if (!SCHEME.test(raw)) return null;

@@ -1,3 +1,4 @@
+import { sleepEvent } from "./since-left-model.js";
 // Sleep as work the sidebar does, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // This is the source copy; `npm run sync:share` copies it into kanso-sleep, and a test fails when a copy differs.
 // The dialog only writes what is to sleep. The tab or pane leaves when sleep is ordered; this worker does the slow
@@ -480,7 +481,7 @@ export class SleepWork {
     if (stranded.length) {
       await Promise.all(stranded.map(async (r) => {
         const why = r.why || "The sleep stopped";
-        if ((await this.kdb.holdWork(r.id, this.me, now)) && (await this.kdb.setWorkState(r.id, this.me, r.state, "stuck", why, now))) this.changed({ ...r, state: "stuck", why });
+        if ((await this.kdb.holdWork(r.id, this.me, now)) && (await this.kdb.setWorkState(r.id, this.me, r.state, "stuck", why, now, sleepEvent(r.id, "stuck")))) this.changed({ ...r, state: "stuck", why });
       }));
     }
     const skip = new Set(stranded.map((r) => r.id));
@@ -506,7 +507,7 @@ export class SleepWork {
     const agents = agentsOf(row);
     const plan = sleepStep(row, agents);
     if (plan.state) {
-      if (await this.kdb.setWorkState(row.id, this.me, row.state, plan.state, plan.why ?? null, now)) this.changed({ ...row, state: plan.state, why: plan.why ?? null });
+      if (await this.kdb.setWorkState(row.id, this.me, row.state, plan.state, plan.why ?? null, now, sleepEvent(row.id, plan.state))) this.changed({ ...row, state: plan.state, why: plan.why ?? null });
       return;
     }
     if (plan.close) return this.close(row);
@@ -550,7 +551,7 @@ export class SleepWork {
     if (plan.closeTab) run("tab.close", { id: tab, confirmed: true });
     for (const t of plan.kill) if (!plan.closeTab || !open.has(t)) run("terminal.kill", { terminal: t });
     const why = plan.busy.length ? `${plan.busy.join(", ")} ${plan.busy.length === 1 ? "runs" : "run"} something started there meanwhile and ${plan.busy.length === 1 ? "stays" : "stay"} open.` : null;
-    if (await this.kdb.finishSleep(row.id, this.me, why)) this.changed();
+    if (await this.kdb.finishSleep(row.id, this.me, why, Date.now(), sleepEvent(row.id, "asleep"))) this.changed();
   }
 
   // An undo is done: what came back is awake, what did not stays asleep (one unsure with its terminal looked at first).

@@ -99,10 +99,11 @@ function tape() {
 }
 
 async function controller() {
-  const state = { list: [agent("a"), agent("b", "done")], terms: [terminal("a", 1), terminal("b", 2)], layouts: [], runs: [], timers: [], writes: 0, builds: 0 };
+  const state = { list: [agent("a"), agent("b", "done")], terms: [terminal("a", 1), terminal("b", 2)], spaces: [], layouts: [], runs: [], timers: [], writes: 0, builds: 0 };
   const sharedState = new Map(), ui = tape();
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { ...ui.host,
-    agents: () => state.list, terminals: () => state.terms, spaces: () => [], machines: () => state.layouts,
+    agents: () => state.list, terminals: () => state.terms, spaces: () => state.spaces, machines: () => state.layouts,
+    panes: () => [], props: () => ({}), theme: () => ({}), image: ui.host.div,
     waitingQueue: (...args) => { state.builds++; return waitingQueue(...args); },
     shared: (key) => sharedState.get(key), setShared: (key, value) => { sharedState.set(key, value); state.writes++; },
     run: (...args) => state.runs.push(args), focused: () => ({ pane: "original" }), home: () => "C:\\Users\\person",
@@ -173,6 +174,40 @@ test("The sidebar list supports click and Enter, with project, name, reason and 
   view.listKeyDown({ key: "enter" }, cx);
   ui.handlers.get("needs-you-a")({}, cx);
   assert.deepEqual(clone(state.runs), [["agent.focus", { terminal: "b" }], ["agent.focus", { terminal: "a" }]]);
+});
+
+test("Status and Threads keep the return digest when the needs-you list opens and closes", async () => {
+  const { state, view, ui } = await controller();
+  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"], ui.host);
+  state.spaces = [{ id: "project", active: true, folder: "C:\\work\\project", tabs: [] }];
+  const returned = new SinceLeft(null);
+  Object.assign(returned, { project: `:${state.spaces[0].folder}`, rows: [{ id: 7, target: "agent:a", text: "Finished while you were away" }] });
+  Object.assign(view, {
+    sinceLeft: returned, custom: {}, order: "updated", assignColors() {}, projectOf: () => null,
+    listed: () => [], seen: () => new Map(), orderPicker: ui.host.div, viewSwitch: ui.host.div,
+    agentsView: () => [], threadsView: () => [],
+  });
+  for (const mode of ["agents", "threads"]) {
+    view.view = mode;
+    view.needsOpen = false;
+    ui.texts.length = 0;
+    view.render();
+    assert.ok(ui.texts.includes("Needs you · 2"));
+    assert.ok(ui.texts.includes(returned.rows[0].text));
+    assert.ok(view.nav.some((row) => row.key === "since-7"));
+    assert.equal(returned.showing, true);
+    view.needsOpen = true;
+    ui.texts.length = 0;
+    view.render();
+    assert.ok(ui.texts.includes("Waiting for you"));
+    assert.ok(ui.texts.includes("Finished"));
+    assert.equal(returned.showing, false, "a hidden digest is not acknowledged");
+    assert.ok(!view.nav.some((row) => row.key === "since-7"));
+    view.needsOpen = false;
+    view.render();
+    assert.equal(returned.rows.length, 1);
+    assert.equal(returned.showing, true);
+  }
 });
 
 test("An empty jump stays in the sidebar briefly and never posts a notification or changes focus", async () => {

@@ -1,14 +1,8 @@
 # Kanso
 
-More agents. Less babysitting. Kanso puts terminals on a horizontal strip:
-a new agent opens beside the one you're in, at its own width, and the view
-slides to it. Nothing gets squeezed, so you can read what each one is doing.
-Next to them: your repos and worktrees, the diff, the pull request with its CI
-and open threads, an agent started on a PR's feedback in one click, and one key
-(Cmd+Shift+O) to open the folder in Cursor, VS Code, Zed or Neovim, over SSH
-too. Warm stone greys in light and dark; color only when an agent's state
-matters. The name is the Japanese principle of simplicity, removing what is not
-needed.
+More agents. Less babysitting. Terminals open side by side at their own width.
+Repos, worktrees, diffs, PR checks and threads stay close; Cmd+Shift+O opens
+the folder in your editor, over SSH too. Warm greys, color for agent state.
 
 ![Kanso](preview.png)
 
@@ -426,6 +420,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## How it behaves
 
+- **Since you left**: after 5 minutes away, up to three sidebar lines under
+  the project show blocked agents, errors, PR updates, then finishes. +N
+  expands inline; Enter/click jumps, a target seen or Dismiss clears it.
+  Focus and dismissal persist in kanso.db. Local events expire after 7 days,
+  capped at 500. No events, loading or a failed read: nothing. No extra fetches.
 - **Needs you**: Cmd+J (`kanso-spaces.needs-you.next`) cycles
   blocked then unseen done, oldest first. Native status owns seen; no sleepers.
   Count opens project/name/reason/age; click/Enter focuses. Empty: "Nobody is waiting";
