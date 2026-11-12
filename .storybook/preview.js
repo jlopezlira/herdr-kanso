@@ -27,7 +27,7 @@ const preview = {
     },
     (story) => {
       const room = document.createElement('div');
-      room.style.padding = '10%';
+      room.style.padding = '2%';
       room.append(story());
       return room;
     },
