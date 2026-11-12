@@ -21,7 +21,7 @@
 //      it is ignored when the versions are put in order.
 //   5. On main, when what Kanso installs changed since the newest stable tag,
 //      version.json is newer than that tag. Merging develop into main then releases
-//      it (.github/workflows/release.yml). Or the change is technical debt, listed
+//      it (the stable job of .github/workflows/ci.yml). Or the change is technical debt, listed
 //      under "## [Unreleased]" (first, if at all): it merges as it is and goes
 //      out with the next release, which takes those entries into its own section.
 //   6. On develop, that next version is the one section newer than the newest
