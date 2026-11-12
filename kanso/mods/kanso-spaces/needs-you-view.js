@@ -29,7 +29,7 @@ export function queueList(t, queue, rowFor, age, scroll = null) {
         .when(selected, (el) => el.bg(c.selected))
         .child(v_flex().min_w(0).gap(G.xs)
           .child(div().truncate().text_size(T.value).text_color(c.text).child(row.name))
-          .child(div().truncate().text_size(T.small).text_color(c.dim).child(row.project))
+          .child(div().truncate().text_size(10.5).text_color(c.dim).child(row.project))
           .child(h_flex().gap(G.sm).child(line(waitingReason(row), c.muted)).child(line(age(row), c.dim))));
     }))
     .when(queue.state === "loading", (el) => el.child(skeleton(c).row(0, H.control)))

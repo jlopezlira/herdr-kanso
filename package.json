@@ -16,6 +16,8 @@
     "sync:share": "node scripts/sync-share.mjs",
     "sync:mods": "node scripts/sync-mods.mjs",
     "build:site-tokens": "node scripts/build-site-tokens.mjs",
+    "build:ui-tokens": "node scripts/build-ui-tokens.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },

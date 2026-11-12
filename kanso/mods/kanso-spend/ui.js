@@ -3,14 +3,15 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, Button, Toggle } from "gpui-base";
 
+// Sizes generated from kanso/tokens.json by npm run build:ui-tokens.
 export const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-/** Control heights keep toolbars, inputs and buttons on one line. */
 export const H = { control: 30, compact: 24, row: 40 };
-export const SEG = { two: 188, three: 280 };
-/** Radii: controls stay tighter than cards. */
 export const R = { control: 6, card: 8 };
-export const T = { page: 20, card: 13.5, title: 15, metric: 22, value: 12.5, body: 11.5, small: 10.5, label: 9.5 };
+export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, body: 11.5, mono: 11.5 };
 export const ICON = 15;
+export const SWITCH = { w: 28, h: 16, knob: 12 };
+// End of the generated sizes.
+export const SEG = { two: 188, three: 280 };
 export const EASE = { duration: 180, easing: "ease-out" };
 /** A second press within this long confirms a removal. */
 export const ARM_MS = 4000;
@@ -115,9 +116,6 @@ export class Armed {
     cx.timer?.after(ARM_MS + 50, (cx) => { if (this.key === key && !this.is(key)) { this.key = null; cx.notify(); } });
   }
 }
-
-/** The one switch: track and knob, in px. */
-export const SWITCH = { w: 28, h: 16, knob: 12 };
 
 export function toggleSwitch(id, checked, onChange, c, { label = "Toggle" } = {}) {
   // The 1px border sits inside the pill, so the knob meets its edge.
