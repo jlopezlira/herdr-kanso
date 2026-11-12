@@ -15,7 +15,7 @@ const preview = {
     return story();
   }],
   parameters: {
-    backgrounds: { disable: true },
+    backgrounds: { disabled: true },
     controls: {
       matchers: {
         color: /(background|color)$/i,
