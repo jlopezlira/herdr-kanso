@@ -3,8 +3,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   body, .sb-show-main { background: var(--canvas); color: var(--fg); font: 400 14px/1.5 var(--ui); }
-  .story-frame { padding: 10%; }
+  .story-frame { padding: var(--k-sp-4); }
+  .story-frame.story-canvas { padding: 10%; }
   :root[data-theme] .sbdocs.sbdocs-wrapper, :root[data-theme] .sbdocs.sbdocs-content { background: var(--canvas); color: var(--fg); }
+  :root[data-theme] .sbdocs.sbdocs-wrapper { padding: 10%; }
   :root[data-theme] .sbdocs :is(h1, h2, h3, h4, h5, h6, strong, b, th) { color: var(--fg); border-color: var(--border); }
   :root[data-theme] .sbdocs :is(p, li, td) { color: var(--muted); }
   :root[data-theme] .sbdocs :is(table, th, td, tr, hr) { border-color: var(--border); background: transparent; }

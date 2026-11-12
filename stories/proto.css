@@ -185,7 +185,7 @@
 /* kansō kit: the only allowed values, and the one drawing of each reusable element.
    Load after the base style (kanso-ux.base.html) and before any fragment's own <style>.
    Values come from kanso/mods/kanso-panel/ui.js (G, H, R, T, ICON, SWITCH at ui.js:6-13, 120) and from boards 01-11.
-   State blocks (failure, empty, pending, toast) are Ventress's state.css (kst-), part of the kit. */
+   State blocks (failure, empty, pending, toast) are state.css (kst-), part of the kit. */
 
 :root,.k{
   /* type: one size per role */
@@ -363,7 +363,7 @@
 :is(.sbar,.ph) .kst-line>.kst-btn:hover{background-color:var(--hover)}
 @media (prefers-reduced-motion:reduce){.skw,.kit-shim,.kit-glint{animation:none}.skw,.kit-shim{background-image:none}.kit-glint{color:var(--muted);background:none}}
 
-/* sidebar boards (ventress): every class starts with sbx-; colours come from the kit's tokens */
+/* sidebar boards: every class starts with sbx-; colours come from the kit's tokens */
 /* state.css: kansō's state pattern, two sizes fixed by kit tokens (kit.css). Prefix kst-. Colours only through theme tokens. */
 .kst-block{display:grid;grid-template-columns:var(--k-ic-row) minmax(0,1fr);column-gap:var(--k-sp-2);row-gap:var(--k-sp-1);padding:var(--k-sp-3);border-radius:var(--k-r-card);box-shadow:inset 0 0 0 1px var(--blocked);box-sizing:border-box;text-align:left}
 .kst-block>.m{grid-row:1;align-self:center;width:var(--k-ic-row);height:var(--k-ic-row)}
@@ -830,7 +830,7 @@ section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 .pbx-ra{flex:none;width:176px;display:flex;justify-content:flex-end;gap:12px}
 .pbx-ra .ql{font-size:11.5px}
 
-/* dialogs (echo): one dialog skeleton, Settings, Sleep, Arrange, Send, Open with, Markdown, dojo */
+/* dialogs: one dialog skeleton, Settings, Sleep, Arrange, Send, Open with, Markdown, dojo */
 .dgx-d{width:480px;background:var(--popover);border-radius:8px;padding:16px;box-sizing:border-box;box-shadow:var(--shadow),0 0 0 1px var(--border);display:flex;flex-direction:column;flex:none}
 .dgx-w340{width:340px;padding:4px}
 .dgx-h{display:flex;align-items:center;gap:8px;min-height:26px}

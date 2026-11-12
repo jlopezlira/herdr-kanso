@@ -26,7 +26,7 @@ const preview = {
   decorators: [(story, context) => {
     applyTheme(context.globals.theme);
     const frame = document.createElement('div');
-    frame.className = 'story-frame';
+    frame.className = context.viewMode === 'story' ? 'story-frame story-canvas' : 'story-frame';
     const content = story();
     if (typeof content === 'string') frame.innerHTML = content;
     else frame.append(content);
