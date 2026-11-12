@@ -41,6 +41,7 @@ const preview = {
           'Compositions', ['Controls', 'Sidebar rows', 'Panel pieces', 'States', 'Bars', 'Files and PR', 'Menu and dialog'],
           'Components', ['While you were away', 'Title and tools', 'Collapsed rail', 'New project', 'Menu', 'Dialog', 'Rename', 'Pick list', 'Markdown window', 'Settings tabs', 'Tab bar', 'Pane header', 'Status bar', 'Tab states', 'Panel menu', 'Header digest', 'Pane standing in', 'Edges and minimap', 'Status bar, working', 'Find in the conversation', 'System notification', 'Simulator screen', 'Annotated picture', 'Code', 'Markdown', 'Log', 'Shipped', 'Worktree row, open', 'New worktree', 'Choosing the channel'],
           'Layouts', ['Settings on Dawn', 'hjkl dōjō', 'Sidebar header, three ways', 'Sidebar at rest', 'Window at rest', 'Right-click any piece'],
+          'About',
         ],
       },
     },
