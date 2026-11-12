@@ -7,7 +7,7 @@ import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-ba
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, H, R, T, breathe, Armed, tokens, button, quietLink, quietTabs, iconButton, field, TextField, section, ghost, toneColor } from "./ui.js";
+import { G, H, R, T, breathe, Armed, tokens, button, quietLink, segmented, iconButton, field, TextField, section, ghost, toneColor } from "./ui.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
@@ -767,17 +767,9 @@ export class PullRequest {
   }
 
   tabs(c) {
-    const tab = (id, label) => {
-      const on = this.tab === id;
-      return Button.new(`pr-tab-${id}`).h(26).px(10).flex_none().items_center().rounded(6).cursor_pointer()
-        .selected(on).when(on, (el) => el.bg(c.selected)).when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-        .accessibility_label(label)
-        .on_click((_e, cx) => this.showTab(id, cx))
-        .child(div().text_size(12).text_color(on ? c.text : c.muted).child(label));
-    };
     const closed = this.closedPrs === null ? "Closed" : `Closed ${this.closedPrs.length >= DONE_LIMIT ? `${DONE_LIMIT}+` : this.closedPrs.length}`;
     const open = this.listed ? `Open ${this.openPrs.length}` : "Open";
-    return h_flex().gap(G.xs).items_center().child(tab("open", open)).child(tab("closed", closed));
+    return segmented("pr-tab", [{ key: "open", label: open }, { key: "closed", label: closed }], this.tab, (id, cx) => this.showTab(id, cx), c);
   }
 
   listPage(c) {
@@ -1178,7 +1170,7 @@ export class PullRequest {
             .when(item.additions != null, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${item.additions} −${item.deletions}`)))));
     };
     return v_flex().w_full().gap(G.lg)
-      .child(quietTabs("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
+      .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
       .when(this.outside, (el) => el.child(div().text_size(12).text_color(c.dim).child("This pane is not in a repository.")))
       .child(!groups.length
         ? div().text_size(12).text_color(c.dim).child("Nothing waiting on you.")

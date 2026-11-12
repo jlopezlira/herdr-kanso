@@ -5,8 +5,6 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
-import { segmentAt } from "./ui.js";
-export { segmentAt };
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { activityTone } from "./sidebar-rows.js";

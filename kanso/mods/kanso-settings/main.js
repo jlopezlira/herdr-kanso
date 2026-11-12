@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, H, T, SEG, tokens, button, quietTabs, quietLink, skeleton, breathe, Armed, field, TextField, section, segmented, toggleSwitch } from "./ui.js";
+import { G, H, T, tokens, button, quietLink, skeleton, breathe, Armed, field, TextField, section, segmented, toggleSwitch } from "./ui.js";
 import { pieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LABEL, STORE } from "./pieces.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
@@ -241,7 +241,7 @@ export default class Settings extends View {
         .child(segmented(`piece-${piece.id}`, items, choice(piece.id, map), (state, cx) => {
           setShared(STORE, setPiece(pieces(shared), piece.id, state));
           cx.notify();
-        }, c, { width: items.length > 2 ? SEG.three : SEG.two }));
+        }, c));
     };
     const armed = this.armed.is("reset");
     return v_flex().w_full()
@@ -367,7 +367,7 @@ export default class Settings extends View {
         .when(Boolean(this.shown()), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.shown())))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(quietTabs("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))
+      .child(div().pt(G.md).child(segmented("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))
       .child(v_flex().id(`settings-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

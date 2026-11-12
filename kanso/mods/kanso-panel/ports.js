@@ -12,7 +12,7 @@ import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
-import { G, Armed, tokens, button, quietLink, quietTabs, iconButton, section, ghost, breathe } from "./ui.js";
+import { G, Armed, tokens, button, quietLink, segmented, iconButton, section, ghost, breathe } from "./ui.js";
 import { Share } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
@@ -311,7 +311,7 @@ export class Ports {
     const anyLoose = (series?.bars ?? []).some((b) => b.loose > 0);
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
-        .child(quietTabs("pt-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
+        .child(segmented("pt-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
         .child(div().text_size(12).text_color(c.dim).child(series && !series.empty ? `peak ${series.peak} at once` : "")))
       .child(h_flex().w_full().h(height + 18).items_end()
         .children((series?.bars ?? []).map((bar) => {
@@ -344,7 +344,7 @@ export class Ports {
     const shown = open ? tab.rows : tab.rows.slice(0, LIST_ROWS);
     const head = tabs.length > 1
       ? h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.sm)
-        .child(quietTabs("pt-list", tabs.map((t) => ({ key: t.key, label: t.label })), tab.key, (key, cx) => { this.tab = key; this.showAll = false; cx.notify(); }, c))
+        .child(segmented("pt-list", tabs.map((t) => ({ key: t.key, label: t.label })), tab.key, (key, cx) => { this.tab = key; this.showAll = false; cx.notify(); }, c))
         .child(div().text_size(12).text_color(c.dim).child(String(tab.rows.length)))
       : section(c, tab.label, String(tab.rows.length));
     return v_flex().w_full()

@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost as host } from "./helpers.mjs";
 
-const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "SWITCH", "H", "G", "R"], host());
+const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "SWITCH", "H", "G", "R", "mix", "WASH"], host());
 
 const arg = (el, name) => {
   const found = el.calls.filter((call) => call[0] === name);
@@ -31,7 +31,7 @@ test("A switch is one compact size, knob at the left when off and at the right w
     assert.equal(pill.tag, "h_flex", "the pill is a flex row");
     assert.equal(knob.tag, "div");
     assert.equal(arg(hit, "h"), H.compact);
-    assert.equal(arg(hit, "px"), G.xs);
+    assert.equal(arg(hit, "px") + G.hair, G.xs, "the ring's border counts inside the padding");
     assert.equal(hit.calls.filter((call) => call[0] === "items_center").length, 1);
     assert.equal(hit.calls.some((call) => call[0] === "cursor_pointer"), true);
     assert.equal(hit.calls.some((call) => call[0] === "bg" || call[0] === "on_click"), false);
@@ -66,7 +66,7 @@ test("A switch fills from the theme when on and marks focus, in light and in dar
       assert.equal(arg(pill, "border_color"), checked ? c.primary : c.input);
       assert.equal(pill.calls.filter((call) => call[0] === "border_1").length, 1);
       assert.equal(arg(hit, "rounded"), R.control);
-      assert.equal(hit.calls.filter((call) => call[0] === "border_1").length, 1);
+      assert.equal(hit.calls.filter((call) => call[0] === "border_2").length, 1, "the ring is 2 px, kept clear at rest");
       assert.equal(arg(hit, "border_color"), "#00000000");
       assert.equal(arg(hit, "pressed"), checked);
       assert.equal(arg(hit, "accessibility_label"), "Check for updates automatically");
@@ -105,6 +105,24 @@ const centered = (toggle) => {
   while (row && !row.calls.some((call) => call[0] === "w_full")) row = row.parent;
   assert.equal(row?.calls.some((call) => call[0] === "items_center"), true, toggle.tag);
 };
+
+test("A switch answers hover and, off, takes no press and no pointer", async () => {
+  const { toggleSwitch, mix, WASH } = await kit();
+  const c = { ...night, background: "#1b1b19", text: "#d8d4cb", border: "#272725", dim: "#6b6862" };
+  for (const checked of [false, true]) {
+    const pill = toggleSwitch("s", checked, () => {}, c).kids[0];
+    const hover = chain();
+    arg(pill, "hover")(hover);
+    assert.deepEqual(hover.calls, checked ? [["bg", mix(c.primary, c.background, WASH.hover)]] : [["border_color", c.muted]]);
+    const off = toggleSwitch("s", checked, () => {}, c, { disabled: true });
+    assert.equal(arg(off, "disabled"), true);
+    for (const name of ["on_change", "cursor_pointer"]) assert.equal(off.calls.some((call) => call[0] === name), false, name);
+    assert.equal(off.kids[0].calls.some((call) => call[0] === "hover"), false);
+    assert.equal(arg(off.kids[0], "bg"), mix(c.text, c.background, WASH.off));
+    assert.equal(arg(off.kids[0].kids[0], "bg"), c.dim);
+    assert.equal(off.kids[0].calls.some((call) => call[0] === "justify_end"), checked, "off keeps its value in view");
+  }
+});
 
 test("Settings and Spend keep each switch on its row and flip the same way", async () => {
   const store = {

@@ -5,7 +5,7 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { appHome, theme, nextCommand, readTextFile, layout } from "herdr";
-import { G, T, PULSE, breathe, Armed, tokens, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, T, PULSE, breathe, Armed, tokens, segmented, quietLink, iconButton, section, ghost } from "./ui.js";
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { memorySpec, memoryText } from "./memory-card.js";
@@ -351,7 +351,7 @@ export default class Memory extends View {
     const height = 96;
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().justify_between().gap(G.md).pb(G.xs)
-        .child(quietTabs("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
+        .child(segmented("guard-range", RANGES.map((r) => ({ key: r.key, label: r.label })), this.range, (key, cx) => { this.range = key; cx.notify(); }, c))
         .child(div().text_size(12).text_color(c.dim).child(series?.lowest ? `lowest ${series.lowest}` : "")))
       .child(h_flex().w_full().h(height + 18).items_end()
         .children((series?.bars ?? []).map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)

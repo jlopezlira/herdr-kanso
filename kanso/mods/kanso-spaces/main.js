@@ -87,9 +87,9 @@ const ONE_LINE_W = 240;
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 
 const VIEWS = {
-  spaces: { label: "Projects" },
-  agents: { label: "Status" },
-  threads: { label: "Threads" },
+  spaces: { label: "Projects", icon: "folder" },
+  agents: { label: "Status", icon: "pulse" },
+  threads: { label: "Threads", icon: "message" },
 };
 // A project's key: its machine and folder.
 export const projectKey = (w) => `${w?.machine ?? ""}:${w?.folder || home()}`;
@@ -2121,24 +2121,6 @@ export default class Spaces extends View {
     };
   }
 
-  // The thumb needs the switch's width (measured); until the first measure the chosen segment is raised on its own.
-  // The three views as icons, stacked, for the collapsed rail: the one shown has the wash the open switch gives it.
-  railSwitch(t, sp) {
-    const asks = sp.some((s) => s.status === "blocked");
-    const icons = { spaces: "folder", agents: "pulse", threads: "message" };
-    return v_flex().mt(4).p(3).gap(2).rounded(8).bg(t.foreground + "0a").children(Object.keys(VIEWS).map((view) => {
-      const on = this.view === view;
-      return div().id(`rail-view-${view}`).relative().size(26).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
-        .tooltip(VIEWS[view].label).text_color(on ? t.foreground : t.muted)
-        .when(on, (el) => el.bg(t.raised ?? t.selected).border_1().border_color(t.border))
-        .when(!on, (el) => el.hover((s) => s.text_color(t.foreground)))
-        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .on_click((_e, cx) => { this.setView(view, cx); cx.notify(); })
-        .child(svg(`mods/kanso-chrome/icons/${icons[view]}.svg`).size(14))
-        .when(view === "agents" && asks && !on, (el) => el.child(div().absolute().top(3).right(3).size(5).rounded_full().bg(t.blocked)));
-    }));
-  }
-
   // One group in the collapsed rail (a project, a status, a shelf): its lead (a project's initial in its color, or an icon), the most
   // urgent state as the list's own mark, how many. A click lists the group in a popup; a right click opens `menu` (else the same list).
   // `space`: a project's, so its list also offers to go to it; with no rows a click goes there at once.
@@ -2241,13 +2223,14 @@ export default class Spaces extends View {
     });
   }
 
-  viewSwitch(t, sp) {
+  // The three views; collapsed, the rail's column of icons.
+  viewSwitch(t, sp, collapsed = false) {
     const asks = sp.some((s) => s.status === "blocked");
-    const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label }));
-    return segmented("spaces-view", items, this.view, (view, cx) => { this.setView(view, cx); cx.notify(); }, t, {
-      width: this.switchW, dot: asks ? "agents" : null,
-      sized: (width, cx) => { if (Math.abs((this.switchW ?? 0) - width) >= 1) { this.switchW = width; cx.notify(); } },
-    }).mx(18).mt(4).mb(14);
+    const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label, icon: collapsed ? VIEWS[key].icon : null, dot: asks && key === "agents" }));
+    const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
+    return collapsed
+      ? segmented("rail-view", items, this.view, pick, tokens(t), { collapsed }).mt(4)
+      : segmented("spaces-view", items, this.view, pick, tokens(t)).mx(18).mt(4).mb(14);
   }
 
   threadsView(t, sp, ps, ctx) {
@@ -2485,7 +2468,7 @@ export default class Spaces extends View {
     const brand = image("frame/welcome/herdr.png").size(20).rounded(6).flex_none();
     // Collapsed, stacked so two buttons never sit on top of each other.
     const add = collapsed
-      ? v_flex().w_full().pt(8).gap(6).items_center().child(brand).child(plus).child(hide).when(switchShown, (el) => el.child(this.railSwitch(t, sp)))
+      ? v_flex().w_full().pt(8).gap(6).items_center().child(brand).child(plus).child(hide).when(switchShown, (el) => el.child(this.viewSwitch(t, sp, true)))
       : h_flex().h(40).px(10).gap(4).items_center()
         .child(plus)
         .child(div().flex_1())
