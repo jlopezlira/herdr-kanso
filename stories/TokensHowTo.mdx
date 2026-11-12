@@ -1,0 +1,16 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Tokens/How to use it" />
+
+# How to use it
+
+- `kanso/tokens.json`: every token: name, value and role, colour in dark and light
+- `kanso/mods/kanso-panel/ui.js`: the constants the app draws with: G, H, R, T, ICON, SWITCH, ARM_MS
+- `kanso/themes/kanso.json`: the dark palette
+- `kanso/themes/kanso-day.json`: the light palette
+
+## Prompt for agents
+
+```text
+Use only kansō's tokens. Read kanso/tokens.json for every size, space, radius, height, icon, switch, motion and colour (dark and light), and pick each by its role. In the app, draw with the constants in kanso/mods/kanso-panel/ui.js (G, H, R, T, ICON, SWITCH, ARM_MS). Write no raw number or hex colour that a token holds, and add no new token. Text is fg, muted or dim, and must keep 4.5:1 on canvas, chrome, bg, raised and popover in both themes. Hover, focus and press change tone only, never a box.
+```

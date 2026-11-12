@@ -1,0 +1,6 @@
+{
+ "PickList": {
+  "caption": "Rows with name and a second line; selected on w12; a pending one at 80% with the dot.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"dgx-list\"><div class=\"dgx-r dgx-two sel kst-pend\"><svg class=\"i i14 c-mu\"><use href=\"#lu-layers\"/></svg><div class=\"dgx-tx\"><div class=\"dgx-nm\">web and api</div><div class=\"dgx-s\">3 panes · claude, codex, vite</div></div><span class=\"kst-pdot\"></span></div></div><div class=\"dgx-list\"><div class=\"dgx-r sel\"><span class=\"dgx-tx dgx-nm\">web and api</span><span class=\"ql\" tabindex=\"0\">Overwrite</span><span class=\"ql\" tabindex=\"0\">Delete</span></div><div class=\"dgx-r\"><span class=\"dgx-tx dgx-nm\">review pair</span></div><div class=\"dgx-r\"><span class=\"dgx-tx dgx-nm\">i18n</span><span class=\"dgx-rt\">docs-site</span></div></div></div></div></div>"
+ }
+}

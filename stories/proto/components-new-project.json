@@ -1,0 +1,6 @@
+{
+ "NewProject": {
+  "caption": "Title 15, field labels meta, Choose… quiet in the field, Create off until a folder is chosen.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"sbx-dlg\"><div class=\"sbx-dt\">New project</div><div class=\"sbx-fl\">Folder</div><div class=\"kit-field \" tabindex=\"0\"><span class=\"sbx-ph\">None chosen</span><span class=\"flex\"></span><span class=\"ql c-fg\" tabindex=\"0\">Choose…</span></div><div class=\"sbx-fl\">Name</div><div class=\"kit-field foc\" tabindex=\"0\"><span class=\"sbx-caret\"></span><span class=\"sbx-ph\">Its folder's name</span><span class=\"flex\"></span></div><div class=\"sbx-da\"><span class=\"ql c-fg\" tabindex=\"0\">Cancel</span><span class=\"btn off\" tabindex=\"0\">Create</span></div></div></div></div>"
+ }
+}

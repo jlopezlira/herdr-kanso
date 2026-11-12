@@ -1,0 +1,214 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './compositions-files-and-pr.stories.js';
+
+<Meta title="Compositions/Files and PR" />
+
+# Files and PR
+
+## File row
+
+Mark letter (A, M, D) in state colour, name, folder dim; Changed | All files as one segmented.
+
+<Canvas of={stories.FileRow} />
+
+## Snippet
+
+A review comment quotes three lines, the one it talks about on w7.
+
+<Canvas of={stories.Snippet} />
+
+## Reply
+
+Author card with its age; "1 reply" quiet; new badge; the inline comment field with its one button.
+
+<Canvas of={stories.Reply} />
+
+## Checks
+
+One line per check: name mono, state muted, the check mark done.
+
+<Canvas of={stories.Checks} />
+
+## Changed on disk
+
+A bar over the text: what, then Overwrite solid and Reload quiet; Saving… while it writes.
+
+<Canvas of={stories.ChangedOnDisk} />
+
+## Picture
+
+A picture box; a large one asks before loading.
+
+<Canvas of={stories.Picture} />
+
+## Skeleton, two lines
+
+Loading shape for two-line rows.
+
+<Canvas of={stories.SkeletonTwoLines} />
+
+## P01 Files
+
+### Files guidelines
+
+- **Seijaku** The kit header: Files. Changed and All files are the two quiet words at its right, then Refresh. No scope line: the pane header already says the folder and branch.
+- **Yūgen** Opened from the digest's files segment it lands on Changed. From the tab bar it opens on the last view used. In a folder that is not a repository there is only the tree.
+- **Seijaku** The files the focused agent named come first, newest first, with no title: the panel opened from that agent. A named file that also changed carries its stat there and is not listed again. Named files that did not change sit on one dim line by name, each name a link. Also changed holds only the rest. The named part exists only for an agent pane with a conversation (piece files.named, S; Hide stops the transcript read).
+- **Kansō** No totals: the header's digest already says 3 files +42 −7. Each row carries its own stat.
+- **Kansō** Modified is the normal case and carries no mark. A and D sit where the file icon goes, dim; U alone is in blocked, because a conflict needs you. A folder shows how many changed files it holds.
+- **Seijaku** Rows 32, 12.5 type, 16 per level, selected on selected. j k move, Enter opens, Esc returns to the pane.
+- **Seijaku** A row opens the file in Preview. Its stat +14 −3 is a control too: it opens the diff (the PR panel's diff page, P10, read with git diff). Right-click gets a menu (Open the diff, Open, Open with…, Copy path) instead of going straight to Open with.
+- **Seijaku** The 500-per-folder cap is said inside the folder it cut, as a dim row. A folder that cannot be read says so in its own place.
+- **Kokō** Remote calls: none on this computer (a folder watch). On another computer, one tree read per open folder, then one stat every 5 s while the panel is in front, 30 s after three quiet reads, none when the panel is hidden.
+
+## P02 Files: reading, failing, elsewhere
+
+### Files guidelines
+
+- **Shizen** First read: kit skeleton rows at 32, breathing. Later reads keep the rows and spin Refresh.
+- **Yūgen** Errors are the folder's own words in blocked, with Refresh, here and on another computer alike.
+- **Seijaku** Stale takes the scope slot: Read 14:02 · devbox unreachable · next try 14:03, rows at 55%. "Unreachable" is the sidebar's word for the same fact.
+- **Seijaku** A pane with no folder says so, instead of "No folder".
+- **Shizen** Narrow: title 15, the folder part truncates before the name.
+- **Kokō** Light: the same marks; only U is coloured. Selected rows use selected, never a hex.
+
+## P05 Preview: pictures, and the Load step
+
+### Preview guidelines
+
+- **Seijaku** Pins are the one pin component (Q10: pbx-pin, pbx-reg, pbx-ov, pbx-pnote, pbx-plist, pbx-sent). On a picture a click means nothing else, so pin mode is always on and there is no tool: a click drops a numbered pin, a drag a region, the note is typed beside it, Enter ends it. The list under the picture is the message. Send to checkout (the agent of the pane in front), or ⌘↩, then "Sent to checkout 14:07". Presses: a click, the words, ⌘↩.
+- **Yūgen** The size in pixels shows under the pointer, beside the folder. The picture fits the width on canvas, radius 8.
+- **Kokō** Load is the one solid button and carries the cost: Load 4.2 MB. On a bad link the press is the decision, so the size belongs on the button and not in a line above it.
+- **Shizen** Loading keeps the picture's frame, breathing.
+- **Seijaku** Over 20 MB says what stops it, with Open with… beside it.
+- **Seijaku** Inside a note, a picture to load is one row: name, size, Load.
+- **Kokō** Remote calls: one stat to learn the size. Under 2 MB the copy starts at once. Over 2 MB nothing moves until Load.
+
+## 06 Pull requests: one list, by project
+
+### Pull request list guidelines
+
+- **Kansō** The list is the panel. One list of open pull requests, by project; no hero, no scope line: the pane header already says the branch.
+- **Yūgen** The branch in front comes first. With no pull request its row leads and offers Create; with one, the panel opens on it (P07).
+- **Seijaku** Every row is the kit's two-line row: title 12.5, number and state as meta 11.5, the verdict word in its state colour and nothing else coloured (K, S21).
+- **Kokō** Cost: one gh pr list per project on open or Refresh; zero at rest (P06).
+
+## 07 Pull requests, light
+
+### Pull requests guidelines
+
+- **Seijaku** The same three panels as 06, in light: the list on background, the log, threads and fields on canvas. State colours stay the state's; never a new red.
+- **Seijaku** The "Everyone's" group open, the review and every thread state are drawn in light on P16.
+
+## P06 Pull requests: every state of the list
+
+### Pull requests guidelines
+
+- **Seijaku** First read: the kit skeleton in the list's shape. Later reads keep the rows and spin Refresh.
+- **Seijaku** Empty is one line, "Nothing open". If the branch in front has something to say, its row stays above it, and the line becomes "Nothing else open".
+- **Seijaku** Signed out and GitHub CLI missing are the only whole-panel states, and both are about this computer, which reads GitHub. Sign in opens gh auth login in a pane to the right.
+- **Seijaku** Rate limited and not answering use the kit stale line, with the last rows at 55%. Nothing retries sooner than GitHub's retry time.
+- **Seijaku** On devbox: the list doesn't change. The branch row names the computer, and Pull runs there. When devbox is unreachable, only that row dims, with the time it was read; the rest is GitHub's and stays live.
+- **Shizen** "Everyone's" reads in place: your rows stay and the others' rows breathe below them.
+- **Kansō** A pull request that asks you opens on Your review (P16): one field, Approve, Request changes, Comment. One that belongs to no pane explains to the agent of the pane in front, never a GitHub link.
+- **Kansō** A merged pull request leaves the list. Its branch row says so once ("#139 merged 14:20") until the branch changes, and offers Create pull request.
+- **Shizen** The branch's pull request paints at once from the header's read; only the card breathes.
+
+## P07 A pull request: every state says why
+
+### Pull request guidelines
+
+- **Seijaku** Every state that is not mergeable says why, on the card, in its source's words, and has one action that hands that reason to an agent: Explain to \<agent\>. One press sends the text on the card (plus the PR's URL) into that agent's prompt, and the button's place then says "Sent to billing 14:07".
+- **Seijaku** A reason the app found is handed over with Explain. "Explain to \<agent\>" carries the state, its source and the log; "Send to \<agent\>" stays for your own words (pins, notes). Two acts, two words.
+- **Kansō** The agent is the one in the pane on that branch. When no pane has the branch, it is the agent of the pane in front (here checkout). With no agent there, Explain is absent, never disabled.
+- **Kansō** Waits carry no Explain, because there is nothing to fix: draft (its action is Ready for review, one press), checks running, and "Checking whether it can merge".
+- **Kansō** Behind its base: Update branch is the primary, one press (GitHub can redo it), and Explain is beside it, quiet.
+- **Yūgen** Nothing ends in "Open on GitHub". GitHub is only the header's icon.
+- **Kokō** Where each reason comes from, all in the one gh pr view made on open or Refresh (zero extra calls at rest): mergeStateStatus and mergeable give the state.
+- **Seijaku** statusCheckRollup gives each check's name, status and conclusion (FAILURE, CANCELLED, TIMED_OUT, ACTION_REQUIRED, SKIPPED) and its run, from which the log is read once.
+- **Seijaku** reviewDecision, reviewRequests and latestReviews (with authorCanPushToRepository) give who was asked and who can merge.
+- **Seijaku** viewerPermission gives your access.
+- **Seijaku** baseRef.branchProtectionRule (requiredApprovingReviewCount, requiredStatusCheckContexts, requiresCommitSignatures) with the head commits' signature gives the unmet rules. Assumed readable with write access; when it is not, the line stays "Blocked by branch rules" with no list.
+- Two reasons are local git, read once when the state turns, on the branch's computer against its last fetch: the conflicting files (git merge-tree --write-tree --name-only) and the missing commits (git log HEAD..origin/main). The failed log is one gh run view --log-failed per failure, cached.
+- Checks running re-read every 20 s only while the panel is open and in front.
+
+## P08 A pull request: sending, writing, elsewhere
+
+### Pull request guidelines
+
+- **Seijaku** Every detail page has ‹: one step back to the list. Reopen goes with the closed state; it lives on GitHub.
+- **Kansō** When the pane's agent is blocked, Explain is absent (never disabled), and the verdict line adds "· cart-ui needs you first". The log stays readable.
+- **Kansō** Explain to checkout (the one name for what was "Send to") sends on one press: the card is the text it pastes, so it needs no preview. Afterwards the button's place says "Sent to checkout 14:07".
+- **Kansō** Full log is a page in the panel (‹ back), from the --log-failed text already read; no new call. "Open log on GitHub" goes; GitHub is the header icon.
+- **Kansō** Explain goes to the agent the pull request belongs to (the pane on its branch); when it belongs to none, to the agent of the pane in front; with no agent there, the action is absent, never disabled.
+- **Seijaku** A refused write follows P00: gh's words where the actions were, then the action's own name to retry, then Explain.
+- **Shizen** Writing: the button keeps its size with "Merging…" and Refresh spins.
+- **Kansō** On another computer only the scope changes: GitHub is read and written from this computer; Explain goes to the agent on devbox. When devbox stops answering, the pull request stays live, and an Explain pressed then fails on P00's pattern: "Not sent: devbox unreachable", with Explain to checkout to try again. When GitHub stops answering, the stale line takes the scope slot and the writes are disabled (the stale line as drawn for the list on P06).
+- **Shizen** Narrow: title 15. The fold note drops the people count first.
+- **Kokō** Remote calls: a write is one gh call plus one re-read. Explain is a local deliver into the pane, no network.
+
+## P09 A pull request: Details open, and the pickers
+
+### Pull request guidelines
+
+- **Kansō** Details holds the rest, in this order: Description, People and labels, Checks, Unresolved threads (when there are any), Files, then Back to draft and Close. The other open pull requests are the list, one step back. Sections are titles only: no notes that repeat the verdict ("Changes requested" beside People) or the facts line ("1 failing · 4 passed", "3 · +86 −12").
+- **Yūgen** A people row is the control: a click on Reviewers opens its picker. It no longer needs a 22px tag icon that only shows in Details.
+- **Kokō** Every write here is optimistic and never blocks. A click marks the row at once (the kit's pending, S21: 80% and the breathing dot), the list stays live, and the next click lands immediately. The changes queue and leave together: 600 ms after the last click, one gh api graphql request with one aliased mutation per change (requestReviews with union, addAssigneesToAssignable or removeAssigneesFromAssignable, addLabelsToLabelable or removeLabelsFromLabelable). When GitHub confirms, the check goes full. A refused change puts its row back and shows gh's words on that row only (P00), with the action's own name to retry. Closing the picker or the panel never cancels the queue. Offline, the queue keeps and says so once.
+- **Kokō** The list itself comes from the local store at once. The skeleton shows only on the very first open of a repository, ever. It is refreshed behind, at most once per open, with one gh api graphql (labels or assignableUsers, 100).
+- **Seijaku** The local store: kdb.js:177 (Kdb, SQLite), schema at kdb.js:90-116, with pr_items (:108) and pr_fetches (:110). Added: pr_candidates (labels and people per repository) and pr_writes (the queue: url, kind, target, op, state, error, at).
+- **Shizen** Truncation is a fact: "First 100 of 132".
+- **Seijaku** Files use the Files panel's row: name, folder, stat, and a mark only for A, D or U. A row opens the diff page (P10).
+- **Kansō** Back to draft and Close: one press each, quiet, below a rule, then Undo where they were. Merge is the only second press in this panel.
+- **Kokō** Remote calls at rest: zero. Details reads nothing new; description, people and files come with the one PR read.
+
+## P10 A pull request: a file's diff, and comments on its lines
+
+### Pull request guidelines
+
+- **Kansō** A click on a diff line, or on the + that takes its number's place under the pointer, opens a comment field under that line. On your own pull request Comment (⌘↵) posts it at once: gh api graphql addPullRequestReviewThread (path, line, side, body). When a review is asked of you, the button is Add to review. The comment waits in the local store, drawn pending (S21), and goes with Approve, Request changes or Comment in one submit (P16).
+- **Kansō** Threads sit under their line in the diff too, with their Reply field: the same thread as in the conversation, never a GitHub link.
+- **Seijaku** Presses: a line comment from the pull request is 3 (the file in Details, the line, ⌘↵).
+- **Yūgen** A file's diff is a page: file name as the title, the PR, folder and stat as the scope, Open in Preview and Open on GitHub as the two icons. Lines 20 in mono 11.5, additions and removals washed in done and blocked at 12%. Files in P01 opens the same page for local changes.
+- **Seijaku** A file with no text diff says so in one line (P00's empty). Over 400 lines: P15.
+- **Kokō** Remote calls: a diff is one gh pr diff per pull request, run on this computer and cached until the pull request changes.
+
+## P16 A pull request: the conversation and the review, in the panel
+
+### Pull request guidelines
+
+- **Seijaku** Everything a review needs happens in the panel. GitHub is only the header's icon.
+- **Shizen** Conversation sits under the verdict and its action, in view, not inside Details. At rest each unresolved thread is its author, path:line and the comment in full; your own replies fold to "1 reply, yours". Its Reply field and Resolve and Explain are always there; under the pointer the 3 lines it sits on show (the commented one on w7). Then reviews and comments, oldest first, and the Comment field at the end.
+- **Kansō** Each thread offers Resolve (one press; it becomes one line with Undo) and Explain to \<agent\>. When the agent answers, its last words fill that thread's field, marked "webhooks answered 14:21"; ⌘↵ posts it.
+- **Kansō** When changes are requested, the reviewer's thread is the body: there is no separate comment card above it, so it is not drawn twice.
+- **Kansō** Asked of you: Files, then Your review: one field with Approve, Request changes and Comment. Line comments added on the diff page wait in the store, and go with the review in one submit; the count is the section's note.
+- **Kansō** Writes are optimistic (P00). A reply or a review appears in the conversation at once, pending (S21: 80% and the breathing dot), and goes full when GitHub confirms. If it is refused, it comes back out, the field keeps the text, and gh's words show under it with Reply. Offline, it waits, said once.
+- **Kansō** Presses: reply 2 (click the field, ⌘↵); resolve 1, Undo 1; comment 2; explain then post the agent's answer 2; review 2 (click the field, Approve).
+- **Kokō** gh calls. Reply: gh api graphql addPullRequestReviewThreadReply. Resolve and Undo: resolveReviewThread and unresolveReviewThread. Comment: gh pr comment --body-file -. Review with no line comments: gh pr review --approve, --request-changes or --comment. Review with line comments: one gh api -X POST repos/\{o\}/\{r\}/pulls/\{n\}/reviews carrying the event, the body and comments[].
+- **Kokō** At rest, zero new polls. Threads, replies, diffHunk, reviews and comments ride the gh pr view and the threads query the panel already makes on open and Refresh (pr.js:477). After a write, one re-read of that pull request.
+
+## P15 A pull request: a long diff
+
+### Pull request guidelines
+
+- **Kokō** A long diff draws 400 lines and its scope says which: "lines 1 to 400". Under the last line: how many are left, and Show the next 400, which reads nothing new because the whole diff came in one gh pr diff. GitHub stays the header icon.
+
+## Prompt for agents
+
+```text
+Build Files and PR (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --accent, --bg, --blocked, --border, --canvas, --dim, --done, --fg, --input, --k-ease-in, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-compact, --k-h-control, --k-h-icon, --k-h-row, --k-hover-in, --k-ic-control, --k-lh-body, --k-r-card, --k-r-control, --k-r-sm, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-8, --muted, --raised, --selected, --solid, --solidfg, --w12, --w7, --working.
+Draw these pieces: File row; Snippet; Reply; Checks; Changed on disk; Picture; Skeleton, two lines.
+Reuse these kit classes: kit-field.
+Follow these rules:
+- File row: Mark letter (A, M, D) in state colour, name, folder dim; Changed | All files as one segmented.
+- Snippet: A review comment quotes three lines, the one it talks about on w7.
+- Reply: Author card with its age; "1 reply" quiet; new badge; the inline comment field with its one button.
+- Checks: One line per check: name mono, state muted, the check mark done.
+- Changed on disk: A bar over the text: what, then Overwrite solid and Reload quiet; Saving… while it writes.
+- Picture: A picture box; a large one asks before loading.
+- Skeleton, two lines: Loading shape for two-line rows.
+Apply every guideline of P01 Files; P02 Files: reading, failing, elsewhere; P05 Preview: pictures, and the Load step; 06 Pull requests: one list, by project; 07 Pull requests, light; P06 Pull requests: every state of the list; P07 A pull request: every state says why; P08 A pull request: sending, writing, elsewhere; P09 A pull request: Details open, and the pickers; P10 A pull request: a file's diff, and comments on its lines; P16 A pull request: the conversation and the review, in the panel; P15 A pull request: a long diff.
+Treat as a defect:
+- No scope line: the pane header already says the folder and branch.
+- No totals: the header's digest already says 3 files +42 −7.
+```

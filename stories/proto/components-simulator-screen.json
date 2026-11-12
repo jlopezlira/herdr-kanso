@@ -1,0 +1,6 @@
+{
+ "SimulatorScreen": {
+  "caption": "A device screen at 180 wide, frozen while the agent looks.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"pbx-scr\" style=\"width:180px;height:378px\"><div class=\"pbx-app\"><div class=\"tm\"><span>9:41</span><span>●●●</span></div><div class=\"t\">Checkout</div><div class=\"ln\"><span>Trail runner, 42</span><span>$64</span></div><div class=\"ln\"><span>Wool socks ×2</span><span>$12</span></div><div class=\"ln\"><span>Shipping</span><span>$8</span></div><div class=\"ln\" style=\"background:color-mix(in srgb,var(--working) 24%,var(--raised))\"><span>Held for</span><span>09:42</span></div><div class=\"pay\">Pay $84.00</div></div></div></div></div>"
+ }
+}

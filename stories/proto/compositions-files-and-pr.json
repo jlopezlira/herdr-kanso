@@ -1,0 +1,30 @@
+{
+ "FileRow": {
+  "caption": "Mark letter (A, M, D) in state colour, name, folder dim; Changed | All files as one segmented.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"qt pax-hq\"><span class=\"on\">Changed</span><span>All files</span></div><div class=\"prow sel\" tabindex=\"0\"><span class=\"pax-mk c-done\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span></div><div class=\"prow\" tabindex=\"0\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span></div></div></div></div>"
+ },
+ "Snippet": {
+  "caption": "A review comment quotes three lines, the one it talks about on w7.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"pax-snip\"><div class=\"pax-dl\"><span class=\"n\">11</span><span class=\"s\"> </span>export function bucket(customer) {</div><div class=\"pax-dl on\"><span class=\"n\">12</span><span class=\"s\"> </span>  const plan = planOf(customer);</div><div class=\"pax-dl\"><span class=\"n\">13</span><span class=\"s\"> </span>  return { plan, tokens: LIMIT[plan] };</div></div></div></div></div>"
+ },
+ "Reply": {
+  "caption": "Author card with its age; \"1 reply\" quiet; new badge; the inline comment field with its one button.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"pax-rep\"><div class=\"ch\"><span class=\"av-s\">J</span><b>jj</b><span class=\"flex\"></span><span class=\"c-dim\" style=\"font-size:11.5px\">40m</span></div><div class=\"body15\">Good catch. The key becomes customer and plan; an upgrade starts a fresh bucket.</div></div><div class=\"pax-said\">1 reply, yours, 40m</div><span class=\"pax-new\">new</span><div class=\"pax-inl\"><div class=\"kit-field foc\" tabindex=\"0\"><span class=\"tx\">Round up here, or a client retries a second early.<span class=\"pax-caret\" style=\"height:14px\"></span></span><span class=\"ib\" tabindex=\"0\"><svg class=\"i i14\"><use href=\"#lu-send\"/></svg></span></div><div class=\"acts\"><span class=\"btn\" tabindex=\"0\">Comment</span></div></div></div></div></div>"
+ },
+ "Checks": {
+  "caption": "One line per check: name mono, state muted, the check mark done.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"pax-li\"><span class=\"k\">build / i18n</span><span>running · 1m 20s</span></div><div class=\"pax-li\"><span class=\"k\">test / unit</span><span><svg class=\"i i14 pax-ck\"><use href=\"#lu-check\"/></svg> passed · 48</span></div></div></div></div>"
+ },
+ "ChangedOnDisk": {
+  "caption": "A bar over the text: what, then Overwrite solid and Reload quiet; Saving… while it writes.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"pax-bar\"><span class=\"t\">Changed on disk at 14:06</span><span class=\"btn\" tabindex=\"0\">Overwrite</span><span class=\"ql\" tabindex=\"0\">Reload</span></div><div class=\"acts\"><span class=\"btn pax-wait\" tabindex=\"0\">Saving…</span><span class=\"pax-st\">Saved</span></div></div></div></div>"
+ },
+ "Picture": {
+  "caption": "A picture box; a large one asks before loading.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><svg class=\"pax-pic\" viewBox=\"0 0 320 200\" aria-hidden=\"true\"><rect width=\"320\" height=\"200\" style=\"fill:var(--raised)\"/><rect width=\"320\" height=\"18\" style=\"fill:var(--w7)\"/><circle cx=\"10\" cy=\"9\" r=\"3\" style=\"fill:var(--input)\"/><circle cx=\"20\" cy=\"9\" r=\"3\" style=\"fill:var(--input)\"/><circle cx=\"30\" cy=\"9\" r=\"3\" style=\"fill:var(--input)\"/><rect x=\"40\" y=\"5\" width=\"160\" height=\"8\" rx=\"4\" style=\"fill:var(--w12)\"/><rect x=\"70\" y=\"52\" width=\"180\" height=\"96\" rx=\"8\" style=\"fill:var(--bg)\"/><text x=\"160\" y=\"92\" text-anchor=\"middle\" style=\"fill:var(--blocked);font:600 13.5px var(--ui)\">429</text><text x=\"160\" y=\"110\" text-anchor=\"middle\" style=\"fill:var(--fg);font:11.5px var(--ui)\">Too many requests</text><text x=\"160\" y=\"126\" text-anchor=\"middle\" style=\"fill:var(--muted);font:11.5px var(--ui)\">Try again in 2 s</text></svg><div class=\"pax-load\"><span class=\"btn\" tabindex=\"0\">Load 4.2 MB</span></div></div></div></div>"
+ },
+ "SkeletonTwoLines": {
+  "caption": "Loading shape for two-line rows.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"pax-skl\"><div class=\"prow2\" tabindex=\"0\"><div class=\"a\"><span class=\"sk skw\" style=\"width:130px;height:11px\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:11px\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:90px;height:9px\"></span></div></div><div class=\"prow2\" tabindex=\"0\"><div class=\"a\"><span class=\"sk skw\" style=\"width:100px;height:11px\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:11px\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:120px;height:9px\"></span></div></div><div class=\"prow2\" tabindex=\"0\"><div class=\"a\"><span class=\"sk skw\" style=\"width:150px;height:11px\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:11px\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:80px;height:9px\"></span></div></div></div></div></div></div>"
+ }
+}

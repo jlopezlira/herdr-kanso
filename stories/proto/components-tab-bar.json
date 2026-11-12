@@ -1,0 +1,6 @@
+{
+ "TabBar": {
+  "caption": "Tabs 26, body size, program mark 15; the chosen tab on w12 with its close at 12. Panel buttons 26 with 15.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:620px\"><div class=\"w1-tabbar\"><span class=\"w1-tab\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>Tab 1</span><span class=\"w1-tab on\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>bix<svg class=\"i x\"><use href=\"#lu-x\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"sp\"></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-chart-column\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-file\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-git-pull-request\"/></svg></span></div></div></div></div>"
+ }
+}

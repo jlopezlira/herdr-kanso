@@ -1,0 +1,6 @@
+{
+ "PaneStandingIn": {
+  "caption": "While a pane is dragged its place shows the mark and the name, and the ruler marks the drop.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:400px\"><div class=\"pane brx-drop brx-held\"><div class=\"ph\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg><span class=\"nm\">tests</span></div><div class=\"brx-body\"><div class=\"brx-stand\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>tests</div></div><div class=\"brx-ruler\"></div></div></div></div></div>"
+ }
+}

@@ -1,0 +1,6 @@
+{
+ "PaneHeader": {
+  "caption": "34 high; name medium with its mark, place and branch meta, tools 26, grip dim. Selected on w7.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:620px\"><div class=\"w1-ph sel\"><span class=\"nm\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>Bix</span><span class=\"bd\">app-audit</span><span class=\"bd\"><svg class=\"i \"><use href=\"#lu-git-branch\"/></svg>audit/app-errors</span><span class=\"sp\"></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-moon\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-send\"/></svg></span><svg class=\"i grip\"><use href=\"#lu-grip-vertical\"/></svg></div></div></div></div>"
+ }
+}

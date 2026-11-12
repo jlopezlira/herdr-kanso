@@ -1,0 +1,89 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './tokens-colour-and-wash.stories.js';
+
+<Meta title="Tokens/Colour and wash" />
+
+# Colour and wash
+
+## Washes
+
+w4 ground, w7 hover, w12 selected or pressed. Washes are the only backgrounds a control gets.
+
+<Canvas of={stories.Washes} />
+
+## Edges
+
+Input edge for fields and switches (3:1). Border is decoration only.
+
+<Canvas of={stories.Edges} />
+
+## State colours
+
+Colour only for a state, on the mark: working, blocked, done, idle.
+
+<Canvas of={stories.StateColours} />
+
+## Contrast, light and dark
+
+A: every pair of text and ground with its ratio; the fixes applied to the kit.
+
+Colour tokens: what each one is for, and the rule it keeps
+
+<table>
+<thead><tr><th>{"Token"}</th><th>{"Dark"}</th><th>{"Light"}</th><th>{"Use it for"}</th><th>{"Rule"}</th></tr></thead>
+<tbody>
+<tr><td colSpan={5}>{"Text"}</td></tr>
+<tr><td>{"fg"}</td><td>{"#d8d4cb"}</td><td>{"#2a2723"}</td><td>{"Names, rows, prose, typed text, labels on a wash"}</td><td>{"Body text. 4.5:1 on every surface, hover and selected included."}</td></tr>
+<tr><td>{"muted"}</td><td>{"#b3afa5"}</td><td>{"#49453d"}</td><td>{"Second lines, scope lines, quiet buttons at rest, field hints"}</td><td>{"Secondary text. 4.5:1 everywhere. Never for the one thing to read first."}</td></tr>
+<tr><td>{"dim"}</td><td>{"#a3a09a"}</td><td>{"#544f48"}</td><td>{"Counts, times, key hints, meta, a disabled label"}</td><td>{"Tertiary text. 4.5:1 everywhere. Told from muted by size and place, not by tone alone."}</td></tr>
+<tr><td colSpan={5}>{"States"}</td></tr>
+<tr><td>{"working"}</td><td>{"#c4b07e"}</td><td>{"#5d4e27"}</td><td>{"The working ensō and a running check"}</td><td>{"One meaning only. 4.5:1 as text, 3:1 as a mark."}</td></tr>
+<tr><td>{"blocked"}</td><td>{"#ca938b"}</td><td>{"#6b4642"}</td><td>{"Needs you, a failure, an error edge"}</td><td>{"One meaning only. 4.5:1 as text, 3:1 as a mark or an edge."}</td></tr>
+<tr><td>{"done"}</td><td>{"#98ad8f"}</td><td>{"#45543c"}</td><td>{"Finished, passed, ready"}</td><td>{"One meaning only. 4.5:1 as text, 3:1 as a mark."}</td></tr>
+<tr><td>{"violet"}</td><td>{"#ad9cab"}</td><td>{"#5a4b55"}</td><td>{"Merged"}</td><td>{"One meaning only. 4.5:1 as text, 3:1 as a mark."}</td></tr>
+<tr><td>{"blue"}</td><td>{"#93a3b5"}</td><td>{"#44505e"}</td><td>{"Information with no state"}</td><td>{"One meaning only. 4.5:1 as text, 3:1 as a mark."}</td></tr>
+<tr><td>{"claude"}</td><td>{"#d4876a"}</td><td>{"#a35a3b"}</td><td>{"The Claude Code mark"}</td><td>{"A mark, not text. 3:1 on every surface."}</td></tr>
+<tr><td colSpan={5}>{"Surfaces"}</td></tr>
+<tr><td>{"canvas"}</td><td>{"#161615"}</td><td>{"#e2ded6"}</td><td>{"Fields, cards inside a panel"}</td><td>{"Behind controls that take input."}</td></tr>
+<tr><td>{"chrome"}</td><td>{"#161615"}</td><td>{"#dbd7ce"}</td><td>{"Sidebar, tab bar, status bar"}</td><td>{"The window frame."}</td></tr>
+<tr><td>{"bg"}</td><td>{"#1b1b19"}</td><td>{"#ebe8e2"}</td><td>{"Panes and panels"}</td><td>{"Where work is read."}</td></tr>
+<tr><td>{"popover"}</td><td>{"#222220"}</td><td>{"#f5f2ec"}</td><td>{"Menus, toasts, dialogs"}</td><td>{"Anything that floats."}</td></tr>
+<tr><td>{"raised"}</td><td>{"#262624"}</td><td>{"#f9f7f3"}</td><td>{"The away card, a segmented thumb"}</td><td>{"One step above its ground. Never pure white."}</td></tr>
+<tr><td>{"hover"}</td><td>{"7% fg"}</td><td>{"7% fg"}</td><td>{"Any row, menu item, icon or quiet button under the pointer"}</td><td>{"Foreground at 7% over its ground. Only tone changes."}</td></tr>
+<tr><td>{"selected"}</td><td>{"12% fg"}</td><td>{"12% fg"}</td><td>{"The chosen row, item or tab"}</td><td>{"Foreground at 12% over its ground. Hover never replaces it."}</td></tr>
+<tr><td>{"blkwash"}</td><td>{"#3d322f"}</td><td>{"#d0c4bf"}</td><td>{"The header of a pane that needs you"}</td><td>{"Text on it stays fg, muted or dim; a blocked verdict on it is drawn in fg."}</td></tr>
+<tr><td colSpan={5}>{"Edges and fills"}</td></tr>
+<tr><td>{"input"}</td><td>{"#73726d"}</td><td>{"#817b72"}</td><td>{"The edge of a field, a switch track, any control whose edge is its only outline"}</td><td>{"3:1 against its ground."}</td></tr>
+<tr><td>{"border"}</td><td>{"#272725"}</td><td>{"#d8d2c8"}</td><td>{"Dividers between areas"}</td><td>{"Decoration only. Never the only outline of a control."}</td></tr>
+<tr><td>{"solid / solidfg"}</td><td>{"#d8d4cb / #161615"}</td><td>{"#2a2723 / #ebe8e2"}</td><td>{"The one primary button"}</td><td>{"Label 4.5:1 on the fill, at rest and on hover."}</td></tr>
+<tr><td>{"accent / accentfg"}</td><td>{"#e88399 / #161615"}</td><td>{"#912845 / #f5f2ec"}</td><td>{"An armed control, the focus ring, the focused pane outline"}</td><td>{"Label 4.5:1 on the fill. Ring and outline 3:1. Never decoration."}</td></tr>
+</tbody>
+</table>
+
+## A Contrast, light and dark
+
+### Colour guidelines
+
+- **Seijaku** Use a token, never a value. Every colour in a board or a mod is one of the tokens in the table. A new colour is added to the table, with its use and its rule, before anything uses it.
+- **Shizen** Text passes 4.5:1 on every surface it can sit on, including hover and selected. Marks, focus rings and control edges pass 3:1. Never lower contrast with opacity on text.
+- **Fukinsei** Three text levels: fg, muted and dim, told apart by size and place first and tone second.
+- **Kokō** One colour, one meaning. A state colour appears only on the thing in that state. Colour on anything that asks nothing is a defect.
+- **Shizen** Washes come from the foreground: track 4%, hover 7%, selected 12%, active project 14%. Light uses the same steps; it never reaches pure white or black.
+- **Seijaku** Light and dark are one design. They share the same geometry and the same token names; only the values differ.
+- **Seijaku** Checking a change. Any change to a token is measured against every surface in the table, hover and selected included, before it is published.
+
+## Prompt for agents
+
+```text
+Build Colour and wash (Tokens) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --accent, --accentfg, --bg, --blocked, --border, --canvas, --done, --fg, --idle, --input, --k-fs-body, --k-fs-meta, --solid, --solidfg, --w12, --w4, --w7, --working.
+Draw these pieces: Washes; Edges; State colours.
+Follow these rules:
+- Washes: w4 ground, w7 hover, w12 selected or pressed. Washes are the only backgrounds a control gets.
+- Edges: Input edge for fields and switches (3:1). Border is decoration only.
+- State colours: Colour only for a state, on the mark: working, blocked, done, idle.
+Apply every guideline of A Contrast, light and dark.
+Treat as a defect:
+- Never lower contrast with opacity on text.
+- Colour on anything that asks nothing is a defect.
+```

@@ -1,0 +1,6 @@
+{
+ "StatusBar": {
+  "caption": "Meta size muted; items with 12 icons; minimap; zoom with the value foreground.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:620px\"><div class=\"w1-sbar\"><span class=\"it\"><svg class=\"i\"><use href=\"#lu-monitor\"/></svg>light</span><span class=\"it\"><svg class=\"i\"><use href=\"#lu-git-branch\"/></svg>audit/app-errors</span><span class=\"sp\"></span><span class=\"w1-mini\"></span><span class=\"sp\"></span><span class=\"ct\"><span>−</span><span class=\"v\">2</span><span>+</span></span></div></div></div></div>"
+ }
+}

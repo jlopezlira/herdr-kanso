@@ -1,0 +1,34 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './tokens-dawn.stories.js';
+
+<Meta title="Tokens/Dawn" />
+
+# Dawn
+
+## The band
+
+First light on the horizon: night, stars, clouds, the line, the glow, the sun as the ensō. 256 × 56, drawn once.
+
+<Canvas of={stories.TheBand} />
+
+## 11 Dawn Mode, the early channel
+
+### Dawn guidelines
+
+- **Shizen** Two modes, named everywhere: Stable Mode and Dawn Mode. Dawn Mode's build arrives before the day everyone gets. The message is light arriving: you see the day first.
+- **Yūgen** The art says which build you are in, in one look. A dawn sky on a horizon: night still at the top with its last stars, plum, apricot, gold at the horizon, and thin cloud bands lit from below. The sun coming up is kansō's ensō. Five colours of its own per theme: dawn-top, dawn-mid, dawn-low, dawn-edge, dawn-sun. One image per theme, drawn by us.
+- **Kansō** One home: the sidebar header, 56 high, behind the lights and above the tools. Nothing in the footer, nothing anywhere else.
+- **Kansō** It is a piece (board 10): Artwork, the default in Dawn Mode; Pill, "Dawn Mode" at the right of the lights, tinted with dawn-sun; or Hidden. Stable Mode shows nothing.
+- **Seijaku** The sun comes up once: when the window opens in Dawn Mode, and at the moment you switch to it. The sky lightens from the horizon over 2.6 s, the sun rises to its place, the ensō draws itself as it arrives, the cloud bands light last. Then it is still for the session. Reduced motion shows the final frame. Every copy of the band plays together.
+- **Shizen** Risk in words, before the press. The switch's row says "It can break" under it; one press switches. A release that breaks something says so first in What's new.
+
+## Prompt for agents
+
+```text
+Build Dawn (Tokens) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --border, --canvas, --chrome, --dawn-edge, --dawn-low, --dawn-mid, --dawn-star, --dawn-sun, --dawn-top, --fg, --k-fs-body, --k-fw-medium, --k-h-control, --k-r-control, --k-sp-3, --w12, --w7.
+Draw these pieces: The band.
+Follow these rules:
+- The band: First light on the horizon: night, stars, clouds, the line, the glow, the sun as the ensō. 256 × 56, drawn once.
+Apply every guideline of 11 Dawn Mode, the early channel.
+```

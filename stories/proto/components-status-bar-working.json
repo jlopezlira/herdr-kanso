@@ -1,0 +1,6 @@
+{
+ "StatusBarWorking": {
+  "caption": "Left the place, right the count of working agents with the mark, and the palette key.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:620px\"><div class=\"brx-st brx-frame\" style=\"width:100%\"><div class=\"brx-sl\"></div><div class=\"brx-sm\"></div><div class=\"brx-sr\"><span class=\"it\"><svg class=\"m m-work s12\"><use href=\"#e-work\"/></svg>2 of 4 working</span><span class=\"it\">⌘⇧P</span></div></div></div></div></div>"
+ }
+}

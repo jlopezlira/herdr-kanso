@@ -13,6 +13,9 @@ const config = {
     "@storybook/addon-mcp"
   ],
   "framework": "@storybook/html-vite",
+  "features": {
+    "componentsManifest": true
+  },
   "core": {
     "disableWhatsNewNotifications": true,
     "disableTelemetry": true

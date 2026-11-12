@@ -1,0 +1,9 @@
+/* The Storybook's own frame around the prototype's drawings. */
+.story-frame { width: max-content; min-width: 100%; box-sizing: border-box; padding: var(--k-sp-4); }
+.story-frame.story-canvas { padding: 2%; }
+.story-frame :has(> .kst-toast) { min-width: min-content; }
+.story-frame .st-s > .cap { margin: var(--k-sp-4) 0 var(--k-sp-2); font-size: var(--k-fs-meta); color: var(--muted); }
+.story-frame .st-s > .cap:first-child { margin-top: 0; }
+.tip-live { display: inline-flex; flex-direction: column; align-items: flex-start; }
+.tip-live > .tip { visibility: hidden; opacity: 0; transition: opacity var(--k-hover-out) var(--k-ease-out), visibility 0s linear var(--k-hover-out); }
+.tip-live > :is(:hover, :focus-visible) + .tip { visibility: visible; opacity: 1; transition: opacity var(--k-hover-in) var(--k-ease-in); }

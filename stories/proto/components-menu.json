@@ -1,0 +1,6 @@
+{
+ "Menu": {
+  "caption": "252 wide, radius 8, items 30 with icon 14, key hint dim at the right, heading dim, rule between groups.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"menu\"><div class=\"mh\">src/api/checkout.ts</div><div class=\"mi hov\"><svg class=\"i i14\"><use href=\"#lu-git-pull-request\"/></svg>Open the diff</div><div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-file\"/></svg>Open<span class=\"k\">↵</span></div><div class=\"mr\"></div><div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-eye-off\"/></svg>Hide this section</div><div class=\"mi kit-armed\"><svg class=\"i i14\"><use href=\"#lu-x\"/></svg><span class=\"kit-act kit-armed\" tabindex=\"0\"><span>Delete worktree</span><span>Press again to delete</span></span></div></div></div></div>"
+ }
+}

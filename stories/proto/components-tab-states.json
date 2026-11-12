@@ -1,0 +1,6 @@
+{
+ "TabStates": {
+  "caption": "At rest, chosen, with a mark (blocked, done), held while dragging, armed to close with its tip.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:620px\"><div class=\"w1-tabbar\"><span class=\"w1-tab on\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>checkout<svg class=\"i x\"><use href=\"#lu-x\"/></svg></span><span class=\"w1-tab\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>cart-ui<svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg></span><span class=\"w1-tab\"><svg class=\"pi\"><use href=\"#p-codex\"/></svg>tests<svg class=\"m m-done\"><use href=\"#e-done\"/></svg></span><span class=\"w1-tab\" style=\"background:var(--w12)\">perf</span><span class=\"w1-tab kit-armed\">checkout<svg class=\"i x\"><use href=\"#lu-x\"/></svg></span></div></div></div></div>"
+ }
+}
