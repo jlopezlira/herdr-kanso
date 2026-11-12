@@ -38,6 +38,7 @@ the branch's rules.
 - A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.
 - Needs you stays out of the sidebar until you choose it. A finished agent is not listed there.
 - On the project you are in, + stays visible. On the others it shows when you point at the row.
+- The panels' sizes come from kanso/tokens.json, and CI rejects a size, space, radius or height in a mod that is not a token value; kanso/tokens-baseline.json lists today's exceptions and can only shrink. Nothing on screen changes. (#177)
 - A count behind the branch asks Press again, then says Pulling… until git answers. A count ahead goes to that project and opens the pull request panel.
 - While you were away sits at the top of Projects, as it does on Status and Threads.
 - A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.
