@@ -32,6 +32,17 @@ test("a terminal address given to another agent after a sleep neither hides the 
   assert.equal(going.dozing.has("t1"), true, "and its awake row is gone");
 });
 
+test("an agent a wake opened in another terminal is drawn awake only, before the wake has written it", async () => {
+  const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
+  const slept = [{ id: "z1", from: ":/f", name: "Tab 1", spaceId: "sp-kanso", saved: 1, agents: [{ name: "Kylo", terminal: "t90", resume: "c1" }, { name: "Tokens", terminal: "t15r", resume: "c2" }] }];
+  const term = (address, wakes, state = "live") => ({ address, state, labels: wakes ? { "kanso.wakes": wakes } : {} });
+  const names = (terms) => clone(sleepingNow(spaces, terms, slept).rows.map((r) => r.name));
+  assert.deepEqual(names([term("t15w", "c1")]), ["Tokens"], "Kylo runs in t15w: not asleep too");
+  assert.deepEqual(names([term("t15w", "c1"), term("t15x", "c2")]), [], "both opened: nothing of it is drawn asleep");
+  assert.deepEqual(names([term("t15w", "c1", "exited")]), ["Kylo", "Tokens"], "a terminal that ended wakes no one");
+  assert.deepEqual(names([term("t90", "c1")]), ["Kylo", "Tokens"], "the terminal put to sleep, itself opened by an earlier wake, hides nothing");
+});
+
 test("a row drawn before the write is dropped once the database has that terminal", async () => {
   const { withAway } = await load("kanso-spaces/roster.js", ["withAway"], {});
   const db = [{ id: "z1", agents: [{ terminal: "t1" }] }];

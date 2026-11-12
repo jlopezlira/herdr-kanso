@@ -14,7 +14,7 @@ import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTermin
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace, seenRow, restDue, machinesToAsk, asOfText, kansoDir } from "./kdb.js";
+import { Kdb, spaceFor, inPlace, seenRow, restDue, machinesToAsk, asOfText, kansoDir, WAKES_LABEL } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, awayShown, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { SleepWork, settleOnLoad, commandsOf, runCmds, releaseHide, awayLeft, isAway, homePlace, couldNotSleep } from "./sleepwork.js";
@@ -1561,7 +1561,7 @@ export default class Spaces extends View {
 
   sleepingNow(sp, terms) {
     const asleep = shared("kanso.asleep") ?? [], away = shared("kanso.sleep.away"), here = home();
-    const signature = sleepingSignature(sp, terms, asleep, away, here);
+    const signature = sleepingSignature(sp, terms, asleep, away, here, WAKES_LABEL);
     if (signature !== this.sleepingSignature) {
       this.sleepingRows = sleepingNow(sp, terms, withAway(asleep, away), () => here);
       this.sleepingSignature = signature;
