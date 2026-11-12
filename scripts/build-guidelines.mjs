@@ -117,7 +117,7 @@ ${body}
 `;
 }
 
-const status = (e) => `<span class="status status-${esc(e.status.toLowerCase())}">${esc(statusLabel(e))}</span>`;
+const status = (e) => (e.status === "Approved" ? "" : `<span class="status status-${esc(e.status.toLowerCase())}">${esc(statusLabel(e))}</span>`);
 
 function indexPage(elements) {
   const rows = elements.map((e) => `  <li><a href="${esc(e.page)}"><strong>${esc(e.title)}</strong>${e.summary ? `<span>${esc(e.summary)}</span>` : ""}</a>${status(e)}</li>`).join("\n");
@@ -126,7 +126,7 @@ function indexPage(elements) {
     description: "kansō's approved design elements: tokens, components and states, each with its status and a block to give your coding agent.",
     body: `<h1>UX/UI guidelines</h1>
 <p class="lede">The elements kansō is drawn with. Reuse them instead of drawing new ones.</p>
-<p class="meta">Only approved elements appear here. Each one shows its status: Approved, Built in a version, or Verified against the running app.</p>
+<p class="meta">Only approved elements appear here. An element built in a version, or verified against the running app, says so.</p>
 
 <ul class="elements">
 ${rows}
@@ -247,8 +247,7 @@ const serves = (elements, e) => {
 
 function head(e) {
   return `<p class="crumb"><a href="./">UX/UI guidelines</a></p>
-<h1>${esc(e.title)}</h1>
-${e.summary ? `<p class="lede">${esc(e.summary)}</p>\n` : ""}<p class="meta">${status(e)}</p>`;
+<h1>${esc(e.title)}</h1>${e.summary ? `\n<p class="lede">${esc(e.summary)}</p>` : ""}${status(e) ? `\n<p class="meta">${status(e)}</p>` : ""}`;
 }
 
 function philosophyPage(e) {
