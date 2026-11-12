@@ -1,5 +1,15 @@
+import { addons } from 'storybook/preview-api';
 import '../site/tokens.css';
 import '../stories/kit.css';
+
+const applyTheme = (theme) => {
+  document.documentElement.dataset.theme = theme || 'dark';
+};
+
+if (typeof window !== 'undefined') {
+  applyTheme('dark');
+  addons.getChannel().on('globalsUpdated', ({ globals }) => applyTheme(globals?.theme));
+}
 
 /** @type { import('@storybook/html-vite').Preview } */
 const preview = {
@@ -10,10 +20,18 @@ const preview = {
     },
   },
   initialGlobals: { theme: 'dark' },
-  decorators: [(story, context) => {
-    document.documentElement.dataset.theme = context.globals.theme;
-    return story();
-  }],
+  decorators: [
+    (story, context) => {
+      applyTheme(context.globals.theme);
+      return story();
+    },
+    (story) => {
+      const room = document.createElement('div');
+      room.style.padding = '10%';
+      room.append(story());
+      return room;
+    },
+  ],
   parameters: {
     options: {
       storySort: {

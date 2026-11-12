@@ -1,3 +1,31 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html :is(.sbdocs, .sbdocs-wrapper, .sbdocs-content, .docs-story, .docblock-source) {
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: var(--ui);
+  }
+  html .sbdocs :is(h1, h2, h3, h4) {
+    color: var(--fg);
+    font-family: var(--ui);
+  }
+  html .sbdocs :is(p, li) {
+    color: var(--muted);
+    font-family: var(--ui);
+  }
+  html .sbdocs :is(code, pre),
+  html .docblock-source,
+  html .docblock-source :is(pre, code, span) {
+    background: var(--canvas);
+    color: var(--fg);
+    font-family: var(--mono);
+  }
+  html .sbdocs table {
+    color: var(--fg);
+    font-family: var(--ui);
+    background: var(--canvas);
+  }
+  html .sbdocs-content { padding: 10%; box-sizing: border-box; }
+</style>

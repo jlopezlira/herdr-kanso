@@ -13,6 +13,7 @@ const config = {
     "@storybook/addon-docs",
     "@storybook/addon-mcp"
   ],
-  "framework": "@storybook/html-vite"
+  "framework": "@storybook/html-vite",
+  "features": { "componentsManifest": true }
 };
 export default config;
