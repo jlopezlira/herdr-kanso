@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { context } from "./helpers.mjs";
+import { context, until } from "./helpers.mjs";
 import { repo, test, fixture, staged, pending, version, told, updated } from "./update-harness.mjs";
 
 test("Updating Kanso swaps its mods, merges its keys and keeps your layout aside", async (t) => {
@@ -135,7 +135,13 @@ test("Two windows installing at once share no state, and the lock lets one throu
     w.store["kanso.update"] = { latest: "1.1.0" };
     await w.updater.readInstalled();
   }
-  const results = await Promise.all([f.updater.install(cx), other.updater.install(cx)]);
+  await f.flag("slow");
+  const first = f.updater.install(cx);
+  await until(async () => f.updater.error || (await f.checks()).includes("open-with"));
+  assert.equal(f.updater.error, null, f.updater.error);
+  const second = await other.updater.install(cx);
+  await f.flag("go");
+  const results = [await first, second];
   assert.deepEqual(results.toSorted(), ["busy", undefined], "one installs, one is told");
   const toasts = [...f.toasts, ...other.toasts];
   assert.equal(updated(toasts).length, 1);
