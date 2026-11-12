@@ -2,6 +2,7 @@
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadTokens, read, writeChanged } from "./tokens.mjs";
+import { SHARED } from "./sync-share.mjs";
 
 export const MODS = "kanso/mods";
 export const BASELINE = "kanso/tokens-baseline.json";
@@ -56,10 +57,13 @@ export function compare(found, baseline) {
   return errors;
 }
 
+// A synced copy is its source byte for byte (sync:share --check), so only the source is linted.
+const COPIES = new Set(SHARED.flatMap(({ copies }) => copies));
+
 export function modFiles() {
   return readdirSync(new URL(`../${MODS}/`, import.meta.url), { recursive: true })
     .map((p) => p.split("\\").join("/"))
-    .filter((p) => p.endsWith(".js"))
+    .filter((p) => p.endsWith(".js") && !COPIES.has(`${MODS}/${p}`))
     .sort()
     .map((p) => ({ file: `${MODS}/${p}`, text: read(`${MODS}/${p}`) }));
 }

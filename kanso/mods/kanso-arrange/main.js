@@ -6,7 +6,7 @@ import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { tryOr } from "./pure.js";
-import { skeleton, breathe } from "./ui.js";
+import { skeleton, breathe, button, tokens } from "./ui.js";
 const ARM_MS = 4000;
 
 export function listFor(projects, key) {
@@ -151,12 +151,7 @@ export default class Arrange extends View {
     const t = theme();
     const p = props() ?? {};
     const project = this.space?.name ?? tilde(this.space?.folder);
-    const button = (id, text, primary, enabled, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
-      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
-      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium()
-      .when(!enabled, (el) => el.opacity(0.45))
-      .when(enabled, (el) => el.cursor_pointer().hover((s) => s.opacity(0.88)).on_click((_e, cx) => action(cx)))
-      .child(text);
+    const c = tokens(t);
     const head = (title, sub) => v_flex().gap(4)
       .child(h_flex().items_center()
         .child(div().flex_1().text_size(15).font_semibold().child(title))
@@ -200,8 +195,8 @@ export default class Arrange extends View {
         .when(Boolean(replaces), (el) => el.child(note(`This replaces the arrangement named ${replaces?.name}.`, t.muted)))
         .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
         .child(h_flex().pt(18).gap(8).justify_end()
-          .child(button("ar-back", "Back", false, true, (cx) => { this.view = "list"; this.target = null; cx.notify(); }))
-          .child(button("ar-save", replaces ? "Overwrite" : "Save", true, Boolean(cols.length), (cx) => this.save(cx))));
+          .child(button("ar-back", "Back", (cx) => { this.view = "list"; this.target = null; cx.notify(); }, c, { kind: "quiet" }))
+          .child(button("ar-save", replaces ? "Overwrite" : "Save", (cx) => this.save(cx), c, { disabled: !cols.length })));
     }
 
     const list = this.list ?? [];
@@ -246,7 +241,7 @@ export default class Arrange extends View {
       .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
       .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
       .child(h_flex().pt(18).gap(8).justify_end()
-        .child(button("ar-close", "Close", false, true, () => closeOverlay(p.overlay)))
-        .child(button("ar-new", "Save this tab", !list.length && !others.length, !this.busy, (cx) => this.startSave(cx))));
+        .child(button("ar-close", "Close", () => closeOverlay(p.overlay), c, { kind: "quiet" }))
+        .child(button("ar-new", "Save this tab", (cx) => this.startSave(cx), c, { kind: !list.length && !others.length ? "solid" : "tonal", disabled: Boolean(this.busy) })));
   }
 }

@@ -311,15 +311,11 @@ export class MarkdownDoc {
   }
 
   controls(t, prefix) {
-    const state = word(this.snapshot());
+    const state = word(this.snapshot()), c = tokens(t);
     return [
       ...(state ? [div().text_size(11.5).text_color(t.dim).child(state)] : []),
-      ...(this.canEdit ? [div().id(`${prefix}-source`).h(24).px(9).flex().items_center().rounded(6).cursor_pointer().text_size(12).font_medium()
-        .when(Boolean(this.source), (el) => el.bg(t.selected).text_color(t.foreground))
-        .when(!this.source, (el) => el.text_color(t.muted))
-        .hover((s) => s.bg(t.hover).text_color(t.foreground))
-        .tooltip(this.source ? "Back to the formatted document" : "Edit the whole file as Markdown")
-        .on_click((_e, cx) => this.toggleSource(cx)).child(this.source ? "Formatted" : "Source")] : []),
+      ...(this.canEdit ? [button(`${prefix}-source`, this.source ? "Formatted" : "Source", (cx) => this.toggleSource(cx), c, { kind: "quiet", small: true, active: Boolean(this.source), color: this.source ? null : c.muted })
+        .tooltip(this.source ? "Back to the formatted document" : "Edit the whole file as Markdown")] : []),
     ];
   }
 

@@ -27,7 +27,7 @@ import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW } from "./sidebar-rows.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, iconButton, Armed, segmented } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, button, iconButton, Armed, segmented } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -368,12 +368,7 @@ export default class Spaces extends View {
   newProjectView(t) {
     const start = Boolean(props().newProject?.start);
     const shown = this.projectFolder ? this.projectFolder.replace(trimmed(home()), "~") : "No folder chosen";
-    const button = (id, text, act, primary) => div().id(id).h(28).px(12).flex().flex_none().items_center().rounded(6).cursor_pointer().text_size(12.5)
-      .when(primary, (el) => el.bg(t.accent).text_color(t.accent_foreground ?? t.background))
-      .when(!primary, (el) => el.border_1().border_color(t.border).text_color(t.foreground))
-      .hover((s) => s.opacity(0.85))
-      .on_click((_e, cx) => act(cx))
-      .child(text);
+    const c = tokens(t);
     const label = (text) => div().text_size(12).text_color(t.muted).child(text);
     return v_flex().id("project-dialog").size_full().p(18).gap(8).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
@@ -381,14 +376,14 @@ export default class Spaces extends View {
       .child(label("Folder"))
       .child(h_flex().gap(8).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
-        .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), false)))
+        .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })))
       .child(label("Name"))
       .child(div().h(32).flex_none().px(8).flex().items_center().rounded(6).border_1().border_color(t.border)
         .child(Input.new(this.projectName).flex_1().h_full().text_size(13)))
       .child(div().min_h(16).text_size(12).text_color(this.projectError ? t.blocked : t.dim).child(this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open.")))
       .child(h_flex().gap(8).justify_end()
-        .child(button("project-cancel", "Cancel", () => closeOverlay(props().overlay), false))
-        .child(button("project-create", this.creating ? "Creating\u2026" : start ? "Create and start" : "Create project", (cx) => this.createProject(cx), true)));
+        .child(button("project-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))
+        .child(button("project-create", this.creating ? "Creating\u2026" : start ? "Create and start" : "Create project", (cx) => this.createProject(cx), c)));
   }
 
 
@@ -1511,12 +1506,7 @@ export default class Spaces extends View {
     const place = props().worktree;
     const base = kansoWorktrees(place.machine);
     const shownBase = base ? base.replace(trimmed(home()), "~") : "~/.kanso/worktrees";
-    const button = (id, text, act, primary) => div().id(id).h(28).px(12).flex().items_center().rounded(6).cursor_pointer().text_size(12.5)
-      .when(primary, (el) => el.bg(t.accent).text_color(t.accent_foreground ?? t.background))
-      .when(!primary, (el) => el.border_1().border_color(t.border).text_color(t.foreground))
-      .hover((s) => s.opacity(0.85))
-      .on_click((_e, cx) => act(cx))
-      .child(text);
+    const c = tokens(t);
     return v_flex().id("worktree-dialog").size_full().p(18).gap(10).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
       .child(div().text_size(15).font_semibold().child(`New agent in a worktree of ${place.name ?? "this project"}`))
@@ -1525,8 +1515,8 @@ export default class Spaces extends View {
         .child(Input.new(this.branch).flex_1().h_full().text_size(13)))
       .child(div().min_h(16).text_size(12).text_color(this.wtError ? t.blocked : t.dim).child(this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel.")))
       .child(h_flex().gap(8).justify_end()
-        .child(button("wt-cancel", "Cancel", () => closeOverlay(props().overlay), false))
-        .child(button("wt-make", this.making ? "Making\u2026" : "Make worktree", (cx) => this.makeWorktree(cx), true)));
+        .child(button("wt-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))
+        .child(button("wt-make", this.making ? "Making\u2026" : "Make worktree", (cx) => this.makeWorktree(cx), c)));
   }
 
   // Each worktree space moves under its main checkout's.

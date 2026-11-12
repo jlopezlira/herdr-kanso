@@ -39,7 +39,7 @@ the branch's rules.
 - Needs you stays out of the sidebar until you choose it. A finished agent is not listed there.
 - On the project you are in, + stays visible. On the others it shows when you point at the row.
 - The panels' sizes come from kanso/tokens.json, and CI rejects a size, space, radius or height in a mod that is not a token value; kanso/tokens-baseline.json lists today's exceptions and can only shrink. Nothing on screen changes. (#177)
-- The panels' buttons are one button in four kinds: solid for the one main action, tonal, quiet text and icon, 30 high or 24 on a line. Pointing washes it, pressing deepens it, focus draws an accent ring without moving anything, and an unavailable one stays flat and dim. (#178)
+- Every button in the panels, dialogs, pane headers and tab bar is one button in four kinds: solid for the one main action, tonal, quiet text and icon, 30 high or 24 on a line. In a dialog Cancel is quiet and comes before the main action. Pointing washes it, pressing deepens it, focus draws an accent ring without moving anything, and an unavailable one stays flat and dim. (#178)
 - A count behind the branch asks Press again, then says Pulling… until git answers. A count ahead goes to that project and opens the pull request panel.
 - While you were away sits at the top of Projects, as it does on Status and Threads.
 - A waiting agent's line is in full ink. A working one is quieter. A finished one is dim.

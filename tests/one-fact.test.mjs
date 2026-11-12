@@ -39,7 +39,7 @@ test("A finished row says its last words and not the header digest", async () =>
 test("An update draws no dot on the gear or the footer", async () => {
   const drawn = paint();
   const host = {
-    div: drawn.node, svg: drawn.node, image: drawn.node, h_flex: drawn.node, v_flex: drawn.node,
+    div: drawn.node, svg: drawn.node, image: drawn.node, h_flex: drawn.node, v_flex: drawn.node, Button: { new: drawn.node },
     theme, run: () => {}, openOverlay: () => {}, home: () => "/Users/me", window: () => ({ platform: "macos" }),
   };
   const { WorkspaceChrome } = await load("kanso-chrome/main.js", ["WorkspaceChrome"], {

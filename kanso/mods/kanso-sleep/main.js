@@ -7,7 +7,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, home } from "herdr";
 import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
-import { skeleton, breathe } from "./ui.js";
+import { skeleton, breathe, button, tokens } from "./ui.js";
 
 export const CLEAR_MS = 3000;
 export const RESEND_MS = 5000;
@@ -182,12 +182,7 @@ export default class Sleep extends View {
     const t = theme();
     const close = () => closeOverlay(props()?.overlay);
     const scope = this.order?.scope ?? null;
-    const button = (id, text, primary, enabled, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
-      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
-      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium()
-      .when(!enabled, (el) => el.opacity(0.45))
-      .when(enabled, (el) => el.cursor_pointer().hover((s) => s.opacity(0.88)).on_click((_e, cx) => action(cx)))
-      .child(text);
+    const c = tokens(t);
     const note = (text, tone) => div().pt(10).text_size(11.5).line_height(1.45).text_color(tone ?? t.dim).child(text);
     const shell = v_flex().id("kanso-sleep").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => { if (e.key !== "escape" || this.busy) return; cx.stop_propagation(); close(); });
@@ -216,7 +211,7 @@ export default class Sleep extends View {
       .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
       .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
       .child(h_flex().pt(18).gap(8).justify_end()
-        .child(button("sl-back", "Cancel", false, !this.busy, () => close()))
-        .when(scope === "project", (el) => el.child(button("sl-go", "Sleep", true, Boolean(this.reads) && !this.busy && !this.error, (cx) => cx.spawn(async (cx) => this.sleep(cx))))));
+        .child(button("sl-back", "Cancel", () => close(), c, { kind: "quiet", disabled: Boolean(this.busy) }))
+        .when(scope === "project", (el) => el.child(button("sl-go", "Sleep", (cx) => cx.spawn(async (cx) => this.sleep(cx)), c, { disabled: !this.reads || Boolean(this.busy) || Boolean(this.error) }))));
   }
 }

@@ -35,6 +35,8 @@ test("prompt editor uses a multiline plain-text Editor and submits edited newlin
     div: element,
     v_flex: element,
     h_flex: element,
+    svg: element,
+    Button: { new: element },
     theme: () => ({ dim: "", solid: "", input: "", solid_foreground: "", foreground: "", raised: "", background: "", popover: "", accent: "" }),
     closeOverlay: (overlay) => calls.push(["close", overlay]),
     run: (...args) => calls.push(["run", ...args]),
