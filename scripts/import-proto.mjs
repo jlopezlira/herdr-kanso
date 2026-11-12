@@ -11,6 +11,7 @@ const OUT = "stories/proto";
 const LAYOUTS = ["Window at rest", "Sidebar at rest", "Sidebar header, three ways", "hjkl dōjō", "Right-click any piece"];
 const SETTINGS = ["Settings", "Settings, what shows", "Keys", "Window map", "What's new", "Credits"];
 const SUBS = { "States (S21)": "States" };
+const TABLES = ["Every value", "Contrast, light and dark"];
 
 const BOARDS = {
   Z: "Philosophy",
@@ -191,13 +192,55 @@ const css = read("sb-atomic.css")
   .replace(/\n{3,}/g, "\n\n");
 if (/k-(dark|light)/.test(css)) throw new Error("a theme selector is left");
 
+const text = (html) => html.replace(/<svg.*?<\/svg>/gs, "").replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
+const q = (s) => JSON.stringify(s);
+const mdxText = (text) => text.split(/(`[^`]*`)/).map((part, i) => (i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`))).join("");
+const cell = (tag, value, span) => `<${tag}${span ? ` colSpan={${span}}` : ""}>{${q(value)}}</${tag}>`;
+const jsxTable = (head, rows) => `<table>\n<thead><tr>${head.map((h) => cell("th", h)).join("")}</tr></thead>\n<tbody>\n${rows.map((r) => `<tr>${r}</tr>`).join("\n")}\n</tbody>\n</table>`;
+
+function tableOf(html) {
+  if (html.includes("<table")) {
+    const [, cap, table] = /<p class="cap">([^<]*)<\/p>(?:<div[^>]*>)?\s*(<table.*?<\/table>)/s.exec(html);
+    const [head, ...rows] = [...table.matchAll(/<tr>(.*?)<\/tr>/gs)].map((m) =>
+      [...m[1].matchAll(/<(td|th)([^>]*)>(.*?)<\/\1>/gs)].map(([, , attrs, inner]) => ({ value: text(inner), span: /colspan="(\d+)"/.exec(attrs)?.[1] })));
+    return `${mdxText(text(cap))}\n\n${jsxTable(head.map((c) => c.value), rows.map((r) => r.map((c) => cell("td", c.value, c.span)).join("")))}`;
+  }
+  const out = [];
+  let rows = [];
+  const flush = () => {
+    if (!rows.length) return;
+    const values = rows.some((r) => r.value);
+    out.push(jsxTable(values ? ["Token", "Value", "Use"] : ["Token", "Use"], rows.map((r) => (values ? [r.name, r.value, r.use] : [r.name, r.use]).map((v) => cell("td", v)).join(""))));
+    rows = [];
+  };
+  for (const m of html.matchAll(/<span class="p-t">(.*?)<\/span>|<div class="p-scope">(.*?)<\/div>|<div class="sect">(.*?)<\/div>|<div class="kbx-t">(.*?)<\/div>/gs)) {
+    if (m[4]) {
+      const part = (c) => text(new RegExp(`<span class="${c}"[^>]*>(.*?)</span>`, "s").exec(m[4])[1]);
+      const value = part("kbx-s");
+      rows.push({ name: part("kbx-n"), value: value === "Aa" ? "" : value, use: part("r") });
+      continue;
+    }
+    flush();
+    if (m[1]) out.push(`### ${mdxText(text(m[1]))}`);
+    if (m[2]) out.push(`{${q(text(m[2]))}}`);
+    if (m[3]) out.push(`#### ${mdxText(text(m[3]))}`);
+  }
+  flush();
+  return out.join("\n\n");
+}
+
 const folders = new Map();
+const tables = {};
 for (const entry of JSON.parse(read("sb-atomic-stories.json"))) {
   const folder = place(entry);
   if (!folder) continue;
   const [, title, caption] = /<div class="st-h"><b>(.*?)<\/b><span>(.*?)<\/span>/s.exec(entry.html);
   if (title !== entry.title) throw new Error(`title mismatch: ${entry.title}`);
   if (!folders.has(folder)) folders.set(folder, {});
+  if (TABLES.includes(title)) {
+    (tables[folder] ??= []).push(`## ${mdxText(title)}\n\n${mdxText(text(caption))}\n\n${tableOf(entry.html)}`);
+    continue;
+  }
   const stories = folders.get(folder);
   let name = exportName(title);
   while (stories[name]) name += "2";
@@ -226,18 +269,15 @@ function prompt(folder, stories, boards) {
   const [level, sub] = folder.split("/");
   return [
     `Build ${sub} (${level}) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.`,
-    `Use these tokens: ${[...vars].filter(isToken).sort().join(", ")}.`,
-    `Draw these pieces: ${Object.values(stories).map((s) => s.title).join("; ")}.`,
+    ...(vars.size ? [`Use these tokens: ${[...vars].filter(isToken).sort().join(", ")}.`] : []),
+    ...(html ? [`Draw these pieces: ${Object.values(stories).map((s) => s.title).join("; ")}.`] : []),
     ...(kit.length ? [`Reuse these kit classes: ${kit.join(", ")}.`] : []),
-    "Follow these rules:",
-    ...Object.values(stories).map((s) => `- ${s.title}: ${s.caption}`),
+    ...(html ? ["Follow these rules:", ...Object.values(stories).map((s) => `- ${s.title}: ${s.caption}`)] : []),
     ...(boards.length ? [`Apply every guideline of ${boards.map((b) => b.name).join("; ")}.`] : []),
     ...(defects.length ? ["Treat as a defect:", ...defects.map((s) => `- ${s}`)] : []),
   ].join("\n");
 }
 
-const mdxText = (text) => text.split(/(`[^`]*`)/).map((part, i) => (i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`))).join("");
-const q = (s) => JSON.stringify(s);
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
@@ -245,8 +285,9 @@ writeFileSync(join(OUT, "story.js"), "export const story = ({ html, caption }) =
 for (const [folder, stories] of folders) {
   const file = slug(folder);
   const boards = why[folder] ?? [];
-  writeFileSync(join(OUT, `${file}.json`), `${JSON.stringify(stories, (k, v) => (k === "title" ? undefined : v), 1)}\n`);
-  writeFileSync(join(OUT, `${file}.stories.js`), `import stories from './${file}.json';
+  const drawn = Object.keys(stories).length > 0;
+  if (drawn) writeFileSync(join(OUT, `${file}.json`), `${JSON.stringify(stories, (k, v) => (k === "title" ? undefined : v), 1)}\n`);
+  if (drawn) writeFileSync(join(OUT, `${file}.stories.js`), `import stories from './${file}.json';
 import { story } from './story.js';
 
 export default { title: ${q(folder)} };
@@ -254,13 +295,12 @@ export default { title: ${q(folder)} };
 ${Object.entries(stories).map(([k, s]) => `export const ${k} = { name: ${q(s.title)}, ...story(stories.${k}) };`).join("\n")}
 `);
   writeFileSync(join(OUT, `${file}.mdx`), `import { Canvas, Meta } from '@storybook/addon-docs/blocks';
-import * as stories from './${file}.stories.js';
-
+${drawn ? `import * as stories from './${file}.stories.js';\n` : ""}
 <Meta title=${q(folder)} />
 
 # ${mdxText(folder.split("/")[1])}
 
-${Object.entries(stories).map(([k, s]) => `## ${mdxText(s.title)}\n\n${mdxText(s.caption)}\n\n<Canvas of={stories.${k}} />`).join("\n\n")}
+${[...Object.entries(stories).map(([k, s]) => `## ${mdxText(s.title)}\n\n${mdxText(s.caption)}\n\n<Canvas of={stories.${k}} />`), ...(tables[folder] ?? [])].join("\n\n")}
 ${boards.map((b) => `\n## ${mdxText(b.name)}\n\n${mdxText(b.body)}\n`).join("")}
 ## Prompt for agents
 

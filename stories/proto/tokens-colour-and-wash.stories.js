@@ -6,4 +6,3 @@ export default { title: "Tokens/Colour and wash" };
 export const Washes = { name: "Washes", ...story(stories.Washes) };
 export const Edges = { name: "Edges", ...story(stories.Edges) };
 export const StateColours = { name: "State colours", ...story(stories.StateColours) };
-export const ContrastLightAndDark = { name: "Contrast, light and dark", ...story(stories.ContrastLightAndDark) };
