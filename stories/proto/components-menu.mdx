@@ -24,7 +24,7 @@ import * as stories from './components-menu.stories.js';
 
 ### Share guidelines
 
-- **Seijaku** One menu (the kit's, 252 wide) from the header's share icon, in Ports, Memory, Spend and the hjkl dōjō. Its header is the privacy fact: "Counts and sizes only" (Ports, Memory), "Totals and days only" (Spend), "Scores and practice days only" (dōjō, shown once a round is played; the dōjō shows only the header icon).
+- **Seijaku** One menu (the kit's, 252 wide) from the header's share icon, in Ports, Memory, Spend and the hjkl dōjō. Its header is the privacy fact: "Counts and sizes only" (Ports, Memory), "Totals and days only" (Spend), "Scores and practice days only" (dōjō, shown once a round is played; the dōjō draws only the header icon).
 - **Yūgen** The icon shows only when there is something to share: history in Ports and Memory, an unfiltered home page in Spend.
 - **Seijaku** While the image is made, that row says so and the others dim; the result is the toast.
 - **Kansō** The inline row of four bordered buttons and its sentence go (share.js:285-296).
@@ -34,9 +34,9 @@ import * as stories from './components-menu.stories.js';
 
 ```text
 Build Menu (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --dim, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --popover, --shadow, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --dim, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-4, --muted, --popover, --shadow, --w12, --w7.
 Draw these pieces: Menu.
-Reuse these kit classes: kit-act, kit-armed.
+Reuse these kit classes: kanso-action, kanso-action--armed.
 Follow these rules:
 - Menu: 252 wide, radius 8, items 30 with icon 14, key hint dim at the right, heading dim, rule between groups.
 Apply every guideline of Right-click menus; Share, one menu everywhere.

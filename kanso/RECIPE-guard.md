@@ -105,11 +105,10 @@ keep moving behind other windows.
   s later. The action's label reads "…ing" until the guard's files show it
   done (the agent gone from the list, a new window pid, no helpers left, a
   newer sample, a fresh file), or 90 s pass.
-  - `recycle <pid>`: per agent row. A second press within 4 s confirms
-    ("Press again", `red`).
-  - `restart-window`: confirmed the same way ("Press again to restart the
-    window").
-  - `reap`: ends hung helpers; confirmed the same way.
+  - `recycle <pid>`: per agent row, on one press: the conversation resumes.
+  - `restart-window`: on one press.
+  - `reap`: ends hung helpers. A second press within 4 s confirms
+    (accent, "Press again to end N").
   - `check`: the refresh icon and ⌘R.
   - `install`: "Turn on". The Windows launcher keeps its ancestry alive for
     up to 10 s while the installer records the window program; install failures
@@ -173,6 +172,6 @@ Written by the guard to `${appHome()}/data/kanso-guard/` (read up to 1 MiB):
   sparklines, the heaviest processes, the events and the limits.
 - Without `now.json` it says "Off" with "Turn on"; with one older than 3
   minutes, "Stopped at HH:MM".
-- "Recycle" needs a second press, starts `guard.mjs recycle <pid>` detached,
+- "Recycle" acts on one press, starts `guard.mjs recycle <pid>` detached,
   and the row's label returns once the agent is recycled.
 - With the panel hidden, it reads nothing.

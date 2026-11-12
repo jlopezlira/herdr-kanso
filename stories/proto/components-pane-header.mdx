@@ -22,9 +22,9 @@ import * as stories from './components-pane-header.stories.js';
 - **Yūgen** The grip has no tooltip. The grab cursor says it.
 - **Kansō** Double-click renames in place, as tabs do. The dialog with its hint goes.
 - **Shizen** The blocked bar breathes on battery too.
-- **Yūgen** Moving a pane: every terminal in the tab gives way to a card, icon 17 and name 13.5, so the whole pane takes the drop. The held one stays on the pressed wash (w12). The target splits toward the side under the pointer and shows the held pane there in accent 25%, the same wash as the header zone, not accent 40. Below also lights the pane's foot (the ruler, :265-292).
+- **Yūgen** Moving a pane: every terminal in the tab gives way to a card, icon 17 and name 13.5, so the whole pane takes the drop. The held one stays on the pressed wash (w12, as sidebar rows). The target splits toward the side under the pointer and shows the held pane there in accent 25%, the same wash as the header zone, not accent 40. Below also lights the pane's foot (the ruler,:265-292).
 - **Kansō** On another computer: the folder is shortened with that computer's home, so it reads ~/acme-shop, not /home/jj/acme-shop. The computer's name is not repeated on every header.
-- **Seijaku** Unreachable: name, icon and digest at 55% as last read (stale), no state mark (it is unknown), terminal at 55%. The words live on the sidebar row and the status bar.
+- **Seijaku** Unreachable: name, icon and digest at 55% as last read (states stale), no state mark (it is unknown), terminal at 55%. The words live on the sidebar row and the status bar.
 - **Yūgen** GitHub not answering: the PR segment's place takes the state pattern's LINE: mark, "Can't read #142", a small Refresh. The tool's words are in the tooltip. A click opens the PR panel on its BLOCK of the same words.
 - **Seijaku** Its grid: 34 tall, 12 left and 8 right, 8 between items, text 12.5, top radius 8, icon 15, name up to 260, folder and branch 11.5 with a 12 icon, up to 220, mark 14, the grip a 14 icon in a 20 box. On the right: tools, then the mark, then the grip.
 - **Kokō** Remote, per stop: git status --porcelain=v2 --branch and git diff --shortstat (two calls, down from four), plus one gh pr view per distinct branch. 0 at rest.
@@ -41,7 +41,7 @@ import * as stories from './components-pane-header.stories.js';
 
 ```text
 Build Pane header (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-icon, --k-h-pane, --k-ic-control, --k-ic-inline, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-icon, --k-h-pane, --k-ic-control, --k-ic-inline, --k-r-card, --k-r-control, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --w12, --w7.
 Draw these pieces: Pane header.
 Follow these rules:
 - Pane header: 34 high; name medium with its mark, place and branch meta, tools 26, grip dim. Selected on w7.

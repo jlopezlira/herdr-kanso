@@ -5,16 +5,14 @@ import * as stories from './layouts-sidebar-at-rest.stories.js';
 
 # Sidebar at rest
 
-The band, tools, machines, projects with their agents, Asleep, the footer.
+the band, tools, machines, projects with their agents, Asleep, the footer.
 
 <Canvas of={stories.SidebarAtRest} />
 
-## Sidebar at rest
-
 ### Sidebar guidelines
 
-- **Shizen** In Dawn Mode, as in the other sidebar examples.
-- **Shizen** The sidebar at full height. Every row the app has, in its place, on the sidebar grid: leads 15, names 8 after, a level every 23, rows 32 (50 with a second line), groups 12 apart.
+- **Shizen** In Dawn Mode, as every sidebar example that follows.
+- **Shizen** The sidebar of, at full height. Every row the app has, in its place, on the 01 grid: leads 15, names 8 after, a level every 23, rows 32 (50 with a second line), groups 12 apart.
 - **Kansō** At rest a row is its lead, its name and its ensō. A second line only when needed (working, blocked), and the user chooses. + and ⋯ on the row under the pointer; no chevron, the row folds.
 - **Kansō** A computer says its state in a word on its row (Off, Unreachable) with its one fix as a row button (power, refresh). Never a block under the row.
 - **Yūgen** Asleep is one folded group with its count; a project in it wakes from its row.
@@ -25,7 +23,7 @@ The band, tools, machines, projects with their agents, Asleep, the footer.
 
 ### Edge guidelines
 
-- **Seijaku** First read is the kit skeleton: projects and their agents in the sidebar, a name, a name and its ensō, at 32, breathing. Rows replace it as they come; nothing jumps.
+- **Seijaku** First read is the kit skeleton: projects and their agents as sidebar at rest draws them, a name, a name and its ensō, at 32, breathing. Rows replace it as they come; nothing jumps.
 - **Yūgen** No project is the kit empty: one dim sentence and one action, New project. No sentence explaining what a project is.
 - **Shizen** Narrow, nothing reflows: under 240 wide rows keep their first line only, the waiting one too (its wash and mark still say it); a branch after a name truncates first; the switch keeps its three words at 12.5. Under 160 it folds to the rail and opens again at the width you had.
 - **Kokō** Cost: none of its own.
@@ -34,10 +32,10 @@ The band, tools, machines, projects with their agents, Asleep, the footer.
 
 ```text
 Build Sidebar at rest (Layouts) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --fg, --k-fs-body, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --fg, --k-fs-body, --k-sp-4, --w12, --w7.
 Draw these pieces: Sidebar at rest.
 Follow these rules:
-- Sidebar at rest: The band, tools, machines, projects with their agents, Asleep, the footer.
+- Sidebar at rest: the band, tools, machines, projects with their agents, Asleep, the footer.
 Apply every guideline of Sidebar at rest; First read, empty, narrow.
 Treat as a defect:
 - Never a block under the row.

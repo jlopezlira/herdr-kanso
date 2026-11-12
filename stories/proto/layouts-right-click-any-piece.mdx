@@ -9,8 +9,6 @@ import * as stories from './layouts-right-click-any-piece.stories.js';
 
 <Canvas of={stories.RightClickAnyPiece} />
 
-## Right-click any piece
-
 ### Right-click guidelines
 
 - **Kansō** Every piece answers a right-click. Nothing is removed to keep the window quiet: a piece can be put away, and it comes back from the same place. Rest shows what you would miss. The rest stays one right-click away.
@@ -30,7 +28,7 @@ import * as stories from './layouts-right-click-any-piece.stories.js';
 - **Kansō** An act that ends agents arms in place for 4 s and names what it ends: "Press again to close 2 agents".
 - **Kansō** Pane menu: grouped by kind, with a header. Split left stays in the menu, with ⌥⌘⇧D shown. "Send right-clicks to pane" and "Use Herdr right-click menu" become one checked row, "Right-clicks go to the program". Find in conversation and Sleep join. Rows that cannot act are not drawn.
 - **Seijaku** Separators come from groups, not from a row's index (menu/main.js:78).
-- **Seijaku** The PR segment and panel button menus use the same menu, unchanged.
+- **Seijaku** The PR segment and panel button menus are, unchanged.
 - **Seijaku** Keys: j k gg G Enter Esc, as in panels. Nothing is chosen until you move.
 - **Kokō** Remote: 0. Pin state and agents are read from the window.
 
@@ -38,7 +36,7 @@ import * as stories from './layouts-right-click-any-piece.stories.js';
 
 ```text
 Build Right-click any piece (Layouts) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --chrome, --dim, --done, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-h-icon, --k-ic-control, --k-ic-row, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --popover, --shadow, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --done, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-h-icon, --k-ic-control, --k-ic-row, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --popover, --shadow, --w12, --w7.
 Draw these pieces: Right-click any piece.
 Follow these rules:
 - Right-click any piece: 10: one menu on every piece: its words, its fixes, Only when needed, Hide this, Settings for this.
