@@ -4,11 +4,12 @@ import { div, svg } from "gpui-kit";
 import { h_flex, Button, Toggle } from "gpui-base";
 
 // Sizes generated from kanso/tokens.json by npm run build:ui-tokens.
-export const G = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-export const H = { control: 30, compact: 24, row: 40 };
+export const G = { hair: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+export const H = { control: 30, compact: 24, icon: 26, row: 40 };
 export const R = { control: 6, card: 8 };
 export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, body: 11.5, mono: 11.5 };
 export const ICON = 15;
+export const ICON_ROW = 14;
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 // End of the generated sizes.
 export const SEG = { two: 188, three: 280 };
@@ -44,16 +45,6 @@ const TONE = {
 };
 export const toneColor = (c, tone) => c[TONE[tone] ?? "dim"];
 
-/** A text-only action, so a choice never competes with the numbers. */
-export function quietLink(id, label, onClick, c, { disabled = false, size = 12, color = c.muted, label: spoken = label } = {}) {
-  return Button.new(id).h(H.compact).items_center().cursor_pointer()
-    .disabled(disabled)
-    .accessibility_label(spoken)
-    .when(!disabled, (el) => el.hover((s) => s.opacity(0.7)).focus((s) => s.opacity(0.7)))
-    .on_click((_e, cx) => { if (!disabled) onClick(cx); })
-    .child(div().text_size(size).text_color(disabled ? c.border : color).child(label));
-}
-
 export function quietTabs(id, items, value, onChange, c) {
   return h_flex().id(id).flex_wrap().gap(G.lg).items_center()
     .children(items.map((item, index) => {
@@ -69,15 +60,52 @@ export function quietTabs(id, items, value, onChange, c) {
     }));
 }
 
-/** `icon`: a name in kanso-chrome's icons, or a path. */
-export function iconButton(id, icon, tip, onClick, c, { spin = false, disabled = false, active = false, color = null } = {}) {
-  const path = icon.includes("/") ? icon : `${ICONS}${icon}.svg`;
-  const glyph = svg(path).size(ICON).text_color(color ?? (spin || active ? c.text : disabled ? c.border : c.muted));
-  return Button.new(id).size(26).flex_none().items_center().justify_center().rounded(R.control)
-    .accessibility_label(tip).tooltip(tip)
-    .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle)).focus((s) => s.bg(c.subtle)).on_click((_e, cx) => onClick(cx)))
-    .child(spin ? glyph.spin(900) : glyph);
+const RGB = /^#[0-9a-f]{6}/i;
+// The kit's color-mix: `a` over an opaque `b`, `share` of the way.
+export function mix(a, b, share) {
+  if (!RGB.test(a ?? "") || !RGB.test(b ?? "")) return a;
+  const at = (hex, i) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return `#${[0, 1, 2].map((i) => Math.round(at(a, i) * share + at(b, i) * (1 - share)).toString(16).padStart(2, "0")).join("")}`;
 }
+
+export const WASH = { off: 0.04, hover: 0.88, press: 0.76 };
+const CLEAR = "#00000000";
+const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
+const LOOKS = {
+  solid: (c) => filled(c.primary, c.primaryText, c),
+  tonal: (c) => ({ fill: c.subtle, ink: c.text, hover: c.selected, press: c.selected }),
+  quiet: (c) => ({ fill: null, ink: c.text, hover: c.subtle, press: c.selected }),
+  icon: (c) => ({ fill: null, ink: c.muted, hover: c.subtle, press: c.selected }),
+};
+
+/** solid: the one primary action; tonal: a wash, no edge; quiet: text only; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path. */
+export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, disabled = false, spoken = label, armed = false, active = false, spin = false, color = null } = {}) {
+  const square = kind === "icon";
+  const look = disabled ? { fill: kind === "quiet" ? null : mix(c.text, c.background, WASH.off), ink: c.dim }
+    : armed ? filled(c.accent, c.accentText, c)
+      : active ? { ...LOOKS[kind](c), fill: c.selected, ink: c.text, hover: c.selected }
+        : LOOKS[kind](c);
+  const ink = disabled || armed ? look.ink : color ?? (spin ? c.text : look.ink);
+  const side = small ? H.compact : square ? H.icon : H.control;
+  const glyph = icon ? svg(icon.includes("/") ? icon : `${ICONS}${icon}.svg`).size(square ? ICON : ICON_ROW).flex_none().text_color(ink) : null;
+  // The ring is a border kept clear at rest, so focusing never resizes the box.
+  return Button.new(id).h(side).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
+    .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
+    .disabled(disabled)
+    .accessibility_label(spoken)
+    .when(square, (el) => el.w(side).tooltip(spoken))
+    .when(!square, (el) => el.px((small ? G.sm : G.md) - G.hair))
+    .when(Boolean(look.fill), (el) => el.bg(look.fill))
+    .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(look.hover)).active((s) => s.bg(look.press)))
+    .when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))
+    .when(Boolean(glyph), (el) => el.child(spin ? glyph.spin(900) : glyph))
+    .when(!square, (el) => el.child(div().text_size(small ? T.body : T.value).font_medium().text_color(ink).child(label)));
+}
+
+/** A quiet action on a line. */
+export const quietLink = (id, label, onClick, c, { label: spoken = label, ...o } = {}) => button(id, label, onClick, c, { color: c.muted, ...o, spoken, kind: "quiet", small: true });
+
+export const iconButton = (id, icon, tip, onClick, c, o = {}) => button(id, tip, onClick, c, { ...o, kind: "icon", icon });
 
 export function section(c, title, note) {
   return h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.sm)

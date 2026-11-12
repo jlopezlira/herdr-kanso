@@ -5,7 +5,7 @@ import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home, appHome } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
-import { skeleton, breathe, quietLink, tokens } from "./ui.js";
+import { skeleton, breathe, quietLink, button, tokens } from "./ui.js";
 import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
 import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs, tooLarge, wholeText, overRead } from "./edit.js";
 
@@ -406,6 +406,7 @@ export class MarkdownDoc {
   tableEditor(t, id) {
     const { head, rows, table } = this.cells;
     const n = head.length;
+    const palette = tokens(t), quiet = { kind: "quiet", small: true, color: palette.muted };
     const icon = (key, tip, action) => div().id(key).size(20).flex_none().flex().items_center().justify_center().rounded(4).cursor_pointer()
       .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip(tip).on_click((_e, cx) => action(cx))
       .child(svg(`${this.icons}/close.svg`).size(11));
@@ -424,10 +425,10 @@ export class MarkdownDoc {
             .children(rows.map((r, ri) => line(r.map((s, c) => cell(s, `${id}-c${ri}-${c}`)), `${id}-row${ri}`, false,
               icon(`${id}-row-x-${ri}`, "Remove this row", (cx) => this.reshape((tb) => ({ ...tb, rows: tb.rows.toSpliced(ri, 1) }), cx))))))))
       .child(h_flex().gap(6)
-        .child(pillButton(`${id}-add-row`, "Add row", t, (cx) => this.reshape((tb) => ({ ...tb, rows: [...tb.rows, Array.from({ length: n }, () => "")] }), cx)))
-        .child(pillButton(`${id}-add-col`, "Add column", t, (cx) => this.reshape((tb) => ({ ...tb, head: [...tb.head, ""], align: [...tb.align, null], rows: tb.rows.map((r) => [...r, ""]) }), cx)))
+        .child(button(`${id}-add-row`, "Add row", (cx) => this.reshape((tb) => ({ ...tb, rows: [...tb.rows, Array.from({ length: n }, () => "")] }), cx), palette, quiet))
+        .child(button(`${id}-add-col`, "Add column", (cx) => this.reshape((tb) => ({ ...tb, head: [...tb.head, ""], align: [...tb.align, null], rows: tb.rows.map((r) => [...r, ""]) }), cx), palette, quiet))
         .child(div().flex_1())
-        .child(pillButton(`${id}-done`, "Done", t, (cx) => { this.close(); cx.notify(); })));
+        .child(button(`${id}-done`, "Done", (cx) => { this.close(); cx.notify(); }, palette, quiet)));
   }
 
   release() { this.close(); this.source?.release(); this.source = null; }
@@ -456,18 +457,12 @@ export const textIo = (path, on) => ({
   note: (error) => on ? copyFailure(error, on) : (quietError(error) ? "This computer did not answer" : "Could not save"),
 });
 
-export function pillButton(id, label, t, action, strong) {
-  return div().id(id).h(24).px(9).flex().items_center().rounded(6).cursor_pointer().text_size(12).font_medium()
-    .when(strong, (el) => el.bg(t.solid).text_color(t.solid_foreground).hover((s) => s.opacity(0.88)))
-    .when(!strong, (el) => el.text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground)))
-    .on_click((_e, cx) => action(cx)).child(label);
-}
-
 export function conflictBar(id, t, onMine, onTheirs) {
+  const c = tokens(t);
   return h_flex().flex_none().px(16).py(8).gap(8).items_center().border_b(1).border_color(t.border)
     .child(div().flex_1().min_w(0).text_size(12).text_color(t.blocked).child("The file changed on disk while you edited it."))
-    .child(pillButton(`${id}-mine`, "Keep mine", t, onMine, true))
-    .child(pillButton(`${id}-theirs`, "Take the file's", t, onTheirs));
+    .child(button(`${id}-mine`, "Keep mine", onMine, c, { small: true }))
+    .child(button(`${id}-theirs`, "Take the file's", onTheirs, c, { kind: "tonal", small: true }));
 }
 
 export const tildePath = (dir, on) => {

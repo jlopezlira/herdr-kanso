@@ -11,7 +11,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
 import { tilde } from "./lib.js";
-import { G, H, R, T, tokens, quietLink, iconButton, skeleton, breathe } from "./ui.js";
+import { G, H, R, T, tokens, button, quietLink, iconButton, skeleton, breathe } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -571,11 +571,8 @@ export class Look {
       .when(Boolean(item), (el) => el.child(h_flex().id("look-bar").flex_none().h(H.control).px(G.lg).gap(G.md).items_center().border_t(1).border_color(c.border)
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))
         .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(10.5).text_color(this.note?.error ? c.red : c.dim).child(status)))
+        .child(button("look-send", this.sending ? "Sending…" : noted(this.pins).length > 1 ? `Send ${noted(this.pins).length}  ⌘↩` : "Send  ⌘↩", (cx) => this.send(cx), c, { small: true, disabled: !ready }))
         .when(Boolean(drawn), (bar) => bar.child(quietLink("look-open", "Open", () => openPath(machine ? paths.join(appHome(), drawn) : drawn), c)))
-        .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(this.pinKey(item.path)); this.asking = null; cx.notify(); }, c)))
-        .child(Button.new("look-send").h(H.compact).px(G.md).flex_none().items_center().rounded(R.control).bg(c.primary)
-          .when(!ready, (b) => b.opacity(0.45))
-          .when(ready, (b) => b.cursor_pointer().hover((s) => s.opacity(0.85)).on_click((_e, cx) => this.send(cx)))
-          .child(div().text_size(T.value).font_medium().text_color(c.primaryText).child(this.sending ? "Sending…" : noted(this.pins).length > 1 ? `Send ${noted(this.pins).length}  ⌘↩` : "Send  ⌘↩")))));
+        .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(this.pinKey(item.path)); this.asking = null; cx.notify(); }, c)))));
   }
 }

@@ -288,8 +288,8 @@ export default class Memory extends View {
     return v_flex().w_full().gap(G.md)
       .child(div().text_size(narrow ? 22 : 28).font_light().text_color(c.muted).child(state === "bad" ? "Unreadable" : "Off"))
       .child(h_flex().gap(G.lg).items_center()
-        .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { size: 13, color: c.text }))
-        .when(state === "bad", (el) => el.child(quietLink("guard-reread", "Read again", (cx) => this.read(cx), c, { size: 13 }))));
+        .child(quietLink("guard-on", busy ? "Turning on…" : "Turn on", (cx) => { if (!busy) this.turnOn(cx); }, c, { color: c.text }))
+        .when(state === "bad", (el) => el.child(quietLink("guard-reread", "Read again", (cx) => this.read(cx), c))));
   }
 
   mainView(c, narrow) {
@@ -391,15 +391,15 @@ export default class Memory extends View {
       .when(batchable.length > 0, (el) => el.child(quietLink("guard-recycle-all",
         armedAll ? `Press again to recycle ${batchable.length}` : `Recycle all ${batchable.length} idle · about ${size(freedEstimate(batchable))} back`,
         (cx) => this.armed.press("all", cx, (cx) => this.recycleAll(0, cx)), c,
-        { color: armedAll ? c.red : c.text, size: 13, label: "Recycle every idle agent" })))
+        { color: armedAll ? c.red : c.text, label: "Recycle every idle agent" })))
       .when(heavy.length > 0 && heavy.length < batchable.length, (el) => el.child(quietLink("guard-recycle-heavy",
         armedHeavy ? `Press again to recycle ${heavy.length}` : `Only the ${heavy.length} over ${size(over)}`,
         (cx) => this.armed.press("heavy", cx, (cx) => this.recycleAll(over, cx)), c,
-        { color: armedHeavy ? c.red : c.muted, size: 13 })))
+        { color: armedHeavy ? c.red : c.muted })))
       .when(stale.length > 0, (el) => el.child(quietLink("guard-close-stale",
         armedStale ? `Press again to close ${stale.length}` : `Close the ${stale.length} not used for ${idleWords(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`,
         (cx) => this.armed.press("stale", cx, (cx) => this.closeStale(staleMin, cx)), c,
-        { color: armedStale ? c.red : c.muted, size: 13, label: "Close agents not used for a long time" })));
+        { color: armedStale ? c.red : c.muted, label: "Close agents not used for a long time" })));
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().w_full().gap(G.sm)
         .child(section(c, "Agents", list.length ? size(agentsMB(data)) : ""))
@@ -425,7 +425,7 @@ export default class Memory extends View {
       .child(h_flex().w_full().items_center().gap(G.sm)
         .when(!b.finished, (el) => el.child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE)))
         .child(div().flex_1().min_w(0).text_size(13).text_color(c.text).child(head))
-        .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; delete this.busy.batch; cx.notify(); }, c, { size: 11.5 }))))
+        .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; delete this.busy.batch; cx.notify(); }, c))))
       .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(2).id(`guard-batch-${i}`)
         .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(d.ok ? c.muted : c.text).child(d.name ?? d.terminal ?? ""))
         .child(div().flex_none().text_size(12).text_color(d.ok ? c.dim : c.red).whitespace_nowrap()
@@ -468,11 +468,11 @@ export default class Memory extends View {
           .when(closable || closing, (el) => el.child(quietLink(`guard-close-${a.pid}`,
             closing ? "Closing…" : armedClose ? "Press again to close" : "Close",
             (cx) => { if (!closing) this.armed.press(closeKey, cx, (cx) => this.closeAgent(a, cx)); }, c,
-            { color: armedClose ? c.red : c.dim, size: 11.5, label: `Close ${a.name || a.pid}` })))
+            { color: armedClose ? c.red : c.dim, label: `Close ${a.name || a.pid}` })))
           .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
             busy ? "Recycling…" : armed ? "Press again" : "Recycle",
             (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.recycle(a, cx)); }, c,
-            { color: armed ? c.red : c.muted, size: 11.5, label: `Recycle ${a.name || a.pid}` })))));
+            { color: armed ? c.red : c.muted, label: `Recycle ${a.name || a.pid}` })))));
   }
 
   heaviest(c, data) {

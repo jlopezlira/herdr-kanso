@@ -7,7 +7,7 @@ import { v_flex, h_flex, Button, Popover, Input, InputState, TextView, ScrollHan
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, H, R, T, breathe, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
+import { G, H, R, T, breathe, Armed, tokens, button, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
@@ -686,10 +686,7 @@ export class PullRequest {
   pickerFor(kind, c) {
     const id = `pr-pick-${kind}`;
     const label = { labels: "Change labels", assignees: "Assign people", reviewers: "Request a review" }[kind];
-    const trigger = Button.new(`${id}-trigger`).size(22).flex_none().items_center().justify_center().rounded(6).cursor_pointer()
-      .accessibility_label(label).tooltip(label)
-      .hover((s) => s.bg(c.subtle))
-      .child(svg(`${ICON}${kind === "labels" ? "tag" : "user-plus"}.svg`).size(13).text_color(c.muted));
+    const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: kind === "labels" ? "tag" : "user-plus" });
     const popover = Popover.new(id).trigger(trigger).anchor("top_right")
       .open(this.picker === kind)
       .on_open_change((open, cx) => this.openPicker(kind, open, cx));
@@ -758,19 +755,15 @@ export class PullRequest {
     const back = this.listing && this.pr;
     const counted = this.listed ? `${this.openPrs.length} open` : "Open";
     const label = this.listing ? (back ? `Back to #${this.pr.number}` : "Back") : counted;
-    return Button.new("pr-switch").h(26).pl(10).pr(8).gap(6).flex_none().items_center().rounded(6).cursor_pointer()
-      .border_1().border_color(this.listing ? c.muted : c.border)
-      .accessibility_label(this.listing ? label : (this.listed ? `${this.openPrs.length} open pull requests` : "Open pull requests"))
+    const spoken = this.listing ? label : (this.listed ? `${this.openPrs.length} open pull requests` : "Open pull requests");
+    return button("pr-switch", label, (cx) => {
+      this.listing = !this.listing;
+      if (!this.listing) { cx.notify(); return; }
+      if (this.loading) this.openedList = true;
+      else this.refresh(cx);
+      cx.notify();
+    }, c, { kind: "tonal", small: true, active: this.listing, spoken })
       .tooltip(this.listing ? "Back to the one shown" : "Every open pull request, and the closed ones")
-      .hover((s) => s.bg(c.subtle))
-      .on_click((_e, cx) => {
-        this.listing = !this.listing;
-        if (!this.listing) { cx.notify(); return; }
-        if (this.loading) this.openedList = true;
-        else this.refresh(cx);
-        cx.notify();
-      })
-      .child(div().text_size(12).text_color(c.text).child(label))
       .when(!this.listing, (el) => el.child(svg(`${ICON}chevron-right.svg`).size(12).text_color(c.muted)));
   }
 
@@ -818,7 +811,7 @@ export class PullRequest {
       .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
-      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { size: 13, color: c.text, disabled: Boolean(this.busy) }))))
+      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) }))))
       .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
   }
 
@@ -827,18 +820,13 @@ export class PullRequest {
   reviewPill(c) {
     const back = this.inboxOn && this.inboxOpen && this.pr;
     const label = this.inboxOn && this.inboxOpen ? (back ? `Back to #${this.pr.number}` : "This pane") : `${this.reviewCount()} to review`;
-    return Button.new("pr-reviews").h(26).px(10).flex_none().items_center().rounded(6).cursor_pointer()
-      .border_1().border_color(this.inboxOpen ? c.muted : c.border)
-      .accessibility_label(label)
-      .tooltip(this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests")
-      .hover((s) => s.bg(c.subtle))
-      .on_click((_e, cx) => {
-        this.inboxOpen = !this.inboxOpen;
-        if (this.inboxOpen) this.inboxTab = this.inboxTab ?? "needs";
-        else this.noteSeen(this.pr?.url);
-        cx.notify();
-      })
-      .child(div().text_size(12).text_color(c.text).child(label));
+    return button("pr-reviews", label, (cx) => {
+      this.inboxOpen = !this.inboxOpen;
+      if (this.inboxOpen) this.inboxTab = this.inboxTab ?? "needs";
+      else this.noteSeen(this.pr?.url);
+      cx.notify();
+    }, c, { kind: "tonal", small: true, active: this.inboxOpen })
+      .tooltip(this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests");
   }
 
   readNote() { return footOf(this).text; }

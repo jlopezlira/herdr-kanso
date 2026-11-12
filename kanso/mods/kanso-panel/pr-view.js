@@ -2,7 +2,7 @@
 import { div, svg } from "gpui-kit";
 import { shared } from "herdr";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { G, H, R, T, quietLink, section, toneColor } from "./ui.js";
+import { G, H, R, T, button, quietLink, section, toneColor } from "./ui.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictCard, VIEW } from "./pr-body.js";
@@ -38,20 +38,12 @@ function actionLabel(panel, action) {
 
 function actionButton(panel, c, action) {
   const disabled = !action?.acts || Boolean(panel.busy);
-  const hot = Boolean(action?.armed) && panel.armed.is(action.target) && !disabled;
-  const fill = hot ? c.accent : c.primary;
-  const ink = hot ? c.accentText : c.primaryText;
-  return Button.new(action.id).h(H.control).px(G.md).flex_none().items_center().rounded(R.control)
-    .disabled(disabled)
-    .accessibility_label(actionLabel(panel, action))
-    .when(disabled, (el) => el.border_1().border_color(c.input))
-    .when(!disabled, (el) => el.bg(fill).cursor_pointer().hover((s) => s.opacity(0.85)))
-    .on_click((_e, cx) => { if (!disabled) onAction(panel, action, cx); })
-    .child(div().text_size(T.value).font_medium().text_color(disabled ? c.dim : ink).child(actionLabel(panel, action)));
+  const armed = Boolean(action?.armed) && panel.armed.is(action.target) && !disabled;
+  return button(action.id, actionLabel(panel, action), (cx) => onAction(panel, action, cx), c, { disabled, armed });
 }
 
 function quietAction(panel, c, action) {
-  return quietLink(action.id, actionLabel(panel, action), (cx) => onAction(panel, action, cx), c, { disabled: !action.acts || Boolean(panel.busy), size: T.value, color: c.muted });
+  return quietLink(action.id, actionLabel(panel, action), (cx) => onAction(panel, action, cx), c, { disabled: !action.acts || Boolean(panel.busy), color: c.muted });
 }
 
 function onAction(panel, action, cx) {

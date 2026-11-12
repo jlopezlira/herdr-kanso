@@ -276,7 +276,7 @@ export default class Containers extends View {
         .children(k.ports.slice(0, 3).map((p) => (this.context?.remote
           ? div().flex_none().text_size(11.5).text_color(c.dim).child(`:${p.port}`)
           : quietLink(`ct-port-${k.id}-${p.port}`, `:${p.port}`, (cx) => cx.write_to_clipboard?.(`localhost:${p.port}`), c,
-            { size: 11.5, color: c.muted, label: `Copy localhost:${p.port}` })))))
+            { color: c.muted, label: `Copy localhost:${p.port}` })))))
       .child(h_flex().flex_wrap().gap_x(G.lg).pl(15)
         .child(quietLink(`ct-toggle-${k.id}`, busy ? "Working…" : on ? "Stop" : "Start", (cx) => { if (!busy) this.containers(on ? "stop" : "start", [k], cx); }, c, { color: c.text, disabled: busy }))
         .when(on, (el) => el.child(quietLink(`ct-restart-${k.id}`, "Restart", (cx) => { if (!busy) this.containers("restart", [k], cx); }, c, { disabled: busy })))
@@ -296,10 +296,10 @@ export default class Containers extends View {
       .child(div().min_w(0).flex_shrink(1).truncate().text_size(12.5).text_color(c.text).tooltip(s.file).child(`${s.compose && s.compose !== s.name ? s.compose : s.name} · compose`))
       .child(div().flex_none().text_size(11.5).text_color(c.dim).child(state))
       .child(h_flex().flex_none().gap(G.md)
-        .child(quietLink(`ct-up-${id}`, s.running ? "Up again" : "Up", () => this.stack(s, "up"), c, { size: 12, color: c.text }))
-        .child(quietLink(`ct-build-${id}`, "Rebuild", () => this.stack(s, "rebuild"), c, { size: 12 }))
+        .child(quietLink(`ct-up-${id}`, s.running ? "Up again" : "Up", () => this.stack(s, "up"), c, { color: c.text }))
+        .child(quietLink(`ct-build-${id}`, "Rebuild", () => this.stack(s, "rebuild"), c))
         .when(s.total > 0, (el) => el.child(quietLink(`ct-down-${id}`, armed ? "Press again: down" : "Down",
-          (cx) => this.armed.press(downKey, cx, () => this.stack(s, "down")), c, { size: 12, color: armed ? c.red : c.muted }))));
+          (cx) => this.armed.press(downKey, cx, () => this.stack(s, "down")), c, { color: armed ? c.red : c.muted }))));
   }
 
   group(g, c) {
@@ -310,15 +310,15 @@ export default class Containers extends View {
         .child(div().min_w(0).flex_shrink(1).truncate().text_size(15).text_color(g.project === OTHER ? c.muted : c.text).child(g.project))
         .child(h_flex().flex_none().gap(G.md).items_center()
           .when(g.containers.length > 0, (el) => el.child(div().text_size(12).text_color(c.dim).child(`${g.running} of ${g.containers.length} running`)))
-          .when(stopped.length > 1, (el) => el.child(quietLink(`ct-start-all-${g.project}`, "Start all", (cx) => this.containers("start", stopped, cx), c, { size: 12 })))
-          .when(running.length > 1, (el) => el.child(quietLink(`ct-stop-all-${g.project}`, "Stop all", (cx) => this.containers("stop", running, cx), c, { size: 12 })))))
+          .when(stopped.length > 1, (el) => el.child(quietLink(`ct-start-all-${g.project}`, "Start all", (cx) => this.containers("start", stopped, cx), c)))
+          .when(running.length > 1, (el) => el.child(quietLink(`ct-stop-all-${g.project}`, "Stop all", (cx) => this.containers("stop", running, cx), c)))))
       .children(g.stacks.map((s) => this.stackRow(s, c)))
       .children(g.containers.map((k) => this.row(k, c)));
   }
 
   head(id, title, note, open, c) {
     return h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.xs)
-      .child(quietLink(`ct-${id}`, `${open ? "Hide" : "Show"} ${title}`, (cx) => { this.show = { ...this.show, [id]: !open }; cx.notify(); }, c, { size: 13, color: c.text }))
+      .child(quietLink(`ct-${id}`, `${open ? "Hide" : "Show"} ${title}`, (cx) => { this.show = { ...this.show, [id]: !open }; cx.notify(); }, c, { color: c.text }))
       .child(div().min_w(0).truncate().text_size(12).text_color(c.dim).child(note));
   }
 
@@ -332,11 +332,11 @@ export default class Containers extends View {
       .child(h_flex().w_full().gap(G.sm).items_center()
         .child(h_flex().flex_1().min_w(0).h(28).px(8).rounded(6).border_1().border_color(c.input).bg(c.canvas)
           .child(Input.new(this.pull).flex_1().h_full().text_size(12)))
-        .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { size: 12, color: name ? c.text : c.border, disabled: !name })))
+        .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { color: name ? c.text : c.border, disabled: !name })))
       .when(unused.length > 0, (el) => el.child(h_flex()
         .child(quietLink("ct-rmi", armed ? `Press again to remove ${unused.length}` : `Remove unused images (${size(spare)})`,
           (cx) => this.armed.press("rmi", cx, (cx) => this.act(["rmi", ...unused.flatMap((i) => i.tags)], cx, { what: "remove images" })), c,
-          { size: 12, color: armed ? c.red : c.muted }))))
+          { color: armed ? c.red : c.muted }))))
       .when(open, (el) => el.children(this.images.map((i) => this.imageRow(i, c))));
   }
 
@@ -351,12 +351,12 @@ export default class Containers extends View {
           .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(i.unused ? `unused · ${i.age}` : `${i.projects.join(", ")} · ${i.users.join(", ")}`)))
         .child(div().flex_none().text_size(12).text_color(c.muted).child(size(i.mb))))
       .child(h_flex().flex_wrap().gap_x(G.lg)
-        .child(quietLink(`ct-run-${i.id}`, form ? "Cancel" : "Run…", (cx) => this.openRun(i, cx), c, { size: 12, color: c.text }))
+        .child(quietLink(`ct-run-${i.id}`, form ? "Cancel" : "Run…", (cx) => this.openRun(i, cx), c, { color: c.text }))
         .when(i.unused, (el) => el.child(quietLink(`ct-rmi-${i.id}`, armed ? "Press again to remove" : "Remove",
-          (cx) => this.armed.press(key, cx, (cx) => this.act(["rmi", ...i.tags], cx, { what: "remove image" })), c, { size: 12, color: armed ? c.red : c.muted }))))
+          (cx) => this.armed.press(key, cx, (cx) => this.act(["rmi", ...i.tags], cx, { what: "remove image" })), c, { color: armed ? c.red : c.muted }))))
       .when(Boolean(form), (el) => el.child(h_flex().w_full().gap(G.sm).items_center()
         .child(field(form.name)).child(field(form.port))
-        .child(quietLink(`ct-run-go-${i.id}`, "Run", (cx) => this.runImage(cx), c, { size: 12, color: c.text }))));
+        .child(quietLink(`ct-run-go-${i.id}`, "Run", (cx) => this.runImage(cx), c, { color: c.text }))));
   }
 
   volumesView(c) {
@@ -366,7 +366,7 @@ export default class Containers extends View {
       .when(unused.length > 0, (el) => el.child(h_flex()
         .child(quietLink("ct-vrm", armed ? `Press again: their data is gone for good` : `Remove ${unused.length} unused volume${unused.length === 1 ? "" : "s"}`,
           (cx) => this.armed.press("vrm", cx, (cx) => this.act(["volume", "rm", ...unused.map((v) => v.name)], cx, { what: "remove volumes" })), c,
-          { size: 12, color: armed ? c.red : c.muted }))))
+          { color: armed ? c.red : c.muted }))))
       .when(open, (el) => el.children(this.volumes.map((v) => h_flex().w_full().items_center().gap(G.md).px(G.md).py(7).border_t(1).border_color(c.border)
         .child(v_flex().flex_1().min_w(0).gap(2)
           .child(div().w_full().truncate().text_size(12.5).text_color(v.unused ? c.muted : c.text).tooltip(v.name).child(v.anonymous ? `${v.name.slice(0, 12)} (anonymous)` : v.name))
@@ -379,7 +379,7 @@ export default class Containers extends View {
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(12.5).text_color(c.muted).child(`Build cache: ${size(cache)} you can get back`))
       .child(quietLink("ct-cache", armed ? "Press again to clear" : "Clear", (cx) => this.armed.press("cache", cx, (cx) => this.act(["builder", "prune", "-f"], cx, { what: "clear the build cache" })), c,
-        { size: 12, color: armed ? c.red : c.text }));
+        { color: armed ? c.red : c.text }));
   }
 
   skeleton(c) {
@@ -418,7 +418,7 @@ export default class Containers extends View {
         .child(div().text_size(13).text_color(c.text).child(`${running} running`))
         .child(div().text_size(13).text_color(c.dim).child(`${all.length - running} stopped`))
         .when(!remote, (el) => el.child(quietLink("ct-quit", armedQuit ? "Press again to quit Docker" : running ? `Quit Docker (stops ${running})` : "Quit Docker",
-          (cx) => this.armed.press("quit", cx, (cx) => this.quitDocker(cx)), c, { size: 12.5, color: armedQuit ? c.red : c.muted }))));
+          (cx) => this.armed.press("quit", cx, (cx) => this.quitDocker(cx)), c, { color: armedQuit ? c.red : c.muted }))));
     const space = this.spaceView(c);
     return v_flex().w_full().gap(32)
       .child(hero)

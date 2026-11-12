@@ -1,42 +1,7 @@
 // The switch: one size, the knob's end, and the rows that keep it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load } from "./helpers.mjs";
-
-function chain(tag) {
-  const state = { calls: [], kids: [], tag, parent: null };
-  const adopt = (child) => {
-    if (child && typeof child === "object") { child.parent = node; state.kids.push(child); }
-  };
-  const node = new Proxy(state, {
-    get(_target, prop) {
-      if (prop === "calls" || prop === "kids" || prop === "tag" || prop === "parent") return state[prop];
-      if (prop === "when") return (condition, build) => {
-        state.calls.push(["when", Boolean(condition)]);
-        return condition ? build(node) : node;
-      };
-      if (prop === "child") return (child) => { state.calls.push(["child", child]); adopt(child); return node; };
-      if (prop === "children") return (list) => { state.calls.push(["children"]); for (const child of list ?? []) adopt(child); return node; };
-      return (...args) => { state.calls.push([String(prop), ...args]); return node; };
-    },
-    set(_target, prop, value) {
-      if (prop === "parent") { state.parent = value; return true; }
-      return false;
-    },
-  });
-  return node;
-}
-
-const host = () => ({
-  div: () => chain("div"),
-  h_flex: () => chain("h_flex"),
-  v_flex: () => chain("v_flex"),
-  svg: () => chain(),
-  image: () => chain(),
-  Button: { new: (id) => chain(id) },
-  Input: { new: () => chain() },
-  Toggle: { new: (id) => { const el = chain(id); el.calls.push(["new", id]); return el; } },
-});
+import { load, chain, gpuiHost as host } from "./helpers.mjs";
 
 const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "SWITCH", "H", "G", "R"], host());
 

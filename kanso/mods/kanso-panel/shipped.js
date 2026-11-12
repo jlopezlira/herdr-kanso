@@ -8,7 +8,7 @@ import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share } from "./share.js";
-import { G, tokens, iconButton, section, ghost, breathe } from "./ui.js";
+import { G, tokens, quietLink, iconButton, section, ghost, breathe } from "./ui.js";
 import { range, tryOrAsync, mapSeries } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
 
@@ -531,9 +531,8 @@ export class Shipped {
           .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(r.commits)} commits · +${fmt(r.add)} −${fmt(r.del)}`)))
         .child(h_flex().w_full().h(4).rounded(2).bg(c.subtle)
           .child(div().h_full().rounded(2).bg(c.accent).w(`${(Math.max(0.02, (r.add + r.del) / top) * 100).toFixed(1)}%`)))))
-      .when(byRepo.length > REPO_ROWS, (el) => el.child(h_flex().pt(G.sm).child(Button.new("shipped-repos-more").cursor_pointer()
-        .on_click((_e, cx) => { this.reposOpen = !this.reposOpen; cx.notify(); })
-        .child(div().text_size(12).text_color(c.muted).child(this.reposOpen ? "Show fewer" : `Show ${byRepo.length - REPO_ROWS} more`)))));
+      .when(byRepo.length > REPO_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("shipped-repos-more", this.reposOpen ? "Show fewer" : `Show ${byRepo.length - REPO_ROWS} more`,
+        (cx) => { this.reposOpen = !this.reposOpen; cx.notify(); }, c))));
   }
 
   status(c) {

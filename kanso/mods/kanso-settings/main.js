@@ -161,7 +161,7 @@ export default class Settings extends View {
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().pt(G.lg)
         .child(div().flex_1().text_size(12).text_color(c.dim).child("The tab bar"))
-        .when(changed, (el) => el.child(quietLink("reset-bar", "Reset", (cx) => { this.reset(panelRow, group.section, cx); this.reset(gearRow, group.section, cx); }, c, { size: 11.5 }))))
+        .when(changed, (el) => el.child(quietLink("reset-bar", "Reset", (cx) => { this.reset(panelRow, group.section, cx); this.reset(gearRow, group.section, cx); }, c))))
       .child(h_flex().w_full().flex_wrap().gap(2).p(4).rounded(10).bg(c.raised).children(tiles))
       .when(capturing, (el) => el.child(this.pressNote(c, this.capture.row === panelRow
         ? "Press the new key with any digit: each panel keeps its number. Esc to keep, Backspace to remove."
@@ -189,7 +189,7 @@ export default class Settings extends View {
           .cursor_pointer().hover((s) => s.bg(c.subtle)).when(capturing, (el) => el.bg(c.subtle))
           .on_click((_e, cx) => this.startCapture(row, g.section, chords[0] ?? null, cx))
           .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(row.label))
-          .when(changed && !capturing, (el) => el.child(quietLink(`reset-${id}`, "Reset", (cx) => this.reset(row, g.section, cx), c, { size: 11.5 })))
+          .when(changed && !capturing, (el) => el.child(quietLink(`reset-${id}`, "Reset", (cx) => this.reset(row, g.section, cx), c)))
           .when(!capturing, (el) => el.children(chords.length ? chords.map((k) => keycap(t, shownChord(k))) : [keycap(t, "No key", true)]))
           .when(capturing, (el) => el.child(div().flex_none().text_size(12).text_color(c.accent).child(row.family ? "Press a key with a digit" : "Press the new key")));
         return capturing ? v_flex().w_full().child(line).child(this.pressNote(c, "Esc to keep, Backspace to remove.")) : line;
