@@ -120,7 +120,7 @@ ${body}
 const status = (e) => `<span class="status status-${esc(e.status.toLowerCase())}">${esc(statusLabel(e))}</span>`;
 
 function indexPage(elements) {
-  const rows = elements.map((e) => `  <li><a href="${esc(e.page)}"><strong>${esc(e.title)}</strong><span>${esc(e.summary)}</span></a>${status(e)}</li>`).join("\n");
+  const rows = elements.map((e) => `  <li><a href="${esc(e.page)}"><strong>${esc(e.title)}</strong>${e.summary ? `<span>${esc(e.summary)}</span>` : ""}</a>${status(e)}</li>`).join("\n");
   return page({
     title: "UX/UI guidelines · kansō",
     description: "kansō's approved design elements: tokens, components and states, each with its status and a block to give your coding agent.",
@@ -230,18 +230,54 @@ ${files}
 <p class="sr-only" role="status" aria-live="polite" data-copy-status></p>`;
 }
 
-const list = (items) => `<ul>\n${items.map((i) => `  <li>${esc(i)}</li>`).join("\n")}\n</ul>`;
+const cite = (s) => esc(s).replace(/\*([^*]+)\*/g, "<i>$1</i>");
+const list = (items) => `<ul>\n${items.map((i) => `  <li>${cite(i)}</li>`).join("\n")}\n</ul>`;
+const kanji = (p) => `<span class="kanji" lang="ja">${esc(p.kanji)}</span>`;
 
-function tokensPage(e, tokens) {
+function principle(elements, id) {
+  const p = elements.find((e) => e.id === "philosophy")?.principles.find((x) => x.id === id);
+  if (!p) throw new Error(`no principle ${id}`);
+  return p;
+}
+
+const serves = (elements, e) => {
+  const p = principle(elements, e.serves);
+  return `<p class="serves"><a href="philosophy.html#${esc(p.id)}">${esc(p.name)} ${kanji(p)}</a></p>`;
+};
+
+function head(e) {
+  return `<p class="crumb"><a href="./">UX/UI guidelines</a></p>
+<h1>${esc(e.title)}</h1>
+${e.summary ? `<p class="lede">${esc(e.summary)}</p>\n` : ""}<p class="meta">${status(e)}</p>`;
+}
+
+function philosophyPage(e) {
+  const sections = e.principles.map((p) => `<section class="principle" id="${esc(p.id)}">
+<h2>${esc(p.name)} ${kanji(p)}</h2>
+<h3>What it means</h3>
+<p>${esc(p.means)}</p>
+<h3>How kansō applies it</h3>
+<p>${esc(p.applies)}</p>
+</section>`).join("\n\n");
+  return page({
+    title: `${e.title} · UX/UI guidelines · kansō`,
+    description: e.why[0].replace(/\*/g, ""),
+    body: `${head(e)}
+
+${sections}
+
+<h2 id="why">Why</h2>
+${list(e.why)}`,
+  });
+}
+
+function tokensPage(e, tokens, elements) {
   const toc = [...GROUPS, ["colour", "Colour"], ["contrast", "Contrast"], ["when", "When to use"], ["how", "How to use it"]]
     .map(([id, title]) => `<a href="#${id}">${title}</a>`).join("\n  ");
   return page({
     title: `${e.title} · UX/UI guidelines · kansō`,
     description: e.summary,
-    body: `<p class="crumb"><a href="./">UX/UI guidelines</a></p>
-<h1>${esc(e.title)}</h1>
-<p class="lede">${esc(e.summary)}</p>
-<p class="meta">${status(e)}</p>
+    body: `${head(e)}
 <nav class="toc" aria-label="On this page">
   ${toc}
 </nav>
@@ -253,6 +289,7 @@ ${colourTable(tokens)}
 ${contrastTables(tokens)}
 
 <h2 id="when">When to use</h2>
+${serves(elements, e)}
 ${list(e.use)}
 <h3>When not to</h3>
 ${list(e.avoid)}
@@ -261,7 +298,7 @@ ${howTo(e)}`,
   });
 }
 
-const PAGES = { tokens: tokensPage };
+const PAGES = { philosophy: philosophyPage, tokens: tokensPage };
 
 export function render({ elements, tokens }) {
   const shown = published(elements);
@@ -269,7 +306,8 @@ export function render({ elements, tokens }) {
   for (const e of shown) {
     if (!PAGES[e.id]) throw new Error(`no page for element ${e.id}`);
     if (e.status === "Built" && !e.version) throw new Error(`element ${e.id} is Built but has no version`);
-    out[`${OUT}/${e.page}`] = PAGES[e.id](e, tokens);
+    if (e.id !== "philosophy" && !e.serves) throw new Error(`element ${e.id} names no principle`);
+    out[`${OUT}/${e.page}`] = PAGES[e.id](e, tokens, shown);
   }
   return out;
 }

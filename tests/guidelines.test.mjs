@@ -34,3 +34,11 @@ test("every site page links the guidelines from its nav", async () => {
     assert.match(nav, /href="guidelines\/">Guidelines</, page);
   }
 });
+
+test("every element page names a principle from the philosophy", () => {
+  const { elements } = load();
+  const ids = elements.find((e) => e.id === "philosophy").principles.map((p) => p.id);
+  for (const e of published(elements).filter((x) => x.id !== "philosophy")) {
+    assert.ok(ids.includes(e.serves), `${e.id} serves ${e.serves}`);
+  }
+});
