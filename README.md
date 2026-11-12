@@ -31,6 +31,7 @@ For the Herdr desktop app, not the Herdr TUI. macOS, Windows and Linux; the iOS 
 <p align="center">
   <a href="https://jlopezlira.github.io/herdr-kanso/">Website</a> ·
   <a href="https://jlopezlira.github.io/herdr-kanso/guidelines/">Guidelines</a> ·
+  <a href="https://jlopezlira.github.io/herdr-kanso/storybook/">Storybook</a> ·
   <a href="#install">Install</a> ·
   <a href="#keys">Keys</a> ·
   <a href="#privacy">Privacy</a> ·

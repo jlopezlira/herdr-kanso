@@ -19,6 +19,13 @@ ${vars(tokens.colour.dark, "  ")}
 ${vars(tokens.colour.light, "    ")}
   }
 }
+:root[data-theme="dark"] {
+${vars(tokens.colour.dark, "  ")}
+}
+
+:root[data-theme="light"] {
+${vars(tokens.colour.light, "  ")}
+}
 `;
 }
 
