@@ -112,8 +112,7 @@ function place({ group, sub, title }) {
   if (group === "Tokens") return "Tokens/Every value";
   if (group === "Atoms") return `${sub === "Controls" ? "Compositions" : "Tokens"}/${sub}`;
   if (group === "Molecules") return `Compositions/${SUBS[sub] ?? sub}`;
-  if (group === "Compositions") return `Components/${title}`;
-  if (group === "Tests") return LAYOUTS.includes(title) ? `Layouts/${title}` : `Components/${SETTINGS.includes(title) ? "Settings tabs" : title}`;
+  if (group === "Compositions") return LAYOUTS.includes(title) ? `Layouts/${title}` : `Components/${SETTINGS.includes(title) ? "Settings tabs" : title}`;
   return null;
 }
 

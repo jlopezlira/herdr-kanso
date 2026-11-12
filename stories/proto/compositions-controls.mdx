@@ -37,9 +37,21 @@ Rest, focus (the one ring), invalid, tall. Input edge, canvas ground, 30 min.
 
 ## Buttons, four kinds
 
-Solid, tonal, quiet, icon. One height 30, one weight 500. Off is w4 with dim text.
+Solid, tonal, quiet, icon. One height 30, radius 6, body size, weight 500, padding 12. Off is w4 with dim text, for solid and icon alike.
 
 <Canvas of={stories.ButtonsFourKinds} />
+
+## Buttons on a line
+
+The small kind: 24 high, meta size, padding 8. The same four kinds, used where a button sits on a row, a toast or a header.
+
+<Canvas of={stories.ButtonsOnALine} />
+
+## Action rows
+
+In a dialog: Cancel quiet, then the one solid action at the end. In a panel: the solid action first, quiet ones after; the first fix of a failure is solid, the rest tonal.
+
+<Canvas of={stories.ActionRows} />
 
 ## Button with a mark
 
@@ -81,16 +93,18 @@ Sidebar tools 32 with 17. Tab bar and pane tools 26 with 15. Row buttons 20 with
 
 ```text
 Build Controls (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --blocked, --border, --canvas, --dim, --fg, --hover, --input, --k-ease-in, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-h-badge, --k-h-compact, --k-h-control, --k-h-icon, --k-h-row, --k-hover-in, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-body, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sw-knob, --muted, --popover, --raised, --selected, --shadow, --solid, --solidfg, --w12, --w4, --w7.
-Draw these pieces: Key hint; Pill and avatar; Switch; Segmented; Field; Buttons, four kinds; Button with a mark; Armed; Focus ring; Hover, selected, pressed; Tooltip; Chrome and bar buttons.
-Reuse these kit classes: kit-act, kit-armed, kit-field, kit-kbd, kit-seg, kit-switch, kst-btn.
+Use these tokens: --bg, --blocked, --border, --canvas, --dim, --fg, --hover, --input, --k-ease-in, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-fw-strong, --k-h-badge, --k-h-compact, --k-h-control, --k-h-icon, --k-h-row, --k-hover-in, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-body, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sw-knob, --muted, --raised, --selected, --solid, --solidfg, --w12, --w4, --w7.
+Draw these pieces: Key hint; Pill and avatar; Switch; Segmented; Field; Buttons, four kinds; Buttons on a line; Action rows; Button with a mark; Armed; Focus ring; Hover, selected, pressed; Tooltip; Chrome and bar buttons.
+Reuse these kit classes: kit-act, kit-armed, kit-field, kit-kbd, kit-seg, kit-switch, kst-acts, kst-block, kst-btn, kst-line, kst-toast, kst-what.
 Follow these rules:
 - Key hint: 24 high, radius 4, mono 11.5, border edge.
 - Pill and avatar: Pill 24 on w7, meta size. Avatar 20, w12, one letter.
 - Switch: Off: raised with input edge. On: solid. Knob is the only part that moves.
 - Segmented: 30 high in a w4 track, chosen segment raised. Replaces every tab strip and period pill.
 - Field: Rest, focus (the one ring), invalid, tall. Input edge, canvas ground, 30 min.
-- Buttons, four kinds: Solid, tonal, quiet, icon. One height 30, one weight 500. Off is w4 with dim text.
+- Buttons, four kinds: Solid, tonal, quiet, icon. One height 30, radius 6, body size, weight 500, padding 12. Off is w4 with dim text, for solid and icon alike.
+- Buttons on a line: The small kind: 24 high, meta size, padding 8. The same four kinds, used where a button sits on a row, a toast or a header.
+- Action rows: In a dialog: Cancel quiet, then the one solid action at the end. In a panel: the solid action first, quiet ones after; the first fix of a failure is solid, the rest tonal.
 - Button with a mark: A program button carries its mark at 14. Small tonal is 24 for a line.
 - Armed: Press to arm, 4 s. Same box, filled with accent, "Press again to …". Solid, quiet and menu item.
 - Focus ring: One ring for everything: 2 px accent outside. Button, row, field.

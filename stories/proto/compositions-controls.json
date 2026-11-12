@@ -20,8 +20,16 @@
   "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-col\" style=\"width:280px\"><div class=\"kit-field\" style=\"margin:0\"><span class=\"tx\">Comment</span><span class=\"ib\"><svg class=\"i i14\"><use href=\"#lu-send\"/></svg></span></div><div class=\"kit-field sbx-ring\" style=\"margin:0\"><span class=\"tx\">Done in 4e1a2b0<span class=\"pax-caret\"></span></span><span class=\"ib\"><svg class=\"i i14\"><use href=\"#lu-send\"/></svg></span></div><div class=\"kit-field bad\" style=\"margin:0\"><span class=\"tx\">cart-retry</span></div><div class=\"kit-field tall\" style=\"margin:0\"><span class=\"tx\">Batching looks right.</span></div></div></div></div>"
  },
  "ButtonsFourKinds": {
-  "caption": "Solid, tonal, quiet, icon. One height 30, one weight 500. Off is w4 with dim text.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"acts\" style=\"margin:0\"><span class=\"btn\">Merge</span><span class=\"kst-btn\">Refresh</span><span class=\"ql c-fg\">Cancel</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-external-link\"/></svg></span><span class=\"btn off\">Merge</span></div></div></div>"
+  "caption": "Solid, tonal, quiet, icon. One height 30, radius 6, body size, weight 500, padding 12. Off is w4 with dim text, for solid and icon alike.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"acts\" style=\"margin:0\"><span class=\"btn\">Merge</span><span class=\"kst-btn\">Refresh</span><span class=\"ql c-fg\">Cancel</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-external-link\"/></svg></span><span class=\"btn off\">Merge</span><span class=\"ib pax-off\"><svg class=\"i\"><use href=\"#lu-chevron-right\"/></svg></span></div></div></div>"
+ },
+ "ButtonsOnALine": {
+  "caption": "The small kind: 24 high, meta size, padding 8. The same four kinds, used where a button sits on a row, a toast or a header.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-col\" style=\"width:320px\"><div class=\"prow\" style=\"margin:0\"><span class=\"kst-line\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg>Couldn't hide<span class=\"kst-btn sm\">Undo</span></span></div><div class=\"kst-toast\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><span class=\"t\">Can't reach devbox</span><span class=\"kst-btn\">Refresh</span></div><div class=\"acts\" style=\"margin:0\"><span class=\"btn sm\">Update</span><span class=\"kst-btn sm\">Undo</span><span class=\"ql kit-act\"><span>Remove</span><span>Press again to remove</span></span></div></div></div></div>"
+ },
+ "ActionRows": {
+  "caption": "In a dialog: Cancel quiet, then the one solid action at the end. In a panel: the solid action first, quiet ones after; the first fix of a failure is solid, the rest tonal.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-col\" style=\"width:320px\"><div class=\"acts pax-end\" style=\"margin:0\"><span class=\"ql c-fg\">Cancel</span><span class=\"btn\">Create</span></div><div class=\"acts\" style=\"margin:0\"><span class=\"btn\">Merge</span><span class=\"ql c-fg\">Open on GitHub</span></div><div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't reach dark</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to Kylo-ren</span></div></div></div></div></div>"
  },
  "ButtonWithAMark": {
   "caption": "A program button carries its mark at 14. Small tonal is 24 for a line.",

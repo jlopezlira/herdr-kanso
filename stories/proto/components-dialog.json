@@ -1,6 +1,6 @@
 {
  "Dialog": {
   "caption": "Popover ground, radius 8, 24 inside. Title 15 strong, actions at the end: solid then quiet.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg\" style=\"width:380px\"><div class=\"dlg-h\"><span class=\"t\">New project</span></div><div class=\"kit-field\"><span class=\"tx\">Folder</span></div><div class=\"acts\" style=\"margin-top:var(--k-sp-4)\"><span class=\"btn\">Create</span><span class=\"ql c-fg\">Cancel</span></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg\" style=\"width:380px\"><div class=\"dlg-h\"><span class=\"t\">New project</span></div><div class=\"kit-field\"><span class=\"tx\">Folder</span></div><div class=\"acts pax-end\" style=\"margin-top:var(--k-sp-4)\"><span class=\"ql c-fg\">Cancel</span><span class=\"btn\">Create</span></div></div></div></div>"
  }
 }
