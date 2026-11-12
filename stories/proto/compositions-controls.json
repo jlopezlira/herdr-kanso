@@ -53,6 +53,6 @@
  },
  "ChromeAndBarButtons": {
   "caption": "Sidebar tools 32 with 17. Tab bar and pane tools 26 with 15. Row buttons 20 with 12.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-row\"><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-search\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-moon\"/></svg></span><div class=\"w1-r\" style=\"padding:0;gap:0\"><span class=\"rb\" title=\"New agent\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"rb\"><svg class=\"i \"><use href=\"#lu-power\"/></svg></span><span class=\"rb\"><svg class=\"i \"><use href=\"#lu-refresh-cw\"/></svg></span></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-row\"><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-search\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"w1-bb\"><svg class=\"i \"><use href=\"#lu-moon\"/></svg></span><div class=\"w1-r\" style=\"padding:0;gap:var(--k-sp-2)\"><span class=\"rb\" title=\"New agent\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"rb\"><svg class=\"i \"><use href=\"#lu-power\"/></svg></span><span class=\"rb\"><svg class=\"i \"><use href=\"#lu-refresh-cw\"/></svg></span></div></div></div></div>"
  }
 }
