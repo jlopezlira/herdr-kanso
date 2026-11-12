@@ -1,0 +1,204 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './pins.stories.js';
+
+<Meta title="Panels/Pins" />
+
+# Pins
+
+Pins attach notes to a picture or device screen when sending feedback to an agent.
+
+## Pins, iOS, pinning: a region, a note being typed
+
+iOS, pinning: a region, a note being typed.
+
+<Canvas of={stories.PinsIOSPinningARegionANoteBeingTyped} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: iOS, pinning: a region, a note being typed"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"iOS, pinning: a region, a note being typed"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The note is typed beside its mark, at once: click, type, Enter; the next click starts the next one. A click on a mark edits its note; Backspace on an empty note removes the mark. The dialog goes."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Pins, Android, pinning: touches wait
+
+Android, pinning: touches wait.
+
+<Canvas of={stories.PinsAndroidPinningTouchesWait} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Android, pinning: touches wait"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Android, pinning: touches wait"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"One pin, everywhere a picture is shown: Simulator (iOS and Android), Images, Preview pictures. Same marks, same note, same list, same Send."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Pins, Sent: live again
+
+Sent: live again.
+
+<Canvas of={stories.PinsSentLiveAgain} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Sent: live again"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Sent: live again"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The list under the picture is the message, one line per mark, in the words that will be sent; × on hover removes one. One action: Send to checkout (the agent of the pane in front, named), ⌘↩. With none in front, Send to… opens the picker. It sends the frozen frame's path, the device and system, and the lines. After: \"Sent to checkout 14:07\", the marks clear, the picture is live again."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Pins, No agent in front: the picker
+
+No agent in front: the picker.
+
+<Canvas of={stories.PinsNoAgentInFrontThePicker} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: No agent in front: the picker"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"No agent in front: the picker"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The list under the picture is the message, one line per mark, in the words that will be sent; × on hover removes one. One action: Send to checkout (the agent of the pane in front, named), ⌘↩. With none in front, Send to… opens the picker. It sends the frozen frame's path, the device and system, and the lines. After: \"Sent to checkout 14:07\", the marks clear, the picture is live again."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Pins, Kept from before, not sent
+
+Kept from before, not sent.
+
+<Canvas of={stories.PinsKeptFromBeforeNotSent} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Kept from before, not sent"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Kept from before, not sent"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Unsent marks are kept per agent and picture when you leave, and the scope line says \"kept from 13:52 · not sent\". A rotation or a device change since the freeze is said once; the marks stay on the frame you saw. A stalled picture freezes on its last frame and says so."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Pins, Images: the same pins, no tool
+
+Images: the same pins, no tool.
+
+<Canvas of={stories.PinsImagesTheSamePinsNoTool} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Images: the same pins, no tool"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Images: the same pins, no tool"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"One pin, everywhere a picture is shown: Simulator (iOS and Android), Images, Preview pictures. Same marks, same note, same list, same Send."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Pins, Rotated since the freeze
+
+Rotated since the freeze.
+
+<Canvas of={stories.PinsRotatedSinceTheFreeze} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Rotated since the freeze"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Rotated since the freeze"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Unsent marks are kept per agent and picture when you leave, and the scope line says \"kept from 13:52 · not sent\". A rotation or a device change since the freeze is said once; the marks stay on the frame you saw. A stalled picture freezes on its last frame and says so."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Pins, The picture had stalled
+
+The picture had stalled.
+
+<Canvas of={stories.PinsThePictureHadStalled} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: The picture had stalled"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"The picture had stalled"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Unsent marks are kept per agent and picture when you leave, and the scope line says \"kept from 13:52 · not sent\". A rotation or a device change since the freeze is said once; the marks stay on the frame you saw. A stalled picture freezes on its last frame and says so."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Pins, The agent is on devbox
+
+The agent is on devbox.
+
+<Canvas of={stories.PinsTheAgentIsOnDevbox} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: The agent is on devbox"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"The agent is on devbox"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"An agent on devbox: the frame is copied there first, then the notes go with that path. Failures use the state pattern: the source's words, then Send."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Pins, Send refused
+
+Send refused.
+
+<Canvas of={stories.PinsSendRefused} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Send refused"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Send refused"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"One pin, everywhere a picture is shown: Simulator (iOS and Android), Images, Preview pictures. Same marks, same note, same list, same Send."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Pins, Copy to devbox refused
+
+Copy to devbox refused.
+
+<Canvas of={stories.PinsCopyToDevboxRefused} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Copy to devbox refused"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Copy to devbox refused"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"An agent on devbox: the frame is copied there first, then the notes go with that path. Failures use the state pattern: the source's words, then Send."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+### Pin guidelines
+
+- **Seijaku** One pin, everywhere a picture is shown: Simulator (iOS and Android), Images, Preview pictures. Same marks, same note, same list, same Send.
+- **Kansō** Entering: on a live picture (Simulator) the Pin tool in the header, or ⌥P, because a click there is a touch on the device. The picture freezes on the frame you saw (the screenshot simctl or the emulator already gives) and the scope line says "frozen at 14:06:12". A 2 px focus ring marks the mode; the device's buttons are not drawn while frozen. The tool again, or Esc, returns to live. Where a click means nothing else (Images, Preview pictures) the pin is always on and there is no tool.
+- **Seijaku** Marks: a click drops a numbered pin; a drag draws a region, numbered at its corner. No strokes and no element picking: a device's picture has no DOM to pick from.
+- **Kansō** The note is typed beside its mark, at once: click, type, Enter; the next click starts the next one. A click on a mark edits its note; Backspace on an empty note removes the mark. The dialog goes.
+- **Yūgen** The list under the picture is the message, one line per mark, in the words that will be sent; × on hover removes one. One action: Send to checkout (the agent of the pane in front, named), ⌘↩. With none in front, Send to… opens the picker. It sends the frozen frame's path, the device and system, and the lines. After: "Sent to checkout 14:07", the marks clear, the picture is live again.
+- **Kansō** Unsent marks are kept per agent and picture when you leave, and the scope line says "kept from 13:52 · not sent". A rotation or a device change since the freeze is said once; the marks stay on the frame you saw. A stalled picture freezes on its last frame and says so.
+- **Kansō** An agent on devbox: the frame is copied there first, then the notes go with that path. Failures use the state pattern: the source's words, then Send.
+- **Seijaku** Presses for one correction: the tool, a click, the words, ⌘↩. On Images and Preview: a click, the words, ⌘↩.
+- **Seijaku** Reused: pinFrom for both marks; noted and aboutMessage, which gain a region form ("2 (region 3% to 97% across, 58% to 67% down)") and the device line; kept marks per agent and picture (, 47); deliver and sendKey (, 19); the waiting refusal (waitingNote,); Send. New: the inline note (replaces the kanso-prompt overlay,), drag regions, the frozen frame and ⌥P in kanso-sim, the copy to another computer, the shared classes.
+- **Kokō** Cost: freezing reads no new file (the last frame is already on disk). Sending: one hc send; to another computer, one copy of the frame (about 300 KB) and one send.
+- **Seijaku** Code annotates a live web page: picked elements, dragged regions, freehand strokes, one comment, a screenshot, then attach or send (contracts ipc.ts:816-948). kansō keeps its regions and its one-press send; it adds a note per mark, because a correction is usually several small things.
+
+## Prompt for agents
+
+```text
+Build Pins for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.
+```

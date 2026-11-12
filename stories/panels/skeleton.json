@@ -1,0 +1,218 @@
+{
+ "SkeletonHeaderScopePeriodTheNumber": {
+  "name": "Skeleton, Header, scope, period, the number",
+  "caption": "Header, scope, period, the number.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Spend</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-settings\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer and devbox · synced 14:02</div>\n              <div class=\"pbx-ctl\"><span class=\"kit-seg\"><span class=\"on\">Today</span><span>Month</span><span>30 days</span><span>Year</span><span>All</span></span><span class=\"flex\"></span><span class=\"ib\"><svg class=\"i i14\"><use href=\"#lu-chevron-left\"/></svg></span><span class=\"ib\" style=\"color:var(--input)\"><svg class=\"i i14\"><use href=\"#lu-chevron-right\"/></svg></span></div>\n              <div class=\"pbx-hero\"><span class=\"big\">$41.20</span><span class=\"u\">API value</span></div>\n              <div class=\"p-facts\"><span>14 tasks</span><span>$2.94 a task</span><span>9.1M tokens</span></div>\n              <div class=\"sect\"><span class=\"kit-seg\"><span class=\"on\">Projects</span><span>Models</span></span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><span class=\"av-s\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">A</span><span class=\"tr\">acme-shop</span><span class=\"pbx-v\">$28.40</span></div><div class=\"b pbx-ind2\">6.2M tokens</div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><span class=\"av-s\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">D</span><span class=\"tr\">docs-site</span><span class=\"pbx-v\">$9.10</span></div><div class=\"b pbx-ind2\">2.1M tokens</div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><span class=\"av-s\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">R</span><span class=\"tr\">relay</span><span class=\"pbx-v\">$3.70</span></div><div class=\"b pbx-ind2\">0.8M tokens</div></div>\n              <div class=\"ql\" style=\"margin-top:var(--k-sp-2)\">Show 4 more</div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Spend</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-settings\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer and devbox · synced 14:02</div>\n              <div class=\"pbx-ctl\"><span class=\"kit-seg\"><span class=\"on\">Today</span><span>Month</span><span>30 days</span><span>Year</span><span>All</span></span><span class=\"flex\"></span><span class=\"ib\"><svg class=\"i i14\"><use href=\"#lu-chevron-left\"/></svg></span><span class=\"ib\" style=\"color:var(--input)\"><svg class=\"i i14\"><use href=\"#lu-chevron-right\"/></svg></span></div>\n              <div class=\"pbx-hero\"><span class=\"big\">$41.20</span><span class=\"u\">API value</span></div>\n              <div class=\"p-facts\"><span>14 tasks</span><span>$2.94 a task</span><span>9.1M tokens</span></div>\n              <div class=\"sect\"><span class=\"kit-seg\"><span class=\"on\">Projects</span><span>Models</span></span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><span class=\"av-s\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">A</span><span class=\"tr\">acme-shop</span><span class=\"pbx-v\">$28.40</span></div><div class=\"b pbx-ind2\">6.2M tokens</div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><span class=\"av-s\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">D</span><span class=\"tr\">docs-site</span><span class=\"pbx-v\">$9.10</span></div><div class=\"b pbx-ind2\">2.1M tokens</div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><span class=\"av-s\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">R</span><span class=\"tr\">relay</span><span class=\"pbx-v\">$3.70</span></div><div class=\"b pbx-ind2\">0.8M tokens</div></div>\n              <div class=\"ql\" style=\"margin-top:var(--k-sp-2)\">Show 4 more</div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Header, scope, period, the number"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Header, scope, period, the number"
+   ],
+   [
+    "Behaviour",
+    "Period: the kit segmented control, natural width, with the stepper (two icon buttons) at its right; a past period adds Now at the number's right. Spend, Shipped and every History range use it; no text tabs. Under 340 the stepper moves to the number's line."
+   ],
+   [
+    "Principle",
+    "Fukinsei"
+   ]
+  ]
+ },
+ "SkeletonSectionsAndTheOneRowRestHoverSelectedArmed": {
+  "name": "Skeleton, Sections and the one row: rest, hover, selected, armed",
+  "caption": "Sections and the one row: rest, hover, selected, armed.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Worktrees</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-plus\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"sect\">acme-shop<span class=\"n\">1.6 GB</span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-work s12\"><use href=\"#e-work\"/></svg><span class=\"tr\">acme-shop-cart</span><span class=\"pbx-v\">310 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-work\">In a tab: cart-ui</span>· today</div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">rate-limit-v1</span><span class=\"pbx-v\">412 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-done\">Merged</span>· 3 d</div></div>\n              <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"tr\">promo-banner</span><span class=\"pbx-v\">380 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-blk\">2 uncommitted changes</span>· 6 d</div><div class=\"c pbx-ind\"><span class=\"ql c-fg\">Open in a new tab</span><span class=\"ql\">Explain it</span><span class=\"ql kit-act kit-armed\"><span>Remove</span><span>Press again to remove</span></span></div></div>\n              <div class=\"sect\">relay<span class=\"ql\">Clean up 1</span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">relay-hotfix</span><span class=\"pbx-v\">120 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-done\">Merged</span>· 9 d</div></div>\n              <div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Freed<span class=\"s\">12.4 GB across 31 worktrees</span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Worktrees</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-plus\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"sect\">acme-shop<span class=\"n\">1.6 GB</span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-work s12\"><use href=\"#e-work\"/></svg><span class=\"tr\">acme-shop-cart</span><span class=\"pbx-v\">310 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-work\">In a tab: cart-ui</span>· today</div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">rate-limit-v1</span><span class=\"pbx-v\">412 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-done\">Merged</span>· 3 d</div></div>\n              <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"tr\">promo-banner</span><span class=\"pbx-v\">380 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-blk\">2 uncommitted changes</span>· 6 d</div><div class=\"c pbx-ind\"><span class=\"ql c-fg\">Open in a new tab</span><span class=\"ql\">Explain it</span><span class=\"ql kit-act kit-armed\"><span>Remove</span><span>Press again to remove</span></span></div></div>\n              <div class=\"sect\">relay<span class=\"ql\">Clean up 1</span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">relay-hotfix</span><span class=\"pbx-v\">120 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-done\">Merged</span>· 9 d</div></div>\n              <div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Freed<span class=\"s\">12.4 GB across 31 worktrees</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Sections and the one row: rest, hover, selected, armed"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Sections and the one row: rest, hover, selected, armed"
+   ],
+   [
+    "Behaviour",
+    "The one row: name 12.5 (truncates), the value at the right 12.5 tabular in foreground (a state colour when the value is a state), meta under the name in 11.5 dim. An optional mark goes first (a 6 dot, a program icon, an ensō, a project square) and the meta lines up under the name. Without meta it is the 32 one-line form. Rest; hover = 7% wash; selected = selected fill, and only then its actions line: at most one primary, the rest quiet, a removal arms \"Press again\" in accent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "SkeletonWithAMarkAndTheOneLineForm": {
+  "name": "Skeleton, With a mark, and the one-line form",
+  "caption": "With a mark, and the one-line form.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB · 2.4 GB swap</span></div>\n              <div class=\"sect\">Herdr</div>\n              <div class=\"prow\">Window<span class=\"pbx-v\">1.1 GB</span></div>\n              <div class=\"prow\">2 hung helpers<span class=\"pbx-v\">60 MB</span><span class=\"ql\" style=\"margin-left:var(--k-sp-4)\">End</span></div>\n              <div class=\"sect\">Agents<span class=\"ql\">Recycle 2 idle · 1.7 GB</span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg><span class=\"tr\">checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"b pbx-ind2\"><svg class=\"m m-work s12\"><use href=\"#e-work\"/></svg>working · up 3 d</div></div>\n              <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"pi\"><use href=\"#p-codex\"/></svg><span class=\"tr\">docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"b pbx-ind2\">idle 3 h · up 2 d</div><div class=\"c pbx-ind2\"><span class=\"ql c-fg\">Recycle</span><span class=\"ql\">Close</span></div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg><span class=\"tr\">cart-ui</span><span class=\"pbx-v\">760 MB</span></div><div class=\"b pbx-ind2\"><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg>needs you · left as it is</div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB · 2.4 GB swap</span></div>\n              <div class=\"sect\">Herdr</div>\n              <div class=\"prow\">Window<span class=\"pbx-v\">1.1 GB</span></div>\n              <div class=\"prow\">2 hung helpers<span class=\"pbx-v\">60 MB</span><span class=\"ql\" style=\"margin-left:var(--k-sp-4)\">End</span></div>\n              <div class=\"sect\">Agents<span class=\"ql\">Recycle 2 idle · 1.7 GB</span></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg><span class=\"tr\">checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"b pbx-ind2\"><svg class=\"m m-work s12\"><use href=\"#e-work\"/></svg>working · up 3 d</div></div>\n              <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"pi\"><use href=\"#p-codex\"/></svg><span class=\"tr\">docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"b pbx-ind2\">idle 3 h · up 2 d</div><div class=\"c pbx-ind2\"><span class=\"ql c-fg\">Recycle</span><span class=\"ql\">Close</span></div></div>\n              <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg><span class=\"tr\">cart-ui</span><span class=\"pbx-v\">760 MB</span></div><div class=\"b pbx-ind2\"><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg>needs you · left as it is</div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: With a mark, and the one-line form"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "With a mark, and the one-line form"
+   ],
+   [
+    "Behaviour",
+    "The one row: name 12.5 (truncates), the value at the right 12.5 tabular in foreground (a state colour when the value is a state), meta under the name in 11.5 dim. An optional mark goes first (a 6 dot, a program icon, an ensō, a project square) and the meta lines up under the name. Without meta it is the 32 one-line form. Rest; hover = 7% wash; selected = selected fill, and only then its actions line: at most one primary, the rest quiet, a removal arms \"Press again\" in accent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "SkeletonFirstRead": {
+  "name": "Skeleton, First read",
+  "caption": "First read.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Worktrees</span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"p-scope\">This computer</div><div class=\"pax-skl\"><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:130px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:90px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:100px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:120px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:150px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:80px;height:var(--k-sp-2)\"></span></div></div></div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Worktrees</span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"p-scope\">This computer</div><div class=\"pax-skl\"><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:130px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:90px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:100px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:120px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:150px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"b\"><span class=\"sk skw\" style=\"width:80px;height:var(--k-sp-2)\"></span></div></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "First read"
+   ],
+   [
+    "Behaviour",
+    "First read: the kit skeleton shaped like the rows it will hold. Empty: one muted line. Error: the tool's words in blocked, with Refresh."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "SkeletonEmpty": {
+  "name": "Skeleton, Empty",
+  "caption": "Empty.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-plug\"/></svg><div class=\"t\">No servers listening</div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-plug\"/></svg><div class=\"t\">No servers listening</div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Empty"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Empty"
+   ],
+   [
+    "Behaviour",
+    "First read: the kit skeleton shaped like the rows it will hold. Empty: one muted line. Error: the tool's words in blocked, with Refresh."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "SkeletonAReadFailedWhereTheListWouldStart": {
+  "name": "Skeleton, A read failed: where the list would start",
+  "caption": "A read failed: where the list would start.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Worktrees</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">devbox</div>\n              <div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list worktrees on devbox</div><div class=\"kst-why\" title=\"git worktree list: timed out after 30 s\">git worktree list: timed out after 30 s</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to migrate</span></div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Worktrees</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">devbox</div>\n              <div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list worktrees on devbox</div><div class=\"kst-why\" title=\"git worktree list: timed out after 30 s\">git worktree list: timed out after 30 s</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to migrate</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A read failed: where the list would start"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "A read failed: where the list would start"
+   ],
+   [
+    "Behaviour",
+    "Header 40: title 20 (15 under 340), at most two context icons, Refresh last; its tooltip says when it was read. A page inside a panel puts ‹ before its title."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "SkeletonStaleAnotherComputerStoppedAnswering": {
+  "name": "Skeleton, Stale: another computer stopped answering",
+  "caption": "Stale: another computer stopped answering.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Containers</span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"stalebody\">\n                <div class=\"sect\"><span class=\"pbx-st\"><span class=\"av-s\">R</span>relay</span></div>\n                <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">db</span><span class=\"pbx-v\">212 MB</span></div><div class=\"b pbx-ind\"><span class=\"pbx-cmd\">postgres:16</span><span>:5432</span><span>· up 3 d</span></div></div>\n                <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">queue</span><span class=\"pbx-v\">48 MB</span></div><div class=\"b pbx-ind\"><span class=\"pbx-cmd\">rabbitmq:3.13</span><span>:5672</span><span>· up 3 d</span></div><div class=\"c pbx-ind\"><span class=\"btn off\">Stop</span></div></div>\n              </div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Containers</span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"stalebody\">\n                <div class=\"sect\"><span class=\"pbx-st\"><span class=\"av-s\">R</span>relay</span></div>\n                <div class=\"prow2\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">db</span><span class=\"pbx-v\">212 MB</span></div><div class=\"b pbx-ind\"><span class=\"pbx-cmd\">postgres:16</span><span>:5432</span><span>· up 3 d</span></div></div>\n                <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-done s12\"><use href=\"#e-done\"/></svg><span class=\"tr\">queue</span><span class=\"pbx-v\">48 MB</span></div><div class=\"b pbx-ind\"><span class=\"pbx-cmd\">rabbitmq:3.13</span><span>:5672</span><span>· up 3 d</span></div><div class=\"c pbx-ind\"><span class=\"btn off\">Stop</span></div></div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Stale: another computer stopped answering"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Stale: another computer stopped answering"
+   ],
+   [
+    "Behaviour",
+    "Scope line 11.5 dim: the project, branch or computer, or what the page is. A stale read takes its place (\"Read 14:02 · devbox unreachable · next try 14:07\") and the body drops to 55%; writes are disabled."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "SkeletonNarrow300Title15MetaTruncates": {
+  "name": "Skeleton, Narrow, 300: title 15, meta truncates",
+  "caption": "Narrow, 300: title 15, meta truncates.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"width:300px\">\n              <div class=\"p-h\"><span class=\"p-t\" style=\"font-size:var(--k-fs-heading)\">Worktrees</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-plus\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"sect\">acme-shop<span class=\"n\">1.6 GB</span></div>\n              <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"tr\">promo-banner</span><span class=\"pbx-v\">380 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-blk tr\">2 uncommitted changes</span>· 6 d</div><div class=\"c pbx-acts\"><span class=\"ql c-fg\">Open in a new tab</span><span class=\"ql\">Explain it</span><span class=\"ql\">Remove</span></div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"width:300px\">\n              <div class=\"p-h\"><span class=\"p-t\" style=\"font-size:var(--k-fs-heading)\">Worktrees</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-plus\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">This computer</div>\n              <div class=\"sect\">acme-shop<span class=\"n\">1.6 GB</span></div>\n              <div class=\"prow2 sel\"><div class=\"a\" style=\"align-items:center\"><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"tr\">promo-banner</span><span class=\"pbx-v\">380 MB</span></div><div class=\"b pbx-ind\"><span class=\"c-blk tr\">2 uncommitted changes</span>· 6 d</div><div class=\"c pbx-acts\"><span class=\"ql c-fg\">Open in a new tab</span><span class=\"ql\">Explain it</span><span class=\"ql\">Remove</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Narrow, 300: title 15, meta truncates"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Narrow, 300: title 15, meta truncates"
+   ],
+   [
+    "Behaviour",
+    "The one row: name 12.5 (truncates), the value at the right 12.5 tabular in foreground (a state colour when the value is a state), meta under the name in 11.5 dim. An optional mark goes first (a 6 dot, a program icon, an ensō, a project square) and the meta lines up under the name. Without meta it is the 32 one-line form. Rest; hover = 7% wash; selected = selected fill, and only then its actions line: at most one primary, the rest quiet, a removal arms \"Press again\" in accent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ }
+}

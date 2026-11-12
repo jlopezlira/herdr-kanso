@@ -1390,3 +1390,41 @@ section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 .st-ic svg{color:var(--muted)}
 .st-s .tokens{display:contents}
 .st-s .tokens .row{gap:var(--k-sp-4)}
+
+/* Additional panel drawing rules. Written by scripts/import-panels.mjs. */
+.cap{font-size:12px;color:#8a867d;margin:0 0 var(--k-sp-2);font-weight:500}
+@media (prefers-reduced-motion:reduce){.skw{animation:none;background-image:none}}
+.mi,.prow,.prow2,.kit-row,.ag,.proj,.comp,.sleep,.w1-r,.away-r,.fold,.ib,.kit-ib,.w1-bb,.w1-tab,.kit-seg span,.kit-seg span,.ql,.btn,.kst-btn,.kit-switch,.kit-field,.kit-act{
+  cursor:pointer;transition:background-color var(--k-hover-out) var(--k-ease-out),color var(--k-hover-out) var(--k-ease-out),box-shadow var(--k-hover-out) var(--k-ease-out)}
+:is(.mi,.prow,.prow2,.kit-row,.ag,.proj,.comp,.sleep,.w1-r,.away-r,.ib,.kit-ib,.w1-bb,.w1-tab,.kit-seg span,.kit-seg span,.kst-btn):hover{
+  background-color:var(--hover);transition-duration:var(--k-hover-in);transition-timing-function:var(--k-ease-in)}
+:is(.ql,.fold,.kit-seg span):hover{color:var(--fg);transition-duration:var(--k-hover-in);transition-timing-function:var(--k-ease-in)}
+:is(.mi,.prow,.prow2,.kit-row,.ag,.proj,.comp,.sleep,.w1-r,.away-r,.ib,.kit-ib,.w1-bb,.w1-tab,.kit-seg span,.kit-seg span,.kst-btn):active{background-color:var(--selected)}
+:is(.mi,.prow,.prow2,.kit-row,.ag,.proj,.comp,.sleep,.w1-r,.away-r,.fold,.ib,.kit-ib,.w1-bb,.w1-tab,.kit-seg span,.kit-seg span,.ql,.btn,.kst-btn,.kit-switch,.kit-field,.kit-act):focus-visible,.ring,.pbx-dj-lv.foc{
+  outline:2px solid var(--accent);outline-offset:1px}
+:is(.kit-seg,.kit-seg,.kit-seg) .on:is(:hover,:active){background-color:var(--w12)}
+:is(.panel,.card,.dlg) .kit-field{margin-top:var(--k-sp-3)}
+:is(.sbar,.w1-ph) .kst-line>.kst-btn{margin-left:var(--k-sp-1)}
+@media (prefers-reduced-motion:reduce){.skw,.skw,.kit-glint{animation:none}}
+.w1-sbar,.brx-cnt,.sbar{font-variant-numeric:tabular-nums}
+.prow.hov,.prow2.hov{background:var(--hover)}
+.pax-ctl .kit-seg{flex:1}
+.pax-ctl .kit-seg span{flex:1;justify-content:center}
+.pax-li.ck .k{color:var(--fg)}
+.pax-li.ck .k+span{margin-left:auto;color:var(--dim);font-size:var(--k-fs-meta);white-space:nowrap}
+.pax-rep .ch b{font-weight:var(--k-fw-medium)}
+.pbx-th i{position:absolute;left:5px;right:5px;height:3px;border-radius:4px;background:var(--input);display:block}
+.pbx-th i.w{height:6px;background:color-mix(in srgb,var(--working) 45%,var(--raised))}
+.pbx-pnote .w1-ph{color:var(--dim)}
+.sect .kit-seg{margin-left:auto}
+.prow>.ql{margin-left:auto}
+.syn-kw{color:var(--syn-kw)}
+.syn-ty{color:var(--syn-ty)}
+.syn-pn{color:var(--syn-pn)}
+.w1-bb.on{background:var(--w12);color:var(--fg)}
+.kit-caret{display:inline-block;width:1px;height:14px;background:var(--fg);vertical-align:-2px;flex:none;animation:dgx-blink 1.06s steps(1) infinite}
+.dlg .acts{justify-content:flex-end;margin-top:var(--k-sp-4)}
+.dlg .dlg-h{margin-bottom:var(--k-sp-3)}
+.hov{background-color:var(--hover)}
+:root[data-theme="dark"] .k{--syn-kw:#b89cf0;--syn-ty:#7fb0dc;--syn-pn:var(--muted)}
+:root[data-theme="light"] .k{--syn-kw:#7a52c7;--syn-ty:#2a6fa8;--syn-pn:var(--muted)}

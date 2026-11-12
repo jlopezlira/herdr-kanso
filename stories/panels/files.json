@@ -1,0 +1,542 @@
+{
+ "FilesAtRestComparison": {
+  "name": "Files, At rest, comparison",
+  "caption": "The previous design is kept as a reference beside the current design. Files · rows 11 → 6 · glyphs 4 → 2 · colours 5 → 3 · lines 11 → 6.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"pax-bas\">\n<div><p class=\"cap\">Before</p><div class=\"k\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">~/acme-shop · checkout-v2</div>\n              <div class=\"kit-seg pax-qt\"><span class=\"on\">Changed</span><span>All files</span></div>\n              <div class=\"sect\">Named by checkout</div>\n              <div class=\"prow sel\"><span class=\"pax-mk c-done\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n              <div class=\"prow hov\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">plans.ts</span><span class=\"pax-dir\">src/api</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">Cart.tsx</span><span class=\"pax-dir\">src/web</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.md</span><span class=\"pax-dir\">docs</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div></div></div></div><div class=\"k st-s panel\"><div class=\"pax-bas\">\n<div><p class=\"cap\">Before</p><div class=\"k\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">~/acme-shop · checkout-v2</div>\n              <div class=\"kit-seg pax-qt\"><span class=\"on\">Changed</span><span>All files</span></div>\n              <div class=\"sect\">Named by checkout</div>\n              <div class=\"prow sel\"><span class=\"pax-mk c-done\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n              <div class=\"prow hov\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">plans.ts</span><span class=\"pax-dir\">src/api</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">Cart.tsx</span><span class=\"pax-dir\">src/web</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.md</span><span class=\"pax-dir\">docs</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Files · rows 11 → 6 · glyphs 4 → 2 · colours 5 → 3 · lines 11 → 6"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Files · rows 11 → 6 · glyphs 4 → 2 · colours 5 → 3 · lines 11 → 6"
+   ],
+   [
+    "Behaviour",
+    "Measured in the browser on the six first screens: rows 103 → 76 · glyphs 35 → 19 · colours 33 → 25 · lines 150 → 88. Preview's 14 lines are the file itself, so its chrome is what halves: 2 rows to 1."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "FilesAtRestBefore": {
+  "name": "Files, At rest, Before",
+  "caption": "The previous design is kept as a reference beside the current design. Before.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">~/acme-shop · checkout-v2</div>\n              <div class=\"kit-seg pax-qt\"><span class=\"on\">Changed</span><span>All files</span></div>\n              <div class=\"sect\">Named by checkout</div>\n              <div class=\"prow sel\"><span class=\"pax-mk c-done\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n              <div class=\"prow hov\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">plans.ts</span><span class=\"pax-dir\">src/api</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">Cart.tsx</span><span class=\"pax-dir\">src/web</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.md</span><span class=\"pax-dir\">docs</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div></div><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">~/acme-shop · checkout-v2</div>\n              <div class=\"kit-seg pax-qt\"><span class=\"on\">Changed</span><span>All files</span></div>\n              <div class=\"sect\">Named by checkout</div>\n              <div class=\"prow sel\"><span class=\"pax-mk c-done\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n              <div class=\"prow hov\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">plans.ts</span><span class=\"pax-dir\">src/api</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">Cart.tsx</span><span class=\"pax-dir\">src/web</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.md</span><span class=\"pax-dir\">docs</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-mk c-work\">M</span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Before"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Before"
+   ],
+   [
+    "Behaviour",
+    "Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "FilesAtRestNow": {
+  "name": "Files, At rest, Now",
+  "caption": "Now, at rest.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, at rest"
+   ],
+   [
+    "Behaviour",
+    "Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "FilesOnThePointer": {
+  "name": "Files, On the pointer",
+  "caption": "Now, pointer on a row: more facts, the same controls.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow hov\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">Open the diff · +14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow hov\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">Open the diff · +14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, pointer on a row: more facts, the same controls"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, pointer on a row: more facts, the same controls"
+   ],
+   [
+    "Behaviour",
+    "Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "FilesAtRestNowLight": {
+  "name": "Files, At rest, Now, light",
+  "caption": "Now, light.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div><div class=\"k st-s panel\"><div class=\"k\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, light"
+   ],
+   [
+    "Behaviour",
+    "Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "FilesChangedOpenedFromTheDigest": {
+  "name": "Files, Changed, opened from the digest",
+  "caption": "Changed, opened from the digest.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div><div class=\"k st-s panel\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Changed, opened from the digest"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Changed, opened from the digest"
+   ],
+   [
+    "Behaviour",
+    "Opened from the digest's files segment it lands on Changed. From the tab bar it opens on the last view used. In a folder that is not a repository there is only the tree."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "FilesAllFilesWithMarks": {
+  "name": "Files, All files, with marks",
+  "caption": "All files, with marks.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:520px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span>Changed</span><span class=\"on\">All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>.github</div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>docs</div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>src<span class=\"r\">3</span></div>\n              <div class=\"prow\"><span style=\"width:16px;flex:none\"></span><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>api<span class=\"r\">3</span></div>\n              <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>checkout.ts</div>\n              <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>limits.test.ts</div>\n              <div class=\"prow sel\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-mk c-dim\">A</span>limits.ts</div>\n              <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>plans.ts</div>\n              <div class=\"prow\"><span style=\"width:16px;flex:none\"></span><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>web</div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>fixtures</div>\n              <div class=\"prow\"><span style=\"width:28px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>orders-0001.json</div>\n              <div class=\"prow pax-more\"><span style=\"width:28px;flex:none\"></span>1,214 more not listed</div>\n              <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>package.json</div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:520px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span>Changed</span><span class=\"on\">All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>.github</div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>docs</div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>src<span class=\"r\">3</span></div>\n              <div class=\"prow\"><span style=\"width:16px;flex:none\"></span><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>api<span class=\"r\">3</span></div>\n              <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>checkout.ts</div>\n              <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>limits.test.ts</div>\n              <div class=\"prow sel\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-mk c-dim\">A</span>limits.ts</div>\n              <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>plans.ts</div>\n              <div class=\"prow\"><span style=\"width:16px;flex:none\"></span><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>web</div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>fixtures</div>\n              <div class=\"prow\"><span style=\"width:28px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>orders-0001.json</div>\n              <div class=\"prow pax-more\"><span style=\"width:28px;flex:none\"></span>1,214 more not listed</div>\n              <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>package.json</div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: All files, with marks"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "All files, with marks"
+   ],
+   [
+    "Behaviour",
+    "The files the focused agent named come first, newest first, with no title: the panel opened from that agent. A named file that also changed carries its stat there and is not listed again. Named files that did not change sit on one dim line by name, each name a link. Also changed holds only the rest. The named part exists only for an agent pane with a conversation (piece files.named, S; Hide stops the transcript read)."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "FilesRightClickARow": {
+  "name": "Files, Right-click a row",
+  "caption": "Right-click a row.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"pax-rel\">\n              <div class=\"panel\" style=\"height:520px\">\n                <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                \n                <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n                <div class=\"prow sel\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span><span class=\"tr\">Named, unchanged: plans.ts</span></div>\n              </div>\n              <svg class=\"ptr\" style=\"left:122px;top:152px\"><use href=\"#i-ptr\"/></svg>\n              <div class=\"menu pax-abs\" style=\"left:128px;top:172px\">\n                <div class=\"mh\">src/api/checkout.ts</div>\n                <div class=\"mi hov\"><svg class=\"i i14\"><use href=\"#lu-git-pull-request\"/></svg>Open the diff</div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-file\"/></svg>Open<span class=\"k\">↵</span></div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-external-link\"/></svg>Open with…</div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-copy\"/></svg>Copy path</div>\n                <div class=\"mr\"></div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-eye-off\"/></svg>Hide this section</div>\n              </div>\n            </div></div><div class=\"k st-s panel\"><div class=\"pax-rel\">\n              <div class=\"panel\" style=\"height:520px\">\n                <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                \n                <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n                <div class=\"prow sel\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span><span class=\"tr\">Named, unchanged: plans.ts</span></div>\n              </div>\n              <svg class=\"ptr\" style=\"left:122px;top:152px\"><use href=\"#i-ptr\"/></svg>\n              <div class=\"menu pax-abs\" style=\"left:128px;top:172px\">\n                <div class=\"mh\">src/api/checkout.ts</div>\n                <div class=\"mi hov\"><svg class=\"i i14\"><use href=\"#lu-git-pull-request\"/></svg>Open the diff</div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-file\"/></svg>Open<span class=\"k\">↵</span></div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-external-link\"/></svg>Open with…</div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-copy\"/></svg>Copy path</div>\n                <div class=\"mr\"></div>\n                <div class=\"mi\"><svg class=\"i i14\"><use href=\"#lu-eye-off\"/></svg>Hide this section</div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Right-click a row"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Right-click a row"
+   ],
+   [
+    "Behaviour",
+    "A row opens the file in Preview. Its stat +14 −3 is a control too: it opens the diff (the PR panel's diff page,, read with git diff). Right-click gets a menu (Open the diff, Open, Open with…, Copy path) instead of going straight to Open with."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "FilesAShellPaneNothingNamed": {
+  "name": "Files, A shell pane: nothing named",
+  "caption": "A shell pane: nothing named.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">RetryIn.tsx</span><span class=\"pax-dir\">src/web</span><span class=\"r\">+22</span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">RetryIn.tsx</span><span class=\"pax-dir\">src/web</span><span class=\"r\">+22</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A shell pane: nothing named"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "A shell pane: nothing named"
+   ],
+   [
+    "Behaviour",
+    "The files the focused agent named come first, newest first, with no title: the panel opened from that agent. A named file that also changed carries its stat there and is not listed again. Named files that did not change sit on one dim line by name, each name a link. Also changed holds only the rest. The named part exists only for an agent pane with a conversation (piece files.named, S; Hide stops the transcript read)."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "FilesNothingChanged": {
+  "name": "Files, Nothing changed",
+  "caption": "Nothing changed.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-file\"/></svg><div class=\"t\">No uncommitted changes</div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-file\"/></svg><div class=\"t\">No uncommitted changes</div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Nothing changed"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Nothing changed"
+   ],
+   [
+    "Behaviour",
+    "The kit header: Files. Changed and All files are the two quiet words at its right, then Refresh. No scope line: the pane header already says the folder and branch."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "FilesNotARepositoryTheTreeOnly": {
+  "name": "Files, Not a repository: the tree only",
+  "caption": "Not a repository: the tree only.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div style=\"height:12px\"></div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>private</div>\n              <div class=\"kst-block kst-onrow\" style=\"margin:var(--k-sp-hair) 0 var(--k-sp-2) var(--k-sp-8)\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list this folder</div><div class=\"kst-why\" title=\"EACCES: permission denied, scandir &#x27;/Users/jj/notes/private&#x27;\">EACCES: permission denied, scandir '/Users/jj/notes/private'</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span></div></div>\n              <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>rate-limits.md</div>\n              <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>standup.md</div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div style=\"height:12px\"></div>\n              <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>private</div>\n              <div class=\"kst-block kst-onrow\" style=\"margin:var(--k-sp-hair) 0 var(--k-sp-2) var(--k-sp-8)\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list this folder</div><div class=\"kst-why\" title=\"EACCES: permission denied, scandir &#x27;/Users/jj/notes/private&#x27;\">EACCES: permission denied, scandir '/Users/jj/notes/private'</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span></div></div>\n              <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>rate-limits.md</div>\n              <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>standup.md</div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Not a repository: the tree only"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Not a repository: the tree only"
+   ],
+   [
+    "Behaviour",
+    "Opened from the digest's files segment it lands on Changed. From the tab bar it opens on the last view used. In a folder that is not a repository there is only the tree."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "FilesFirstRead": {
+  "name": "Files, First read",
+  "caption": "First read.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kit-skl\">\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:120px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:96px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:140px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:84px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:110px;height:var(--k-sp-2)\"></span></div>\n              </div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kit-skl\">\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:120px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:96px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:140px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:84px;height:var(--k-sp-2)\"></span></div>\n                <div class=\"prow\"><span class=\"sk skw\" style=\"width:14px;height:14px;border-radius:4px\"></span><span class=\"sk skw\" style=\"width:110px;height:var(--k-sp-2)\"></span></div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "First read"
+   ],
+   [
+    "Behaviour",
+    "First read: kit skeleton rows at 32, breathing. Later reads keep the rows and spin Refresh."
+   ],
+   [
+    "Principle",
+    "Shizen"
+   ]
+  ]
+ },
+ "FilesErrorTheFoldersOwnWords": {
+  "name": "Files, Error: the folder's own words",
+  "caption": "Error: the folder's own words.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kst-block\" style=\"margin-top:var(--k-sp-4)\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list ~/acme-shop</div><div class=\"kst-why\" title=\"EACCES: permission denied, scandir &#x27;/Users/jj/acme-shop&#x27;\">EACCES: permission denied, scandir '/Users/jj/acme-shop'</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kst-block\" style=\"margin-top:var(--k-sp-4)\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list ~/acme-shop</div><div class=\"kst-why\" title=\"EACCES: permission denied, scandir &#x27;/Users/jj/acme-shop&#x27;\">EACCES: permission denied, scandir '/Users/jj/acme-shop'</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Error: the folder's own words"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Error: the folder's own words"
+   ],
+   [
+    "Behaviour",
+    "Errors are the folder's own words in blocked, with Refresh, here and on another computer alike."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "FilesNoFolderForThisPane": {
+  "name": "Files, No folder for this pane",
+  "caption": "No folder for this pane.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-folder\"/></svg><div class=\"t\">This pane has no folder</div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:300px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-folder\"/></svg><div class=\"t\">This pane has no folder</div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: No folder for this pane"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "No folder for this pane"
+   ],
+   [
+    "Behaviour",
+    "A pane with no folder says so, instead of \"No folder\"."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "FilesOnAnotherComputer": {
+  "name": "Files, On another computer",
+  "caption": "On another computer.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:340px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">devbox</div>\n              <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:340px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">devbox</div>\n              <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: On another computer"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "On another computer"
+   ],
+   [
+    "Behaviour",
+    "Errors are the folder's own words in blocked, with Refresh, here and on another computer alike."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "FilesStaleDevboxStoppedAnswering": {
+  "name": "Files, Stale: devbox stopped answering",
+  "caption": "Stale: devbox stopped answering.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:340px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 14:02 · devbox unreachable · next try 14:03</div>\n              <div class=\"stalebody\">\n                <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n                <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n                <div class=\"sect\">Also changed</div>\n                <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n              </div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:340px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 14:02 · devbox unreachable · next try 14:03</div>\n              <div class=\"stalebody\">\n                <div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n                <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n                <div class=\"sect\">Also changed</div>\n                <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Stale: devbox stopped answering"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Stale: devbox stopped answering"
+   ],
+   [
+    "Behaviour",
+    "Stale takes the scope slot: Read 14:02 · devbox unreachable · next try 14:03, rows at 55%. \"Unreachable\" is the sidebar's word for the same fact."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "FilesUnreachableBeforeTheFirstRead": {
+  "name": "Files, Unreachable before the first read",
+  "caption": "Unreachable before the first read.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:340px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">devbox</div>\n              <div class=\"kst-block\" style=\"margin-top:var(--k-sp-4)\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't reach devbox</div><div class=\"kst-why\" title=\"ssh: connect to host devbox port 22: Operation timed out\">ssh: connect to host devbox port 22: Operation timed out</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span></div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:340px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">devbox</div>\n              <div class=\"kst-block\" style=\"margin-top:var(--k-sp-4)\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't reach devbox</div><div class=\"kst-why\" title=\"ssh: connect to host devbox port 22: Operation timed out\">ssh: connect to host devbox port 22: Operation timed out</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Unreachable before the first read"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Unreachable before the first read"
+   ],
+   [
+    "Behaviour",
+    "First read: kit skeleton rows at 32, breathing. Later reads keep the rows and spin Refresh."
+   ],
+   [
+    "Principle",
+    "Shizen"
+   ]
+  ]
+ },
+ "FilesLight": {
+  "name": "Files, Light",
+  "caption": "Light.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div><div class=\"k st-s panel\"><div class=\"panel\">\n<div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n<div class=\"prow\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span>Named, unchanged: plans.ts, Cart.tsx, limits.md</div>\n<div class=\"sect\">Also changed</div>\n<div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n</div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Light"
+   ],
+   [
+    "Behaviour",
+    "Light: the same marks; only U is coloured. Selected rows use selected, never a hex."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "FilesLightAllFiles": {
+  "name": "Files, Light, all files",
+  "caption": "Light, all files.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:420px\">\n                <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span>Changed</span><span class=\"on\">All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                \n                <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>docs</div>\n                <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>src<span class=\"r\">3</span></div>\n                <div class=\"prow\"><span style=\"width:16px;flex:none\"></span><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>api<span class=\"r\">3</span></div>\n                <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>checkout.ts</div>\n                <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>limits.test.ts</div>\n                <div class=\"prow sel\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-mk c-dim\">A</span>limits.ts</div>\n                <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>package.json</div>\n              </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:420px\">\n                <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span>Changed</span><span class=\"on\">All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                \n                <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-right\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>docs</div>\n                <div class=\"prow\"><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>src<span class=\"r\">3</span></div>\n                <div class=\"prow\"><span style=\"width:16px;flex:none\"></span><svg class=\"i i12 c-dim\"><use href=\"#lu-chevron-down\"/></svg><svg class=\"i i14 c-mu\"><use href=\"#lu-folder\"/></svg>api<span class=\"r\">3</span></div>\n                <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>checkout.ts</div>\n                <div class=\"prow\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-sp\"></span>limits.test.ts</div>\n                <div class=\"prow sel\"><span style=\"width:44px;flex:none\"></span><span class=\"pax-mk c-dim\">A</span>limits.ts</div>\n                <div class=\"prow\"><span style=\"width:12px;flex:none\"></span><svg class=\"i i14 c-mu\"><use href=\"#lu-file\"/></svg>package.json</div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light, all files"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Light, all files"
+   ],
+   [
+    "Behaviour",
+    "Light: the same marks; only U is coloured. Selected rows use selected, never a hex."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "FilesNarrow300": {
+  "name": "Files, Narrow, 300",
+  "caption": "Narrow, 300.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel pax-nar\" style=\"height:420px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"prow sel\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span><span class=\"tr\">Named, unchanged: rate-limit-buckets.ts</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel pax-nar\" style=\"height:420px\">\n              <div class=\"p-h\"><span class=\"p-t\">Files</span><span class=\"kit-seg pax-hq\"><span class=\"on\">Changed</span><span>All files</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              \n              <div class=\"prow sel\"><span class=\"pax-mk c-dim\">A</span><span class=\"pax-nm\">limits.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+22</span></div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">checkout.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+14 −3</span></div>\n<div class=\"prow c-dim\"><span class=\"pax-sp\"></span><span class=\"tr\">Named, unchanged: rate-limit-buckets.ts</span></div>\n              <div class=\"sect\">Also changed</div>\n              <div class=\"prow\"><span class=\"pax-sp\"></span><span class=\"pax-nm\">limits.test.ts</span><span class=\"pax-dir\">src/api</span><span class=\"r\">+6 −4</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Narrow, 300"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Narrow, 300"
+   ],
+   [
+    "Behaviour",
+    "Narrow: title 15, the folder part truncates before the name."
+   ],
+   [
+    "Principle",
+    "Shizen"
+   ]
+  ]
+ }
+}

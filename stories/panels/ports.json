@@ -1,0 +1,380 @@
+{
+ "PortsRestTwoWithNoPaneTwoInPanes": {
+  "name": "Ports, Rest: two with no pane, two in panes",
+  "caption": "Rest: two with no pane, two in panes.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop 2 with no pane</span></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div><div class=\"pbx-gap\"></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div><div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div><div class=\"pbx-lt\"><span class=\"kit-seg\"><span class=\"on\">Opened today</span><span>Recently ended</span></span><span class=\"ql\" style=\"margin-left:auto\">Show 4 more</span></div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop 2 with no pane</span></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div><div class=\"pbx-gap\"></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div><div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div><div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div><div class=\"pbx-lt\"><span class=\"kit-seg\"><span class=\"on\">Opened today</span><span>Recently ended</span></span><span class=\"ql\" style=\"margin-left:auto\">Show 4 more</span></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Rest: two with no pane, two in panes"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Rest: two with no pane, two in panes"
+   ],
+   [
+    "Behaviour",
+    "At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsArmedOneStopPending": {
+  "name": "Ports, Armed · one stop pending",
+  "caption": "Armed · one stop pending.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql\">Stop 2</span></div>\n              <div class=\"prow2 sel\" title=\"~/acme-shop-cart · 2 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql kit-act kit-armed\"><span>Stop</span><span>Press again to stop</span></span></div>\n              </div>\n              <div class=\"prow2 kst-pend\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"kst-pdot\" style=\"align-self:center\"></span><span class=\"pbx-v\">214 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow2\" title=\"checkout ~/acme-shop · 1 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">tsx</span><span class=\"pbx-v\">146 MB</span></div>\n                \n              <div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql\">Stop 2</span></div>\n              <div class=\"prow2 sel\" title=\"~/acme-shop-cart · 2 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql kit-act kit-armed\"><span>Stop</span><span>Press again to stop</span></span></div>\n              </div>\n              <div class=\"prow2 kst-pend\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"kst-pdot\" style=\"align-self:center\"></span><span class=\"pbx-v\">214 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow2\" title=\"checkout ~/acme-shop · 1 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">tsx</span><span class=\"pbx-v\">146 MB</span></div>\n                \n              <div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Armed · one stop pending"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Armed · one stop pending"
+   ],
+   [
+    "Behaviour",
+    "A row is one line: port, what runs it (a word: storybook, next; or the pane's name) and its size. On pointer or selection the second line shows the command, folder and age, and the actions: No pane, Stop is the one primary; in a pane, three quiet links, Go to first."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsInAPaneSelectedAStopRefusedOnItsRow": {
+  "name": "Ports, In a pane, selected · a stop refused, on its row",
+  "caption": "In a pane, selected · a stop refused, on its row.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n              <div class=\"prow2\" title=\"~/acme-shop-cart · 2 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div>\n                \n                <div class=\"kst-block kst-onrow\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Couldn't stop :6006</div><div class=\"kst-why\" title=\"kill 48213: still listening on :6006 after SIGTERM\">kill 48213: still listening on :6006 after SIGTERM</div><div class=\"kst-acts\"><span class=\"kst-btn\">Force stop</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n              </div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow2 sel\" title=\"checkout ~/acme-shop · 1 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">tsx</span><span class=\"pbx-v\">146 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql c-fg\">Go to checkout</span><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div>\n              </div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n              <div class=\"prow2\" title=\"~/acme-shop-cart · 2 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div>\n                \n                <div class=\"kst-block kst-onrow\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Couldn't stop :6006</div><div class=\"kst-why\" title=\"kill 48213: still listening on :6006 after SIGTERM\">kill 48213: still listening on :6006 after SIGTERM</div><div class=\"kst-acts\"><span class=\"kst-btn\">Force stop</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n              </div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow2 sel\" title=\"checkout ~/acme-shop · 1 h\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">tsx</span><span class=\"pbx-v\">146 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql c-fg\">Go to checkout</span><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div>\n              </div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              <div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: In a pane, selected · a stop refused, on its row"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "In a pane, selected · a stop refused, on its row"
+   ],
+   [
+    "Behaviour",
+    "The status bar's:6006 no pane opens here with that row selected and Stop focused."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "PortsHistoryOpenShareFromTheHeader": {
+  "name": "Ports, History open · Share from the header",
+  "caption": "History open · Share from the header.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"pbx-anchor\">\n              <div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\" style=\"background:var(--w12);color:var(--fg)\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"pbx-gap\"></div>\n                <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n                <div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-down\"/></svg>History<span class=\"s\">6 at the peak · 1.3 GB given back</span></div>\n                <div class=\"kit-seg\" style=\"margin-top:var(--k-sp-4);width:max-content\"><span>24 h</span><span class=\"on\">7 days</span><span>30 days</span></div>\n                <div class=\"pbx-chart\">\n                  <i style=\"height:17%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:33%\"><b style=\"height:25%\"></b></i><i style=\"height:50%\"><b style=\"height:33%\"></b></i><i style=\"height:42%\"></i><i style=\"height:25%\"></i><i style=\"height:17%\"></i><i style=\"height:8%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:58%\"><b style=\"height:14%\"></b></i><i class=\"pk\" style=\"height:100%\"></i><i style=\"height:67%\"><b style=\"height:25%\"></b></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:17%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"><b style=\"height:33%\"></b></i><i style=\"height:42%\"><b style=\"height:20%\"></b></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:42%\"></i><i style=\"height:50%\"><b style=\"height:33%\"></b></i><i style=\"height:33%\"></i><i style=\"height:17%\"></i>\n                </div>\n                <div class=\"pbx-axis\"><span>Wed</span><span>now</span></div>\n                <div class=\"p-facts\" style=\"margin-top:var(--k-sp-3)\"><span>4 stopped by you</span><span>3 left with no pane</span></div>\n              </div>\n              <div class=\"menu\">\n                <div class=\"mh\">Counts and sizes only</div>\n                <div class=\"mi hov\">Post to X</div>\n                <div class=\"mi\">Post to LinkedIn</div>\n                <div class=\"mi\">Post to Bluesky</div>\n                <div class=\"mr\"></div>\n                <div class=\"mi\">Save image</div>\n              </div>\n            </div></div><div class=\"k st-s panel\"><div class=\"pbx-anchor\">\n              <div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\" style=\"background:var(--w12);color:var(--fg)\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"pbx-gap\"></div>\n                <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n                <div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-down\"/></svg>History<span class=\"s\">6 at the peak · 1.3 GB given back</span></div>\n                <div class=\"kit-seg\" style=\"margin-top:var(--k-sp-4);width:max-content\"><span>24 h</span><span class=\"on\">7 days</span><span>30 days</span></div>\n                <div class=\"pbx-chart\">\n                  <i style=\"height:17%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:33%\"><b style=\"height:25%\"></b></i><i style=\"height:50%\"><b style=\"height:33%\"></b></i><i style=\"height:42%\"></i><i style=\"height:25%\"></i><i style=\"height:17%\"></i><i style=\"height:8%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:58%\"><b style=\"height:14%\"></b></i><i class=\"pk\" style=\"height:100%\"></i><i style=\"height:67%\"><b style=\"height:25%\"></b></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:17%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"><b style=\"height:33%\"></b></i><i style=\"height:42%\"><b style=\"height:20%\"></b></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:42%\"></i><i style=\"height:50%\"><b style=\"height:33%\"></b></i><i style=\"height:33%\"></i><i style=\"height:17%\"></i>\n                </div>\n                <div class=\"pbx-axis\"><span>Wed</span><span>now</span></div>\n                <div class=\"p-facts\" style=\"margin-top:var(--k-sp-3)\"><span>4 stopped by you</span><span>3 left with no pane</span></div>\n              </div>\n              <div class=\"menu\">\n                <div class=\"mh\">Counts and sizes only</div>\n                <div class=\"mi hov\">Post to X</div>\n                <div class=\"mi\">Post to LinkedIn</div>\n                <div class=\"mi\">Post to Bluesky</div>\n                <div class=\"mr\"></div>\n                <div class=\"mi\">Save image</div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: History open · Share from the header"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "History open · Share from the header"
+   ],
+   [
+    "Behaviour",
+    "Share is a menu from the header, worded \"Counts and sizes only\". The note under the buttons goes."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsAnotherComputer": {
+  "name": "Ports, Another computer",
+  "caption": "Another computer.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports<span class=\"pbx-q\">devbox</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n              <div class=\"prow2 sel\" title=\"~/relay · 3 d\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:8000</span><span class=\"c-mu tr\">uvicorn</span><span class=\"pbx-v\">96 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql c-fg\">Stop</span></div>\n              </div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5432</span><span class=\"c-mu tr\">migrate</span><span class=\"pbx-v\">64 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports<span class=\"pbx-q\">devbox</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n              <div class=\"prow2 sel\" title=\"~/relay · 3 d\">\n                <div class=\"a pbx-r1\"><span class=\"pbx-port\">:8000</span><span class=\"c-mu tr\">uvicorn</span><span class=\"pbx-v\">96 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql c-fg\">Stop</span></div>\n              </div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5432</span><span class=\"c-mu tr\">migrate</span><span class=\"pbx-v\">64 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Another computer"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Another computer"
+   ],
+   [
+    "Behaviour",
+    "At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsAnotherComputerUnreachable": {
+  "name": "Ports, Another computer, unreachable",
+  "caption": "Another computer, unreachable.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"stalebody\">\n                <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n                <div class=\"prow2 sel\" title=\"~/relay · 3 d\">\n                  <div class=\"a pbx-r1\"><span class=\"pbx-port\">:8000</span><span class=\"c-mu tr\">uvicorn</span><span class=\"pbx-v\">96 MB</span></div>\n                  \n                  <div class=\"c pbx-acts\"><span class=\"btn off\">Stop</span></div>\n                </div>\n                <div class=\"pbx-gap\"></div>\n                <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5432</span><span class=\"c-mu tr\">migrate</span><span class=\"pbx-v\">64 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              </div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"stalebody\">\n                <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n                <div class=\"prow2 sel\" title=\"~/relay · 3 d\">\n                  <div class=\"a pbx-r1\"><span class=\"pbx-port\">:8000</span><span class=\"c-mu tr\">uvicorn</span><span class=\"pbx-v\">96 MB</span></div>\n                  \n                  <div class=\"c pbx-acts\"><span class=\"btn off\">Stop</span></div>\n                </div>\n                <div class=\"pbx-gap\"></div>\n                <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:5432</span><span class=\"c-mu tr\">migrate</span><span class=\"pbx-v\">64 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Go to its pane</span><span class=\"ql\">Stop</span></div></div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Another computer, unreachable"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Another computer, unreachable"
+   ],
+   [
+    "Behaviour",
+    "At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsFirstRead": {
+  "name": "Ports, First read",
+  "caption": "First read.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"pax-skl\"><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:150px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:120px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:140px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div></div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"pax-skl\"><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:150px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:120px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:140px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "First read"
+   ],
+   [
+    "Behaviour",
+    "The list is the panel. No pane first, said once as that section's title; the rows in panes follow after a gap, each named by its pane."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsEmpty": {
+  "name": "Ports, Empty",
+  "caption": "Empty.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-plug\"/></svg><div class=\"t\">No servers listening</div></div>\n              <div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-plug\"/></svg><div class=\"t\">No servers listening</div></div>\n              <div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:58%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:42%\"></i><i style=\"height:67%\"></i><i style=\"height:100%\"></i><i style=\"height:75%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:83%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Empty"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Empty"
+   ],
+   [
+    "Behaviour",
+    "At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsAReadFailed": {
+  "name": "Ports, A read failed",
+  "caption": "A read failed.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't read ports</div><div class=\"kst-why\" title=\"lsof: unknown option -F\">lsof: unknown option -F</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't read ports</div><div class=\"kst-why\" title=\"lsof: unknown option -F\">lsof: unknown option -F</div><div class=\"kst-acts\"><span class=\"kst-btn\">Refresh</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A read failed"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "A read failed"
+   ],
+   [
+    "Behaviour",
+    "The focused project's computer decides what is read: devbox's ports when it lives there, named beside the title. Unreachable keeps the last read at 55% with Stop disabled."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "PortsFromTheStatusBarTheRowIsSelectedAndStopHasFocus": {
+  "name": "Ports, From the status bar: the row is selected and Stop has focus",
+  "caption": "From the status bar: the row is selected and Stop has focus.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"pbx-col\">\n              <div class=\"pbx-strip-sb\"><div class=\"sbar\"><span class=\"flex\"></span><span class=\"it c-work\" style=\"background:var(--w7);border-radius:6px;padding:var(--k-sp-1) var(--k-sp-1);margin:0 calc(-1 * var(--k-sp-1))\"><svg class=\"i i12\"><use href=\"#lu-plug\"/></svg>:6006 no pane</span><span class=\"it\"><svg class=\"m m-work s12\"><use href=\"#e-work\"/></svg>2 of 4 working</span></div></div>\n              <div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n                <div class=\"prow2 sel\" title=\"~/acme-shop-cart · 2 h\">\n                  <div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div>\n                  \n                  <div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql c-fg pbx-focus\">Stop</span></div>\n                </div>\n              </div>\n            </div></div><div class=\"k st-s free\"><div class=\"pbx-col\">\n              <div class=\"pbx-strip-sb\"><div class=\"sbar\"><span class=\"flex\"></span><span class=\"it c-work\" style=\"background:var(--w7);border-radius:6px;padding:var(--k-sp-1) var(--k-sp-1);margin:0 calc(-1 * var(--k-sp-1))\"><svg class=\"i i12\"><use href=\"#lu-plug\"/></svg>:6006 no pane</span><span class=\"it\"><svg class=\"m m-work s12\"><use href=\"#e-work\"/></svg>2 of 4 working</span></div></div>\n              <div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n                <div class=\"prow2 sel\" title=\"~/acme-shop-cart · 2 h\">\n                  <div class=\"a pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div>\n                  \n                  <div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql c-fg pbx-focus\">Stop</span></div>\n                </div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: From the status bar: the row is selected and Stop has focus"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "From the status bar: the row is selected and Stop has focus"
+   ],
+   [
+    "Behaviour",
+    "The status bar's:6006 no pane opens here with that row selected and Stop focused."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "PortsNarrow300TheCommandFoldsAway": {
+  "name": "Ports, Narrow, 300: the command folds away",
+  "caption": "Narrow, 300: the command folds away.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"width:300px\">\n              <div class=\"p-h\"><span class=\"p-t\" style=\"font-size:var(--k-fs-heading)\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n              <div class=\"prow2 sel\" title=\"~/acme-shop-cart · 2 h\">\n                <div class=\"a\"><span class=\"pbx-port\">:6006</span><span class=\"pbx-v\">388 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql c-fg\">Stop</span><span class=\"ql\">Open</span></div>\n              </div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"width:300px\">\n              <div class=\"p-h\"><span class=\"p-t\" style=\"font-size:var(--k-fs-heading)\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"sect\">No pane<span class=\"ql c-fg\" style=\"margin-left:auto\">Stop with no pane</span></div>\n              <div class=\"prow2 sel\" title=\"~/acme-shop-cart · 2 h\">\n                <div class=\"a\"><span class=\"pbx-port\">:6006</span><span class=\"pbx-v\">388 MB</span></div>\n                \n                <div class=\"c pbx-acts\"><span class=\"ql c-fg\">Stop</span><span class=\"ql\">Open</span></div>\n              </div>\n              <div class=\"prow2\"><div class=\"a pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"c pbx-acts\"><span class=\"ql\">Open in the browser</span><span class=\"ql\">Stop</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Narrow, 300: the command folds away"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Narrow, 300: the command folds away"
+   ],
+   [
+    "Behaviour",
+    "Narrow under 340: title 15, the command hides, \"Open in the browser\" becomes \"Open\"."
+   ],
+   [
+    "Principle",
+    "Shizen"
+   ]
+  ]
+ },
+ "PortsAtRestNow": {
+  "name": "Ports, At rest, Now",
+  "caption": "Now, at rest.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div data-m=\"ports-after\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span></div><div class=\"sect\">No pane</div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</div></div></div></div><div class=\"k st-s panel\"><div data-m=\"ports-after\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span></div><div class=\"sect\">No pane</div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, at rest"
+   ],
+   [
+    "Behaviour",
+    "Share, Refresh: in the header → gone. pointer in the panel or keyboard focus, in the header."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsAtRestNowLight": {
+  "name": "Ports, At rest, Now, light",
+  "caption": "Now, light.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span></div><div class=\"sect\">No pane</div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span></div><div class=\"sect\">No pane</div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, light"
+   ],
+   [
+    "Behaviour",
+    "Share, Refresh: in the header → gone. pointer in the panel or keyboard focus, in the header."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "PortsPointerOn6006": {
+  "name": "Ports, Pointer on:6006",
+  "caption": "Pointer on:6006.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"sect\">No pane<span class=\"ql\" style=\"margin-left:auto\">Stop 2</span></div><div class=\"prow2 pbx-hv\"><div class=\"a\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"b\"><span class=\"pbx-cmd tr\">storybook dev -p 6006</span><span class=\"tr\">~/acme-shop-cart · 2 h</span></div><div class=\"c\"><span class=\"btn\">Stop</span><span class=\"ql\">Open in the browser</span></div></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Ports</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"sect\">No pane<span class=\"ql\" style=\"margin-left:auto\">Stop 2</span></div><div class=\"prow2 pbx-hv\"><div class=\"a\"><span class=\"pbx-port\">:6006</span><span class=\"c-mu tr\">storybook</span><span class=\"pbx-v\">388 MB</span></div><div class=\"b\"><span class=\"pbx-cmd tr\">storybook dev -p 6006</span><span class=\"tr\">~/acme-shop-cart · 2 h</span></div><div class=\"c\"><span class=\"btn\">Stop</span><span class=\"ql\">Open in the browser</span></div></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:3001</span><span class=\"c-mu tr\">next</span><span class=\"pbx-v\">214 MB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:4000</span><span class=\"c-mu tr\">checkout</span><span class=\"pbx-v\">146 MB</span></div><div class=\"prow pbx-r1\"><span class=\"pbx-port\">:5173</span><span class=\"c-mu tr\">web</span><span class=\"pbx-v\">182 MB</span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Pointer on:6006"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Pointer on:6006"
+   ],
+   [
+    "Behaviour",
+    "Share, Refresh: in the header → gone. pointer in the panel or keyboard focus, in the header."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ }
+}

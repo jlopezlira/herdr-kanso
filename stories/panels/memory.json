@@ -1,0 +1,434 @@
+{
+ "MemoryRestGuardOnOneAgentNeedsYouOnePastTheLimit": {
+  "name": "Memory, Rest: guard on, one agent needs you, one past the limit",
+  "caption": "Rest: guard on, one agent needs you, one past the limit.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:67%\"></i><i style=\"height:58%\"></i><i style=\"height:58%\"></i><i style=\"height:50%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:50%\"></i><i style=\"height:58%\"></i><i style=\"height:67%\"></i><i style=\"height:67%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:58%\"></i><i style=\"height:67%\"></i><i style=\"height:67%\"></i><i style=\"height:58%\"></i><i style=\"height:50%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:50%\"></i></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span><span class=\"ql\">Restart window</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"sect\">Agents</div><div class=\"pbx-bulk\"><span class=\"ql c-fg\">Recycle all 2 idle · about 1.7 GB back</span><span class=\"ql\">Only the 1 over 900 MB</span><span class=\"ql\">Close the 1 not used for 2 days · 720 MB back</span></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span><span class=\"pbx-ra\"></span></div><div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Recycle</span></span></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span><span class=\"pbx-ra\"></span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Close</span><span class=\"ql\">Recycle</span></span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span><span class=\"pbx-ra\"></span></div><div class=\"sect\">Heaviest</div><div class=\"prow pbx-r1\"><span>Google Chrome</span><span class=\"pbx-v\">2.1 GB</span></div><div class=\"prow pbx-r1\"><span>Docker</span><span class=\"pbx-v\">1.6 GB</span></div><div class=\"prow pbx-r1\"><span>Slack</span><span class=\"pbx-v\">540 MB</span></div><div class=\"sect\">Guard</div><div class=\"pbx-swr kit-row\"><span class=\"t\">Recycle idle agents <b>past 900 MB</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Restart the window <b>past 1.2 GB</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Notify <b>under 20% free</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Events</div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"sect\">History<span class=\"kit-seg\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></span></div><div class=\"pbx-chart\" style=\"height:48px\"><i style=\"height:67%\"></i><i style=\"height:58%\"></i><i style=\"height:58%\"></i><i style=\"height:50%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:50%\"></i><i style=\"height:58%\"></i><i style=\"height:67%\"></i><i style=\"height:67%\"></i><i style=\"height:58%\"></i><i style=\"height:42%\"></i><i style=\"height:33%\"></i><i style=\"height:25%\"></i><i style=\"height:33%\"></i><i style=\"height:50%\"></i><i style=\"height:58%\"></i><i style=\"height:67%\"></i><i style=\"height:67%\"></i><i style=\"height:58%\"></i><i style=\"height:50%\"></i><i style=\"height:50%\"></i><i style=\"height:42%\"></i><i style=\"height:50%\"></i></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span><span class=\"ql\">Restart window</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"sect\">Agents</div><div class=\"pbx-bulk\"><span class=\"ql c-fg\">Recycle all 2 idle · about 1.7 GB back</span><span class=\"ql\">Only the 1 over 900 MB</span><span class=\"ql\">Close the 1 not used for 2 days · 720 MB back</span></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span><span class=\"pbx-ra\"></span></div><div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Recycle</span></span></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span><span class=\"pbx-ra\"></span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Close</span><span class=\"ql\">Recycle</span></span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span><span class=\"pbx-ra\"></span></div><div class=\"sect\">Heaviest</div><div class=\"prow pbx-r1\"><span>Google Chrome</span><span class=\"pbx-v\">2.1 GB</span></div><div class=\"prow pbx-r1\"><span>Docker</span><span class=\"pbx-v\">1.6 GB</span></div><div class=\"prow pbx-r1\"><span>Slack</span><span class=\"pbx-v\">540 MB</span></div><div class=\"sect\">Guard</div><div class=\"pbx-swr kit-row\"><span class=\"t\">Recycle idle agents <b>past 900 MB</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Restart the window <b>past 1.2 GB</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Notify <b>under 20% free</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Events</div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Rest: guard on, one agent needs you, one past the limit"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Rest: guard on, one agent needs you, one past the limit"
+   ],
+   [
+    "Behaviour",
+    "Agents follow after a gap, one line each: name and size. Over the guard's limit the size turns working; an agent that needs you keeps the blocked mark. Program, state and uptime show on pointer or selection; working lives in the sidebar."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "MemoryLowTheWindowPastItsLimit": {
+  "name": "Memory, Low · the window past its limit",
+  "caption": "Low · the window past its limit.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big c-blk\">8%</span><span class=\"u\">free of 16 GB</span></div>\n              <div class=\"acts\"><span class=\"btn\">Recycle 2 idle · 1.7 GB back</span></div>\n              <div class=\"sect\">Herdr</div>\n              <div class=\"prow\">Window<span class=\"pbx-v c-blk\">1.4 GB</span><span class=\"ql\" style=\"margin-left:var(--k-sp-4)\">Restart</span></div>\n              <div class=\"prow\">Core<span class=\"pbx-v\">230 MB</span></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.6 GB</span><span class=\"pbx-ra\"></span></div>\n              <div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Recycle</span></span></div>\n              <div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Close</span><span class=\"ql\">Recycle</span></span></div>\n              <div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span><span class=\"pbx-ra\"></span></div>\n              <div class=\"ql\" style=\"margin-top:var(--k-sp-3)\">Close 1 unused 2 days · 720 MB</div>\n              <div class=\"sect\">Guard</div><div class=\"pbx-swr kit-row\"><span class=\"t\">Recycle idle agents <b>past 900 MB</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Restart the window <b>past 1.2 GB</b></span><span class=\"kit-switch\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Notify <b>under 20% free</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Events</div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big c-blk\">8%</span><span class=\"u\">free of 16 GB</span></div>\n              <div class=\"acts\"><span class=\"btn\">Recycle 2 idle · 1.7 GB back</span></div>\n              <div class=\"sect\">Herdr</div>\n              <div class=\"prow\">Window<span class=\"pbx-v c-blk\">1.4 GB</span><span class=\"ql\" style=\"margin-left:var(--k-sp-4)\">Restart</span></div>\n              <div class=\"prow\">Core<span class=\"pbx-v\">230 MB</span></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.6 GB</span><span class=\"pbx-ra\"></span></div>\n              <div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Recycle</span></span></div>\n              <div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span><span class=\"pbx-ra\"><span class=\"ql\">Close</span><span class=\"ql\">Recycle</span></span></div>\n              <div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span><span class=\"pbx-ra\"></span></div>\n              <div class=\"ql\" style=\"margin-top:var(--k-sp-3)\">Close 1 unused 2 days · 720 MB</div>\n              <div class=\"sect\">Guard</div><div class=\"pbx-swr kit-row\"><span class=\"t\">Recycle idle agents <b>past 900 MB</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Restart the window <b>past 1.2 GB</b></span><span class=\"kit-switch\"><i></i></span></div><div class=\"pbx-swr kit-row\"><span class=\"t\">Notify <b>under 20% free</b></span><span class=\"kit-switch on\"><i></i></span></div><div class=\"fold\"><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Events</div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Low · the window past its limit"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Low · the window past its limit"
+   ],
+   [
+    "Behaviour",
+    "The stats row goes. Herdr is one row with its total; Window and Core on pointer, or as rows when one is past its limit. Hung helpers keep their row with End. Recycles, restarts and freed move to History."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "MemoryRecycle3IdleTwoConfirmedOnePending": {
+  "name": "Memory, Recycle 3 idle: two confirmed, one pending",
+  "caption": "Recycle 3 idle: two confirmed, one pending.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"pbx-gap\"></div>\n                                <div class=\"prow c-mu\">checkout<span class=\"pbx-r\">1.6 GB → 210 MB</span></div>\n                <div class=\"prow c-mu\">perf<span class=\"pbx-r\">720 MB → 180 MB</span></div>\n                <div class=\"prow kst-pend\">docs<span class=\"kst-pdot\"></span><span class=\"pbx-v\">980 MB</span></div>\n              </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"pbx-gap\"></div>\n                                <div class=\"prow c-mu\">checkout<span class=\"pbx-r\">1.6 GB → 210 MB</span></div>\n                <div class=\"prow c-mu\">perf<span class=\"pbx-r\">720 MB → 180 MB</span></div>\n                <div class=\"prow kst-pend\">docs<span class=\"kst-pdot\"></span><span class=\"pbx-v\">980 MB</span></div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Recycle 3 idle: two confirmed, one pending"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Recycle 3 idle: two confirmed, one pending"
+   ],
+   [
+    "Behaviour",
+    "The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "MemoryRecycledOneRefusedOnItsRowAnAgentArmed": {
+  "name": "Memory, Recycled · one refused, on its row · an agent armed",
+  "caption": "Recycled · one refused, on its row · an agent armed.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"sect\">Agents<span class=\"n\">1.9 GB back</span></div>\n                <div class=\"prow c-mu\">checkout<span class=\"pbx-r\">1.6 GB → 210 MB</span></div>\n                <div class=\"prow pbx-r1\"><span>docs</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">980 MB</span><span class=\"pbx-ra\"></span></div><div class=\"kst-block kst-onrow\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Couldn't recycle docs</div><div class=\"kst-why\" title=\"docs: its terminal did not take the restart\">docs: its terminal did not take the restart</div><div class=\"kst-acts\"><span class=\"kst-btn\">Recycle</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to docs</span></div></div></div></div><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"sect\">Agents<span class=\"n\">1.9 GB back</span></div>\n                <div class=\"prow c-mu\">checkout<span class=\"pbx-r\">1.6 GB → 210 MB</span></div>\n                <div class=\"prow pbx-r1\"><span>docs</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">980 MB</span><span class=\"pbx-ra\"></span></div><div class=\"kst-block kst-onrow\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Couldn't recycle docs</div><div class=\"kst-why\" title=\"docs: its terminal did not take the restart\">docs: its terminal did not take the restart</div><div class=\"kst-acts\"><span class=\"kst-btn\">Recycle</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to docs</span></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Recycled · one refused, on its row · an agent armed"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Recycled · one refused, on its row · an agent armed"
+   ],
+   [
+    "Behaviour",
+    "Agents follow after a gap, one line each: name and size. Over the guard's limit the size turns working; an agent that needs you keeps the blocked mark. Program, state and uptime show on pointer or selection; working lives in the sidebar."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "MemoryGuardOff": {
+  "name": "Memory, Guard off",
+  "caption": "Guard off.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-memory-stick\"/></svg><div class=\"t\">The memory guard is off</div><span class=\"kst-btn\">Turn on</span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-memory-stick\"/></svg><div class=\"t\">The memory guard is off</div><span class=\"kst-btn\">Turn on</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Guard off"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Guard off"
+   ],
+   [
+    "Behaviour",
+    "The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "MemoryTurnOnPending": {
+  "name": "Memory, Turn on, pending",
+  "caption": "Turn on, pending.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-memory-stick\"/></svg><div class=\"t\">The memory guard is off</div><span class=\"kst-btn kst-pend\">Turn on<span class=\"kst-pdot\"></span></span></div>\n              </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kst-empty\"><svg class=\"i\"><use href=\"#lu-memory-stick\"/></svg><div class=\"t\">The memory guard is off</div><span class=\"kst-btn kst-pend\">Turn on<span class=\"kst-pdot\"></span></span></div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Turn on, pending"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Turn on, pending"
+   ],
+   [
+    "Behaviour",
+    "Off: one line and Turn on. Off, unreadable and stopped share it; a failed install prints the installer's words."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "MemoryTurnOnRefusedInTheInstallersWords": {
+  "name": "Memory, Turn on refused, in the installer's words",
+  "caption": "Turn on refused, in the installer's words.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Couldn't turn on the memory guard</div><div class=\"kst-why\" title=\"launchctl bootstrap: 5: Input/output error\">launchctl bootstrap: 5: Input/output error</div><div class=\"kst-acts\"><span class=\"kst-btn\">Turn on</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n              </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n                <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Couldn't turn on the memory guard</div><div class=\"kst-why\" title=\"launchctl bootstrap: 5: Input/output error\">launchctl bootstrap: 5: Input/output error</div><div class=\"kst-acts\"><span class=\"kst-btn\">Turn on</span><span class=\"kst-btn\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Turn on refused, in the installer's words"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Turn on refused, in the installer's words"
+   ],
+   [
+    "Behaviour",
+    "Off: one line and Turn on. Off, unreadable and stopped share it; a failed install prints the installer's words."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "MemoryStaleTheGuardStoppedAnswering": {
+  "name": "Memory, Stale: the guard stopped answering",
+  "caption": "Stale: the guard stopped answering.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 13:58 · guard stopped answering</div>\n              <div class=\"stalebody\"><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div></div>\n              <div class=\"acts\"><span class=\"btn\">Start the guard</span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"p-scope\">Read 13:58 · guard stopped answering</div>\n              <div class=\"stalebody\"><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div></div>\n              <div class=\"acts\"><span class=\"btn\">Start the guard</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Stale: the guard stopped answering"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Stale: the guard stopped answering"
+   ],
+   [
+    "Behaviour",
+    "The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "MemoryFirstRead": {
+  "name": "Memory, First read",
+  "caption": "First read.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div style=\"margin-top:var(--k-sp-6)\"><span class=\"sk skw\" style=\"width:120px;height:50px;border-radius:6px\"></span></div><div class=\"pax-skl\"><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:110px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:90px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:130px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div></div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib spin\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div style=\"margin-top:var(--k-sp-6)\"><span class=\"sk skw\" style=\"width:120px;height:50px;border-radius:6px\"></span></div><div class=\"pax-skl\"><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:110px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:90px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div><div class=\"prow2\"><div class=\"a\"><span class=\"sk skw\" style=\"width:130px;height:var(--k-sp-2)\"></span><span class=\"flex\"></span><span class=\"sk skw\" style=\"width:40px;height:var(--k-sp-2)\"></span></div></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "First read"
+   ],
+   [
+    "Behaviour",
+    "Cost: three small local files every 15 s while open and in front. Another computer with the guard installed: one on read there every 60 s (about 3 KB); history only when the fold opens."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "MemoryWindowsTheGuardReadsTheWorkingSet": {
+  "name": "Memory, Windows: the guard reads the working set",
+  "caption": "Windows: the guard reads the working set.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory<span class=\"pbx-q\">working set</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big\">42%</span><span class=\"u\">free of 32 GB · 3.1 GB page file</span></div>\n              <div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">940 MB</span><span class=\"ql\">Restart window</span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory<span class=\"pbx-q\">working set</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big\">42%</span><span class=\"u\">free of 32 GB · 3.1 GB page file</span></div>\n              <div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">940 MB</span><span class=\"ql\">Restart window</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Windows: the guard reads the working set"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Windows: the guard reads the working set"
+   ],
+   [
+    "Behaviour",
+    "Agents follow after a gap, one line each: name and size. Over the guard's limit the size turns working; an agent that needs you keeps the blocked mark. Program, state and uptime show on pointer or selection; working lives in the sidebar."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "MemoryAnotherComputerNarrow300": {
+  "name": "Memory, Another computer · narrow, 300",
+  "caption": "Another computer · narrow, 300.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"width:300px\">\n              <div class=\"p-h\"><span class=\"p-t\" style=\"font-size:var(--k-fs-heading)\">Memory<span class=\"pbx-q\">devbox</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big\">64%</span><span class=\"u\">free of 64 GB</span></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow pbx-r1\"><span>migrate</span><span class=\"pbx-v\">1.1 GB</span><span class=\"pbx-ra\"></span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\" style=\"width:300px\">\n              <div class=\"p-h\"><span class=\"p-t\" style=\"font-size:var(--k-fs-heading)\">Memory<span class=\"pbx-q\">devbox</span></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big\">64%</span><span class=\"u\">free of 64 GB</span></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow pbx-r1\"><span>migrate</span><span class=\"pbx-v\">1.1 GB</span><span class=\"pbx-ra\"></span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Another computer · narrow, 300"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Another computer · narrow, 300"
+   ],
+   [
+    "Behaviour",
+    "At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid": {
+  "name": "Memory, History open: free over time, then what the guard did",
+  "caption": "History open: free over time, then what the guard did.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"fold\" style=\"margin-top:var(--k-sp-4)\"><svg class=\"i i12\"><use href=\"#lu-chevron-down\"/></svg>History<span class=\"s\">lowest 18% · 6 recycles · 2.3 GB freed</span></div>\n              <div class=\"kit-seg\" style=\"margin-top:var(--k-sp-4);width:max-content\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></div>\n              <div class=\"pbx-chart\">\n                <i style=\"height:72%\"></i><i style=\"height:69%\"></i><i style=\"height:64%\"></i><i style=\"height:61%\"></i><i style=\"height:56%\"></i><i style=\"height:47%\"></i><i style=\"height:39%\"></i><i class=\"lo\" style=\"height:19%\"></i><i class=\"lo\" style=\"height:17%\"></i><i class=\"pk\" style=\"height:18%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:75%\"></i><i style=\"height:72%\"></i><i style=\"height:64%\"></i><i style=\"height:56%\"></i><i style=\"height:53%\"></i><i style=\"height:50%\"></i><i style=\"height:58%\"></i><i style=\"height:67%\"></i><i style=\"height:69%\"></i><i style=\"height:64%\"></i><i style=\"height:61%\"></i><i style=\"height:56%\"></i>\n              </div>\n              <div class=\"pbx-axis\"><span>yesterday 15:00</span><span>lowest 8% · 11:20</span><span>now</span></div>\n              <div class=\"sect\">Events</div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">11:24</span>docs recycled: 1.4 GB to 190 MB</div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">11:20</span><span class=\"c-work\">Memory low: 8% free</span></div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">09:02</span><span class=\"c-blk tr\">cart-ui not recycled: it needs you</span></div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">08:41</span>Window restarted past 1.2 GB</div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"fold\" style=\"margin-top:var(--k-sp-4)\"><svg class=\"i i12\"><use href=\"#lu-chevron-down\"/></svg>History<span class=\"s\">lowest 18% · 6 recycles · 2.3 GB freed</span></div>\n              <div class=\"kit-seg\" style=\"margin-top:var(--k-sp-4);width:max-content\"><span class=\"on\">24 h</span><span>7 days</span><span>30 days</span></div>\n              <div class=\"pbx-chart\">\n                <i style=\"height:72%\"></i><i style=\"height:69%\"></i><i style=\"height:64%\"></i><i style=\"height:61%\"></i><i style=\"height:56%\"></i><i style=\"height:47%\"></i><i style=\"height:39%\"></i><i class=\"lo\" style=\"height:19%\"></i><i class=\"lo\" style=\"height:17%\"></i><i class=\"pk\" style=\"height:18%\"></i><i style=\"height:50%\"></i><i style=\"height:67%\"></i><i style=\"height:75%\"></i><i style=\"height:72%\"></i><i style=\"height:64%\"></i><i style=\"height:56%\"></i><i style=\"height:53%\"></i><i style=\"height:50%\"></i><i style=\"height:58%\"></i><i style=\"height:67%\"></i><i style=\"height:69%\"></i><i style=\"height:64%\"></i><i style=\"height:61%\"></i><i style=\"height:56%\"></i>\n              </div>\n              <div class=\"pbx-axis\"><span>yesterday 15:00</span><span>lowest 8% · 11:20</span><span>now</span></div>\n              <div class=\"sect\">Events</div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">11:24</span>docs recycled: 1.4 GB to 190 MB</div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">11:20</span><span class=\"c-work\">Memory low: 8% free</span></div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">09:02</span><span class=\"c-blk tr\">cart-ui not recycled: it needs you</span></div>\n              <div class=\"prow\"><span class=\"c-dim\" style=\"width:40px;flex:none\">08:41</span>Window restarted past 1.2 GB</div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: History open: free over time, then what the guard did"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "History open: free over time, then what the guard did"
+   ],
+   [
+    "Behaviour",
+    "The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "MemoryOnlyTheAgentYouAreOnIsIdleNoBulkRecycle": {
+  "name": "Memory, Only the agent you are on is idle: no bulk recycle",
+  "caption": "Only the agent you are on is idle: no bulk recycle.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big\">44%</span><span class=\"u\">free of 16 GB</span></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow pbx-r1 sel\" title=\"idle 20 min · you are on it\"><span>checkout</span><span class=\"pbx-v\">1.1 GB</span><span class=\"pbx-ra\"><span class=\"ql c-fg\">Recycle</span></span></div>\n              <div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span><span class=\"pbx-ra\"></span></div>\n              <div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span><span class=\"pbx-ra\"></span></div>\n            </div></div><div class=\"k st-s panel\"><div class=\"panel\">\n              <div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"metric\"><span class=\"big\">44%</span><span class=\"u\">free of 16 GB</span></div>\n              <div class=\"pbx-gap\"></div>\n              <div class=\"prow pbx-r1 sel\" title=\"idle 20 min · you are on it\"><span>checkout</span><span class=\"pbx-v\">1.1 GB</span><span class=\"pbx-ra\"><span class=\"ql c-fg\">Recycle</span></span></div>\n              <div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span><span class=\"pbx-ra\"></span></div>\n              <div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span><span class=\"pbx-ra\"></span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Only the agent you are on is idle: no bulk recycle"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Only the agent you are on is idle: no bulk recycle"
+   ],
+   [
+    "Behaviour",
+    "When the only idle agent is the one you are on, the section has no bulk link; its row says \"you are on it\" and keeps its own Recycle. The sentence \"Only the agent you are on is idle…\" goes."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "MemoryAtRestNow": {
+  "name": "Memory, At rest, Now",
+  "caption": "Now, at rest.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div data-m=\"memory-after\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span></div><div class=\"fold pbx-2f\"><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Guard on</span><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</span></div></div></div></div><div class=\"k st-s panel\"><div data-m=\"memory-after\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span></div><div class=\"fold pbx-2f\"><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Guard on</span><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</span></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, at rest"
+   ],
+   [
+    "Behaviour",
+    "Share, Refresh: in the header → gone. pointer in the panel or keyboard focus."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "MemoryAtRestNowLight": {
+  "name": "Memory, At rest, Now, light",
+  "caption": "Now, light.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span></div><div class=\"fold pbx-2f\"><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Guard on</span><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</span></div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"prow pbx-r1\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span></div><div class=\"fold pbx-2f\"><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Guard on</span><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</span></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, light"
+   ],
+   [
+    "Behaviour",
+    "Share, Refresh: in the header → gone. pointer in the panel or keyboard focus."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "MemoryPointerOnDocs": {
+  "name": "Memory, Pointer on docs",
+  "caption": "Pointer on docs.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"prow2 pbx-hv\"><div class=\"a\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"b\">Codex · idle 3 h · up 2 d · past the guard's 900 MB</div><div class=\"c\"><span class=\"ql c-fg\">Recycle</span><span class=\"ql\">Close</span></div></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span></div><div class=\"fold pbx-2f\"><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Guard on</span><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</span></div></div></div><div class=\"k st-s panel\"><div class=\"panel\"><div class=\"p-h\"><span class=\"p-t\">Memory</span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-share\"/></svg></span><span class=\"ib\"><svg class=\"i\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"metric\"><span class=\"big\">31%</span><span class=\"u\">free of 16 GB</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>Herdr</span><span class=\"pbx-v\">1.4 GB</span></div><div class=\"prow pbx-r1\"><span>2 hung helpers</span><span class=\"pbx-v\">60 MB</span><span class=\"ql\">End</span></div><div class=\"pbx-gap\"></div><div class=\"prow pbx-r1\"><span>checkout</span><span class=\"pbx-v\">1.2 GB</span></div><div class=\"prow2 pbx-hv\"><div class=\"a\"><span>docs</span><span class=\"pbx-v c-work\">980 MB</span></div><div class=\"b\">Codex · idle 3 h · up 2 d · past the guard's 900 MB</div><div class=\"c\"><span class=\"ql c-fg\">Recycle</span><span class=\"ql\">Close</span></div></div><div class=\"prow pbx-r1\"><span>cart-ui</span><svg class=\"m m-blk s12\"><use href=\"#e-blk\"/></svg><span class=\"pbx-v\">760 MB</span></div><div class=\"prow pbx-r1\"><span>perf</span><span class=\"pbx-v\">720 MB</span></div><div class=\"prow pbx-r1\"><span>i18n</span><span class=\"pbx-v\">640 MB</span></div><div class=\"fold pbx-2f\"><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>Guard on</span><span><svg class=\"i i12\"><use href=\"#lu-chevron-right\"/></svg>History</span></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Pointer on docs"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Pointer on docs"
+   ],
+   [
+    "Behaviour",
+    "Share, Refresh: in the header → gone. pointer in the panel or keyboard focus."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ }
+}
