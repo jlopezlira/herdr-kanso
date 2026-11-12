@@ -241,7 +241,7 @@
 .kit-switch.on{background:var(--solid);box-shadow:none;justify-content:flex-end}
 .kit-switch.on i{background:var(--solidfg)}
 /* key hint */
-.kit-kbd,.kc{display:inline-flex;align-items:center;height:var(--k-h-compact);padding:0 var(--k-sp-1);border-radius:var(--k-r-sm);box-shadow:inset 0 0 0 1px var(--border);font:var(--k-fs-meta) var(--mono);color:var(--muted)}
+.kit-kbd,.kc{display:inline-flex;align-items:center;height:var(--k-h-compact);padding:0 var(--k-sp-2);border-radius:var(--k-r-sm);box-shadow:inset 0 0 0 1px var(--border);font:var(--k-fs-meta) var(--mono);letter-spacing:.1em;color:var(--muted)}
 /* loading: one motion in the app, the working name's shimmer (kanso-spaces/agents.js:356-375).
    Three glint windows, 44, 26 and 12 px at .35, .6 and 1 of foreground over the dim base, each sliding from -its width to 240 px,
    linear, 2200 ms (the app adds 0 to 960 ms per agent so rows drift apart). Bars keep their box; reduced motion shows the still bar. */
