@@ -13,6 +13,7 @@
     "check:mods": "node scripts/check-mods.mjs",
     "sync:share": "node scripts/sync-share.mjs",
     "sync:mods": "node scripts/sync-mods.mjs",
-    "build:guidelines": "node scripts/build-guidelines.mjs"
+    "build:guidelines": "node scripts/build-guidelines.mjs",
+    "build:site-tokens": "node scripts/build-site-tokens.mjs"
   }
 }

@@ -1,25 +1,21 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { ROOT, THEMES, colour, contrast, loadTokens, read, writeChanged } from "./tokens.mjs";
 
-const ROOT = fileURLToPath(new URL("../", import.meta.url));
 export const OUT = "site/guidelines";
 export const ELEMENTS = `${OUT}/elements.json`;
-export const TOKENS = "kanso/tokens.json";
 export const STATUSES = ["Approved", "Built", "Verified"];
 export const TEXT = ["fg", "muted", "dim"];
 export const SURFACES = ["canvas", "chrome", "bg", "raised", "popover"];
 export const MIN_CONTRAST = 4.5;
-const THEMES = ["dark", "light"];
 const GROUPS = [
   ["type", "Type"], ["space", "Space"], ["radius", "Radius"], ["height", "Height"],
   ["icon", "Icon"], ["switch", "Switch"], ["motion", "Motion"],
 ];
 
-const read = (path) => readFileSync(ROOT + path, "utf8");
-
 export function load() {
-  return { elements: JSON.parse(read(ELEMENTS)).elements, tokens: JSON.parse(read(TOKENS)) };
+  return { elements: JSON.parse(read(ELEMENTS)).elements, tokens: loadTokens() };
 }
 
 export const published = (elements) => elements.filter((e) => STATUSES.includes(e.status));
@@ -31,28 +27,6 @@ export function statusLabel(e) {
 }
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const toHex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
-
-export function colour(tokens, theme, name) {
-  const t = tokens.colour[theme].find((x) => x.name === name);
-  if (!t) throw new Error(`no colour ${name} in ${theme}`);
-  const mix = /^color-mix\(in srgb, var\(--([a-z]+)\) ([\d.]+)%, var\(--([a-z]+)\)\)$/.exec(t.value);
-  if (!mix) return t.value;
-  const a = rgb(colour(tokens, theme, mix[1])), b = rgb(colour(tokens, theme, mix[3])), p = Number(mix[2]) / 100;
-  return toHex(a.map((v, i) => v * p + b[i] * (1 - p)));
-}
-
-function luminance(hex) {
-  const [r, g, b] = rgb(hex).map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-export function contrast(a, b) {
-  const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m);
-  return (x + 0.05) / (y + 0.05);
-}
 
 export function pairs(tokens) {
   return THEMES.flatMap((theme) => TEXT.flatMap((text) => SURFACES.map((surface) => ({
@@ -76,6 +50,7 @@ function page({ title, description, body }) {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../style.css">
 <link rel="stylesheet" href="guidelines.css">
 </head>
@@ -160,7 +135,8 @@ ${rows}
 
 function swatch(tokens, theme, t) {
   const hex = colour(tokens, theme, t.name);
-  const lines = [`<span class="swatch" style="background:${esc(hex)}"></span><span class="value">${esc(hex)}</span>`];
+  const paint = hex.startsWith("#") ? "background" : "box-shadow";
+  const lines = [`<span class="swatch" style="${paint}:${esc(hex)}"></span><span class="value">${esc(hex)}</span>`];
   if (hex !== t.value) lines.push(`<span class="note">${esc(t.value)}</span>`);
   if (t.palette) lines.push(`<span class="note">palette ${esc(t.palette)}</span>`);
   return lines.join("");
@@ -313,9 +289,5 @@ export function render({ elements, tokens }) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   mkdirSync(ROOT + OUT, { recursive: true });
-  for (const [path, html] of Object.entries(render(load()))) {
-    let old = null;
-    try { old = read(path); } catch {}
-    if (old !== html) { writeFileSync(ROOT + path, html); console.log(`wrote ${path}`); }
-  }
+  for (const [path, html] of Object.entries(render(load()))) writeChanged(path, html);
 }

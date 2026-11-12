@@ -53,6 +53,7 @@ the branch's rules.
 - Wake starts `claude --resume` on the agent's conversation in the same terminal. Options such as `--model` are not carried over.
 - Sleeps from before this update are not offered to wake: run `claude --resume <id>` in its folder.
 - Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
+- The site's pages use kansō's own type scale, spacing, radii and colours from kanso/tokens.json, in dark and light. Muted text in the light theme is darker, and field edges are darker in both themes, so they read on every surface. (#176)
 
 ### Fixed
 
