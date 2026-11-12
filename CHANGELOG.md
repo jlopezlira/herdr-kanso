@@ -45,6 +45,7 @@ release.
 - Putting a tab to sleep no longer stays on the dialog with only Cancel. While it goes to sleep the dialog says so. If a step does not answer, the tab comes back and one sentence says what did not answer.
 - Waking a tab no longer shows its agents twice, awake and asleep. An agent leaves the asleep list as soon as its terminal opens. If the wake stops half way, the tab stops showing as asleep on its own.
 - Sleep and Wake try once more after a lost database call. Later tries keep working without restarting Herdr, and a slow database has time to answer.
+- Dragging a project in the sidebar shows where it will land and moves it there. A project stays among the projects of its own computer, and a worktree listed under its checkout keeps its place.
 
 ## [3.30.0] - 2026-11-11
 
