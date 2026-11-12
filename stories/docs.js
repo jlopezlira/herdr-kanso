@@ -4,11 +4,15 @@ export const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[c]);
 
-export function docs(use, avoid, principle = 'seijaku') {
-  const p = elements.find((e) => e.id === 'philosophy').principles.find((p) => p.id === principle);
+export const principle = (id) => {
+  const p = elements.find((e) => e.id === 'philosophy').principles.find((p) => p.id === id);
+  return `Principle: ${p.name}. ${p.means} ${p.applies}`;
+};
+
+export function docs(use, avoid, id = 'seijaku') {
   return {
     parameters: {
-      docs: { description: { component: `Use: ${use}\n\nAvoid: ${avoid}\n\nPrinciple: ${p.name}. ${p.means} ${p.applies}` } },
+      docs: { description: { component: `Use: ${use}\n\nAvoid: ${avoid}\n\n${principle(id)}` } },
     },
   };
 }
