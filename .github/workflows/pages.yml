@@ -5,7 +5,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ["site/**", "CHANGELOG.md", ".github/workflows/pages.yml"]
+    paths: ["site/**", "CHANGELOG.md", ".github/workflows/pages.yml", ".storybook/**", "stories/**", "kanso/tokens.json", "package.json", "package-lock.json"]
   workflow_dispatch:
 
 permissions:
@@ -35,6 +35,12 @@ jobs:
       - uses: actions/configure-pages@v5
       # The changelog page reads it next to itself, so a release shows there.
       - run: cp CHANGELOG.md site/CHANGELOG.md
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build-storybook -- -o site/storybook
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

@@ -105,6 +105,7 @@ function indexPage(elements) {
 
 <ul class="elements">
 ${rows}
+  <li><a href="../storybook/"><strong>Storybook</strong><span>The elements and their states, in dark and light.</span></a></li>
 </ul>`,
   });
 }

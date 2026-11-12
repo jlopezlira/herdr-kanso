@@ -4,7 +4,9 @@
   "description": "Kanso: your agents in a row, not a grid. A Herdr layout with PR review and your editor one key away.",
   "license": "Apache-2.0",
   "type": "module",
-  "engines": { "node": ">=22.15" },
+  "engines": {
+    "node": ">=22.15"
+  },
   "scripts": {
     "test": "node --test --test-timeout=180000 --test-force-exit",
     "bench": "node benchmarks/macos.mjs",
@@ -14,6 +16,20 @@
     "sync:share": "node scripts/sync-share.mjs",
     "sync:mods": "node scripts/sync-mods.mjs",
     "build:guidelines": "node scripts/build-guidelines.mjs",
-    "build:site-tokens": "node scripts/build-site-tokens.mjs"
+    "build:site-tokens": "node scripts/build-site-tokens.mjs",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
+  },
+  "devDependencies": {
+    "storybook": "^10.6.7",
+    "@storybook/html-vite": "^10.6.7",
+    "@chromatic-com/storybook": "latest",
+    "@storybook/addon-vitest": "^10.6.7",
+    "@storybook/addon-a11y": "^10.6.7",
+    "@storybook/addon-docs": "^10.6.7",
+    "vitest": "latest",
+    "@vitest/browser-playwright": "latest",
+    "@vitest/coverage-v8": "latest",
+    "playwright": "latest"
   }
 }
