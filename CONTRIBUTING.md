@@ -29,6 +29,8 @@ A mod runs in Herdr's runtime, not in Node. That runtime is QuickJS, and a step 
 
 Set `HERDR_APP_HOME` to a separate directory, so the try does not use your own Herdr home, then run `sh ./scripts/local-install.sh`. The script copies the layout, themes and mods there and switches Herdr to kansō. Merge the `layout:kanso` section of `kanso/keys.json` into that home's `keys.json`. On Windows, merge `kanso/keys.windows.json` instead.
 
+`sh ./scripts/try.sh start` does this for a checkout in the demo home `~/.cache/kd` and opens its window on its own core session; `sh ./scripts/try.sh stop` closes both.
+
 ## Pull requests
 
 [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) asks for Why, What, Tests, Not verified and Version.
