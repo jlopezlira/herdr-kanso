@@ -18,7 +18,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          # Process starts are slow on Windows: its tests run in three shards, each on its own runner.
+          - { os: windows-latest, shard: "1/3" }
+          - { os: windows-latest, shard: "2/3" }
+          - { os: windows-latest, shard: "3/3" }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -49,7 +55,7 @@ jobs:
           }
       - name: Tests
         timeout-minutes: 20
-        run: npm test
+        run: npm test${{ matrix.shard && format(' -- --test-shard={0}', matrix.shard) || '' }}
   test:
     needs: platform
     if: ${{ !cancelled() }}

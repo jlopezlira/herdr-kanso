@@ -97,6 +97,13 @@ test("CI drops only a pull request's older run, and every job of every workflow 
   }
 });
 
+test("Windows runs its tests in three shards, each on its own runner, and the other platforms in one", async () => {
+  const ci = await workflow("ci.yml");
+  for (const n of [1, 2, 3]) assert.match(ci, new RegExp(`os: windows-latest, shard: "${n}/3"`));
+  assert.equal(ci.match(/os: windows-latest/g).length, 3);
+  assert.match(ci, /run: npm test\$\{\{ matrix\.shard && format\(' -- --test-shard=\{0\}', matrix\.shard\) \|\| '' \}\}/);
+});
+
 const remote = (tags) => tags.map((tag, i) => `${i}\trefs/tags/${/^\d/.test(tag) ? `v${tag}` : tag}`).join("\n");
 const mixed = remote(["3.29.0", "3.30.0-beta.1", "3.30.0-beta.2", "3.30.0-rc.1", "3.30.0", "3.31.0-beta.1", "nightly", "v2.0.0-beta"]);
 
