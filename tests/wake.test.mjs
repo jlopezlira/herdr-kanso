@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
-import { load, clone, temporary, exec, psMissing, nativeWindow } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, psMissing, nativeWindow } from "./helpers.mjs";
 
 const HOME = "/nonexistent-home";
 const C1 = "00000000-0000-4000-8000-000000000001";
@@ -58,8 +58,8 @@ async function asleepInKanso(t, tweak = () => {}) {
   const dir = await temporary(t);
   const world = herdr(dir);
   tweak(world);
-  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store"], world.host);
-  const store = new mod.Store(undefined, join(dir, "none"));
+  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store", "Kdb"], world.host);
+  const store = new mod.Store(new mod.Kdb(databaseTimer), join(dir, "none"));
   const kanso = world.spaces[2];
   await store.kdb.observe([{ conversation: C1, given: "Hashiko", space: kanso.id, pos: 2, status: "idle", terminal: "t3q" }]);
   const id = await store.sleep(":/f", { name: "Hashiko", space: { id: kanso.id, name: kanso.name }, per: null, saved: 1,
@@ -596,11 +596,11 @@ test("a sleep that stopped half way: its old pid, now another claude, does not k
   const fake = spawn(bin, ["-e", "setTimeout(() => {}, 20000)"]);
   t.after(() => fake.kill());
   await new Promise((r) => setTimeout(r, 300));
-  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store", "stillThere"], world.host);
+  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store", "Kdb", "stillThere"], world.host);
   assert.equal(await mod.stillThere(fake.pid, Date.now()), true, "a claude that ran before the sleep: still that one");
   assert.equal(await mod.stillThere(fake.pid, Date.now() - 60_000), false, "one started after the sleep: another process with that pid");
   assert.equal(await mod.stillThere(process.pid, Date.now()), false, "not claude: not it");
-  const store = new mod.Store(undefined, join(dir, "none"));
+  const store = new mod.Store(new mod.Kdb(databaseTimer), join(dir, "none"));
   const kanso = world.spaces[2];
   const pane = { argv: ["claude"], cwd: "/w/kanso", name: "Alice", terminal: "t3q", tab: "tb-herdr-kanso", pid: fake.pid };
   // One from an older sleep (no conversation kept) and one with its conversation, both on that pid.

@@ -6,10 +6,29 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
 import { EventEmitter, once } from "node:events";
-import { load, clone, temporary, exec, nativeWindow } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, nativeWindow } from "./helpers.mjs";
 
 const C1 = "00000000-0000-4000-8000-000000000001";
 const C2 = "00000000-0000-4000-8000-000000000002";
+
+for (const dead of [false, true]) {
+  test(`sleepwork retries a lost database stage once and ${dead ? "ends on its second miss" : "uses the recovered rows"}`, async () => {
+    const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"]);
+    let tries = 0, abandoned = 0;
+    const worker = new SleepWork({
+      stage: async () => {
+        tries += 1;
+        if (dead || tries === 1) throw Object.assign(new Error("did not answer"), { late: true });
+        return { rows: [{ id: "s1" }], wrote: [] };
+      },
+      abandon() { abandoned += 1; },
+    });
+    if (dead) await assert.rejects(worker.stage(["SELECT 1;"]), /did not answer/);
+    else assert.deepEqual(clone(await worker.stage(["SELECT 1;"])), { rows: [{ id: "s1" }], wrote: [] });
+    assert.equal(tries, 2);
+    assert.equal(abandoned, 1);
+  });
+}
 const RULE = "─".repeat(40);
 const EMPTY = `Claude\n${RULE}\n❯ \n${RULE}\n`;
 const DRAFT = `Claude\n${RULE}\n❯ half a thought\n${RULE}\n`;
@@ -105,7 +124,7 @@ async function setup(t, exits = {}) {
   const world = herdr(dir, exits);
   const mod = await load("kanso-spaces/sleepwork.js", NAMES, world.host);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], world.host);
-  const kdb = new Kdb(join(dir, "kanso"));
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"));
   const id = await intent(kdb);
   const changes = [];
   const worker = (me) => new mod.SleepWork(kdb, (row) => changes.push(row && { state: row.state, why: row.why }), me);

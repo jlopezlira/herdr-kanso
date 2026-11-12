@@ -25,7 +25,7 @@ export default class Panel extends View {
     const id = typeof p.panel === "string" ? p.panel : "files";
     const Impl = PANELS[id] ?? Files;
     this.id = id;
-    this.db = new Kdb();
+    this.db = new Kdb(cx.timer);
     this.panel = new Impl(this.db);
     this.project = projectNow();
     this.ready = false;

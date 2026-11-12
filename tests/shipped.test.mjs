@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, temporary, clone, exec as run, nativeWindow } from "./helpers.mjs";
+import { databaseTimer, load, context, temporary, clone, exec as run, nativeWindow } from "./helpers.mjs";
 
 const names = ["Shipped", "periodRange", "comparedRange", "periodLabel", "streaks", "computeRecords", "mergeRecords", "periodQuery",
   "REPOS", "fmt", "yourWeeks", "weekAt", "sumWeeks", "heatLayout", "contributionsIn"];
@@ -156,7 +156,7 @@ async function panelWith(t, gh) {
   const { Store } = await load("kanso-panel/shipped-store.js", ["Store"], host);
   const mod = await shipped({ ...host, Store });
   const { cx, drain } = context();
-  cx.timer = { every() {} };
+  cx.timer = { after: databaseTimer.after, every() {} };
   const settle = async () => { for (let i = 0; i < 40; i++) await drain(); };
   return { ...mod, home, store, toasts, cx, settle };
 }

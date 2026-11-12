@@ -1,6 +1,5 @@
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // localStorage mirrors the prefs only so the first frame after a start is already right; the database is what counts.
-import { Store } from "./store.js";
 import { tryOr } from "./pure.js";
 
 export const REFRESH_MS = 20_000; // an unchanged agent is seen again this often (gone after kdb's GONE_MS)
@@ -13,7 +12,8 @@ export const sameSeen = (left, right) => left?.size === right.size && [...right]
 });
 
 export class Panel {
-  constructor(seed = [], store = null) {
+  constructor(seed = [], store) {
+    if (!store) throw new TypeError("A panel needs its store");
     this.store = store;
     this.cache = new Map(seed.flatMap((k) => {
       const v = tryOr(() => localStorage.getItem(k));
@@ -24,11 +24,11 @@ export class Panel {
     this.chain = Promise.resolve();
   }
 
-  get kdb() { return (this.store ??= new Store()).kdb; }
+  get kdb() { return this.store.kdb; }
 
   // True when a pref differs from the first frame's.
   async load() {
-    await (this.store ??= new Store()).open();
+    await this.store.open();
     const [prefs, agents] = [await this.kdb.prefs(), await this.kdb.agents()];
     for (const r of agents) this.agents.set(r.id, { name: r.name, title: r.title, said: r.said, space: r.space_id, pos: r.pos, program: r.program, status: r.status, restore: r.restore, project: r.project ?? null, projectAt: r.project_at ?? null });
     this.dropUnlisted(new Set(agents.map((r) => r.id)));

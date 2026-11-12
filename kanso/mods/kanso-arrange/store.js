@@ -1,9 +1,8 @@
-import { localService } from "./platform-host.js";
+import { Database } from "./platform-database.js";
 import { paths } from "./platform-paths.js";
-import { fileApi } from "./platform-files.js";
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { exec, appHome, readTextFile } from "herdr";
-import { parseOr, tryOrAsync } from "./pure.js";
+import { appHome, readTextFile } from "herdr";
+import { parseOr } from "./pure.js";
 
 export const STORE_DIR = "data/kanso-arrange";
 const OLD_FILE = "data/kanso-arrange.json";
@@ -42,31 +41,23 @@ export function importSql(text) {
     .join("\n");
 }
 
-export class Store {
-  constructor() {
+export class Store extends Database {
+  constructor(timer) {
+    super(timer);
     this.dir = paths.join(appHome(), STORE_DIR);
-    this.db = paths.join(this.dir, "arrange.db");
-    this.ready = null;
-  }
-
-  async sql(text, json = false) {
-    const r = await exec("sqlite3", [...(json ? ["-json"] : []), this.db, text]);
-    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
-    return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
+    this.file = paths.join(this.dir, "arrange.db");
   }
 
   open() {
-    return (this.ready ??= (async () => {
-      const ok = await tryOrAsync(() => exec("sqlite3", ["-version"])); // a failure is reported below
-      if (ok?.code !== 0) { this.ready = null; throw new Error("Install sqlite3 to keep arrangements."); }
-      await localService(fileApi).mkdir(this.dir);
+    return this.opening(async () => {
+      await this.prepare(this.dir, "Install sqlite3 to keep arrangements.");
       await this.sql(SCHEMA);
       const done = await this.sql(`SELECT v FROM meta WHERE k='imported';`, true);
       if (!done.length) {
-        const old = importSql(await readTextFile(paths.join(appHome(), OLD_FILE)).catch(() => null));
+        const old = importSql(await this.bound(readTextFile(paths.join(appHome(), OLD_FILE))).catch((error) => { if (error?.late) throw error; return null; }));
         await this.sql(`BEGIN;\n${old}\nINSERT OR REPLACE INTO meta(k,v) VALUES('imported','${Date.now()}');\nCOMMIT;`);
       }
-    })());
+    });
   }
 
   async all() {

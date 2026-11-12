@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec, singleUse, context, tape } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, singleUse, context, tape } from "./helpers.mjs";
 import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, sleepEvent, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL, destinationOf, livePlaces, eventLabel, oneLine, awayShown, AWAY_PIECE, DID_CAP } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const project = ":C:\\work\\kanso";
@@ -13,7 +13,7 @@ async function database(t) {
   const dir = await temporary(t);
   const { Kdb, rowsOfOutput } = await load("kanso-spaces/kdb.js", ["Kdb", "rowsOfOutput"], { exec, appHome: () => dir });
   const { SinceStore } = await load("kanso-spaces/since-left-store.js", ["SinceStore"], { exec, appHome: () => dir });
-  const db = new Kdb(join(dir, "data"));
+  const db = new Kdb(databaseTimer, join(dir, "data"));
   await db.open();
   return { db, store: new SinceStore(db), rowsOfOutput };
 }

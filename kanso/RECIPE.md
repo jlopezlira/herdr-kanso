@@ -538,8 +538,8 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `strip.req` widths.
   - `kanso-sleep`: a dialog (520 wide); asleep is in that computer's `kanso.db`.
     Sleep hides it; a last tab selects a neighbour (Undo returns) or stays alone.
-    One owner (20 s). Another computer's space sleeps there; each step asks
-    once, then not again until its timer. Silent rows stay grey and Wake waits.
+    One owner (20 s). Remote spaces sleep there. Lost calls expire and retry
+    once; later tries stay usable. Silent rows stay grey; Wake waits.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

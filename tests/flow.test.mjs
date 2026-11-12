@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, clone, temporary, exec, singleUse } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, singleUse } from "./helpers.mjs";
 
 const HOME = "/Users/me";
 
@@ -146,14 +146,14 @@ test("Arrangements are kept in SQLite: saving under a name overwrites it, and th
   const { readFile } = await import("node:fs/promises");
   const host = { exec, appHome: () => dir, readTextFile: (p) => readFile(p, "utf8").catch(() => null) };
   const { Store } = await load("kanso-arrange/store.js", ["Store"], host);
-  const store = new Store();
+  const store = new Store(databaseTimer);
   let all = clone(await store.all());
   assert.deepEqual(all, { [`:${HOME}/web`]: [{ name: "it's mine", per: 2, cols: cols("claude"), saved: 5 }] }, "the JSON file read in, a quote in a name kept, a broken entry skipped");
   all = clone(await store.save(`:${HOME}/web`, { name: "it's mine", per: 3, cols: cols("codex"), saved: 9 }));
   assert.deepEqual(all[`:${HOME}/web`], [{ name: "it's mine", per: 3, cols: cols("codex"), saved: 9 }], "the same name in the same project overwrites");
   all = clone(await store.save(`:${HOME}/shop`, { name: "it's mine", per: 1, cols: cols("grok"), saved: 10 }));
   assert.equal(Object.keys(all).length, 2, "the same name in another project is its own arrangement");
-  const again = new Store();
+  const again = new Store(databaseTimer);
   assert.equal(clone(await again.all())[`:${HOME}/web`][0].per, 3, "the JSON file is not read in a second time over a newer row");
   all = clone(await again.remove(`:${HOME}/shop`, "it's mine"));
   assert.deepEqual(Object.keys(all), [`:${HOME}/web`]);
@@ -178,7 +178,8 @@ test("Sleep keeps each Claude agent's conversation, and Wake starts it on that c
   const dir = await temporary(t);
   const { readFile } = await import("node:fs/promises");
   const { Store } = await load("kanso-sleep/store.js", ["Store"], { exec, appHome: () => dir });
-  const store = new Store();
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
+  const store = new Store(new Kdb(databaseTimer));
   // What the sidebar does once every agent has left (sleepwork.js).
   const settle = async (id) => (await store.kdb.holdWork(id, "w-test")) && store.kdb.finishSleep(id, "w-test");
   const id = await store.sleep(":/w", { ...a, saved: 7 });
@@ -391,7 +392,7 @@ test("The dōjō's card: the best round, the days in a row, only the levels play
 test("The dōjō keeps its rounds in its own SQLite: bests per level, totals, the days played", async (t) => {
   const dir = await temporary(t);
   const { Store } = await load("kanso-dojo/store.js", ["Store"], { exec, appHome: () => dir });
-  const store = new Store();
+  const store = new Store(databaseTimer);
   assert.equal(await store.level(), 1, "level 1 to start");
   await store.setLevel(3);
   assert.equal(await store.level(), 3);
@@ -403,7 +404,7 @@ test("The dōjō keeps its rounds in its own SQLite: bests per level, totals, th
   assert.deepEqual(tot.bests, { 1: 55, 3: 30 });
   assert.deepEqual([tot.rounds, tot.rings, tot.fewest, tot.longest, tot.first], [3, 12, 9, 3, day - 86400000]);
   assert.deepEqual(tot.days, ["2026-11-05", "2026-11-06"]);
-  assert.equal(store.db, join(dir, "data", "kanso-dojo", "dojo.db"));
+  assert.equal(store.file, join(dir, "data", "kanso-dojo", "dojo.db"));
 });
 
 
@@ -457,14 +458,17 @@ test("The sidebar keeps its state in the left nav's database: prefs moved from l
   const local = new Map([["spaces.view", "threads"], ["spaces.sections", "[\"done\"]"]]);
   const localStorage = { getItem: (k) => local.get(k) ?? null, setItem: (k, v) => local.set(k, v) };
   const { Panel } = await load("kanso-spaces/panel.js", ["Panel"], { exec, appHome: () => dir, localStorage });
-  const p = new Panel(["spaces.view", "spaces.sections", "spaces.order"]);
+  const { Store } = await load("kanso-spaces/store.js", ["Store"], { exec, appHome: () => dir });
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
+  const store = new Store(new Kdb(databaseTimer));
+  const p = new Panel(["spaces.view", "spaces.sections", "spaces.order"], store);
   assert.equal(p.get("spaces.view"), "threads", "the first frame: the copy in localStorage");
   assert.equal(await p.load(), false, "first start: localStorage moves in, nothing differs");
   p.set("spaces.view", "agents");
   const seen = (status) => new Map([["t1", { conversation: "c1", given: "fury", name: "fury", title: "Fix sleep", said: 3, space: "w1", tab: "tb1", pos: 1, program: null, status, terminal: "t1" }]]);
   await p.remember(seen("idle"), 100);
   local.set("spaces.view", "spaces"); // an old copy: the database wins
-  const fresh = new Panel(["spaces.view"]);
+  const fresh = new Panel(["spaces.view"], store);
   assert.equal(await fresh.load(), true);
   assert.equal(fresh.get("spaces.view"), "agents");
   assert.deepEqual(clone(fresh.json("spaces.sections", [])), ["done"]);
@@ -474,7 +478,7 @@ test("The sidebar keeps its state in the left nav's database: prefs moved from l
   fresh.sent.set("c1", { a: seen("idle").get("t1"), at: 100 });
   assert.equal(fresh.remember(seen("idle"), 200), before, "nothing changed: nothing written");
   await fresh.remember(seen("working"), 300);
-  const last = new Panel([]);
+  const last = new Panel([], store);
   await last.load();
   assert.equal(last.agents.get("c1").status, "working");
   // The name cleared on its terminal: the automatic one again, here and in the database.

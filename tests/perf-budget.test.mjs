@@ -1,7 +1,7 @@
 // Budgets count production paths through their first loading draw.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { temporary } from "./helpers.mjs";
+import { databaseTimer, temporary } from "./helpers.mjs";
 import { fixture, firstDraw, PANEL_IDS, loadMod } from "./perf-harness.mjs";
 
 for (const id of [...PANEL_IDS, "spaces", "tabs", "strip"]) {
@@ -40,7 +40,7 @@ for (const [working, budget] of [[2, 8], [0, 2]]) test(`sidebar at rest with 10 
   const dir = await temporary(t), f = fixture({ dir, working });
   const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
   f.host.Kdb = Kdb;
-  const db = new Kdb();
+  const db = new Kdb(databaseTimer);
   await db.open();
   await db.migrate();
   const { Spaces } = await loadMod("kanso-spaces/main.js", ["Spaces"], f.host);

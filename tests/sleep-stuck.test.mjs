@@ -60,13 +60,21 @@ async function open(prepare) {
   return { s, calls, closed, clock, sleepRefusal };
 }
 
+async function endLate(clock, n) {
+  await clock.until(n);
+  assert.equal(clock.waits.length, n, `step ${n} never armed its timer`);
+  assert.equal(clock.waits.at(-1).ms, 15_000);
+  clock.fireLast();
+  await clock.until(n + 1);
+  assert.equal(clock.waits.length, n + 1, "a lost step is tried once more");
+  assert.equal(clock.waits.at(-1).ms, 15_000);
+  clock.fireLast();
+}
+
 async function late(n, prepare) {
   const opened = await open(prepare);
-  await opened.clock.until(n);
-  assert.equal(opened.clock.waits.length, n, `step ${n} never armed its timer`);
-  assert.equal(opened.clock.waits.at(-1).ms, 15_000);
   assert.equal(opened.s.busy, "Going to sleep");
-  opened.clock.fireLast();
+  await endLate(opened.clock, n);
   await opened.clock.drain();
   assert.equal(opened.s.busy, null);
   assert.equal(opened.s.ordering, false);
@@ -87,7 +95,7 @@ test("a confirm read that never answers says so and brings the tab back", { time
   const { s, calls } = await late(2, (row) => {
     row.readTabs = () => { reads += 1; return reads === 1 ? shown : hang(); };
   });
-  assert.equal(reads, 2);
+  assert.equal(reads, 3);
   assert.equal(s.error, "This tab did not answer.");
   assert.equal(back(calls), true);
 });
@@ -102,6 +110,26 @@ test("asleep rows that never answer say so and bring the tab back", { timeout: 5
   const { s, calls } = await late(4, (row) => { row.store = { asleep: hang, sleep: async () => "id1" }; });
   assert.equal(s.error, "What's asleep did not answer.");
   assert.equal(back(calls), true);
+});
+
+test("a lost asleep read is tried once and then the tab sleeps", { timeout: 5_000 }, async () => {
+  let reads = 0;
+  let dropped = 0;
+  const { s, closed, clock } = await open((row) => {
+    row.store = {
+      kdb: { abandon() { dropped += 1; } },
+      asleep: () => { reads += 1; return reads === 1 ? hang() : []; },
+      sleep: async () => "id1",
+    };
+  });
+  await clock.until(4);
+  assert.equal(clock.waits.length, 4);
+  clock.fireLast();
+  await clock.drain();
+  assert.equal(reads, 2);
+  assert.equal(dropped, 1);
+  assert.equal(s.error, null);
+  assert.deepEqual(closed, ["close"]);
 });
 
 test("a save that never answers says so and brings the tab back", { timeout: 5_000 }, async () => {
@@ -133,9 +161,7 @@ test("a list that never answers, with nothing stored, brings the tab back", { ti
   s.conceal("tab", "tb", null);
   const clock = stepClock();
   const task = s.finishSleep(clock.cx);
-  await clock.until(4);
-  assert.equal(clock.waits.length, 4);
-  clock.fireLast();
+  await endLate(clock, 4);
   await task;
   assert.equal(s.error, "The list did not answer.");
   assert.equal(back(calls), true);
@@ -184,6 +210,33 @@ test("a wake already coming back says so", async () => {
   s.wake({ id: "s1", state: "undoing", name: "Ada" }, { notify() {}, spawn() { throw new Error("spawned"); } });
   assert.equal(s.error, "Coming back");
 });
+
+for (const dead of [false, true]) {
+  test(`Wake retries a lost claim once and ${dead ? "reports a dead store once" : "continues with the same claim token"}`, async () => {
+    const closed = [], notices = [], tokens = [];
+    const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host({ closed }));
+    const s = new Sleep(), clock = stepClock();
+    let abandoned = 0, opened = 0;
+    clock.cx.notify = () => { if (s.error) notices.push(s.error); };
+    s.store = {
+      kdb: { abandon() { abandoned += 1; } },
+      claim(_id, token) { tokens.push(token); return dead || tokens.length === 1 ? hang() : { id: "s1", token, cols: [], name: "Ada" }; },
+    };
+    s.refresh = async () => {};
+    s.wakeHeld = async () => { opened += 1; s.busy = null; return true; };
+    s.wake({ id: "s1", name: "Ada", state: "asleep" }, clock.cx);
+    if (dead) await endLate(clock, 1);
+    else { await clock.until(1); clock.fireLast(); }
+    await clock.drain();
+    assert.equal(tokens.length, 2);
+    assert.equal(tokens[0], tokens[1]);
+    assert.equal(abandoned, 1);
+    assert.equal(s.busy, null);
+    assert.equal(opened, dead ? 0 : 1);
+    assert.deepEqual(notices, dead ? ["Ada could not be woken: did not answer"] : []);
+    assert.deepEqual(closed, dead ? [] : ["close"]);
+  });
+}
 
 test("readTab drops an agent's hc-run children on purpose, both reads match, and the tab sleeps", async () => {
   const asked = [];

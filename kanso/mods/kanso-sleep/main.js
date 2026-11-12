@@ -6,17 +6,14 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, machines, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile } from "herdr";
 import { Store, idle, done, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText, machinesToAsk, WAKES_LABEL, BEAT_MS } from "./kdb.js";
+import { Kdb, newId, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText, machinesToAsk, WAKES_LABEL, BEAT_MS } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
 import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway, homeOf, homePlace } from "./sleepwork.js";
-import { aliasText, machineTitle, retry, tryOr, tryOrAsync, mapSeries, reduceSeries, bounded, LATE } from "./pure.js";
+import { aliasText, machineTitle, retry, tryOr, tryOrAsync, mapSeries, reduceSeries, settled, onceMore } from "./pure.js";
 import { skeleton, breathe, Armed } from "./ui.js";
 
-const settled = async (fn) => {
-  try { return { ok: true, value: await fn() }; } catch (error) { return { ok: false, error }; }
-};
 // settled(fn) plus `told`: the arguments of its first tell(...) (it may tell, then throw), null when it never told.
 const telling = (fn) => new Promise((done) => {
   const told = new Promise((tell) => {
@@ -85,8 +82,9 @@ export default class Sleep extends View {
     this.busy = null;
     this.error = null;
     const ask = props() ?? {};
+    this.clock = cx.timer;
     this.space = spaces().find((s) => s.id === ask.sleep?.space) ?? spaces().find((s) => s.active) ?? null;
-    this.store = new Store();
+    this.store = new Store(new Kdb(this.clock));
     this.remotes = new Map();
     this.kept = new Map();
     this.keptAt = new Map();
@@ -113,7 +111,7 @@ export default class Sleep extends View {
     if (had) return had;
     const place = await homePlace(machine);
     const dir = kansoDir(place.home, place.platform);
-    const store = new Store(new Kdb(dir, machine));
+    const store = new Store(new Kdb(this.clock, dir, machine));
     this.remotes.set(machine, store);
     return store;
   }
@@ -255,10 +253,8 @@ export default class Sleep extends View {
     this.hidden = null;
   }
 
-  async take(cx, work) {
-    const result = await bounded(settled(work), cx.timer, STEP_MS);
-    if (result === LATE || result?.late) return { ok: false, late: true };
-    return result;
+  async take(cx, work, db = null) {
+    return onceMore(work, cx.timer, db?.timer ? null : STEP_MS, () => this.drop, () => db?.abandon?.());
   }
 
   // Cancel and Esc put the tab back. A part already stored stays hidden.
@@ -320,7 +316,7 @@ export default class Sleep extends View {
       const placed = await this.take(cx, () => this.storeFor(machine));
       if (this.halt(placed, "That computer did not answer.")) return;
       const store = placed.value;
-      const was = await this.take(cx, async () => new Set((await store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)));
+      const was = await this.take(cx, async () => new Set((await store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)), store?.kdb);
       if (this.halt(was, "What's asleep did not answer.")) return;
       // Each tab under a name no other tab asleep in the project has (nor one before it here).
       const named = list.reduce(({ out, taken }, r) => {
@@ -330,7 +326,8 @@ export default class Sleep extends View {
       // A tab that can't be written stops the ones after it; those written go on.
       const out = await reduceSeries(named, async (acc, r) => {
         if (acc.error || this.drop) return acc;
-        const w = await this.take(cx, () => store.sleep(project, this.intentOf(r)));
+        const intent = { ...this.intentOf(r), id: newId() };
+        const w = await this.take(cx, () => store.sleep(project, intent), store?.kdb);
         if (this.drop) return acc;
         if (!w.ok) return { ...acc, error: w.late ? "saving it did not answer" : w.error };
         setShared("kanso.sleep.hidden", claimHide(shared("kanso.sleep.hidden"), r.tab.id, w.value));
@@ -342,7 +339,7 @@ export default class Sleep extends View {
       if (out.error && out.ids.length) this.revealLeft();
       else if (out.error) this.reveal();
       if (out.ids.length) setShared("kanso.sleep.kick", Date.now());
-      const refreshed = await this.take(cx, () => this.refresh());
+      const refreshed = await this.take(cx, () => this.refresh(), this.store.kdb);
       if (!out.error && !out.ids.length && this.halt(refreshed, "The list did not answer.")) return;
       if (this.drop) return;
       this.error = out.error ? `${out.ids.length ? "The rest" : "It"} can't sleep: ${String(out.error?.message ?? out.error)}.` : null;
@@ -430,10 +427,11 @@ export default class Sleep extends View {
     this.busy = `Waking ${shown.name}`; this.error = null; cx.notify();
     const machine = shown?.machine ?? null;
     cx.spawn(async (cx) => {
-      const got = machine ? await settled(() => this.storeFor(machine)) : { ok: true, value: this.store };
+      const got = machine ? await this.take(cx, () => this.storeFor(machine)) : { ok: true, value: this.store };
       if (!got.ok) { this.busy = null; this.error = `${shown.name} could not be woken: ${String(got.error?.message ?? got.error)}`; cx.notify(); return; }
       const store = got.value;
-      const claimed = await settled(() => store.claim(shown.id));
+      const token = newId();
+      const claimed = await this.take(cx, () => store.claim(shown.id, token), store.kdb);
       if (!claimed.ok) { this.busy = null; this.error = `${shown.name} could not be woken: ${String(claimed.error?.message ?? claimed.error)}`; cx.notify(); return; }
       const a = claimed.value;
       if (!a) {

@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, temporary, exec as realExec } from "./helpers.mjs";
+import { databaseTimer, load, temporary, exec as realExec } from "./helpers.mjs";
 
 const C1 = "00000000-0000-4000-8000-000000000001";
 const RULE = "─".repeat(40);
@@ -84,7 +84,7 @@ export async function sleepWire(t, { machine = "light", agent = "idle" } = {}) {
   const layout = { per: null, tab: "tb1", cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Ada", terminal: "t1", tab: "tb1", front: 11, pid: 11 }] }] };
   const { SleepWork, TICK_MS, homePlace } = await load("kanso-spaces/sleepwork.js", ["SleepWork", "TICK_MS", "homePlace"], host);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
-  const kdb = new Kdb(join(dir, "kanso"), machine);
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"), machine);
   await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true, saved: now, now });
   await homePlace(machine);
   const opened = { calls: calls.length, reads: reads.length, hc: hcLog.length };
@@ -188,7 +188,7 @@ test("a local sleep and wake of one idle agent, counted on this computer", async
   const layout = { per: null, tab: "tb1", cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w", resume: C1, wake: ["claude", "--resume", C1], name: "Ada", terminal: "t1", tab: "tb1", front: 11, pid: 11 }] }] };
   const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], host);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
-  const kdb = new Kdb(join(dir, "kanso"));
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"));
   await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true });
   const at = calls.length;
   const tasks = [];
@@ -247,7 +247,7 @@ test("a remote claim takes a free row, leaves a fresh lease, and sticks one that
   const dir = await temporary(t);
   const { Kdb, LEASE_MS } = await load("kanso-spaces/kdb.js", ["Kdb", "LEASE_MS"], { exec: realExec, appHome: () => dir, home: () => "/Users/local", window: () => ({ platform: "macos" }) });
   const { LONG_MS } = await load("kanso-spaces/sleepwork.js", ["LONG_MS"], { home: () => "/Users/local" });
-  const kdb = new Kdb(join(dir, "kanso"));
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"));
   const layout = { per: null, tab: "tb1", cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w", resume: C1, name: "Ada", terminal: "t1", tab: "tb1", pid: 11 }] }] };
   const now = 1_700_000_000_000;
   const { id } = await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true, now });
@@ -289,7 +289,7 @@ test("a remote step that is waiting does not ask again until its timer", async (
   const layout = { per: null, tab: "tb1", cols: [{ w: 1, panes: [{ argv: ["claude"], cwd: "/w", resume: C1, wake: ["claude"], name: "Ada", terminal: "t1", tab: "tb1", pid: 11 }] }] };
   const { SleepWork, homePlace, TICK_MS, SAVE_MS } = await load("kanso-spaces/sleepwork.js", ["SleepWork", "homePlace", "TICK_MS", "SAVE_MS"], host);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
-  const kdb = new Kdb(join(dir, "kanso"), "light");
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"), "light");
   const now = 1_700_000_000_000;
   await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true, now });
   await homePlace("light");
