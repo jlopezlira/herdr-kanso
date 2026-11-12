@@ -12,6 +12,7 @@
     "check:version": "node scripts/check-version.mjs",
     "check:mods": "node scripts/check-mods.mjs",
     "sync:share": "node scripts/sync-share.mjs",
-    "sync:mods": "node scripts/sync-mods.mjs"
+    "sync:mods": "node scripts/sync-mods.mjs",
+    "build:guidelines": "node scripts/build-guidelines.mjs"
   }
 }

@@ -1,0 +1,31 @@
+{
+  "elements": [
+    {
+      "id": "tokens",
+      "title": "Tokens",
+      "status": "Approved",
+      "version": null,
+      "page": "tokens.html",
+      "summary": "The only values kansō may use. Every size, space, radius, height, icon, switch, motion and colour comes from this set.",
+      "use": [
+        "Take every size, space, radius, height and colour from a token, in the app and in a design.",
+        "Pick the token by its role, not by the number that looks closest.",
+        "Write text in fg, muted or dim only, at 4.5:1 or more on every surface it can sit on.",
+        "Change tone on hover, focus and press; never the size or position of a box."
+      ],
+      "avoid": [
+        "A raw number or hex colour in code, when a token holds that value.",
+        "A new token for one place. Use the nearest role, or ask for the set to change.",
+        "A palette value where the published value differs: the published one is the one that passes contrast.",
+        "Dawn colours on controls or text. They belong to the Dawn Mode art."
+      ],
+      "files": [
+        { "path": "kanso/tokens.json", "role": "every token: name, value and role, colour in dark and light" },
+        { "path": "kanso/mods/kanso-panel/ui.js", "role": "the constants the app draws with: G, H, R, T, ICON, SWITCH, ARM_MS" },
+        { "path": "kanso/themes/kanso.json", "role": "the dark palette" },
+        { "path": "kanso/themes/kanso-day.json", "role": "the light palette" }
+      ],
+      "agent": "Use only kansō's tokens. Read kanso/tokens.json for every size, space, radius, height, icon, switch, motion and colour (dark and light), and pick each by its role. In the app, draw with the constants in kanso/mods/kanso-panel/ui.js (G, H, R, T, ICON, SWITCH, ARM_MS). Write no raw number or hex colour that a token holds, and add no new token. Text is fg, muted or dim, and must keep 4.5:1 on canvas, chrome, bg, raised and popover in both themes. Hover, focus and press change tone only, never a box."
+    }
+  ]
+}
