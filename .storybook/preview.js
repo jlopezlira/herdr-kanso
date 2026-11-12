@@ -3,6 +3,7 @@ import { GLOBALS_UPDATED, SET_GLOBALS } from 'storybook/internal/core-events';
 import sprite from '../stories/proto-sprite.svg?raw';
 import '../site/tokens.css';
 import '../stories/proto.css';
+import '../stories/frame.css';
 
 document.body.insertAdjacentHTML('afterbegin', sprite);
 

@@ -12,6 +12,8 @@ const LAYOUTS = ["Window at rest", "Sidebar at rest", "Sidebar header, three way
 const SETTINGS = ["Settings", "Settings, what shows", "Keys", "Window map", "What's new", "Credits"];
 const SUBS = { "States (S21)": "States" };
 const TABLES = ["Every value", "Contrast, light and dark"];
+const LIVE = ["Hover, selected, pressed", "Focus ring", "Field", "Tooltip"];
+const FROZEN = ["sbx-ring", "sbx-press", "sbx-hov", "hov", "press"];
 
 const BOARDS = {
   Z: "Philosophy",
@@ -191,6 +193,16 @@ const css = read("sb-atomic.css")
   .replaceAll(".k-light ", ':root[data-theme="light"] ')
   .replace(/\n{3,}/g, "\n\n");
 if (/k-(dark|light)/.test(css)) throw new Error("a theme selector is left");
+const interactive = /([^{}]+)\{\s*cursor:pointer;transition:/.exec(css)[1].split(",").map((s) => /^\s*\.([\w-]+)\s*$/.exec(s)?.[1]).filter(Boolean);
+
+const focusable = (html) => html.replace(/<(\w+) class="([^"]*)"(?![^>]*tabindex)/g, (m, tag, c) => (c.split(/\s+/).some((n) => interactive.includes(n)) ? `${m} tabindex="0"` : m));
+
+function live(html) {
+  const [, open, drawn] = /^(<div class="st-ex"><div class="k st-s free">)(.*)<\/div><\/div>$/s.exec(html);
+  const thawed = drawn.replace(/class="([^"]*)"/g, (_, c) => `class="${c.split(/\s+/).filter((n) => !FROZEN.includes(n)).join(" ")}"`).replace(/;?background:var\(--hover\)/g, "");
+  const trigger = drawn.startsWith('<span class="tip"') ? `<span class="tip-live"><span class="ib"><svg class="i"><use href="#lu-refresh-cw"/></svg></span>${drawn}</span>` : thawed;
+  return `${open}<p class="cap">Live</p>${trigger}<p class="cap">Drawn</p>${drawn}</div></div>`;
+}
 
 const text = (html) => html.replace(/<svg.*?<\/svg>/gs, "").replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
 const q = (s) => JSON.stringify(s);
@@ -244,7 +256,7 @@ for (const entry of JSON.parse(read("sb-atomic-stories.json"))) {
   const stories = folders.get(folder);
   let name = exportName(title);
   while (stories[name]) name += "2";
-  stories[name] = { title, caption: caption.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), html: example(entry.html) };
+  stories[name] = { title, caption: caption.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), html: focusable(LIVE.includes(title) ? live(example(entry.html)) : example(entry.html)) };
 }
 
 const why = notes();

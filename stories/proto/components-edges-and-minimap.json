@@ -1,6 +1,6 @@
 {
  "EdgesAndMinimap": {
   "caption": "Off-screen panes at the edge as tiles; the minimap and zoom in the status bar.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:400px\"><div class=\"brx-edge\">‹<span class=\"brx-tile kit-ib\"><svg class=\"pi\"><use href=\"#p-codex\"/></svg></span></div><div class=\"brx-slot\"><span class=\"mini-map\"><i class=\"f\" style=\"width:24px\"></i><i style=\"width:24px\"></i></span><span style=\"width:8px\"></span><span class=\"c-dim\">−</span><span class=\"c-mu\" style=\"margin:0 4px\">2</span><span class=\"c-dim\">+</span></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:400px\"><div class=\"brx-edge\">‹<span class=\"brx-tile kit-ib\" tabindex=\"0\"><svg class=\"pi\"><use href=\"#p-codex\"/></svg></span></div><div class=\"brx-slot\"><span class=\"mini-map\"><i class=\"f\" style=\"width:24px\"></i><i style=\"width:24px\"></i></span><span style=\"width:8px\"></span><span class=\"c-dim\">−</span><span class=\"c-mu\" style=\"margin:0 4px\">2</span><span class=\"c-dim\">+</span></div></div></div></div>"
  }
 }
