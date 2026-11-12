@@ -6,9 +6,9 @@ import { systemApi } from "./platform-system.js";
 // Containers, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Docker, simply: what runs and for which project, and everything you'd open Docker Desktop for.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared } from "herdr";
-import { G, Armed, tokens, quietLink, iconButton, ghost, breathe } from "./ui.js";
+import { G, Armed, tokens, quietLink, iconButton, field, TextField, ghost, breathe } from "./ui.js";
 import { afterMount } from "./pure.js";
 import { Front } from "./front.js";
 import {
@@ -66,7 +66,7 @@ export default class Containers extends View {
     this.front = new Front();
     this.names = new Map();   // compose folder -> [{ name, files }] seen there, so Up after Down uses them
     this.namesKey = null;     // the Docker context they belong to
-    this.pull = InputState.new({ placeholder: "postgres:17, redis, nginx:alpine…" });
+    this.pull = new TextField({ placeholder: "postgres:17, redis, nginx:alpine…" });
     this.pull.on("change", (_e, cx) => cx.notify());
     this.pull.on("submit", () => this.pullImage());
     this.runFor = null;       // the image whose Run form is open, with its fields
@@ -192,7 +192,7 @@ export default class Containers extends View {
     this.closeRun();
     if (same) { cx.notify(); return; }
     const base = (image.tags[0] ?? "").split(":")[0].split("/").at(-1) || "app";
-    const name = InputState.new({ placeholder: `name (${base})` }), port = InputState.new({ placeholder: "port, e.g. 8080:80" });
+    const name = new TextField({ placeholder: `name (${base})` }), port = new TextField({ placeholder: "port, e.g. 8080:80" });
     name.on("submit", (_e, cx) => this.runImage(cx));
     port.on("submit", (_e, cx) => this.runImage(cx));
     this.runFor = { id: image.id, target: image.tags[0] ?? image.id, name, port };
@@ -330,8 +330,7 @@ export default class Containers extends View {
       .child(this.head("images", "images", `${this.images.length} · ${size(total)}${spare > 0 ? ` · ${size(spare)} unused` : ""}`, open, c))
       // Pull is always here: a new image is one line away.
       .child(h_flex().w_full().gap(G.sm).items_center()
-        .child(h_flex().flex_1().min_w(0).h(28).px(8).rounded(6).border_1().border_color(c.input).bg(c.canvas)
-          .child(Input.new(this.pull).flex_1().h_full().text_size(12)))
+        .child(field("ct-pull-image", this.pull, c).flex_1().min_w(0))
         .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { color: name ? c.text : c.border, disabled: !name })))
       .when(unused.length > 0, (el) => el.child(h_flex()
         .child(quietLink("ct-rmi", armed ? `Press again to remove ${unused.length}` : `Remove unused images (${size(spare)})`,
@@ -342,8 +341,6 @@ export default class Containers extends View {
 
   imageRow(i, c) {
     const key = `rmi:${i.id}`, armed = this.armed.is(key), form = this.runFor?.id === i.id ? this.runFor : null;
-    const field = (state) => h_flex().flex_1().min_w(0).h(26).px(8).rounded(6).border_1().border_color(c.input).bg(c.canvas)
-      .child(Input.new(state).flex_1().h_full().text_size(12));
     return v_flex().w_full().gap(4).px(G.md).py(7).border_t(1).border_color(c.border)
       .child(h_flex().w_full().items_center().gap(G.md)
         .child(v_flex().flex_1().min_w(0).gap(2)
@@ -355,7 +352,8 @@ export default class Containers extends View {
         .when(i.unused, (el) => el.child(quietLink(`ct-rmi-${i.id}`, armed ? "Press again to remove" : "Remove",
           (cx) => this.armed.press(key, cx, (cx) => this.act(["rmi", ...i.tags], cx, { what: "remove image" })), c, { color: armed ? c.red : c.muted }))))
       .when(Boolean(form), (el) => el.child(h_flex().w_full().gap(G.sm).items_center()
-        .child(field(form.name)).child(field(form.port))
+        .child(field(`ct-run-name-${i.id}`, form.name, c).flex_1().min_w(0))
+        .child(field(`ct-run-port-${i.id}`, form.port, c).flex_1().min_w(0))
         .child(quietLink(`ct-run-go-${i.id}`, "Run", (cx) => this.runImage(cx), c, { color: c.text }))));
   }
 

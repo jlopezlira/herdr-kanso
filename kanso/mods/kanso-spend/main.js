@@ -4,9 +4,9 @@ import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
+import { v_flex, h_flex, Button, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, R, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, H, R, PULSE, breathe, tokens, toggleSwitch, field, TextField, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
@@ -372,16 +372,16 @@ export default class TokenSpend extends View {
     this.settingsNote = null;
     // Inputs need a live host call: build them here, never in render.
     this.planInputs = (this.settings?.plans ?? []).map((plan) => ({
-      name: InputState.new({ value: plan.name, placeholder: "Plan" }),
-      amount: InputState.new({ value: String(plan.usdPerMonth), placeholder: "0" }),
+      name: new TextField({ value: plan.name, placeholder: "Plan" }),
+      amount: new TextField({ value: String(plan.usdPerMonth), placeholder: "0" }),
     }));
     cx.notify();
   }
 
   addPlan(cx) {
     this.planInputs = [...this.planInputs, {
-      name: InputState.new({ placeholder: "ChatGPT Pro, Claude Max…" }),
-      amount: InputState.new({ placeholder: "200" }),
+      name: new TextField({ placeholder: "ChatGPT Pro, Claude Max…" }),
+      amount: new TextField({ placeholder: "200" }),
     }];
     cx.notify();
   }
@@ -766,9 +766,9 @@ export default class TokenSpend extends View {
       .child(v_flex().w_full()
         .child(heading("Plans", "What you pay each month. Spend subtracts it from the API value to show what your plans save you."))
         .children(this.planInputs.map((input, index) => h_flex().w_full().items_center().gap(G.sm).py(4)
-          .child(div().flex_1().min_w(0).child(controlInput(Input.new(input.name).w_full(), c)))
+          .child(div().flex_1().min_w(0).child(field(`ins-plan-name-${index}`, input.name, c)))
           .child(div().text_size(12).text_color(c.dim).child("$"))
-          .child(div().w(84).flex_none().child(controlInput(Input.new(input.amount).w_full(), c)))
+          .child(div().w(84).flex_none().child(field(`ins-plan-amount-${index}`, input.amount, c)))
           .child(div().text_size(11).text_color(c.dim).child("/ mo"))
           .child(iconButton(`ins-plan-remove-${index}`, icon("close"), "Remove plan", (cx) => this.removePlan(index, cx), c))))
         .child(h_flex().w_full().gap(G.lg).items_center().pt(G.sm)

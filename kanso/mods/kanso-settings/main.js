@@ -4,9 +4,9 @@ import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Input, InputState } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, H, T, SEG, tokens, button, quietTabs, quietLink, skeleton, breathe, Armed, controlInput, section, segmented, toggleSwitch } from "./ui.js";
+import { G, H, T, SEG, tokens, button, quietTabs, quietLink, skeleton, breathe, Armed, field, TextField, section, segmented, toggleSwitch } from "./ui.js";
 import { pieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LABEL, STORE } from "./pieces.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
@@ -49,7 +49,7 @@ export default class Settings extends View {
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
     this.avatars = null;
-    this.find = InputState.new({ placeholder: "Find" });
+    this.find = new TextField({ placeholder: "Find" });
     this.find.on("change", (_e, cx) => cx.notify());
     if (this.page === "credits") this.readAvatars(cx);
     cx.spawn(async (cx) => {
@@ -205,7 +205,7 @@ export default class Settings extends View {
   }
 
   findField(c) {
-    return controlInput(Input.new(this.find).w_full(), c).id("pieces-find");
+    return field("pieces-find", this.find, c);
   }
 
   piecesPage(t, c) {
