@@ -13,9 +13,13 @@ From a clone, with Node 22.15 or newer, Git, Bash and sqlite3:
 
 ## Version
 
-Pull requests target `develop`. A change to what kansō installs adds its entries to the next version's section in [CHANGELOG.md](CHANGELOG.md), and raises `kanso/mods/kanso-chrome/version.json` only when its category needs a bigger bump than that section already has. What it installs is `kanso/mods`, `kanso/themes`, `kanso/layouts`, `kanso/keys.json` and `kanso/keys.windows.json`. Docs do not bump the version.
+Pull requests target `develop`. Add entries for changes to what kansō installs under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md), using Breaking, Added, Changed, Deprecated, Removed, Fixed, Security or Upgrade. Use Upgrade for steps users must take before updating; like Fixed and Changed, it does not require a larger bump. Never edit a numbered section or `kanso/mods/kanso-chrome/version.json` in a pull request. What kansō installs is `kanso/mods`, `kanso/themes`, `kanso/layouts`, `kanso/keys.json` and `kanso/keys.windows.json`. Docs need no entry.
 
-A release that lists Breaking or Removed changes is a major version, one that lists Added or Deprecated is a minor version, anything else is a patch. `npm run check:version` checks this, a push to `develop` publishes a beta once CI passes on all three platforms, the Release candidate workflow publishes a release candidate, and merging `develop` into `main` releases the version in `version.json`. Technical debt stays under `## [Unreleased]` and goes out with the next release.
+Until a release candidate is cut, version.json stays at the newest stable version. Once CI passes on all three platforms, a push to develop publishes a beta with the Unreleased entries as its notes. Its version is computed from the newest stable tag: Breaking or Removed means a major bump, Added or Deprecated means a minor bump, anything else a patch. Existing beta numbers continue upward. The beta job creates a detached commit with only version.json set to the computed version, tags that commit and pushes only the tag. Develop keeps its version file, and the updater gets an archive whose version matches its tag.
+
+Run the manual Release candidate workflow on `develop` to prepare the next version. It computes the same bump, moves Unreleased into a dated, numbered section, updates version.json, commits those files to develop and publishes `vX.Y.Z-rc.N`. Later candidates combine that numbered section with new Unreleased entries and recompute the bump from the newest stable tag. The number can go up until stable, but never down. A larger bump renames the section in place, updates version.json and starts rc.N at 1 for the new version; otherwise only N increases. Betas compute their version from the same combined entries. Merging develop into main releases the version in version.json.
+
+`npm run check:version -- --branch develop` checks the develop rules; CI also checks that a pull request leaves version.json and numbered history alone. `npm run check:version` checks main's stable rules. Technical debt goes under Unreleased too and ships with the next release.
 
 ## Shared files
 
@@ -31,4 +35,8 @@ Set `HERDR_APP_HOME` to a separate directory, so the try does not use your own H
 
 ## Pull requests
 
-[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) asks for Why, What, Tests, Not verified and Version.
+Use `type(scope): subject` for the PR title, with `type` one of `feat`, `fix`, `perf`, `test`, `ci`, `docs` or `chore`. Do not use `bug` as a type or put a version or issue number in the title. Branch names use `<type>/<slug>`.
+
+Kansō tracks users' GitHub issues, not tickets. When a user's issue prompted the change, put `Closes #N` under Why in the PR body and end the related CHANGELOG entry with `(#N)`. With no issue, omit both references.
+
+[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) keeps five sections: Why, What, Tests, Not verified and Version.

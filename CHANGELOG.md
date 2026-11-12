@@ -1,18 +1,28 @@
 # Changelog
 
-Every change to what kansō installs, newest first. Versions follow
-[Semantic Versioning](https://semver.org): a release that lists Breaking or
-Removed changes is a major version, one that lists Added or Deprecated is a
-minor version, anything else is a patch. The format follows
-[Keep a Changelog](https://keepachangelog.com). `npm run check:version`
-checks all of this, and merging to main releases the version in
-`kanso/mods/kanso-chrome/version.json`, the stable release the updater
-offers unless Early is on.
-Technical debt (a change that keeps what you see and do) merges without a
-version of its own, listed under `## [Unreleased]`, and goes out with the next
-release.
+Pull requests to develop add entries under `## [Unreleased]` and never change
+`kanso/mods/kanso-chrome/version.json` or numbered sections. The version file
+stays at the newest stable version until the Release candidate workflow prepares
+the next version. A push to develop publishes a beta with the Unreleased notes.
+Its version is computed from the newest stable tag: Breaking or Removed means
+a major bump, Added or Deprecated means a minor bump, anything else a patch.
+Use Upgrade for steps users must take before updating. Like Fixed and Changed,
+it does not require a larger bump; RC notes put it under Before you update.
+The beta tag points to a detached commit with that computed version in
+version.json so its archive passes the updater check. Develop is unchanged.
 
-## [3.31.0] - 2026-11-11
+The manual Release candidate workflow moves Unreleased into a dated, numbered
+section and sets version.json. Later candidates combine that section with new
+Unreleased entries and recompute from the newest stable tag, as betas do. The
+number can only go up until stable: a larger bump renames the section in place,
+updates version.json and starts rc.N at 1 for the new version. Otherwise only N
+increases. Beta numbering continues within each version. Merging develop into main releases the version
+in version.json, which the stable updater offers. Versions follow
+[Semantic Versioning](https://semver.org); sections follow
+[Keep a Changelog](https://keepachangelog.com). `npm run check:version` checks
+the branch's rules.
+
+## [Unreleased]
 
 ### Added
 
