@@ -3,7 +3,7 @@ import { paths } from "./platform-paths.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
-import { G, tokens, iconButton } from "./ui.js";
+import { G, tokens, button, iconButton } from "./ui.js";
 import { Store } from "./store.js";
 import { Share } from "./share.js";
 import { dojoShare } from "./card.js";
@@ -232,10 +232,10 @@ export default class Dojo extends View {
   }
 
   // Every pet: a click and it is the dōjō's.
-  chooser(t, c, button) {
+  chooser(t, c, press) {
     return v_flex().id("dojo-pets").flex_1().min_w(0).min_h(0).gap(G.lg).overflow_y_scrollbar()
       .child(this.pal.grid(t, c, () => { this.choosing = false; }))
-      .child(h_flex().pt(G.sm).child(button("pets-done", "Done  esc", () => { this.choosing = false; }, { strong: true })));
+      .child(h_flex().pt(G.sm).child(press("pets-done", "Done  esc", () => { this.choosing = false; }, { kind: "solid" })));
   }
 
   render() {
@@ -265,15 +265,12 @@ export default class Dojo extends View {
         .child(div().text_size(11).text_color(c.dim).child(b != null ? String(b) : ""));
     };
     const leaving = now - this.armed <= ARM_MS;
-    const button = (id, text, act, { strong = false, warn = false } = {}) => div().id(id).h(32).px(14).rounded(8).flex().items_center().cursor_pointer()
-      .border_1().border_color(strong ? c.accent : warn ? c.accent + "90" : c.border).bg(strong ? c.accent : warn ? c.accent + "24" : c.text + "08")
-      .text_size(12.5).font_semibold().text_color(strong ? ink : c.text).hover((s) => s.opacity(0.85))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { act(); cx.notify(); })
-      .child(text);
+    // A press here never reaches the board behind it.
+    const press = (id, text, act, o = { kind: "tonal" }) => button(id, text, (cx) => { act(); cx.notify(); }, c, o)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
     // A new element each place it shows: an element can have one parent, and the result shows it beside the header's.
-    const leave = (id) => button(id, leaving ? "Click again to leave" : "Leave the dōjō",
-      () => { if (Date.now() - this.armed <= ARM_MS) closeOverlay(props()?.overlay); else this.armed = Date.now(); }, { warn: leaving });
+    const leave = (id) => press(id, leaving ? "Click again to leave" : "Leave the dōjō",
+      () => { if (Date.now() - this.armed <= ARM_MS) closeOverlay(props()?.overlay); else this.armed = Date.now(); }, { kind: "tonal", armed: leaving });
     const o = this.over;
     const result = o ? v_flex().gap(G.lg).p(24).rounded(12).bg(c.accent + "10").border_1().border_color(c.accent + "50")
       .child(div().text_size(13).text_color(c.muted).child(o.kept ? `Level ${lv.n}: ${lv.name}, done` : "Round stopped"))
@@ -285,8 +282,8 @@ export default class Dojo extends View {
         .child(stat("Time", secs(o.ms))))
       .when(this.record, (el) => el.child(div().text_size(15).font_semibold().text_color(c.text).child("A new best for this level.")))
       .child(h_flex().gap(G.md).flex_wrap()
-        .child(button("dojo-again", "Play again  ↩", () => this.again(), { strong: true }))
-        .when(lv.n < LEVELS.length, (el) => el.child(button("dojo-next", `Next level: ${LEVELS[lv.n].name}  n`, () => this.setLevel(lv.n + 1))))
+        .child(press("dojo-again", "Play again  ↩", () => this.again(), { kind: "solid" }))
+        .when(lv.n < LEVELS.length, (el) => el.child(press("dojo-next", `Next level: ${LEVELS[lv.n].name}  n`, () => this.setLevel(lv.n + 1))))
         .child(leave("dojo-leave-result"))) : null;
     return v_flex().id("kanso-dojo").track_focus(this.handle).size_full().min_h(0).bg(t.popover).text_color(t.foreground)
       .on_key_down((e, cx) => this.key(e, cx))
@@ -297,7 +294,7 @@ export default class Dojo extends View {
         .child(div().flex_1())
         .when(this.totals.rounds > 0, (el) => el.child(div().on_mouse_down("left", (_e, cx) => cx.stop_propagation())
           .child(iconButton("dojo-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open }))))
-        .when(Boolean(r), (el) => el.child(button("dojo-end", "End round", () => this.endRound(null, false))))
+        .when(Boolean(r), (el) => el.child(press("dojo-end", "End round", () => this.endRound(null, false))))
         .child(leave("dojo-leave")))
       .child(h_flex().flex_1().min_h(0).items_start().gap(G.xl).p(20)
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -310,7 +307,7 @@ export default class Dojo extends View {
             .child(stat("Streak", r ? r.streak : 0))
             .child(stat("Best", best ?? "–")))
           .child(v_flex().gap(2).children(LEVELS.map(levelRow))))
-        .child(this.choosing ? this.chooser(t, c, button) : v_flex().flex_1().min_w(0).gap(G.lg)
+        .child(this.choosing ? this.chooser(t, c, press) : v_flex().flex_1().min_w(0).gap(G.lg)
           .when(this.share.open && this.totals.rounds > 0, (el) => el.child(this.share.row(c, async () => ({ ...dojoShare(this.totals, Date.now(), await this.pal.figure(theme(), this.share.workDir).catch(() => null)), name: "dojo", title: "hjkl dōjō" }),
             "Your best round, targets, days practiced and levels: nothing else. The post opens with the image in it.", G.sm)))
           .child(div().text_size(12.8).line_height(1.5).text_color(c.muted).child(lv.tip))

@@ -11,7 +11,7 @@ import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } fr
 import { Share, postText } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
 import { tilde, pool } from "./lib.js";
-import { G, PULSE, breathe, Armed, tokens, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, PULSE, breathe, Armed, tokens, button, quietLink, iconButton, section, ghost } from "./ui.js";
 import { aliasText, machineTitle, range, reduceSeries } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 
@@ -657,13 +657,8 @@ export class Worktrees {
       { value: String(gone), unit: gone === 1 ? "folder gone" : "folders gone" },
     ];
     const armed = this.armed.is("all"), busy = this.working === "all", can = plan.length > 0 && !this.working && this.done;
-    const primary = Button.new("wt-clean").h(30).px(14).flex_none().items_center().rounded(6)
-      .disabled(!can)
-      .bg(can ? (armed ? c.red : c.primary) : c.subtle)
-      .when(can, (el) => el.cursor_pointer().hover((s) => s.opacity(0.85)))
-      .on_click((_e, cx) => { if (can) this.armed.press("all", cx, (cx) => this.cleanUp(cx)); })
-      .child(div().text_size(12).font_medium().text_color(can ? c.primaryText : c.dim)
-        .child(busy ? "Removing…" : armed ? `Press again to remove ${plan.length}` : `Clean up ${plan.length}`));
+    const primary = button("wt-clean", busy ? "Removing…" : armed ? `Press again to remove ${plan.length}` : `Clean up ${plan.length}`,
+      (cx) => this.armed.press("all", cx, (cx) => this.cleanUp(cx)), c, { disabled: !can, armed });
     const gist = !this.done ? "Clean up waits for the scan to finish."
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
     return v_flex().w_full().gap(G.xl)
@@ -853,7 +848,7 @@ export class Worktrees {
       .child(div().text_size(12).text_color(c.dim).pb(G.xs)
         .child(`${look.length} would lose work if removed. Your agent can find out what that work is and whether it already lives somewhere else.`))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.xs)
-        .child(quietLink("wt-review", `Review the ${look.length} that need a look`, () => this.ask("Worktrees review", home(), reviewPrompt(look, baseOf)), c, { size: 13, color: c.text })));
+        .child(quietLink("wt-review", `Review the ${look.length} that need a look`, () => this.ask("Worktrees review", home(), reviewPrompt(look, baseOf)), c, { color: c.text })));
   }
 
   current() {

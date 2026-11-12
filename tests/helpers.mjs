@@ -175,3 +175,39 @@ export function tape() {
   };
   return { texts, handlers, host: { div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } } };
 }
+
+// A gpui element that records its calls, and a host that builds them.
+export function chain(tag) {
+  const state = { calls: [], kids: [], tag, parent: null };
+  const adopt = (child) => {
+    if (child && typeof child === "object") { child.parent = node; state.kids.push(child); }
+  };
+  const node = new Proxy(state, {
+    get(_target, prop) {
+      if (prop === "calls" || prop === "kids" || prop === "tag" || prop === "parent") return state[prop];
+      if (prop === "when") return (condition, build) => {
+        state.calls.push(["when", Boolean(condition)]);
+        return condition ? build(node) : node;
+      };
+      if (prop === "child") return (child) => { state.calls.push(["child", child]); adopt(child); return node; };
+      if (prop === "children") return (list) => { state.calls.push(["children"]); for (const child of list ?? []) adopt(child); return node; };
+      return (...args) => { state.calls.push([String(prop), ...args]); return node; };
+    },
+    set(_target, prop, value) {
+      if (prop === "parent") { state.parent = value; return true; }
+      return false;
+    },
+  });
+  return node;
+}
+
+export const gpuiHost = () => ({
+  div: () => chain("div"),
+  h_flex: () => chain("h_flex"),
+  v_flex: () => chain("v_flex"),
+  svg: () => chain(),
+  image: () => chain(),
+  Button: { new: (id) => chain(id) },
+  Input: { new: () => chain() },
+  Toggle: { new: (id) => { const el = chain(id); el.calls.push(["new", id]); return el; } },
+});

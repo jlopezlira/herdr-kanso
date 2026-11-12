@@ -14,6 +14,7 @@ import { tryOr, tryOrAsync } from "./pure.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs } from "./pieces.js";
+import { H, iconButton, tokens } from "./ui.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -45,8 +46,7 @@ const SETTLE = 250; // ms without the dragged sizes changing before the strip ad
 
 const GAP = 6; // the soft gutter between panes, in the frame's tone: no lines
 const RADIUS = 8;
-// TOOL: a 15px glyph in 5px of padding on each side.
-const TOOL = 25;
+const TOOL = H.icon;
 const TOOL_GAP = 10;
 const TOOLS_EASE = { duration: 160, easing: "ease-out" };
 const TAB_BLOCK = {
@@ -426,15 +426,12 @@ export default class Strip extends View {
     if (cur?.to !== pane || cur.side !== side) setShared("strip.drop", { to: pane, side });
   }
 
-  button(t, id, icon, command, args) {
-    return div().id(id).p(5).rounded(6).text_color(t.muted)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        if (typeof command === "function") command();
-        else this.act(command, args);
-      })
-      .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(15));
+  tool(t, id, icon, tip, command, args, on = false) {
+    return iconButton(id, icon, tip, (cx) => {
+      cx.stop_propagation();
+      if (typeof command === "function") command();
+      else this.act(command, args);
+    }, tokens(t), { active: on });
   }
 
   digestBar(t, p, segments, strip) {
@@ -544,17 +541,17 @@ export default class Strip extends View {
     const pane = p.pane;
     const canSleep = Boolean(p.terminal && p.tab && agents().some((x) => x.address === p.terminal));
     const place = headerTools({ focused, status, canSend, canSleep });
-    const sleep = place.sleep === "hidden" ? null : this.button(t, `ph-zz-${pane}`, "moon", () => openSleep(p)).tooltip("Sleep this agent");
-    const send = place.send === "hidden" ? null : this.button(t, `ph-s-${pane}`, "send", () => openSend(p)).tooltip("Send to another agent");
+    const sleep = place.sleep === "hidden" ? null : this.tool(t, `ph-zz-${pane}`, "moon", "Sleep this agent", () => openSleep(p));
+    const send = place.send === "hidden" ? null : this.tool(t, `ph-s-${pane}`, "send", "Send to another agent", () => openSend(p));
     const hover = [
-      strip ? this.button(t, `ph-p-${pane}`, "pin", pin).when(pinned, (b) => b.text_color(t.foreground)) : null,
+      strip ? this.tool(t, `ph-p-${pane}`, "pin", "Pin", pin, null, pinned) : null,
       place.sleep === "hover" ? sleep : null,
       place.send === "hover" ? send : null,
-      p.cwd ? this.button(t, `ph-o-${pane}`, "open-with", () => this.openWith(p)) : null,
-      this.button(t, `ph-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }),
-      this.button(t, `ph-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }),
-      this.button(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }),
-      this.button(t, `ph-x-${pane}`, "close", "pane.close", { pane }),
+      p.cwd ? this.tool(t, `ph-o-${pane}`, "open-with", "Open with…", () => this.openWith(p)) : null,
+      this.tool(t, `ph-r-${pane}`, "split-right", "Split right", "pane.split", { direction: "right", pane }),
+      this.tool(t, `ph-d-${pane}`, "split-down", "Split down", "pane.split", { direction: "down", pane }),
+      this.tool(t, `ph-z-${pane}`, p.zoomed ? "unzoom" : "zoom", p.zoomed ? "Unzoom" : "Zoom", "pane.zoom", { pane }),
+      this.tool(t, `ph-x-${pane}`, "close", "Close", "pane.close", { pane }),
     ].filter(Boolean);
     const pinnedTools = [place.sleep === "shown" ? sleep : null, place.send === "shown" ? send : null].filter(Boolean);
     const wide = hover.length * TOOL + Math.max(0, hover.length - 1) * TOOL_GAP;

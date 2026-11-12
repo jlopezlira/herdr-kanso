@@ -644,9 +644,9 @@ export default class TokenSpend extends View {
         .child(h_flex().gap(G.md).items_center()
           .child(div().text_size(15).text_color(c.muted).child(hero.title))
           .when(stepper, (el) => el
-            .child(quietLink("ins-older", "‹", (cx) => this.setCost({ offset: offset - 1 }, cx), c, { size: 16, label: "Previous period" }))
+            .child(quietLink("ins-older", "‹", (cx) => this.setCost({ offset: offset - 1 }, cx), c, { label: "Previous period" }))
             .child(quietLink("ins-newer", "›", (cx) => this.setCost({ offset: Math.min(0, offset + 1) }, cx), c, {
-              size: 16, label: "Next period", disabled: offset >= 0,
+              label: "Next period", disabled: offset >= 0,
             }))
             .when(offset < 0, (row) => row.child(quietLink("ins-now", "Back to now", (cx) => this.setCost({ offset: 0 }, cx), c)))))
         .child(h_flex().flex_wrap().items_end().gap_x(G.md)

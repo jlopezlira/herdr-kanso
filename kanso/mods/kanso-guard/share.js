@@ -7,9 +7,10 @@ import { imageApi } from "./platform-images.js";
 // Kanso's share card, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Kept byte for byte in kanso-panel/ and kanso-spend/ (`npm run sync:share`): edit kanso-panel/share.js.
 import { div } from "gpui-kit";
-import { h_flex, Button } from "gpui-base";
+import { h_flex } from "gpui-base";
 import { exec, home, writeTextFile, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
+import { button } from "./ui.js";
 
 export const NETWORKS = {
   x: { name: "X", wait: 4, url: (text) => `https://x.com/intent/post?text=${encodeURIComponent(text)}` },
@@ -283,11 +284,8 @@ export class Share {
   }
 
   row(c, make, note, gap = 8) {
-    const choice = (key, label, network) => Button.new(`${this.id}-share-${key}`).h(26).px(10).flex_none().items_center().rounded(6).cursor_pointer()
-      .border_1().border_color(c.border).hover((s) => s.bg(c.subtle))
-      .accessibility_label(label)
-      .on_click((_e, cx) => this.run(network, make, cx))
-      .child(div().text_size(12).text_color(this.busy === key ? c.dim : c.text).child(this.busy === key ? "Making the image…" : label));
+    const choice = (key, label, network) => button(`${this.id}-share-${key}`, this.busy === key ? "Making the image…" : label,
+      (cx) => this.run(network, make, cx), c, { kind: "tonal", small: true, spoken: label, disabled: this.busy === key });
     return h_flex().w_full().flex_wrap().gap(gap).items_center()
       .child(div().text_size(12).text_color(c.dim).child("Share to"))
       .children(Object.entries(NETWORKS).map(([key, n]) => choice(key, n.name, key)))

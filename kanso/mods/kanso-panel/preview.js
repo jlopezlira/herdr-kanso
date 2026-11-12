@@ -1,4 +1,4 @@
-import { div, svg, image } from "gpui-kit";
+import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor } from "gpui-base";
 import { readTextFile, watchFolder, theme, openOverlay, window, layout, appHome, nextCommand } from "herdr";
 import { commandLoop } from "./sidebar.js";
@@ -10,7 +10,7 @@ import { codeState, isMarkdown, showPanel } from "./lib.js";
 import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo, readWhole } from "./doc.js";
 import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs, tooLarge } from "./edit.js";
-import { skeleton, quietLink, tokens, Armed } from "./ui.js";
+import { skeleton, quietLink, iconButton, tokens, Armed } from "./ui.js";
 import { tryOrAsync, extOf } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 import { walkLayout } from "./layout.js";
@@ -345,23 +345,20 @@ export class Preview {
     const editing = this.doc ? this.doc.snapshot() : this.edit;
     const mark = this.doc ? "" : word(this.edit);
     const armed = Boolean(this.ask?.is(this.path));
-    const button = (id, icon, tip, action) => div().id(id).p(4).rounded(6).cursor_pointer().text_color(t.muted).tooltip(tip)
-      .hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click((_e, cx) => { action(cx); })
-      .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14));
     return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .on_key_down((e, cx) => { this.doc?.key(e, cx); })
       .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
-        .when(Boolean(this.back), (el) => el.child(button("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx))))
+        .when(Boolean(this.back), (el) => el.child(iconButton("preview-back", "chevron-left", BACK[this.back], (cx) => this.goBack(cx), c)))
         .child(v_flex().flex_1().min_w(0).pl(this.back ? 0 : 4)
           .child(div().truncate().font_semibold().text_size(13).child(nameOf(this.path)))
           .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(folderOf(this.path), this.on)}${this.pixels ? ` · ${this.pixels.width} × ${this.pixels.height}` : ""}${(this.held ?? this.doc?.held) ? ` · ${asOf((this.held ?? this.doc.held).at, Date.now())}` : ""}`)))
         .children(this.doc ? this.doc.controls(t, "preview") : [])
         .when(Boolean(mark), (el) => el.child(div().text_size(11.5).text_color(t.dim).child(mark)))
         .when(needsSave(editing), (el) => el.child(quietLink("preview-save", "Save", (cx) => this.save(cx), c)))
-        .child(button("preview-open-with", "open-with", "Open with…", () => this.openWith()))
+        .child(iconButton("preview-open-with", "open-with", "Open with…", () => this.openWith(), c))
         .when(armed, (el) => el.child(quietLink("preview-discard", "Press again to discard", (cx) => this.reread(cx), c)))
-        .when(!armed, (el) => el.child(button("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.reread(cx))))
-        .child(button("preview-close", "close", "Close", (cx) => this.leave(cx, () => { previewKeys.unbind(this); showPanel(null); }))))
+        .when(!armed, (el) => el.child(iconButton("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.reread(cx), c)))
+        .child(iconButton("preview-close", "close", "Close", (cx) => this.leave(cx, () => { previewKeys.unbind(this); showPanel(null); }), c)))
       .child(this.doc ? this.doc.body(t, "preview-md")
         : this.edit?.big ? div().p(12).text_color(t.dim).child("Too large to edit")
         : this.code ? v_flex().flex_1().min_h(0)

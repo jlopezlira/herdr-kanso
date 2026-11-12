@@ -5,7 +5,7 @@ import { paths } from "./platform-paths.js";
 import { localName } from "./platform-host.js";
 import { modifierLabels, guideSections } from "./guide.js";
 import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } from "herdr";
-import { G, tokens, quietTabs, quietLink } from "./ui.js";
+import { G, tokens, button, quietTabs, quietLink } from "./ui.js";
 import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
@@ -136,7 +136,7 @@ export default class Help extends View {
   petState() { return Date.now() - this.hello < 1800 ? "waving" : "idle"; }
 
   dojoPage(t, c) {
-    const ink = t.accent_foreground ?? c.canvas, pet = this.pal.pet;
+    const pet = this.pal.pet;
     return v_flex().gap(G.xl).pt(G.lg)
       .child(h_flex().gap(G.xl).items_center()
       .child(h_flex().w(150).h(150).flex_none().items_center().justify_center().child(this.pal.face(t, this.petState(), { since: this.hello, scale: 0.7, mood: "glad", px: 9 })))
@@ -147,10 +147,7 @@ export default class Help extends View {
           ? `${pet.name} keeps you company, still until you earn it: a jump for a target in the fewest moves, a wave for a streak or a round won, a slump for a key that is no move or the long way round.`
           : "Hachi, the dōjō's shiba, keeps you company: tongue out on a streak or a new best, sweating when you go the long way, asleep if you leave it alone."))
         .child(h_flex().pt(G.sm).gap(G.md).items_center()
-          .child(div().id("enter-dojo").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
-            .text_size(13).font_semibold().text_color(ink).hover((s) => s.opacity(0.88))
-            .on_click(() => this.enterDojo())
-            .child("Enter the dōjō"))
+          .child(button("enter-dojo", "Enter the dōjō", () => this.enterDojo(), c))
           .child(div().text_size(11.5).text_color(c.dim).child("or press Enter")))))
       .child(v_flex().gap(G.md)
         .child(div().text_size(14).font_semibold().text_color(c.text).child("Your pet"))

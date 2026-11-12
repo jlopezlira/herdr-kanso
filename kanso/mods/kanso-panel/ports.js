@@ -5,14 +5,14 @@ import { portApi } from "./platform-ports.js";
 import { killApi } from "./platform-kill.js";
 import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { hc, panes, terminals, home, run, theme, appHome, readTextFile, shared } from "herdr";
 import { tilde } from "./lib.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
-import { G, Armed, tokens, quietLink, quietTabs, iconButton, section, ghost, breathe } from "./ui.js";
+import { G, Armed, tokens, button, quietLink, quietTabs, iconButton, section, ghost, breathe } from "./ui.js";
 import { Share } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
@@ -291,11 +291,8 @@ export class Ports {
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.yellow : c.text).child(s.value))
           .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
       .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
-        .child(Button.new("pt-stop-all").h(30).px(14).flex_none().items_center().rounded(6).cursor_pointer()
-          .bg(armedAll ? c.red : c.primary).hover((s) => s.opacity(0.85))
-          .on_click((_e, cx) => this.armed.press("all", cx, (cx) => this.stop(loose, cx)))
-          .child(div().text_size(12).font_medium().text_color(c.primaryText)
-            .child(armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} ${NO_PANE}`)))
+        .child(button("pt-stop-all", armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} ${NO_PANE}`,
+          (cx) => this.armed.press("all", cx, (cx) => this.stop(loose, cx)), c, { armed: armedAll }))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
   }
 

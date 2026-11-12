@@ -98,8 +98,9 @@ test("armed ink comes from the kit token", async () => {
   ]) {
     const source = await text(file);
     assert.equal(source.includes("#ffffff"), false, file);
-    assert.match(source, /primaryText/);
+    assert.match(source, /button\("[\w-]+", [^\n]*\n?[^\n]*\{ [^}]*armed/, file);
   }
+  assert.match(await text("kanso/mods/kanso-panel/ui.js"), /filled\(c\.accent, c\.accentText, c\)/);
 });
 
 test("the teaching footers are gone and a scan time can still be said", async () => {

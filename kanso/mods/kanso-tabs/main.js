@@ -13,6 +13,7 @@ import { stateMark, programIcon } from "./marks.js";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar } from "./layout.js";
 import { Updater } from "./update.js";
 import { tryOr, tryOrAsync } from "./pure.js";
+import { iconButton, tokens } from "./ui.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
 import { TOOLS, PROBE_MS, available, probeTools } from "./sim-registration.js";
@@ -319,8 +320,9 @@ export default class Tabs extends View {
     const ps = panes();
     const tree = layout();
     const stop = (_e, cx) => cx.stop_propagation();
-    const button = (id, label, action) => div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.foreground + "0a").text_color(t.foreground))
-      .on_mouse_down("left", stop).on_click(action).child(label);
+    const c = tokens(t);
+    // A press on a tool never starts a window drag.
+    const tool = (id, icon, tip, action) => iconButton(id, icon, tip, action, c).on_mouse_down("left", stop);
     // The pill under the chosen tab glides to it; tab widths are measured as they draw.
     this.tabW ??= {};
     for (const id of Object.keys(this.tabW)) if (!openTabs.some((c) => c.id === id)) delete this.tabW[id];
@@ -408,19 +410,16 @@ export default class Tabs extends View {
       .on_scroll_wheel(e => this.wheel(e))
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().gap(6).overflow_x_scrollbar()
         .child(h_flex().flex_none().gap(2).items_center().relative().when(Boolean(tabPill), (el) => el.child(tabPill)).children(openTabs.map(item)))
-        .child(button("tab-new", svg("mods/kanso-chrome/icons/plus.svg").size(16), () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
+        .child(tool("tab-new", "plus", "New", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
           .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }))
-        .when(shown("tabs.arrange", true, map), (el) => el.child(button("tab-arrange", svg("mods/kanso-chrome/icons/layers.svg").size(15), () => openArrange())
-          .tooltip(window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements"))))
+        .when(shown("tabs.arrange", true, map), (el) => el.child(tool("tab-arrange", "layers", window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements", () => openArrange()))))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Help and settings, alike and side by side: not panels, never dragged nor turned off.
-        .child(button("kanso-help", svg("mods/kanso-chrome/icons/help.svg").size(15), () => run("mod.open", { name: "kanso-help" }))
-          .ml(4).tooltip(window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/"))
-        .child(button("kanso-settings", svg("mods/kanso-chrome/icons/settings.svg").size(15),
-          () => openSettings(update ? "news" : "pieces"))
-          .tooltip(update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,")))
-      .when(window()?.buttons, el => el.child(button("minimize", "−", () => run("window.minimize")))
-        .child(button("maximize", "□", () => run("window.maximize")))
-        .child(button("close-window", svg("mods/kanso-chrome/icons/close.svg").size(13), () => run("window.close"))));
+        .child(tool("kanso-help", "help", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
+        .child(tool("kanso-settings", "settings", update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,",
+          () => openSettings(update ? "news" : "pieces"))))
+      .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
+        .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))
+        .child(tool("close-window", "close", "Close", () => run("window.close"))));
   }
 }

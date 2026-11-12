@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Input, InputState } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, H, T, SEG, tokens, quietTabs, quietLink, skeleton, breathe, Armed, controlInput, section, segmented, toggleSwitch } from "./ui.js";
+import { G, H, T, SEG, tokens, button, quietTabs, quietLink, skeleton, breathe, Armed, controlInput, section, segmented, toggleSwitch } from "./ui.js";
 import { pieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LABEL, STORE } from "./pieces.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
@@ -161,7 +161,7 @@ export default class Settings extends View {
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_center().pt(G.lg)
         .child(div().flex_1().text_size(12).text_color(c.dim).child("The tab bar"))
-        .when(changed, (el) => el.child(quietLink("reset-bar", "Reset", (cx) => { this.reset(panelRow, group.section, cx); this.reset(gearRow, group.section, cx); }, c, { size: 11.5 }))))
+        .when(changed, (el) => el.child(quietLink("reset-bar", "Reset", (cx) => { this.reset(panelRow, group.section, cx); this.reset(gearRow, group.section, cx); }, c))))
       .child(h_flex().w_full().flex_wrap().gap(2).p(4).rounded(10).bg(c.raised).children(tiles))
       .when(capturing, (el) => el.child(this.pressNote(c, this.capture.row === panelRow
         ? "Press the new key with any digit: each panel keeps its number. Esc to keep, Backspace to remove."
@@ -189,7 +189,7 @@ export default class Settings extends View {
           .cursor_pointer().hover((s) => s.bg(c.subtle)).when(capturing, (el) => el.bg(c.subtle))
           .on_click((_e, cx) => this.startCapture(row, g.section, chords[0] ?? null, cx))
           .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(row.label))
-          .when(changed && !capturing, (el) => el.child(quietLink(`reset-${id}`, "Reset", (cx) => this.reset(row, g.section, cx), c, { size: 11.5 })))
+          .when(changed && !capturing, (el) => el.child(quietLink(`reset-${id}`, "Reset", (cx) => this.reset(row, g.section, cx), c)))
           .when(!capturing, (el) => el.children(chords.length ? chords.map((k) => keycap(t, shownChord(k))) : [keycap(t, "No key", true)]))
           .when(capturing, (el) => el.child(div().flex_none().text_size(12).text_color(c.accent).child(row.family ? "Press a key with a digit" : "Press the new key")));
         return capturing ? v_flex().w_full().child(line).child(this.pressNote(c, "Esc to keep, Backspace to remove.")) : line;
@@ -320,16 +320,11 @@ export default class Settings extends View {
         .child(toggleSwitch("auto-update-check", autoCheck, (next) => setShared("kanso.update", { ...(shared("kanso.update") ?? {}), autoCheck: next }), c, { label: "Check for updates automatically" })))
       .child(h_flex().w_full().pt(G.sm).items_center()
         .child(
-          div().id("check-kanso-update").h(34).px(16).rounded(8).bg(c.accent).flex().items_center().cursor_pointer()
-            .text_size(13).font_semibold().text_color(c.canvas).hover((s) => s.opacity(0.88))
-            .on_click(() => run("kanso-tabs.check"))
-            .child("Check for updates")))
+          button("check-kanso-update", "Check for updates", () => run("kanso-tabs.check"), c)))
       .when(entries === null, (el) => el.child(this.newsBones(c)))
       .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(c.accent + "1a")
         .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
-        .child(div().id("update-kanso").flex_none().h(28).px(12).rounded(6).bg(c.primary).text_color(c.primaryText).text_size(12.5).font_medium()
-          .flex().items_center().cursor_pointer().child(`Update to ${waiting}`)
-          .on_click((_e, _cx) => { run("kanso-tabs.update"); closeOverlay(props().overlay); }))))
+        .child(button("update-kanso", `Update to ${waiting}`, () => { run("kanso-tabs.update"); closeOverlay(props().overlay); }, c))))
       .when(Boolean(error), (el) => el.child(div().text_size(12.5).text_color(c.red).child(error)))
       .when(from === "cache", (el) => el.child(div().text_size(11.5).text_color(c.dim).child("GitHub could not be reached; this is the last copy read.")))
       .children((entries ?? []).map(entry));

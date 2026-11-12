@@ -14,7 +14,7 @@ export function queueControl(t, queue, collapsed, empty, toggle) {
   if (!count && !empty) return div();
   const c = tokens(t), spoken = `Needs you: ${count}`;
   return h_flex().flex_none().px(G.sm).child(quietLink("needs-you-count", queueLabel(queue, collapsed, empty), toggle, c,
-    { size: T.body, label: spoken, color: count ? c.text : c.dim }).tooltip(spoken));
+    { label: spoken, color: count ? c.text : c.dim }).tooltip(spoken));
 }
 
 export function queueList(t, queue, rowFor, age, scroll = null) {

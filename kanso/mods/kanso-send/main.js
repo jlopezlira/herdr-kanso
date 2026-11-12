@@ -6,6 +6,7 @@ import { v_flex, h_flex, TextareaState, Textarea, InputState, Input } from "gpui
 import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
+import { button, tokens } from "./ui.js";
 
 const LAST = "kanso.send.last";
 
@@ -90,7 +91,7 @@ export default class Send extends View {
   }
 
   render() {
-    const t = theme();
+    const t = theme(), c = tokens(t);
     const p = props() ?? {};
     const given = givenNames(), sp = spaces();
     const name = (q) => nameOf(q, given);
@@ -124,12 +125,6 @@ export default class Send extends View {
           .when(q.status === "blocked", (el) => el.child("Needs you"))
           .child(div().size(6).rounded_full().bg(dot(q.status))));
     };
-    const button = (id, text, primary, enabled, action) => h_flex().id(id).h(32).px(14).items_center().rounded(8)
-      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
-      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium()
-      .when(!enabled, (el) => el.opacity(0.45))
-      .when(enabled, (el) => el.cursor_pointer().hover((s) => s.opacity(0.88)).on_click((_e, cx) => action(cx)))
-      .child(text);
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${tilde(this.from.cwd)}` : ""}` : "";
     const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim()) && !this.sending;
     const rows = groups.flatMap((g) => [head(g), ...g.agents.map(row)]);
@@ -154,7 +149,7 @@ export default class Send extends View {
       .child(div().pt(6).text_size(11.5).text_color(this.error ? t.blocked : t.dim)
         .child(this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there."))
       .child(h_flex().pt(18).gap(8).justify_end()
-        .child(button("send-cancel", "Cancel", false, true, () => closeOverlay(p.overlay)))
-        .child(button("send-go", this.sending ? "Sending…" : this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩", true, ready, (cx) => this.send(cx, groups))));
+        .child(button("send-cancel", "Cancel", () => closeOverlay(p.overlay), c, { kind: "quiet" }))
+        .child(button("send-go", this.sending ? "Sending…" : this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩", (cx) => this.send(cx, groups), c, { disabled: !ready })));
   }
 }
