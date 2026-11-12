@@ -90,17 +90,15 @@ test("an unreachable computer's word is blocked and every other state stays dim"
   assert.equal(machineWordTone("loading"), "dim");
 });
 
-test("Enter on an asleep row wakes it, and a row that cannot wake does nothing", () => {
-  const asleep = { address: "a", asleep: { id: "s1" } };
+test("Enter on an asleep row wakes it", () => {
+  const z = { id: "tb1", tabId: "tb1", settled: true, space: "sp1" };
+  const asleep = { address: "zz:t1", asleep: z };
   assert.equal(ASLEEP_ROW, 32);
   assert.equal(canWake(asleep), true);
-  assert.deepEqual(enterOpens(asleep), { wake: "s1" });
+  assert.deepEqual(enterOpens(asleep), { wake: z });
   assert.deepEqual(asleepControls(asleep), [{ id: "wake", label: "Wake" }]);
-  for (const row of [{ address: "b", asleep: { id: "s2", busy: true } }, { address: "c", asleep: { id: "s3", quiet: "away" } }, { address: "d", asleep: {} }]) {
-    assert.equal(canWake(row), false);
-    assert.equal(enterOpens(row), null);
-    assert.deepEqual(asleepControls(row), []);
-  }
+  assert.equal(canWake({ address: "d" }), false);
+  assert.deepEqual(asleepControls({ address: "d" }), []);
   assert.deepEqual(enterOpens({ address: "e", pane: "p1" }), { focus: "p1" });
   assert.deepEqual(enterOpens({ address: "f" }), { peek: "f" });
 });

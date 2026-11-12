@@ -37,15 +37,17 @@ release.
 - An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
 - What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
 - When memory is low, the notice says "Memory N% free", the same words as the status bar.
-- When a sleep cannot finish, the notice and the Asleep line say the same sentence. Retry and undo stay on that line.
+- Asleep rows wake from the row or its menu. There is no separate list with Undo, Retry and Forget.
+- While you were away no longer lists sleeps.
+- Wake starts `claude --resume` on the agent's conversation in the same terminal. Options such as `--model` are not carried over.
+- Sleeps from before this update are not offered to wake: run `claude --resume <id>` in its folder.
 - Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
 
 ### Fixed
 
+- Sleep no longer gets stuck going to sleep or waking. If an agent does not exit, nothing is put away and the Sleep dialog says why.
+- A long conversation wakes: Wake no longer stops an agent that takes a while to load it.
 - Dragging the sidebar's edge only changes its width: it no longer folds the sidebar to the rail, so it can no longer stay folded after you expand it. Hide sidebar still folds it.
-- Putting a tab to sleep no longer stays on the dialog with only Cancel. While it goes to sleep the dialog says so. If a step does not answer, the tab comes back and one sentence says what did not answer.
-- Waking a tab no longer shows its agents twice, awake and asleep. An agent leaves the asleep list as soon as its terminal opens. If the wake stops half way, the tab stops showing as asleep on its own.
-- Sleep and Wake try once more after a lost database call. Later tries keep working without restarting Herdr, and a slow database has time to answer.
 - Dragging a project in the sidebar shows where it will land and moves it there. A project stays among the projects of its own computer, and a worktree listed under its checkout keeps its place.
 
 ## [3.30.0] - 2026-11-11

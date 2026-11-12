@@ -71,9 +71,9 @@ On Windows, merge `kanso/keys.windows.json` into your Herdr keys instead of
   The sidebar shows every project, every agent's state and what it is on, and
   your conversations as threads.
 - **Sleep and wake.** An agent, a tab or a project goes to sleep: it exits with
-  its conversation kept, and wakes on it where it was. Sleep of a space on
-  another computer stays on that computer, so the same tabs are asleep
-  whichever computer you sit at, and waking from either works.
+  its conversation kept on its terminal, and wakes on it in the same pane.
+  Herdr keeps that, so another computer on the same space sees it asleep too,
+  and waking from either works.
 - **Images.** The newest picture the agent in focus made, big beside it,
   and a circle for each picture. Click a circle to switch. Click a spot to
   pin it and say what about it; ⌘↩ sends every note to the agent. Files,

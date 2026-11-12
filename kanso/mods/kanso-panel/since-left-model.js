@@ -16,11 +16,7 @@ export function parseTarget(target) {
   const [kind, ...parts] = String(target ?? "").split(":");
   return { kind, id: parts.join(":") };
 }
-export function sleepEvent(id, state, why = null) {
-  const kind = { stuck: "sleep_failed", asleep: "sleep_finished" }[state];
-  return kind ? { ...LOG_LIMITS, target: targetOf("sleep", id), kind, did: oneLine(why) } : null;
-}
-const PRIORITY = { blocked: 0, error: 1, sleep_failed: 1, pr: 2, finished: 3, sleep_finished: 3 };
+const PRIORITY = { blocked: 0, error: 1, pr: 2, finished: 3 };
 
 export function changes(before, after) {
   if (!before) return [];
@@ -59,10 +55,10 @@ export function lines(events, expanded = false) {
 }
 
 export const RETURN_LABEL = "While you were away";
-const MARK = { blocked: "blocked", error: "error", sleep_failed: "error", finished: "done", sleep_finished: "asleep", pr: "pr" };
-const OUTCOME = { blocked: "Needs you", error: "Failed", sleep_failed: "Could not sleep", finished: "Finished", sleep_finished: "Went to sleep" };
+const MARK = { blocked: "blocked", error: "error", finished: "done", pr: "pr" };
+const OUTCOME = { blocked: "Needs you", error: "Failed", finished: "Finished" };
 const PR_TEXT = /^(PR #\d+)\s+(.+)$/;
-const SPOKEN = /\s+(?:finished|needs you|errored|slept|could not sleep)$/;
+const SPOKEN = /\s+(?:finished|needs you|errored)$/;
 
 export function shownName(agent, seen, term) {
   const given = String(term?.labels?.["kanso.name"] ?? seen?.given ?? "").trim();
@@ -127,7 +123,7 @@ export function destinationOf(target, live, asleep) {
   const { kind, id } = parseTarget(target);
   if (kind === "pr") return { kind, url: id };
   if (kind === "agent" && live.has(target)) return { kind, address: live.get(target) };
-  const row = asleep.find((a) => (kind === "sleep" ? a.asleep?.id === id : kind === "agent" && a.asleep?.resume === id));
+  const row = kind === "agent" ? asleep.find((a) => a.asleep?.resume === id) : null;
   return row ? { kind: "asleep", row } : null;
 }
 

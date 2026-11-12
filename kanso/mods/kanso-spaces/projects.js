@@ -33,15 +33,10 @@ export function shownNames(projects) {
   }));
 }
 
-// The spaces open when projects came in, and the places asleep whole: those are your projects. Home is not one.
-export function startingProjects(spaces, sleepKeys, homeDir) {
-  const fromSpaces = spaces.filter((w) => w.folder && trimmed(w.folder) !== trimmed(homeDir))
+// The spaces open when projects came in are your projects. Home is not one.
+export function startingProjects(spaces, homeDir) {
+  const all = spaces.filter((w) => w.folder && trimmed(w.folder) !== trimmed(homeDir))
     .map((w) => ({ name: folderName(w.folder), folder: trimmed(w.folder), machine: w.machine ?? "" }));
-  const fromSleeps = sleepKeys.map((key) => ({ machine: key.slice(0, key.indexOf(":")), folder: trimmed(key.slice(key.indexOf(":") + 1)) }))
-    // A space at its machine's home was kept under this computer's home folder: home is not a project, on any machine.
-    .filter((p) => p.folder && p.folder !== trimmed(homeDir))
-    .map((p) => ({ ...p, name: folderName(p.folder) }));
-  const all = [...fromSpaces, ...fromSleeps];
   return all.filter((p, i) => all.findIndex((x) => placeKey(x.machine, x.folder) === placeKey(p.machine, p.folder)) === i);
 }
 

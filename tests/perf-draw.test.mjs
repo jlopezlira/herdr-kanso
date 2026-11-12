@@ -4,16 +4,17 @@ import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
 
 async function drawHost() {
-  const state = { sleeps: [], away: null, rows: 0, needs: 0, terms: [{ address: "a", state: "live" }], list: [{ address: "a", pane: "p", status: "blocked", name: "A" }], layouts: [] };
+  const state = { panes: [{ terminal: "a", tab: "tab" }], rows: 0, needs: 0, terms: [{ address: "a", state: "live", labels: {} }], list: [{ address: "a", pane: "p", status: "blocked", name: "A" }], layouts: [] };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    home: () => "/home", shared: (key) => clone(key === "kanso.asleep" ? state.sleeps : key === "kanso.sleep.away" ? state.away : null),
-    agents: () => clone(state.list), terminals: () => clone(state.terms), machines: () => clone(state.layouts),
+    home: () => "/home", shared: () => null,
+    agents: () => clone(state.list), terminals: () => clone(state.terms), panes: () => clone(state.panes), machines: () => clone(state.layouts),
     sleepingNow: () => { state.rows += 1; return { rows: [], dozing: new Set() }; },
     waitingQueue: () => { state.needs += 1; return []; },
   });
   const view = new Spaces();
+  view.panel = { agents: new Map() };
   const spaces = [{ id: "s", folder: "/a", name: "A", tabs: [{ id: "tab" }] }];
-  const draw = () => view.refreshNeeds(clone(spaces), clone(state.terms), view.sleepingNow(clone(spaces), clone(state.terms)));
+  const draw = () => view.refreshNeeds(clone(spaces), clone(state.terms), view.sleepingNow(clone(spaces), clone(state.terms), clone(state.panes)));
   return { state, view, spaces, draw };
 }
 
@@ -32,17 +33,17 @@ test("unchanged sidebar draws build zero sleeping or needs-you rows", async () =
   assert.equal(state.needs, 2);
 });
 
-test("sleeping rows rebuild when a space, terminal, sleep or optimistic sleep changes", async () => {
-  const { state, spaces, draw } = await drawHost();
+test("sleeping rows rebuild when a tab, a pane, a terminal or a kept name changes", async () => {
+  const { state, view, spaces, draw } = await drawHost();
   draw();
   const changes = [
-    () => { spaces[0].folder = "/b"; },
     () => { spaces[0].tabs.push({ id: "other" }); },
-    () => { state.terms.push({ address: "b" }); },
-    () => { state.sleeps.push({ id: "sleep", state: "asleep", agents: [{ resume: "c", name: "Name" }] }); },
-    () => { state.sleeps[0].agents[0].name = "Renamed"; },
-    () => { state.sleeps[0].state = "undoing"; },
-    () => { state.away = { rows: [{ id: "pending", going: true, agents: [] }] }; },
+    () => { spaces[0].tabs[0].settled = true; },
+    () => { state.terms.push({ address: "b", labels: {} }); },
+    () => { state.terms[0].labels = { "kanso.resume": "c" }; },
+    () => { state.terms[0].program = { shell: true }; },
+    () => { state.panes.push({ terminal: "b", tab: "other" }); },
+    () => { view.panel.agents.set("c", { name: "Renamed" }); },
   ];
   for (const change of changes) { change(); draw(); }
   assert.equal(state.rows, changes.length + 1);
