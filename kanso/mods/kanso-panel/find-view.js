@@ -290,7 +290,7 @@ export class Find {
 
   cell(item, c) {
     if (item.kind === "day") {
-      return div().w_full().px(G.md).pt(G.sm).pb(G.xs).text_size(T.small).text_color(c.dim).child(item.label);
+      return div().w_full().px(G.md).pt(G.sm).pb(G.xs).text_size(10.5).text_color(c.dim).child(item.label);
     }
     const turn = this.state.turns[item.hit.turn];
     const on = item.index === this.at;
@@ -298,8 +298,8 @@ export class Find {
       .when(on, (el) => el.bg(c.selected))
       .hover((s) => s.bg(c.selected))
       .child(h_flex().gap(G.sm).items_center()
-        .child(div().text_size(T.small).text_color(c.muted).child(whoOf(turn)))
-        .child(div().text_size(T.small).text_color(c.dim).child(whenLabel(turn?.at))))
+        .child(div().text_size(10.5).text_color(c.muted).child(whoOf(turn)))
+        .child(div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at))))
       .child(this.excerpt(this.partsFor(item), c));
   }
 
@@ -310,8 +310,8 @@ export class Find {
     return v_flex().w_full().max_h(MAX)
       .child(h_flex().px(G.sm).pt(G.xs).items_center()
         .child(iconButton("find-back", "chevron-left", "Back", (cx) => this.back(cx), c))
-        .child(div().text_size(T.small).text_color(c.muted).child(whoOf(turn)))
-        .child(div().text_size(T.small).text_color(c.dim).child(whenLabel(turn?.at))))
+        .child(div().text_size(10.5).text_color(c.muted).child(whoOf(turn)))
+        .child(div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at))))
       .child(div().px(G.md).pb(G.xs).child(this.excerpt(hit ? partsOf(text, hit, EXCERPT) : [], c)))
       .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(MAX));
   }
@@ -353,7 +353,7 @@ export class Find {
     if (this.open) return this.reading(c, t);
     if (laid.items.length) return this.listBox(c, laid);
     if (showSkel) return v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1].map((i) => skeleton(c).row(i)));
-    return div().px(G.md).py(G.sm).text_size(T.small).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
+    return div().px(G.md).py(G.sm).text_size(10.5).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
   }
 
   render(cx) {

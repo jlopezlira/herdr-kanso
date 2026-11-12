@@ -6,7 +6,7 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, Input, InputState } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, R, T, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, H, R, PULSE, breathe, tokens, toggleSwitch, controlInput, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
@@ -561,7 +561,7 @@ export default class TokenSpend extends View {
           ? h_flex().w_full().gap(56).items_start().children(lists.map((list) => div().flex_1().min_w(0).max_w(lists.length === 1 ? 560 : 10_000).child(list)))
           : v_flex().w_full().gap(narrow ? 36 : 48).children(lists))
         .child(this.tasks(c, data)))
-      .child(v_flex().w_full().gap(2).children(data.footnote.map((line) => div().text_size(T.small).text_color(c.dim).child(line))));
+      .child(v_flex().w_full().gap(2).children(data.footnote.map((line) => div().text_size(10.5).text_color(c.dim).child(line))));
   }
 
   controls(c, inDetail = false) {

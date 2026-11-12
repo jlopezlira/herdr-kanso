@@ -481,7 +481,7 @@ export class Look {
   noteRow(p, i, c) {
     return h_flex().id(`look-note-${i}`).flex_none().min_h(H.compact).px(G.sm).gap(G.sm).items_center().rounded(R.control).cursor_pointer()
       .hover((s) => s.bg(c.subtle)).on_click((_e, cx) => this.askNote(i, cx))
-      .child(div().flex_none().size(G.lg).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(T.label).font_bold().text_color(c.canvas).child(String(i + 1)))
+      .child(div().flex_none().size(G.lg).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(9.5).font_bold().text_color(c.canvas).child(String(i + 1)))
       .child(div().flex_1().min_w(0).text_size(T.body).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
       .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(T.card).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
         .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }).child("×"));
@@ -507,7 +507,7 @@ export class Look {
     const s = this.shown;
     if (!s?.image) return null;
     const mark = (p, i) => div().absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-G.sm).mt(-G.sm).size(G.lg).rounded_full().bg(p.note ? c.accent : c.muted)
-      .flex().items_center().justify_center().text_size(T.label).font_bold().text_color(c.canvas).child(String(i + 1));
+      .flex().items_center().justify_center().text_size(9.5).font_bold().text_color(c.canvas).child(String(i + 1));
     return div().id("look-picture").relative().w_full().cursor_crosshair()
       .on_mouse_down("left", (e, cx) => this.pin(e, cx))
       .child(image(s.image).w_full())
@@ -560,7 +560,7 @@ export class Look {
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().text_size(T.card).child(who?.name ?? "Images"))
-          .child(div().truncate().text_size(T.small).text_color(c.dim).child([who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "", this.held ? asOf(this.held.at, Date.now()) : ""].filter(Boolean).join(" · "))))
+          .child(div().truncate().text_size(10.5).text_color(c.dim).child([who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "", this.held ? asOf(this.held.at, Date.now()) : ""].filter(Boolean).join(" · "))))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
         .child(iconButton("look-refresh", "refresh", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
@@ -570,7 +570,7 @@ export class Look {
         .children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
       .when(Boolean(item), (el) => el.child(h_flex().id("look-bar").flex_none().h(H.control).px(G.lg).gap(G.md).items_center().border_t(1).border_color(c.border)
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))
-        .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(T.small).text_color(this.note?.error ? c.red : c.dim).child(status)))
+        .when(Boolean(status), (bar) => bar.child(div().flex_1().min_w(0).truncate().text_size(10.5).text_color(this.note?.error ? c.red : c.dim).child(status)))
         .when(Boolean(drawn), (bar) => bar.child(quietLink("look-open", "Open", () => openPath(machine ? paths.join(appHome(), drawn) : drawn), c)))
         .when(this.pins.length > 0, (bar) => bar.child(quietLink("look-unpin", this.pins.length === 1 ? "Clear the pin" : `Clear ${this.pins.length} pins`, (cx) => { this.pins = []; this.kept.delete(this.pinKey(item.path)); this.asking = null; cx.notify(); }, c)))
         .child(Button.new("look-send").h(H.compact).px(G.md).flex_none().items_center().rounded(R.control).bg(c.primary)

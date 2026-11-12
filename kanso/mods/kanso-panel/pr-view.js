@@ -143,7 +143,7 @@ function footnote(panel, c) {
   const line = footOf(panel);
   if (!line.text) return null;
   return h_flex().gap(G.sm).items_center()
-    .child(div().text_size(T.small).text_color(c.dim).child(line.text))
+    .child(div().text_size(10.5).text_color(c.dim).child(line.text))
     .when(line.retry, (el) => el.child(quietLink("pr-retry", "Retry", (cx) => panel.again(cx), c)));
 }
 

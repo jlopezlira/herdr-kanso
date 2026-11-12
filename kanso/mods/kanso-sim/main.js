@@ -274,7 +274,7 @@ export default class Simulator extends View {
           .hover((row) => row.bg(c.subtle))
           .on_click((_event, next) => this.pick(item, next))
           .child(div().flex_1().min_w(0).truncate().text_size(T.value).child(item.name))
-          .child(div().flex_none().text_size(T.small).text_color(c.dim).child(item.runtime ?? "Android"))
+          .child(div().flex_none().text_size(10.5).text_color(c.dim).child(item.runtime ?? "Android"))
           .child(this.line(this.boot?.id === item.id ? bootState(item, this.boot, Date.now()) ?? item.state : item.state, c))))))
       .when(Boolean(spaces().find((space) => space.active)?.machine), (el) => el.child(this.line("Devices are on this computer.", c)))
       .when(Boolean(this.tools?.adb && !this.tools.emulator), (el) => el.child(this.line("Android SDK emulator binary is missing.", c)))
