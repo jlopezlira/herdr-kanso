@@ -124,6 +124,7 @@ const sameKey = (key) => { const i = String(key).indexOf(":"); return `${key.sli
 const projectAt = (key) => registry().find((p) => keyOfProject(p) === sameKey(key)) ?? null;
 // Kanso's worktrees: beside its database here; on another machine, ~/.kanso/worktrees (the script's default).
 const kansoWorktrees = (machine) => (machine ? "" : paths.join(appHome(), WORKTREES));
+const spaceAt = (id) => spaces().findIndex((s) => s.id === id);
 // Where a new agent of a project goes. Plain data, so a menu can be given it.
 const placeOfSpace = (w) => {
   const project = registry().find((p) => keyOfProject(p) === keyOfSpace(w, home())) ?? null;
@@ -1785,7 +1786,7 @@ export default class Spaces extends View {
     const key = (w) => places.get(w.id).key;
     const ready = (w) => this.shown.has(w.id) || key(w) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
-    const list = sp.map((w, i) => ({ w, i, g: this.git[key(w)] ?? null, place: places.get(w.id) })).filter((r) => this.shown.has(r.w.id));
+    const list = sp.map((w) => ({ w, g: this.git[key(w)] ?? null, place: places.get(w.id) })).filter((r) => this.shown.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
     const tops = list.filter((r) => !nested(r));
@@ -2220,7 +2221,7 @@ export default class Spaces extends View {
       .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13));
   }
 
-  row({ w, i, g, tree, place }, t, mine = [], group = null) {
+  row({ w, g, tree, place }, t, mine = [], group = null) {
     const on = w.active;
     const spot = placeOfSpace(w);
     const controls = projectControls({ active: on, hovered: this.hoverSpace === w.id, place: spot });
@@ -2243,17 +2244,19 @@ export default class Spaces extends View {
       .rounded(8)
       .cursor_pointer()
       .hover((s) => s.bg(washHover))
-      .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.border_t(2).border_color(t.accent))
+      .when(this.over === w.id && this.takes(w, tree), (el) => (spaceAt(this.pressed) < spaceAt(w.id) ? el.border_b(2) : el.border_t(2)).border_color(t.accent))
       .on_mouse_down("left", (e) => {
-        this.pressed = i;
-        this.over = i;
-        if (e.click_count === 2) { this.pressed = null; run("space.rename", { id: w.id }); }
+        this.pressed = tree || e.click_count === 2 ? null : w.id;
+        this.over = null;
+        if (e.click_count === 2) run("space.rename", { id: w.id });
       })
+      .on_mouse_move((_e, cx) => this.hold(this.takes(w, tree) ? w.id : null, cx))
       .on_mouse_up("left", (_e, cx) => {
-        const from = this.pressed;
+        const from = this.pressed, drop = this.takes(w, tree);
         this.pressed = null;
-        if (from !== null && from !== i) run("space.move", { id: spaces()[from].id, index: i + 1 });
-        else {
+        this.over = null;
+        if (drop) run("space.move", { id: from, index: spaceAt(w.id) + 1 });
+        else if (from === null || from === w.id) {
           if (asleep) this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx);
           else if (mine.length) this.setAgentsFolded(w.id, on ? !this.agentsFolded.has(w.id) : false, cx);
           if (!on) run("space.select", { id: w.id });
@@ -2261,7 +2264,10 @@ export default class Spaces extends View {
         cx.notify();
       })
       .on_mouse_down("right", () => this.menu(w))
-      .on_hover((h, cx) => { if (h ? this.hoverSpace !== w.id : this.hoverSpace === w.id) { this.hoverSpace = h ? w.id : null; cx.notify(); } })
+      .on_hover((h, cx) => {
+        if (h ? this.hoverSpace !== w.id : this.hoverSpace === w.id) { this.hoverSpace = h ? w.id : null; cx.notify(); }
+        if (!h && this.over === w.id) this.hold(null, cx);
+      })
       .when(Boolean(tree), (el) => el.children(this.connector(tree, t)))
       .child(
         h_flex()
@@ -2277,6 +2283,14 @@ export default class Spaces extends View {
       );
     return row;
   }
+
+  // A held project lands only on another top-level project of its own machine.
+  takes(w, tree) {
+    const from = !tree && this.pressed !== w.id && spaces().find((s) => s.id === this.pressed);
+    return Boolean(from) && (from.machine || null) === (w.machine || null);
+  }
+
+  hold(over, cx) { if (this.pressed !== null && this.over !== over) { this.over = over; cx.notify(); } }
 
   // Projects, collapsed: one mark per project; a click lists its agents, or goes to it when it has none.
   compact({ w }, t, ctx) {
@@ -2777,7 +2791,7 @@ export default class Spaces extends View {
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : gap).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
-      .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.draggedAgent = null; cx.notify(); })
+      .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.over = null; this.draggedAgent = null; cx.notify(); })
       // Rows keep their height: shrunk to fit, there would be nothing to scroll.
       .children([...pills, ...els.map((el) => el.flex_none())]);
   }
