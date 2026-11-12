@@ -1,7 +1,7 @@
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { agentLabel, THREAD_LABEL } from "./agents.js";
 import { NAME_LABEL } from "./marks.js";
-import { spaceFor, conversationOf } from "./kdb.js";
+import { spaceFor, conversationOf, WAKES_LABEL } from "./kdb.js";
 import { parseOr } from "./pure.js";
 
 export const conversationOfThread = (th) => conversationOf(th?.file);
@@ -30,15 +30,18 @@ export function seenNow(sp, ctx, threads, kept, nameFor, since = {}) {
     const conversation = agentKey(th, k, ctx.alive), was = conversation ? kept.get(conversation) : null;
     return [[a.address, { conversation, given: a.name || null, name: nameFor(a), title: th?.title ?? was?.title ?? null, said: th?.said ?? th?.at ?? was?.said ?? null,
       space: w.id, tab: a.tab ?? null, pos: i, program: a.program ? JSON.stringify(a.program) : null, status: a.status || "unknown",
-      terminal: a.address, cwd: a.cwd ?? null, since: since[a.address]?.at ?? null, pid: readNow(th, k, ctx.alive) ? th.pid : null }]];
+      terminal: a.address, cwd: a.cwd ?? null, since: since[a.address]?.at ?? null, wakes: k?.labels?.[WAKES_LABEL] || null, pid: readNow(th, k, ctx.alive) ? th.pid : null }]];
   })));
 }
 
 // A terminal a sleep still holds leaves the awake list. One undoing, still live, returns to where it was.
+// An agent a wake already opened in another terminal is drawn there only, before the wake has written it.
 export function sleepingNow(sp, terms, asleep, home = () => "") {
   const live = new Set(terms.map((k) => k.address)), ids = new Set(sp.map((w) => w.id));
   const tabSpace = new Map(sp.flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, w.id])));
-  const each = (asleep ?? []).flatMap((s) => (s.agents ?? []).map((p, i) => ({ s, p, i })));
+  const woken = terms.filter((k) => (!k.state || k.state === "live") && k.labels?.[WAKES_LABEL]).map((k) => [k.labels[WAKES_LABEL], k.address]);
+  const awake = (p) => Boolean(p.resume) && woken.some(([resume, address]) => resume === p.resume && address !== p.terminal);
+  const each = (asleep ?? []).flatMap((s) => (s.agents ?? []).map((p, i) => ({ s, p, i }))).filter(({ p }) => !awake(p));
   const going = (s) => s.going === true || s.state === "sleeping" || (s.state == null && Boolean(s.pending) && !s.stuck);
   const back = (s, p) => s.state === "undoing" && Boolean(p.terminal) && live.has(p.terminal);
   const held = (s) => s.state !== "undoing" && (going(s) || Boolean(s.stuck));

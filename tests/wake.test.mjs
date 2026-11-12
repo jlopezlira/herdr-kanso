@@ -83,7 +83,7 @@ test("a wake opens the agent in the space it slept in, on its conversation, and 
   assert.equal(opened.folder, "/w/kanso");
   assert.deepEqual(clone(await store.asleep(true)), [], "awake: its row is gone");
   assert.equal(world.host.closed, true);
-  assert.deepEqual(clone(world.labels), [["t-new-1", "kanso.name=Hashiko"]], "the name you gave it goes back on its new terminal");
+  assert.deepEqual(clone(world.labels), [["t-new-1", `kanso.wakes=${C1}`], ["t-new-1", "kanso.name=Hashiko"]], "its terminal says what it brings back, and the name you gave it goes back on it");
   assert.equal((await store.kdb.read(`SELECT status FROM agents WHERE id='${C1}'`))[0].status, "unknown", "its status is what it is seen with next, no longer asleep");
   assert.ok(!(await store.claim(id)));
 });
@@ -478,6 +478,7 @@ test("a wake that could neither prove an agent back nor end it keeps its termina
   view.wake(shown, first.c);
   await first.drain();
   assert.deepEqual(world.killed, []);
+  assert.deepEqual(clone(world.labels.at(-1)), ["t-new-1", "kanso.wakes="], "not proved back: its terminal no longer says it runs it");
   blind = false; // Herdr answers again; the agent this wake started may still be loading its conversation there
   const [again] = await store.asleep();
   const second = cx();

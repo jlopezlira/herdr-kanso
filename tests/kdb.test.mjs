@@ -450,6 +450,25 @@ test("an abandoned sleep let go of in part loses its token: its window, back lat
   assert.deepEqual(clone(await db.awake([live("c1", "t1", 11)], saved + STALE_MS + 3)), [id], "still abandoned: c1 seen running later is let go too, and the sleep ends");
 });
 
+test("a wake that stopped half way: the sleep lets go of what its terminals say it opened, once its hold is no longer renewed", async (t) => {
+  const { db, ABANDON_MS } = await database(t);
+  const panes = { per: null, cols: [{ w: 1, panes: [{ argv: ["claude"], resume: "c1", pid: 11 }, { argv: ["claude"], resume: "c2", pid: 12 }] }] };
+  const saved = 1000;
+  const { id, token } = await db.sleepTab({ name: "tab", space: spaces[2], project, layout: panes, saved, now: saved, agents: [{ conversation: "c1" }, { conversation: "c2" }] });
+  await db.settle(id, token);
+  const claim = await db.claim(id, saved + 10);
+  // The conversation can't be read in either terminal (still loading, or cleared since): only the wake's label says what runs there.
+  const opened = (c, terminal) => ({ ...seen(`term:${terminal}`, null, "sp-kanso", 0, "idle", terminal), program: "{\"kind\":\"claude-code\"}", pid: null, wakes: c });
+  assert.deepEqual(clone(await db.awake([opened("c1", "t7"), opened("c2", "t8")], saved + 10 + ABANDON_MS - 1)), [], "the wake may still be checking: left alone");
+  assert.equal(await db.renew(id, claim.token, saved + 10 + ABANDON_MS), true);
+  assert.deepEqual(clone(await db.awake([opened("c1", "t7"), opened("c2", "t8")], saved + 10 + ABANDON_MS + 1)), [], "renewed: still its own");
+  assert.deepEqual(clone(await db.awake([opened("c1", "t7")], saved + 10 + 2 * ABANDON_MS + 1)), [id], "stopped: the one opened is awake");
+  assert.deepEqual(clone((await db.sleeps()).map((s) => s.agents.map((a) => a.id))), [["c2"]], "the one never opened stays asleep");
+  assert.deepEqual(clone(await db.awake([opened("c2", "t8")], saved + 10 + 2 * ABANDON_MS + 2)), [id]);
+  assert.deepEqual(clone(await db.sleeps()), [], "no one left asleep: the sleep is over");
+  assert.equal(await db.woke(id, claim.token), false, "the wake, back late, holds nothing");
+});
+
 test("an agent of a sleep seen running again is awake: the sleep lets it go, and ends when none is left asleep", async (t) => {
   const { db } = await database(t);
   const live = (c, terminal, pid) => ({ ...seen(c, null, "sp-kanso", 0, "idle", terminal), program: "{\"kind\":\"claude-code\"}", pid });

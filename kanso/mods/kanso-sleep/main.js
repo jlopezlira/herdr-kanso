@@ -6,7 +6,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, machines, shared, setShared, hc, run, props, closeOverlay, theme, home, readTextFile } from "herdr";
 import { Store, idle, done, shownOf } from "./store.js";
-import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText, machinesToAsk } from "./kdb.js";
+import { Kdb, spaceFor, inPlace, seenAddress, localAddress, seenRow, kansoDir, asOfText, machinesToAsk, WAKES_LABEL, BEAT_MS } from "./kdb.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
@@ -535,6 +535,10 @@ export default class Sleep extends View {
     const late = Number(failure?.pending) || 0;
     const flat = a.cols.flatMap((c, ci) => c.panes.map((p, ri) => ({ p, pane: ids[ci]?.[ri] ?? null })));
     const termOf = (pane) => (pane ? panes().find((q) => q.pane === pane)?.terminal ?? null : null);
+    // Said on each terminal before the slow check: the sidebar draws the agent once.
+    const wakes = (term, resume) => hc(["label", term, `${WAKES_LABEL}=${resume ?? ""}`]).catch(() => null);
+    await Promise.all(flat.map(({ p, pane }) => (p.resume && termOf(pane) ? wakes(termOf(pane), p.resume) : null)));
+    this.beatAt = Date.now();
     const tabOf = flat.map((x) => x.pane && panes().find((q) => q.pane === x.pane)?.tab).find(Boolean);
     const nowIn = space?.id ?? (tabOf ? spaces().find((w) => (w.tabs ?? []).some((tb) => tb.id === tabOf))?.id ?? null : null);
     // Its space was gone and one was made for it: what else slept there wakes there too.
@@ -560,6 +564,7 @@ export default class Sleep extends View {
       const lost = st.lost || !(await store.renew(a.id, a.token).catch(() => true));
       // The first claude seen there on this conversation since the wake began is this wake's, unless one was already there.
       const saw = async (fg, mine) => {
+        if (Date.now() - this.beatAt >= BEAT_MS) { this.beatAt = Date.now(); await store.renew(a.id, a.token).catch(() => null); }
         if (st.owner.has(term) || mine || !fg?.pid || !(fg.argv ?? []).map(String).includes(p.resume)) return mine;
         const proc = await procOf(fg.pid, Date.now(), machine);
         return proc?.comm === "claude" && proc.start >= startedAt - 2000 ? fg.pid : mine;
@@ -576,6 +581,7 @@ export default class Sleep extends View {
       }
       // Not ended (unreadable, or not this wake's to end): it stays asleep with that terminal looked at first.
       const ended = await endIfOurs(owner, term, p);
+      if (!ended) await wakes(term, null);
       return { ...st, owner, lost, kept: ended ? st.kept : [...st.kept, term], missed: [...st.missed, ended ? p : { ...p, checkNow: term }] };
     }, { owner: new Map(), lost: lostOpening, missed: [], unnamed: [], restores: [], kept: [] });
     const { owner, lost, missed, unnamed, restores } = checked;
@@ -598,6 +604,7 @@ export default class Sleep extends View {
     }, { done: (v) => v.done });
     const held = saved.held;
     const endedNow = (!held && opened) || (saved.error && opened) ? await endOpened() : [];
+    await Promise.all(endedNow.map((term) => wakes(term, null)));
     const saveError = !held && opened ? "another window woke it meanwhile; what this one opened was ended"
       : saved.error && opened ? `${saved.error}; what it opened was ended, so it wakes from here again in 10 minutes`
       : saved.error;

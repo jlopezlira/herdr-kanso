@@ -5,11 +5,11 @@ const order = (a, b) => a.at - b.at || a.seq - b.seq || a.address.localeCompare(
 
 const field = (value) => { const text = String(value ?? ""); return `${text.length}:${text}`; };
 
-export function sleepingSignature(spaces, terms, asleep, away, home) {
+export function sleepingSignature(spaces, terms, asleep, away, home, wakesLabel) {
   const project = spaces.map((s) => [s.id, s.name, s.folder, s.machine, (s.tabs ?? []).map((t) => field(t.id)).join("")].map(field).join(""));
   const sleeps = (rows) => rows.map((s) => [s.id, s.from, s.name, s.saved, s.spaceId, s.space, s.into?.tabId, s.going, s.state, s.pending, s.stuck, s.busy,
     (s.agents ?? []).map((p) => [p.terminal, p.resume, p.spaceId, p.program, p.name, p.title, p.at, p.said].map(field).join("")).map(field).join("")].map(field).join(""));
-  return [home, project.map(field).join(""), terms.map((t) => field(t.address)).join(""), sleeps(asleep).map(field).join(""), sleeps(away?.rows ?? []).map(field).join("")].map(field).join("");
+  return [home, project.map(field).join(""), terms.map((t) => field(t.address) + field(t.labels?.[wakesLabel])).join(""), sleeps(asleep).map(field).join(""), sleeps(away?.rows ?? []).map(field).join("")].map(field).join("");
 }
 
 export function waitingSignature(list, terms, excluded, nameLabel) {

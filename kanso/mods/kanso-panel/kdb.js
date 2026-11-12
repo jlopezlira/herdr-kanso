@@ -11,7 +11,9 @@ import { mapSeries, parseOr } from "./pure.js";
 export const DIR = "data/kanso";
 export const VERSION = 1;
 export const STALE_MS = 10 * 60_000; // a wake's hold not renewed this long stopped half way
-export const ABANDON_MS = 3 * 60_000; // a sleep's: it renews its hold before each agent leaves, and one leaves in under a minute
+export const ABANDON_MS = 3 * 60_000; // a sleep's or a wake's hold not renewed this long stopped half way: a sleep renews before each agent leaves, a wake every BEAT_MS
+export const BEAT_MS = 20_000; // a wake renews its hold this often while it checks an agent
+export const WAKES_LABEL = "kanso.wakes"; // on a terminal a wake opened: the conversation it brings back
 export const GONE_MS = 60_000; // an agent not seen this long, and not asleep, is gone
 export const SPACE_KEEP_MS = 7 * 86400_000; // a project gone this long is forgotten, the same keep as since-left
 export const forgetAgentsSql = () => "DELETE FROM agents WHERE status='gone' AND project_at IS NULL AND sleep_id IS NULL;";
@@ -155,7 +157,7 @@ const STEP_FIELDS = ["step", "step_at", "sent_at", "nudged_at", "why", "title", 
 const CLEAR_STEP = "step=NULL,step_at=NULL,sent_at=NULL,nudged_at=NULL,why=NULL";
 const restoreSql = (restores, mine) => restores.map(([c, name]) => `UPDATE agents SET restore=${q(name)} WHERE id=${q(c)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`).join("");
 
-const free = (col, now) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - STALE_MS)})`;
+const free = (col, now, within = STALE_MS) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - within)})`;
 // The same, read: a token renewed within STALE_MS holds the row.
 export const isHeld = (token, at, now, within = STALE_MS) => token != null && at != null && at >= now - within;
 
@@ -419,10 +421,11 @@ export class Kdb {
   // the agent would otherwise stay "asleep" for good, so no tab with it could sleep again. A settled
   // sleep saw every agent leave, so a sighting of the old pid after it is a late one, never a wake.
   async awake(live, now = Date.now()) {
-    const running = new Map(live.filter((a) => a.conversation && a.terminal && a.program && a.pid != null).map((a) => [a.conversation, a.pid]));
+    // A terminal a wake opened says so itself (WAKES_LABEL): never the slept process, whatever its pid.
+    const running = new Map(live.filter((a) => a.terminal && a.program).flatMap((a) => [...(a.conversation && a.pid != null ? [[a.conversation, a.pid]] : []), ...(a.wakes ? [[a.wakes, null]] : [])]));
     if (!running.size) return [];
     const slept = (s) => new Map(parseOr(s.layout, { cols: [] }).cols?.flatMap((c) => c.panes ?? []).map((p) => [p.resume, p.pid]) ?? []);
-    const held = (s) => isHeld(s.pending, s.pending_at, now, ABANDON_MS) || isHeld(s.waking, s.waking_at, now);
+    const held = (s) => isHeld(s.pending, s.pending_at, now, ABANDON_MS) || isHeld(s.waking, s.waking_at, now, ABANDON_MS);
     const abandoned = (s) => s.pending != null && !held(s);
     const awakeIn = (s) => { const pids = slept(s); return s.agents.filter((a) => running.has(a.id) && (abandoned(s) || running.get(a.id) !== pids.get(a.id))).map((a) => a.id); };
     // A sleep the sidebar is working on (or stuck) is its own: its agents still run while they leave.
@@ -434,7 +437,7 @@ export class Kdb {
       // Freeing by the slept pid holds only while the row is the abandoned one read: a window that resumed
       // and settled the sleep meanwhile (pending NULL, every agent gone) keeps it, and the next sighting looks again.
       const same = abandoned(s) ? ` AND pending=${q(s.pending)} AND pending_at=${n(s.pending_at)}` : "";
-      const mine = `id=${q(s.id)} AND ${DONE} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now)}${same}`;
+      const mine = `id=${q(s.id)} AND ${DONE} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now, ABANDON_MS)}${same}`;
       // An abandoned sleep let go of in part gets a token its window never had: back after all, it must not
       // end and settle what is no longer in the sleep. The time stays, so the sleep stays abandoned for the rest.
       const after = gone.length < s.agents.length && layout.cols.length
