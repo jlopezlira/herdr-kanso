@@ -13,7 +13,7 @@ export const ICON_ROW = 14;
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 // End of the generated sizes.
 export const EASE = { duration: 180, easing: "ease-out" };
-/** A second press within this long confirms a removal. */
+/** A second press within this long confirms what cannot be undone. */
 export const ARM_MS = 4000;
 export const BREATH = { from: 0.35, to: 0.8, period: 1800 };
 export const PULSE = { from: 0.35, to: 1, period: 2400 };
@@ -57,6 +57,8 @@ const CLEAR = "#00000000";
 // The 4% wash: the segmented track and a disabled control's ground.
 const well = (c) => mix(c.text, c.background, WASH.off);
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
+/** The armed look: the accent fill, its hover and press washes, the accent foreground. */
+export const armedLook = (c) => filled(c.accent, c.accentText, c);
 const LOOKS = {
   solid: (c) => filled(c.primary, c.primaryText, c),
   tonal: (c) => ({ fill: c.subtle, ink: c.text, hover: c.selected, press: c.selected }),
@@ -64,28 +66,39 @@ const LOOKS = {
   icon: (c) => ({ fill: null, ink: c.muted, hover: c.subtle, press: c.selected }),
 };
 
-/** solid: the one primary action; tonal: a wash, no edge; quiet: text only; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path. */
-export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, disabled = false, spoken = label, armed = false, active = false, spin = false, color = null } = {}) {
-  const square = kind === "icon";
+export const pressAgain = (verb) => `Press again to ${verb}`;
+
+/** Both labels in one cell, the hidden one at no height: the box is the wider of the two at rest, so arming moves nothing. */
+export function armedLabel(label, verb, on, text, { start = false } = {}) {
+  const hidden = (el, hide) => (hide ? el.h(0).overflow_hidden() : el);
+  return v_flex().when(start, (el) => el.items_start()).when(!start, (el) => el.items_center())
+    .child(hidden(text(label).whitespace_nowrap(), on)).child(hidden(text(pressAgain(verb)).whitespace_nowrap(), !on));
+}
+
+/** solid: the one primary action; tonal: a wash, no edge; quiet: text only; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path.
+ * `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>". */
+export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null } = {}) {
+  const square = kind === "icon", on = armed && !disabled;
   const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
-    : armed ? filled(c.accent, c.accentText, c)
+    : on ? armedLook(c)
       : active ? { ...LOOKS[kind](c), fill: c.selected, ink: c.text, hover: c.selected }
         : LOOKS[kind](c);
-  const ink = disabled || armed ? look.ink : color ?? (spin ? c.text : look.ink);
+  const ink = disabled || on ? look.ink : color ?? (spin ? c.text : look.ink);
   const side = small ? H.compact : square ? H.icon : H.control;
+  const text = (words) => div().text_size(small ? T.body : T.value).font_medium().text_color(ink).child(words);
   const glyph = icon ? svg(icon.includes("/") ? icon : `${ICONS}${icon}.svg`).size(square ? ICON : ICON_ROW).flex_none().text_color(ink) : null;
   // The ring is a border kept clear at rest, so focusing never resizes the box.
   return Button.new(id).h(side).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
     .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .disabled(disabled)
-    .accessibility_label(spoken)
+    .accessibility_label(on && verb ? pressAgain(verb) : spoken)
     .when(square, (el) => el.w(side).tooltip(spoken))
     .when(!square, (el) => el.px((small ? G.sm : G.md) - G.hair))
     .when(Boolean(look.fill), (el) => el.bg(look.fill))
     .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(look.hover)).active((s) => s.bg(look.press)))
     .when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))
     .when(Boolean(glyph), (el) => el.child(spin ? glyph.spin(900) : glyph))
-    .when(!square, (el) => el.child(div().text_size(small ? T.body : T.value).font_medium().text_color(ink).child(label)));
+    .when(!square, (el) => el.child(verb ? armedLabel(label, verb, on, text, { start: kind === "quiet" }) : text(label)));
 }
 
 /** A quiet action on a line. */
@@ -117,6 +130,7 @@ export function skeleton(c) {
 }
 export const ghost = skeleton;
 
+/** What a view has armed: one `key` at a time, for ARM_MS. */
 export class Armed {
   constructor() { this.key = null; this.at = 0; }
 
@@ -129,7 +143,17 @@ export class Armed {
     this.key = key; this.at = Date.now(); cx.notify();
     cx.timer?.after(ARM_MS + 50, (cx) => { if (this.key === key && !this.is(key)) { this.key = null; cx.notify(); } });
   }
+
+  /** A button that asks twice: the first press arms `key`, the second runs `act`. */
+  button(id, label, verb, key, act, c, o = {}) { return button(id, label, (cx) => this.press(key, cx, act), c, { ...o, verb, armed: this.is(key) }); }
+
+  link(id, label, verb, key, act, c, o = {}) { return quietLink(id, label, (cx) => this.press(key, cx, act), c, { ...o, verb, armed: this.is(key) }); }
 }
+
+/** A reversible action, done: what happened, and Undo at the end of its line. */
+export const undoLine = (id, text, onUndo, c) => h_flex().id(id).min_w(0).items_center().gap(G.md)
+  .child(div().min_w(0).truncate().text_size(T.body).font_medium().text_color(c.text).child(text))
+  .child(button(`${id}-undo`, "Undo", onUndo, c, { kind: "tonal", small: true }));
 
 /** One switch: off is raised with the input edge, on is the solid colour; only the knob moves. Disabled: the 4% wash, dim knob. */
 export function toggleSwitch(id, checked, onChange, c, { label = "Toggle", disabled = false } = {}) {

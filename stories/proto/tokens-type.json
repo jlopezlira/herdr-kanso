@@ -4,7 +4,7 @@
   "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__type\"><span style=\"font-size:var(--k-fs-display);line-height:var(--k-lh-tight);font-weight:var(--k-fw-strong)\">48 display</span><span style=\"font-size:var(--k-fs-title);font-weight:var(--k-fw-strong)\">20 title</span><span style=\"font-size:var(--k-fs-section);font-weight:var(--k-fw-strong)\">15 section</span><span style=\"font-size:var(--k-fs-name);font-weight:var(--k-fw-medium)\">13.5 name</span><span style=\"font-size:var(--k-fs-body)\">12.5 body</span><span style=\"font-size:var(--k-fs-meta);color:var(--muted)\">11.5 meta</span><span style=\"font:var(--k-fs-mono) var(--mono);color:var(--muted)\">11.5 mono · kanso-spaces/main.js</span></div></div></div>"
  },
  "TextRoles": {
-  "caption": "Foreground, muted, dim. Dim is the floor: 3:1 on its ground (A).",
+  "caption": "Foreground, muted, dim. Dim is the floor: 3:1 on its ground.",
   "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__type\"><span style=\"font-size:var(--k-fs-name);color:var(--fg)\">Foreground · names, titles, the answer</span><span style=\"font-size:var(--k-fs-body);color:var(--muted)\">Muted · second lines, labels, counts</span><span style=\"font-size:var(--k-fs-meta);color:var(--dim)\">Dim · tails, ages, key hints</span></div></div></div>"
  },
  "OneLineNeverWraps": {

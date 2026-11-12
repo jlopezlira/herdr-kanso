@@ -7,7 +7,7 @@ import * as stories from './compositions-bars.stories.js';
 
 ## Toast with its source
 
-A toast says what and offers the one fix; the source line above is for the board only.
+A toast says what and offers the one fix; the source line above is for the example only.
 
 <Canvas of={stories.ToastWithItsSource} />
 
@@ -17,18 +17,18 @@ A pane whose process is gone keeps its last output at 55%.
 
 <Canvas of={stories.StaleBody} />
 
-## B9 Toasts and system notifications
+## Toasts and system notifications
 
 ### Toasts and system notifications guidelines
 
 - **Seijaku** One shape, the menu's materials: popover, radius 8, the kit shadow. 360 × 40, mark 14, one sentence 12.5, and at most one action word, 12.5 medium. Up to three stacked, newest at the bottom.
 - **Kansō** A click goes to the fact. A word shows only for a different act: Undo, Update, Refresh, Restart, Open, Show, What's new.
-- **Kansō** The leading dot goes. A failure is the state pattern's toast (S21, state.css): the blocked mark, what failed in our words, one small button with the fix (Refresh for a read, the write's own name, Undo for a stuck sleep). The tool's words are in the tooltip. No Explain in a toast. The words match the BLOCK of the same failure.
+- **Kansō** The leading dot goes. A failure is the state pattern's toast: the blocked mark, what failed in our words, one small button with the fix (Refresh for a read, the write's own name, Undo for a stuck sleep). The tool's words are in the tooltip. No Explain in a toast. The words match the BLOCK of the same failure.
 - **Yūgen** An echo shows only when its home is out of sight. PR: no header shows that PR. Update: the footer row is not on screen. Could not sleep: the Asleep group is not on screen.
-- **Kansō** On Dawn Mode the toast does not name the channel and wears no channel mark: the channel's one home is the sidebar header (board 11).
-- **Kansō** A computer that drops is said once, by this toast. Nothing stands on the bar after that unless a pane of that computer is in front (B8).
+- **Kansō** On Dawn Mode the toast does not name the channel and wears no channel mark: the channel's one home is the sidebar header.
+- **Kansō** A computer that drops is said once, by this toast. Nothing stands on the bar after that unless a pane of that computer is in front.
 - **Kansō** Share with nothing copied: one sentence naming the file and the post. The folder opens on its own, so the path line goes.
-- **Kansō** "Already a project" and "already has a worktree" leave the toasts. The New project and New worktree dialogs say it where you typed it (S14).
+- **Kansō** "Already a project" and "already has a worktree" leave the toasts. The New project and New worktree dialogs say it where you typed it.
 - **Seijaku** One update checker remains: kanso-tabs/update.js, the only one that polls and installs, because the tab bar is always on screen. kanso-chrome/update.js, a byte-for-byte copy, is deleted. The footer row reads the shared kanso.update state and its press runs kanso-tabs.update, so each update toast has one sender.
 - **Kansō** Second sentences go: "Click to update; Herdr's own updates stay under Settings.", "Check it and post. Not there?…"
 - **Yūgen** System notifications: only while no kansō window is on screen. Otherwise the guard writes the notice and the window shows it as a toast in the same words. The memory notice uses the status bar's words, "Memory 8% free".
@@ -39,13 +39,13 @@ A pane whose process is gone keeps its last output at 55%.
 
 ```text
 Build Bars (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --done, --fg, --k-fs-body, --k-fw-strong, --k-h-header, --k-ic-row, --k-r-card, --k-sp-2, --k-sp-3, --muted, --popover, --shadow, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --done, --fg, --k-fs-body, --k-fw-strong, --k-h-header, --k-ic-row, --k-r-card, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --popover, --shadow, --w12, --w7.
 Draw these pieces: Toast with its source; Stale body.
 Reuse these kit classes: kanso-button--tonal, kanso-toast.
 Follow these rules:
-- Toast with its source: A toast says what and offers the one fix; the source line above is for the board only.
+- Toast with its source: A toast says what and offers the one fix; the source line above is for the example only.
 - Stale body: A pane whose process is gone keeps its last output at 55%.
-Apply every guideline of B9 Toasts and system notifications.
+Apply every guideline of Toasts and system notifications.
 Treat as a defect:
 - No Explain in a toast.
 ```

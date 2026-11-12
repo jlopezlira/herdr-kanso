@@ -9,7 +9,7 @@ Blocks: h1, paragraph, table, h2, code in text.
 
 <Canvas of={stories.Markdown} />
 
-## P04 Preview: Markdown, blocks and Source
+## Preview: Markdown, blocks and Source
 
 ### Preview guidelines
 
@@ -17,16 +17,16 @@ Blocks: h1, paragraph, table, h2, code in text.
 - **Seijaku** Clicking under the last block adds a paragraph.
 - **Yūgen** Source is a context icon in the header that stays lit while on, not a pill whose tooltip explains it. Its text is the file as written.
 - **Seijaku** Tables edit cell by cell. Add row, Add column and Remove row are quiet links under the table, so it is not covered in ✕ icons. Done closes it. Esc closes any block.
-- **Shizen** Save follows P03: ⌘S or the button, never on its own.
+- **Shizen** Save follows code: ⌘S or the button, never on its own.
 - **Seijaku** Headings 20 and 15, body 13.5, code 11.5 on w7, so a document reads like the rest of the window.
 
 ## Prompt for agents
 
 ```text
 Build Markdown (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --fg, --hover, --k-fs-body, --k-r-card, --k-sp-4, --muted, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --fg, --hover, --k-fs-body, --k-r-card, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-hair, --muted, --w12, --w7.
 Draw these pieces: Markdown.
 Follow these rules:
 - Markdown: Blocks: h1, paragraph, table, h2, code in text.
-Apply every guideline of P04 Preview: Markdown, blocks and Source.
+Apply every guideline of Preview: Markdown, blocks and Source.
 ```

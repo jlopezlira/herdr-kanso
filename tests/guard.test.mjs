@@ -481,9 +481,9 @@ test("Memory hides the restart without an identified window and omits actions fo
     } });
     return proxy;
   };
-  const { Memory } = await load("kanso-guard/main.js", ["Memory"], { div: element, v_flex: element, h_flex: element, Button: { new: (id) => { ids.push(id); return element(); } } });
+  const { Memory, Armed } = await load("kanso-guard/main.js", ["Memory", "Armed"], { div: element, v_flex: element, h_flex: element, Button: { new: (id) => { ids.push(id); return element(); } } });
   const view = new Memory(), data = sample();
-  Object.assign(view, { busy: {}, armed: { is: () => false }, digest: null, now: { data } });
+  Object.assign(view, { busy: {}, armed: new Armed(), digest: null, now: { data } });
   data.window = { pid: null, mb: 0, reason: "Several windows" };
   data.swapLabel = "page file";
   view.hero({}, data, false);

@@ -9,42 +9,42 @@ Tabs 26, body size, program mark 15; the chosen tab on w12 with its close at 12.
 
 <Canvas of={stories.TabBar} />
 
-## B1 Tab bar, the tabs
+## Tab bar, the tabs
 
 ### Tab bar guidelines
 
 - **Yūgen** Tabs carry no program icon and no working mark: the pane headers carry both, and the icon told no tab apart. A mark shows only when it asks or changed: Needs you, and Finished until seen. Piece tabs.marks, S.
 - **Kansō** Close stays where it is: × on the active tab, at rest. On a tab that holds an agent the first press arms it for 4 s: the tab turns accent in its own box and the tooltip says "Press again to close checkout". Nothing changes width. A plain shell closes on one press.
 - **Kansō** Double-click renames in place with the built-in Input, name selected. Enter keeps it, Esc puts it back. The dialog with its hint goes.
-- **Kokō** Drag: the held tab stays on the pressed wash (w12, as S16) and a 2 px accent bar shows where it lands.
-- **Shizen** A rename on another computer is drawn at once: the new name at 80% with a breathing dot until the core confirms. Refused, the old name comes back and the toast says so (B9).
+- **Kokō** Drag: the held tab stays on the pressed wash (w12, as sidebar rows) and a 2 px accent bar shows where it lands.
+- **Shizen** A rename on another computer is drawn at once: the new name at 80% with a breathing dot until the core confirms. Refused, the old name comes back and the toast says so.
 - **Kansō** The " Z" after a zoomed tab's name goes. The zoomed pane fills the tab and its header holds Unzoom.
 - **Shizen** Tabs that do not fit fold behind +5, which opens them as a menu with their marks. + and Arrange sit outside the scroller.
-- **Shizen** devbox connecting: one breathing skeleton per known tab. Unreachable: tabs at 55% (S21 stale), and no +, because it cannot start anything there.
+- **Shizen** devbox connecting: one breathing skeleton per known tab. Unreachable: tabs at 55% (states stale), and no +, because it cannot start anything there.
 - **Kokō** Remote: 0 calls at rest. Tabs come over the core's own link.
-- **Seijaku** Measured, unchanged: bar 48 (layouts/kanso.json:62), px 12, no fill of its own (tabs/main.js:406). A tab is 26 tall, 8 inside, 8 between icon, name and mark, text 12.5, icon 15, mark 14, name up to 170; 2 between tabs, 8 to + and Arrange. Panel buttons 26 with 2 between (:386, :418); the last one now sits 12 from the edge.
+- **Seijaku** Measured, unchanged: bar 48 (layouts/kanso.json:62), px 12, no fill of its own (tabs/main.js:406). A tab is 26 tall, 8 inside, 8 between icon, name and mark, text 12.5, icon 15, mark 14, name up to 170; 2 between tabs, 8 to + and Arrange. Panel buttons 26 with 2 between (:386,:418); the last one now sits 12 from the edge.
 
-## B2 Tab bar, panel buttons
+## Tab bar, panel buttons
 
 ### Tab bar guidelines
 
 - **Seijaku** One button for all: 26 square, icon 15, hover w7, open w12. The name is the tooltip, with its key. Nothing changes width, so no button moves when you point at one or open one.
 - **Yūgen** A closed panel button paints nothing: no fill, no border, the frame shows through. Only hover and open paint.
-- **Kansō** The ? and the gear leave the tab bar and its end closes up. Settings has one door: the footer's Settings row, whose menu holds kansō settings (⌃⇧,) and Herdr settings (S19). The ? opened the same dialog on Keys, so it was a second door; ⌘⇧/ still opens Keys.
+- **Kansō** The ? and the gear leave the tab bar and its end closes up. Settings has one door: the footer's Settings row, whose menu holds kansō settings (⌃⇧,) and Herdr settings. The ? opened the same dialog on Keys, so it was a second door; ⌘⇧/ still opens Keys.
 - **Kokō** Drag to reorder shows the held button on the pressed wash and the accent bar, as tabs do.
 - **Yūgen** Panels is the place a hidden panel comes back from: a check means shown, the key is ⌃⇧N in bar order, hover shows the grip, and a row drags to reorder. Hiding unmounts the panel, so its reads stop.
 - **Shizen** Fold order as the bar narrows: tab names to 120, then to 72, then extra tabs into +N. Panel buttons, + and Arrange never fold: they stay visible at any width.
 - **Seijaku** Window buttons are icons in the same 26 button, not "−" and "□" in the font, right after the panel buttons.
-- **Seijaku** Order: Files, Spend, PR, Shipped, Worktrees, Ports, Containers, Memory, Images, then Simulator when a simulator tool exists (tabs/main.js:57-68), until the person drags them (:72-77). The boards draw the default.
+- **Seijaku** Order: Files, Spend, PR, Shipped, Worktrees, Ports, Containers, Memory, Images, then Simulator when a simulator tool exists (tabs/main.js:57-68), until the person drags them (:72-77). The examples draw the default.
 - **Kokō** Remote: 0. A hidden panel mounts nothing.
 
 ## Prompt for agents
 
 ```text
 Build Tab bar (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-h-icon, --k-ic-control, --k-ic-inline, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-h-icon, --k-ic-control, --k-ic-inline, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --w12, --w7.
 Draw these pieces: Tab bar.
 Follow these rules:
 - Tab bar: Tabs 26, body size, program mark 15; the chosen tab on w12 with its close at 12. Panel buttons 26 with 15.
-Apply every guideline of B1 Tab bar, the tabs; B2 Tab bar, panel buttons.
+Apply every guideline of Tab bar, the tabs; Tab bar, panel buttons.
 ```

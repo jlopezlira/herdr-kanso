@@ -957,6 +957,21 @@ export function importProto(src) {
     D11c: "Layouts/hjkl dōjō",
   };
 
+  function stripRefs(text) {
+    return text
+      .replace(/\b(?:[AKLZ]|I1|S01|S21): /g, "")
+      .replace(/\bFrom boards? [A-Z0-9]+\.\s*/gi, "")
+      .replace(/\s*\((?:[Bb]oards?\b[^)]*|[A-Z]\d{0,2}[a-z]?|[ab]|0[1-9]|10|11|K, S21|11, S02|S21, state\.css)\)/g, "")
+      .replace(/\b[Bb]oards? (?:[A-Z]\d{0,2}[a-z]?|\d{2})(?:['’]s)?\b/g, "")
+      .replace(/\b(?:on|across) (?:these|the|every) boards?(?: themselves)?\b/gi, "")
+      .replace(/\(([A-Z]\d{1,2})[:,] /g, "(")
+      .replace(/\b[A-Z]\d{1,2}[a-z]?\b/g, (code) => BOARDS[code]?.split("/").at(-1).toLowerCase() ?? ({ P00: "the state pattern", D11: "the dōjō" })[code] ?? code)
+      .replace(/\bboards?\b/gi, (word) => word.toLowerCase().endsWith("s") ? "examples" : "example")
+      .replace(/\b[\w-]+\.html\b/g, "")
+      .replace(/\b(?:from|as in) [AKLZ]\b/g, "")
+      .replace(/[ \t]+([.,;:])/g, "$1").replace(/[ \t]{2,}/g, " ").trim();
+  }
+
   function place({ group, sub, title }) {
     if (group === "Tokens") return "Tokens/Every value";
     if (group === "Atoms") return `${sub === "Controls" ? "Compositions" : "Tokens"}/${sub}`;
@@ -1020,7 +1035,7 @@ export function importProto(src) {
       const [head, ...body] = board.trim().split("\n");
       const folder = BOARDS[head.split(" ")[0]];
       if (!folder) throw new Error(`board ${head} has no folder`);
-      (byFolder[folder] ??= []).push({ name: head.replace(/\s*\(`#[^`]*`\)$/, ""), body: body.join("\n").trim() });
+      (byFolder[folder] ??= []).push({ name: stripRefs(head.replace(/^\S+\s+/, "").replace(/\s*\(`#[^`]*`\)$/, "")), body: stripRefs(body.join("\n")) });
     }
     return byFolder;
   }
@@ -1056,8 +1071,8 @@ export function importProto(src) {
 
   const text = (html) => html.replace(/<svg.*?<\/svg>/gs, "").replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
   const q = (s) => JSON.stringify(s);
-  const mdxText = (text) => text.split(/(`[^`]*`)/).map((part, i) => (i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`))).join("");
-  const cell = (tag, value, span) => `<${tag}${span ? ` colSpan={${span}}` : ""}>{${q(value)}}</${tag}>`;
+  const mdxText = (text) => stripRefs(text).split(/(`[^`]*`)/).map((part, i) => (i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`))).join("");
+  const cell = (tag, value, span) => `<${tag}${span ? ` colSpan={${span}}` : ""}>{${q(stripRefs(value))}}</${tag}>`;
   const jsxTable = (head, rows) => `<table>\n<thead><tr>${head.map((h) => cell("th", h)).join("")}</tr></thead>\n<tbody>\n${rows.map((r) => `<tr>${r}</tr>`).join("\n")}\n</tbody>\n</table>`;
 
   function tableOf(html) {
@@ -1106,7 +1121,7 @@ export function importProto(src) {
     const stories = folders.get(folder);
     let name = exportName(title);
     while (stories[name]) name += "2";
-    stories[name] = { title, caption: caption.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), html: focusable(LIVE.includes(title) ? live(example(entry.html)) : example(entry.html)) };
+    stories[name] = { title: stripRefs(title), caption: stripRefs(caption).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), html: focusable(LIVE.includes(title) ? live(example(entry.html)) : example(entry.html)) };
   }
 
   const why = notes();

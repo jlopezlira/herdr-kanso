@@ -1,6 +1,6 @@
 {
  "ToastWithItsSource": {
-  "caption": "A toast says what and offers the one fix; the source line above is for the board only.",
+  "caption": "A toast says what and offers the one fix; the source line above is for the example only.",
   "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-toast\" style=\"width:360px\"><svg class=\"kanso-mark kanso-mark--done\"><use href=\"#e-done\"/></svg><span class=\"kanso-content__text\"><b>tests</b> finished · 48 passed</span><span class=\"kanso-button--tonal kanso-button--small\" tabindex=\"0\">Open</span></div></div></div>"
  },
  "StaleBody": {

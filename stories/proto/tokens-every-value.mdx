@@ -4,7 +4,7 @@ import { Canvas, Meta } from '@storybook/addon-docs/blocks';
 
 # Every value
 
-From board K. Type, space, radius, heights, icons.
+Type, space, radius, heights, icons.
 
 ### Type
 
@@ -49,7 +49,7 @@ From board K. Type, space, radius, heights, icons.
 <tr><td>{"sp-3"}</td><td>{"12 · row gap, card padding"}</td></tr>
 <tr><td>{"sp-4"}</td><td>{"16 · panel padding, actions"}</td></tr>
 <tr><td>{"sp-6"}</td><td>{"24 · section top, dialog padding"}</td></tr>
-<tr><td>{"sp-8"}</td><td>{"32 · between boards of a panel"}</td></tr>
+<tr><td>{"sp-8"}</td><td>{"32 · between examples of a panel"}</td></tr>
 </tbody>
 </table>
 
@@ -96,17 +96,17 @@ From board K. Type, space, radius, heights, icons.
 </tbody>
 </table>
 
-## K Kit: every value and every element, once
+## Kit: every value and every element, once
 
 ### Design guidelines
 
-- **Seijaku** One kit. Every board and every mod uses these tokens and these pieces. A value outside the kit is a defect, and a piece drawn twice is a defect.
+- **Seijaku** One kit. Every example and every mod uses these tokens and these pieces. A value outside the kit is a defect, and a piece drawn twice is a defect.
 - **Fukinsei** Hierarchy. Six roles, each with one size, weight and tone. Display 48 regular, the one number. Title 20 strong. Section 15 strong. Group 13.5 strong. Name 13.5 medium. Body 12.5 regular, with controls at 12.5 medium. Meta 11.5 regular in muted or dim. Size and weight tell the level; colour comes last.
 - **Seijaku** Space. Use the 4-based scale only: 2, 4, 8, 12, 16, 24, 32. The same relation always gets the same gap. Icon to label is 8. Control to control is 8. Rows touch. Groups and fields are 12 apart. Panel padding is 16. Nothing is glued and nothing floats.
 - **Seijaku** Controls. Buttons and fields are 30 high, 12.5, with 12 inside. Buttons come in four kinds: solid (the one primary), tonal (a 7% foreground fill, no edge), quiet (text only) and armed. A field's label sits 8 above it, in 12.5 medium muted. A one-line state or a toast puts its action at the end of the line, 24 high with 8 inside. In a failure block the buttons start on the text column.
 - **Shizen** Live states. Washes come from the foreground: track 4%, hover 7%, selected 12%. Hover moves only tone, entering in 120 ms and leaving in 80 ms. Press uses the selected wash. Focus is a 2 px accent ring outside the box, on every control. Hover never reaches a disabled control and never replaces a state.
 - **Kansō** Armed. Only an action that cannot be undone asks twice. It fills with accent and reads "Press again to \<verb\>" for 4 s. Both labels share one cell, so nothing moves.
-- **Seijaku** States. Loading lives here. Failure, empty and pending live on S21, the one home for states.
+- **Seijaku** States. Loading lives here. Failure, empty and pending live on states, the one home for states.
 - **Shizen** Motion. Only three things move. The ensō spins at 900 ms. A working name shimmers with three glints over 2200 ms, with no dots. A blocked pane's bar breathes. Nothing changes size or place. Reduced motion holds everything still.
 - **Kokō** Icons. Use exact Lucide icons, one name per meaning, at 12, 14, 15 or 17. Show an icon only where it tells something apart. The ensō marks and program marks are marks, not icons.
 - **Shizen** Themes. Light and dark share the same geometry; only the tokens change. Text passes 4.5:1 and edges 3:1 in both themes. Light is never pure white.
@@ -115,7 +115,7 @@ From board K. Type, space, radius, heights, icons.
 
 ```text
 Build Every value (Tokens) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Apply every guideline of K Kit: every value and every element, once.
+Apply every guideline of Kit: every value and every element, once.
 Treat as a defect:
 - A value outside the kit is a defect, and a piece drawn twice is a defect.
 ```

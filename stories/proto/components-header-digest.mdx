@@ -9,23 +9,23 @@ After the name: files with their delta, the PR with its dot. Stale digest dim.
 
 <Canvas of={stories.HeaderDigest} />
 
-## B11 Pane header, every digest state
+## Pane header, every digest state
 
 ### Pane header guidelines
 
-- **Seijaku** Replaces board 03. The same ten states and the same segments, drawn with the header spacing of B4.
+- **Seijaku** Replaces. The same ten states and the same segments, drawn with the header spacing of pane header.
 - **Kansō** The 6 px dot beside the verdict goes. The verdict is already a word in its colour: blocked for failed, conflicts and changes requested, working for running and behind, done for ready.
-- **Shizen** Needs you is the blocked wash, the breathing bar and the mark (B4).
-- **Kansō** Kept: the shimmer. Removed: the counting dots after a working name. The battery branch at :362 also drops the shimmer, against "motion never stops"; the build removes that branch too.
-- **Kokō** Remote: as B4. One gh pr view per distinct branch when an agent stops, and every 60 s only while a check is pending.
+- **Shizen** Needs you is the blocked wash, the breathing bar and the mark.
+- **Kansō** Kept: the shimmer. Removed: the counting dots after a working name. The battery branch at:362 also drops the shimmer, against "motion never stops"; the build removes that branch too.
+- **Kokō** Remote: as pane header. One gh pr view per distinct branch when an agent stops, and every 60 s only while a check is pending.
 
 ## Prompt for agents
 
 ```text
 Build Header digest (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-pane, --k-ic-control, --k-ic-inline, --k-r-card, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --w12, --w7, --working.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-pane, --k-ic-control, --k-ic-inline, --k-r-card, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --w12, --w7, --working.
 Draw these pieces: Header digest.
 Follow these rules:
 - Header digest: After the name: files with their delta, the PR with its dot. Stale digest dim.
-Apply every guideline of B11 Pane header, every digest state.
+Apply every guideline of Pane header, every digest state.
 ```

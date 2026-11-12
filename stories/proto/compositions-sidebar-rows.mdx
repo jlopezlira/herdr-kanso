@@ -89,16 +89,16 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 
 <Canvas of={stories.DawnBand} />
 
-## S03 Projects | Status | Threads
+## Projects | Status | Threads
 
 ### Switch guidelines
 
-- **Seijaku** The kit's segmented control, 30, under the tools row and 12 above the list, spanning the list's width (8 in from each side), like the rows under it. Track w4, the chosen segment w12, no edge, 12.5 medium (K).
+- **Seijaku** The kit's segmented control, 30, under the tools row and 12 above the list, spanning the list's width (8 in from each side), like the rows under it. Track w4, the chosen segment w12, no edge, 12.5 medium.
 - **Kokō** No dot. A waiting agent is said by its row and by the status bar; a dot here was a third, wordless copy. The Needs you section says it with the mark and the words in foreground, not in red.
 - **Yūgen** The keys live in the tooltip: ⌃⌥P, ⌃⌥S, ⌃⌥T (view-spaces|agents|threads).
-- **Kansō** It is a piece (10): Hidden, the list starts under the tools and stays on Projects; Status and Threads keep their keys. Collapsed, the same three stand as icons in the rail (S12).
+- **Kansō** It is a piece: Hidden, the list starts under the tools and stays on Projects; Status and Threads keep their keys. Collapsed, the same three stand as icons in the rail.
 
-## S04 Project and worktree rows
+## Project and worktree rows
 
 ### Project and worktree guidelines
 
@@ -106,131 +106,131 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 - **Kansō** A worktree is a sibling checkout, not something the project spawned: its branch mark as lead, its name muted, one level under the project, no elbow. With one agent it is that agent's row, the branch dim after the name. With none, or two or more, it keeps its own row.
 - **Kansō** ↑N shows only while no pane of that place is in view; an open pane's header already says its commits. ↓N stays: nothing else says behind upstream, and you act on it.
 - **Shizen** + stays on the active project; on every other row + and ⋯ come with the pointer. The row itself folds; folded, it shows what it hides in place of any chevron: the most urgent mark and how many.
-- **Kansō** ↓N pulls on one press (git pull --ff-only, undoable, so it never arms): marked at once (↓N goes, a breathing dot, the tooltip says Pulling) and quiet until git answers. A refusal brings ↓N back and says why in a toast (S21).
-- **Kansō** A failed read is a word on the row (S21): Folder not found, with Locate as the row's button; the path and Explain in right-click (10). Under an unreachable computer the rows stay dim, with when they were read, once the computer's line is opened (S06).
-- **Yūgen** Kept with nothing open is one muted row; a click asks which agent starts there (S14). Double-click renames in place; Enter keeps, Esc leaves. The keyboard ring is the kit's focus ring (K).
+- **Kansō** ↓N pulls on one press (git pull --ff-only, undoable, so it never arms): marked at once (↓N goes, a breathing dot, the tooltip says Pulling) and quiet until git answers. A refusal brings ↓N back and says why in a toast.
+- **Kansō** A failed read is a word on the row: Folder not found, with Locate as the row's button; the path and Explain in right-click. Under an unreachable computer the rows stay dim, with when they were read, once the computer's line is opened.
+- **Yūgen** Kept with nothing open is one muted row; a click asks which agent starts there. Double-click renames in place; Enter keeps, Esc leaves. The keyboard ring is the kit's focus ring.
 - **Kokō** Cost: git status and rev-parse per place when a folder changes or a turn ends; remote places once a minute, in front only. Hidden git (sidebar.git) runs nothing.
 
-## S05 Agent rows
+## Agent rows
 
 ### Agent row guidelines
 
 - **Seijaku** A row is 32: the program's icon 15 (a terminal's is Lucide's terminal), the name 13.5 medium 8 after, its ensō 14 at the right. With a second line, 50. One weight always, so a change of state never reflows the name.
 - **Shizen** The second line is the user's choice (right-click, 10): What it is on, Time in its state and Commands still running, each Show, Only when needed or Hide. At Only when needed, the default: a working or blocked agent shows what it is on · its time; a finished one shows the count of commands still running, named in the tooltip; an idle one is its name.
 - **Kokō** Ink: working, blocked and focused in foreground; finished and idle muted; a sub-agent dim. The state lives on the mark alone: blocked on the ensō, the question in foreground, never red.
-- **Fukinsei** Under the pointer pin and ⋯ take the time's place; the mark never moves. A pinned row keeps a 12 pin before its mark. The keyboard ring is the kit's focus ring (K).
-- **Kansō** Sub-agents sit under their parent, their icon under its name, joined by the tree line (01). A sub-agent that needs you says it with its own mark and line; folded, the parent shows it (S04).
-- **Yūgen** A terminal has no ensō: it has no turn to report. In Status and Threads, mixed lists, the project (and the computer when it is not this one) follows the name in dim; in Projects the rows above say it. Under an unreachable computer the row is dim with an idle ensō; the computer's line says why (S06).
+- **Fukinsei** Under the pointer pin and ⋯ take the time's place; the mark never moves. A pinned row keeps a 12 pin before its mark. The keyboard ring is the kit's focus ring.
+- **Kansō** Sub-agents sit under their parent, their icon under its name, joined by the tree line. A sub-agent that needs you says it with its own mark and line; folded, the parent shows it.
+- **Yūgen** A terminal has no ensō: it has no turn to report. In Status and Threads, mixed lists, the project (and the computer when it is not this one) follows the name in dim; in Projects the rows above say it. Under an unreachable computer the row is dim with an idle ensō; the computer's line says why.
 - **Seijaku** Motion: the ensō spin and the working name's shimmer. No counting dots.
 - **Kokō** Cost: the step and the question come with Herdr's own report (OSC 7501), zero commands. Running commands: one local ps while an agent works, none when sidebar.tasks is hidden.
 
-## S06 Computer rows
+## Computer rows
 
 ### Computer guidelines
 
-- **Seijaku** A computer is a row like any other (01): its icon 15 as lead (monitor for this one, server for a remote), its name 13.5 medium, its state in a word at the right (11.5 dim) and its one fix as a row button, 20 with 12. The projects that live there follow under it.
-- **Kansō** Off, Unreachable and Needs login are one word on the row, never a block under it (S21): Off with power (a choice, not a failure), Unreachable with Refresh, Needs login with Sign in, which opens a terminal pane running hc machine login dark. The source's words, the other fixes and Explain to \<agent\> live in right-click (10). Opened, an unreachable computer shows its projects dim, as last read.
+- **Seijaku** A computer is a row like any other: its icon 15 as lead (monitor for this one, server for a remote), its name 13.5 medium, its state in a word at the right (11.5 dim) and its one fix as a row button, 20 with 12. The projects that live there follow under it.
+- **Kansō** Off, Unreachable and Needs login are one word on the row, never a block under it: Off with power (a choice, not a failure), Unreachable with Refresh, Needs login with Sign in, which opens a terminal pane running hc machine login dark. The source's words, the other fixes and Explain to \<agent\> live in right-click. Opened, an unreachable computer shows its projects dim, as last read.
 - **Shizen** Said once: a computer that drops while you are here is a toast with Refresh; then its row says Unreachable and nothing else repeats it.
 - **Kansō** Turn on is one press, marked at once: the row is on, its projects are the kit skeleton until hc answers; a refusal turns it back and says why in a toast. Connected, the row holds power, + and Sync under the pointer; Sync's mark stays while it is on, and when it can't run the row says so in a word with Sync as its button.
-- **Yūgen** Folded, the row shows the most urgent mark and how many projects (S04). With no project it is the kit empty: No projects on dark yet, New project. Double-click renames in place, an alias kept by kansō and carried by Sync.
+- **Yūgen** Folded, the row shows the most urgent mark and how many projects. With no project it is the kit empty: No projects on dark yet, New project. Double-click renames in place, an alias kept by kansō and carried by Sync.
 - **Kokō** Cost: hc machine ls every 30 s in front, 2 min behind; a dim computer is read once a minute only while opened; one caffeinate hold per connected computer every 270 s; Sync one exchange per 3 min per computer it is on for. Off: nothing.
 
-## S07 Asleep and Wake
+## Asleep and Wake
 
 ### Asleep guidelines
 
-- **Kansō** Asleep is one folded row at rest, with its count (S04). Open, its rows are 32 one level in: the name dim, Wake at the right as a quiet link; no moon, the group says it. Enter on the row wakes; the menu stays on right-click. The count shows only when folded, where the rows can't be seen.
-- **Shizen** Sleep and Wake are one press, marked at once (S21): the row moves and shows the breathing dot until it lands. Wake on the row is the undo. No breathing moon, no "Going to sleep", no spinner.
-- **Kansō** Could not sleep is a word on the row (S21): Couldn't sleep, with Undo as the row's button (the tab comes back as it was); the reason and Explain in right-click (10). No toast repeats it.
+- **Kansō** Asleep is one folded row at rest, with its count. Open, its rows are 32 one level in: the name dim, Wake at the right as a quiet link; no moon, the group says it. Enter on the row wakes; the menu stays on right-click. The count shows only when folded, where the rows can't be seen.
+- **Shizen** Sleep and Wake are one press, marked at once: the row moves and shows the breathing dot until it lands. Wake on the row is the undo. No breathing moon, no "Going to sleep", no spinner.
+- **Kansō** Could not sleep is a word on the row: Couldn't sleep, with Undo as the row's button (the tab comes back as it was); the reason and Explain in right-click. No toast repeats it.
 - **Yūgen** On an unreachable computer the row stays, dim, with when it was read, and no Wake: it can't run there now. A tab asleep in an awake project is one row named by the tab, Wake N; its agents fold under it. A whole project asleep keeps its moon: among awake projects it is what tells it apart.
 - **Kokō** Cost: none at rest. A sleep or wake runs where the project lives, when you ask.
 
-## S09 Needs you list: hidden by default
+## Needs you list: hidden by default
 
 ### Needs you guidelines
 
-- **Kansō** Hidden by default (sidebar.needs). Nothing is lost: the row keeps its mark and its question (S05), the status bar names the oldest one with +N while its row is out of view (L), Status opens on the same list, and ⌘J walks the waiting agents.
+- **Kansō** Hidden by default (sidebar.needs). Nothing is lost: the row keeps its mark and its question, the status bar names the oldest one with +N while its row is out of view, Status opens on the same list, and ⌘J walks the waiting agents.
 - **Shizen** Only agents that wait count. A finished agent is not Needs you: its word is Finished, on its row.
 - **Seijaku** Shown, it is a section of the same rows (the mark and the words Needs you as its head, the project after each name in dim), not a second component with sizes of its own. It appears only with rows and never replaces the list. Nobody waiting draws nothing.
 - **Kokō** Cost: none. It reads what Herdr reports.
 
-## S10 Status view
+## Status view
 
 ### Status guidelines
 
-- **Kansō** Sections in order of what they ask of you: Needs you, Working, Done, Idle, Asleep, Terminals. A head is 32, 13.5 strong muted, words only; Needs you keeps its mark, the words stay muted (Kokō: colour on the mark). No chevron: the head folds, and folded it shows its count (S04). Idle, Asleep and Terminals start folded; what you have to act on starts open.
-- **Seijaku** The rows are S05's rows, flush at 8: the program's icon, the name, the project after it in dim (and the computer when it is not this one: ops · dark), the ensō at the right. The second line comes as the user chose (10): at Only when needed, on working and blocked agents. Sub-agents keep their tree line under their parent (01).
+- **Kansō** Sections in order of what they ask of you: Needs you, Working, Done, Idle, Asleep, Terminals. A head is 32, 13.5 strong muted, words only; Needs you keeps its mark, the words stay muted (Kokō: colour on the mark). No chevron: the head folds, and folded it shows its count. Idle, Asleep and Terminals start folded; what you have to act on starts open.
+- **Seijaku** The rows are sidebar rows's rows, flush at 8: the program's icon, the name, the project after it in dim (and the computer when it is not this one: ops · dark), the ensō at the right. The second line comes as the user chose: at Only when needed, on working and blocked agents. Sub-agents keep their tree line under their parent.
 - **Kokō** Projects have no colours of their own: colour is for agent state. The six hues were raw hex outside the theme.
-- **Yūgen** Empty is the kit's (S21): the view's icon and one sentence, no action, since + is right above. First read is the kit skeleton, breathing, at the rows' height.
-- **Shizen** Sort (S02): latest change first, longest in its state, project.
+- **Yūgen** Empty is the kit's: the view's icon and one sentence, no action, since + is right above. First read is the kit skeleton, breathing, at the rows' height.
+- **Shizen** Sort: latest change first, longest in its state, project.
 - **Kokō** Cost: none of its own. It draws what Herdr reports; the step comes with the agent's report.
 
-## S11 Threads view
+## Threads view
 
 ### Threads guidelines
 
-- **Seijaku** A conversation is a row like any other (S05): the program's icon, its title, its ensō, 32. What it says now, or your last message as "You: …", is the second line, as the user chose (10): at Only when needed, on the ones working or waiting.
-- **Kansō** Grouped by project (default): the project's name heads its conversations, a head of 32 in muted words; its + comes with the pointer, as in Projects. Pinned first. Snoozed and Settled start folded with their count; no chevron, the head folds (S04). Open, a snoozed row's time is when it comes back (Thu 9:00).
+- **Seijaku** A conversation is a row like any other: the program's icon, its title, its ensō, 32. What it says now, or your last message as "You: …", is the second line, as the user chose: at Only when needed, on the ones working or waiting.
+- **Kansō** Grouped by project (default): the project's name heads its conversations, a head of 32 in muted words; its + comes with the pointer, as in Projects. Pinned first. Snoozed and Settled start folded with their count; no chevron, the head folds. Open, a snoozed row's time is when it comes back (Thu 9:00).
 - **Kokō** A snooze that ended says Woke as a word after the title, dim, as Off on a computer: no pill, no accent. Colour stays on the mark.
-- **Kansō** A conversation that can't be read is a word on the row (S21): Can't read, with Refresh as its button; the read's words and Explain in right-click. Empty is the kit's: the view's icon and one sentence.
-- **Shizen** Under the pointer a finished row shows Settle (✓) and ⋯; Pin, Snooze and Mark unread are in the menu (S18).
+- **Kansō** A conversation that can't be read is a word on the row: Can't read, with Refresh as its button; the read's words and Explain in right-click. Empty is the kit's: the view's icon and one sentence.
+- **Shizen** Under the pointer a finished row shows Settle (✓) and ⋯; Pin, Snooze and Mark unread are in the menu.
 - **Kokō** Cost: transcripts on this computer, read every 60 s (15 s while Threads is in front), only files that grew. Other computers' conversations are not read: zero remote calls.
 
-## S13 Find
+## Find
 
 ### Find guidelines
 
 - **Kansō** Search opens a find field in place of the switch, under the tools row: the kit's field, 30 tall, canvas, the kit's focus ring while it has the keyboard, placeholder Find, esc at its right. Esc closes it and the list comes back as it was. ⌘F and / from the list open it too.
 - **Shizen** The list itself narrows: projects, worktrees, agents, conversations and asleep rows that match by name, step, branch or folder; the project stays as context. The matched letters go foreground semibold; nothing else changes, nothing moves.
-- **Yūgen** The first match carries the keyboard ring: Enter goes there, ↓ ↑ move, the list keys work as in S17.
-- **Kansō** It works on what the sidebar already knows, rows on other computers included (dim when unreachable, with when they were read). No match is the kit empty (S21): the search icon, one sentence with what you typed, no action.
+- **Yūgen** The first match carries the keyboard ring: Enter goes there, ↓ ↑ move, the list keys work as in sidebar rows.
+- **Kansō** It works on what the sidebar already knows, rows on other computers included (dim when unreachable, with when they were read). No match is the kit empty: the search icon, one sentence with what you typed, no action.
 - **Kokō** Cost: none. It filters what is drawn; it asks nothing of any computer.
 
-## S15 Add computer
+## Add computer
 
 ### Add computer guidelines
 
 - **Kansō** kansō's own dialog in the kit, opened from + → Add computer… and from a computer's menu. It runs the same hc machine add Herdr's dialog runs; the word is computer, never machine.
 - **Seijaku** Hosts from ~/.ssh/config as rows of 32: the server icon, the name, how ssh reaches it in mono dim, and Add at the right as the kit's small tonal button. A typed user@host goes in the field below; Enter adds.
-- **Shizen** Add is one press and optimistic: the row says Added at once, with the done mark and the word in muted, and stays quiet until ssh answers. A refusal clears it and puts the kit failure block under that host's row (S21, the block form: a dialog has the room): ssh's own words, then the action that fits (Sign in, a terminal pane running the login, or Add) and Explain to \<agent\>.
+- **Shizen** Add is one press and optimistic: the row says Added at once, with the done mark and the word in muted, and stays quiet until ssh answers. A refusal clears it and puts the kit failure block under that host's row (the block form: a dialog has the room): ssh's own words, then the action that fits (Sign in, a terminal pane running the login, or Add) and Explain to \<agent\>.
 - **Yūgen** After a Mac is added, the one fact that will matter: it asks before agents read Documents, with the button that opens that setting there. No paragraph explains it. No hosts is the kit empty, one sentence; the field below is the action.
 - **Kokō** Cost: reading the ssh config is local. Each Add is one ssh connection, when you press it. Nothing at rest.
 
-## S16 Drag and drop
+## Drag and drop
 
 ### Drag and drop guidelines
 
 - **Seijaku** The row held stays where it was, on the pressed wash (w12); where it will land is a 2 px accent line at a row's top or bottom. No ghost, nothing resizes, nothing else moves (Herdr draws no ghost; neither do we).
 - **Kansō** Projects move within their computer only (Herdr's own rule); outside it no line is drawn, so nothing promises a drop.
-- **Shizen** An agent can be dragged in any order. The first drop switches the project to Your order and the sort icon turns foreground (S02). Pinned rows move among the pinned; a drop renumbers the pins.
+- **Shizen** An agent can be dragged in any order. The first drop switches the project to Your order and the sort icon turns foreground. Pinned rows move among the pinned; a drop renumbers the pins.
 - **Kansō** A pane held in the strip and let go over the sidebar goes back where it was: no mark on the sidebar.
 - **Kokō** Cost: none; a drop writes a label (pins) or a preference.
 
-## S17 Keyboard list mode
+## Keyboard list mode
 
-- **Kokō** One ring: the kit's focus ring (K), 2 px accent outside the row, the same on every control of the app. Never a second wash; the selection wash stays where it was.
+- **Kokō** One ring: the kit's focus ring, 2 px accent outside the row, the same on every control of the app. Never a second wash; the selection wash stays where it was.
 - **Kansō** It walks every row in screen order: computers, projects, agents, sub-agents, asleep rows. Nothing is skipped and nothing is special.
-- **Fukinsei** The panels' keys: j k or ↓ ↑ move, gg G go to the ends, Enter or l runs the row's first action (focus the pane, fold or go, Wake, the row button of a failed computer), Esc returns to the pane you came from, / opens find (S13).
+- **Fukinsei** The panels' keys: j k or ↓ ↑ move, gg G go to the ends, Enter or l runs the row's first action (focus the pane, fold or go, Wake, the row button of a failed computer), Esc returns to the pane you came from, / opens find.
 - **Seijaku** The ring leaves when the list loses the keyboard (a click on a pane). No hint on screen: the keys live in Settings · Keys and the palette.
 
-## S19 Footer
+## Footer
 
 ### Footer guidelines
 
 - **Seijaku** One row on the 01 grid: Settings, 32 with its gear 17 muted and 13.5 text, 8 above and 16 below. The block is its rows (56; 88 with an update row), never a fixed band with empty space above.
 - **Kansō** One door to settings. Settings opens the kit menu (252, rows 30): kansō settings (⌃⇧, opens it directly) and Herdr settings (Herdr's own window). The tab bar's gear goes. Herdr's logo is not an icon anywhere in the footer or the rail.
-- **Kansō** Dawn Mode puts nothing here: its one home is the header band (11, S02). The footer reads the same in Stable Mode and Dawn Mode.
+- **Kansō** Dawn Mode puts nothing here: its one home is the header band. The footer reads the same in Stable Mode and Dawn Mode.
 - **Kokō** An update is words, in foreground: one row above Settings, "Update kansō to 3.31.0" with the refresh icon, or in Dawn Mode "Update to 3.31.0-beta.3". No dot beside words that already say it.
-- **Shizen** Update is one press, marked at once (S21): the row reads "Updating kansō" in muted, no spinner, quiet until it lands. Refused: the row returns and the kit failure block sits under it, aligned with the words: the tool's own line, then Update and Explain to .
+- **Shizen** Update is one press, marked at once: the row reads "Updating kansō" in muted, no spinner, quiet until it lands. Refused: the row returns and the kit failure block sits under it, aligned with the words: the tool's own line, then Update and Explain to.
 - **Kansō** Herdr's own update lives in that menu: when one waits, a third row "Update Herdr to 0.1.16" after a rule. It restarts the window, so it arms first ("Press again to restart Herdr", 4 s); terminals live in herdr-core and stay.
-- **Kansō** The account chip goes (L): its count is the status bar's, its name is you, its click was the Settings row's. Add computer moves to the + menu (S02) and hides with its piece; the rail drops its square too.
+- **Kansō** The account chip goes: its count is the status bar's, its name is you, its click was the Settings row's. Add computer moves to the + menu and hides with its piece; the rail drops its square too.
 - **Kokō** Cost: none here; the update check is the tab bar's.
 
 ## Prompt for agents
 
 ```text
 Build Sidebar rows (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --accent, --bg, --blocked, --blue, --border, --canvas, --chrome, --dawn-edge, --dawn-low, --dawn-mid, --dawn-star, --dawn-sun, --dawn-top, --dim, --done, --fg, --idle, --input, --k-fs-body, --k-fs-meta, --k-fs-mono, --k-fs-name, --k-fw-medium, --k-fw-regular, --k-fw-strong, --k-h-badge, --k-h-control, --k-h-row, --k-h-row2, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-body, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-6, --k-sp-hair, --muted, --raised, --w12, --w14, --w7, --working.
+Use these tokens: --accent, --bg, --blocked, --blue, --border, --canvas, --chrome, --dawn-edge, --dawn-low, --dawn-mid, --dawn-star, --dawn-sun, --dawn-top, --dim, --done, --fg, --idle, --input, --k-fs-body, --k-fs-meta, --k-fs-mono, --k-fs-name, --k-fw-medium, --k-fw-regular, --k-fw-strong, --k-h-badge, --k-h-control, --k-h-row, --k-h-row2, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-body, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-6, --k-sp-hair, --muted, --raised, --w12, --w14, --w7, --working.
 Draw these pieces: Computer; Project; Agent, one line; Agent, two lines; Sub-agent; Asleep; Footer; Worktree row; Drop target; Projects, Status, Threads; Status view tile; Find; Add computer; Dawn band.
 Reuse these kit classes: kanso-field, kanso-row--interactive, kanso-segmented, kanso-state-line__pending-dot, kanso-state-line--pending.
 Follow these rules:
@@ -248,14 +248,14 @@ Follow these rules:
 - Find: The field at the top of the list; the match in the name is foreground, the rest muted.
 - Add computer: Host row: icon, name, user@host dim, then its pending state at the right.
 - Dawn band: Dawn Mode paints the band behind the lights; the ensō is the sun.
-Apply every guideline of S03 Projects | Status | Threads; S04 Project and worktree rows; S05 Agent rows; S06 Computer rows; S07 Asleep and Wake; S09 Needs you list: hidden by default; S10 Status view; S11 Threads view; S13 Find; S15 Add computer; S16 Drag and drop; S17 Keyboard list mode; S19 Footer.
+Apply every guideline of Projects | Status | Threads; Project and worktree rows; Agent rows; Computer rows; Asleep and Wake; Needs you list: hidden by default; Status view; Threads view; Find; Add computer; Drag and drop; Keyboard list mode; Footer.
 Treat as a defect:
 - No dot.
 - No initial tile: the rail keeps the letter, where it is the only name.
 - No counting dots.
 - No breathing moon, no "Going to sleep", no spinner.
 - No toast repeats it.
-- No chevron: the head folds, and folded it shows its count (S04).
+- No chevron: the head folds, and folded it shows its count.
 - No paragraph explains it.
 - No ghost, nothing resizes, nothing else moves (Herdr draws no ghost; neither do we).
 - Never a second wash; the selection wash stays where it was.

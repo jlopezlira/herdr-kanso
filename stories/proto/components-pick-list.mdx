@@ -9,7 +9,7 @@ Rows with name and a second line; selected on w12; a pending one at 80% with the
 
 <Canvas of={stories.PickList} />
 
-## D8 Send to an agent
+## Send to an agent
 
 ### Send to an agent guidelines
 
@@ -19,11 +19,11 @@ Rows with name and a second line; selected on w12; a pending one at 80% with the
 - **Seijaku** A press on a row's project word selects every agent there that can take it. The primary names the target: Send to tests, Send to 2 in acme-shop.
 - **Kansō** "Pasted into its terminal and sent with Enter, as if you typed it there." goes: a caption. Cancel goes: Esc closes.
 - **Kokō** Another computer: the dim word says it ("relay · devbox"). Unreachable: the row dims, says so, and is not a target.
-- **Shizen** Sending is marked at once on the target's row (the kit's pending, S21: 80% and the breathing dot); the dialog closes when hc confirms. Refused: hc's words under that row and nothing else: the terminal is gone, so no retry fixes it and no agent can act; the draft stays for another target.
+- **Shizen** Sending is marked at once on the target's row (the kit's pending, 80% and the breathing dot); the dialog closes when hc confirms. Refused: hc's words under that row and nothing else: the terminal is gone, so no retry fixes it and no agent can act; the draft stays for another target.
 - **Kansō** A primary that cannot act is not drawn: with no target or an empty message there is no Send,.
 - **Kokō** Remote: no reads. One hc send per target, on that agent's computer.
 
-## D9 Open with
+## Open with
 
 ### Open with guidelines
 
@@ -38,12 +38,12 @@ Rows with name and a second line; selected on w12; a pending one at 80% with the
 
 ```text
 Build Pick list (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --dim, --fg, --k-fs-body, --muted, --popover, --selected, --shadow, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --dim, --fg, --k-fs-body, --k-sp-2, --k-sp-4, --k-sp-hair, --muted, --popover, --selected, --shadow, --w12, --w7.
 Draw these pieces: Pick list.
 Reuse these kit classes: kanso-state-line__pending-dot, kanso-state-line--pending.
 Follow these rules:
 - Pick list: Rows with name and a second line; selected on w12; a pending one at 80% with the dot.
-Apply every guideline of D8 Send to an agent; D9 Open with.
+Apply every guideline of Send to an agent; Open with.
 Treat as a defect:
 - No scope line: the draft says where the work comes from.
 - No program icon, no branch (the branch shows on the row under the pointer), no project heads.
