@@ -1,10 +1,10 @@
 import { View, div, image } from "gpui-kit";
-import { h_flex, v_flex, Input, InputState } from "gpui-base";
+import { h_flex, v_flex } from "gpui-base";
 import { exec, home, appHome, shared, setShared, window, theme, layout, spaces } from "herdr";
 import { mkdir, readFile, readdir, unlink } from "fs/promises";
 import { pathApi } from "./platform-paths.js";
 import { checked } from "./platform-command.js";
-import { G, H, R, T, tokens, quietLink, skeleton } from "./ui.js";
+import { G, H, R, T, tokens, quietLink, field, TextField, skeleton } from "./ui.js";
 import { Front } from "./front.js";
 import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
 import { pieces, runs } from "./pieces.js";
@@ -30,7 +30,7 @@ export default class Simulator extends View {
     this.readAt = 0; this.reading = false; this.sending = false; this.acting = false;
     this.closed = false; this.frameNo = 0;
     this.focus = cx.focus_handle();
-    this.url = InputState.new({ placeholder: "URL" });
+    this.url = new TextField({ placeholder: "URL" });
     this.url.on("submit", (_event, cx) => this.openUrl(cx));
     cx.timer.after(0, (next) => this.tick(next));
   }
@@ -240,7 +240,7 @@ export default class Simulator extends View {
         .children(["light", "dark"].map((mode) => link(`Appearance ${mode}`, (cx) => this.act(() => iosCommand(exec, this.tools, ["ui", device.target, "appearance", mode]), cx))))
         .child(link("Shut down", (cx) => this.act(() => iosCommand(exec, this.tools, ["shutdown", device.target]), cx))))
       .child(h_flex().gap(G.sm).items_center()
-        .child(Input.new(this.url).flex_1().min_w(0).h(H.control))
+        .child(field("sim-url", this.url, c).flex_1().min_w(0))
         .child(link("Open a URL", (cx) => this.openUrl(cx))));
   }
 

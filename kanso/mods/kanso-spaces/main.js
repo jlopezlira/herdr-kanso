@@ -9,7 +9,7 @@ import { systemApi } from "./platform-system.js";
 // Modified by Iván Campaña (https://github.com/icampana): layout writers set the tree only when it is Kanso's, so a switch from another layout never saves that layout into kanso.json.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, Popover, InputState, Input, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
+import { v_flex, h_flex, Popover, v_virtual_list, VirtualListScrollHandle, Scrollbar, ScrollHandle } from "gpui-base";
 import { agentRow, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, agentRowH, mostUrgent } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
@@ -27,7 +27,7 @@ import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW } from "./sidebar-rows.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, button, iconButton, Armed, segmented } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, button, iconButton, field, TextField, Armed, segmented } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -266,14 +266,14 @@ export default class Spaces extends View {
   openPopup(cx) {
     const p = props();
     if (p.newProject) {
-      this.projectName = InputState.new({ placeholder: "Its name" });
+      this.projectName = new TextField({ placeholder: "Its name" });
       this.projectName.on("submit", (_e, cx) => this.createProject(cx));
       this.projectFolder = null;
       this.projectName.focus();
       return;
     }
     if (p.worktree) {
-      this.branch = InputState.new({ placeholder: "feat/my-change" });
+      this.branch = new TextField({ placeholder: "feat/my-change" });
       this.branch.on("submit", (_e, cx) => this.makeWorktree(cx));
       this.branch.focus();
       return;
@@ -377,9 +377,7 @@ export default class Spaces extends View {
       .child(h_flex().gap(8).items_center()
         .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
         .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })))
-      .child(label("Name"))
-      .child(div().h(32).flex_none().px(8).flex().items_center().rounded(6).border_1().border_color(t.border)
-        .child(Input.new(this.projectName).flex_1().h_full().text_size(13)))
+      .child(field("project-name", this.projectName, c, { label: "Name" }))
       .child(div().min_h(16).text_size(12).text_color(this.projectError ? t.blocked : t.dim).child(this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open.")))
       .child(h_flex().gap(8).justify_end()
         .child(button("project-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))
@@ -1511,8 +1509,7 @@ export default class Spaces extends View {
       .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
       .child(div().text_size(15).font_semibold().child(`New agent in a worktree of ${place.name ?? "this project"}`))
       .child(div().text_size(12).text_color(t.muted).child(`A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`))
-      .child(div().h(32).flex_none().px(8).flex().items_center().rounded(6).border_1().border_color(this.wtError ? t.blocked : t.border)
-        .child(Input.new(this.branch).flex_1().h_full().text_size(13)))
+      .child(field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }))
       .child(div().min_h(16).text_size(12).text_color(this.wtError ? t.blocked : t.dim).child(this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel.")))
       .child(h_flex().gap(8).justify_end()
         .child(button("wt-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))

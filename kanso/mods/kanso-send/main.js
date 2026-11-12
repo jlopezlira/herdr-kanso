@@ -2,11 +2,11 @@ import { paths } from "./platform-paths.js";
 // Send to an agent, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // props.pane: the pane whose work the draft is about.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, TextareaState, Textarea, InputState, Input } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
-import { button, tokens } from "./ui.js";
+import { button, field, TextField, G, tokens } from "./ui.js";
 
 const LAST = "kanso.send.last";
 
@@ -56,10 +56,10 @@ export default class Send extends View {
     this.from = panes().find((q) => q.pane === p.pane) ?? null;
     this.to = targetsOf(panes(), p.pane, shared(LAST))[0]?.terminal ?? null;
     this.toProject = null;
-    this.query = InputState.new({ placeholder: "Find an agent or a project" });
+    this.query = new TextField({ placeholder: "Find an agent or a project" });
     this.query.on("change", (_e, cx) => cx.notify());
     this.text = draftFor(this.from, shared("kanso.digest")?.[p.pane]);
-    this.box = TextareaState.new({ value: this.text, rows: 5 });
+    this.box = new TextField({ value: this.text }, { multiline: true });
     this.box.on("change", (_e, cx) => { this.text = this.box.value(); this.error = null; cx.notify(); });
     this.box.focus();
     cx.timer.after(400, () => this.box.focus());
@@ -102,7 +102,6 @@ export default class Send extends View {
     // A search that hides the chosen project drops it, so Send always means what is shown.
     if (this.toProject && !groups.some((g) => g.project === this.toProject)) this.toProject = null;
     if (!this.toProject && !list.some((q) => q.terminal === this.to)) this.to = list[0]?.terminal ?? null;
-    const label = (text) => div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(text);
     const dot = (st) => ({ working: t.working, blocked: t.blocked, done: t.done }[st] ?? t.idle);
     const head = (g) => {
       const on = this.toProject === g.project;
@@ -137,15 +136,12 @@ export default class Send extends View {
         .child(div().flex_1().text_size(15).font_semibold().child("Send to an agent"))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .when(Boolean(from), (el) => el.child(div().pt(4).truncate().text_size(11.5).text_color(t.dim).child(from)))
-      .child(label("To"))
-      .child(div().h(30).flex_none().mb(6).px(8).flex().items_center().rounded(7).border_1().border_color(t.input).bg(t.background)
-        .child(Input.new(this.query).flex_1().h_full().text_size(12.5).text_color(t.foreground)))
+      .child(field("send-to", this.query, c, { label: "To" }).pt(G.lg).pb(G.sm))
       .child(rows.length
         // A set height, rows that never shrink: past it, the list scrolls.
         ? v_flex().id("send-list").flex_none().h(Math.min(rows.length * 34, 6 * 34)).overflow_y_scrollbar().gap(1).children(rows)
         : div().py(8).text_size(12).text_color(t.muted).child(this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send."))
-      .child(label("Message"))
-      .child(Textarea.new(this.box).px(10).py(8).rounded(9).border_1().border_color(t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .child(field("send-message", this.box, c, { label: "Message" }).pt(G.lg))
       .child(div().pt(6).text_size(11.5).text_color(this.error ? t.blocked : t.dim)
         .child(this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there."))
       .child(h_flex().pt(18).gap(8).justify_end()

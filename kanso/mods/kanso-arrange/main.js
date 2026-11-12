@@ -1,12 +1,12 @@
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "herdr";
 import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { tryOr } from "./pure.js";
-import { skeleton, breathe, button, tokens } from "./ui.js";
+import { skeleton, breathe, button, field, TextField, G, tokens } from "./ui.js";
 const ARM_MS = 4000;
 
 export function listFor(projects, key) {
@@ -38,7 +38,7 @@ export default class Arrange extends View {
     this.armed = null;
     this.busy = null;
     this.error = null;
-    this.name = InputState.new({ placeholder: "Name" });
+    this.name = new TextField({ placeholder: "Name" });
     this.name.on("submit", (_e, cx) => this.save(cx));
     this.name.on("change", (_e, cx) => { this.error = null; cx.notify(); });
     this.space = spaces().find((s) => s.active) ?? null;
@@ -183,8 +183,7 @@ export default class Arrange extends View {
       const replaces = (tg && tg.name === typed) ? tg : (this.list ?? []).some((a) => a.name === typed) ? { name: typed } : null;
       return shell
         .child(head(tg ? `Overwrite ${tg.name}` : "Save this tab", tg ? "With this tab as it is now" : `An arrangement for ${project}`))
-        .child(div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child("Name"))
-        .child(Input.new(this.name).h(36).px(10).rounded(9).border_1().border_color(t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
+        .child(field("ar-name", this.name, c, { label: "Name" }).pt(G.lg))
         .child(cols.length
           ? div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(`${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right`)
           : this.captureBones(t))

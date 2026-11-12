@@ -3,20 +3,17 @@
 // uses to rename a space or a tab, for what Herdr has no command for: a terminal's name, kept as a
 // label on the terminal in herdr-core.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { button, tokens } from "./ui.js";
+import { v_flex, h_flex } from "gpui-base";
+import { button, field, TextField, G, tokens } from "./ui.js";
 import { run, hc, props, closeOverlay, theme, shared, setShared } from "herdr";
 
 export default class Prompt extends View {
   init(_props, cx) {
     this.text = props()?.value ?? "";
-    this.input = InputState.new({ value: this.text });
+    this.input = new TextField({ value: this.text });
     if (this.text) this.input.set_selected_range({ start: 0, end: this.text.length });
     this.input.on("change", (_e, cx) => { this.text = this.input.value(); cx.notify(); });
     this.input.on("submit", () => this.submit());
-    this.inputFocused = true;
-    this.input.on("focus", (_e, cx) => { this.inputFocused = true; cx.notify(); });
-    this.input.on("blur", (_e, cx) => { this.inputFocused = false; cx.notify(); });
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
     this.handle = cx.focus_handle();
@@ -51,14 +48,12 @@ export default class Prompt extends View {
   render() {
     const t = theme();
     const p = props() ?? {};
-    const label = (text) => div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(text);
     const c = tokens(t);
     return v_flex().id("prompt").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
       .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child((p.title ?? "").replace(/^./, (c) => c.toUpperCase())))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(label(p.field ?? "Name"))
-      .child(Input.new(this.input).h(36).px(10).rounded(9).border_1().border_color(this.inputFocused ? t.accent : t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
+      .child(field("pm-input", this.input, c, { label: p.field ?? "Name" }).pt(G.lg))
       .when(Boolean(p.hint), el => el.child(div().pt(6).text_size(11.5).text_color(t.dim).child(p.hint)))
       .child(h_flex().pt(20).gap(8).justify_end()
         .child(button("pm-cancel", "Cancel", () => this.cancel(), c, { kind: "quiet" }))

@@ -1,9 +1,9 @@
 import { localService, localName } from "./platform-host.js";
 import { processApi } from "./platform-processes.js";
 import { div, list, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, VirtualListScrollHandle, Scrollbar } from "gpui-base";
+import { v_flex, h_flex, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
-import { tokens, skeleton, controlInput, iconButton, G, H, R, T, ICON, EASE } from "./ui.js";
+import { tokens, skeleton, field, TextField, iconButton, G, H, R, T, ICON, EASE } from "./ui.js";
 import { markdownView } from "./lib.js";
 import { tryOr } from "./pure.js";
 import {
@@ -25,7 +25,7 @@ export class Find {
   init(cx, p) {
     const remembered = keptQuery({ queries: this.kept }, p?.terminal);
     this.terminal = p?.terminal ?? null;
-    this.input = InputState.new({ value: remembered, placeholder: "Find in conversation" });
+    this.input = new TextField({ value: remembered, placeholder: "Find in conversation" });
     this.query = remembered;
     this.pending = remembered;
     this.hits = [];
@@ -253,11 +253,11 @@ export class Find {
 
   giveBack(cx) { this.shut(true, cx); }
 
-  bar(c, count, field) {
+  bar(c, count, text) {
     const quiet = !count || count === "No matches";
     return h_flex().w_full().flex_none().px(G.md).py(G.sm).gap(G.sm).items_center()
       .child(svg("mods/kanso-chrome/icons/search.svg").size(ICON).flex_none().text_color(c.muted))
-      .child(field ? controlInput(field, c).flex_1() : div().flex_1().h(H.control))
+      .child(text ? field("find-input", text, c).flex_1() : div().flex_1().h(H.control))
       .child(div().flex_none().text_size(T.value).text_color(quiet ? c.dim : c.muted).whitespace_nowrap().child(count ?? ""))
       .child(iconButton("find-prev", "chevron-up", "Previous match", (cx) => this.move(true, cx), c, { disabled: !this.hits?.length }))
       .child(iconButton("find-next", "chevron-down", "Next match", (cx) => this.move(false, cx), c, { disabled: !this.hits?.length }));
@@ -380,7 +380,7 @@ export class Find {
       .text_color(t.foreground).track_focus(this.handle).on_key_down(onKey)
       .opacity(this.leaving ? 0 : 1).transition("opacity", EASE)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .child(this.bar(c, countLabel(this.query, this.at, this.hits.length), Input.new(this.input)))
+      .child(this.bar(c, countLabel(this.query, this.at, this.hits.length), this.input))
       .child(this.well(show, body, cx) ?? div());
     if (this.pendingScroll && laid.items.length) {
       this.pendingScroll = false;

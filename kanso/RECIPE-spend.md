@@ -81,7 +81,7 @@ Top to bottom:
   - `labels.mjs`: task titles and tickets, in `labels.json`. Pi sessions reuse pi-usage's cache (`~/.prjct/pi-usage/scan.json`) when it exists.
   - `costs.mjs`: rates, periods, grouping, and all display text.
   - `demo.mjs`: the sample data.
-- **`ui.js`:** the theme token mapping and a few helpers (`toggleSwitch`, `controlInput`).
+- **`ui.js`:** the theme token mapping and a few helpers (`toggleSwitch`, `field`).
 - **`share.js` and `spend-card.js`:** Share, the same as Shipped's (see `kanso-panel/share.js`, of which this is a byte-for-byte copy; `npm run sync:share`). A share icon in the header, shown only on the home view with no project or model filter; it opens the "Share to" row. `spend-card.js` turns the costs into the card: "Spend" and the period, the total "of AI work at API list price", the rise against the period before (only a rise), tasks, per task, tokens, the project and model counts, the plan note, and the chart's bars by ratio with its first and last labels. No names reach it.
 - **`icons/`:** `refresh`, `settings`, `back`, `close` and `share`, as 24 px stroke-2 line SVGs drawn with `svg()` and tinted by text color.
 - **Network:** one HTTPS GET a day to the OpenRouter catalog. **Programs:** `node` (on another computer too, when Sync is on; no new port). **Files read outside the mod:** the four session folders above and, if present, `~/.prjct/pi-usage/`. **Files written:** under `data/kanso-spend/`, and under `data/kanso-sync/` when Sync is on.

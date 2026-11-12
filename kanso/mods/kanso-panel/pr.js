@@ -3,11 +3,11 @@ import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover, Input, InputState, TextView, ScrollHandle } from "gpui-base";
+import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { location, key, diffRows, monoFont, tilde } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, H, R, T, breathe, Armed, tokens, button, quietLink, quietTabs, iconButton, section, ghost, toneColor } from "./ui.js";
+import { G, H, R, T, breathe, Armed, tokens, button, quietLink, quietTabs, iconButton, field, TextField, section, ghost, toneColor } from "./ui.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
@@ -133,7 +133,7 @@ export class PullRequest {
     this.tab = "open"; // that page's tab: "open", or "closed" (merged or closed, newest first)
     this.closedPrs = null; this.closedLoading = false;
     this.picker = null; this.candidates = null; this.query = "";
-    this.search = InputState.new({ placeholder: "Search" });
+    this.search = new TextField({ placeholder: "Search" });
     this.search.on("change", (_e, cx) => { this.query = this.search.value(); cx.notify(); });
     this.section = props.section ?? null;
     this.check = props.check ?? null;
@@ -721,8 +721,7 @@ export class PullRequest {
         .child(kind === "labels" ? "This repository has more labels than are listed here. Apply the rest on GitHub." : "This repository has more people with access than are listed here. Ask for the rest on GitHub.")));
     // The list sizes to its rows up to 290 px, then scrolls; a flex share would collapse it to nothing.
     return popover.content(v_flex().w(288).p(G.xs).gap(G.xs).rounded(8).bg(c.popover).border_1().border_color(c.border)
-      .child(div().h(30).flex_none().px(8).flex().items_center().rounded(6).border_1().border_color(c.border)
-        .child(Input.new(this.search).flex_1().h_full().text_size(12).text_color(c.text)))
+      .child(field(`${id}-search`, this.search, c))
       .child(div().id(`${id}-list`).w_full().max_h(290).overflow_y_scrollbar().child(div().flex_none().w_full().child(list))));
   }
 
