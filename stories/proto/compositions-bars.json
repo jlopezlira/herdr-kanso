@@ -1,10 +1,10 @@
 {
  "ToastWithItsSource": {
-  "caption": "A toast says what and offers the one fix; the source line above is only for the example.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"kst-toast\" style=\"width:360px\"><svg class=\"m m-done\"><use href=\"#e-done\"/></svg><span class=\"t\"><b>tests</b> finished · 48 passed</span><span class=\"kst-btn sm\" tabindex=\"0\">Open</span></div></div></div>"
+  "caption": "A toast says what and offers the one fix; the source line above is for the example only.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-toast\" style=\"width:360px\"><svg class=\"kanso-mark kanso-mark--done\"><use href=\"#e-done\"/></svg><span class=\"kanso-content__text\"><b>tests</b> finished · 48 passed</span><span class=\"kanso-button--tonal kanso-button--small\" tabindex=\"0\">Open</span></div></div></div>"
  },
  "StaleBody": {
   "caption": "A pane whose process is gone keeps its last output at 55%.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"stalebody\" style=\"padding:8px 12px;font:12.5px/1.6 var(--mono);color:var(--muted);white-space:pre\"><span class=\"t-m\">&gt;</span> Add the limits table to /admin</div></div></div>"
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-panel--stale\" style=\"padding:8px 12px;font:12.5px/1.6 var(--mono);color:var(--muted);white-space:pre\"><span class=\"kanso-terminal__text--muted\">&gt;</span> Add the limits table to /admin</div></div></div>"
  }
 }

@@ -1,6 +1,6 @@
 {
  "Rename": {
   "caption": "Dialog with one field: the current name selected, Rename solid.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dgx-d\"><div class=\"dgx-h\"><span class=\"dgx-t\">Rename checkout</span></div><div class=\"kit-field foc dgx-gapt\" tabindex=\"0\"><span class=\"dgx-hl\">checkout</span><span class=\"dgx-car\"></span></div><div class=\"dgx-ft\"><span class=\"btn\" tabindex=\"0\">Rename</span></div></div></div></div>"
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog\"><div class=\"kanso-dialog__header\"><span class=\"kanso-dialog__title\">Rename checkout</span></div><div class=\"kanso-field kanso-control--focus kanso-dialog__section\" tabindex=\"0\"><span class=\"kanso-dialog__highlight\">checkout</span><span class=\"kanso-dialog__caret\"></span></div><div class=\"kanso-dialog__footer\"><span class=\"kanso-button\" tabindex=\"0\">Rename</span></div></div></div></div>"
  }
 }

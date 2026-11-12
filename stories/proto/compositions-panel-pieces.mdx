@@ -77,7 +77,7 @@ Switch row where the sentence carries the value in strong.
 
 <Canvas of={stories.SettingRowWithAValue} />
 
-## a tab
+## In a tab
 
 A row says where it runs: working colour on the place, the age dim.
 
@@ -122,7 +122,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Kokō** Colour only on what asks: a stopped container, an agent that needs you, a size past the guard's limit, your own pins.
 - **Seijaku** Measured in the browser: rows are the blocks stacked in the panel, lines are text lines, glyphs are icons and marks, colours are chromatic colours. The phone screen and the picture are content and are not counted.
 - **Seijaku** Rows fall less than half because most rows are the list itself: a port, a container, an agent. Those are the facts; none is dropped.
-- **Shizen** States that need you are unchanged; the failure, empty and pending panel screens stay as drawn.
+- **Shizen** States that need you are unchanged; the failure, empty and pending screens on panel pieces to simulator screen stay as drawn.
 
 ## No tool, no panel
 
@@ -139,7 +139,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 ### Second half guidelines
 
 - **Kokō** Each surface's main state on the light theme: the same tokens, nothing new.
-- **Seijaku** Pictures and the device screen sit on raised inside the background slab, the same surface step used for the log card.
+- **Seijaku** Pictures and the device screen sit on raised inside the background slab, the step uses for the log card.
 - **Kansō** The armed Stop is accent on accent_foreground in both themes; no fixed white.
 
 ## Ports
@@ -151,7 +151,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Kansō** No hero. "4 servers", "1 with no pane", "held now", "opened today" counted the rows under them.
 - **Kansō** A row is one line: port, what runs it (a word: storybook, next; or the pane's name) and its size. On pointer or selection the second line shows the command, folder and age, and the actions: No pane, Stop is the one primary; in a pane, three quiet links, Go to first.
 - **Kansō** Stop and Stop 2 arm "Press again" in accent, 4 s. A stop that did not take says so in blocked and offers Force stop.
-- **Seijaku** The status bar's :6006 no pane opens here with that row selected and Stop focused.
+- **Seijaku** The status bar's:6006 no pane opens here with that row selected and Stop focused.
 - **Yūgen** Chart, history and the share story sit behind History, closed; its range is the kit segmented control, like every period switch. Its summary shows when it opens.
 - **Kansō** Share is a menu from the header, worded "Counts and sizes only". The note under the buttons goes.
 - **Seijaku** The focused project's computer decides what is read: devbox's ports when it lives there, named beside the title. Unreachable keeps the last read at 55% with Stop disabled.
@@ -256,7 +256,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Yūgen** Several computers: each computer's sessions are priced there and summed here, one line per computer; an unreachable one says so under it. The same Claude account on two computers (oauthAccount.accountUuid, an id) counts its plan once.
 - **Shizen** Settings: sources are on when their folder holds sessions; a missing CLI says "not on this computer". Plans are detected rows, corrected in place (Enter keeps it; the correction is pending until saved). Add plan stays for what cannot be detected.
 - **Kansō** One fact, one home: the multiple lives here only. The status bar's spend item stays the day's number.
-- **Seijaku** States follow the state pattern: first read, empty, a read failed, a plan not read on its row.
+- **Seijaku** States follow first read, empty, a read failed, a plan not read on its row.
 - **Kokō** Cost: three small local files, read when the panel opens and once an hour after. Another computer: its plan and its month's rows come over the existing sync exchange, one call per synced computer per minute while the panel is open and in front, under 2 KB; nothing when closed.
 - **Seijaku** New to build: the detector (three readers), plans.json, a Grok session reader (Spend reads Claude Code, Codex and Pi, core/config.mjs:10-35), the month-per-plan figure in costs.mjs, the plan row in the sync payload.
 
@@ -281,7 +281,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 
 - **Kansō** At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged.
 - **Kansō** The panel skeleton: title 20 with "1 of 3" beside it. Stay on this agent and Refresh appear with the pointer; the lock stays while you have pinned it. The Send button names the agent.
-- **Kansō** The picture fills the width; a click drops a numbered pin, a drag a region, and the note is typed beside it: the shared pin component. The dialog overlay goes.
+- **Kansō** The picture fills the width; a click drops a numbered pin, a drag a region, and the note is typed beside it: the one pin component of annotated picture. The dialog overlay goes.
 - **Kansō** On pointer over the picture: its name, folder and time, and Open, then a strip of 40 px thumbnails (← → too). The wordless coloured dots go.
 - **Kansō** One primary that names the agent: Send to checkout, ⌘↩ beside it when it has focus. No pins, no button. Clear goes: Backspace on an empty note, or × on hover, removes a mark.
 - **Seijaku** An agent that waits on you gets no Send; the line says "cart-ui needs you first", the PR panel's words.
@@ -306,9 +306,9 @@ Images: one thumbnail per shot, the chosen one on w12.
 
 ```text
 Build Panel pieces (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --blocked, --border, --canvas, --dim, --fg, --input, --k-fs-body, --k-fs-display, --k-fs-meta, --k-fs-name, --k-fs-section, --k-fs-title, --k-fw-regular, --k-fw-strong, --k-h-header, --k-h-icon, --k-h-row, --k-ic-control, --k-ic-row, --k-lh-body, --k-lh-tight, --k-r-card, --k-r-control, --k-r-sm, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-6, --k-sp-hair, --k-sw-knob, --muted, --raised, --selected, --solid, --solidfg, --w12, --w4, --w7, --working.
+Use these tokens: --bg, --blocked, --border, --canvas, --dim, --fg, --input, --k-fs-body, --k-fs-display, --k-fs-meta, --k-fs-name, --k-fs-section, --k-fs-title, --k-fw-regular, --k-fw-strong, --k-h-header, --k-h-icon, --k-h-row, --k-ic-control, --k-ic-row, --k-lh-body, --k-lh-tight, --k-r-card, --k-r-control, --k-r-sm, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-6, --k-sw-knob, --muted, --raised, --selected, --solid, --solidfg, --w12, --w4, --w7, --working.
 Draw these pieces: Header and scope; Section and rows; Card; Setting row; Loading; Metric; Hero and verdict; Plan and spend; Memory metric and chart; Port row; Row actions; Setting row with a value; In a tab; Thumbnail strip.
-Reuse these kit classes: kit-ib, kit-kbd, kit-row, kit-skl, kit-switch.
+Reuse these kit classes: kanso-button--inline-icon, kanso-key, kanso-row--interactive, kanso-switch.
 Follow these rules:
 - Header and scope: Header 40 with the title 20 and icon buttons; scope line meta, dim.
 - Section and rows: Section 15 strong with its count dim. Row 32 body, detail dim at the right. Two-line row for a name and a fact.

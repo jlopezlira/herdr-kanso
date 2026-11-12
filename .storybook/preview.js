@@ -27,7 +27,7 @@ const preview = {
   decorators: [(story, context) => {
     applyTheme(context.globals.theme);
     const frame = document.createElement('div');
-    frame.className = context.viewMode === 'story' ? 'story-frame story-canvas' : 'story-frame';
+    frame.className = context.viewMode === 'story' ? 'kanso-story__viewport kanso-story--canvas' : 'kanso-story__viewport';
     const content = story();
     if (typeof content === 'string') frame.innerHTML = content;
     else frame.append(content);

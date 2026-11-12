@@ -1,18 +1,18 @@
 {
  "Sleep": {
   "caption": "Going to sleep: the moon at 55% breathing, the name, the state dim.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"dgx-zz\"><svg class=\"i i13 c-dim skw\"><use href=\"#lu-moon\"/></svg><div class=\"dgx-tx\"><div class=\"dgx-nm\">checkout</div></div><span class=\"dgx-rt\"><span class=\"c-dim\" style=\"font-size:11.5px\">Going to sleep</span></span></div></div></div></div>"
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog--settings kanso-settings\" style=\"width:420px;padding:16px 24px\"><div class=\"kanso-sleep\"><svg class=\"kanso-icon kanso-icon--narrow kanso-text--dim kanso-skeleton--breathing\"><use href=\"#lu-moon\"/></svg><div class=\"kanso-dialog__text\"><div class=\"kanso-dialog__name\">checkout</div></div><span class=\"kanso-dialog__meta\"><span class=\"kanso-text--dim\" style=\"font-size:11.5px\">Going to sleep</span></span></div></div></div></div>"
  },
  "Arrangement": {
   "caption": "Agent panels: mark and name, the command mono, the conversation line dim.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"dgx-pn\"><div class=\"dgx-a\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>checkout</div><div class=\"dgx-cmd\">claude --model opus</div><div class=\"dgx-sm\">new conversation</div></div></div></div></div>"
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog--settings kanso-settings\" style=\"width:420px;padding:16px 24px\"><div class=\"kanso-arrangement__pane\"><div class=\"kanso-arrangement__agent\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg>checkout</div><div class=\"kanso-arrangement__command\">claude --model opus</div><div class=\"kanso-arrangement__meta\">new conversation</div></div></div></div></div>"
  },
  "SourceLine": {
   "caption": "Where a conversation comes from: path mono dim.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"dgx-sc\">src/api/limits.ts:42</div></div></div></div>"
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog--settings kanso-settings\" style=\"width:420px;padding:16px 24px\"><div class=\"kanso-dialog__scope\">src/api/limits.ts:42</div></div></div></div>"
  },
  "FindRow": {
   "caption": "The find line in a dialog: icon 13 and the word.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"find\"><svg class=\"i i13\"><use href=\"#lu-search\"/></svg>Find</div></div></div></div>"
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog--settings kanso-settings\" style=\"width:420px;padding:16px 24px\"><div class=\"kanso-field--search\"><svg class=\"kanso-icon kanso-icon--narrow\"><use href=\"#lu-search\"/></svg>Find</div></div></div></div>"
  }
 }

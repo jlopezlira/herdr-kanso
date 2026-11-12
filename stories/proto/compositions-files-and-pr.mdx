@@ -57,7 +57,7 @@ Loading shape for two-line rows.
 - **Kansō** No totals: the header's digest already says 3 files +42 −7. Each row carries its own stat.
 - **Kansō** Modified is the normal case and carries no mark. A and D sit where the file icon goes, dim; U alone is in blocked, because a conflict needs you. A folder shows how many changed files it holds.
 - **Seijaku** Rows 32, 12.5 type, 16 per level, selected on selected. j k move, Enter opens, Esc returns to the pane.
-- **Seijaku** A row opens the file in Preview. Its stat +14 −3 is a control too: it opens the diff (the PR panel's diff page, read with git diff). Right-click gets a menu (Open the diff, Open, Open with…, Copy path) instead of going straight to Open with.
+- **Seijaku** A row opens the file in Preview. Its stat +14 −3 is a control too: it opens the diff (the PR panel's diff page, files and pr, read with git diff). Right-click gets a menu (Open the diff, Open, Open with…, Copy path) instead of going straight to Open with.
 - **Seijaku** The 500-per-folder cap is said inside the folder it cut, as a dim row. A folder that cannot be read says so in its own place.
 - **Kokō** Remote calls: none on this computer (a folder watch). On another computer, one tree read per open folder, then one stat every 5 s while the panel is in front, 30 s after three quiet reads, none when the panel is hidden.
 
@@ -97,8 +97,8 @@ Loading shape for two-line rows.
 
 ### Pull requests guidelines
 
-- **Seijaku** The same three pull request panels, in light: the list on background, the log, threads and fields on canvas. State colours stay the state's; never a new red.
-- **Seijaku** The open "Everyone's" group, the review and every thread state are shown in light in the conversation examples.
+- **Seijaku** The same three panels as 06, in light: the list on background, the log, threads and fields on canvas. State colours stay the state's; never a new red.
+- **Seijaku** The "Everyone's" group open, the review and every thread state are drawn in light on files and pr.
 
 ## Pull requests: every state of the list
 
@@ -143,7 +143,7 @@ Loading shape for two-line rows.
 - **Kansō** Explain goes to the agent the pull request belongs to (the pane on its branch); when it belongs to none, to the agent of the pane in front; with no agent there, the action is absent, never disabled.
 - **Seijaku** A refused write follows the state pattern: gh's words where the actions were, then the action's own name to retry, then Explain.
 - **Shizen** Writing: the button keeps its size with "Merging…" and Refresh spins.
-- **Kansō** On another computer only the scope changes: GitHub is read and written from this computer; Explain goes to the agent on devbox. When devbox stops answering, the pull request stays live, and an Explain pressed then fails with the state pattern: "Not sent: devbox unreachable", with Explain to checkout to try again. When GitHub stops answering, the stale line takes the scope slot and the writes are disabled (the stale line used for the pull request list).
+- **Kansō** On another computer only the scope changes: GitHub is read and written from this computer; Explain goes to the agent on devbox. When devbox stops answering, the pull request stays live, and an Explain pressed then fails on the state pattern's pattern: "Not sent: devbox unreachable", with Explain to checkout to try again. When GitHub stops answering, the stale line takes the scope slot and the writes are disabled (the stale line as drawn for the list on files and pr).
 - **Shizen** Narrow: title 15. The fold note drops the people count first.
 - **Kokō** Remote calls: a write is one gh call plus one re-read. Explain is a local deliver into the pane, no network.
 
@@ -168,8 +168,8 @@ Loading shape for two-line rows.
 - **Kansō** A click on a diff line, or on the + that takes its number's place under the pointer, opens a comment field under that line. On your own pull request Comment (⌘↵) posts it at once: gh api graphql addPullRequestReviewThread (path, line, side, body). When a review is asked of you, the button is Add to review. The comment waits in the local store, drawn pending, and goes with Approve, Request changes or Comment in one submit.
 - **Kansō** Threads sit under their line in the diff too, with their Reply field: the same thread as in the conversation, never a GitHub link.
 - **Seijaku** Presses: a line comment from the pull request is 3 (the file in Details, the line, ⌘↵).
-- **Yūgen** A file's diff is a page: file name as the title, the PR, folder and stat as the scope, Open in Preview and Open on GitHub as the two icons. Lines 20 in mono 11.5, additions and removals washed in done and blocked at 12%. The Files panel opens the same page for local changes.
-- **Seijaku** A file with no text diff says so in one line (the empty state). Over 400 lines, show the long-diff controls.
+- **Yūgen** A file's diff is a page: file name as the title, the PR, folder and stat as the scope, Open in Preview and Open on GitHub as the two icons. Lines 20 in mono 11.5, additions and removals washed in done and blocked at 12%. Files in files and pr opens the same page for local changes.
+- **Seijaku** A file with no text diff says so in one line (the state pattern's empty). Over 400 lines: files and pr.
 - **Kokō** Remote calls: a diff is one gh pr diff per pull request, run on this computer and cached until the pull request changes.
 
 ## A pull request: the conversation and the review, in the panel
@@ -196,9 +196,9 @@ Loading shape for two-line rows.
 
 ```text
 Build Files and PR (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --accent, --bg, --blocked, --border, --canvas, --dim, --done, --fg, --input, --k-ease-in, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-compact, --k-h-control, --k-h-icon, --k-h-row, --k-hover-in, --k-ic-control, --k-lh-body, --k-r-card, --k-r-control, --k-r-sm, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-8, --muted, --raised, --selected, --solid, --solidfg, --w12, --w7, --working.
+Use these tokens: --accent, --bg, --blocked, --border, --canvas, --dim, --done, --fg, --input, --k-ease-in, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-compact, --k-h-control, --k-h-icon, --k-h-row, --k-hover-in, --k-ic-control, --k-lh-body, --k-r-card, --k-r-control, --k-r-sm, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-8, --k-sp-hair, --muted, --raised, --selected, --solid, --solidfg, --w12, --w7, --working.
 Draw these pieces: File row; Snippet; Reply; Checks; Changed on disk; Picture; Skeleton, two lines.
-Reuse these kit classes: kit-field.
+Reuse these kit classes: kanso-field.
 Follow these rules:
 - File row: Mark letter (A, M, D) in state colour, name, folder dim; Changed | All files as one segmented.
 - Snippet: A review comment quotes three lines, the one it talks about on w7.

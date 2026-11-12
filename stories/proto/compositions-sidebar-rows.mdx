@@ -102,7 +102,7 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 
 ### Project and worktree guidelines
 
-- **Seijaku** A project row is 32: the name 13.5 semibold, then its folder, branch and ahead/behind as a tail, 11.5 dim with the counts muted. No initial tile: the rail keeps the letter, where it is the only name.
+- **Seijaku** A project row is 32: the name 13.5 semibold, then its folder, branch and ahead/behind as a tail, 11.5 dim with the counts muted, as in 01. No initial tile: the rail keeps the letter, where it is the only name.
 - **Kansō** A worktree is a sibling checkout, not something the project spawned: its branch mark as lead, its name muted, one level under the project, no elbow. With one agent it is that agent's row, the branch dim after the name. With none, or two or more, it keeps its own row.
 - **Kansō** ↑N shows only while no pane of that place is in view; an open pane's header already says its commits. ↓N stays: nothing else says behind upstream, and you act on it.
 - **Shizen** + stays on the active project; on every other row + and ⋯ come with the pointer. The row itself folds; folded, it shows what it hides in place of any chevron: the most urgent mark and how many.
@@ -116,7 +116,7 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 ### Agent row guidelines
 
 - **Seijaku** A row is 32: the program's icon 15 (a terminal's is Lucide's terminal), the name 13.5 medium 8 after, its ensō 14 at the right. With a second line, 50. One weight always, so a change of state never reflows the name.
-- **Shizen** The second line is the user's choice (right-click): What it is on, Time in its state and Commands still running, each Show, Only when needed or Hide. At Only when needed, the default: a working or blocked agent shows what it is on · its time; a finished one shows the count of commands still running, named in the tooltip; an idle one is its name.
+- **Shizen** The second line is the user's choice (right-click, 10): What it is on, Time in its state and Commands still running, each Show, Only when needed or Hide. At Only when needed, the default: a working or blocked agent shows what it is on · its time; a finished one shows the count of commands still running, named in the tooltip; an idle one is its name.
 - **Kokō** Ink: working, blocked and focused in foreground; finished and idle muted; a sub-agent dim. The state lives on the mark alone: blocked on the ensō, the question in foreground, never red.
 - **Fukinsei** Under the pointer pin and ⋯ take the time's place; the mark never moves. A pinned row keeps a 12 pin before its mark. The keyboard ring is the kit's focus ring.
 - **Kansō** Sub-agents sit under their parent, their icon under its name, joined by the tree line. A sub-agent that needs you says it with its own mark and line; folded, the parent shows it.
@@ -159,7 +159,7 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 ### Status guidelines
 
 - **Kansō** Sections in order of what they ask of you: Needs you, Working, Done, Idle, Asleep, Terminals. A head is 32, 13.5 strong muted, words only; Needs you keeps its mark, the words stay muted (Kokō: colour on the mark). No chevron: the head folds, and folded it shows its count. Idle, Asleep and Terminals start folded; what you have to act on starts open.
-- **Seijaku** The rows are agent rows, flush at 8: the program's icon, the name, the project after it in dim (and the computer when it is not this one: ops · dark), the ensō at the right. The second line comes as the user chose: at Only when needed, on working and blocked agents. Sub-agents keep their tree line under their parent.
+- **Seijaku** The rows are sidebar rows's rows, flush at 8: the program's icon, the name, the project after it in dim (and the computer when it is not this one: ops · dark), the ensō at the right. The second line comes as the user chose: at Only when needed, on working and blocked agents. Sub-agents keep their tree line under their parent.
 - **Kokō** Projects have no colours of their own: colour is for agent state. The six hues were raw hex outside the theme.
 - **Yūgen** Empty is the kit's: the view's icon and one sentence, no action, since + is right above. First read is the kit skeleton, breathing, at the rows' height.
 - **Shizen** Sort: latest change first, longest in its state, project.
@@ -182,7 +182,7 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 
 - **Kansō** Search opens a find field in place of the switch, under the tools row: the kit's field, 30 tall, canvas, the kit's focus ring while it has the keyboard, placeholder Find, esc at its right. Esc closes it and the list comes back as it was. ⌘F and / from the list open it too.
 - **Shizen** The list itself narrows: projects, worktrees, agents, conversations and asleep rows that match by name, step, branch or folder; the project stays as context. The matched letters go foreground semibold; nothing else changes, nothing moves.
-- **Yūgen** The first match carries the keyboard ring: Enter goes there, ↓ ↑ move, the list keys work as in keyboard list mode.
+- **Yūgen** The first match carries the keyboard ring: Enter goes there, ↓ ↑ move, the list keys work as in sidebar rows.
 - **Kansō** It works on what the sidebar already knows, rows on other computers included (dim when unreachable, with when they were read). No match is the kit empty: the search icon, one sentence with what you typed, no action.
 - **Kokō** Cost: none. It filters what is drawn; it asks nothing of any computer.
 
@@ -217,11 +217,11 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 
 ### Footer guidelines
 
-- **Seijaku** One row on the sidebar grid: Settings, 32 with its gear 17 muted and 13.5 text, 8 above and 16 below. The block is its rows (56; 88 with an update row), never a fixed band with empty space above.
+- **Seijaku** One row on the 01 grid: Settings, 32 with its gear 17 muted and 13.5 text, 8 above and 16 below. The block is its rows (56; 88 with an update row), never a fixed band with empty space above.
 - **Kansō** One door to settings. Settings opens the kit menu (252, rows 30): kansō settings (⌃⇧, opens it directly) and Herdr settings (Herdr's own window). The tab bar's gear goes. Herdr's logo is not an icon anywhere in the footer or the rail.
 - **Kansō** Dawn Mode puts nothing here: its one home is the header band. The footer reads the same in Stable Mode and Dawn Mode.
 - **Kokō** An update is words, in foreground: one row above Settings, "Update kansō to 3.31.0" with the refresh icon, or in Dawn Mode "Update to 3.31.0-beta.3". No dot beside words that already say it.
-- **Shizen** Update is one press, marked at once: the row reads "Updating kansō" in muted, no spinner, quiet until it lands. Refused: the row returns and the kit failure block sits under it, aligned with the words: the tool's own line, then Update and Explain to .
+- **Shizen** Update is one press, marked at once: the row reads "Updating kansō" in muted, no spinner, quiet until it lands. Refused: the row returns and the kit failure block sits under it, aligned with the words: the tool's own line, then Update and Explain to.
 - **Kansō** Herdr's own update lives in that menu: when one waits, a third row "Update Herdr to 0.1.16" after a rule. It restarts the window, so it arms first ("Press again to restart Herdr", 4 s); terminals live in herdr-core and stay.
 - **Kansō** The account chip goes: its count is the status bar's, its name is you, its click was the Settings row's. Add computer moves to the + menu and hides with its piece; the rail drops its square too.
 - **Kokō** Cost: none here; the update check is the tab bar's.
@@ -230,9 +230,9 @@ Dawn Mode paints the band behind the lights; the ensō is the sun.
 
 ```text
 Build Sidebar rows (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --accent, --bg, --blocked, --blue, --border, --canvas, --chrome, --dawn-edge, --dawn-low, --dawn-mid, --dawn-star, --dawn-sun, --dawn-top, --dim, --done, --fg, --idle, --input, --k-fs-body, --k-fs-meta, --k-fs-mono, --k-fs-name, --k-fw-medium, --k-fw-regular, --k-fw-strong, --k-h-badge, --k-h-control, --k-h-row, --k-h-row2, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-body, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-6, --k-sp-hair, --muted, --raised, --w12, --w14, --w7, --working.
+Use these tokens: --accent, --bg, --blocked, --blue, --border, --canvas, --chrome, --dawn-edge, --dawn-low, --dawn-mid, --dawn-star, --dawn-sun, --dawn-top, --dim, --done, --fg, --idle, --input, --k-fs-body, --k-fs-meta, --k-fs-mono, --k-fs-name, --k-fw-medium, --k-fw-regular, --k-fw-strong, --k-h-badge, --k-h-control, --k-h-row, --k-h-row2, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-body, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-6, --k-sp-hair, --muted, --raised, --w12, --w14, --w7, --working.
 Draw these pieces: Computer; Project; Agent, one line; Agent, two lines; Sub-agent; Asleep; Footer; Worktree row; Drop target; Projects, Status, Threads; Status view tile; Find; Add computer; Dawn band.
-Reuse these kit classes: kit-field, kit-row, kit-seg, kst-pdot, kst-pend.
+Reuse these kit classes: kanso-field, kanso-row--interactive, kanso-segmented, kanso-state-line__pending-dot, kanso-state-line--pending.
 Follow these rules:
 - Computer: Lead 15, name 13.5 foreground. Its state in a word, its one fix as a row button.
 - Project: Name 13.5 strong, never shrinks. One tail, dim, one ellipsis. + only under the pointer.
