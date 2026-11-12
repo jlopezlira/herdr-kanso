@@ -17,7 +17,7 @@ const preview = {
   parameters: {
     options: {
       storySort: {
-        order: ['Philosophy', 'Tokens', '*'],
+        order: ['Philosophy', 'Tokens', 'Icons', '*'],
         method: 'alphabetical',
       },
     },

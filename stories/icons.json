@@ -1,0 +1,274 @@
+[
+  {
+    "id": "lu-activity",
+    "meaning": "activity, running"
+  },
+  {
+    "id": "lu-apple",
+    "meaning": "iOS (flag: no brand marks in Lucide)"
+  },
+  {
+    "id": "lu-arrow-right-left",
+    "meaning": "sync"
+  },
+  {
+    "id": "lu-arrow-up-down",
+    "meaning": "sort"
+  },
+  {
+    "id": "lu-bot",
+    "meaning": "an agent, Explain to <agent>"
+  },
+  {
+    "id": "lu-chart-column",
+    "meaning": "Spend"
+  },
+  {
+    "id": "lu-check",
+    "meaning": "checked, on"
+  },
+  {
+    "id": "lu-chevron-down",
+    "meaning": "fold open, next"
+  },
+  {
+    "id": "lu-chevron-left",
+    "meaning": "back"
+  },
+  {
+    "id": "lu-chevron-right",
+    "meaning": "folded, go in"
+  },
+  {
+    "id": "lu-chevron-up",
+    "meaning": "previous"
+  },
+  {
+    "id": "lu-circle-question-mark",
+    "meaning": "help, keys"
+  },
+  {
+    "id": "lu-clock",
+    "meaning": "time, scheduled"
+  },
+  {
+    "id": "lu-code",
+    "meaning": "code, source"
+  },
+  {
+    "id": "lu-columns-2",
+    "meaning": "split right"
+  },
+  {
+    "id": "lu-container",
+    "meaning": "containers"
+  },
+  {
+    "id": "lu-copy",
+    "meaning": "copy"
+  },
+  {
+    "id": "lu-download",
+    "meaning": "update kansō"
+  },
+  {
+    "id": "lu-ellipsis",
+    "meaning": "more actions"
+  },
+  {
+    "id": "lu-external-link",
+    "meaning": "open outside"
+  },
+  {
+    "id": "lu-eye",
+    "meaning": "Images, show"
+  },
+  {
+    "id": "lu-eye-off",
+    "meaning": "hide this"
+  },
+  {
+    "id": "lu-file",
+    "meaning": "file, Files panel"
+  },
+  {
+    "id": "lu-folder",
+    "meaning": "folder, project"
+  },
+  {
+    "id": "lu-folder-plus",
+    "meaning": "new project"
+  },
+  {
+    "id": "lu-git-branch",
+    "meaning": "branch"
+  },
+  {
+    "id": "lu-git-fork",
+    "meaning": "worktree"
+  },
+  {
+    "id": "lu-git-pull-request",
+    "meaning": "pull request"
+  },
+  {
+    "id": "lu-grip-vertical",
+    "meaning": "drag handle"
+  },
+  {
+    "id": "lu-house",
+    "meaning": "home"
+  },
+  {
+    "id": "lu-image",
+    "meaning": "image"
+  },
+  {
+    "id": "lu-key",
+    "meaning": "key, sign in"
+  },
+  {
+    "id": "lu-keyboard",
+    "meaning": "software keyboard (Simulator)"
+  },
+  {
+    "id": "lu-layers",
+    "meaning": "layers, arrangement set"
+  },
+  {
+    "id": "lu-link",
+    "meaning": "linked again"
+  },
+  {
+    "id": "lu-lock",
+    "meaning": "lock"
+  },
+  {
+    "id": "lu-map-pin",
+    "meaning": "location"
+  },
+  {
+    "id": "lu-memory-stick",
+    "meaning": "memory"
+  },
+  {
+    "id": "lu-message-square",
+    "meaning": "thread, message"
+  },
+  {
+    "id": "lu-minus",
+    "meaning": "minimize"
+  },
+  {
+    "id": "lu-monitor",
+    "meaning": "this computer"
+  },
+  {
+    "id": "lu-moon",
+    "meaning": "asleep, sleep"
+  },
+  {
+    "id": "lu-move-horizontal",
+    "meaning": "wider or narrower"
+  },
+  {
+    "id": "lu-panel-left",
+    "meaning": "fold the sidebar"
+  },
+  {
+    "id": "lu-panels-top-left",
+    "meaning": "Arrangements"
+  },
+  {
+    "id": "lu-pencil",
+    "meaning": "rename"
+  },
+  {
+    "id": "lu-pin",
+    "meaning": "pinned"
+  },
+  {
+    "id": "lu-plug",
+    "meaning": "ports, servers"
+  },
+  {
+    "id": "lu-plus",
+    "meaning": "add, new"
+  },
+  {
+    "id": "lu-power",
+    "meaning": "off, power"
+  },
+  {
+    "id": "lu-refresh-cw",
+    "meaning": "refresh"
+  },
+  {
+    "id": "lu-rotate-ccw",
+    "meaning": "rotate"
+  },
+  {
+    "id": "lu-rows-2",
+    "meaning": "split down"
+  },
+  {
+    "id": "lu-search",
+    "meaning": "find"
+  },
+  {
+    "id": "lu-send",
+    "meaning": "send to an agent"
+  },
+  {
+    "id": "lu-server",
+    "meaning": "another computer"
+  },
+  {
+    "id": "lu-settings",
+    "meaning": "settings"
+  },
+  {
+    "id": "lu-share",
+    "meaning": "share"
+  },
+  {
+    "id": "lu-sliders-vertical",
+    "meaning": "settings for this"
+  },
+  {
+    "id": "lu-smartphone",
+    "meaning": "Simulator"
+  },
+  {
+    "id": "lu-square",
+    "meaning": "maximize"
+  },
+  {
+    "id": "lu-sun",
+    "meaning": "awake, light"
+  },
+  {
+    "id": "lu-terminal",
+    "meaning": "terminal, a shell"
+  },
+  {
+    "id": "lu-trophy",
+    "meaning": "Shipped"
+  },
+  {
+    "id": "lu-undo",
+    "meaning": "undo"
+  },
+  {
+    "id": "lu-volume-1",
+    "meaning": "volume down"
+  },
+  {
+    "id": "lu-volume-2",
+    "meaning": "volume up"
+  },
+  {
+    "id": "lu-x",
+    "meaning": "close"
+  }
+]
