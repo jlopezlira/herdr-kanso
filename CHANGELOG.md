@@ -12,7 +12,7 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [4.0.0] - 2026-11-12
+## [3.31.0] - 2026-11-11
 
 ### Added
 
@@ -37,19 +37,16 @@ release.
 - An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
 - What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
 - When memory is low, the notice says "Memory N% free", the same words as the status bar.
-- Sleep keeps nothing of its own. Each Claude agent keeps its conversation as a label on its terminal and exits, anything else running in the tab is stopped, and the tab is put away in its project. Wake brings the tab back and runs `claude --resume` on that conversation in the same terminal. Options such as `--model` are not carried over.
-- An agent put to sleep alone leaves its pane as a shell, and Wake starts it there again.
-- If an agent does not exit, nothing is put away and the Sleep dialog says why.
+- Asleep rows wake from the row or its menu. There is no separate list with Undo, Retry and Forget.
+- While you were away no longer lists sleeps.
+- Wake starts `claude --resume` on the agent's conversation in the same terminal. Options such as `--model` are not carried over.
+- Sleeps from before this update are not offered to wake: run `claude --resume <id>` in its folder.
 - Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
-
-### Removed
-
-- The list of everything asleep, with its Undo, Retry and Forget. An asleep row wakes from the row or its menu.
-- Went to sleep and Could not sleep in While you were away.
-- What Sleep kept in kanso.db. Anything asleep before this update is not offered to wake: run `claude --resume <id>` in its folder.
 
 ### Fixed
 
+- Sleep no longer gets stuck going to sleep or waking. If an agent does not exit, nothing is put away and the Sleep dialog says why.
+- A long conversation wakes: Wake no longer stops an agent that takes a while to load it.
 - Dragging the sidebar's edge only changes its width: it no longer folds the sidebar to the rail, so it can no longer stay folded after you expand it. Hide sidebar still folds it.
 - Dragging a project in the sidebar shows where it will land and moves it there. A project stays among the projects of its own computer, and a worktree listed under its checkout keeps its place.
 

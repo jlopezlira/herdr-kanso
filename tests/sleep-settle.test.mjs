@@ -6,7 +6,7 @@ import { load, clone } from "./helpers.mjs";
 const sleepMod = (host = {}) => load("kanso-sleep/main.js", ["Sleep", "sleepPlan", "hideCommands", "wakePlan", "exitStep", "labelArgs", "atPrompt", "CLEAR_MS", "EXIT_MS", "RESEND_MS"], { home: () => "/home/me", ...host });
 const space = (over = {}) => ({ id: "sp1", active: true, tabs: [{ id: "a", active: true }, { id: "b" }], ...over });
 const reads = [
-  { terminal: "t1", name: "Rey", resume: "c1", running: true },
+  { terminal: "t1", name: "Rey", resume: "00000000-0000-4000-8000-000000000001", running: true },
   { terminal: "t2", name: "npm", resume: null, running: true },
   { terminal: "t3", name: "zsh", resume: null, running: false },
 ];
@@ -62,7 +62,7 @@ test("a failed exit takes its label back and settles nothing; the dialog says wh
   const { Sleep } = await sleepMod({ hc, spaces: () => [space()], run: (...a) => runs.push(a), props: () => ({}), closeOverlay: () => runs.push(["close"]) });
   const view = Object.assign(new Sleep(), { order: { scope: "tab", tab: "a" }, space: space(), reads: [{ ...reads[0], pid: 9 }, reads[1]], busy: null, error: null });
   await view.sleep({ notify() {}, sleep: async () => {} });
-  assert.deepEqual(clone(calls.filter((a) => a[0] === "label")), [["label", "t1", "kanso.resume=c1"], ["label", "t1", "kanso.resume="]]);
+  assert.deepEqual(clone(calls.filter((a) => a[0] === "label")), [["label", "t1", "kanso.resume=00000000-0000-4000-8000-000000000001"], ["label", "t1", "kanso.resume="]]);
   assert.equal(calls.some((a) => a[0] === "interrupt"), false, "nothing else stops");
   assert.deepEqual(runs, [], "no tab settles, the dialog stays");
   assert.equal(view.error, "It can't sleep: Rey's terminal changed.");
@@ -73,13 +73,27 @@ test("a tab wakes: it comes back and is shown, then each asleep terminal is clea
   const sp = space({ active: false, tabs: [{ id: "a", settled: true }, { id: "b" }] });
   const ps = [{ terminal: "t1", tab: "a" }, { terminal: "t2", tab: "a" }, { terminal: "t3", tab: "b" }];
   const shell = (address, resume) => ({ address, state: "live", program: { shell: true }, labels: resume ? { "kanso.resume": resume } : {} });
-  const terms = [shell("t1", "c1"), shell("t2", null), shell("t3", "c3")];
+  const terms = [shell("t1", "00000000-0000-4000-8000-000000000001"), shell("t2", null), shell("t3", "00000000-0000-4000-8000-000000000003")];
   const plan = clone(wakePlan(sp, ["a"], null, ps, terms));
   assert.deepEqual(plan.commands, [["tab.unsettle", { id: "a" }], ["space.select", { id: "sp1" }], ["tab.select", { id: "a" }]]);
-  assert.deepEqual(plan.hc, [["label", "t1", "kanso.resume="], ["send", "t1", "claude --resume c1"]], "the clear is the claim; t3's tab was not asked");
+  assert.deepEqual(plan.hc, [["label", "t1", "kanso.resume="], ["send", "t1", "claude --resume 00000000-0000-4000-8000-000000000001"]], "the clear is the claim; t3's tab was not asked");
   const one = clone(wakePlan(space(), ["b"], "t3", ps, terms));
   assert.deepEqual(one.commands, [["tab.select", { id: "b" }]], "an agent asleep alone: its tab was never settled");
-  assert.deepEqual(one.hc, [["label", "t3", "kanso.resume="], ["send", "t3", "claude --resume c3"]]);
-  const running = [{ ...shell("t1", "c1"), program: { agent: true } }];
+  assert.deepEqual(one.hc, [["label", "t3", "kanso.resume="], ["send", "t3", "claude --resume 00000000-0000-4000-8000-000000000003"]]);
+  const running = [{ ...shell("t1", "00000000-0000-4000-8000-000000000001"), program: { agent: true } }];
   assert.deepEqual(clone(wakePlan(sp, ["a"], null, ps, running)).hc, [], "a terminal that runs something is not sent the line");
+});
+
+test("only a real session id is kept or typed: a label can never carry shell text", async () => {
+  const { wakePlan, labelArgs } = await sleepMod();
+  const { resumeLine, isSessionId } = await load("kanso-sleep/resume.js", ["resumeLine", "isSessionId"]);
+  const id = "00000000-0000-4000-8000-000000000001", bad = "x; rm -rf ~";
+  assert.equal(isSessionId(id), true);
+  assert.equal(isSessionId(bad), false);
+  assert.equal(resumeLine(id), `claude --resume ${id}`);
+  assert.equal(resumeLine(bad), null);
+  assert.deepEqual(clone(labelArgs("t1", bad)), ["label", "t1", "kanso.resume="]);
+  const sp = space({ tabs: [{ id: "a", settled: true }] });
+  const terms = [{ address: "t1", state: "live", program: { shell: true }, labels: { "kanso.resume": bad } }];
+  assert.deepEqual(clone(wakePlan(sp, ["a"], null, [{ terminal: "t1", tab: "a" }], terms)).hc, [], "a forged label is not asleep and is never sent");
 });

@@ -29,7 +29,7 @@ const shell = (address, resume, name) => ({ address, state: "live", program: { s
 const fury = (tabs) => [{ id: "sp1", name: "fury", folder: "/Users/me/fury", machine: null, active: false, tabs }];
 const asleepTab = { id: "tb", name: "Notes", index: 0, settled: true, settled_at: 1 };
 const sleepers = [{ pane: "p1", tab: "tb", terminal: "t1", cwd: "/Users/me/fury" }, { pane: "p2", tab: "tb", terminal: "t2", cwd: "/Users/me/fury" }];
-const sleeperTerms = [shell("t1", "c1", "Ada"), shell("t2", "c2", "Bea")];
+const sleeperTerms = [shell("t1", "00000000-0000-4000-8000-000000000001", "Ada"), shell("t2", "00000000-0000-4000-8000-000000000002", "Bea")];
 const registry = [{ id: "p-fury", name: "fury", folder: "/Users/me/fury", machine: "", missing: false }];
 
 function ready(view, extra = {}) {

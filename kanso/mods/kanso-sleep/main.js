@@ -5,7 +5,7 @@ import { paths } from "./platform-paths.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, home } from "herdr";
-import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, resumeLine, asleepTerminal } from "./resume.js";
+import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
 import { skeleton, breathe } from "./ui.js";
 
@@ -21,7 +21,7 @@ export function sleepBlocker(recs) {
 
 // At its own shell's prompt: another shell in front (a script, say) counts as running.
 export const atPrompt = (x) => Boolean(x) && (!x.foreground?.pid || x.foreground.pid === x.pid);
-export const labelArgs = (terminal, session = "") => ["label", terminal, `${RESUME_LABEL}=${session}`];
+export const labelArgs = (terminal, session = "") => ["label", terminal, `${RESUME_LABEL}=${isSessionId(session) ? session : ""}`];
 
 // The tabs settle; what was shown moves to a tab still awake, else to the project beside.
 export function hideCommands(space, ids, all) {
@@ -127,10 +127,10 @@ export default class Sleep extends View {
       const ses = claude ? await sessionOf(p.terminal, fg.pid) : null;
       const name = names[p.terminal] || x?.labels?.["kanso.name"] || ses?.name || x?.title || p.terminal;
       const problem = !x ? `${p.terminal} could not be read`
-        : claude && (!ses?.sessionId || ses.pid !== fg.pid) ? `${name}'s conversation was not found, so it could not wake on it`
+        : claude && (!isSessionId(ses?.sessionId) || ses.pid !== fg.pid) ? `${name}'s conversation was not found, so it could not wake on it`
         : only && !claude ? "only a Claude agent can sleep on its own; this pane runs something else" : null;
       return { terminal: p.terminal, name, pid: fg?.pid ?? null, argv: fg?.argv ?? null, cwd: fg?.cwd ?? p.cwd ?? null,
-        resume: claude ? ses?.sessionId ?? null : null, running: Boolean(x) && !atPrompt(x), problem };
+        resume: claude && isSessionId(ses?.sessionId) ? ses.sessionId : null, running: Boolean(x) && !atPrompt(x), problem };
     }));
     const stop = sleepBlocker(recs) ?? this.reads.find((r) => r.problem)?.problem
       ?? (this.reads.some((r) => r.resume) ? null : "nothing here keeps a conversation to wake on");

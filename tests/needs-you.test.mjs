@@ -141,7 +141,7 @@ test("Redraws and focus reuse the queue, while agent changes rebuild it and avai
   assert.equal(state.builds, 3);
   state.spaces = [{ id: "project", tabs: [{ id: "tab", settled: true }] }];
   state.panes = [{ terminal: "a", tab: "tab" }];
-  state.terms = state.terms.map((t) => (t.address === "a" ? { ...t, labels: { "kanso.resume": "c1" }, program: { shell: true } } : t));
+  state.terms = state.terms.map((t) => (t.address === "a" ? { ...t, labels: { "kanso.resume": "00000000-0000-4000-8000-000000000001" }, program: { shell: true } } : t));
   assert.equal(view.refreshNeeds().rows.length, 0, "a sleep hides its agent without a status change");
   assert.equal(state.builds, 4);
 });

@@ -17,12 +17,12 @@ test("asleep is read from Herdr: a settled tab with a conversation kept on a ter
   const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
   const sp = [{ id: "sp-kanso", name: "herdr-kanso", tabs: [{ id: "tb-k", index: 1, settled: true, settled_at: 50 }, { id: "tb-o", index: 2 }] }];
   const ps = [{ terminal: "t1", tab: "tb-k" }, { terminal: "t2", tab: "tb-k" }, { terminal: "t3", tab: "tb-k" }, { terminal: "t4", tab: "tb-o" }];
-  const terms = [shell("t1", "c1", { "kanso.name": "Hashiko" }), shell("t2", "c2"), shell("t3", null), { address: "t4", state: "live", program: { agent: true }, labels: {} }];
-  const kept = new Map([["c2", { name: null, title: "Memory leaks", said: 9, program: JSON.stringify({ name: "claude" }) }]]);
+  const terms = [shell("t1", "00000000-0000-4000-8000-000000000001", { "kanso.name": "Hashiko" }), shell("t2", "00000000-0000-4000-8000-000000000002"), shell("t3", null), { address: "t4", state: "live", program: { agent: true }, labels: {} }];
+  const kept = new Map([["00000000-0000-4000-8000-000000000002", { name: null, title: "Memory leaks", said: 9, program: JSON.stringify({ name: "claude" }) }]]);
   const got = sleepingNow(sp, ps, terms, kept), rows = clone(got.rows), dozing = [...got.dozing];
   assert.deepEqual(rows.map((r) => [r.address, r.name, r.space, r.status]), [["zz:t1", "Hashiko", "sp-kanso", "asleep"], ["zz:t2", "Memory leaks", "sp-kanso", "asleep"]]);
   assert.deepEqual(rows.map((r) => [r.asleep.id, r.asleep.tab, r.asleep.n, r.asleep.saved, r.asleep.resume, r.asleep.settled]),
-    [["tb-k", "Tab 2", 2, 50, "c1", true], ["tb-k", "Tab 2", 2, 50, "c2", true]], "one sleep: the tab, since it settled");
+    [["tb-k", "Tab 2", 2, 50, "00000000-0000-4000-8000-000000000001", true], ["tb-k", "Tab 2", 2, 50, "00000000-0000-4000-8000-000000000002", true]], "one sleep: the tab, since it settled");
   assert.equal(rows[1].program.name, "claude");
   assert.deepEqual(dozing.sort(), ["t1", "t2", "t3"], "the whole tab dozes; the awake tab does not");
 });
@@ -33,7 +33,7 @@ test("settled without a conversation is not asleep, and a conversation in a tab 
   const ps = [{ terminal: "t1", tab: "a" }, { terminal: "t2", tab: "b" }];
   const none = sleepingNow(sp, ps, [shell("t1", null), shell("t2", null)]);
   assert.deepEqual([none.rows.length, none.dozing.size], [0, 0], "a tab you settled yourself is not asleep");
-  const got = sleepingNow(sp, ps, [shell("t1", null), shell("t2", "c9", { "kanso.name": "Rey" })]), rows = clone(got.rows), dozing = [...got.dozing];
+  const got = sleepingNow(sp, ps, [shell("t1", null), shell("t2", "00000000-0000-4000-8000-000000000009", { "kanso.name": "Rey" })]), rows = clone(got.rows), dozing = [...got.dozing];
   assert.deepEqual(rows.map((r) => [r.name, r.asleep.id, r.asleep.tab, r.asleep.settled, r.asleep.n]), [["Rey", "t2", "Rey", false, 1]], "an agent asleep on its own, or a tab settled on another screen");
   assert.deepEqual(dozing, ["t2"]);
 });
@@ -42,9 +42,9 @@ test("a conversation kept on a terminal that runs something, or ended, is not as
   const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
   const sp = [{ id: "sp", name: "app", tabs: [{ id: "a", settled: true }] }];
   const ps = [{ terminal: "t1", tab: "a" }];
-  const running = { ...shell("t1", "c1"), program: { shell: false, agent: true } };
+  const running = { ...shell("t1", "00000000-0000-4000-8000-000000000001"), program: { shell: false, agent: true } };
   assert.equal(sleepingNow(sp, ps, [running]).rows.length, 0, "a wake started it: awake");
-  assert.equal(sleepingNow(sp, ps, [{ ...shell("t1", "c1"), state: "exited" }]).rows.length, 0);
+  assert.equal(sleepingNow(sp, ps, [{ ...shell("t1", "00000000-0000-4000-8000-000000000001"), state: "exited" }]).rows.length, 0);
 });
 
 test("one name per agent, kept with its conversation: the one you gave it, else its conversation's title", async () => {
