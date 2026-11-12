@@ -1,0 +1,35 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './components-panel-menu.stories.js';
+
+<Meta title="Components/Panel menu" />
+
+# Panel menu
+
+## Panel menu
+
+The + and the panel buttons open one menu: a check 14 before each shown panel, its key dim, a hidden one dimmed.
+
+<Canvas of={stories.PanelMenu} />
+
+## B3 The + menu
+
+### + menu guidelines
+
+- **Seijaku** kansō draws it with the one menu (252, rows 30, radius 8).
+- **Seijaku** The header names where the tab opens: the project, plus the computer when it is not this one.
+- **Kansō** Only installed agents, keyed 1 to 9. "not installed" rows were dead controls and they go.
+- **Kansō** "New space" stays, worded New project as everywhere. "Start an agent" goes: the icons say it.
+- **Seijaku** Checking again keeps the last list usable and spins a 12 ensō in the header. With no list yet, it shows two skeleton rows. A timeout is the state pattern's BLOCK (S21, state.css) in the agents' place: "Can't list agents on devbox", the tool's words as evidence, then Refresh and Explain to api.
+- **Yūgen** Worktree rows show only inside a repository. Arrange is the last row, ⌥⌘T: it left the tab bar (B12).
+- **Kokō** Remote: one agent check on the project's computer per open, and the last answer paints at once. 0 at rest.
+
+## Prompt for agents
+
+```text
+Build Panel menu (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --blocked, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-h-icon, --k-ic-row, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --popover, --shadow, --w12, --w7.
+Draw these pieces: Panel menu.
+Follow these rules:
+- Panel menu: The + and the panel buttons open one menu: a check 14 before each shown panel, its key dim, a hidden one dimmed.
+Apply every guideline of B3 The + menu.
+```

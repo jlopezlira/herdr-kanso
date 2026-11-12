@@ -1,0 +1,6 @@
+{
+ "HeaderDigest": {
+  "caption": "After the name: files with their delta, the PR with its dot. Stale digest dim.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"st-bar\" style=\"width:620px\"><div class=\"w1-ph sel\"><span class=\"nm\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>Kylo-ren</span><span class=\"bd\">herdr-kanso</span><span class=\"dg\"><span class=\"seg dg stale\">3 files <span class=\"pm\">+42 −7</span></span><span class=\"seg\"><i class=\"dot d-work\"></i>#166 · checks running</span></span><span class=\"sp\"></span></div></div></div></div>"
+ }
+}

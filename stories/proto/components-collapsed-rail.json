@@ -1,0 +1,6 @@
+{
+ "CollapsedRail": {
+  "caption": "76 wide: lights, +, the tiles, settings at the foot; the view switch as three icons.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"k sbx-rail\" style=\"height:720px\"><div class=\"sbx-rbrand\"><span class=\"lights\"><i></i><i></i><i></i></span></div><div class=\"sbx-rtop\" style=\"padding-top:2px\"><span class=\"sq\"><svg class=\"i i17\"><use href=\"#lu-panel-left\"/></svg></span><span class=\"sq\"><svg class=\"i i17\"><use href=\"#lu-plus\"/></svg></span></div><div class=\"sbx-rlist\"><div class=\"sbx-rrow\"><div class=\"sbx-tile on\"><span class=\"l sbx-h6\">A</span><div class=\"c c-blk\"><svg class=\"m m-blk \"><use href=\"#e-blk\"/></svg>4</div></div></div><div class=\"sbx-rrow\"><div class=\"sbx-tile strong\"><span class=\"l sbx-h3\">D</span><div class=\"c \"><svg class=\"m m-work \"><use href=\"#e-work\"/></svg>1</div></div></div><div class=\"sbx-rrow\"><div class=\"sbx-tile \"><span class=\"l c-mu\">B</span><div class=\"c \"><svg class=\"i i12 c-dim\"><use href=\"#lu-moon\"/></svg>1</div></div></div><div class=\"sbx-rsep\"></div><div class=\"sbx-rrow\"><svg class=\"i i15 c-dim\"><use href=\"#lu-server\"/></svg></div></div><div class=\"sbx-rfoot\"><span><svg class=\"i i17\"><use href=\"#lu-settings\"/></svg></span></div></div></div></div>"
+ }
+}

@@ -1,0 +1,34 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './components-while-you-were-away.stories.js';
+
+<Meta title="Components/While you were away" />
+
+# While you were away
+
+## While you were away
+
+Raised card, one entry per event, age dim at the right. Two lines only with a detail.
+
+<Canvas of={stories.WhileYouWereAway} />
+
+## S08 While you were away
+
+### Away card guidelines
+
+- **Yūgen** A card, not a list header: raised on the sidebar's chrome, radius 8, a 1 px border, 4 inside. It is the one raised surface in the sidebar, so it reads as a note left for you; when there is nothing new it takes zero space.
+- **Seijaku** It docks at the foot of the list, 12 above the footer, over empty space: no row moves when it comes or goes, and the list keeps its place.
+- **Seijaku** On the 01 grid: the title row 32, "While you were away" 13.5 semibold with × (20 with 12) at its right. Each event a row of 32 (50 with a detail line): its icon 15 in its state colour, the fact 12.5 with the name medium, the detail 11.5 muted, the time 11.5 dim at the right. Four rows, then "+N more".
+- **Kansō** It lists only what nothing in view says: a merge, an approval, a red check out of view, an agent that went to sleep or could not, an agent whose pane is gone. A PR verdict in a pane header in view, or an agent still on screen, is not repeated (L).
+- **Shizen** A click opens the thing (the pane, the PR panel on the step, the Wake menu) and drops the row. × dismisses the batch. Right-click: Dismiss these, then the piece lines (10); Hide this switches it off for good, the same switch as its row in Settings · Pieces (sidebar.away: Show, When needed, Hide).
+- **Kokō** Cost: none. Events come from what kansō already reads; they are written to the local database.
+
+## Prompt for agents
+
+```text
+Build While you were away (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --blocked, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-fw-strong, --k-h-badge, --k-h-row, --k-h-row2, --k-ic-control, --k-ic-inline, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-hair, --muted, --raised, --violet, --w12, --w7.
+Draw these pieces: While you were away.
+Follow these rules:
+- While you were away: Raised card, one entry per event, age dim at the right. Two lines only with a detail.
+Apply every guideline of S08 While you were away.
+```

@@ -1,0 +1,6 @@
+{
+ "TitleAndTools": {
+  "caption": "Lights 12 on input. + left; sort, search, hide right. 32 with 17, muted.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s side\"><div class=\"sbx-slice\"><div class=\"w1-title\"><span class=\"lights\"><i></i><i></i><i></i></span></div><div class=\"w1-tools\"><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-plus\"/></svg></span><span class=\"sp\"></span><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-arrow-up-down\"/></svg></span><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-search\"/></svg></span><span class=\"w1-sq\"><svg class=\"i \"><use href=\"#lu-panel-left\"/></svg></span></div></div></div></div>"
+ }
+}

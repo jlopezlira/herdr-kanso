@@ -1,0 +1,60 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './tokens-colour-and-wash.stories.js';
+
+<Meta title="Tokens/Colour and wash" />
+
+# Colour and wash
+
+## Washes
+
+w4 ground, w7 hover, w12 selected or pressed. Washes are the only backgrounds a control gets.
+
+<Canvas of={stories.Washes} />
+
+## Edges
+
+Input edge for fields and switches (3:1). Border is decoration only.
+
+<Canvas of={stories.Edges} />
+
+## State colours
+
+Colour only for a state, on the mark: working, blocked, done, idle.
+
+<Canvas of={stories.StateColours} />
+
+## Contrast, light and dark
+
+A: every pair of text and ground with its ratio; the fixes applied to the kit.
+
+<Canvas of={stories.ContrastLightAndDark} />
+
+## A Contrast, light and dark
+
+### Colour guidelines
+
+- **Seijaku** Use a token, never a value. Every colour in a board or a mod is one of the tokens in the table. A new colour is added to the table, with its use and its rule, before anything uses it.
+- **Shizen** Text passes 4.5:1 on every surface it can sit on, including hover and selected. Marks, focus rings and control edges pass 3:1. Never lower contrast with opacity on text.
+- **Fukinsei** Three text levels: fg, muted and dim, told apart by size and place first and tone second.
+- **Kokō** One colour, one meaning. A state colour appears only on the thing in that state. Colour on anything that asks nothing is a defect.
+- **Shizen** Washes come from the foreground: track 4%, hover 7%, selected 12%, active project 14%. Light uses the same steps; it never reaches pure white or black.
+- **Seijaku** Light and dark are one design. They share the same geometry and the same token names; only the values differ.
+- **Seijaku** Checking a change. Any change to a token is measured against every surface in the table, hover and selected included, before it is published.
+
+## Prompt for agents
+
+```text
+Build Colour and wash (Tokens) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --accent, --accentfg, --bg, --blocked, --border, --canvas, --chrome, --dim, --done, --fg, --focus, --idle, --input, --k-ease-in, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-fw-strong, --k-h-bar, --k-h-compact, --k-h-control, --k-h-header, --k-h-row, --k-h-row2, --k-hover-in, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-body, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-6, --k-sp-hair, --muted, --popover, --raised, --selected, --shadow, --solid, --solidfg, --w12, --w14, --w4, --w7, --working.
+Draw these pieces: Washes; Edges; State colours; Contrast, light and dark.
+Reuse these kit classes: kit-act, kit-armed, kit-field, kst-btn, kst-toast.
+Follow these rules:
+- Washes: w4 ground, w7 hover, w12 selected or pressed. Washes are the only backgrounds a control gets.
+- Edges: Input edge for fields and switches (3:1). Border is decoration only.
+- State colours: Colour only for a state, on the mark: working, blocked, done, idle.
+- Contrast, light and dark: A: every pair of text and ground with its ratio; the fixes applied to the kit.
+Apply every guideline of A Contrast, light and dark.
+Treat as a defect:
+- Never lower contrast with opacity on text.
+- Colour on anything that asks nothing is a defect.
+```

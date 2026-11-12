@@ -1,0 +1,37 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './components-status-bar.stories.js';
+
+<Meta title="Components/Status bar" />
+
+# Status bar
+
+## Status bar
+
+Meta size muted; items with 12 icons; minimap; zoom with the value foreground.
+
+<Canvas of={stories.StatusBar} />
+
+## B8 Status bar, every item
+
+### Status bar guidelines
+
+- **Kansō** The branch leaves the bar. Its homes are the pane header (the pane's) and the project row (the project's). The bar said it a third time.
+- **Kansō** Information and actions are told apart. The computer's name is information: it shows only while the sidebar's computer row is out of sight. Needs you, an action, always shows while someone waits. A computer you know is down is said once, by a toast when it drops (B9); after that the bar names it only while a pane of that computer is in front, because then it explains what you are looking at.
+- **Shizen** The computer, piece status.computer S/N/H, default N: the name while the sidebar row is out of sight; "Can't reach devbox" with a small Refresh while a pane of devbox is in front. A click on either reconnects; while it waits, "devbox" is drawn pending (80% and a breathing dot) until it answers.
+- **Seijaku** Needs you, piece status.needs N/H, default N: drawn while any agent waits. Mark, name, question, +1. The question comes from the row's own function, so it is the same words and the same cut. Click: ⌘J.
+- **Kansō** The working count, piece status.agents S/N/H with default N: drawn only while one works. "4 agents idle" and "No agents" go. Click opens the sidebar on Status.
+- **Kokō** Memory, ports, containers, reviews: as board 05. Memory is this computer's guard file, read every 60 s on this computer only.
+- **Kansō** Fold order, right half: the palette key goes first, then the count becomes its number, then servers, containers and reviews become their icon (the words move to the tooltip), then the question shrinks to nothing, then Memory becomes "8% free". The name and +1 never fold, so no fact leaves the bar. Left: the computer becomes its icon.
+- **Seijaku** Its grid: 26 tall, 12 inside, 16 between items, text 11.5, icons 14 with 8 between, mark 14. Two halves of equal weight around the strip's fixed 180 minimap slot (layouts/kanso.json:127-160), so the map stays at the centre whatever each side says, and each half folds in its own width, (window − sidebar − 180) / 2.
+- **Kokō** Remote at rest: 0 for computer, needs you, count, memory, palette. Ports every 120 s and reviews at most every 120 s, both only with the window in front. Hide stops them.
+
+## Prompt for agents
+
+```text
+Build Status bar (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-h-bar, --k-ic-inline, --k-r-full, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --w12, --w7.
+Draw these pieces: Status bar.
+Follow these rules:
+- Status bar: Meta size muted; items with 12 icons; minimap; zoom with the value foreground.
+Apply every guideline of B8 Status bar, every item.
+```

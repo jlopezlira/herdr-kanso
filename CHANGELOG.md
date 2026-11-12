@@ -26,7 +26,7 @@ the branch's rules.
 
 ### Added
 
-- Storybook documents kansō's design: the philosophy, the tokens, the reusable elements and their states in dark and light; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
+- Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
 - Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
 - Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.
 - kansō installs and updates on Windows the same way it does on macOS and Linux. The installer and the updater use Windows PowerShell, and the download uses the curl and tar that ship with Windows. The Windows keymap is merged on Windows. A file that is in use is retried, then the update is undone and the file is named; a read-only file is updated. The update runs with no console window.

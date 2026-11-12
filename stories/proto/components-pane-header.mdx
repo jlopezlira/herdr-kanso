@@ -1,0 +1,53 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './components-pane-header.stories.js';
+
+<Meta title="Components/Pane header" />
+
+# Pane header
+
+## Pane header
+
+34 high; name medium with its mark, place and branch meta, tools 26, grip dim. Selected on w7.
+
+<Canvas of={stories.PaneHeader} />
+
+## B4 Pane header, focus, tools, grip
+
+### Pane header guidelines
+
+- **Yūgen** Hover shows four tools, not eight: split right, width, close, and ⋯, which opens the pane menu (board B10). Pin, open with, split down and send live there. 26 buttons with 15, 2 apart (01).
+- **Seijaku** The focused finished or idle pane keeps Sleep and Send visible (board 03). A blocked pane has no Send.
+- **Shizen** A blocked header loses the words "Needs you": the agent's row says it. The 40% blocked wash, the breathing bar and the mark stay.
+- **Seijaku** One spacing rule for every header on these boards: the header alone, 34 tall, its content centred with equal room above and below. Where the pane matters, the line under it is terminal text, never an empty band.
+- **Kansō** Close arms when the pane holds an agent: the × turns accent in its own 26 box and the tooltip says "Press again to close tests" (4 s). Nothing moves.
+- **Kansō** Pinned is a 12 pin in dim after the name, and no grip. The accent wash goes: accent is the window asking.
+- **Yūgen** The grip has no tooltip. The grab cursor says it.
+- **Kansō** Double-click renames in place, as tabs do. The dialog with its hint goes.
+- **Shizen** The blocked bar breathes on battery too.
+- **Yūgen** Moving a pane: every terminal in the tab gives way to a card, icon 17 and name 13.5, so the whole pane takes the drop. The held one stays on the pressed wash (w12, as S16). The target splits toward the side under the pointer and shows the held pane there in accent 25%, the same wash as the header zone, not accent 40. Below also lights the pane's foot (the ruler, :265-292).
+- **Kansō** On another computer: the folder is shortened with that computer's home, so it reads ~/acme-shop, not /home/jj/acme-shop. The computer's name is not repeated on every header.
+- **Seijaku** Unreachable: name, icon and digest at 55% as last read (S21 stale), no state mark (it is unknown), terminal at 55%. The words live on the sidebar row and the status bar.
+- **Yūgen** GitHub not answering: the PR segment's place takes the state pattern's LINE (S21): mark, "Can't read #142", a small Refresh. The tool's words are in the tooltip. A click opens the PR panel on its BLOCK of the same words.
+- **Seijaku** Its grid: 34 tall, 12 left and 8 right, 8 between items, text 12.5, top radius 8, icon 15, name up to 260, folder and branch 11.5 with a 12 icon, up to 220, mark 14, the grip a 14 icon in a 20 box. On the right: tools, then the mark, then the grip.
+- **Kokō** Remote, per stop: git status --porcelain=v2 --branch and git diff --shortstat (two calls, down from four), plus one gh pr view per distinct branch. 0 at rest.
+
+## B5 Pane header, folding as the pane narrows
+
+### Pane header guidelines
+
+- **Shizen** The tools are on every header at rest, as an action is (B4). As the pane narrows, information folds before any action: folder, then branch. Then the tools fold into ⋯ (the pane menu, which holds every one of them), with close staying out. Then commits, files, the verdict word (#142 keeps its colour) and the PR segment. Then close joins ⋯, and the name truncates.
+- **Seijaku** Never folded: program icon, state mark, grip, ⋯.
+- **Yūgen** A folded segment keeps its fact in the PR segment's tooltip, word for word (one prLine).
+
+## Prompt for agents
+
+```text
+Build Pane header (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --k-fs-body, --k-fs-meta, --k-fw-medium, --k-h-icon, --k-h-pane, --k-ic-control, --k-ic-inline, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --w12, --w7.
+Draw these pieces: Pane header.
+Follow these rules:
+- Pane header: 34 high; name medium with its mark, place and branch meta, tools 26, grip dim. Selected on w7.
+Apply every guideline of B4 Pane header, focus, tools, grip; B5 Pane header, folding as the pane narrows.
+Treat as a defect:
+- Never folded: program icon, state mark, grip, ⋯.
+```

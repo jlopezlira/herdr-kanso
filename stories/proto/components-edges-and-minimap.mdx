@@ -1,0 +1,36 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './components-edges-and-minimap.stories.js';
+
+<Meta title="Components/Edges and minimap" />
+
+# Edges and minimap
+
+## Edges and minimap
+
+Off-screen panes at the edge as tiles; the minimap and zoom in the status bar.
+
+<Canvas of={stories.EdgesAndMinimap} />
+
+## B6 Off-screen panes and the minimap
+
+### Off-screen panes and the minimap guidelines
+
+- **Kansō** Edges show which panes are past them: chevron, then tiles 20 with the program icon. Click a tile to go there, hover for its name. The state dots on the tiles go: the sidebar rows and the status bar already say who waits.
+- **Kansō** The hover card goes ("2 panes beyond the right edge" over a list of the same tiles). It was a hover card, which spec §7 rules out, and its title counted rows already in view.
+- **Kokō** A pane dragged over an edge washes it in accent 25%, as every drop zone does. Piece strip.edges, S/H, default S.
+- **Yūgen** Minimap, piece strip.minimap S/H, default S: it is a control (a pill jumps to its column, the stepper sets panes per view). Focused column fg, in view muted, out of view input, stacks as 2 px cells.
+- **Kansō** The "− 2 +" stepper stays on the bar. Its tooltips lose the teaching ("Fewer panes per view" becomes the key, ⌘⇧−). The right-click menu adds the same choice as a segmented control, and Even out.
+- **Seijaku** "Strip paused" becomes the state pattern's LINE: mark, "Layout paused", a small Resume. It still resumes alone after 10 s.
+- **Kokō** Remote: 0. Layout only.
+
+## Prompt for agents
+
+```text
+Build Edges and minimap (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --input, --k-fs-body, --k-fs-name, --k-h-bar, --k-ic-control, --k-r-control, --k-sp-1, --k-sp-hair, --muted, --w12, --w7.
+Draw these pieces: Edges and minimap.
+Reuse these kit classes: kit-ib.
+Follow these rules:
+- Edges and minimap: Off-screen panes at the edge as tiles; the minimap and zoom in the status bar.
+Apply every guideline of B6 Off-screen panes and the minimap.
+```

@@ -1,0 +1,6 @@
+{
+ "Markdown": {
+  "caption": "Blocks: h1, paragraph, table, h2, code in text.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"pax-md\">\n                <div class=\"pax-blk\"><div class=\"h1\">Rate limits</div></div>\n                <div class=\"pax-blk\"><p>Each customer gets a bucket of requests. A request takes one token; the bucket refills one token every 2 s.</p></div>\n                <div class=\"pax-blk hv\"><table class=\"pax-tbl\"><tr><th>Plan</th><th>Per minute</th><th>Burst</th></tr><tr><td>Free</td><td>40</td><td>10</td></tr><tr><td>Pro</td><td>400</td><td>60</td></tr></table></div>\n                <div class=\"pax-blk\"><div class=\"h2\">Retry-After</div></div>\n                <div class=\"pax-blk\"><p>An empty bucket answers <code>429</code> with <code>Retry-After</code> in seconds.</p></div>\n              </div></div></div></div>"
+ }
+}

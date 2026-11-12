@@ -1,0 +1,18 @@
+{
+ "Sleep": {
+  "caption": "Going to sleep: the moon at 55% breathing, the name, the state dim.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"dgx-zz\"><svg class=\"i i13 c-dim skw\"><use href=\"#lu-moon\"/></svg><div class=\"dgx-tx\"><div class=\"dgx-nm\">checkout</div></div><span class=\"dgx-rt\"><span class=\"c-dim\" style=\"font-size:11.5px\">Going to sleep</span></span></div></div></div></div>"
+ },
+ "Arrangement": {
+  "caption": "Agent panels: mark and name, the command mono, the conversation line dim.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"dgx-pn\"><div class=\"dgx-a\"><svg class=\"pi\"><use href=\"#p-claude\"/></svg>checkout</div><div class=\"dgx-cmd\">claude --model opus</div><div class=\"dgx-sm\">new conversation</div></div></div></div></div>"
+ },
+ "SourceLine": {
+  "caption": "Where a conversation comes from: path mono dim.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"dgx-sc\">src/api/limits.ts:42</div></div></div></div>"
+ },
+ "FindRow": {
+  "caption": "The find line in a dialog: icon 13 and the word.",
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"dlg dgx-setwin\" style=\"width:420px;padding:16px 24px\"><div class=\"find\"><svg class=\"i i13\"><use href=\"#lu-search\"/></svg>Find</div></div></div></div>"
+ }
+}

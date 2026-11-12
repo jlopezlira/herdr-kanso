@@ -1,0 +1,23 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './components-tab-states.stories.js';
+
+<Meta title="Components/Tab states" />
+
+# Tab states
+
+## Tab states
+
+At rest, chosen, with a mark (blocked, done), held while dragging, armed to close with its tip.
+
+<Canvas of={stories.TabStates} />
+
+## Prompt for agents
+
+```text
+Build Tab states (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --blocked, --border, --canvas, --chrome, --dim, --done, --fg, --k-fs-body, --k-h-icon, --k-ic-control, --k-ic-inline, --k-ic-row, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --w12, --w7.
+Draw these pieces: Tab states.
+Reuse these kit classes: kit-armed.
+Follow these rules:
+- Tab states: At rest, chosen, with a mark (blocked, done), held while dragging, armed to close with its tip.
+```

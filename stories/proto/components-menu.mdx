@@ -1,0 +1,45 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './components-menu.stories.js';
+
+<Meta title="Components/Menu" />
+
+# Menu
+
+## Menu
+
+252 wide, radius 8, items 30 with icon 14, key hint dim at the right, heading dim, rule between groups.
+
+<Canvas of={stories.Menu} />
+
+## S18 Right-click menus
+
+### Menu guidelines
+
+- **Kokō** One menu, the kit's (10): 252 wide, rows 30, icons 14 muted, an 11.5 dim head naming what was clicked. Hints at the right in dim (when, where, last).
+- **Kansō** Twelve rows, not twenty-four. Snooze, Move to project and Copy open their own short popup (›) instead of five presets, a project list and three copies inline. Sleep its project lives in the project's menu, its one home. Settle appears on Threads only.
+- **Seijaku** Every menu ends the same way: the piece lines of the thing under the pointer, Hide “…” and Settings for this… (10).
+- **Kansō** Armed in place. Close agent and Remove project become "Press again …" on accent for 4 s, the kit's Armed (K), and the menu stays open. Remove says how many tabs close.
+- **Seijaku** One word for each thing: New conversation (the + says the same), Sleep the project, Wake all 3 in review.
+- **Kansō** A computer answers a right-click too: Rename, Turn off, Sync, New project, Add computer. The asleep row's menu leads with Wake; Everything asleep… opens the Sleep dialog.
+
+## Q7 Share, one menu everywhere
+
+### Share guidelines
+
+- **Seijaku** One menu (the kit's, 252 wide) from the header's share icon, in Ports, Memory, Spend and the hjkl dōjō. Its header is the privacy fact: "Counts and sizes only" (Ports, Memory), "Totals and days only" (Spend), "Scores and practice days only" (dōjō, shown once a round is played; D11 draws only the header icon).
+- **Yūgen** The icon shows only when there is something to share: history in Ports and Memory, an unfiltered home page in Spend.
+- **Seijaku** While the image is made, that row says so and the others dim; the result is the toast (B9).
+- **Kansō** The inline row of four bordered buttons and its sentence go (share.js:285-296).
+- **Kokō** Cost: none until chosen; then a local render. The post opens in the browser.
+
+## Prompt for agents
+
+```text
+Build Menu (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
+Use these tokens: --bg, --border, --canvas, --dim, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --popover, --shadow, --w12, --w7.
+Draw these pieces: Menu.
+Reuse these kit classes: kit-act, kit-armed.
+Follow these rules:
+- Menu: 252 wide, radius 8, items 30 with icon 14, key hint dim at the right, heading dim, rule between groups.
+Apply every guideline of S18 Right-click menus; Q7 Share, one menu everywhere.
+```
