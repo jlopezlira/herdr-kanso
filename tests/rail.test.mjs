@@ -1,4 +1,4 @@
-// The collapsed sidebar's rail: one mark per group, its popup, and the drag that folds the sidebar.
+// The collapsed sidebar's rail: one mark per group, its popup, and Hide sidebar.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { clone, load } from "./helpers.mjs";
@@ -63,35 +63,14 @@ test("the rail's list scrolls to the row the keyboard picks, past the ten that s
   assert.equal(scrolled.at(-1), 11, "the twelfth row is brought into view");
 });
 
-test("a drag that folds the sidebar remembers the width you had, not an older one", async () => {
-  const state = { "sidebar.collapsed": false, "sidebar.width": 256 };
-  const tree = { id: "root", resizable: true, children: [{ id: "sidebar", min: 120 }, { id: "strip-map" }] };
-  const runs = [];
+test("dragging the sidebar edge changes its width and never folds it or changes what it remembers", async () => {
+  const state = { "sidebar.collapsed": false, "sidebar.width": 256 }, runs = [];
   const { view } = await spaces({
-    shared: (k) => clone(state[k] ?? null), setShared: (k, v) => { state[k] = clone(v); },
-    layout: () => clone(tree), window: () => ({ platform: "macos" }), run: (cmd, args) => runs.push([cmd, clone(args)]),
+    shared: (k) => clone(state[k] ?? null), setShared: (k, v) => { state[k] = clone(v); }, run: (cmd, args) => runs.push([cmd, args]),
   });
   const cx = { notify() {} };
-  view.sized(256, cx, 0);
-  view.sized(220, cx, 1000); // narrowed to 220 and left there
-  view.foldRail(view.width); // Hide sidebar
-  assert.equal(state["sidebar.width"], 220);
-  view.openRail(); // Show sidebar: it opens at 220
-  view.sized(76, cx, 5000);
-  view.sized(220, cx, 5016);
-  // Later, a drag down past 160.
-  view.sized(200, cx, 9000);
-  view.sized(180, cx, 9016);
-  view.sized(159, cx, 9032);
-  assert.equal(state["sidebar.collapsed"], true, "folded to the rail");
-  assert.equal(state["sidebar.width"], 220, "it opens again at 220, not the 256 it had before");
-  // And a drag from a width held a while remembers that width.
-  view.openRail();
-  view.sized(220, cx, 20000);
-  view.sized(300, cx, 20016); // dragged out to 300 and held
-  view.sized(250, cx, 30000);
-  view.sized(159, cx, 30016);
-  assert.equal(state["sidebar.width"], 300);
+  for (const w of [256, 220, 180, 160, 140, 120, 120, 300, 385]) view.sized(w, cx);
+  assert.deepEqual([state["sidebar.collapsed"], state["sidebar.width"], runs.length, view.width], [false, 256, 0, 385]);
 });
 
 test("kanso-spaces.sidebar folds an open sidebar to the rail and opens a folded one", async () => {
