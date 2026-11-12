@@ -596,7 +596,7 @@ test("a sleep that stopped half way: its old pid, now another claude, does not k
   const fake = spawn(bin, ["-e", "setTimeout(() => {}, 20000)"]);
   t.after(() => fake.kill());
   await new Promise((r) => setTimeout(r, 300));
-  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store", "stillThere"], world.host);
+  const mod = await load("kanso-sleep/main.js", ["Sleep", "Store", "Kdb", "stillThere"], world.host);
   assert.equal(await mod.stillThere(fake.pid, Date.now()), true, "a claude that ran before the sleep: still that one");
   assert.equal(await mod.stillThere(fake.pid, Date.now() - 60_000), false, "one started after the sleep: another process with that pid");
   assert.equal(await mod.stillThere(process.pid, Date.now()), false, "not claude: not it");
