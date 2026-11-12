@@ -5,20 +5,7 @@ import { join } from "node:path";
 
 const src = process.argv[2];
 if (!src) throw new Error("usage: node scripts/import-proto.mjs <dir>");
-const CREDITS = [
-  [" (Fives, Q10: ", " (Q10: "],
-  ["Tab bar (Phasma): ", "Tab bar: "],
-  [" (Kylo, after the unified menu)", " (after the unified menu)"],
-  ["app.settings (Ventress), ", "app.settings, "],
-  ["no gear and no ?, Phasma)", "no gear and no ?)"],
-  ["(Cody's pax-fail", "(pax-fail"],
-  ["editor conflict, Cody's markup: ", "editor conflict: "],
-  [" are Ventress's state.css (kst-)", " are state.css (kst-)"],
-  ["sidebar boards (ventress): ", "sidebar boards: "],
-  ["dialogs (echo): ", "dialogs: "],
-];
-const uncredit = (text) => CREDITS.reduce((t, [from, to]) => t.replaceAll(from, to), text);
-const read = (name) => uncredit(readFileSync(join(src, name), "utf8"));
+const read = (name) => readFileSync(join(src, name), "utf8");
 const OUT = "stories/proto";
 
 const LAYOUTS = ["Window at rest", "Sidebar at rest", "Sidebar header, three ways", "Settings on Dawn", "hjkl dōjō", "Right-click any piece"];
