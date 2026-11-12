@@ -250,7 +250,7 @@ for (const entry of JSON.parse(read("sb-atomic-stories.json"))) {
   if (title !== entry.title) throw new Error(`title mismatch: ${entry.title}`);
   if (!folders.has(folder)) folders.set(folder, {});
   if (TABLES.includes(title)) {
-    (tables[folder] ??= []).push(`## ${mdxText(title)}\n\n${mdxText(text(caption))}\n\n${tableOf(entry.html)}`);
+    (tables[folder] ??= []).push({ title, body: `${mdxText(text(caption))}\n\n${tableOf(entry.html)}` });
     continue;
   }
   const stories = folders.get(folder);
@@ -306,14 +306,17 @@ export default { title: ${q(folder)} };
 
 ${Object.entries(stories).map(([k, s]) => `export const ${k} = { name: ${q(s.title)}, ...story(stories.${k}) };`).join("\n")}
 `);
+  const h1 = folder.split("/")[1];
+  const pieces = [...Object.entries(stories).map(([k, s]) => ({ title: s.title, body: `${mdxText(s.caption)}\n\n<Canvas of={stories.${k}} />` })), ...(tables[folder] ?? [])];
+  const piece = (p) => (pieces.length > 1 && p.title !== h1 ? `## ${mdxText(p.title)}\n\n${p.body}` : p.body);
   writeFileSync(join(OUT, `${file}.mdx`), `import { Canvas, Meta } from '@storybook/addon-docs/blocks';
 ${drawn ? `import * as stories from './${file}.stories.js';\n` : ""}
 <Meta title=${q(folder)} />
 
-# ${mdxText(folder.split("/")[1])}
+# ${mdxText(h1)}
 
-${[...Object.entries(stories).map(([k, s]) => `## ${mdxText(s.title)}\n\n${mdxText(s.caption)}\n\n<Canvas of={stories.${k}} />`), ...(tables[folder] ?? [])].join("\n\n")}
-${boards.map((b) => `\n## ${mdxText(b.name)}\n\n${mdxText(b.body)}\n`).join("")}
+${pieces.map(piece).join("\n\n")}
+${boards.map((b) => `\n${b.name === h1 ? "" : `## ${mdxText(b.name)}\n\n`}${mdxText(b.body)}\n`).join("")}
 ## Prompt for agents
 
 \`\`\`text
