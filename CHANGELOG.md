@@ -26,6 +26,8 @@ the branch's rules.
 
 ### Fixed
 
+- Storybook shows Edge and Minimap slot as separate pieces, with the edges around an empty pane and the minimap in its own frame.
+
 - Storybook documentation and captions read on their own without prototype references; imported text strips those references on regeneration.
 - Storybook uses one token spacing rhythm for matching pairs of elements in rows, controls, blocks and containers.
 

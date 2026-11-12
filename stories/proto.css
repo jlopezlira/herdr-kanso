@@ -517,14 +517,14 @@
 .kanso-story__bars-anchor{position:relative}
 .kanso-tooltip__anchor{position:absolute;white-space:nowrap;z-index:2}
 .kanso-tooltip__anchor .kanso-tooltip{margin:0}
-.kanso-story__pane-strip{display:flex;gap:var(--k-sp-2);height:200px;background:var(--chrome);border-radius:var(--k-r-card);padding:var(--k-sp-2);box-sizing:border-box;box-shadow:0 0 0 1px var(--border)}
-.kanso-story__pane-strip .kanso-pane .kanso-header{flex:none}
-.kanso-edge{width:28px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--k-sp-2);border-radius:var(--k-r-control);color:var(--muted);font-size:var(--k-fs-name);position:relative}
+.kanso-pane-strip{display:flex;gap:var(--k-sp-2);height:200px;background:var(--chrome);border-radius:var(--k-r-card);padding:var(--k-sp-2);box-sizing:border-box;box-shadow:0 0 0 1px var(--border)}
+.kanso-pane-strip .kanso-pane .kanso-header{flex:none}
+.kanso-edge{width:28px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--k-sp-1);border-radius:var(--k-r-control);color:var(--muted);font-size:var(--k-fs-name);position:relative}
 .kanso-edge.kanso-edge--target{background:color-mix(in srgb,var(--accent) 25%,transparent);color:var(--fg)}
 .kanso-minimap__tile{width:20px;height:20px;border-radius:6px;background:var(--input);display:grid;place-items:center;flex:none}
 .kanso-minimap__tile .kanso-icon--program{width:12px;height:12px}
 .kanso-minimap__tile.kanso-row--hover{background:var(--selected);box-shadow:0 0 0 1px var(--border)}
-.kanso-status-bar__slot{width:180px;height:var(--k-h-bar);display:flex;align-items:center;justify-content:center;gap:var(--k-sp-2);background:var(--chrome);border-radius:6px;box-shadow:0 0 0 1px var(--border);font-size:11.5px;color:var(--muted)}
+.kanso-status-bar__slot{width:180px;height:var(--k-h-bar);display:flex;align-items:center;justify-content:center;gap:var(--k-sp-hair);background:var(--chrome);border-radius:6px;box-shadow:0 0 0 1px var(--border);font-size:var(--k-fs-meta);color:var(--muted)}
 .kanso-status-bar__stack{display:flex;flex-direction:column;gap:var(--k-sp-hair)}
 .kanso-status-bar__stack i{height:2px!important}
 .kanso-search{width:420px;background:var(--canvas);border-radius:8px;box-shadow:var(--shadow),0 0 0 1px var(--border);overflow:hidden;flex:none}

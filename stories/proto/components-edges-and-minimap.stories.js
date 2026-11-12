@@ -3,4 +3,5 @@ import { story } from './story.js';
 
 export default { title: "Components/Edges and minimap" };
 
-export const EdgesAndMinimap = { name: "Edges and minimap", ...story(stories.EdgesAndMinimap) };
+export const Edge = { name: "Edge", ...story(stories.Edge) };
+export const MinimapSlot = { name: "Minimap slot", ...story(stories.MinimapSlot) };

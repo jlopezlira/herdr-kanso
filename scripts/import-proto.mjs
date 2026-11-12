@@ -89,7 +89,7 @@ const CLASSES = {
   "brx-stage": "kanso-story__bars-stage",
   "brx-stand": "kanso-pane__placeholder",
   "brx-stk": "kanso-status-bar__stack",
-  "brx-stripv": "kanso-story__pane-strip",
+  "brx-stripv": "kanso-pane-strip",
   "brx-tgrid": "kanso-story__toast-grid",
   "brx-tile": "kanso-minimap__tile",
   "brx-tools": "kanso-tab-bar__tools",
@@ -1056,6 +1056,8 @@ export function importProto(src) {
     })
     .replaceAll(".k.k-dark,.k.k-light{", ".k{")
     .replaceAll(".k-light ", ':root[data-theme="light"] ')
+    .replace(/\.brx-edge\{[^}]*\}/, (rule) => rule.replace("gap:var(--k-sp-2)", "gap:var(--k-sp-1)"))
+    .replace(/\.brx-slot\{[^}]*\}/, (rule) => rule.replace("gap:var(--k-sp-2)", "gap:var(--k-sp-hair)").replace("font-size:11.5px", "font-size:var(--k-fs-meta)"))
     .replace(/\n{3,}/g, "\n\n");
   if (/k-(dark|light)/.test(css)) throw new Error("a theme selector is left");
   const interactive = /([^{}]+)\{\s*cursor:pointer;transition:/.exec(css)[1].split(",").map((s) => /^\s*\.([\w-]+)\s*$/.exec(s)?.[1]).filter(Boolean);
@@ -1119,9 +1121,24 @@ export function importProto(src) {
       continue;
     }
     const stories = folders.get(folder);
-    let name = exportName(title);
-    while (stories[name]) name += "2";
-    stories[name] = { title: stripRefs(title), caption: stripRefs(caption).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), html: focusable(LIVE.includes(title) ? live(example(entry.html)) : example(entry.html)) };
+    // The export still combines these two independent Bars pieces.
+    const pieces = title === "Edges and minimap" ? [
+      {
+        title: "Edge",
+        caption: "Off-screen pane tiles on either side of an empty pane in the strip.",
+        html: '<div class="st-ex"><div class="k"><div class="brx-stripv" style="width:400px;height:120px"><div class="brx-edge">‹<span class="brx-tile kit-ib"><svg class="pi"><use href="#p-codex"/></svg></span></div><div class="pane" style="flex:1"></div><div class="brx-edge">›<span class="brx-tile kit-ib"><svg class="pi"><use href="#p-codex"/></svg></span><span class="brx-tile kit-ib"><svg class="pi"><use href="#p-claude"/></svg></span><span class="brx-tile kit-ib"><svg class="pi"><use href="#lu-terminal"/></svg></span></div></div></div></div>',
+      },
+      {
+        title: "Minimap slot",
+        caption: "The minimap and zoom control in their own status bar slot.",
+        html: '<div class="st-ex"><div class="k"><div class="brx-slot"><span class="mini-map"><i class="f" style="width:24px"></i><i style="width:24px"></i></span><span style="width:8px"></span><span class="c-dim">−</span><span class="c-mu" style="margin:0 var(--k-sp-1)">2</span><span class="c-dim">+</span></div></div></div>',
+      },
+    ] : [{ title, caption, html: example(entry.html) }];
+    for (const piece of pieces) {
+      let name = exportName(piece.title);
+      while (stories[name]) name += "2";
+      stories[name] = { title: stripRefs(piece.title), caption: stripRefs(piece.caption).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), html: focusable(LIVE.includes(piece.title) ? live(piece.html) : piece.html) };
+    }
   }
 
   const why = notes();
