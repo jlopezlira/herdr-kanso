@@ -13,7 +13,7 @@ From a clone, with Node 22.15 or newer, Git, Bash and sqlite3:
 
 ## Version
 
-Pull requests target `develop`. Add entries for changes to what kansō installs under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md), using Added, Changed, Fixed, Removed or another supported category. Never edit a numbered section or `kanso/mods/kanso-chrome/version.json` in a pull request. What kansō installs is `kanso/mods`, `kanso/themes`, `kanso/layouts`, `kanso/keys.json` and `kanso/keys.windows.json`. Docs need no entry.
+Pull requests target `develop`. Add entries for changes to what kansō installs under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md), using Breaking, Added, Changed, Deprecated, Removed, Fixed, Security or Upgrade. Use Upgrade for steps users must take before updating; like Fixed and Changed, it does not require a larger bump. Never edit a numbered section or `kanso/mods/kanso-chrome/version.json` in a pull request. What kansō installs is `kanso/mods`, `kanso/themes`, `kanso/layouts`, `kanso/keys.json` and `kanso/keys.windows.json`. Docs need no entry.
 
 Until a release candidate is cut, version.json stays at the newest stable version. Once CI passes on all three platforms, a push to develop publishes a beta with the Unreleased entries as its notes. Its version is computed from the newest stable tag: Breaking or Removed means a major bump, Added or Deprecated means a minor bump, anything else a patch. Existing beta numbers continue upward. The beta job creates a detached commit with only version.json set to the computed version, tags that commit and pushes only the tag. Develop keeps its version file, and the updater gets an archive whose version matches its tag.
 

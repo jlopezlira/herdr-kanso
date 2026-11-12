@@ -6,6 +6,8 @@ stays at the newest stable version until the Release candidate workflow prepares
 the next version. A push to develop publishes a beta with the Unreleased notes.
 Its version is computed from the newest stable tag: Breaking or Removed means
 a major bump, Added or Deprecated means a minor bump, anything else a patch.
+Use Upgrade for steps users must take before updating. Like Fixed and Changed,
+it does not require a larger bump; RC notes put it under Before you update.
 The beta tag points to a detached commit with that computed version in
 version.json so its archive passes the updater check. Develop is unchanged.
 

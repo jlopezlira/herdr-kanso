@@ -8,6 +8,8 @@ import test from "node:test";
 const project = fileURLToPath(new URL("../", import.meta.url));
 const versionFile = "kanso/mods/kanso-chrome/version.json";
 const stable = "## [1.1.0] - 2026-11-01\n\n### Added\n\n- Stable.\n";
+const footer = "Report a problem: https://github.com/jlopezlira/herdr-kanso/issues/new?template=bug.yml";
+const rcIntro = "Release candidate for 1.2.0. It becomes 1.2.0 stable if nothing blocks it.";
 const pending = "### Added\n\n- Feature.\n\n  Detail kept in release notes.";
 
 test("Workflow commands preserve PR history, publish computed notes and prepare successive RCs", (t) => {
@@ -62,7 +64,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   write("CHANGELOG.md", original);
   run("release-plan", ["beta"]);
   assert.match(read("output"), /tag=v1\.2\.0-beta\.14\n/);
-  assert.equal(read("kanso-release-notes.md"), `${pending}\n`);
+  assert.equal(read("kanso-release-notes.md"), `${pending}\n\n${footer}\n`);
   assert.equal(read(versionFile), '{ "version": "1.1.0" }\n');
   assert.equal(read("CHANGELOG.md"), original);
   const developHead = git("rev-parse", "develop");
@@ -103,7 +105,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   write("event.json", JSON.stringify({ pull_request: { base: { sha: fixedBase } } }));
   run("check-version", [], pr);
   run("release-plan", ["beta"]);
-  assert.equal(read("kanso-release-notes.md"), "### Fixed\n\n- Bug.\n");
+  assert.equal(read("kanso-release-notes.md"), `### Fixed\n\n- Bug.\n\n${footer}\n`);
   assert.match(read("output"), /tag=v1\.2\.0-beta\.15\n/);
   const fixHead = git("rev-parse", "develop");
   run("release-tag", ["v1.2.0-beta.15"]);
@@ -114,7 +116,7 @@ test("Workflow commands preserve PR history, publish computed notes and prepare 
   run("release-plan", ["rc", "--prepare"]);
   assert.equal(read(versionFile), fixedVersion);
   assert.match(read("CHANGELOG.md"), /- Feature\.[\s\S]*- Bug\./);
-  assert.equal(read("kanso-release-notes.md"), `${pending}\n\n### Fixed\n\n- Bug.\n`);
+  assert.equal(read("kanso-release-notes.md"), `${rcIntro}\n\n## Changes\n\n${pending}\n\n### Fixed\n\n- Bug.\n\n${footer}\n`);
   commit("Update release candidate");
   run("release-tag", ["v1.2.0-rc.2"]);
   const minorHead = git("rev-parse", "HEAD");

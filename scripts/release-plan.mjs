@@ -85,6 +85,25 @@ export function planRelease({ kind, branch, version, changelog, tags, installedC
   }
 }
 
+export function releaseNotes({ kind, version, changelog }) {
+  const section = parseChangelog(changelog).sections.find((s) => s.version === (kind === "beta" ? UNRELEASED : version));
+  if (!section) return null;
+  if (kind === "stable") return section.body;
+  const footer = "Report a problem: https://github.com/jlopezlira/herdr-kanso/issues/new?template=bug.yml";
+  if (kind === "beta") return `${section.body}\n\n${footer}`;
+  let upgrade = false;
+  const changes = section.body.split("\n").filter((line) => {
+    if (line.startsWith("### ")) upgrade = line.slice(4).trim() === "Upgrade";
+    return !upgrade;
+  }).join("\n").trim();
+  const parts = [
+    `Release candidate for ${version}. It becomes ${version} stable if nothing blocks it.`,
+    ["## Changes", changes].filter(Boolean).join("\n\n"),
+  ];
+  if (section.categories.Upgrade) parts.push(`## Before you update\n\n${section.categories.Upgrade.map((entry) => `- ${entry}`).join("\n")}`);
+  return [...parts, footer].join("\n\n");
+}
+
 function writeOutputs(pairs) {
   const file = process.env.GITHUB_OUTPUT;
   if (!file) return;
@@ -132,7 +151,7 @@ function main() {
     version = candidate.version;
     changelog = candidate.changelog;
   }
-  const body = notes(changelog, kind === "beta" ? UNRELEASED : version);
+  const body = releaseNotes({ kind, version, changelog });
   if (body === null) {
     console.error(`error: ${CHANGELOG} has no section for ${version}`);
     process.exit(1);
