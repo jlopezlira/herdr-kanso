@@ -8,7 +8,7 @@ if (!src) throw new Error("usage: node scripts/import-proto.mjs <dir>");
 const read = (name) => readFileSync(join(src, name), "utf8");
 const OUT = "stories/proto";
 
-const LAYOUTS = ["Window at rest", "Sidebar at rest", "Sidebar header, three ways", "Settings on Dawn", "hjkl dōjō", "Right-click any piece"];
+const LAYOUTS = ["Window at rest", "Sidebar at rest", "Sidebar header, three ways", "hjkl dōjō", "Right-click any piece"];
 const SETTINGS = ["Settings", "Settings, what shows", "Keys", "Window map", "What's new", "Credits"];
 const SUBS = { "States (S21)": "States" };
 

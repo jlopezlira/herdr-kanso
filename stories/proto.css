@@ -1030,10 +1030,7 @@ section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 
 .dgx-setwin{position:relative;overflow:hidden}
 .dgx-setwin>*{position:relative}
-.dgx-setwin>svg.dawn{position:absolute;left:0;top:0;width:100%}
-.dgx-ondawn .qt span{color:color-mix(in srgb,var(--fg) 72%,transparent)}
-.dgx-ondawn .qt .on{color:var(--fg)}
-.dgx-ondawn .dlg-h .ql{color:var(--fg)}
+
 .dgx-ws{display:grid;grid-template-columns:372px minmax(0,1fr);gap:32px;margin-top:16px;align-items:start}
 .dgx-wmap{position:relative;width:372px;height:232px;border-radius:8px;background:var(--canvas)}
 .dgx-ar{position:absolute;border-radius:4px;background:var(--w7);font-size:11.5px;color:var(--muted);display:grid;place-items:center;text-align:center;box-sizing:border-box}
