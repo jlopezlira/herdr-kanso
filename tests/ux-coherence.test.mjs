@@ -70,17 +70,15 @@ test("a second press within four seconds confirms, and after that it arms again"
 test("the sidebar and settings confirm through Armed", async () => {
   const spaces = await text("kanso/mods/kanso-spaces/main.js");
   assert.equal(spaces.includes("confirmClose"), false);
-  assert.equal(spaces.includes("Click again"), false);
   assert.match(spaces, /this\.armed\.press\("remove"/);
   assert.match(spaces, /this\.armed\.press\("close"/);
-  assert.match(spaces, /Press again: remove it/);
-  assert.match(spaces, /Press again to close it/);
+  assert.match(spaces, /verb: w \? `remove it and close its/);
+  assert.match(spaces, /verb: "close it"/);
   const settings = await text("kanso/mods/kanso-settings/main.js");
   assert.match(settings, /new Armed\(\)/);
-  assert.match(settings, /Press again to take it/);
+  assert.match(settings, /pressAgain\("take it"\)/);
   assert.equal(settings.includes("Press it again"), false);
 });
-
 test("memory's Esc leaves the full list only while that list is open", async () => {
   assert.equal(leaveShowAll(true), false);
   assert.equal(leaveShowAll(false), null);
@@ -98,11 +96,24 @@ test("armed ink comes from the kit token", async () => {
   ]) {
     const source = await text(file);
     assert.equal(source.includes("#ffffff"), false, file);
-    assert.match(source, /button\("[\w-]+", [^\n]*\n?[^\n]*\{ [^}]*armed/, file);
+    assert.match(source, /this\.armed\.button\("[\w-]+"/, file);
   }
   assert.match(await text("kanso/mods/kanso-panel/ui.js"), /filled\(c\.accent, c\.accentText, c\)/);
 });
 
+test("one armed wording: only the kit says Press again, and only as Press again to <verb>", async () => {
+  const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
+  const all = async (dir) => (await readdir(dir, { recursive: true })).filter((name) => /\.m?js$/.test(name)).map((name) => join(dir, name));
+  const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !file.endsWith("/ui.js"));
+  const found = [];
+  for (const file of files) {
+    for (const line of (await readFile(file, "utf8")).split("\n")) {
+      if (/\b(?:Press|Click|Tap)\b[^\n]{0,24}\bagain\b|Press again:/.test(line)) found.push(`${file}: ${line.trim().slice(0, 120)}`);
+    }
+  }
+  assert.deepEqual(found, []);
+  assert.match(await text("kanso/mods/kanso-panel/ui.js"), /export const pressAgain = \(verb\) => `Press again to \$\{verb\}`;/);
+});
 test("the teaching footers are gone and a scan time can still be said", async () => {
   assert.equal((await text("kanso/mods/kanso-panel/ports.js")).includes("Programs of yours listening"), false);
   assert.equal((await text("kanso/mods/kanso-containers/main.js")).includes("grouped by the Kanso project"), false);
@@ -244,7 +255,7 @@ const BANNED = [
   [/machine low/, "machine low"],
   [/\} machine\b/, "} machine"],
   [/Press it again/, "Press it again"],
-  [/Click again(?! to leave)/, "Click again"],
+  [/Click again/, "Click again"],
   [/Pull request/, "Pull request"],
 ];
 

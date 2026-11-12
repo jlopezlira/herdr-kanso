@@ -29,7 +29,7 @@ when a file or its HEAD changed within `kanso.worktrees.idleHours`
   (72 light, 48 under 560 wide) with "in worktrees", what Clean up
   frees, and worktrees, repositories, need a look and folders gone
   (28 light); then "Clean up N" (primary, 30 tall), which a second
-  press within 4 s confirms (red, "Press again to remove N"). It takes
+  press within 4 s confirms (accent, "Press again to remove N"). It takes
   what loses nothing: merged, not merged (the branch keeps its
   commits), detached with every commit on a branch, and folders gone;
   never one git can't read (its `.git` names a moved repository:

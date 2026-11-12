@@ -247,9 +247,8 @@ export class Ports {
   }
 
   row(s, c) {
-    const key = `stop:${s.pid}`, armed = this.armed.is(key), busy = this.stopping.has(s.pid);
+    const busy = this.stopping.has(s.pid);
     const owner = s.owner ? this.paneOf(s.owner) : null;
-    const stopLabel = busy ? "Stopping…" : armed ? (s.force ? "Press again to force stop" : "Press again to stop") : s.force ? "Force stop" : "Stop";
     const since = s.startedAt ?? Date.now() - s.secs * 1000;
     return v_flex().w_full().px(G.md).py(10).gap(4).rounded(6).hover((st) => st.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
       .child(h_flex().w_full().items_center().gap(G.md)
@@ -264,13 +263,13 @@ export class Ports {
       .child(h_flex().flex_wrap().gap_x(G.lg)
         .child(quietLink(`pt-open-${s.pid}`, "Open in the browser", (cx) => cx.open_url(`http://localhost:${s.ports[0]}`), c, { color: c.text }))
         .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${s.pid}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
-        .child(quietLink(`pt-stop-${s.pid}`, stopLabel, (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.stop([s], cx)); }, c, { color: armed ? c.red : c.muted })));
+        .child(this.armed.link(`pt-stop-${s.pid}`, busy ? "Stopping…" : s.force ? "Force stop" : "Stop", s.force ? "force stop" : "stop",
+          `stop:${s.pid}`, (cx) => this.stop([s], cx), c, { disabled: busy })));
   }
 
   hero(c, list, narrow) {
     const loose = list.filter((s) => !s.owner);
     const here = aliasText(shared("kanso.alias"), "");
-    const armedAll = this.armed.is("all");
     const held = list.reduce((t, s) => t + (typeof s.mb === "number" ? s.mb : 0), 0);
     const st = this.digest?.stats;
     const stats = [
@@ -291,8 +290,7 @@ export class Ports {
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.yellow : c.text).child(s.value))
           .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
       .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
-        .child(button("pt-stop-all", armedAll ? `Press again to stop ${loose.length}` : `Stop ${loose.length} ${NO_PANE}`,
-          (cx) => this.armed.press("all", cx, (cx) => this.stop(loose, cx)), c, { armed: armedAll }))
+        .child(this.armed.button("pt-stop-all", `Stop ${loose.length} ${NO_PANE}`, `stop ${loose.length}`, "all", (cx) => this.stop(loose, cx), c))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
   }
 

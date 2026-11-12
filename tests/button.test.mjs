@@ -101,17 +101,35 @@ test("Off is a w4 fill with dim text for solid and icon alike, and never reacts 
   assert.equal(pressed, 0);
 });
 
-test("A press runs the action; armed fills with the accent", async () => {
+test("A press runs the action; armed fills with the accent and reads Press again to <verb>", async () => {
   const { button, tokens } = await kit();
   const c = tokens(night);
   const ran = [];
-  const el = button("a", "Press again to remove", (cx) => ran.push(cx), c, { armed: true });
+  const el = button("a", "Remove", (cx) => ran.push(cx), c, { verb: "remove", armed: true });
   assert.equal(one(el, "bg"), c.accent);
-  assert.equal(one(el.kids.at(-1), "text_color"), c.accentText);
+  assert.equal(one(el, "accessibility_label"), "Press again to remove");
+  for (const label of el.kids.at(-1).kids) assert.equal(one(label, "text_color"), c.accentText);
   one(el, "on_click")(null, "cx");
   assert.deepEqual(ran, ["cx"]);
 });
 
+test("Arming changes no width: both labels share one cell at rest and armed, the hidden one at no height", async () => {
+  const { button, tokens } = await kit();
+  const c = tokens(day);
+  const words = (cell) => cell.kids.map((label) => one(label, "child"));
+  const hidden = (cell) => cell.kids.map((label) => calls(label, "h").some((call) => call[1] === 0) && calls(label, "overflow_hidden").length === 1);
+  for (const [kind, small] of [["solid", false], ["tonal", true], ["quiet", true]]) {
+    const rest = button("r", "Delete", () => {}, c, { kind, small, verb: "delete" });
+    const armed = button("r", "Delete", () => {}, c, { kind, small, verb: "delete", armed: true });
+    const [restCell, armedCell] = [rest.kids.at(-1), armed.kids.at(-1)];
+    assert.deepEqual(words(restCell), ["Delete", "Press again to delete"], kind);
+    assert.deepEqual(words(armedCell), words(restCell), kind);
+    assert.deepEqual(hidden(restCell), [false, true], kind);
+    assert.deepEqual(hidden(armedCell), [true, false], kind);
+    for (const cell of [restCell, armedCell]) for (const label of cell.kids) assert.equal(calls(label, "whitespace_nowrap").length, 1);
+    for (const name of ["h", "px", "gap", "rounded", "w", "min_w", "max_w"]) assert.deepEqual(calls(armed, name), calls(rest, name), `${kind} ${name}`);
+  }
+});
 test("quietLink and iconButton are the quiet and icon kinds", async () => {
   const { quietLink, iconButton, tokens, H, ICON } = await kit();
   const c = tokens(night);

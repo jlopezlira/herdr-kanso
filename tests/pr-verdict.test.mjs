@@ -88,7 +88,7 @@ test("each pull request state names what stops it, in that colour, with one acti
     painted(view);
   }
   const ready = verdictOf(scene());
-  assert.equal(ready.primary.press, "Press again to squash and merge");
+  assert.equal(ready.primary.verb, "squash and merge");
   assert.equal(ready.primary.armed, true);
   assert.equal(ready.primary.write, true);
   assert.equal(ready.body.kind, "note");
@@ -226,7 +226,7 @@ test("a branch with no pull request says where it is, and offers the one next st
   const unpushed = empty({ kind: "unpushed", ahead: 1, subjects });
   assert.equal(unpushed.text, "1 commit not on GitHub");
   assert.equal(unpushed.primary.id, "pr-push");
-  assert.equal(unpushed.primary.armed, true);
+  assert.equal(unpushed.primary.armed, false, "a push acts on one press");
   assert.deepEqual(host(unpushed.body.lines), subjects.slice(0, 5));
   assert.equal(empty({ kind: "unpushed", ahead: 0 }).text, "Commits not on GitHub");
   const none = empty({ kind: "none", canCreate: true });

@@ -6,7 +6,7 @@ import { imageApi } from "./platform-images.js";
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, H, T, tokens, button, quietLink, skeleton, breathe, Armed, field, TextField, section, segmented, toggleSwitch } from "./ui.js";
+import { G, H, T, tokens, button, quietLink, skeleton, breathe, Armed, field, TextField, section, segmented, toggleSwitch, undoLine, pressAgain } from "./ui.js";
 import { pieces, choice, setPiece, filterPieces, groupsOf, withRoster, STATE_LABEL, STORE } from "./pieces.js";
 import { glyphs, keycap, familyPattern, shownChord } from "./marks.js";
 import { GROUPS, ofRow, familyChords, conflictsOf, rebound } from "./actions.js";
@@ -45,6 +45,7 @@ export default class Settings extends View {
     this.capture = null; // { key, section, row, old }: the row waiting for a press
     this.conflict = null; // { chord, taken }: the press that needs a second one
     this.armed = new Armed();
+    this.undo = null; // the pieces before Reset all
     this.message = null;
     this.installed = null;
     this.news = { entries: null, error: null, from: null };
@@ -171,7 +172,7 @@ export default class Settings extends View {
   pressNote(c, ask) {
     const live = this.conflict && this.armed.is(this.conflict.chord);
     const text = live
-      ? `${glyphs(this.conflict.chord)} already does ${[...new Set(this.conflict.taken.map((k) => k.action))].join(", ")}. Press again to take it, Esc to keep yours.`
+      ? `${glyphs(this.conflict.chord)} already does ${[...new Set(this.conflict.taken.map((k) => k.action))].join(", ")}. ${pressAgain("take it")}, Esc to keep yours.`
       : this.message ?? ask;
     return div().px(G.sm).py(4).text_size(12).line_height(1.45).text_color(live ? c.yellow : this.message ? c.red : c.accent).child(text);
   }
@@ -240,17 +241,16 @@ export default class Settings extends View {
         .when(Boolean(bare), (el) => el.child(h_flex().flex_none().gap(2).children([step(bare, -1, "\u2191"), step(bare, 1, "\u2193")])))
         .child(segmented(`piece-${piece.id}`, items, choice(piece.id, map), (state, cx) => {
           setShared(STORE, setPiece(pieces(shared), piece.id, state));
-          cx.notify();
+          this.undo = null; cx.notify();
         }, c));
     };
-    const armed = this.armed.is("reset");
     return v_flex().w_full()
       .child(this.findField(c))
       .when(!groups.length, (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("No piece matches.")))
       .children(groups.map((group) => v_flex().w_full().pt(G.lg).child(section(c, group.name)).children(group.rows.map(row))))
-      .child(h_flex().w_full().justify_end().pt(G.lg).child(quietLink("pieces-reset", armed ? "Press again" : "Reset all", (cx) => {
-        this.armed.press("reset", cx, () => { setShared(STORE, {}); cx.notify(); });
-      }, c, { color: armed ? c.accent : c.muted })));
+      .child(h_flex().w_full().justify_end().pt(G.lg).child(this.undo
+        ? undoLine("pieces-reset", "Back to the defaults", (cx) => { setShared(STORE, this.undo); this.undo = null; cx.notify(); }, c)
+        : quietLink("pieces-reset", "Reset all", (cx) => { this.undo = pieces(shared); setShared(STORE, {}); cx.notify(); }, c)));
   }
 
   async readNews(cx) {
@@ -367,7 +367,7 @@ export default class Settings extends View {
         .when(Boolean(this.shown()), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.shown())))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(segmented("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))
+      .child(div().pt(G.md).child(segmented("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))
       .child(v_flex().id(`settings-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

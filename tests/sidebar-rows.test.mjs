@@ -21,25 +21,22 @@ test("plus stays on the active project and the menu stays on hover", () => {
   assert.deepEqual(projectControls({ active: false, hovered: false, place: { folder: "/work" } }), { plus: false, dots: false });
 });
 
-test("a count behind arms Press again and the second press pulls with git on that computer", () => {
-  assert.equal(pullLabel(0, false), null);
-  assert.equal(pullLabel(3, false), "\u21933");
-  assert.equal(pullLabel(3, true), "Press again to pull 3");
-  assert.equal(pullLabel(3, false, true), "Pulling\u2026");
-  assert.equal(pullLabel(3, true, true), "Pulling\u2026");
+test("a count behind pulls with git on that computer at one press", () => {
+  assert.equal(pullLabel(0), null);
+  assert.equal(pullLabel(3), "\u21933");
+  assert.equal(pullLabel(3, true), "Pulling\u2026");
   assert.equal(pullKey("/work/app", "dark"), "pull:dark:/work/app");
   assert.equal(pullKey("/work/app", null), "pull::/work/app");
   assert.deepEqual(pullCommand("/work/app", "dark"), { command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], on: "dark" });
   assert.deepEqual(pullCommand("/work/app", null), { command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], on: null });
   assert.equal(pullCommand("", "dark"), null);
   assert.equal(pullCommand(null, null), null);
-  const armed = gitControls(git, { folder: place.cwd, on: place.on, armed: true });
-  assert.equal(armed.find((item) => item.kind === "behind").label, "Press again to pull 3");
-  assert.deepEqual(armed.find((item) => item.kind === "behind").command, pullCommand(place.cwd, place.on));
-  const pulling = gitControls(git, { folder: place.cwd, on: place.on, armed: true, pulling: true });
+  const rest = gitControls(git, { folder: place.cwd, on: place.on });
+  assert.equal(rest.find((item) => item.kind === "behind").label, "\u21933");
+  assert.deepEqual(rest.find((item) => item.kind === "behind").command, pullCommand(place.cwd, place.on));
+  const pulling = gitControls(git, { folder: place.cwd, on: place.on, pulling: true });
   const behind = pulling.find((item) => item.kind === "behind");
   assert.equal(behind.label, "Pulling\u2026");
-  assert.equal(behind.armed, false);
   assert.equal(behind.command, null);
 });
 
@@ -69,7 +66,7 @@ test("a count ahead goes to that project and opens the pull request panel", () =
   assert.equal(aheadOpen(2, { folder: "", id: "app", active: false }), null);
   assert.deepEqual(aheadOpen(2, { folder: "/work/app", id: "app", active: false }), { panel: "pr", select: "app" });
   assert.deepEqual(aheadOpen(2, { folder: "/work/app", id: "app", active: true }), { panel: "pr", select: null });
-  const controls = gitControls(git, { folder: "/work/app", on: "dark", id: "app", active: false, armed: false });
+  const controls = gitControls(git, { folder: "/work/app", on: "dark", id: "app", active: false });
   assert.deepEqual(controls.find((item) => item.kind === "ahead").open, { panel: "pr", select: "app" });
   assert.equal(controls.find((item) => item.kind === "ahead").label, "\u21912");
 });

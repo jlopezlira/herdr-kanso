@@ -6,8 +6,7 @@ import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { tryOr } from "./pure.js";
-import { skeleton, breathe, button, field, TextField, G, tokens } from "./ui.js";
-const ARM_MS = 4000;
+import { skeleton, breathe, button, field, TextField, G, tokens, Armed } from "./ui.js";
 
 export function listFor(projects, key) {
   const tag = (k) => (projects?.[k] ?? []).map((a) => ({ ...a, from: k }));
@@ -35,7 +34,7 @@ export default class Arrange extends View {
     this.view = "list";
     this.list = null;
     this.others = [];
-    this.armed = null;
+    this.armed = new Armed();
     this.busy = null;
     this.error = null;
     this.name = new TextField({ placeholder: "Name" });
@@ -118,12 +117,6 @@ export default class Arrange extends View {
     });
   }
 
-  arm(key, cx, act) {
-    if (this.armed === key && Date.now() - this.armedAt <= ARM_MS) { this.armed = null; act(cx); return; }
-    this.armed = key; this.armedAt = Date.now(); cx.notify();
-    cx.timer.after(ARM_MS + 50, (cx) => { if (this.armed === key) { this.armed = null; cx.notify(); } });
-  }
-
   // The pending g (for gg) is kept on the view between keys.
   listed(e) {
     const { move, gAt } = listKey(e, this.listG);
@@ -203,7 +196,7 @@ export default class Arrange extends View {
     this.order = [...list, ...others];
     const at = this.order[Math.min(this.at ?? 0, Math.max(0, this.order.length - 1))];
     const row = (a) => {
-      const key = `rm:${a.from}:${a.name}`, armed = this.armed === key, id = `${a.from}:${a.name}`;
+      const id = `${a.from}:${a.name}`;
       const from = a.from === projectOf(this.space) ? null : originOf(a);
       const n = a.cols.reduce((s, c) => s + c.panes.length, 0);
       return h_flex().id(`ar-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
@@ -219,10 +212,8 @@ export default class Arrange extends View {
           .hover((s) => s.text_color(t.foreground))
           .on_click((_e, cx) => { cx.stop_propagation(); this.startSave(cx, a); })
           .child("Overwrite")))
-        .child(div().id(`ar-rm-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(armed ? t.blocked : t.dim)
-          .hover((s) => s.text_color(armed ? t.blocked : t.foreground))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.arm(key, cx, (cx) => this.remove(a, cx)); })
-          .child(armed ? "Press again to delete" : "Delete"));
+        .child(this.armed.link(`ar-rm-${id}`, "Delete", "delete", `rm:${id}`, (cx) => this.remove(a, cx), c)
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation()));
     };
     const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
     return shell
