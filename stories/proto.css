@@ -111,7 +111,7 @@
 .kanso-section--collapsible .kanso-row__detail{color:var(--dim);font-size:12.5px;margin-left:auto}
 .kanso-state-empty--inline{font-size:13.5px;color:var(--muted);margin-top:var(--k-sp-3)}
 .kanso-state-line--error{font-size:12.5px;color:var(--blocked);margin-top:var(--k-sp-3);display:flex;gap:var(--k-sp-2);align-items:center}
-.kanso-panel--stale{opacity:.55}
+.kanso-panel--stale{color:var(--muted)}
 .kanso-section .kanso-row__name{font-size:12.5px;color:var(--dim)}
 .kanso-row.kanso-row--selected{background:var(--selected)}
 .kanso-row .kanso-row__meta{margin-left:auto;color:var(--dim);font-size:11.5px;white-space:nowrap}
@@ -406,7 +406,7 @@
 .kanso-sidebar__navigation{display:flex;flex-direction:column;gap:var(--k-sp-hair);padding:8px 0 12px}
 .kanso-text--host-teal{color:color-mix(in srgb,var(--blue) 50%,var(--done))!important}.kanso-text--host-yellow{color:var(--working)!important}.kanso-text--host-blue{color:var(--blue)!important}.kanso-text--host-violet{color:var(--violet)!important}.kanso-text--host-green{color:var(--done)!important}.kanso-text--host-red{color:var(--blocked)!important}
 .kanso-sidebar--pressed{background:var(--w12)}
-.kanso-sidebar--dim{opacity:.45}
+.kanso-sidebar--dim{color:var(--muted)}
 .kanso-sidebar--flush{padding-left:8px}
 .kanso-sidebar__activity{background:var(--raised);border-radius:8px;box-shadow:0 0 0 1px var(--border),0 1px 2px color-mix(in srgb,var(--fg) 6%,transparent);padding:2px 4px 4px;margin:0 0 var(--k-sp-3)}
 .kanso-sidebar__activity .kanso-content__heading{display:flex;align-items:center;gap:var(--k-sp-2);height:32px;padding:0 4px 0 8px;font-size:13.5px;font-weight:600;color:var(--fg)}
@@ -447,7 +447,7 @@
 .kanso-sidebar__emphasis{color:var(--fg);font-weight:600}
 .kanso-sidebar__mark--breathing{animation:ghost 1.8s ease-in-out infinite alternate}
 .kanso-sidebar__tooltip{position:absolute;z-index:3}
-.kanso-sidebar__row--removed{position:relative;opacity:.4}
+.kanso-sidebar__row--removed{position:relative;color:var(--muted)}
 .kanso-sidebar__row--removed::after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:var(--blocked)}
 .kanso-sidebar__row--drop-before,.kanso-sidebar__row--drop-after{position:relative}
 .kanso-sidebar__row--drop-before::before,.kanso-sidebar__row--drop-after::after{content:"";position:absolute;left:6px;right:6px;height:2px;border-radius:999px;background:var(--accent)}
@@ -506,7 +506,7 @@
 .kanso-tab__name{padding:0 var(--k-sp-2);font-size:var(--k-fs-body)}
 .kanso-tab-bar__insertion{width:2px;height:var(--k-h-badge);border-radius:var(--k-r-sm);background:var(--accent);flex:none;display:block;margin:0 calc(-1 * var(--k-sp-1)) 0 calc(-1 * var(--k-sp-hair))}
 .kanso-tab--held{opacity:.4}
-.kanso-tab--dim{opacity:.45}
+.kanso-tab--dim{color:var(--muted)}
 .kanso-tab--off{color:var(--input)!important}
 .kanso-tab__editor{height:var(--k-h-badge);display:flex;align-items:center;padding:0 var(--k-sp-1);margin:0 calc(-1 * var(--k-sp-hair));border-radius:var(--k-r-sm);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--input);color:var(--fg);font-weight:400}
 .kanso-tab__selection{background:color-mix(in srgb,var(--accent) 30%,transparent);border-radius:var(--k-r-sm)}
@@ -543,7 +543,7 @@
 .kanso-search__excerpt.kanso-search__excerpt--full{color:var(--fg);padding:var(--k-sp-1) var(--k-sp-3) var(--k-sp-2)}
 .kanso-search__match{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--fg);border-radius:4px;padding:0 2px}
 .kanso-toast .kanso-content__text b{font-weight:var(--k-fw-strong)}
-.kanso-toast--removed{opacity:.55}
+.kanso-toast--removed{color:var(--muted)}
 .kanso-toast--removed .kanso-content__text{text-decoration:line-through}
 .kanso-story__toast-grid{display:grid;grid-template-columns:repeat(2,max-content);gap:var(--k-sp-4)}
 .kanso-story__toast-grid>div{display:flex;flex-direction:column;gap:var(--k-sp-1)}
@@ -855,7 +855,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-dialog__row.kanso-dialog__row--two-lines{height:50px}
 .kanso-dialog__row.kanso-row--selected{background:var(--selected)}
 .kanso-dialog__row.kanso-control--hover{background:var(--w7)}
-.kanso-dialog__row.kanso-control--off{opacity:.55}
+.kanso-dialog__row.kanso-control--off{color:var(--muted)}
 .kanso-dialog__row .kanso-dialog__text{flex:1;min-width:0}
 .kanso-dialog__row .kanso-dialog__name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kanso-dialog__row .kanso-dialog__detail{font-size:11.5px;color:var(--dim);margin-top:var(--k-sp-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -931,7 +931,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-update__summary{font-size:11.5px;color:var(--dim);margin-top:var(--k-sp-2)}
 .kanso-update__item{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:var(--k-sp-1);padding-left:12px;position:relative;max-width:640px}
 .kanso-update__item::before{content:"";position:absolute;left:2px;top:8px;width:4px;height:4px;border-radius:4px;background:var(--dim)}
-.kanso-update--stale{opacity:.55}
+.kanso-update--stale{color:var(--muted)}
 .kanso-credit{display:flex;align-items:center;gap:var(--k-sp-2);height:50px;margin:0 calc(-1 * var(--k-sp-2));padding:0 8px;border-radius:6px}
 .kanso-credit.kanso-control--hover{background:var(--w7)}
 .kanso-credit .kanso-credit__avatar{width:28px;height:26px;border-radius:8px;background:var(--w7);display:grid;place-items:center;color:var(--muted);font-size:11.5px;font-weight:500;flex:none}
@@ -1390,3 +1390,6 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-story__icon svg{color:var(--muted)}
 .kanso-story__frame .kanso-tokens{display:contents}
 .kanso-story__frame .kanso-tokens .kanso-story__layout-row{gap:var(--k-sp-4)}
+
+.kanso-text--dimmed{color:var(--muted)}
+:is(.kanso-text--dimmed,.kanso-panel--stale,.kanso-update--stale,.kanso-tab--dim,.kanso-sidebar--dim,.kanso-sidebar__row--removed,.kanso-toast--removed,.kanso-dialog__row.kanso-control--off) :not(svg,svg *){color:var(--muted)!important}

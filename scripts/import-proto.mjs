@@ -772,6 +772,7 @@ const CLASSES = {
   "tbar": "kanso-prototype__toolbar",
   "tbox": "kanso-terminal__box",
   "term": "kanso-terminal",
+  "text-dimmed": "kanso-text--dimmed",
   "tip": "kanso-tooltip",
   "tip-live": "kanso-tooltip__trigger",
   "tl": "kanso-row__task",
