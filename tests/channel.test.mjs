@@ -66,12 +66,12 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   const ci = await workflow("ci.yml");
   assert.match(ci, /branches: \[main, develop\]/);
   assert.match(ci, /KANSO_BRANCH: \$\{\{ github\.event_name == 'pull_request' && github\.base_ref \|\| github\.ref_name \}\}/);
-  const release = await workflow("release.yml");
-  assert.match(release, /branches: \[main\]/);
-  assert.match(release, /release-plan\.mjs stable/);
-  assert.doesNotMatch(release, /workflow_dispatch/);
-  assert.doesNotMatch(release, /--prerelease/);
-  const beta = ci.slice(ci.indexOf("\n  beta:"));
+  const stable = ci.slice(ci.indexOf("\n  stable:"));
+  assert.match(stable, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/, "a stable release waits for all three platforms");
+  assert.match(stable, /release-plan\.mjs stable/);
+  assert.doesNotMatch(stable, /--prerelease/);
+  assert.deepEqual((await readdir(workflows)).sort(), ["ci.yml", "pages.yml", "rc.yml"], "no workflow publishes a stable release beside CI");
+  const beta = ci.slice(ci.indexOf("\n  beta:"), ci.indexOf("\n  stable:"));
   assert.match(beta, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'/, "a beta waits for all three platforms");
   assert.match(beta, /release-plan\.mjs beta/);
   assert.match(beta, /--prerelease/);
