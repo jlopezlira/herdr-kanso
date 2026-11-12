@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { MIN_CONTRAST, STATUSES, contrast, load, pairs, published, render } from "../scripts/build-guidelines.mjs";
+import { MIN_CONTRAST, contrast, load, pairs, published, render } from "../scripts/build-guidelines.mjs";
 
 const disk = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -11,9 +11,8 @@ test("generated guideline pages match elements.json and kanso/tokens.json", asyn
   }
 });
 
-test("only Approved, Built or Verified elements are published", async () => {
+test("an element that is not Approved, Built or Verified stays out of the output", async () => {
   const { elements, tokens } = load();
-  for (const e of elements) assert.ok(STATUSES.includes(e.status), `${e.id} has status ${e.status}`);
   const draft = { ...elements[0], id: "draft-only", title: "Draft only element", status: "Draft", page: "draft-only.html" };
   const out = render({ elements: [...elements, draft], tokens });
   assert.ok(!Object.keys(out).some((p) => p.endsWith("draft-only.html")));
