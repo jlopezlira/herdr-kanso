@@ -66,7 +66,17 @@ a:hover, button:hover { transition-duration: var(--k-hover-in); transition-timin
 .star-small:hover { background: var(--hover); }
 
 /* ---- hero ---- */
-.hero { padding: calc(var(--k-sp-8) * 3) var(--k-sp-6) 0; text-align: center; }
+.hero { position: relative; overflow: hidden; padding: calc(var(--k-sp-8) * 3) var(--k-sp-6) 0; text-align: center; }
+/* Dawn behind the headline. */
+.hero::before {
+  content: ""; position: absolute; left: 50%; top: calc(var(--k-sp-8) * -7); z-index: -1;
+  width: min(var(--wide), 160vw); height: calc(var(--wide) * .64); transform: translateX(-50%);
+  background:
+    radial-gradient(closest-side at 38% 55%, color-mix(in srgb, var(--dawn-mid) 20%, transparent), transparent 72%),
+    radial-gradient(closest-side at 64% 46%, color-mix(in srgb, var(--dawn-low) 14%, transparent), transparent 70%);
+  filter: blur(var(--k-sp-2));
+  pointer-events: none;
+}
 .pill {
   display: inline-flex; align-items: center; gap: var(--k-sp-2);
   padding: var(--k-sp-hair) var(--k-sp-3) var(--k-sp-hair) var(--k-sp-hair); border: var(--hairline) solid var(--input); border-radius: var(--k-r-full);
@@ -79,7 +89,7 @@ a:hover, button:hover { transition-duration: var(--k-hover-in); transition-timin
 }
 h1 {
   margin: var(--k-sp-8) auto 0;
-  color: var(--fg); font-size: var(--k-fs-display); font-weight: var(--k-fw-strong); line-height: var(--k-lh-tight);
+  color: var(--fg); font-size: var(--k-fs-display); font-weight: var(--k-fw-strong); line-height: var(--k-lh-tight); letter-spacing: -.02em;
 }
 .lede { max-width: var(--measure); margin: var(--k-sp-6) auto 0; color: var(--fg); font-size: var(--k-fs-section); line-height: var(--k-lh-body); }
 .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--k-sp-3); margin-top: var(--k-sp-8); }
@@ -99,7 +109,7 @@ h1 {
 .fine a { text-underline-offset: var(--k-sp-hair); }
 
 /* A window: the app's frame around a real screenshot. */
-.window { margin: 0; border-radius: var(--k-r-window); overflow: hidden; border: var(--line); background: var(--bg); }
+.window { margin: 0; border-radius: var(--k-r-window); overflow: hidden; border: var(--line); background: var(--bg); box-shadow: var(--shadow); }
 .window-hero { max-width: var(--wide); margin: calc(var(--k-sp-8) * 2) auto 0; }
 
 /* ---- works with ---- */

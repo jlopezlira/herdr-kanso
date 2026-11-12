@@ -135,7 +135,8 @@ ${rows}
 
 function swatch(tokens, theme, t) {
   const hex = colour(tokens, theme, t.name);
-  const lines = [`<span class="swatch" style="background:${esc(hex)}"></span><span class="value">${esc(hex)}</span>`];
+  const paint = hex.startsWith("#") ? "background" : "box-shadow";
+  const lines = [`<span class="swatch" style="${paint}:${esc(hex)}"></span><span class="value">${esc(hex)}</span>`];
   if (hex !== t.value) lines.push(`<span class="note">${esc(t.value)}</span>`);
   if (t.palette) lines.push(`<span class="note">palette ${esc(t.palette)}</span>`);
   return lines.join("");
