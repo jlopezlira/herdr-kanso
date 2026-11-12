@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { check, parseChangelog, requiredBump, notes, versionBranch } from "../scripts/check-version.mjs";
+import { check, parseChangelog, requiredBump, notes, versionBranch, checkDevelopPullRequest, nextVersion } from "../scripts/check-version.mjs";
 
 const log = (...sections) => `# Changelog\n\n${sections.join("\n")}`;
 const section = (v, date, body) => `## [${v}] - ${date}\n\n${body}\n`;
@@ -62,20 +62,45 @@ test("The changelog keeps every release, newest first, in the agreed shape", () 
   assert.match(check({ version: "1.0.0", changelog: log(one), tags: ["1.1.0"], installedChangedSince: () => false }).join(), /older than the released v1\.1\.0/);
 });
 
-test("A prerelease tag is not a release, and develop prepares one next version", () => {
+test("Develop keeps the stable version and Unreleased until an RC prepares it", () => {
   const base = section("1.0.0", "2026-11-01", "### Added\n\n- First.");
-  const same = { tags: ["1.0.0", "v2.0.0-beta.1", "2.0.0-rc.1"], installedChangedSince: () => false };
-  assert.deepEqual(check({ version: "1.0.0", changelog: log(base), ...same }), [], "a beta or rc tag needs no section and is not the newest release");
-  assert.deepEqual(check({ version: "1.0.0", changelog: log(base), tags: ["v1.0.0", "2.0.0-beta.1"], installedChangedSince: () => false, branch: "develop" }), []);
-  assert.match(check({ version: "1.0.0", changelog: log(base), tags: ["1.0.0", "1.1.0", "1.1.0-beta.1"], installedChangedSince: () => false }).join(), /tag v1\.1\.0 has no CHANGELOG\.md section/);
-  const next = section("1.1.0", "2026-11-02", "### Added\n\n- Second.");
-  assert.deepEqual(check({ version: "1.1.0", changelog: log(next, base), tags: ["1.0.0", "1.1.0-beta.2", "1.1.0-rc.1"], installedChangedSince: () => true, branch: "develop" }), []);
-  assert.match(check({ version: "1.2.0", changelog: log(section("1.2.0", "2026-11-02", "### Added\n\n- Second."), base), tags: ["1.0.0", "1.2.0-beta.1"], installedChangedSince: () => true, branch: "develop" }).join(), /minor bump: 1\.1\.0, not 1\.2\.0/);
-  const patch = section("1.0.1", "2026-11-02", "### Fixed\n\n- A bug.");
-  const minor = section("1.1.0", "2026-11-03", "### Added\n\n- Second.");
-  const two = { version: "1.1.0", changelog: log(minor, patch, base), tags: ["1.0.0"], installedChangedSince: () => true };
-  assert.deepEqual(check({ ...two, branch: "main" }), [], "main still allows every successor, tagged or not");
-  assert.deepEqual(check({ ...two, branch: "develop" }), ["CHANGELOG.md: develop prepares one version after v1.0.0; found 1.1.0, 1.0.1"]);
+  const pending = "## [Unreleased]\n\n### Added\n\n- Second.\n";
+  const run = (over = {}) => check({ version: "1.0.0", changelog: log(pending, base), tags: ["v1.0.0", "1.1.0-beta.13"], installedChangedSince: () => true, branch: "develop", ...over });
+  assert.deepEqual(run(), []);
+  assert.match(run({ version: "1.1.0" }).join(), /develop keeps 1.0.0 until the Release candidate/);
+  const numbered = log(section("1.1.0", "2026-11-02", "### Added\n\n- Second."), base);
+  assert.match(run({ version: "1.1.0", changelog: numbered }).join(), /only the Release candidate workflow writes a numbered section/);
+  assert.deepEqual(run({ version: "1.1.0", changelog: numbered, tags: ["1.0.0", "1.1.0-rc.1"] }), []);
+  assert.deepEqual(run({ version: "1.1.0", changelog: log(pending, numbered), tags: ["1.0.0", "1.1.0-rc.1"] }), [], "new changes wait in Unreleased after an RC");
+  assert.match(run({ changelog: log(base) }).join(), /add entries under "## \[Unreleased\]"/);
+  assert.deepEqual(run({ changelog: log(base), installedChangedSince: () => false }), [], "docs need no entry");
+  assert.match(run({ tags: [] }).join(), /needs a stable tag/);
+});
+
+test("Develop PRs leave the version file and all numbered history unchanged", () => {
+  const base = log(section("1.0.0", "2026-11-01", "### Added\n\n- First."));
+  const pending = "## [Unreleased]\n\n### Removed\n\n- Old feature.\n";
+  const input = { versionText: '{ "version": "1.0.0" }\n', baseVersionText: '{ "version": "1.0.0" }\n', changelog: log(pending, base), baseChangelog: base, tags: ["1.0.0"], installedChanged: true };
+  assert.deepEqual(checkDevelopPullRequest(input), []);
+  assert.equal(nextVersion(input.changelog, input.tags), "2.0.0");
+  assert.match(checkDevelopPullRequest({ ...input, versionText: '{ "version": "2.0.0" }\n' }).join(), /must not change this file/);
+  assert.match(checkDevelopPullRequest({ ...input, versionText: '{"version":"1.0.0"}' }).join(), /must not change this file/, "formatting counts too");
+  assert.match(checkDevelopPullRequest({ ...input, changelog: input.changelog.replace("First.", "Edited history.") }).join(), /must not change numbered sections/);
+  assert.match(checkDevelopPullRequest({ ...input, changelog: log(section("2.0.0", "2026-11-02", "### Removed\n\n- Old feature."), base) }).join(), /must not change numbered sections/);
+  assert.match(checkDevelopPullRequest({ ...input, changelog: base }).join(), /installed change.*needs entries/);
+  assert.match(checkDevelopPullRequest({ ...input, baseChangelog: input.changelog }).join(), /installed change.*needs entries/, "old pending entries do not cover a new installed change");
+  const rc = log(section("1.1.0", "2026-11-02", "### Added\n\n- Candidate."), base);
+  assert.match(checkDevelopPullRequest({ ...input, baseChangelog: rc, changelog: rc.replace("Candidate.", "Edited candidate."), tags: ["1.0.0", "1.1.0-rc.1"], versionText: '{ "version": "1.1.0" }', baseVersionText: '{ "version": "1.1.0" }' }).join(), /must not change numbered sections/, "an existing RC does not authorize PR edits");
+});
+
+test("The migration only restores an untagged next section to Unreleased and the stable version", () => {
+  const stable = section("3.30.0", "2026-11-01", "### Added\n\n- Stable.");
+  const next = section("3.31.0", "2026-11-02", "### Added\n\n- Pending.");
+  const input = { baseVersionText: '{ "version": "3.31.0" }', versionText: '{ "version": "3.30.0" }', baseChangelog: log(next, stable), changelog: log("## [Unreleased]\n\n### Added\n\n- Pending.\n", stable), tags: ["v3.30.0", "v3.31.0-beta.13"] };
+  assert.deepEqual(checkDevelopPullRequest(input), []);
+  assert.match(checkDevelopPullRequest({ ...input, changelog: input.changelog.replace("Pending.", "Different.") }).join(), /must not change this file/);
+  assert.match(checkDevelopPullRequest({ ...input, changelog: input.changelog.replace("Stable.", "Edited.") }).join(), /must not change numbered sections/);
+  assert.match(checkDevelopPullRequest({ ...input, tags: [...input.tags, "3.31.0-rc.1"] }).join(), /must not change this file/, "a fixed candidate cannot be reset by a PR");
 });
 
 test("The version rules follow the pull request's base branch, and otherwise stay on main", () => {

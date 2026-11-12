@@ -1,42 +1,13 @@
 #!/usr/bin/env node
-// Checks that Kanso is versioned the way its updater needs, and prints release notes.
-//
-//   node scripts/check-version.mjs                  check, using the main rules
-//   node scripts/check-version.mjs --branch develop check, using the develop rules
-//   node scripts/check-version.mjs --notes          print the CHANGELOG section of version.json
-//
-// KANSO_BRANCH does the same as --branch. Workflows set it from the pull request's
-// base branch, or from the branch just pushed. Anything other than develop uses the main rules.
-//
-// The updater's stable channel offers a release only when a vX.Y.Z tag is newer than
-// the installed version. A vX.Y.Z-beta.N or vX.Y.Z-rc.N tag is not one of those:
-//   1. version.json holds a semantic version, X.Y.Z (the next stable version on develop).
-//   2. CHANGELOG.md has a section per stable version, newest first, from the first
-//      release on: "## [X.Y.Z] - YYYY-MM-DD", then "### <Category>" headings
-//      with "- " entries. Its newest section is version.json's version.
-//   3. Each version is the exact semantic successor of the one before, by what
-//      its section lists: Breaking or Removed -> major, Added or Deprecated ->
-//      minor, otherwise (Changed, Fixed, Security) -> patch.
-//   4. Every stable vX.Y.Z tag has its section. A beta or rc tag does not, and
-//      it is ignored when the versions are put in order.
-//   5. On main, when what Kanso installs changed since the newest stable tag,
-//      version.json is newer than that tag. Merging develop into main then releases
-//      it (the stable job of .github/workflows/ci.yml). Or the change is technical debt, listed
-//      under "## [Unreleased]" (first, if at all): it merges as it is and goes
-//      out with the next release, which takes those entries into its own section.
-//   6. On develop, that next version is the one section newer than the newest
-//      stable tag (or there is none yet). A pull request adds its entries there.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { bareRelease } from "../kanso/mods/kanso-chrome/release.js";
+import { bareRelease, parseRelease } from "../kanso/mods/kanso-chrome/release.js";
 
 export const VERSION_FILE = "kanso/mods/kanso-chrome/version.json";
 export const CHANGELOG = "CHANGELOG.md";
-// What the updater installs; a change here is a release.
 export const INSTALLED = ["kanso/mods", "kanso/themes", "kanso/layouts", "kanso/keys.json", "kanso/keys.windows.json"];
 export const CATEGORIES = ["Breaking", "Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"];
-// Technical debt merged without a version of its own: it waits here for the next release.
 export const UNRELEASED = "Unreleased";
 
 export const parse = (v) => {
@@ -50,7 +21,6 @@ export function compare(a, b) {
   return 0;
 }
 
-// The bump a section's categories call for.
 export function requiredBump(categories) {
   if (categories.some((c) => c === "Breaking" || c === "Removed")) return "major";
   if (categories.some((c) => c === "Added" || c === "Deprecated")) return "minor";
@@ -70,13 +40,10 @@ export function versionBranch(env = process.env, argv = process.argv) {
   return env.KANSO_BRANCH || "main";
 }
 
-// Stable X.Y.Z tags only. A beta or rc tag is not a release and has no section of its own.
 export function stableTags(tags) {
   return [...new Set(tags.map(bareRelease).filter(parse))];
 }
 
-// CHANGELOG.md as [{ version, date, categories: { name: [entries] }, body, line }],
-// in file order, plus the problems found reading it.
 export function parseChangelog(text) {
   const sections = [], errors = [];
   let section = null, category = null;
@@ -106,11 +73,15 @@ export function parseChangelog(text) {
     } else if (line.startsWith("- ")) {
       if (!category) errors.push(`${CHANGELOG}:${at}: an entry before any "### <Category>" heading`);
       else section.categories[category].push(line.slice(2));
+    } else if (category && section.categories[category].length) {
+      const entries = section.categories[category];
+      entries[entries.length - 1] += `\n${raw}`;
     }
   });
   for (const s of sections) {
     s.body = s.body.join("\n").trim();
     for (const [name, entries] of Object.entries(s.categories)) {
+      entries.forEach((entry, i) => { entries[i] = entry.trimEnd(); });
       if (!entries.length) errors.push(`${CHANGELOG}:${s.line}: ${s.version} has an empty "### ${name}"`);
     }
     if (!Object.keys(s.categories).length) errors.push(`${CHANGELOG}:${s.line}: ${s.version} lists no changes`);
@@ -118,17 +89,14 @@ export function parseChangelog(text) {
   return { sections, errors };
 }
 
-// Everything wrong with the versioning, given what the repository holds.
-// `tags`: tag names, stable or not; `installedChangedSince(tag)`: whether what
-// Kanso installs differs from that tag. `branch` "develop" allows the one next
-// stable version; anything else checks as main does today.
-export function check({ version, changelog, tags, installedChangedSince, branch = "main" }) {
+export function check({ version, changelog, tags, installedChangedSince, branch = "main", pullRequest }) {
   const errors = [];
   if (!parse(version)) errors.push(`${VERSION_FILE} says "${version}", not a semantic version (X.Y.Z)`);
   const { sections, errors: read } = parseChangelog(changelog);
   errors.push(...read);
   if (!sections.length) errors.push(`${CHANGELOG} has no "## [X.Y.Z] - YYYY-MM-DD" sections`);
   const valid = sections.filter((s) => parse(s.version));
+  if (sections.filter((s) => s.version === UNRELEASED).length > 1) errors.push(`${CHANGELOG}: Unreleased appears twice`);
   const seen = new Set();
   for (const s of valid) {
     if (seen.has(s.version)) errors.push(`${CHANGELOG}:${s.line}: ${s.version} appears twice`);
@@ -155,17 +123,74 @@ export function check({ version, changelog, tags, installedChangedSince, branch 
   }
   const latest = [...stable].sort(compare).at(-1);
   const waiting = sections.some((s) => s.version === UNRELEASED);
+  if (branch === "develop") {
+    if (!latest) errors.push("develop needs a stable tag to compute its next version");
+    if (latest && parse(version)) {
+      const ahead = valid.filter((s) => compare(s.version, latest) > 0);
+      if (ahead.length > 1) errors.push(`${CHANGELOG}: develop prepares one version after v${latest}; found ${ahead.map((s) => s.version).join(", ")}`);
+      if (version !== latest && !isCandidate(version, tags)) {
+        errors.push(`${VERSION_FILE}: develop keeps ${latest} until the Release candidate workflow prepares the next version`);
+      }
+      for (const section of ahead) {
+        if (!isCandidate(section.version, tags)) errors.push(`${CHANGELOG}: develop entries go under "## [${UNRELEASED}]"; only the Release candidate workflow writes a numbered section`);
+      }
+      if (installedChangedSince(latest) && !waiting && !ahead.length) errors.push(`what Kanso installs changed since v${latest}: add entries under "## [${UNRELEASED}]"`);
+    }
+    if (pullRequest) errors.push(...checkDevelopPullRequest({ ...pullRequest, changelog, tags }));
+    return errors;
+  }
   if (latest && parse(version)) {
     if (compare(version, latest) < 0) errors.push(`${VERSION_FILE} says ${version}, older than the released v${latest}`);
     else if (compare(version, latest) === 0 && installedChangedSince(latest) && !waiting) {
       errors.push(`what Kanso installs changed since v${latest}, but ${VERSION_FILE} still says ${version}: bump it and add its ${CHANGELOG} section, or list it under "## [${UNRELEASED}]" if it is technical debt, or the updater will never offer this change`);
     }
-    // A release takes what waited: nothing is left behind under Unreleased.
     if (compare(version, latest) > 0 && waiting) errors.push(`${version} is a new release: move the "## [${UNRELEASED}]" entries into its ${CHANGELOG} section`);
-    if (branch === "develop" && compare(version, latest) > 0) {
-      const ahead = valid.filter((s) => compare(s.version, latest) > 0);
-      if (ahead.length > 1) errors.push(`${CHANGELOG}: develop prepares one version after v${latest}; found ${ahead.map((s) => s.version).join(", ")}`);
-    }
+  }
+  return errors;
+}
+
+export function isCandidate(version, tags) {
+  return tags.some((tag) => {
+    const rel = parseRelease(tag);
+    return rel?.channel === "rc" && `${rel.major}.${rel.minor}.${rel.patch}` === version;
+  });
+}
+
+export function nextVersion(changelog, tags) {
+  const latest = stableTags(tags).sort(compare).at(-1);
+  if (!latest) throw new Error("no stable tag to compute the next version from");
+  const { sections, errors } = parseChangelog(changelog);
+  if (errors.length) throw new Error(errors.join("; "));
+  const pending = sections.filter((s) => s.version === UNRELEASED || (parse(s.version) && compare(s.version, latest) > 0));
+  return pending.length ? bump(latest, requiredBump(pending.flatMap((s) => Object.keys(s.categories)))) : null;
+}
+
+const numberedHistory = (text, skip = 0) => {
+  const lines = text.split("\n");
+  const first = lines.map((line, i) => /^## \[\d/.test(line) ? i : -1).filter((i) => i >= 0)[skip];
+  return first === undefined ? "" : lines.slice(first).join("\n");
+};
+
+export function checkDevelopPullRequest({ versionText, baseVersionText, changelog, baseChangelog, tags, installedChanged = false }) {
+  const errors = [];
+  const current = parseChangelog(changelog).sections;
+  const base = parseChangelog(baseChangelog).sections;
+  const latest = stableTags(tags).sort(compare).at(-1);
+  const baseVersion = JSON.parse(baseVersionText).version;
+  const version = JSON.parse(versionText).version;
+  const legacy = base.filter((s) => parse(s.version) && latest && compare(s.version, latest) > 0);
+  const migrated = latest && version === latest && parse(baseVersion) && compare(baseVersion, latest) > 0
+    && !isCandidate(baseVersion, tags) && legacy.length === 1 && legacy[0].version === baseVersion
+    && base[0] === legacy[0] && current[0]?.version === UNRELEASED && current[0].body === legacy[0].body
+    && numberedHistory(changelog) === numberedHistory(baseChangelog, 1);
+  if (migrated) return errors;
+  if (versionText !== baseVersionText) errors.push(`${VERSION_FILE}: a pull request to develop must not change this file`);
+  if (numberedHistory(changelog) !== numberedHistory(baseChangelog)) errors.push(`${CHANGELOG}: a pull request to develop must not change numbered sections; add entries under "## [${UNRELEASED}]"`);
+  const pending = current.find((s) => s.version === UNRELEASED);
+  const previous = base.find((s) => s.version === UNRELEASED);
+  const addedEntry = pending && Object.entries(pending.categories).some(([category, entries]) => entries.some((entry) => !previous?.categories[category]?.includes(entry)));
+  if (installedChanged && !addedEntry) {
+    errors.push(`${CHANGELOG}: an installed change in a pull request needs entries under "## [${UNRELEASED}]"`);
   }
   return errors;
 }
@@ -190,9 +215,10 @@ export function readChangelog() {
   return readFileSync(CHANGELOG, "utf8");
 }
 
-export function installedChangedSince(tag) {
-  try { git(["diff", "--quiet", `v${bareRelease(tag)}`, "HEAD", "--", ...INSTALLED]); return false; }
-  catch { return true; }
+export function installedChangedSince(tag, { isTag = true, ignoreVersion = false } = {}) {
+  const paths = ignoreVersion ? [...INSTALLED, `:(exclude)${VERSION_FILE}`] : INSTALLED;
+  try { git(["diff", "--quiet", isTag ? `v${bareRelease(tag)}` : tag, "HEAD", "--", ...paths]); return false; }
+  catch (error) { if (error.status === 1) return true; throw error; }
 }
 
 function main() {
@@ -209,16 +235,25 @@ function main() {
   }
   const branch = versionBranch();
   const tags = listTags();
-  const errors = check({ version, changelog, tags, installedChangedSince, branch });
+  let pullRequest;
+  if (branch === "develop" && process.env.GITHUB_EVENT_NAME === "pull_request") {
+    const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+    const base = event.pull_request.base.sha;
+    pullRequest = {
+      versionText: readFileSync(VERSION_FILE, "utf8"),
+      baseVersionText: git(["show", `${base}:${VERSION_FILE}`]),
+      baseChangelog: git(["show", `${base}:${CHANGELOG}`]),
+      installedChanged: installedChangedSince(base, { isTag: false }),
+    };
+  }
+  const errors = check({ version, changelog, tags, installedChangedSince, branch, pullRequest });
   if (errors.length) {
     for (const e of errors) console.error(`error: ${e}`);
     process.exit(1);
   }
   const latest = stableTags(tags).sort(compare).at(-1);
   if (branch === "develop") {
-    console.log(latest && compare(version, latest) > 0
-      ? `Kanso ${version}: versioned correctly; a push to develop publishes a beta when what Kanso installs changed.`
-      : `Kanso ${version}: versioned correctly for develop.`);
+    console.log(`Kanso ${version}: versioned correctly for develop.`);
     return;
   }
   console.log(latest && compare(version, latest) === 0

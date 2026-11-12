@@ -1,16 +1,10 @@
 #!/usr/bin/env node
-// Plans the tag a workflow may publish. It writes GitHub outputs and does not call gh.
-//
-//   node scripts/release-plan.mjs stable|beta|rc
-//
-// KANSO_BRANCH (or --branch) is the branch this run is on. The default is main,
-// which refuses a beta and a release candidate.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bareRelease, compareReleases, parseRelease } from "../kanso/mods/kanso-chrome/release.js";
-import { CHANGELOG, VERSION_FILE, installedChangedSince, listTags, notes, parse, readChangelog, readVersion, versionBranch } from "./check-version.mjs";
+import { CATEGORIES, CHANGELOG, UNRELEASED, VERSION_FILE, check, compare, installedChangedSince, isCandidate, listTags, nextVersion, notes, parse, parseChangelog, readChangelog, readVersion, stableTags, versionBranch } from "./check-version.mjs";
 
 const fail = (message) => ({ action: "fail", message });
 const skip = (message) => ({ action: "skip", message });
@@ -23,7 +17,6 @@ function nextN(names, version, channel) {
   return (ns.length ? Math.max(...ns) : 0) + 1;
 }
 
-// The newest beta of this version, or the newest stable tag when it has no beta yet.
 function baseline(names, version) {
   const betas = names.filter((name) => {
     const rel = parseRelease(name);
@@ -33,7 +26,37 @@ function baseline(names, version) {
   return pool.length ? [...pool].sort(compareReleases).at(-1) : null;
 }
 
-export function planRelease({ kind, branch, version, tags, installedChangedSince: changedSince = () => true }) {
+export function activeCandidate(version, tags) {
+  const latest = stableTags(tags).sort(compare).at(-1);
+  return latest && parse(version) && compare(version, latest) > 0 && isCandidate(version, tags) ? version : null;
+}
+
+export function prepareCandidate({ version, changelog, tags, date = new Date().toISOString().slice(0, 10) }) {
+  const { sections, errors } = parseChangelog(changelog);
+  if (errors.length) throw new Error(errors.join("; "));
+  const pending = sections.find((s) => s.version === UNRELEASED);
+  const current = activeCandidate(version, tags);
+  const computed = nextVersion(changelog, tags);
+  const next = current && computed && compare(current, computed) > 0 ? current : computed;
+  if (!next) throw new Error(`v${version} is already stable; refusing a release candidate without Unreleased entries`);
+  const candidate = current ? sections.find((s) => s.version === current) : null;
+  if (current && !candidate) throw new Error(`${CHANGELOG} has no section for ${current}`);
+  if (!pending) return { version: next, changelog };
+  const categories = {};
+  for (const name of CATEGORIES) {
+    const entries = [...(candidate?.categories[name] || []), ...(pending.categories[name] || [])];
+    if (entries.length) categories[name] = entries;
+  }
+  const body = Object.entries(categories).map(([name, entries]) => `### ${name}\n\n${entries.map((entry) => `- ${entry}`).join("\n")}`).join("\n\n");
+  const lines = changelog.split("\n");
+  const last = candidate || pending;
+  const after = sections[sections.indexOf(last) + 1];
+  const before = lines.slice(0, pending.line - 1).join("\n");
+  const history = after ? lines.slice(after.line - 1).join("\n") : "";
+  return { version: next, changelog: `${before}${before ? "\n" : ""}## [${next}] - ${candidate?.date || date}\n\n${body}\n${history ? `\n${history}` : ""}` };
+}
+
+export function planRelease({ kind, branch, version, changelog, tags, installedChangedSince: changedSince = () => true }) {
   const versionText = String(version ?? "");
   if (!parse(versionText)) return fail(`${versionText || "missing"} is not a stable version (X.Y.Z)`);
   const names = [...new Set(tags.map(bareRelease).filter((name) => parseRelease(name)))];
@@ -45,16 +68,21 @@ export function planRelease({ kind, branch, version, tags, installedChangedSince
   if (kind !== "beta" && kind !== "rc") return fail(`unknown release ${kind}`);
   const what = kind === "beta" ? "beta" : "release candidate";
   if (branch !== "develop") return fail(`a ${what} is published only from develop (this is ${where(branch)})`);
-  if (names.includes(versionText)) {
-    return kind === "rc"
-      ? fail(`v${versionText} is already stable; refusing a release candidate`)
-      : skip(`v${versionText} is already stable; no beta.`);
-  }
-  if (kind === "beta") {
-    const base = baseline(names, versionText);
+  try {
+    if (kind === "rc") {
+      const candidate = prepareCandidate({ version, changelog, tags });
+      const plan = publish(`${candidate.version}-rc.${nextN(names, candidate.version, "rc")}`, true);
+      const errors = check({ ...candidate, tags: [...tags, plan.tag], installedChangedSince: () => false, branch });
+      return errors.length ? fail(errors.join("; ")) : plan;
+    }
+    if (notes(changelog, UNRELEASED) === null) return skip("no Unreleased entries; no beta.");
+    const next = nextVersion(changelog, tags);
+    const base = baseline(names, next);
     if (base && !changedSince(base)) return skip(`what Kanso installs has not changed since v${base}; no beta.`);
+    return publish(`${next}-beta.${nextN(names, next, "beta")}`, true);
+  } catch (error) {
+    return fail(error.message);
   }
-  return publish(`${versionText}-${kind}.${nextN(names, versionText, kind)}`, true);
 }
 
 function writeOutputs(pairs) {
@@ -74,7 +102,15 @@ function main() {
   catch (e) { console.error(`error: ${VERSION_FILE} could not be read: ${e.message}`); process.exit(1); }
   try { changelog = readChangelog(); }
   catch (e) { console.error(`error: ${CHANGELOG} could not be read: ${e.message}`); process.exit(1); }
-  const plan = planRelease({ kind, branch: versionBranch(), version, tags: listTags(), installedChangedSince });
+  const tags = listTags();
+  const branch = versionBranch();
+  const errors = check({ version, changelog, tags, installedChangedSince, branch });
+  if (errors.length) {
+    for (const error of errors) console.error(`error: ${error}`);
+    process.exit(1);
+  }
+  const changedSince = kind === "beta" ? (tag) => installedChangedSince(tag, { ignoreVersion: true }) : installedChangedSince;
+  const plan = planRelease({ kind, branch, version, changelog, tags, installedChangedSince: changedSince });
   if (plan.action === "fail") {
     console.error(`error: ${plan.message}`);
     process.exit(1);
@@ -84,7 +120,19 @@ function main() {
     writeOutputs([["action", "skip"]]);
     return;
   }
-  const body = notes(changelog, version);
+  if (kind === "rc") {
+    const candidate = prepareCandidate({ version, changelog, tags });
+    if (process.argv.includes("--prepare")) {
+      if (candidate.changelog !== changelog) writeFileSync(CHANGELOG, candidate.changelog);
+      if (candidate.version !== version) {
+        const data = JSON.parse(readFileSync(VERSION_FILE, "utf8"));
+        writeFileSync(VERSION_FILE, `${JSON.stringify({ ...data, version: candidate.version }, null, 2)}\n`);
+      }
+    }
+    version = candidate.version;
+    changelog = candidate.changelog;
+  }
+  const body = notes(changelog, kind === "beta" ? UNRELEASED : version);
   if (body === null) {
     console.error(`error: ${CHANGELOG} has no section for ${version}`);
     process.exit(1);

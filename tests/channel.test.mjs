@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readdir, readFile } from "node:fs/promises";
 import { channelOf, compareReleases, hostInstall, installedRelease, newestTag, offerRelease, parseRelease, stableStay } from "../kanso/mods/kanso-chrome/release.js";
-import { planRelease } from "../scripts/release-plan.mjs";
+import { planRelease, prepareCandidate } from "../scripts/release-plan.mjs";
 
 const order = ["1.0.0-beta.1", "1.0.0-beta.2", "1.0.0-beta.10", "1.0.0-rc.1", "1.0.0-rc.2", "1.0.0", "1.0.1-beta.1", "1.1.0-rc.1", "1.1.0", "2.0.0-beta.1", "2.0.0"];
 
@@ -22,35 +22,82 @@ test("A beta is older than its release candidate, and both are older than the st
   assert.deepEqual(parseRelease("1.2.3"), { major: 1, minor: 2, patch: 3, channel: null, n: null });
 });
 
-const beta = (over = {}) => planRelease({ kind: "beta", branch: "develop", version: "1.2.0", tags: ["1.1.0"], installedChangedSince: () => true, ...over });
+const stableLog = "## [1.1.0] - 2026-11-01\n\n### Added\n\n- Stable.\n";
+const pendingLog = `# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Feature.\n\n${stableLog}`;
+const beta = (over = {}) => planRelease({ kind: "beta", branch: "develop", version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], installedChangedSince: () => true, ...over });
 
-test("A beta is the next number for that version, and it is skipped when nothing installed changed", () => {
+test("A beta computes its version from stable and Unreleased, and continues existing numbers", () => {
   const seen = [];
   assert.deepEqual(beta({ installedChangedSince: (tag) => { seen.push(tag); return true; } }), { action: "release", tag: "v1.2.0-beta.1", title: "Kanso 1.2.0-beta.1", prerelease: true, message: "publish v1.2.0-beta.1" });
-  assert.deepEqual(seen, ["1.1.0"], "the first beta is compared with the newest stable tag");
-  assert.deepEqual(beta({ installedChangedSince: () => false }), { action: "skip", message: "what Kanso installs has not changed since v1.1.0; no beta." });
+  assert.deepEqual(seen, ["1.1.0"]);
+  assert.equal(beta({ tags: ["v1.1.0", "v1.2.0-beta.1", "1.2.0-beta.2", "v1.2.0-beta.13"] }).tag, "v1.2.0-beta.14");
+  assert.equal(beta({ tags: ["1.1.0", "1.2.0-beta.1", "1.2.0-beta.4"] }).tag, "v1.2.0-beta.5");
   const again = [];
-  assert.equal(beta({ tags: ["v1.1.0", "v1.2.0-beta.1", "1.2.0-beta.2", "v1.2.0-beta.10", "v1.2.0-rc.3"], installedChangedSince: (tag) => { again.push(tag); return true; } }).tag, "v1.2.0-beta.11");
-  assert.deepEqual(again, ["1.2.0-beta.10"], "a release candidate is not the mark a beta compares against");
+  assert.equal(beta({ tags: ["1.1.0", "1.2.0-beta.10"], installedChangedSince: (tag) => { again.push(tag); return true; } }).tag, "v1.2.0-beta.11");
+  assert.deepEqual(again, ["1.2.0-beta.10"]);
+  for (const [category, next] of [["Removed", "2.0.0"], ["Breaking", "2.0.0"], ["Deprecated", "1.2.0"], ["Fixed", "1.1.1"], ["Changed", "1.1.1"], ["Security", "1.1.1"]]) {
+    assert.equal(beta({ changelog: pendingLog.replace("### Added", `### ${category}`) }).tag, `v${next}-beta.1`);
+  }
+  assert.equal(beta({ version: "3.30.0", tags: ["v3.30.0", "v3.31.0-beta.13"], changelog: pendingLog.replaceAll("1.1.0", "3.30.0") }).tag, "v3.31.0-beta.14");
+});
+
+test("A beta skips unchanged installs and missing entries, and refuses the wrong branch or missing stable baseline", () => {
+  assert.deepEqual(beta({ installedChangedSince: () => false }), { action: "skip", message: "what Kanso installs has not changed since v1.1.0; no beta." });
   assert.equal(beta({ tags: ["1.1.0", "1.2.0-beta.2"], installedChangedSince: () => false }).action, "skip");
-  assert.equal(beta({ tags: ["1.1.0", "1.2.0-beta.1", "1.2.0-beta.4"] }).tag, "v1.2.0-beta.5", "a missing number is not reused");
-  let called = false;
-  assert.equal(beta({ tags: [], installedChangedSince: () => { called = true; return false; } }).tag, "v1.2.0-beta.1");
-  assert.equal(called, false, "with no earlier tag there is nothing to compare");
-  called = false;
-  assert.deepEqual(beta({ tags: ["v1.2.0", "1.2.0-beta.1"], installedChangedSince: () => { called = true; return true; } }), { action: "skip", message: "v1.2.0 is already stable; no beta." });
-  assert.equal(called, false);
+  assert.deepEqual(beta({ changelog: stableLog }), { action: "skip", message: "no Unreleased entries; no beta." });
+  assert.equal(beta({ tags: [] }).action, "fail");
   assert.deepEqual(beta({ branch: "main" }), { action: "fail", message: "a beta is published only from develop (this is main)" });
   assert.match(beta({ branch: "" }).message, /unknown branch/);
   assert.equal(beta({ version: "1.2.0-beta.1" }).action, "fail");
 });
 
-test("A release candidate is published only from develop, and never for a version that is already stable", () => {
-  let called = false;
-  assert.deepEqual(planRelease({ kind: "rc", branch: "develop", version: "1.2.0", tags: ["1.1.0", "1.2.0-beta.4", "v1.2.0-rc.1", "1.2.0-rc.2"], installedChangedSince: () => { called = true; return false; } }), { action: "release", tag: "v1.2.0-rc.3", title: "Kanso 1.2.0-rc.3", prerelease: true, message: "publish v1.2.0-rc.3" });
-  assert.equal(called, false, "a release candidate is cut by hand, even when the files match a beta");
-  assert.deepEqual(planRelease({ kind: "rc", branch: "develop", version: "1.2.0", tags: ["v1.2.0"], installedChangedSince: () => true }), { action: "fail", message: "v1.2.0 is already stable; refusing a release candidate" });
-  assert.match(planRelease({ kind: "rc", branch: "main", version: "1.2.0", tags: [], installedChangedSince: () => true }).message, /only from develop/);
+test("The first RC moves Unreleased, fixes the version, and keeps stable history", () => {
+  const input = { version: "1.1.0", changelog: pendingLog, tags: ["v1.1.0", "v1.2.0-beta.13"], date: "2026-11-12" };
+  const candidate = prepareCandidate(input);
+  assert.equal(candidate.version, "1.2.0");
+  assert.equal(candidate.changelog, `# Changelog\n\n## [1.2.0] - 2026-11-12\n\n### Added\n\n- Feature.\n\n${stableLog}`);
+  assert.equal(planRelease({ ...input, kind: "rc", branch: "develop" }).tag, "v1.2.0-rc.1");
+  assert.equal(planRelease({ ...input, kind: "rc", branch: "main" }).action, "fail");
+  assert.equal(planRelease({ ...input, kind: "rc", branch: "develop", changelog: stableLog }).action, "fail");
+});
+
+test("Later RCs retain the version when the combined categories need no larger bump", () => {
+  const first = prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+  const tags = ["1.1.0", "1.2.0-beta.13", "1.2.0-rc.1", "v1.2.0-rc.2"];
+  assert.deepEqual(prepareCandidate({ ...first, tags, date: "2026-11-12" }), first, "no entries means no file changes");
+  assert.equal(planRelease({ ...first, tags, kind: "rc", branch: "develop" }).tag, "v1.2.0-rc.3");
+  const pending = "## [Unreleased]\n\n### Fixed\n\n- Bug.\n\n  More detail.\n\n### Added\n\n- Another feature.\n\n";
+  const changelog = first.changelog.replace("## [1.2.0]", `${pending}## [1.2.0]`);
+  const merged = prepareCandidate({ ...first, changelog, tags, date: "2026-11-12" });
+  assert.equal(merged.version, "1.2.0");
+  assert.ok(merged.changelog.includes("## [1.2.0] - 2026-11-02"));
+  assert.ok(merged.changelog.includes("- Feature.\n- Another feature."));
+  assert.ok(merged.changelog.includes("- Bug.\n\n  More detail."));
+  assert.ok(merged.changelog.endsWith(stableLog));
+  assert.ok(!merged.changelog.includes("[Unreleased]"));
+  assert.equal(planRelease({ ...first, changelog, tags, kind: "rc", branch: "develop" }).tag, "v1.2.0-rc.3");
+  assert.equal(beta({ ...first, changelog, tags }).tag, "v1.2.0-beta.14");
+  assert.equal(beta({ ...first, changelog: changelog.replace("### Added\n\n- Another feature.\n\n", ""), tags }).tag, "v1.2.0-beta.14", "Fixed entries keep the candidate's minor version");
+});
+
+test("A later RC recomputes all unreleased entries and renames a minor candidate for Breaking or Removed", () => {
+  const first = prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+  const tags = ["1.1.0", "1.2.0-rc.1", "1.2.0-rc.7"];
+  for (const category of ["Breaking", "Removed"]) {
+    const changelog = first.changelog.replace("## [1.2.0]", `## [Unreleased]\n\n### ${category}\n\n- Old behavior.\n\n## [1.2.0]`);
+    const candidate = prepareCandidate({ ...first, changelog, tags });
+    assert.equal(candidate.version, "2.0.0");
+    assert.ok(candidate.changelog.includes("## [2.0.0]"));
+    assert.ok(!candidate.changelog.includes("## [1.2.0]"));
+    assert.ok(candidate.changelog.includes("- Feature."));
+    assert.ok(candidate.changelog.includes("- Old behavior."));
+    assert.ok(candidate.changelog.endsWith(stableLog));
+    assert.equal(planRelease({ ...first, changelog, tags, kind: "rc", branch: "develop" }).tag, "v2.0.0-rc.1");
+    assert.equal(beta({ ...first, changelog, tags }).tag, "v2.0.0-beta.1");
+  }
+  const patch = prepareCandidate({ version: "1.1.0", changelog: pendingLog.replace("### Added", "### Fixed"), tags: ["1.1.0"] });
+  const changelog = patch.changelog.replace("## [1.1.1]", "## [Unreleased]\n\n### Deprecated\n\n- Old API.\n\n## [1.1.1]");
+  assert.equal(planRelease({ ...patch, changelog, tags: ["1.1.0", "1.1.1-rc.3"], kind: "rc", branch: "develop" }).tag, "v1.2.0-rc.1");
 });
 
 test("A stable tag is published only from main, and a prerelease of that version does not count as it", () => {
@@ -75,6 +122,10 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.match(beta, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'/, "a beta waits for all three platforms");
   assert.match(beta, /release-plan\.mjs beta/);
   assert.match(beta, /--prerelease/);
+  assert.match(beta, /release-tag\.mjs "\$RELEASE_TAG"/);
+  assert.match(beta, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.match(beta, /--verify-tag/);
+  assert.doesNotMatch(beta, /--target|HEAD:refs\/heads\/develop/);
   assert.doesNotMatch(ci, /workflow_dispatch/);
   const rc = await workflow("rc.yml");
   assert.match(rc, /workflow_dispatch/);
