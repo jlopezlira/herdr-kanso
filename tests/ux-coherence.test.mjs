@@ -104,7 +104,7 @@ test("armed ink comes from the kit token", async () => {
 test("one armed wording: only the kit says Press again, and only as Press again to <verb>", async () => {
   const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
   const all = async (dir) => (await readdir(dir, { recursive: true })).filter((name) => /\.m?js$/.test(name)).map((name) => join(dir, name));
-  const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !file.endsWith("/ui.js"));
+  const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !/[\\/]ui\.js$/.test(file));
   const found = [];
   for (const file of files) {
     for (const line of (await readFile(file, "utf8")).split("\n")) {
