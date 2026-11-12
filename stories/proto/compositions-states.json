@@ -5,7 +5,7 @@
  },
  "FailureBlock": {
   "caption": "Mark, what in name size, why dim, then the fixes: first solid, the rest tonal.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"kst-block\" style=\"margin-top:0\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list worktrees on dark</div><div class=\"kst-why\">git worktree list: timed out after 30 s</div><div class=\"kst-block\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't reach dark</div><div class=\"kst-acts\"><span class=\"kst-btn\" tabindex=\"0\">Refresh</span><span class=\"kst-btn\" tabindex=\"0\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to Kylo-ren</span></div></div></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"kst-block\" style=\"margin-top:0\"><svg class=\"m m-blk\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Can't list worktrees on dark</div><div class=\"kst-why\">git worktree list: timed out after 30 s</div><div class=\"kst-acts\"><span class=\"kst-btn\" tabindex=\"0\">Refresh</span><span class=\"kst-btn\" tabindex=\"0\"><svg class=\"i\"><use href=\"#lu-bot\"/></svg>Explain to Kylo-ren</span></div></div></div></div></div>"
  },
  "Empty": {
   "caption": "Icon, one sentence muted, the one action solid.",

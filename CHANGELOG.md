@@ -59,6 +59,7 @@ the branch's rules.
 
 ### Fixed
 
+- Storybook: a quiet button has no hover wash, everything in an action row is 30 high, rows in a list keep 2 px apart, a state line keeps 12 px before its button, the skeleton shows on both grounds under a real panel header, the thumbnail strip shows pictures, and a failure block is one block.
 - Sleep no longer gets stuck going to sleep or waking. If an agent does not exit, nothing is put away and the Sleep dialog says why.
 - A long conversation wakes: Wake no longer stops an agent that takes a while to load it.
 - Dragging the sidebar's edge only changes its width: it no longer folds the sidebar to the rail, so it can no longer stay folded after you expand it. Hide sidebar still folds it.

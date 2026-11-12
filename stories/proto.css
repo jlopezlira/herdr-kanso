@@ -15,7 +15,7 @@
 .m-done{color:var(--done)}.m-blk{color:var(--blocked)}.m-idle{color:var(--idle);opacity:.7}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes br{from{opacity:.45}to{opacity:1}}
-@keyframes ghost{from{opacity:.35}to{opacity:.8}}
+@keyframes ghost{from{opacity:.5}to{opacity:1}}
 @keyframes shim{from{background-position:100% 0}to{background-position:0 0}}
 .shim{background:linear-gradient(90deg,var(--muted) 0 34%,var(--fg) 44%,var(--fg) 50%,var(--muted) 62% 100%);background-size:260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;animation:shim 2.6s linear infinite alternate}
 .dot{width:6px;height:6px;border-radius:50%;flex:none;display:inline-block}
@@ -245,8 +245,7 @@
 /* loading: one motion in the app, the working name's shimmer (kanso-spaces/agents.js:356-375).
    Three glint windows, 44, 26 and 12 px at .35, .6 and 1 of foreground over the dim base, each sliding from -its width to 240 px,
    linear, 2200 ms (the app adds 0 to 960 ms per agent so rows drift apart). Bars keep their box; reduced motion shows the still bar. */
-.sk{background-color:var(--border)}
-.skw,.kit-shim{animation:kit-shim 2200ms linear infinite;background-repeat:no-repeat;
+.kit-shim{animation:kit-shim 2200ms linear infinite;background-repeat:no-repeat;
   background-image:linear-gradient(color-mix(in srgb,var(--fg) 35%,transparent),color-mix(in srgb,var(--fg) 35%,transparent)),
     linear-gradient(color-mix(in srgb,var(--fg) 60%,transparent),color-mix(in srgb,var(--fg) 60%,transparent)),
     linear-gradient(var(--fg),var(--fg));
@@ -285,7 +284,8 @@
 .kit-act>span+span{visibility:hidden}
 .kit-act.kit-armed>span:first-child{visibility:hidden}
 .kit-act.kit-armed>span+span{visibility:visible}
-.ql.kit-act,.acts>.kit-act:not(.btn):not(.kst-btn){height:var(--k-h-compact);padding:0 var(--k-sp-2);margin-left:calc(-1 * var(--k-sp-2));border-radius:var(--k-r-control)}
+.ql.kit-act,.ql.kit-armed{height:var(--k-h-compact);padding:0 var(--k-sp-2);margin-left:calc(-1 * var(--k-sp-2));border-radius:var(--k-r-control)}
+.acts>.ql.kit-act,.acts>.ql.kit-armed{height:var(--k-h-control);padding:0 var(--k-sp-3);margin-left:0}
 .btn.kit-act{justify-items:center}
 .kit-armed,.btn.kit-armed,.kst-btn.kit-armed,.mi.kit-armed,.ql.kit-armed,.btn.arm{background:var(--accent)!important;color:var(--accentfg)!important;box-shadow:none}
 .kit-armed .i,.kit-armed .pi,.mi.kit-armed .i{color:var(--accentfg)!important}
@@ -319,7 +319,6 @@
 :is(.kst-acts,.kst-empty)>.kst-btn:first-of-type{background:var(--solid);color:var(--solidfg)}
 :is(.kst-acts,.kst-empty)>.kst-btn:first-of-type:hover{background:color-mix(in srgb,var(--solid) 88%,var(--bg))}
 :is(.acts>.ql,.prow2 .b>.ql,.kst-acts>.ql){color:var(--fg)}
-:is(.acts>.ql,.prow2 .b>.ql,.kst-acts>.ql):not(.kit-armed):hover{background-color:var(--hover)}
 .acts>.pill{background:var(--w7);color:var(--fg)}
 .kst-block>.kst-acts{grid-column:2;margin-top:var(--k-sp-2)}
 .kst-block>.kst-acts>.kst-btn{flex:1 1 0;min-width:max-content}
@@ -345,8 +344,7 @@
 :is(.p-scope,.prow .r,.prow2 .b,.mh,.sect .n,.mi .k,.ag-l,.age,.cost,.reset){font-size:var(--k-fs-meta);font-weight:var(--k-fw-regular)}
 :is(.p-scope,.prow .r,.mh,.mi .k,.sect .n){color:var(--dim)}
 /* loading: one soft light per bar; a working name keeps its own glints */
-.sk{background-color:color-mix(in srgb,var(--fg) 8%,transparent)}
-.skw,.kit-shim{background-repeat:no-repeat;background-size:300% 100%;animation:kit-sweep 2200ms linear infinite;
+.kit-shim{background-repeat:no-repeat;background-size:300% 100%;animation:kit-sweep 2200ms linear infinite;
   background-image:linear-gradient(90deg,transparent 0 35%,color-mix(in srgb,var(--fg) 12%,transparent) 50%,transparent 65% 100%)}
 @keyframes kit-sweep{from{background-position:100% 0}to{background-position:0 0}}
 .kit-skl>:nth-child(2n) .skw{animation-delay:-480ms}
@@ -590,7 +588,6 @@
 section[id^="panels-a-"] .panel,#pr .panel,#pr-light .panel{overflow:hidden;height:auto!important;padding:16px}
 section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 .btn.pax-wait{opacity:.6}
-.menu .sk{background:var(--input)}
 .pax-at{position:absolute;right:-4px;top:34px;margin:0}
 
 /* preview */
@@ -759,8 +756,7 @@ section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 .pbx-strip{display:flex;gap:8px;margin-top:12px}
 .pbx-th{width:40px;height:40px;border-radius:4px;flex:none;overflow:hidden;box-shadow:inset 0 0 0 1px var(--border);background:var(--raised);position:relative}
 .pbx-th.on{box-shadow:0 0 0 1px var(--bg),0 0 0 2px var(--fg)}
-.pbx-th i{position:absolute;left:5px;right:5px;height:3px;border-radius:4px;background:var(--input);display:block}
-.pbx-th i.w{height:6px;background:color-mix(in srgb,var(--working) 45%,var(--raised))}
+.pbx-th img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 .pbx-th.sw{box-shadow:none}
 .pbx-file{display:flex;align-items:baseline;gap:8px;margin-top:12px;font-size:12.5px;white-space:nowrap}
 .pbx-note{display:flex;align-items:center;gap:8px;height:32px;margin:0 -8px;padding:0 8px;border-radius:6px;font-size:12.5px}
@@ -876,7 +872,6 @@ section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 .dgx-arrow{color:var(--dim);font-size:12.5px;align-self:center}
 .dgx-x{font-size:11.5px;color:var(--dim);margin-top:4px}
 
-.dgx-d .sk,.dgx-mw .sk,.dlg .sk{background:var(--input)}
 .dgx-gapt{margin-top:16px}
 .dgx-gapt8{margin-top:8px}
 .kit-kbd.dgx-ask{box-shadow:inset 0 0 0 1px var(--accent);color:var(--accent);animation:ghost 1.8s ease-in-out infinite alternate}
@@ -1249,7 +1244,7 @@ section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 .ib{width:var(--k-h-icon);height:var(--k-h-icon);border-radius:var(--k-r-control);display:grid;place-items:center;color:var(--muted);flex:none}
 .kit-field.bad{box-shadow:inset 0 0 0 1px var(--blocked)}
 .kit-field.tall{min-height:calc(var(--k-h-control) * 2 + var(--k-sp-3));align-items:flex-start;padding-block:var(--k-sp-2)}
-.kst-line{display:inline-flex;flex:1;min-width:0;align-items:center;gap:var(--k-sp-2);white-space:nowrap;font-size:var(--k-fs-body);font-weight:var(--k-fw-medium);color:var(--fg)}
+.kst-line{display:inline-flex;flex:1;min-width:0;align-items:center;gap:var(--k-sp-3);white-space:nowrap;font-size:var(--k-fs-body);font-weight:var(--k-fw-medium);color:var(--fg)}
 .log{font:var(--k-fs-mono)/var(--k-lh-code) var(--mono);color:var(--muted);white-space:pre;overflow:hidden;margin-top:12px;font-size:var(--k-fs-mono);line-height:var(--k-lh-code)}
 .metric{display:flex;align-items:baseline;gap:var(--k-sp-2);margin-top:var(--k-sp-6)}
 .p-facts{font-size:var(--k-fs-body);color:var(--muted);margin-top:var(--k-sp-1);display:flex;gap:var(--k-sp-1) var(--k-sp-3);flex-wrap:wrap}
@@ -1266,9 +1261,10 @@ section[id^="panels-a-"] .panel>*,#pr .panel>*,#pr-light .panel>*{flex-shrink:0}
 .pill{height:var(--k-h-compact);padding:0 var(--k-sp-2);border-radius:var(--k-r-control);background:var(--w7);font-size:var(--k-fs-meta);display:flex;align-items:center;color:var(--fg);margin-right:4px;white-space:nowrap}
 .prow{display:flex;align-items:center;gap:var(--k-sp-3);height:var(--k-h-row);padding:0 var(--k-sp-2);margin:0 calc(-1 * var(--k-sp-2));border-radius:var(--k-r-control);font-size:var(--k-fs-body)}
 .prow2{padding:var(--k-sp-2);margin:0 calc(-1 * var(--k-sp-2));border-radius:var(--k-r-control)}
+:is(.w1-r,.prow,.prow2,.kit-row,.mi)+:is(.w1-r,.prow,.prow2,.kit-row,.mi){margin-top:var(--k-sp-hair)}
 .qt{display:flex;gap:var(--k-sp-4);font-size:var(--k-fs-body);color:var(--dim)}
 .sect{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:var(--k-sp-6) 0 var(--k-sp-2);font-size:var(--k-fs-section)}
-.sk{background:var(--border);border-radius:var(--k-r-sm);display:block}
+.sk{background:var(--w12);border-radius:var(--k-r-sm);display:block}
 
 /* boards 01-02: the real window (capture 2026-11-12), polished on the kit */
 .w1{width:1240px;height:820px}
