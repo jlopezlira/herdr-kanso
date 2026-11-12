@@ -37,19 +37,19 @@
  },
  "ProjectsStatusThreads": {
   "caption": "One segmented control switches the list. Same drawing as every segmented.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s side\"><div class=\"sbx-slice\"><div class=\"kit-seg\" style=\"margin:4px 0 8px\"><span class=\"on\">Projects</span><span>Status</span><span>Threads</span></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s side\"><div class=\"sbx-slice\"><div class=\"kit-seg\" style=\"margin:var(--k-sp-1) 0 var(--k-sp-2)\"><span class=\"on\">Projects</span><span>Status</span><span>Threads</span></div></div></div></div>"
  },
  "StatusViewTile": {
   "caption": "A letter 20 and the count on its mark. Blocked red only on the mark.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"sbx-rlist\" style=\"display:flex;gap:8px\"><div class=\"sbx-tile on\"><span class=\"l sbx-h6\">A</span><div class=\"c c-blk\"><svg class=\"m m-blk \"><use href=\"#e-blk\"/></svg>4</div></div><div class=\"sbx-tile strong\"><span class=\"l sbx-h3\">D</span><div class=\"c \"><svg class=\"m m-work \"><use href=\"#e-work\"/></svg>1</div></div><div class=\"sbx-tile \"><span class=\"l c-mu\">B</span><div class=\"c \"><svg class=\"i i12 c-dim\"><use href=\"#lu-moon\"/></svg>1</div></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"sbx-rlist\" style=\"display:flex;gap:var(--k-sp-2)\"><div class=\"sbx-tile on\"><span class=\"l sbx-h6\">A</span><div class=\"c c-blk\"><svg class=\"m m-blk \"><use href=\"#e-blk\"/></svg>4</div></div><div class=\"sbx-tile strong\"><span class=\"l sbx-h3\">D</span><div class=\"c \"><svg class=\"m m-work \"><use href=\"#e-work\"/></svg>1</div></div><div class=\"sbx-tile \"><span class=\"l c-mu\">B</span><div class=\"c \"><svg class=\"i i12 c-dim\"><use href=\"#lu-moon\"/></svg>1</div></div></div></div></div>"
  },
  "Find": {
   "caption": "The field at the top of the list; the match in the name is foreground, the rest muted.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s side\"><div class=\"sbx-slice\"><div class=\"kit-field\" tabindex=\"0\" style=\"margin:0 0 8px\"><svg class=\"i i14\"><use href=\"#lu-search\"/></svg><span class=\"tx\"><span class=\"sbx-ph\">None chosen</span></span></div><div class=\"w1-r ag l1\" tabindex=\"0\"><svg class=\"pi ld\"><use href=\"#p-claude\"/></svg><span class=\"n\"><span class=\"sbx-m\">Bi</span>x</span></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s side\"><div class=\"sbx-slice\"><div class=\"kit-field\" tabindex=\"0\" style=\"margin:0 0 var(--k-sp-2)\"><svg class=\"i i14\"><use href=\"#lu-search\"/></svg><span class=\"tx\"><span class=\"sbx-ph\">None chosen</span></span></div><div class=\"w1-r ag l1\" tabindex=\"0\"><svg class=\"pi ld\"><use href=\"#p-claude\"/></svg><span class=\"n\"><span class=\"sbx-m\">Bi</span>x</span></div></div></div></div>"
  },
  "AddComputer": {
   "caption": "Host row: icon, name, user@host dim, then its pending state at the right.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s side\"><div class=\"sbx-slice\"><div class=\"sbx-host\"><svg class=\"i i14 c-mu\"><use href=\"#lu-server\"/></svg><span>mini</span><span class=\"who\">jj@mini.local</span><span class=\"r\"><span class=\"c-done kst-pend\" style=\"display:flex;gap:4px;align-items:center\"><svg class=\"i i13\"><use href=\"#lu-check\"/></svg>Added</span><span class=\"kst-pdot\"></span></span></div></div></div></div>"
+  "html": "<div class=\"st-ex\"><div class=\"k st-s side\"><div class=\"sbx-slice\"><div class=\"sbx-host\"><svg class=\"i i14 c-mu\"><use href=\"#lu-server\"/></svg><span>mini</span><span class=\"who\">jj@mini.local</span><span class=\"r\"><span class=\"c-done kst-pend\" style=\"display:flex;gap:var(--k-sp-1);align-items:center\"><svg class=\"i i13\"><use href=\"#lu-check\"/></svg>Added</span><span class=\"kst-pdot\"></span></span></div></div></div></div>"
  },
  "DawnBand": {
   "caption": "Dawn Mode paints the band behind the lights; the ensō is the sun.",

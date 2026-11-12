@@ -24,6 +24,10 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Fixed
+
+- Storybook uses one token spacing rhythm for matching pairs of elements in rows, controls, blocks and containers.
+
 ### Added
 
 - Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
