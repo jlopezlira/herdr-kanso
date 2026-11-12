@@ -41,7 +41,7 @@ Tiles with the initial, lead with its logo.
 
 <Canvas of={stories.Credits} />
 
-## D12 kansō settings and Herdr settings
+## kansō settings and Herdr settings
 
 ### Kansō settings and Herdr settings guidelines
 
@@ -53,31 +53,31 @@ Tiles with the initial, lead with its logo.
 - **Kansō** Removed: the account chip's click into app.settings, "Settings · update ready" with its dot, and the separate Update Herdr footer row (now the menu's third row).
 - **Kokō** Remote: none. app.settings is local.
 
-## D13 Settings, every tab, full screen (Stable Mode and Dawn Mode)
+## Settings, every tab, full screen (Stable Mode and Dawn Mode)
 
 ### Settings guidelines
 
-- **Seijaku** Every tab of kansō settings as the whole dialog, 860 wide, dark and light, for audit, in Stable Mode and in Dawn Mode. The design and its states are on D2 (What shows), D3 (Keys), D4 (What's new), D5 (Credits) and D12 (how you get here).
-- **Yūgen** Dawn Mode: the header carries board 11's band, rising on first load, on every tab. With Channel mark set to Pill, the Dawn Mode pill sits beside the title; set to Hidden, nothing.
-- **Yūgen** The way in: the sidebar footer's Settings opens one menu, kansō settings or Herdr settings (D12). ⌃⇧, opens kansō settings on Pieces and ⌘⇧/ on Keys.
+- **Seijaku** Every tab of kansō settings as the whole dialog, 860 wide, dark and light, for audit, in Stable Mode and in Dawn Mode. The tabs and their states cover What shows, Keys, What's new and Credits, with one settings menu to open them.
+- **Yūgen** Dawn Mode: the header carries the dawn band, rising on first load, on every tab. With Channel mark set to Pill, the Dawn Mode pill sits beside the title; set to Hidden, nothing.
+- **Yūgen** The way in: the sidebar footer's Settings opens one menu, kansō settings or Herdr settings. ⌃⇧, opens kansō settings on Pieces and ⌘⇧/ on Keys.
 - **Seijaku** No area of What shows scrolls at 680; Keys and What's new scroll as documents.
 
-## D2 Settings · What shows
+## Settings · What shows
 
 ### Settings guidelines
 
-- **Yūgen** Asked first: what does a programmer come here to do? Bring back something they hid (often), hide what they are looking at (that happens in place: right-click, Hide this, board 10), and now and then look around. The page is built for that order.
+- **Yūgen** Asked first: what does a programmer come here to do? Bring back something they hid (often), hide what they are looking at (that happens in place: right-click, Hide this), and now and then look around. The page is built for that order.
 - **Yūgen** The tab is What shows. It opens on Hidden by you: each hidden thing by name; the row under the pointer says where it lives and offers Show; Show all once. Nothing hidden: one dim sentence.
 - **Yūgen** Everything else sits behind Browse the window (or Find): a small drawn map of the window: Sidebar, Tab bar, Pane header, Panels, Status bar, Notifications, plus Behind the scenes for work with no pixels. Pick an area and only its 3 to 11 rows show beside it. No area scrolls at 680.
 - **Yūgen** One switch per row. "When needed" is no longer a choice: a piece that only speaks when it has something to say just does, and its row says so in three dim words (only when low, only after a turn). Three looks only where there are three: Channel mark (Artwork, Pill, Hidden).
 - **Kansō** The ps / git / gh / lsof tags go from the rows. What hiding saves is said once, in the area's one line, only where it matters (Sidebar, Pane header, Status bar, Tab bar, Behind the scenes).
 - **Kansō** Fewer rows, 52 ids kept in pieces.js: What each agent is doing writes sidebar.activity and sidebar.tasks (both read ps for the same rows; nobody hides one without the other); Computers writes sidebar.computers and footer.machine (the rows and the Add computer row go together); the guard's three switches show under Memory guard only when it is on.
 - **Seijaku** Find searches every area; results name their area in dim; nothing found is one dim sentence.
-- **Shizen** A switch acts at once, drawn at 80% with the breathing dot until shared state is written (S21) (the state pattern). Settings for this… from a right-click lands on the area with the row washed.
-- **Yūgen** Presses. (a) Bring back a hidden piece: footer Settings, kansō settings, Show = 3 (⌃⇧, then Show = 2). (b) Hide what you are looking at: right-click, Hide this = 2; from here: 2 to open, the area, the switch = 4.
+- **Shizen** A switch acts at once, drawn at 80% with the breathing dot until shared state is written (the state pattern). Settings for this… from a right-click lands on the area with the row washed.
+- **Yūgen** Presses. Bring back a hidden piece: footer Settings, kansō settings, Show = 3 (⌃⇧, then Show = 2). Hide what you are looking at: right-click, Hide this = 2; from here: 2 to open, the area, the switch = 4.
 - **Kokō** Remote: none. Every switch is one shared write; hiding stops the job at once on every computer.
 
-## D3 Settings · Keys, with Help's keyboard
+## Settings · Keys, with Help's keyboard
 
 ### Settings guidelines
 
@@ -93,7 +93,7 @@ Tiles with the initial, lead with its logo.
 - **Kansō** The two teaching lines ("kansō's own keys. Click one…", "Panes, tabs and spaces use Herdr's keys…") go.
 - **Kokō** Remote: none. Writes keys.json on this computer. Herdr applies it as it lands.
 
-## D4 Settings · What's new, a timeline
+## Settings · What's new, a timeline
 
 ### Settings guidelines
 
@@ -101,11 +101,11 @@ Tiles with the initial, lead with its logo.
 - **Seijaku** Version 15 and the date beside the node, relative and absolute (today · Nov 11). The one action, Update to 3.31.0, sits on its node.
 - **Kansō** Added, Changed, Fixed are quiet labels in a 64 column, said once per release beside the first of its lines, not headings that compete with the version.
 - **Shizen** Older releases fold to one line (version, date, how many changes) and open in place.
-- **Kansō** Updates (Stable Mode | Dawn Mode) and the version line with Refresh stay above it, as board 11. The automatic-check switch, the big Check button and the waiting banner stay removed.
-- **Kansō** Dawn Mode: the kansō settings header carries board 11's dawn band, on every tab. The band arrives when the armed press is confirmed.
+- **Kansō** Updates (Stable Mode | Dawn Mode) and the version line with Refresh stay above it. The automatic-check switch, the big Check button and the waiting banner stay removed.
+- **Kansō** Dawn Mode: the kansō settings header carries the dawn band, on every tab. The band arrives when the armed press is confirmed.
 - **Kokō** Remote: one GET of CHANGELOG.md and one git ls-remote --tags when the page opens or on Refresh; nothing while it stays open.
 
-## D5 Settings · Credits
+## Settings · Credits
 
 ### Settings guidelines
 
@@ -116,11 +116,11 @@ Tiles with the initial, lead with its logo.
 - **Seijaku** Nothing is downloaded: no avatars.
 - **Kokō** Remote: none.
 
-## D14 Help, now kansō settings · Keys
+## Help, now kansō settings · Keys
 
 ### Help guidelines
 
-- **Seijaku** Help and Settings · Keys were two homes for which key does what. Help is now the Keys tab of kansō settings (D3), drawn here whole, dark and light.
+- **Seijaku** Help and Settings · Keys were two homes for which key does what. Help is now the Keys tab of kansō settings, drawn here whole, dark and light.
 - **Kansō**
 - **Seijaku** The Guide's prose moves to the site's docs; every key it names is on the Keys page, and its two settings facts point at their homes (Herdr settings · Look, What's new).
 
@@ -137,7 +137,7 @@ Follow these rules:
 - Window map: Where each piece lives: regions named, the body blank, the chosen one on w12.
 - What's new: A timeline: the dot, version and date, the update button; Added / Changed lines; "you are here".
 - Credits: Tiles with the initial, lead with its logo.
-Apply every guideline of D12 kansō settings and Herdr settings; D13 Settings, every tab, full screen (Stable Mode and Dawn Mode); D2 Settings · What shows; D3 Settings · Keys, with Help's keyboard; D4 Settings · What's new, a timeline; D5 Settings · Credits; D14 Help, now kansō settings · Keys.
+Apply every guideline of kansō settings and Herdr settings; Settings, every tab, full screen (Stable Mode and Dawn Mode); Settings · What shows; Settings · Keys, with Help's keyboard; Settings · What's new, a timeline; Settings · Credits; Help, now kansō settings · Keys.
 Treat as a defect:
 - No link across: the footer's Settings menu is the one door to both. kansō settings' header carries no Herdr settings link (after the unified menu).
 - No area of What shows scrolls at 680; Keys and What's new scroll as documents.

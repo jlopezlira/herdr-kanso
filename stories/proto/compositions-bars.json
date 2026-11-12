@@ -1,6 +1,6 @@
 {
  "ToastWithItsSource": {
-  "caption": "A toast says what and offers the one fix; the source line above is for the board only.",
+  "caption": "A toast says what and offers the one fix; the source line above is only for the example.",
   "html": "<div class=\"st-ex\"><div class=\"k st-s free\"><div class=\"kst-toast\" style=\"width:360px\"><svg class=\"m m-done\"><use href=\"#e-done\"/></svg><span class=\"t\"><b>tests</b> finished · 48 passed</span><span class=\"kst-btn sm\" tabindex=\"0\">Open</span></div></div></div>"
  },
  "StaleBody": {
