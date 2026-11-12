@@ -15,7 +15,6 @@
     "check:mods": "node scripts/check-mods.mjs",
     "sync:share": "node scripts/sync-share.mjs",
     "sync:mods": "node scripts/sync-mods.mjs",
-    "build:guidelines": "node scripts/build-guidelines.mjs",
     "build:site-tokens": "node scripts/build-site-tokens.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"

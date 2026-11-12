@@ -1,4 +1,4 @@
-import { elements } from '../site/guidelines/elements.json';
+import { elements } from './elements.json';
 
 export const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

@@ -37,3 +37,14 @@ export function contrast(a, b) {
   const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m);
   return (x + 0.05) / (y + 0.05);
 }
+
+export const TEXT = ["fg", "muted", "dim"];
+export const SURFACES = ["canvas", "chrome", "bg", "raised", "popover"];
+export const MIN_CONTRAST = 4.5;
+
+export function pairs(tokens) {
+  return THEMES.flatMap((theme) => TEXT.flatMap((text) => SURFACES.map((surface) => ({
+    theme, text, surface,
+    ratio: contrast(colour(tokens, theme, text), colour(tokens, theme, surface)),
+  }))));
+}

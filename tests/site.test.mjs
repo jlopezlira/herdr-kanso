@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { THEMES, colour, contrast, loadTokens, read } from "../scripts/tokens.mjs";
-import { SURFACES } from "../scripts/build-guidelines.mjs";
+import { MIN_CONTRAST, SURFACES, THEMES, colour, contrast, loadTokens, pairs, read } from "../scripts/tokens.mjs";
 import { OUT, render } from "../scripts/build-site-tokens.mjs";
 
-const CSS = ["site/style.css", "site/guidelines/guidelines.css"];
+const CSS = ["site/style.css"];
 const PAGES = ["index", "changelog", "credits", "privacy", "terms", "use"].map((p) => `site/${p}.html`);
 const SCRIPTS = ["site/main.js", "site/changelog.js"];
 
@@ -41,6 +40,13 @@ test("field edges (input) keep 3:1 on every surface in both themes", () => {
   const low = THEMES.flatMap((theme) => SURFACES.map((surface) => ({
     theme, surface, ratio: contrast(colour(tokens, theme, "input"), colour(tokens, theme, surface)),
   }))).filter((p) => p.ratio < 3).map((p) => `${p.theme} input on ${p.surface}: ${p.ratio.toFixed(2)}`);
+  assert.deepEqual(low, []);
+});
+
+test("every text colour keeps 4.5:1 on every surface in both themes", () => {
+  assert.equal(contrast("#000000", "#ffffff").toFixed(2), "21.00");
+  const low = pairs(loadTokens()).filter((p) => p.ratio < MIN_CONTRAST)
+    .map((p) => `${p.theme} ${p.text} on ${p.surface}: ${p.ratio.toFixed(2)}`);
   assert.deepEqual(low, []);
 });
 
@@ -99,4 +105,11 @@ test("site pages and scripts carry no inline styles", () => {
 
 test("every site page loads the tokens before its stylesheet", () => {
   for (const path of PAGES) assert.match(read(path), /href="tokens\.css">\n<link rel="stylesheet" href="style\.css">/, path);
+});
+
+test("every site page's nav links storybook/", () => {
+  for (const path of PAGES) {
+    const nav = /<nav class="nav-links"[\s\S]*?<\/nav>/.exec(read(path))[0];
+    assert.match(nav, /href="storybook\/">Storybook</, path);
+  }
 });
