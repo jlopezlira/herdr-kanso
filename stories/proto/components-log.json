@@ -1,6 +1,6 @@
 {
  "Log": {
   "caption": "Test output mono, failures in blocked colour.",
-  "html": "<div class=\"st-ex\"><div class=\"k st-s panel\"><div class=\"panel\" style=\"height:auto\"><div class=\"log\"><span class=\"e\"> FAIL</span>  src/api/limits.test.ts &gt; refills after 2 s\n<span class=\"e\">AssertionError: expected 39 to be 40</span>\n ❯ src/api/limits.test.ts:42:18\n    40|   vi.advanceTimersByTime(2000)\n    41|   const b = bucket(\"c1\")\n<span class=\"e\">  &gt; 42|   expect(b.tokens).toBe(40)</span>\n      Tests  <span class=\"e\">1 failed</span> | 47 passed (48)\n<span class=\"e\">##[error]Process completed with exit code 1.</span></div></div></div></div>"
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\" style=\"height:auto\"><div class=\"kanso-log\"><span class=\"kanso-content__entry\"> FAIL</span>  src/api/limits.test.ts &gt; refills after 2 s\n<span class=\"kanso-content__entry\">AssertionError: expected 39 to be 40</span>\n ❯ src/api/limits.test.ts:42:18\n    40|   vi.advanceTimersByTime(2000)\n    41|   const b = bucket(\"c1\")\n<span class=\"kanso-content__entry\">  &gt; 42|   expect(b.tokens).toBe(40)</span>\n      Tests  <span class=\"kanso-content__entry\">1 failed</span> | 47 passed (48)\n<span class=\"kanso-content__entry\">##[error]Process completed with exit code 1.</span></div></div></div></div>"
  }
 }
