@@ -1,6 +1,6 @@
 import { paths, pathApi, appHomeDir } from "./platform-paths.js";
 // Kanso's one database, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-// Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
+// Agents are keyed by conversation: a terminal's address is reused.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
 import { appHome } from "herdr";
 import { mapSeries, parseOr } from "./pure.js";
@@ -10,15 +10,8 @@ export { CALL_MS };
 
 export const DIR = "data/kanso";
 export const VERSION = 1;
-export const STALE_MS = 10 * 60_000; // a wake's hold not renewed this long stopped half way
-export const ABANDON_MS = 3 * 60_000; // a sleep's or a wake's hold not renewed this long stopped half way: a sleep renews before each agent leaves, a wake every BEAT_MS
-export const BEAT_MS = 20_000; // a wake renews its hold this often while it checks an agent
-export const WAKES_LABEL = "kanso.wakes"; // on a terminal a wake opened: the conversation it brings back
-export const GONE_MS = 60_000; // an agent not seen this long, and not asleep, is gone
-export const SPACE_KEEP_MS = 7 * 86400_000; // a project gone this long is forgotten, the same keep as since-left
-export const forgetAgentsSql = () => "DELETE FROM agents WHERE status='gone' AND project_at IS NULL AND sleep_id IS NULL;";
-export const forgetSpacesSql = (now) => `DELETE FROM spaces WHERE gone IS NOT NULL AND gone < ${n(now - SPACE_KEEP_MS)};`;
-export const LEASE_MS = 20_000; // a sleep's owner (sleepwork.js) not heard from this long is gone: another window takes the row
+export const GONE_MS = 60_000; // an agent not seen this long is gone
+export const forgetAgentsSql = () => "DELETE FROM agents WHERE status='gone' AND project_at IS NULL;";
 export const REST_MS = 60_000; // a remote database, while this window is in front and nothing was ordered
 
 export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}'`);
@@ -47,17 +40,6 @@ export function localAddress(seen, machine) {
   const prefix = `${machine}/`;
   return text.startsWith(prefix) ? text.slice(prefix.length) : null;
 }
-const mapId = (value, machine, fn) => (value == null || value === "" ? value ?? null : fn(value, machine));
-const mapPane = (pane, machine, fn) => (pane ? { ...pane, ...(pane.terminal != null ? { terminal: mapId(pane.terminal, machine, fn) } : {}), ...(pane.tab != null ? { tab: mapId(pane.tab, machine, fn) } : {}), ...(pane.check != null ? { check: mapId(pane.check, machine, fn) } : {}) } : pane);
-const mapAgent = (agent, machine, fn) => (agent ? { ...agent, ...(agent.terminal != null ? { terminal: mapId(agent.terminal, machine, fn) } : {}), ...(agent.tab != null ? { tab: mapId(agent.tab, machine, fn) } : {}), ...(agent.tab_id != null ? { tab_id: mapId(agent.tab_id, machine, fn) } : {}), ...(agent.spaceId != null ? { spaceId: mapId(agent.spaceId, machine, fn) } : {}), ...(agent.space_id != null ? { space_id: mapId(agent.space_id, machine, fn) } : {}) } : agent);
-export function mapSleep(row, machine, fn) {
-  if (!row || typeof row !== "object") return row;
-  const into = row.into ? { ...row.into, ...(row.into.tabId != null ? { tabId: mapId(row.into.tabId, machine, fn) } : {}) } : row.into;
-  return { ...row, ...(row.spaceId != null ? { spaceId: mapId(row.spaceId, machine, fn) } : {}), ...(row.space_id != null ? { space_id: mapId(row.space_id, machine, fn) } : {}), ...(typeof row.tab === "string" ? { tab: mapId(row.tab, machine, fn) } : {}), ...(row.into !== undefined ? { into } : {}), ...(row.agents ? { agents: row.agents.map((agent) => mapAgent(agent, machine, fn)) } : {}), ...(row.cols ? { cols: row.cols.map((col) => ({ ...col, panes: (col.panes ?? []).map((pane) => mapPane(pane, machine, fn)) })) } : {}) };
-}
-export const seenRow = (row, machine) => mapSleep(row, machine, seenAddress);
-export const localRow = (row, machine) => mapSleep(row, machine, localAddress);
-
 // Computers Herdr lists, plus any that still have a space open. The sidebar and the dialog both ask this list.
 export function machinesToAsk(known, spaces) {
   const names = [...(known ?? []).map((row) => row?.name), ...(spaces ?? []).map((row) => row?.machine)];
@@ -81,22 +63,17 @@ export function asOfText(at, now) {
 export const conversationOf = (file) => String(file ?? "").match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/)?.[1] ?? null;
 
 // Columns added after a table's first release: [table, name, type].
-const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["agents", "step", "TEXT"], ["agents", "step_at", "INTEGER"],
-  ["agents", "sent_at", "INTEGER"], ["agents", "nudged_at", "INTEGER"], ["agents", "why", "TEXT"], ["sleeps", "state", "TEXT"], ["sleeps", "why", "TEXT"],
-  ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"]];
-// A sleep the sidebar works on: sleeping or undoing (held by its owner), stuck (waiting on you). NULL or asleep: done.
-const DONE = "(state IS NULL OR state='asleep')";
+const ADDED = [["agents", "project", "TEXT"], ["agents", "project_at", "INTEGER"], ["picture_scans", "mark", "TEXT"], ["since_events", "did", "TEXT"]];
+// What the old Sleep kept, dropped once: a sleep is now a label on its terminal.
+const DROPPED = ["sleep_id", "restore", "step", "step_at", "sent_at", "nudged_at", "why"];
+const DROP_SLEEPS = `DROP TRIGGER IF EXISTS agents_one_sleep;DROP TABLE IF EXISTS sleeps;DROP TABLE IF EXISTS spaces;
+DELETE FROM since_events WHERE kind IN ('sleep_finished','sleep_failed');DELETE FROM meta WHERE key LIKE 'moved:%' OR key LIKE 'replacing:%';`;
 
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS prefs(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS spaces(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT, machine TEXT, seen INTEGER NOT NULL, gone INTEGER);
-CREATE TABLE IF NOT EXISTS sleeps(id TEXT PRIMARY KEY, name TEXT NOT NULL, space_id TEXT, space_name TEXT, project TEXT NOT NULL, layout TEXT NOT NULL,
-  into_tab TEXT, saved INTEGER NOT NULL, pending TEXT, pending_at INTEGER, waking TEXT, waking_at INTEGER, state TEXT, why TEXT);
-CREATE UNIQUE INDEX IF NOT EXISTS sleeps_name ON sleeps(project, name);
 CREATE TABLE IF NOT EXISTS agents(id TEXT PRIMARY KEY, name TEXT, title TEXT, said INTEGER, program TEXT, cwd TEXT, space_id TEXT, tab_id TEXT, pos INTEGER,
-  terminal TEXT, status TEXT NOT NULL DEFAULT 'unknown', since INTEGER, seen INTEGER NOT NULL, sleep_id TEXT, restore TEXT, project TEXT, project_at INTEGER,
-  step TEXT, step_at INTEGER, sent_at INTEGER, nudged_at INTEGER, why TEXT);
+  terminal TEXT, status TEXT NOT NULL DEFAULT 'unknown', since INTEGER, seen INTEGER NOT NULL, project TEXT, project_at INTEGER);
 CREATE INDEX IF NOT EXISTS agents_space ON agents(space_id, status);
 CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL, machine TEXT NOT NULL DEFAULT '', added INTEGER NOT NULL, removed INTEGER, agent TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS projects_place ON projects(machine, folder);
@@ -117,13 +94,8 @@ CREATE TABLE IF NOT EXISTS panel_state(project TEXT NOT NULL, panel TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS machines_off(name TEXT PRIMARY KEY, target TEXT NOT NULL DEFAULT '', via TEXT NOT NULL DEFAULT '', session TEXT NOT NULL DEFAULT '', temporary INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS computer_alias(route TEXT PRIMARY KEY, name TEXT NOT NULL, at INTEGER NOT NULL, pending INTEGER NOT NULL DEFAULT 0);
 INSERT OR IGNORE INTO meta(key,value) VALUES('version','${VERSION}');`;
-// Kept on its own: the trigger body has its own ";".
 // hc once stored the words false and null for a plain ssh machine.
 const CLEAN_OFF = `UPDATE machines_off SET via=CASE WHEN via IN ('false','null') THEN '' ELSE via END, session=CASE WHEN session IN ('false','null') THEN '' ELSE session END WHERE via IN ('false','null') OR session IN ('false','null');`;
-
-export const ONE_SLEEP = `CREATE TRIGGER IF NOT EXISTS agents_one_sleep BEFORE UPDATE OF sleep_id ON agents
-  WHEN OLD.sleep_id IS NOT NULL AND NEW.sleep_id IS NOT NULL AND OLD.sleep_id != NEW.sleep_id
-  BEGIN SELECT RAISE(ABORT, 'that agent is already asleep'); END;`;
 
 export function statements(text) {
   if (Array.isArray(text)) return text;
@@ -138,34 +110,6 @@ export function statements(text) {
 
 // sqlite3 -json prints one array per statement; a raw newline never appears inside JSON, so "]\n[" only parts them.
 export const rowsOfOutput = (out) => (out.trim() ? JSON.parse(`[${out.trim().replace(/\r\n?/g, "\n").replace(/\]\n\[/g, "],[")}]`).flat() : []);
-
-// By id only: a space of the same folder and name may have stood beside it; pre-id rows match only when exactly one fits.
-export function spaceFor(place, spaces, home = "") {
-  if (place.spaceId) return spaces.find((w) => w.id === place.spaceId || localAddress(w.id, w.machine ?? null) === place.spaceId) ?? null;
-  const same = spaces.filter((w) => projectKey(w, home) === place.project);
-  const named = place.spaceName ? same.filter((w) => w.name === place.spaceName) : same;
-  return named.length === 1 ? named[0] : null;
-}
-
-export function inPlace(a, place, spaces, home = "") {
-  const w = spaceFor({ spaceId: a.spaceId, spaceName: a.space, project: a.from }, spaces, home);
-  return place.space ? w?.id === place.space : !w && a.from === place.from;
-}
-
-const STEP_FIELDS = ["step", "step_at", "sent_at", "nudged_at", "why", "title", "cwd", "program"];
-const CLEAR_STEP = "step=NULL,step_at=NULL,sent_at=NULL,nudged_at=NULL,why=NULL";
-const restoreSql = (restores, mine) => restores.map(([c, name]) => `UPDATE agents SET restore=${q(name)} WHERE id=${q(c)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`).join("");
-
-const free = (col, now, within = STALE_MS) => `(${col} IS NULL OR ${col}_at IS NULL OR ${col}_at < ${n(now - within)})`;
-// The same, read: a token renewed within STALE_MS holds the row.
-export const isHeld = (token, at, now, within = STALE_MS) => token != null && at != null && at >= now - within;
-
-// A sleep's layout without the panes of these conversations; a column left empty goes, the rest share its width.
-export function layoutWithout(layout, ids) {
-  const cols = (layout?.cols ?? []).map((c) => ({ ...c, panes: (c.panes ?? []).filter((p) => !ids.includes(p.resume)) })).filter((c) => c.panes.length);
-  const total = cols.reduce((sum, c) => sum + (Number(c.w) || 0), 0);
-  return { ...layout, cols: cols.map((c) => ({ ...c, w: total > 0 ? (Number(c.w) || 0) / total : 1 / cols.length })) };
-}
 
 const CACHE_MS = 30_000;
 // Files whose schema is in place. Plain values only: a view's queue and cache die with the view.
@@ -212,11 +156,13 @@ export class Kdb extends Database {
 
   async create() {
     await this.prepare(this.dir, "Install sqlite3 to keep the sidebar's state.");
-    await this.sql(["BEGIN;", ...statements(SCHEMA), ONE_SLEEP, "COMMIT;"]);
+    await this.sql(["BEGIN;", ...statements(SCHEMA), "COMMIT;"]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));
     const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
-    if (missing.length) await this.sql(["BEGIN;", ...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), "COMMIT;"]);
+    const dropped = DROPPED.filter((name) => has.agents.includes(name));
+    const changes = [...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), ...(dropped.length ? statements(DROP_SLEEPS) : []), ...dropped.map((name) => `ALTER TABLE agents DROP COLUMN ${name};`)];
+    if (changes.length) await this.sql(["BEGIN;", ...changes, "COMMIT;"]);
   }
 
   enqueue(text) {
@@ -300,58 +246,22 @@ export class Kdb extends Database {
   forgetMachine(name) { return this.run(`DELETE FROM machines_off WHERE name=${q(name)};`); }
 
   // The migrated marker is checked inside the write lock by every statement, so two windows never both take the old data in.
-  migrate({ sleeps = [], prefs = [] } = {}) {
+  migrate({ prefs = [] } = {}) {
     const todo = "NOT EXISTS(SELECT 1 FROM meta WHERE key='migrated')";
     const prefRows = prefs.map((p) => `INSERT OR IGNORE INTO prefs(key,value) SELECT ${q(p.key)},${q(p.value)} WHERE ${todo};`);
-    const sleepRows = sleeps.flatMap((r) => [
-      `INSERT OR IGNORE INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at,waking,waking_at)
-        SELECT ${q(r.id)},${q(r.name)},NULL,${q(r.space)},${q(r.project)},${q(JSON.stringify(r.layout))},${q(r.into && JSON.stringify(r.into))},${n(r.saved)},
-          ${r.pendingAt == null ? "NULL" : "'legacy'"},${n(r.pendingAt)},${r.wakingAt == null ? "NULL" : "'legacy'"},${n(r.wakingAt)} WHERE ${todo};`,
-      ...r.agents.map((g) => `INSERT INTO agents(id,name,cwd,status,seen,sleep_id) SELECT ${q(g.conversation)},${q(g.name)},${q(g.cwd)},'asleep',${n(r.saved)},${q(r.id)}
-        WHERE ${todo} AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(r.id)}) ON CONFLICT(id) DO UPDATE SET status='asleep',sleep_id=excluded.sleep_id,terminal=NULL;`),
-    ]);
-    return this.run(["BEGIN IMMEDIATE;", ...prefRows, ...sleepRows, `INSERT OR IGNORE INTO meta(key,value) VALUES('migrated','${Date.now()}');`, "COMMIT;"]);
+    return this.run(["BEGIN IMMEDIATE;", ...prefRows, `INSERT OR IGNORE INTO meta(key,value) VALUES('migrated','${Date.now()}');`, "COMMIT;"]);
   }
   async migrated() { return (await this.read("SELECT 1 AS x FROM meta WHERE key='migrated';")).length > 0; }
 
-  // A space no longer listed is marked gone, never deleted: what sleeps in it still finds its way back.
-  syncSpaces(spaces, now = Date.now()) {
-    const rows = spaces.map((w) => `INSERT INTO spaces(id,name,folder,machine,seen,gone) VALUES(${q(w.id)},${q(w.name)},${q(w.folder)},${q(w.machine)},${n(now)},NULL)
-      ON CONFLICT(id) DO UPDATE SET name=excluded.name,folder=excluded.folder,machine=excluded.machine,seen=excluded.seen,gone=NULL;`);
-    return this.run(`BEGIN;${rows.join("")}UPDATE spaces SET gone=${n(now)} WHERE gone IS NULL AND ${notIn("id", spaces.map((w) => w.id))};${forgetSpacesSql(now)}COMMIT;`);
-  }
-  adoptSpaces(found) {
-    const rows = found.map(({ sleep, space }) => `UPDATE sleeps SET space_id=${q(space)} WHERE id=${q(sleep)} AND space_id IS NULL;
-      UPDATE agents SET space_id=${q(space)} WHERE sleep_id=${q(sleep)} AND space_id IS NULL;`);
-    return rows.length ? this.run(`BEGIN;${rows.join("")}COMMIT;`) : Promise.resolve([]);
-  }
-
-  // Records the replacement so a wake still holding the old id finds the new space.
-  moveSpace(from, to, token = null) {
-    const mine = token ? ` AND EXISTS(SELECT 1 FROM meta WHERE key=${q(`replacing:${from}`)} AND value LIKE ${q(`${token}|%`)})` : "";
-    return this.run(`BEGIN;UPDATE sleeps SET space_id=${q(to)} WHERE space_id=${q(from)}${mine};UPDATE agents SET space_id=${q(to)} WHERE space_id=${q(from)} AND sleep_id IS NOT NULL${mine};
-      INSERT INTO meta(key,value) SELECT ${q(`moved:${from}`)},${q(to)} WHERE 1${mine} ON CONFLICT(key) DO UPDATE SET value=excluded.value;DELETE FROM meta WHERE key=${q(`replacing:${from}`)}${mine};COMMIT;`);
-  }
-  async replacement(from) { return (await this.read(`SELECT value FROM meta WHERE key=${q(`moved:${from}`)};`))[0]?.value ?? null; }
-  // True only for the one window that may make the space in place of a gone one.
-  replacing(from, token, now = Date.now()) {
-    return this.held(`INSERT INTO meta(key,value) VALUES(${q(`replacing:${from}`)},${q(`${token}|${now}`)})
-      ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE CAST(substr(meta.value, instr(meta.value,'|')+1) AS INTEGER) < ${n(now - STALE_MS)} RETURNING key;`);
-  }
-  unreplacing(from, token) { return this.run(`DELETE FROM meta WHERE key=${q(`replacing:${from}`)} AND value LIKE ${q(`${token}|%`)};`); }
-
-  // A sighting older than what is kept never overwrites it, and an asleep agent is not changed by one.
+  // A sighting older than what is kept never overwrites it.
   observe(agents, now = Date.now()) {
     const rows = agents.filter((a) => a.conversation).map((a) => `INSERT INTO agents(id,name,title,said,program,cwd,space_id,tab_id,pos,terminal,status,since,seen)
       VALUES(${q(a.conversation)},${q(a.given)},${q(a.title)},${n(a.said)},${q(a.program)},${q(a.cwd)},${q(a.space)},${q(a.tab)},${n(a.pos)},${q(a.terminal)},${q(a.status || "unknown")},${n(a.since)},${n(now)})
-      ON CONFLICT(id) DO UPDATE SET name=CASE WHEN excluded.name IS NULL AND restore IS NOT NULL THEN name ELSE excluded.name END,
-        restore=CASE WHEN excluded.name IS NOT NULL THEN NULL ELSE restore END,title=COALESCE(excluded.title,title),said=COALESCE(excluded.said,said),program=COALESCE(excluded.program,program),
+      ON CONFLICT(id) DO UPDATE SET name=excluded.name,title=COALESCE(excluded.title,title),said=COALESCE(excluded.said,said),program=COALESCE(excluded.program,program),
         cwd=excluded.cwd,space_id=excluded.space_id,tab_id=excluded.tab_id,pos=excluded.pos,terminal=excluded.terminal,status=excluded.status,since=excluded.since,seen=excluded.seen
-      WHERE sleep_id IS NULL AND excluded.seen >= seen;`);
-    return this.run(`BEGIN;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE sleep_id IS NULL AND status!='gone' AND seen < ${n(now - GONE_MS)};${forgetAgentsSql()}COMMIT;`);
+      WHERE excluded.seen >= seen;`);
+    return this.run(`BEGIN;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE status!='gone' AND seen < ${n(now - GONE_MS)};${forgetAgentsSql()}COMMIT;`);
   }
-  // A name the wake could not put back on the new terminal yet; observe clears it once it is there.
-  toRestore(conversation, name) { return this.run(`UPDATE agents SET restore=${q(name)} WHERE id=${q(conversation)};`); }
   rename(conversation, name) { return this.run(`UPDATE agents SET name=${q(name)} WHERE id=${q(conversation)};`); }
   // Every agent a person ever moved stays, even while away, so it comes back where it was put.
   agents() { return this.read("SELECT * FROM agents WHERE status!='gone' OR project_at IS NOT NULL;"); }
@@ -359,201 +269,6 @@ export class Kdb extends Database {
   setProject(id, project, at = Date.now()) {
     return this.run(`INSERT INTO agents(id,status,seen,project,project_at) VALUES(${q(id)},'unknown',${n(at)},${q(project)},${n(at)})
       ON CONFLICT(id) DO UPDATE SET project=excluded.project,project_at=excluded.project_at WHERE project_at IS NULL OR excluded.project_at >= project_at;`);
-  }
-
-  // Throws when a tab of that name sleeps there already, or an agent of it sleeps in another sleep.
-  // `requested`: the sidebar does the work (sleepwork.js), and any window may take it; else the caller holds `token`.
-  async sleepTab({ id = newId(), name, space, project, layout, into = null, agents, saved = Date.now(), now = Date.now(), requested = false }) {
-    const token = newId();
-    // An agent still held by a sleep that stopped half way (pending, not renewed for ABANDON_MS, no wake on it) is
-    // let go first, so the tab can sleep now; that sleep keeps the rest under a token its window never had, or goes.
-    const ids = agents.filter((a) => a.conversation).map((a) => q(a.conversation)).join(",") || "NULL";
-    const gone = `state IS NULL AND pending IS NOT NULL AND pending_at < ${n(now - ABANDON_MS)} AND ${free("waking", now)}`;
-    const letGo = `UPDATE sleeps SET pending=${q(newId())} WHERE ${gone} AND id IN (SELECT sleep_id FROM agents WHERE id IN (${ids}));
-      UPDATE agents SET status='unknown',sleep_id=NULL WHERE id IN (${ids}) AND sleep_id IN (SELECT id FROM sleeps WHERE ${gone});
-      DELETE FROM sleeps WHERE ${gone} AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=sleeps.id);`;
-    const step = requested ? `'requested',${n(now)}` : "NULL,NULL";
-    const marks = agents.filter((a) => a.conversation).map((a) => `INSERT INTO agents(id,name,cwd,space_id,tab_id,pos,status,seen,sleep_id,step,step_at)
-      VALUES(${q(a.conversation)},${q(a.given)},${q(a.cwd)},${q(space?.id)},${q(a.tab)},${n(a.pos)},'asleep',${n(saved)},${q(id)},${step})
-      ON CONFLICT(id) DO UPDATE SET status='asleep',sleep_id=excluded.sleep_id,terminal=NULL,seen=excluded.seen,space_id=excluded.space_id,name=excluded.name,
-        tab_id=COALESCE(excluded.tab_id,tab_id),pos=COALESCE(excluded.pos,pos),cwd=COALESCE(excluded.cwd,cwd),step=excluded.step,step_at=excluded.step_at,sent_at=NULL,nudged_at=NULL,why=NULL;`);
-    await this.run(`BEGIN IMMEDIATE;${letGo}INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at,state)
-      VALUES(${q(id)},${q(name)},${q(space?.id)},${q(space?.name)},${q(project)},${q(JSON.stringify(layout))},${q(into && JSON.stringify(into))},${n(saved)},${requested ? "NULL" : q(token)},${n(now)},${requested ? "'sleeping'" : "NULL"});${marks.join("")}COMMIT;`)
-      .catch((e) => {
-        if (e?.late) throw e;
-        throw new Error(/UNIQUE/.test(e.message) ? `a tab named ${name} is already asleep in this project`
-          : /already asleep/.test(e.message) ? "an agent of it is already asleep in another sleep; if that one is stuck, retry or undo it from Asleep" : e.message);
-      });
-    return { id, token };
-  }
-  // False once the sleep no longer holds the row: then it changes nothing more, its agents included.
-  holdSleep(id, token, now = Date.now()) { return this.held(`UPDATE sleeps SET pending_at=${n(now)} WHERE id=${q(id)} AND pending=${q(token)} AND waking IS NULL RETURNING id;`); }
-  settle(id, token) { return this.held(`UPDATE sleeps SET pending=NULL,pending_at=NULL WHERE id=${q(id)} AND pending=${q(token)} AND waking IS NULL RETURNING id;`); }
-  drop(id, token) {
-    const mine = `id=${q(id)} AND pending=${q(token)} AND waking IS NULL`;
-    return this.held(`BEGIN;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-      DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
-  }
-
-  // A sleep that stopped half way loses its token here for good; its `pending_at` stays, so the wake looks for agents of it still running.
-  async claim(id, now = Date.now(), token = newId()) {
-    const [row] = await this.run(`UPDATE sleeps SET waking=${q(token)},waking_at=${n(now)},pending=NULL WHERE id=${q(id)} AND ${DONE} AND ${free("pending", now)} AND (${free("waking", now)} OR waking=${q(token)}) RETURNING *;`);
-    return row ? { ...row, token } : null;
-  }
-  renew(id, token, now = Date.now()) { return this.held(`UPDATE sleeps SET waking_at=${n(now)} WHERE id=${q(id)} AND waking=${q(token)} RETURNING id;`); }
-  release(id, token) { return this.held(`UPDATE sleeps SET waking=NULL,waking_at=NULL WHERE id=${q(id)} AND waking=${q(token)} RETURNING id;`); }
-  // `restores` ride in the same write so a name is never lost in between.
-  woke(id, token, restores = []) {
-    const mine = `id=${q(id)} AND waking=${q(token)}`;
-    return this.held(`BEGIN;${restoreSql(restores, mine)}UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-      DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
-  }
-  // `wait`: a pane may still be starting, so the sleep is not offered to wake until that would have long settled.
-  narrow(id, layout, keep, hold, { space = null, wait = false, restores = [], now = Date.now() } = {}) {
-    const mine = hold.wake ? `id=${q(id)} AND waking=${q(hold.wake)}` : `id=${q(id)} AND pending=${q(hold.sleep)} AND waking IS NULL`;
-    const after = wait ? `pending=${q(hold.wake ?? hold.sleep)},pending_at=${n(now)},waking=NULL,waking_at=NULL` : hold.wake ? "waking=NULL,waking_at=NULL,pending=NULL,pending_at=NULL" : "pending=NULL,pending_at=NULL";
-    return this.held(`BEGIN;${restoreSql(restores, mine)}UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND ${notIn("id", keep)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-      ${space ? `UPDATE agents SET space_id=${q(space)} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});` : ""}
-      UPDATE sleeps SET layout=${q(JSON.stringify(layout))},${space ? `space_id=${q(space)},` : ""}${after} WHERE ${mine} RETURNING id;COMMIT;`);
-  }
-  // Unless a wake holds it: its agents are then left alone.
-  forget(id, now = Date.now()) {
-    const mine = `id=${q(id)} AND (${DONE.slice(1, -1)} OR state='stuck') AND ${free("waking", now)}`;
-    return this.held(`BEGIN;UPDATE agents SET status='gone',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-      DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
-  }
-
-  // An agent of a sleep seen running again (resumed by hand, or before this Kanso) is awake:
-  // the sleep lets it go, and ends once no agent of it is left asleep. A sleep or wake in progress
-  // is left alone: its agents still run while it ends them. Only a process other than the one put
-  // to sleep counts, except for a sleep that stopped half way (its window closed, say): its row is
-  // still pending once no one has held it for STALE_MS, the process it meant to end still runs, and
-  // the agent would otherwise stay "asleep" for good, so no tab with it could sleep again. A settled
-  // sleep saw every agent leave, so a sighting of the old pid after it is a late one, never a wake.
-  async awake(live, now = Date.now()) {
-    // A terminal a wake opened says so itself (WAKES_LABEL): never the slept process, whatever its pid.
-    const running = new Map(live.filter((a) => a.terminal && a.program).flatMap((a) => [...(a.conversation && a.pid != null ? [[a.conversation, a.pid]] : []), ...(a.wakes ? [[a.wakes, null]] : [])]));
-    if (!running.size) return [];
-    const slept = (s) => new Map(parseOr(s.layout, { cols: [] }).cols?.flatMap((c) => c.panes ?? []).map((p) => [p.resume, p.pid]) ?? []);
-    const held = (s) => isHeld(s.pending, s.pending_at, now, ABANDON_MS) || isHeld(s.waking, s.waking_at, now, ABANDON_MS);
-    const abandoned = (s) => s.pending != null && !held(s);
-    const awakeIn = (s) => { const pids = slept(s); return s.agents.filter((a) => running.has(a.id) && (abandoned(s) || running.get(a.id) !== pids.get(a.id))).map((a) => a.id); };
-    // A sleep the sidebar is working on (or stuck) is its own: its agents still run while they leave.
-    const ours = (await this.sleeps()).filter((s) => (s.state == null || s.state === "asleep") && s.saved < now && !held(s) && awakeIn(s).length);
-    return mapSeries(ours, async (s) => {
-      const gone = awakeIn(s);
-      const layout = layoutWithout(parseOr(s.layout, { cols: [] }), gone);
-      // Only the layout read here is changed: another window that changed it first wins, and the next sighting looks again.
-      // Freeing by the slept pid holds only while the row is the abandoned one read: a window that resumed
-      // and settled the sleep meanwhile (pending NULL, every agent gone) keeps it, and the next sighting looks again.
-      const same = abandoned(s) ? ` AND pending=${q(s.pending)} AND pending_at=${n(s.pending_at)}` : "";
-      const mine = `id=${q(s.id)} AND ${DONE} AND layout=${q(s.layout)} AND saved < ${n(now)} AND ${free("pending", now)} AND ${free("waking", now, ABANDON_MS)}${same}`;
-      // An abandoned sleep let go of in part gets a token its window never had: back after all, it must not
-      // end and settle what is no longer in the sleep. The time stays, so the sleep stays abandoned for the rest.
-      const after = gone.length < s.agents.length && layout.cols.length
-        ? `UPDATE sleeps SET layout=${q(JSON.stringify(layout))}${abandoned(s) ? `,pending=${q(newId())}` : ""} WHERE ${mine} RETURNING id;`
-        : `DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
-      const freed = await this.held(`BEGIN;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(s.id)} AND id IN (${gone.map(q).join(",")}) AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-        ${after}COMMIT;`);
-      return freed ? s.id : null;
-    }).then((ids) => ids.filter(Boolean));
-  }
-
-  // The sidebar's sleep work (sleepwork.js). Every write holds only while `me` owns the row in the state it was read in.
-  holdSql(id, me, now = Date.now()) {
-    return `UPDATE sleeps SET pending=${q(me)},pending_at=${n(now)} WHERE id=${q(id)} AND state IN ('sleeping','undoing') AND waking IS NULL AND (pending IS NULL OR pending=${q(me)} OR pending_at IS NULL OR pending_at < ${n(now - LEASE_MS)}) RETURNING id;`;
-  }
-  holdWork(id, me, now = Date.now()) { return this.held(this.holdSql(id, me, now)); }
-  // True while `me` owns the row in `state`: checked right before an act that writes nothing first.
-  stillSql(id, me, state, now = Date.now()) {
-    return `UPDATE sleeps SET pending_at=${n(now)} WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)} AND waking IS NULL RETURNING id;`;
-  }
-  stillMine(id, me, state, now = Date.now()) { return this.held(this.stillSql(id, me, state, now)); }
-  // `from`: the agent's step as read; another window that moved it meanwhile wins.
-  stepSql(id, me, state, conversation, from, fields) {
-    const set = Object.entries(fields).filter(([k]) => STEP_FIELDS.includes(k)).map(([k, v]) => `${k}=${typeof v === "number" ? n(v) : q(v)}`).join(",");
-    return `UPDATE agents SET ${set} WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step IS ${q(from)} AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state=${q(state)}) RETURNING id;`;
-  }
-  stepAgent(id, me, state, conversation, from, fields) { return this.held(this.stepSql(id, me, state, conversation, from, fields)); }
-  // Stuck lets go of the row: nothing moves until you retry or undo it (or the agent goes on its own).
-  stateSql(id, me, from, to, why = null, now = Date.now(), fact = null) {
-    const event = this.sinceSleep(id, fact, `pending=${q(me)} AND state=${q(from)}`, now);
-    const owner = to === "stuck" ? "pending=NULL,pending_at=NULL" : `pending_at=${n(now)}`;
-    return `BEGIN;${event}UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;COMMIT;`;
-  }
-  setWorkState(id, me, from, to, why = null, now = Date.now(), fact = null) { return this.held(this.stateSql(id, me, from, to, why, now, fact)); }
-  // A stuck agent seen gone has left; once none is stuck the sleep goes on. True when it does.
-  unstickSql(id, conversation = null, now = Date.now()) {
-    const left = conversation ? `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step='stuck' AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');` : "";
-    return `BEGIN;${left}UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step='stuck') RETURNING id;COMMIT;`;
-  }
-  unstick(id, conversation = null, now = Date.now()) { return this.held(this.unstickSql(id, conversation, now)); }
-  // sent_at stays: an /exit that went may still land, and an undo needs to know it went.
-  retry(id, now = Date.now()) {
-    return this.held(`BEGIN;UPDATE agents SET step='saving',step_at=${n(now)},nudged_at=NULL,why=NULL WHERE sleep_id=${q(id)} AND step='stuck'
-      AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');
-      UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' RETURNING id;COMMIT;`);
-  }
-  // From sleeping too: an owner mid-step then finds the state changed and does nothing more of the sleep.
-  undo(id, now = Date.now()) {
-    return this.held(`UPDATE sleeps SET state='undoing',why=NULL,pending_at=CASE WHEN pending IS NULL THEN ${n(now)} ELSE pending_at END
-      WHERE id=${q(id)} AND state IN ('sleeping','stuck') AND waking IS NULL RETURNING id;`);
-  }
-  finishSleep(id, me, why = null, now = Date.now(), fact = null) {
-    const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
-    return this.held(`BEGIN;${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping'`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-      UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;COMMIT;`);
-  }
-  sinceSleep(id, fact, guard, now) {
-    if (!fact) return "";
-    return `INSERT INTO since_events(project,target,kind,text,did,at) SELECT project,${q(fact.target)},${q(fact.kind)},name,${q(fact.did)},${n(now)} FROM sleeps WHERE id=${q(id)} AND ${guard};${pruneSinceSql(now, fact)}`;
-  }
-  // An undo's agent that is back (or never left) is awake.
-  freeSql(id, me, conversation) {
-    return `UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND pending=${q(me)} AND state='undoing') RETURNING id;`;
-  }
-  freeAgent(id, me, conversation) { return this.held(this.freeSql(id, me, conversation)); }
-  // `layout`: what did not come back, asleep; null: all did, and the row goes.
-  endUndo(id, me, layout) { return this.held(this.endSql(id, me, layout)); }
-  endSql(id, me, layout) {
-    const mine = `id=${q(id)} AND pending=${q(me)} AND state='undoing'`;
-    const end = layout ? `UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-      UPDATE sleeps SET layout=${q(JSON.stringify(layout))},state='asleep',why=NULL,pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;`
-      : `UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
-      DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
-    return `BEGIN;${end}COMMIT;`;
-  }
-
-  // Statements queued here share one sqlite3 call. The selects run after the writes.
-  async stage(texts) {
-    await this.open();
-    const pending = texts.map((text) => this.enqueue(text));
-    const sleeps = this.enqueue("SELECT * FROM sleeps;");
-    const agents = this.enqueue("SELECT * FROM agents WHERE sleep_id IS NOT NULL;");
-    const out = await Promise.all([...pending, sleeps, agents]);
-    const rows = out.at(-2).map((r) => ({ ...r, agents: out.at(-1).filter((a) => a.sleep_id === r.id) }));
-    return { wrote: out.slice(0, -2), rows };
-  }
-  // Take what this window may own, and move a requested agent to saving, in that one call.
-  claimSql(me, now, liveIds, longMs, log = null) {
-    const mine = q(me), lease = n(now - LEASE_MS), long = n(now - longMs);
-    const seen = liveIds.length ? liveIds.map((id) => `instr(layout, ${q(`"terminal":${JSON.stringify(id)}`)}) > 0`).join(" OR ") : "0";
-    const holdable = `state IN ('sleeping','undoing') AND waking IS NULL AND (pending IS NULL OR pending=${mine} OR pending_at IS NULL OR pending_at < ${lease})`;
-    const visible = `(pending=${mine} OR ${seen} OR pending IS NULL OR pending_at IS NULL OR pending_at <= ${long})`;
-    const strand = `state IN ('sleeping','undoing') AND waking IS NULL AND pending IS NOT NULL AND pending<>${mine} AND pending_at IS NOT NULL AND pending_at < ${lease} AND pending_at > ${long} AND NOT (${seen})`;
-    const why = "COALESCE(why, 'The sleep stopped')";
-    const event = log ? `INSERT INTO since_events(project,target,kind,text,did,at) SELECT project,'sleep:'||id,'sleep_failed',name,${why},${n(now)} FROM sleeps WHERE ${strand};${pruneSinceSql(now, log)}` : "";
-    return `BEGIN;${event}UPDATE sleeps SET state='stuck',why=${why},pending=NULL,pending_at=NULL WHERE ${strand};UPDATE sleeps SET pending=${mine},pending_at=${n(now)} WHERE ${holdable} AND ${visible};UPDATE agents SET step='saving',step_at=${n(now)} WHERE step='requested' AND sleep_id IN (SELECT id FROM sleeps WHERE pending=${mine} AND state='sleeping' AND waking IS NULL);COMMIT;`;
-  }
-  openWork(me, now, liveIds, { log = null, longMs = 5 * 60_000 } = {}) {
-    return this.stage([this.claimSql(me, now, liveIds, longMs, log)]).then((out) => out.rows);
-  }
-  // The last agent left and the row finished, or neither did: the finish sees this update.
-  leaveSql(id, me, conversation, from, why, now, fact) {
-    const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
-    const gone = `NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step IS NOT NULL AND step!='left')`;
-    const step = `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step IS ${q(from)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`;
-    return `BEGIN;${step}${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping' AND ${gone}`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine}) AND ${gone};UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} AND ${gone} RETURNING id;COMMIT;`;
   }
 
   // The writer's clock: a row ahead of it keeps its later time and takes this name.
@@ -567,24 +282,16 @@ export class Kdb extends Database {
   }
   saveAlias(row, now = Date.now()) { return this.run(this.aliasSql(row, now)); }
 
-  async sleeps(spaces = null, now = Date.now(), write = null) {
-    const list = write == null ? [] : (Array.isArray(write) ? write : [write]);
-    // One statement, so a retry of several rows stays in this read's process.
-    const sql = list.map((row) => this.aliasSql({ ...row, route: row.route ?? "" }, now)).join("");
-    const batch = await Promise.all([
-      sql ? this.run(sql) : Promise.resolve([]),
-      spaces ? this.syncSpaces(spaces, now) : Promise.resolve([]),
-      this.read("SELECT * FROM sleeps;"),
-      this.read("SELECT * FROM agents WHERE sleep_id IS NOT NULL;"),
-      this.read("SELECT route, name, at, pending FROM computer_alias;"),
-    ]);
-    this.seenAlias = batch[4];
-    return batch[2].map((r) => ({ ...r, agents: batch[3].filter((a) => a.sleep_id === r.id) }));
+  // `write`: alias rows to keep first, in the same sqlite3 call as the read, so a retry stays in this read's process.
+  async aliases(write = [], now = Date.now()) {
+    const sql = write.map((row) => this.aliasSql({ ...row, route: row.route ?? "" }, now)).join("");
+    const [, rows] = await Promise.all([sql ? this.run(sql) : [], this.read("SELECT route, name, at, pending FROM computer_alias;")]);
+    return rows;
   }
 
   // Projects you added stay when their last agent closes; removed ones are kept as removed, so no window brings them back.
   projects() { return this.read("SELECT * FROM projects WHERE removed IS NULL ORDER BY added, name;"); }
-  // Once for every window: the spaces open when this came in (and the places that sleep) are your projects; home is not one.
+  // Once for every window: the spaces open when this came in are your projects; home is not one.
   migrateProjects(places, now = Date.now()) {
     const todo = "NOT EXISTS(SELECT 1 FROM meta WHERE key='projects')";
     const rows = places.filter((p) => p.folder).map((p) => `INSERT OR IGNORE INTO projects(id,name,folder,machine,added) SELECT ${q(newId())},${q(p.name)},${q(p.folder)},${q(p.machine ?? "")},${n(now)} WHERE ${todo};`);

@@ -241,13 +241,8 @@ test("spaces, sleep and arrangements show the shape they are about to draw", asy
 
   const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host);
   const sleep = new Sleep();
-  Object.assign(sleep, { handle: {}, space: { name: "App", folder: "/repo" }, busy: null, error: null, at: 0, armed: null, work: [] });
-  sleep.view = "list"; sleep.asleep = null;
+  Object.assign(sleep, { handle: {}, space: { name: "App", folder: "/repo" }, busy: null, error: null, order: { scope: "project" }, reads: null });
   assertSkeleton(sleep.render());
-  sleep.view = "sleep"; sleep.sleepers = null; sleep.whole = false; sleep.onlyPane = false;
-  assertSkeleton(sleep.render());
-  sleep.view = "list"; sleep.asleep = []; sleep.work = [];
-  assert.equal(walk(sleep.render()).texts.includes("Nothing is asleep."), true);
 
   const { Arrange } = await load("kanso-arrange/main.js", ["Arrange"], host);
   const arrange = new Arrange();

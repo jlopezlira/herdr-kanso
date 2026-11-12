@@ -6,7 +6,7 @@ import { fixture, loadMod } from "./perf-harness.mjs";
 
 const gitOf = (f) => f.state.processes.filter((p) => p.command === "git");
 const hcReads = (f) => f.state.processes.filter((p) => p.command === "hc" && p.args[0] === "read");
-const asleepTimer = (f) => f.state.timers.find((timer) => timer.every && timer.ms === 30000 && String(timer.fn).includes("pollSleepWork"));
+const namesTimer = (f) => f.state.timers.find((timer) => timer.every && timer.ms === 30000 && String(timer.fn).includes("loadNames"));
 
 function countRedraws(f) {
   const seen = { n: 0 };
@@ -41,10 +41,10 @@ function askGit(view, f) {
   }
 }
 
-test("an idle sidebar redraws 0 times from the asleep tick and from an unchanged conversation", async (t) => {
+test("an idle sidebar redraws 0 times from the names tick and from an unchanged conversation", async (t) => {
   const { f, view, redraws } = await sidebar(t);
-  const timer = asleepTimer(f);
-  assert.ok(timer, "the asleep tick is armed");
+  const timer = namesTimer(f);
+  assert.ok(timer, "the names tick is armed");
   redraws.n = 0;
   timer.fn(f.cx);
   await f.settle();
@@ -52,7 +52,7 @@ test("an idle sidebar redraws 0 times from the asleep tick and from an unchanged
   await f.settle();
   view.refreshThreads(f.cx);
   await f.settle();
-  assert.equal(redraws.n, 0, `asleep tick and unchanged threads redrawn ${redraws.n} times; budget 0`);
+  assert.equal(redraws.n, 0, `names tick and unchanged threads redrawn ${redraws.n} times; budget 0`);
 });
 
 test("a collapsed rail asks git 0 times a minute, and opening it reads at once", async (t) => {

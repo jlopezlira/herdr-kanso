@@ -61,10 +61,10 @@ export function activityTone(status) {
 
 export const machineWordTone = (phase) => (phase === "unavailable" ? "blocked" : "dim");
 
-export const canWake = (row) => Boolean(row?.asleep && !row.asleep.busy && !row.asleep.quiet && row.asleep.id);
+export const canWake = (row) => Boolean(row?.asleep);
 
 export function enterOpens(row) {
-  if (row?.asleep) return canWake(row) ? { wake: row.asleep.id } : null;
+  if (row?.asleep) return { wake: row.asleep };
   if (row?.pane) return { focus: row.pane };
   if (row?.address) return { peek: row.address };
   return null;

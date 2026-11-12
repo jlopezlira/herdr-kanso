@@ -43,11 +43,8 @@ function customPanels() {
   return Array.isArray(list) ? list.filter((p) => p && typeof p.id === "string" && typeof p.mod === "string" && !(p.id in PANELS)) : [];
 }
 
-// A tab put to sleep leaves the bar in the same turn.
-export function shownTabs(tabs, hidden) {
-  const away = new Set((hidden ?? []).flatMap((h) => h.settle ?? []));
-  return (tabs ?? []).filter((c) => !c.settled && !away.has(c.id));
-}
+// A settled tab (put to sleep, say) is not on the bar.
+export const shownTabs = (tabs) => (tabs ?? []).filter((c) => !c.settled);
 
 // Both shared, so every bar agrees. A panel set to Hide is not mounted.
 const ORDER = "kanso.panels.order";
@@ -317,7 +314,7 @@ export default class Tabs extends View {
     }
     const t = theme();
     const space = spaces().find(p => p.active);
-    const openTabs = shownTabs(space?.tabs, shared("kanso.sleep.hidden"));
+    const openTabs = shownTabs(space?.tabs);
     // Each live-data read copies the whole list: read once per render.
     const ps = panes();
     const tree = layout();

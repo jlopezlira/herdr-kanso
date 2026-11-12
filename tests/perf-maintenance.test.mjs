@@ -7,7 +7,7 @@ test("seen state writes only on changes and coalesces changes for ten seconds", 
   const writes = [];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { terminals: () => [], shared: () => null });
   const row = { conversation: "c1", terminal: "t1", title: "First" };
-  const panel = { agents: new Map(), remember: (seen, at) => writes.push([at, seen.size]), toRestore: () => [] };
+  const panel = { agents: new Map(), remember: (seen, at) => writes.push([at, seen.size]) };
   const view = Object.assign(new Spaces(), { panel, panelReady: true, seenNow: new Map([["t1", row]]), nameTerminals() {} });
   view.keepSeen(0);
   view.seenNow = new Map([["t1", { ...row, title: "Changed" }]]);
@@ -18,48 +18,24 @@ test("seen state writes only on changes and coalesces changes for ten seconds", 
   assert.deepEqual(writes.at(-1), [62000, 0]);
 });
 
-test("name restoration reloads agents only while a name is pending", async () => {
-  let pending = false, reloads = 0;
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { terminals: () => [], shared: () => null });
-  const panel = {
-    agents: new Map(), remember() {}, toRestore: () => pending ? [{ terminal: "t1", conversation: "c1", name: "Name" }] : [],
-    reloadAgents: async () => { reloads += 1; },
-  };
-  const view = Object.assign(new Spaces(), { panel, panelReady: true, seenNow: new Map(), nameTerminals() {} });
-  view.keepSeen(100000);
-  assert.equal(reloads, 0);
-  pending = true;
-  view.keepSeen(100001);
-  await Promise.resolve();
-  view.keepSeen(110000);
-  assert.equal(reloads, 1);
-  pending = false;
-  view.keepSeen(140000);
-  assert.equal(reloads, 1);
-});
-
-test("sleep reloads wait for a changed stamp, a kick, or two minutes", async () => {
-  let now = 100000, stamp = 0, kick = 0, reads = 0;
+test("names and projects are read again only when asked, while a save waits, or after two minutes", async () => {
+  let now = 100000, reads = 0, pending = null;
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    Date: { now: () => now }, spaces: () => [], machines: () => [], home: () => "/home",
-    shared: (key) => key === "kanso.asleep.at" ? stamp : key === "kanso.sleep.kick" ? kick : null,
+    Date: { now: () => now }, spaces: () => [], machines: () => [], home: () => "/home", shared: () => null,
   });
   const view = Object.assign(new Spaces(), {
-    asleepReads: 0, asleepApplied: 0, leftNavStore: () => ({ asleep: async () => { reads += 1; return []; } }),
-    loadProjects: async () => {}, settleHidden() {},
+    db: () => ({ aliases: async () => { reads += 1; return []; } }), loadProjects: async () => {},
   });
-  await view.loadAsleep();
-  for (const elapsed of [30000, 60000, 90000]) { now = 100000 + elapsed; await view.loadAsleep(false); }
+  view.names = { pending: () => pending, absorb() {}, owed: () => null, took() {} };
+  await view.loadNames();
+  for (const elapsed of [30000, 60000, 90000]) { now = 100000 + elapsed; await view.loadNames(false); }
   assert.equal(reads, 1);
   now = 220000;
-  await view.loadAsleep(false);
+  await view.loadNames(false);
   assert.equal(reads, 2);
-  stamp = now;
-  await view.loadAsleep(false);
+  pending = [{ route: "", name: "Cave", at: 1, pending: 0 }];
+  await view.loadNames(false);
   assert.equal(reads, 3);
-  kick = 1;
-  await view.loadAsleep(false);
-  assert.equal(reads, 4);
 });
 
 test("project folders are checked only after registry changes or five minutes", async () => {
@@ -82,22 +58,3 @@ test("project folders are checked only after registry changes or five minutes", 
   assert.equal(checks, 3);
 });
 
-test("sleep work waits for a shared change, a kick, or its two-minute fallback", async () => {
-  let now = 0, stamp = 0, kick = 0, starts = 0;
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    Date: { now: () => now }, spaces: () => [], machines: () => [], shared: (key) => key === "kanso.asleep.at" ? stamp : kick,
-  });
-  const view = Object.assign(new Spaces(), { sleepWork: { start() { starts += 1; } } });
-  view.pollSleepWork({});
-  for (now of [30000, 60000, 90000, 119999]) view.pollSleepWork({});
-  assert.equal(starts, 1);
-  now = 120000;
-  view.pollSleepWork({});
-  assert.equal(starts, 2);
-  kick = 1;
-  view.pollSleepWork({});
-  assert.equal(starts, 3);
-  stamp = 2;
-  view.pollSleepWork({});
-  assert.equal(starts, 4);
-});

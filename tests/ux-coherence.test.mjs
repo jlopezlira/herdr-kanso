@@ -67,7 +67,7 @@ test("a second press within four seconds confirms, and after that it arms again"
   }
 });
 
-test("the sidebar, settings and sleep confirm through Armed", async () => {
+test("the sidebar and settings confirm through Armed", async () => {
   const spaces = await text("kanso/mods/kanso-spaces/main.js");
   assert.equal(spaces.includes("confirmClose"), false);
   assert.equal(spaces.includes("Click again"), false);
@@ -79,11 +79,6 @@ test("the sidebar, settings and sleep confirm through Armed", async () => {
   assert.match(settings, /new Armed\(\)/);
   assert.match(settings, /Press again to take it/);
   assert.equal(settings.includes("Press it again"), false);
-  const sleep = await text("kanso/mods/kanso-sleep/main.js");
-  assert.equal(sleep.includes("ARM_MS"), false);
-  assert.equal(/^\s*arm\(key, cx, act\)/m.test(sleep), false);
-  assert.match(sleep, /this\.armed\.press\(key/);
-  assert.match(sleep, /Press again to forget it/);
 });
 
 test("memory's Esc leaves the full list only while that list is open", async () => {
@@ -127,7 +122,7 @@ test("help names a project, and a panel list keeps the name PR", async () => {
 });
 
 const SKIP_DIR = new Set(["kanso-strip"]);
-const skipFile = (name) => name === "sleepwork.js" || name === "pr.js" || name.startsWith("pr-");
+const skipFile = (name) => name === "pr.js" || name.startsWith("pr-");
 
 async function sources(dir, acc = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {

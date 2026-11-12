@@ -87,18 +87,6 @@ test("Low memory is one sentence", async () => {
   assert.equal(guard.includes("Memory low:"), false);
 });
 
-test("Could not sleep is one sentence, said from one place", async () => {
-  const { couldNotSleep } = await load("kanso-spaces/sleepwork.js", ["couldNotSleep"]);
-  assert.equal(couldNotSleep({ name: "Notes", why: "Finn's prompt could not be cleared" }), "Notes could not sleep. Finn's prompt could not be cleared");
-  assert.equal(couldNotSleep({ name: "Notes", why: "stuck" }), "Notes could not sleep");
-  assert.equal(couldNotSleep({ name: "Notes", why: "Notes could not sleep" }), "Notes could not sleep");
-  const main = await text("kanso/mods/kanso-spaces/main.js");
-  assert.equal((main.match(/notify\(\{ title: couldNotSleep\(row\)/g) ?? []).length, 1);
-  assert.equal((main.match(/noteStuck\(row\)/g) ?? []).length, 2);
-  assert.match(main, /couldNotSleep\(\{ name: held\.tab, why: held\.stuck \}\)/);
-  assert.equal(main.includes("Retry or undo it from Asleep"), false);
-});
-
 test("Ports says no pane from one constant", async () => {
   const { NO_PANE } = await load("kanso-panel/ports.js", ["NO_PANE"]);
   assert.equal(NO_PANE, "no pane");
