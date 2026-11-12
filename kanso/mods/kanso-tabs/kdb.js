@@ -212,11 +212,12 @@ export class Kdb extends Database {
 
   async create() {
     await this.prepare(this.dir, "Install sqlite3 to keep the sidebar's state.");
-    await this.sql(["BEGIN;", ...statements(SCHEMA), ONE_SLEEP, "COMMIT;"]);
+    // A deferred BEGIN shares the file, then deadlocks: busy comes back without waiting.
+    await this.sql(["BEGIN IMMEDIATE;", ...statements(SCHEMA), ONE_SLEEP, "COMMIT;"]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));
     const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
-    if (missing.length) await this.sql(["BEGIN;", ...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), "COMMIT;"]);
+    if (missing.length) await this.sql(["BEGIN IMMEDIATE;", ...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), "COMMIT;"]);
   }
 
   enqueue(text) {
@@ -318,18 +319,18 @@ export class Kdb extends Database {
   syncSpaces(spaces, now = Date.now()) {
     const rows = spaces.map((w) => `INSERT INTO spaces(id,name,folder,machine,seen,gone) VALUES(${q(w.id)},${q(w.name)},${q(w.folder)},${q(w.machine)},${n(now)},NULL)
       ON CONFLICT(id) DO UPDATE SET name=excluded.name,folder=excluded.folder,machine=excluded.machine,seen=excluded.seen,gone=NULL;`);
-    return this.run(`BEGIN;${rows.join("")}UPDATE spaces SET gone=${n(now)} WHERE gone IS NULL AND ${notIn("id", spaces.map((w) => w.id))};${forgetSpacesSql(now)}COMMIT;`);
+    return this.run(`BEGIN IMMEDIATE;${rows.join("")}UPDATE spaces SET gone=${n(now)} WHERE gone IS NULL AND ${notIn("id", spaces.map((w) => w.id))};${forgetSpacesSql(now)}COMMIT;`);
   }
   adoptSpaces(found) {
     const rows = found.map(({ sleep, space }) => `UPDATE sleeps SET space_id=${q(space)} WHERE id=${q(sleep)} AND space_id IS NULL;
       UPDATE agents SET space_id=${q(space)} WHERE sleep_id=${q(sleep)} AND space_id IS NULL;`);
-    return rows.length ? this.run(`BEGIN;${rows.join("")}COMMIT;`) : Promise.resolve([]);
+    return rows.length ? this.run(`BEGIN IMMEDIATE;${rows.join("")}COMMIT;`) : Promise.resolve([]);
   }
 
   // Records the replacement so a wake still holding the old id finds the new space.
   moveSpace(from, to, token = null) {
     const mine = token ? ` AND EXISTS(SELECT 1 FROM meta WHERE key=${q(`replacing:${from}`)} AND value LIKE ${q(`${token}|%`)})` : "";
-    return this.run(`BEGIN;UPDATE sleeps SET space_id=${q(to)} WHERE space_id=${q(from)}${mine};UPDATE agents SET space_id=${q(to)} WHERE space_id=${q(from)} AND sleep_id IS NOT NULL${mine};
+    return this.run(`BEGIN IMMEDIATE;UPDATE sleeps SET space_id=${q(to)} WHERE space_id=${q(from)}${mine};UPDATE agents SET space_id=${q(to)} WHERE space_id=${q(from)} AND sleep_id IS NOT NULL${mine};
       INSERT INTO meta(key,value) SELECT ${q(`moved:${from}`)},${q(to)} WHERE 1${mine} ON CONFLICT(key) DO UPDATE SET value=excluded.value;DELETE FROM meta WHERE key=${q(`replacing:${from}`)}${mine};COMMIT;`);
   }
   async replacement(from) { return (await this.read(`SELECT value FROM meta WHERE key=${q(`moved:${from}`)};`))[0]?.value ?? null; }
@@ -348,7 +349,7 @@ export class Kdb extends Database {
         restore=CASE WHEN excluded.name IS NOT NULL THEN NULL ELSE restore END,title=COALESCE(excluded.title,title),said=COALESCE(excluded.said,said),program=COALESCE(excluded.program,program),
         cwd=excluded.cwd,space_id=excluded.space_id,tab_id=excluded.tab_id,pos=excluded.pos,terminal=excluded.terminal,status=excluded.status,since=excluded.since,seen=excluded.seen
       WHERE sleep_id IS NULL AND excluded.seen >= seen;`);
-    return this.run(`BEGIN;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE sleep_id IS NULL AND status!='gone' AND seen < ${n(now - GONE_MS)};${forgetAgentsSql()}COMMIT;`);
+    return this.run(`BEGIN IMMEDIATE;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE sleep_id IS NULL AND status!='gone' AND seen < ${n(now - GONE_MS)};${forgetAgentsSql()}COMMIT;`);
   }
   // A name the wake could not put back on the new terminal yet; observe clears it once it is there.
   toRestore(conversation, name) { return this.run(`UPDATE agents SET restore=${q(name)} WHERE id=${q(conversation)};`); }
@@ -391,7 +392,7 @@ export class Kdb extends Database {
   settle(id, token) { return this.held(`UPDATE sleeps SET pending=NULL,pending_at=NULL WHERE id=${q(id)} AND pending=${q(token)} AND waking IS NULL RETURNING id;`); }
   drop(id, token) {
     const mine = `id=${q(id)} AND pending=${q(token)} AND waking IS NULL`;
-    return this.held(`BEGIN;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+    return this.held(`BEGIN IMMEDIATE;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
   }
 
@@ -405,21 +406,21 @@ export class Kdb extends Database {
   // `restores` ride in the same write so a name is never lost in between.
   woke(id, token, restores = []) {
     const mine = `id=${q(id)} AND waking=${q(token)}`;
-    return this.held(`BEGIN;${restoreSql(restores, mine)}UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+    return this.held(`BEGIN IMMEDIATE;${restoreSql(restores, mine)}UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
   }
   // `wait`: a pane may still be starting, so the sleep is not offered to wake until that would have long settled.
   narrow(id, layout, keep, hold, { space = null, wait = false, restores = [], now = Date.now() } = {}) {
     const mine = hold.wake ? `id=${q(id)} AND waking=${q(hold.wake)}` : `id=${q(id)} AND pending=${q(hold.sleep)} AND waking IS NULL`;
     const after = wait ? `pending=${q(hold.wake ?? hold.sleep)},pending_at=${n(now)},waking=NULL,waking_at=NULL` : hold.wake ? "waking=NULL,waking_at=NULL,pending=NULL,pending_at=NULL" : "pending=NULL,pending_at=NULL";
-    return this.held(`BEGIN;${restoreSql(restores, mine)}UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND ${notIn("id", keep)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+    return this.held(`BEGIN IMMEDIATE;${restoreSql(restores, mine)}UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(id)} AND ${notIn("id", keep)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       ${space ? `UPDATE agents SET space_id=${q(space)} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});` : ""}
       UPDATE sleeps SET layout=${q(JSON.stringify(layout))},${space ? `space_id=${q(space)},` : ""}${after} WHERE ${mine} RETURNING id;COMMIT;`);
   }
   // Unless a wake holds it: its agents are then left alone.
   forget(id, now = Date.now()) {
     const mine = `id=${q(id)} AND (${DONE.slice(1, -1)} OR state='stuck') AND ${free("waking", now)}`;
-    return this.held(`BEGIN;UPDATE agents SET status='gone',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+    return this.held(`BEGIN IMMEDIATE;UPDATE agents SET status='gone',sleep_id=NULL WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       DELETE FROM sleeps WHERE ${mine} RETURNING id;COMMIT;`);
   }
 
@@ -453,7 +454,7 @@ export class Kdb extends Database {
       const after = gone.length < s.agents.length && layout.cols.length
         ? `UPDATE sleeps SET layout=${q(JSON.stringify(layout))}${abandoned(s) ? `,pending=${q(newId())}` : ""} WHERE ${mine} RETURNING id;`
         : `DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
-      const freed = await this.held(`BEGIN;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(s.id)} AND id IN (${gone.map(q).join(",")}) AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+      const freed = await this.held(`BEGIN IMMEDIATE;UPDATE agents SET status='unknown',sleep_id=NULL WHERE sleep_id=${q(s.id)} AND id IN (${gone.map(q).join(",")}) AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
         ${after}COMMIT;`);
       return freed ? s.id : null;
     }).then((ids) => ids.filter(Boolean));
@@ -479,18 +480,18 @@ export class Kdb extends Database {
   stateSql(id, me, from, to, why = null, now = Date.now(), fact = null) {
     const event = this.sinceSleep(id, fact, `pending=${q(me)} AND state=${q(from)}`, now);
     const owner = to === "stuck" ? "pending=NULL,pending_at=NULL" : `pending_at=${n(now)}`;
-    return `BEGIN;${event}UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;COMMIT;`;
+    return `BEGIN IMMEDIATE;${event}UPDATE sleeps SET state=${q(to)},why=${q(why)},${owner} WHERE id=${q(id)} AND state=${q(from)} AND pending=${q(me)} RETURNING id;COMMIT;`;
   }
   setWorkState(id, me, from, to, why = null, now = Date.now(), fact = null) { return this.held(this.stateSql(id, me, from, to, why, now, fact)); }
   // A stuck agent seen gone has left; once none is stuck the sleep goes on. True when it does.
   unstickSql(id, conversation = null, now = Date.now()) {
     const left = conversation ? `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step='stuck' AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');` : "";
-    return `BEGIN;${left}UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step='stuck') RETURNING id;COMMIT;`;
+    return `BEGIN IMMEDIATE;${left}UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' AND NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step='stuck') RETURNING id;COMMIT;`;
   }
   unstick(id, conversation = null, now = Date.now()) { return this.held(this.unstickSql(id, conversation, now)); }
   // sent_at stays: an /exit that went may still land, and an undo needs to know it went.
   retry(id, now = Date.now()) {
-    return this.held(`BEGIN;UPDATE agents SET step='saving',step_at=${n(now)},nudged_at=NULL,why=NULL WHERE sleep_id=${q(id)} AND step='stuck'
+    return this.held(`BEGIN IMMEDIATE;UPDATE agents SET step='saving',step_at=${n(now)},nudged_at=NULL,why=NULL WHERE sleep_id=${q(id)} AND step='stuck'
       AND EXISTS(SELECT 1 FROM sleeps WHERE id=${q(id)} AND state='stuck');
       UPDATE sleeps SET state='sleeping',why=NULL,pending=NULL,pending_at=${n(now)} WHERE id=${q(id)} AND state='stuck' RETURNING id;COMMIT;`);
   }
@@ -501,7 +502,7 @@ export class Kdb extends Database {
   }
   finishSleep(id, me, why = null, now = Date.now(), fact = null) {
     const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
-    return this.held(`BEGIN;${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping'`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
+    return this.held(`BEGIN IMMEDIATE;${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping'`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;COMMIT;`);
   }
   sinceSleep(id, fact, guard, now) {
@@ -521,7 +522,7 @@ export class Kdb extends Database {
       UPDATE sleeps SET layout=${q(JSON.stringify(layout))},state='asleep',why=NULL,pending=NULL,pending_at=NULL WHERE ${mine} RETURNING id;`
       : `UPDATE agents SET status='unknown',sleep_id=NULL,${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});
       DELETE FROM sleeps WHERE ${mine} RETURNING id;`;
-    return `BEGIN;${end}COMMIT;`;
+    return `BEGIN IMMEDIATE;${end}COMMIT;`;
   }
 
   // Statements queued here share one sqlite3 call. The selects run after the writes.
@@ -543,7 +544,7 @@ export class Kdb extends Database {
     const strand = `state IN ('sleeping','undoing') AND waking IS NULL AND pending IS NOT NULL AND pending<>${mine} AND pending_at IS NOT NULL AND pending_at < ${lease} AND pending_at > ${long} AND NOT (${seen})`;
     const why = "COALESCE(why, 'The sleep stopped')";
     const event = log ? `INSERT INTO since_events(project,target,kind,text,did,at) SELECT project,'sleep:'||id,'sleep_failed',name,${why},${n(now)} FROM sleeps WHERE ${strand};${pruneSinceSql(now, log)}` : "";
-    return `BEGIN;${event}UPDATE sleeps SET state='stuck',why=${why},pending=NULL,pending_at=NULL WHERE ${strand};UPDATE sleeps SET pending=${mine},pending_at=${n(now)} WHERE ${holdable} AND ${visible};UPDATE agents SET step='saving',step_at=${n(now)} WHERE step='requested' AND sleep_id IN (SELECT id FROM sleeps WHERE pending=${mine} AND state='sleeping' AND waking IS NULL);COMMIT;`;
+    return `BEGIN IMMEDIATE;${event}UPDATE sleeps SET state='stuck',why=${why},pending=NULL,pending_at=NULL WHERE ${strand};UPDATE sleeps SET pending=${mine},pending_at=${n(now)} WHERE ${holdable} AND ${visible};UPDATE agents SET step='saving',step_at=${n(now)} WHERE step='requested' AND sleep_id IN (SELECT id FROM sleeps WHERE pending=${mine} AND state='sleeping' AND waking IS NULL);COMMIT;`;
   }
   openWork(me, now, liveIds, { log = null, longMs = 5 * 60_000 } = {}) {
     return this.stage([this.claimSql(me, now, liveIds, longMs, log)]).then((out) => out.rows);
@@ -553,7 +554,7 @@ export class Kdb extends Database {
     const mine = `id=${q(id)} AND pending=${q(me)} AND state='sleeping'`;
     const gone = `NOT EXISTS(SELECT 1 FROM agents WHERE sleep_id=${q(id)} AND step IS NOT NULL AND step!='left')`;
     const step = `UPDATE agents SET step='left',why=NULL WHERE id=${q(conversation)} AND sleep_id=${q(id)} AND step IS ${q(from)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine});`;
-    return `BEGIN;${step}${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping' AND ${gone}`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine}) AND ${gone};UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} AND ${gone} RETURNING id;COMMIT;`;
+    return `BEGIN IMMEDIATE;${step}${this.sinceSleep(id, fact, `pending=${q(me)} AND state='sleeping' AND ${gone}`, now)}UPDATE agents SET ${CLEAR_STEP} WHERE sleep_id=${q(id)} AND EXISTS(SELECT 1 FROM sleeps WHERE ${mine}) AND ${gone};UPDATE sleeps SET state='asleep',why=${q(why)},pending=NULL,pending_at=NULL WHERE ${mine} AND ${gone} RETURNING id;COMMIT;`;
   }
 
   // The writer's clock: a row ahead of it keeps its later time and takes this name.
@@ -601,7 +602,7 @@ export class Kdb extends Database {
   // Throws when another project is already there.
   relocateProject(id, folder) {
     // A project you removed from there does not hold the place.
-    return this.run(`BEGIN;DELETE FROM projects WHERE removed IS NOT NULL AND folder=${q(folder)} AND machine=(SELECT machine FROM projects WHERE id=${q(id)});
+    return this.run(`BEGIN IMMEDIATE;DELETE FROM projects WHERE removed IS NOT NULL AND folder=${q(folder)} AND machine=(SELECT machine FROM projects WHERE id=${q(id)});
       UPDATE projects SET folder=${q(folder)} WHERE id=${q(id)};COMMIT;`)
       .catch((e) => { throw new Error(/UNIQUE/.test(e.message) ? "That folder is already a project." : e.message); });
   }
@@ -620,7 +621,7 @@ export class Kdb extends Database {
     const drop = notIn("path", rows.map((r) => r.path));
     const writes = rows.map((r) => `INSERT INTO pictures(file,path,ord,color,there) VALUES(${q(file)},${q(r.path)},${n(r.ord)},${q(r.color)},1)
       ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord,there=1,color=COALESCE(pictures.color,excluded.color);`).join("");
-    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND ${drop};${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
+    return this.run(`BEGIN IMMEDIATE;DELETE FROM pictures WHERE file=${q(file)} AND ${drop};${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
   }
   setPictureColor(file, path, color) {
     return this.run(`UPDATE pictures SET color=${q(color)} WHERE file=${q(file)} AND path=${q(path)};`);
