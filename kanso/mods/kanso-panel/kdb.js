@@ -156,13 +156,14 @@ export class Kdb extends Database {
 
   async create() {
     await this.prepare(this.dir, "Install sqlite3 to keep the sidebar's state.");
-    await this.sql(["BEGIN;", ...statements(SCHEMA), "COMMIT;"]);
+    // A deferred BEGIN shares the file, then deadlocks: busy comes back without waiting.
+    await this.sql(["BEGIN IMMEDIATE;", ...statements(SCHEMA), "COMMIT;"]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));
     const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
     const dropped = DROPPED.filter((name) => has.agents.includes(name));
     const changes = [...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), ...(dropped.length ? statements(DROP_SLEEPS) : []), ...dropped.map((name) => `ALTER TABLE agents DROP COLUMN ${name};`)];
-    if (changes.length) await this.sql(["BEGIN;", ...changes, "COMMIT;"]);
+    if (changes.length) await this.sql(["BEGIN IMMEDIATE;", ...changes, "COMMIT;"]);
   }
 
   enqueue(text) {
@@ -260,7 +261,7 @@ export class Kdb extends Database {
       ON CONFLICT(id) DO UPDATE SET name=excluded.name,title=COALESCE(excluded.title,title),said=COALESCE(excluded.said,said),program=COALESCE(excluded.program,program),
         cwd=excluded.cwd,space_id=excluded.space_id,tab_id=excluded.tab_id,pos=excluded.pos,terminal=excluded.terminal,status=excluded.status,since=excluded.since,seen=excluded.seen
       WHERE excluded.seen >= seen;`);
-    return this.run(`BEGIN;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE status!='gone' AND seen < ${n(now - GONE_MS)};${forgetAgentsSql()}COMMIT;`);
+    return this.run(`BEGIN IMMEDIATE;${rows.join("")}UPDATE agents SET status='gone',terminal=NULL WHERE status!='gone' AND seen < ${n(now - GONE_MS)};${forgetAgentsSql()}COMMIT;`);
   }
   rename(conversation, name) { return this.run(`UPDATE agents SET name=${q(name)} WHERE id=${q(conversation)};`); }
   // Every agent a person ever moved stays, even while away, so it comes back where it was put.
@@ -308,7 +309,7 @@ export class Kdb extends Database {
   // Throws when another project is already there.
   relocateProject(id, folder) {
     // A project you removed from there does not hold the place.
-    return this.run(`BEGIN;DELETE FROM projects WHERE removed IS NOT NULL AND folder=${q(folder)} AND machine=(SELECT machine FROM projects WHERE id=${q(id)});
+    return this.run(`BEGIN IMMEDIATE;DELETE FROM projects WHERE removed IS NOT NULL AND folder=${q(folder)} AND machine=(SELECT machine FROM projects WHERE id=${q(id)});
       UPDATE projects SET folder=${q(folder)} WHERE id=${q(id)};COMMIT;`)
       .catch((e) => { throw new Error(/UNIQUE/.test(e.message) ? "That folder is already a project." : e.message); });
   }
@@ -327,7 +328,7 @@ export class Kdb extends Database {
     const drop = notIn("path", rows.map((r) => r.path));
     const writes = rows.map((r) => `INSERT INTO pictures(file,path,ord,color,there) VALUES(${q(file)},${q(r.path)},${n(r.ord)},${q(r.color)},1)
       ON CONFLICT(file,path) DO UPDATE SET ord=excluded.ord,there=1,color=COALESCE(pictures.color,excluded.color);`).join("");
-    return this.run(`BEGIN;DELETE FROM pictures WHERE file=${q(file)} AND ${drop};${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
+    return this.run(`BEGIN IMMEDIATE;DELETE FROM pictures WHERE file=${q(file)} AND ${drop};${writes}INSERT INTO picture_scans(file,size,mark) VALUES(${q(file)},${n(size)},${q(mark)}) ON CONFLICT(file) DO UPDATE SET size=excluded.size, mark=excluded.mark;COMMIT;`);
   }
   setPictureColor(file, path, color) {
     return this.run(`UPDATE pictures SET color=${q(color)} WHERE file=${q(file)} AND path=${q(path)};`);

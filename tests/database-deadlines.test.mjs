@@ -78,7 +78,7 @@ test("Windows schema creation may take over thirty seconds without a false deadl
   assert.ok(schema.options.timeout > 30_000);
   assert.ok(schema.options.timeout > CALL_MS);
   const schemaText = scripts.join("\n") || schema.args.join("\n");
-  assert.match(schemaText, /BEGIN;/);
+  assert.match(schemaText, /BEGIN IMMEDIATE;/);
   assert.match(schemaText, /COMMIT;/);
   assert.ok(schema.args.includes(`.timeout ${BUSY_MS}`));
   finish({ code: 0, stdout: "", stderr: "" });
