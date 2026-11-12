@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { MIN_CONTRAST, contrast, load, pairs, published, render } from "../scripts/build-guidelines.mjs";
+import { MIN_CONTRAST, load, pairs, published, render } from "../scripts/build-guidelines.mjs";
+import { contrast } from "../scripts/tokens.mjs";
 
 const disk = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
