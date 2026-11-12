@@ -31,19 +31,21 @@ function scopeRow(panel, c) {
 }
 
 function actionLabel(panel, action) {
-  if (panel.busy === action.busy) return action.busyLabel || action.label;
-  if (action.armed && panel.armed.is(action.target)) return action.press;
-  return action.label;
+  return panel.busy === action.busy ? action.busyLabel || action.label : action.label;
+}
+
+// What cannot be undone asks twice.
+function asks(panel, action) {
+  const disabled = !action?.acts || Boolean(panel.busy);
+  return action?.armed ? { disabled, verb: action.verb, armed: !disabled && panel.armed.is(action.target) } : { disabled };
 }
 
 function actionButton(panel, c, action) {
-  const disabled = !action?.acts || Boolean(panel.busy);
-  const armed = Boolean(action?.armed) && panel.armed.is(action.target) && !disabled;
-  return button(action.id, actionLabel(panel, action), (cx) => onAction(panel, action, cx), c, { disabled, armed });
+  return button(action.id, actionLabel(panel, action), (cx) => onAction(panel, action, cx), c, asks(panel, action));
 }
 
 function quietAction(panel, c, action) {
-  return quietLink(action.id, actionLabel(panel, action), (cx) => onAction(panel, action, cx), c, { disabled: !action.acts || Boolean(panel.busy), color: c.muted });
+  return quietLink(action.id, actionLabel(panel, action), (cx) => onAction(panel, action, cx), c, { ...asks(panel, action), color: c.muted });
 }
 
 function onAction(panel, action, cx) {

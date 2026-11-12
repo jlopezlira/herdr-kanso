@@ -14,18 +14,18 @@ const blank = (partial) => ({
   more: null, note: null, writes: [], logKey: null, ...partial,
 });
 
-const push = { id: "pr-push", label: "Push", press: "Press again to push", target: "push", armed: true, write: true, busy: "Push", busyLabel: "Pushing…" };
-const pull = { id: "pr-pull", label: "Pull", press: "Press again to pull", target: "pull", armed: true, write: true, busy: "Pull", busyLabel: "Pulling…" };
-const update = { id: "pr-update", label: "Update branch", press: "Press again to update the branch", target: "update", armed: true, write: true, busy: "Update", busyLabel: "Updating…" };
-const ready = { id: "pr-ready", label: "Ready for review", press: "Press again to mark it ready", target: "ready", armed: true, write: true, busy: "Ready", busyLabel: "Marking ready…" };
-const merge = { id: "pr-merge", label: "Squash and merge", press: "Press again to squash and merge", target: "merge", armed: true, write: true, busy: "Merge", busyLabel: "Merging…" };
+const push = { id: "pr-push", label: "Push", target: "push", armed: false, write: true, busy: "Push", busyLabel: "Pushing…" };
+const pull = { id: "pr-pull", label: "Pull", target: "pull", armed: false, write: true, busy: "Pull", busyLabel: "Pulling…" };
+const update = { id: "pr-update", label: "Update branch", target: "update", armed: false, write: true, busy: "Update", busyLabel: "Updating…" };
+const ready = { id: "pr-ready", label: "Ready for review", target: "ready", armed: false, write: true, busy: "Ready", busyLabel: "Marking ready…" };
+const merge = { id: "pr-merge", label: "Squash and merge", verb: "squash and merge", target: "merge", armed: true, write: true, busy: "Merge", busyLabel: "Merging…" };
 const send = { id: "pr-send", label: "Send", target: "send", armed: false, write: false };
 const create = { id: "pr-create", label: "Create on GitHub", target: "create", armed: false, write: false, busy: "Create", busyLabel: "Opening GitHub…" };
 const signIn = { id: "pr-sign-in", label: "Sign in", target: "sign-in", armed: false, write: false };
-const reopen = { id: "pr-reopen", label: "Reopen", press: "Press again to reopen", target: "reopen", armed: true, write: true, busy: "Reopen", busyLabel: "Reopening…" };
+const reopen = { id: "pr-reopen", label: "Reopen", target: "reopen", armed: false, write: true, busy: "Reopen", busyLabel: "Reopening…" };
 
-const close = { id: "pr-close", label: "Close", press: "Press again to close", target: "close", armed: true, write: true, busy: "Close", busyLabel: "Closing…" };
-const draftBack = { id: "pr-draft", label: "Back to draft", press: "Press again to return to draft", target: "draft", armed: true, write: true, busy: "Draft", busyLabel: "Returning…" };
+const close = { id: "pr-close", label: "Close", verb: "close", target: "close", armed: true, write: true, busy: "Close", busyLabel: "Closing…" };
+const draftBack = { id: "pr-draft", label: "Back to draft", target: "draft", armed: false, write: true, busy: "Draft", busyLabel: "Returning…" };
 
 const link = (id, label, target, url) => ({ id, label, target, url, armed: false, write: false });
 

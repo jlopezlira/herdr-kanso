@@ -657,8 +657,7 @@ export class Worktrees {
       { value: String(gone), unit: gone === 1 ? "folder gone" : "folders gone" },
     ];
     const armed = this.armed.is("all"), busy = this.working === "all", can = plan.length > 0 && !this.working && this.done;
-    const primary = button("wt-clean", busy ? "Removing…" : armed ? `Press again to remove ${plan.length}` : `Clean up ${plan.length}`,
-      (cx) => this.armed.press("all", cx, (cx) => this.cleanUp(cx)), c, { disabled: !can, armed });
+    const primary = this.armed.button("wt-clean", busy ? "Removing…" : `Clean up ${plan.length}`, `remove ${plan.length}`, "all", (cx) => this.cleanUp(cx), c, { disabled: !can });
     const gist = !this.done ? "Clean up waits for the scan to finish."
       : plan.length ? `${freed ? `${fmtSize(freed)} of it` : `${plan.length} of them`} can go without losing anything.` : "Nothing can go without losing work.";
     return v_flex().w_full().gap(G.xl)
@@ -701,7 +700,7 @@ export class Worktrees {
             .child(div().min_w(0).truncate().text_size(12).text_color(v.quiet || v.color === c.dim ? c.muted : v.color).child(busy ? "Removing…" : v.text))))
         .child(div().flex_none().text_size(15).font_light().text_color(c.text).child(fmtSize(w.size))));
     if (!picked) return button;
-    const s = stateOf(w), key = `one:${w.path}`, armed = this.armed.is(key);
+    const s = stateOf(w);
     const blocked = s === "open" ? "Close its tabs in Herdr to remove it." : s === "locked" ? "Locked: run git worktree unlock to remove it."
       : s === "broken" ? "Its .git points to where the repository used to be, so git can't read what it holds. Repair the link to check it like any other."
       : s === "checking" || !w.fresh ? "As the last scan saw it. Checking it again before it can be removed." : "";
@@ -718,8 +717,8 @@ export class Worktrees {
           .when(!w.missing && s !== "broken", (el) => el.child(quietLink(`wt-explain-${w.path}`, "Explain it", () => this.ask(`Explain ${name(w.path)}`, w.path,
             explainPrompt(this.item(w.path) ?? w, this.groups.find((g) => g.repo === w.repo)?.base)), c, { color: c.text })))
           .when(!w.missing, (el) => el.child(quietLink(`wt-open-${w.path}`, "Open in a new tab", () => run("tab.new", { folder: w.path }), c)))
-          .when(!blocked, (el) => el.child(quietLink(`wt-rm-${w.path}`, busy ? "Removing…" : armed ? "Press again to remove" : "Remove",
-            (cx) => this.armed.press(key, cx, (cx) => this.remove(w.path, cx)), c, { color: armed ? c.red : c.text, disabled: Boolean(this.working) })))));
+          .when(!blocked, (el) => el.child(this.armed.link(`wt-rm-${w.path}`, busy ? "Removing…" : "Remove", "remove",
+            `one:${w.path}`, (cx) => this.remove(w.path, cx), c, { color: c.text, disabled: Boolean(this.working) })))));
   }
 
   group(id, title, where, items, c) {
@@ -736,15 +735,16 @@ export class Worktrees {
           .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(where)))
         .child(div().flex_none().text_size(12).text_color(c.dim).child(note)))
       .children(rows.map((w) => this.row(w, c)))
-      .when(armed, (el) => el.child(div().w_full().px(G.md).pt(G.xs).text_size(12).line_height(1.45).text_color(lost === "Nothing is lost." ? c.muted : c.red)
-        .child(`${lost} Branches stay unless merged. Anything open in Herdr, locked or in use today stays.`)))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).px(G.md).pt(G.xs)
         .when(shown.length > ROWS, (el) => el.child(quietLink(`wt-more-${id}`, open ? "Show fewer" : `Show ${shown.length - ROWS} more`,
           (cx) => { this.more = open ? new Set([...this.more].filter((x) => x !== id)) : new Set([...this.more, id]); cx.notify(); }, c)))
         .when(missing.length > 0, (el) => el.child(quietLink(`wt-prune-${id}`, `Prune ${missing.length} ${missing.length === 1 ? "record" : "records"} of ${missing.some((w) => w.replaced) ? "folders gone or reused" : missing.length === 1 ? "a folder already gone" : "folders already gone"}`,
           (cx) => this.prune(missing.map((w) => w.path), cx), c, { disabled: Boolean(this.working) })))
-        .when(many.length > 1 && this.done, (el) => el.child(quietLink(`wt-all-${id}`, armed ? `Press again to remove ${many.length}` : `Remove all ${many.length}`,
-          (cx) => this.armed.press(key, cx, (cx) => { this.markOpen(); this.removeAll(items.map((w) => this.item(w.path)).filter((w) => w && removable(w)), cx); }), c, { color: armed ? c.red : c.muted, disabled: Boolean(this.working) }))));
+        .when(many.length > 1 && this.done, (el) => el.child(this.armed.link(`wt-all-${id}`, `Remove all ${many.length}`, `remove ${many.length}`,
+          key, (cx) => { this.markOpen(); this.removeAll(items.map((w) => this.item(w.path)).filter((w) => w && removable(w)), cx); }, c, { disabled: Boolean(this.working) }))))
+      // Below the actions, so arming moves none of them.
+      .when(armed, (el) => el.child(div().w_full().px(G.md).pt(G.xs).text_size(12).line_height(1.45).text_color(lost === "Nothing is lost." ? c.muted : c.red)
+        .child(`${lost} Branches stay unless merged. Anything open in Herdr, locked or in use today stays.`)));
   }
 
   ask(title, folder, prompt) {

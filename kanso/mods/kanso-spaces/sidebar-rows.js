@@ -1,4 +1,4 @@
-// What the sidebar may paint, and the pull a second press runs. Drawing stays next door.
+// What the sidebar may paint, and the pull a press runs. Drawing stays next door.
 export const ASLEEP_ROW = 32;
 
 export const showPlus = (active, hovered) => Boolean(active || hovered);
@@ -10,11 +10,10 @@ export function projectControls({ active, hovered, place }) {
 
 export const pullKey = (folder, on) => `pull:${on ?? ""}:${folder ?? ""}`;
 
-export function pullLabel(n, armed, pulling = false) {
+export function pullLabel(n, pulling = false) {
   const count = Number(n) || 0;
   if (count <= 0) return null;
-  if (pulling) return "Pulling\u2026";
-  return armed ? `Press again to pull ${count}` : `\u2193${count}`;
+  return pulling ? "Pulling\u2026" : `\u2193${count}`;
 }
 
 export function pullCommand(folder, on) {
@@ -34,12 +33,12 @@ export function aheadOpen(count, place) {
   return { panel: "pr", select: place.active ? null : place.id ?? null };
 }
 
-export function gitControls(git, { folder, on, id, active, armed, pulling } = {}) {
+export function gitControls(git, { folder, on, id, active, pulling } = {}) {
   if (!git || !folder) return [];
   const open = Number(git.ahead) > 0 ? aheadOpen(git.ahead, { folder, on, id, active }) : null;
-  const behindLabel = pullLabel(git.behind, armed, pulling);
+  const behindLabel = pullLabel(git.behind, pulling);
   const ahead = open ? { kind: "ahead", label: `\u2191${git.ahead}`, open } : null;
-  const behind = behindLabel ? { kind: "behind", label: behindLabel, armed: Boolean(armed) && !pulling, pulling: Boolean(pulling), command: pulling ? null : pullCommand(folder, on) } : null;
+  const behind = behindLabel ? { kind: "behind", label: behindLabel, pulling: Boolean(pulling), command: pulling ? null : pullCommand(folder, on) } : null;
   return [ahead, behind].filter(Boolean);
 }
 

@@ -37,8 +37,10 @@ The verdict, in order, and its one action. The words are the header's.
 Send goes to the agent of the pane in front. The first press shows the log
 or the comment. The second sends it. A blocked agent is named on the verdict
 and Send is absent. When the pane is not an agent, the GitHub link is the
-primary. Merge, Push, Pull, Update branch, Ready, Close, Reopen and Back to
-draft ask for a second press. Send, Create and Sign in do not.
+primary. Squash and merge and Close ask for a second press ("Press again to
+<verb>"). Push, Pull, Update branch, Ready, Reopen and Back to draft act on
+one press; Ready and Back to draft undo each other. Send, Create and Sign in
+do not ask.
 
 With no pull request the same page says where the branch is: not signed in
 (Sign in), commits not on GitHub (Push), commits behind GitHub (Pull), no

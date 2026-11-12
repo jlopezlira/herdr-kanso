@@ -156,11 +156,7 @@ export class Preview {
     remember(drafts, draftKey(path, on), next);
   }
 
-  reread(cx) {
-    const dirty = this.doc ? (this.doc.dirty || this.doc.conflict) : needsSave(this.edit) || this.edit?.phase === "conflict";
-    if (!dirty) { this.load(cx); return; }
-    this.ask.press(this.path, cx, (cx) => this.discard(cx));
-  }
+  dirty() { return this.doc ? Boolean(this.doc.dirty || this.doc.conflict) : needsSave(this.edit) || this.edit?.phase === "conflict"; }
 
   discard(cx) {
     if (this.doc) this.doc.dropDraft();
@@ -344,7 +340,6 @@ export class Preview {
     const t = theme(), c = tokens(t);
     const editing = this.doc ? this.doc.snapshot() : this.edit;
     const mark = this.doc ? "" : word(this.edit);
-    const armed = Boolean(this.ask?.is(this.path));
     return v_flex().id("preview").track_focus(this.handle).size_full().min_h(0).bg(t.background).text_color(t.foreground).text_size(13)
       .on_key_down((e, cx) => { this.doc?.key(e, cx); })
       .child(h_flex().h(42).flex_none().px(10).gap(6).items_center().border_b(1).border_color(t.border)
@@ -356,8 +351,8 @@ export class Preview {
         .when(Boolean(mark), (el) => el.child(div().text_size(11.5).text_color(t.dim).child(mark)))
         .when(needsSave(editing), (el) => el.child(quietLink("preview-save", "Save", (cx) => this.save(cx), c)))
         .child(iconButton("preview-open-with", "open-with", "Open with…", () => this.openWith(), c))
-        .when(armed, (el) => el.child(quietLink("preview-discard", "Press again to discard", (cx) => this.reread(cx), c)))
-        .when(!armed, (el) => el.child(iconButton("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.reread(cx), c)))
+        .when(this.dirty(), (el) => el.child(this.ask.link("preview-discard", "Discard", "discard", this.path, (cx) => this.discard(cx), c)))
+        .when(!this.dirty(), (el) => el.child(iconButton("preview-refresh", "refresh", this.held || this.doc?.held ? "Retry" : "Read again", (cx) => this.load(cx), c)))
         .child(iconButton("preview-close", "close", "Close", (cx) => this.leave(cx, () => { previewKeys.unbind(this); showPanel(null); }), c)))
       .child(this.doc ? this.doc.body(t, "preview-md")
         : this.edit?.big ? div().p(12).text_color(t.dim).child("Too large to edit")

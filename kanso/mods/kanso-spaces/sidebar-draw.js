@@ -1,7 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { run } from "herdr";
-import { G, H, R, T, tokens, quietLink } from "./ui.js";
+import { G, R, T, tokens, quietLink } from "./ui.js";
 import { commitLayout } from "./layout.js";
 import { ASLEEP_ROW, asleepControls, gitControls, pullKey } from "./sidebar-rows.js";
 
@@ -15,10 +15,10 @@ export function openAhead(space) {
   commitLayout({ panel: { id: "pr", type: "block", content: { mod: "kanso-panel", props: { panel: "pr" } } } });
 }
 
-export function gitTail(g, tree, name, t, place, armed, act) {
+export function gitTail(g, tree, name, t, place, act) {
   const folder = place?.cwd ?? "";
   const on = place?.on ?? null;
-  const controls = gitControls(g, { folder, on, id: act.id, active: act.active, armed: Boolean(folder && armed.is(pullKey(folder, on))), pulling: act.pulling === pullKey(folder, on) });
+  const controls = gitControls(g, { folder, on, id: act.id, active: act.active, pulling: act.pulling === pullKey(folder, on) });
   const same = (value) => value.toLowerCase() === String(name ?? "").toLowerCase();
   const branch = tree ? "" : (g.branch ?? "detached");
   const repo = tree || same(g.name) ? "" : g.name;
@@ -26,9 +26,7 @@ export function gitTail(g, tree, name, t, place, armed, act) {
     const base = div().id(`git-${control.kind}-${act.id}`).flex_none();
     if (control.pulling) return base.text_size(T.body).text_color(t.muted).child(control.label);
     const go = control.kind === "ahead" ? act.open : act.pull;
-    return control.armed
-      ? stop(base.h(H.compact).px(G.sm).flex().items_center().rounded(R.control).bg(t.accent).text_color(t.accent_foreground ?? t.background).text_size(T.body), go).child(control.label)
-      : stop(base.text_size(T.body).text_color(control.kind === "ahead" ? t.ansi2 : t.ansi1), go).child(control.label);
+    return stop(base.text_size(T.body).text_color(control.kind === "ahead" ? t.ansi2 : t.ansi1), go).child(control.label);
   };
   return h_flex().flex_1().min_w(0).gap(5).justify_end().items_center().text_size(T.body).text_color(t.dim)
     .when(Boolean(repo), (el) => el.child(div().min_w(0).truncate().child(repo)))

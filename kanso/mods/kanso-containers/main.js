@@ -261,7 +261,7 @@ export default class Containers extends View {
 
   row(k, c) {
     const busy = this.busy.has(k.id), on = k.health === "running" || k.health === "busy";
-    const removeKey = `rm:${k.id}`, armed = this.armed.is(removeKey), open = this.opened.has(k.id);
+    const open = this.opened.has(k.id);
     const mem = this.mem.get(k.id.slice(0, 12));
     const web = !this.context?.remote && on ? k.ports.find(isWeb) : null;
     return v_flex().w_full().px(G.md).py(9).gap(4).rounded(6).hover((s) => s.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
@@ -284,22 +284,20 @@ export default class Containers extends View {
         .when(k.health === "running", (el) => el.child(quietLink(`ct-shell-${k.id}`, "Shell", () => inTab(`shell ${k.service ?? k.name}`, localService(systemApi).containerShell(k.name, this.details.get(k.id.slice(0, 12))?.platform)), c)))
         .child(quietLink(`ct-logs-${k.id}`, "Logs", () => inTab(`logs ${k.service ?? k.name}`, ["docker", "logs", "-f", "--tail", "200", k.name]), c))
         .child(quietLink(`ct-more-${k.id}`, open ? "Less" : "Details", (cx) => { this.opened = open ? new Set([...this.opened].filter((x) => x !== k.id)) : new Set([...this.opened, k.id]); cx.notify(); }, c))
-        .when(!on, (el) => el.child(quietLink(`ct-rm-${k.id}`, armed ? "Press again to remove" : "Remove",
-          (cx) => { if (!busy) this.armed.press(removeKey, cx, (cx) => this.containers("rm", [k], cx)); }, c, { color: armed ? c.red : c.muted, disabled: busy }))))
+        .when(!on, (el) => el.child(this.armed.link(`ct-rm-${k.id}`, "Remove", "remove", `rm:${k.id}`, (cx) => this.containers("rm", [k], cx), c, { disabled: busy }))))
       .when(open, (el) => el.child(this.detailsView(k, c)));
   }
 
   stackRow(s, c) {
     const state = s.total === 0 ? "not started" : `${s.running} of ${s.total} running`;
-    const id = `${s.dir}:${s.compose ?? ""}`, downKey = `down:${id}`, armed = this.armed.is(downKey);
+    const id = `${s.dir}:${s.compose ?? ""}`;
     return h_flex().w_full().flex_wrap().items_center().gap_x(G.lg).gap_y(G.xs).px(G.md).py(7).rounded(6).bg(c.subtle)
       .child(div().min_w(0).flex_shrink(1).truncate().text_size(12.5).text_color(c.text).tooltip(s.file).child(`${s.compose && s.compose !== s.name ? s.compose : s.name} · compose`))
       .child(div().flex_none().text_size(11.5).text_color(c.dim).child(state))
       .child(h_flex().flex_none().gap(G.md)
         .child(quietLink(`ct-up-${id}`, s.running ? "Up again" : "Up", () => this.stack(s, "up"), c, { color: c.text }))
         .child(quietLink(`ct-build-${id}`, "Rebuild", () => this.stack(s, "rebuild"), c))
-        .when(s.total > 0, (el) => el.child(quietLink(`ct-down-${id}`, armed ? "Press again: down" : "Down",
-          (cx) => this.armed.press(downKey, cx, () => this.stack(s, "down")), c, { color: armed ? c.red : c.muted }))));
+        .when(s.total > 0, (el) => el.child(this.armed.link(`ct-down-${id}`, "Down", "take it down", `down:${id}`, () => this.stack(s, "down"), c))));
   }
 
   group(g, c) {
@@ -325,7 +323,7 @@ export default class Containers extends View {
   imagesView(c) {
     const unused = this.images.filter((i) => i.unused);
     const total = this.images.reduce((t, i) => t + i.mb, 0), spare = unused.reduce((t, i) => t + i.mb, 0);
-    const armed = this.armed.is("rmi"), open = this.show.images, name = this.pull.value().trim();
+    const open = this.show.images, name = this.pull.value().trim();
     return v_flex().w_full().gap(4)
       .child(this.head("images", "images", `${this.images.length} · ${size(total)}${spare > 0 ? ` · ${size(spare)} unused` : ""}`, open, c))
       // Pull is always here: a new image is one line away.
@@ -333,14 +331,13 @@ export default class Containers extends View {
         .child(field("ct-pull-image", this.pull, c).flex_1().min_w(0))
         .child(quietLink("ct-pull", "Pull", () => this.pullImage(), c, { color: name ? c.text : c.border, disabled: !name })))
       .when(unused.length > 0, (el) => el.child(h_flex()
-        .child(quietLink("ct-rmi", armed ? `Press again to remove ${unused.length}` : `Remove unused images (${size(spare)})`,
-          (cx) => this.armed.press("rmi", cx, (cx) => this.act(["rmi", ...unused.flatMap((i) => i.tags)], cx, { what: "remove images" })), c,
-          { color: armed ? c.red : c.muted }))))
+        .child(this.armed.link("ct-rmi", `Remove unused images (${size(spare)})`, `remove ${unused.length}`,
+          "rmi", (cx) => this.act(["rmi", ...unused.flatMap((i) => i.tags)], cx, { what: "remove images" }), c))))
       .when(open, (el) => el.children(this.images.map((i) => this.imageRow(i, c))));
   }
 
   imageRow(i, c) {
-    const key = `rmi:${i.id}`, armed = this.armed.is(key), form = this.runFor?.id === i.id ? this.runFor : null;
+    const form = this.runFor?.id === i.id ? this.runFor : null;
     return v_flex().w_full().gap(4).px(G.md).py(7).border_t(1).border_color(c.border)
       .child(h_flex().w_full().items_center().gap(G.md)
         .child(v_flex().flex_1().min_w(0).gap(2)
@@ -349,8 +346,8 @@ export default class Containers extends View {
         .child(div().flex_none().text_size(12).text_color(c.muted).child(size(i.mb))))
       .child(h_flex().flex_wrap().gap_x(G.lg)
         .child(quietLink(`ct-run-${i.id}`, form ? "Cancel" : "Run…", (cx) => this.openRun(i, cx), c, { color: c.text }))
-        .when(i.unused, (el) => el.child(quietLink(`ct-rmi-${i.id}`, armed ? "Press again to remove" : "Remove",
-          (cx) => this.armed.press(key, cx, (cx) => this.act(["rmi", ...i.tags], cx, { what: "remove image" })), c, { color: armed ? c.red : c.muted }))))
+        .when(i.unused, (el) => el.child(this.armed.link(`ct-rmi-${i.id}`, "Remove", "remove", `rmi:${i.id}`,
+          (cx) => this.act(["rmi", ...i.tags], cx, { what: "remove image" }), c))))
       .when(Boolean(form), (el) => el.child(h_flex().w_full().gap(G.sm).items_center()
         .child(field(`ct-run-name-${i.id}`, form.name, c).flex_1().min_w(0))
         .child(field(`ct-run-port-${i.id}`, form.port, c).flex_1().min_w(0))
@@ -358,13 +355,12 @@ export default class Containers extends View {
   }
 
   volumesView(c) {
-    const unused = this.volumes.filter((v) => v.unused), armed = this.armed.is("vrm"), open = this.show.volumes;
+    const unused = this.volumes.filter((v) => v.unused), open = this.show.volumes;
     return v_flex().w_full().gap(4)
       .child(this.head("volumes", "volumes", `${this.volumes.length}${unused.length ? ` · ${unused.length} unused` : ""}`, open, c))
       .when(unused.length > 0, (el) => el.child(h_flex()
-        .child(quietLink("ct-vrm", armed ? `Press again: their data is gone for good` : `Remove ${unused.length} unused volume${unused.length === 1 ? "" : "s"}`,
-          (cx) => this.armed.press("vrm", cx, (cx) => this.act(["volume", "rm", ...unused.map((v) => v.name)], cx, { what: "remove volumes" })), c,
-          { color: armed ? c.red : c.muted }))))
+        .child(this.armed.link("ct-vrm", `Remove ${unused.length} unused volume${unused.length === 1 ? "" : "s"}`, "delete their data for good",
+          "vrm", (cx) => this.act(["volume", "rm", ...unused.map((v) => v.name)], cx, { what: "remove volumes" }), c))))
       .when(open, (el) => el.children(this.volumes.map((v) => h_flex().w_full().items_center().gap(G.md).px(G.md).py(7).border_t(1).border_color(c.border)
         .child(v_flex().flex_1().min_w(0).gap(2)
           .child(div().w_full().truncate().text_size(12.5).text_color(v.unused ? c.muted : c.text).tooltip(v.name).child(v.anonymous ? `${v.name.slice(0, 12)} (anonymous)` : v.name))
@@ -372,12 +368,11 @@ export default class Containers extends View {
   }
 
   spaceView(c) {
-    const cache = this.spare["Build Cache"] ?? 0, armed = this.armed.is("cache");
+    const cache = this.spare["Build Cache"] ?? 0;
     if (cache < 1) return null;
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(12.5).text_color(c.muted).child(`Build cache: ${size(cache)} you can get back`))
-      .child(quietLink("ct-cache", armed ? "Press again to clear" : "Clear", (cx) => this.armed.press("cache", cx, (cx) => this.act(["builder", "prune", "-f"], cx, { what: "clear the build cache" })), c,
-        { color: armed ? c.red : c.text }));
+      .child(this.armed.link("ct-cache", "Clear", "clear", "cache", (cx) => this.act(["builder", "prune", "-f"], cx, { what: "clear the build cache" }), c, { color: c.text }));
   }
 
   skeleton(c) {
@@ -402,7 +397,7 @@ export default class Containers extends View {
     if (this.groups === null) return this.skeleton(c);
     const all = this.groups.flatMap((g) => g.containers);
     const running = all.filter((k) => k.health === "running").length;
-    const armedQuit = this.armed.is("quit"), remote = Boolean(this.context?.remote);
+    const remote = Boolean(this.context?.remote);
     // What Docker costs this computer comes first: its VM keeps memory even with nothing running.
     const hero = v_flex().gap(G.md)
       .when(!remote, (el) => el.child(v_flex().gap(4)
@@ -415,8 +410,8 @@ export default class Containers extends View {
       .child(h_flex().items_center().gap(G.md).flex_wrap()
         .child(div().text_size(13).text_color(c.text).child(`${running} running`))
         .child(div().text_size(13).text_color(c.dim).child(`${all.length - running} stopped`))
-        .when(!remote, (el) => el.child(quietLink("ct-quit", armedQuit ? "Press again to quit Docker" : running ? `Quit Docker (stops ${running})` : "Quit Docker",
-          (cx) => this.armed.press("quit", cx, (cx) => this.quitDocker(cx)), c, { color: armedQuit ? c.red : c.muted }))));
+        .when(!remote, (el) => el.child(this.armed.link("ct-quit", running ? `Quit Docker (stops ${running})` : "Quit Docker", "quit Docker",
+          "quit", (cx) => this.quitDocker(cx), c))));
     const space = this.spaceView(c);
     return v_flex().w_full().gap(32)
       .child(hero)
