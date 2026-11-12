@@ -120,7 +120,7 @@ ${body}
 const status = (e) => (e.status === "Approved" ? "" : `<span class="status status-${esc(e.status.toLowerCase())}">${esc(statusLabel(e))}</span>`);
 
 function indexPage(elements) {
-  const rows = elements.map((e) => `  <li><a href="${esc(e.page)}"><strong>${esc(e.title)}</strong>${e.summary ? `<span>${esc(e.summary)}</span>` : ""}</a>${status(e)}</li>`).join("\n");
+  const rows = elements.map((e) => `  <li><a href="${esc(e.page)}"><strong>${esc(e.title)}</strong>${e.summary ? `<span>${cite(e.summary)}</span>` : ""}</a>${status(e)}</li>`).join("\n");
   return page({
     title: "UX/UI guidelines · kansō",
     description: "kansō's approved design elements: tokens, components and states, each with its status and a block to give your coding agent.",
@@ -245,9 +245,9 @@ const serves = (elements, e) => {
   return `<p class="serves"><a href="philosophy.html#${esc(p.id)}">${esc(p.name)} ${kanji(p)}</a></p>`;
 };
 
-function head(e) {
+function head(e, lede = true) {
   return `<p class="crumb"><a href="./">UX/UI guidelines</a></p>
-<h1>${esc(e.title)}</h1>${e.summary ? `\n<p class="lede">${esc(e.summary)}</p>` : ""}${status(e) ? `\n<p class="meta">${status(e)}</p>` : ""}`;
+<h1>${esc(e.title)}</h1>${lede && e.summary ? `\n<p class="lede">${esc(e.summary)}</p>` : ""}${status(e) ? `\n<p class="meta">${status(e)}</p>` : ""}`;
 }
 
 function philosophyPage(e) {
@@ -260,8 +260,8 @@ function philosophyPage(e) {
 </section>`).join("\n\n");
   return page({
     title: `${e.title} · UX/UI guidelines · kansō`,
-    description: e.why[0].replace(/\*/g, ""),
-    body: `${head(e)}
+    description: e.summary.replace(/\*/g, ""),
+    body: `${head(e, false)}
 
 ${sections}
 

@@ -6,6 +6,7 @@
       "status": "Approved",
       "version": null,
       "page": "philosophy.html",
+      "summary": "kansō is named after one of the seven principles of Zen art described by Shin'ichi Hisamatsu in *Zen and the Fine Arts* (1971). The design follows all seven as one philosophy, not taste.",
       "principles": [
         {
           "id": "kanso",
