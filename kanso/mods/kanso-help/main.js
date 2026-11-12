@@ -5,7 +5,7 @@ import { paths } from "./platform-paths.js";
 import { localName } from "./platform-host.js";
 import { modifierLabels, guideSections } from "./guide.js";
 import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } from "herdr";
-import { G, tokens, button, quietTabs, quietLink } from "./ui.js";
+import { G, tokens, button, segmented, quietLink } from "./ui.js";
 import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
@@ -176,7 +176,7 @@ export default class Help extends View {
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(quietTabs("help-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); }, c)))
+      .child(div().pt(G.md).child(segmented("help-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); }, c)))
       .child(v_flex().id(`help-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
   }
 }

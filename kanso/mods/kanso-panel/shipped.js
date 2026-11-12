@@ -3,12 +3,12 @@ import { localSleep } from "./platform-host.js";
 // Statistics only, never one item at a time from GitHub.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share } from "./share.js";
-import { G, tokens, quietLink, iconButton, section, ghost, breathe } from "./ui.js";
+import { G, tokens, quietLink, iconButton, section, ghost, breathe, segmented } from "./ui.js";
 import { range, tryOrAsync, mapSeries } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
 
@@ -397,16 +397,9 @@ export class Shipped {
   }
 
   periods(c) {
-    const tab = (kind) => {
-      const on = this.kind === kind;
-      return Button.new(`shipped-${kind}`).h(26).px(10).flex_none().items_center().rounded(6).cursor_pointer()
-        .selected(on).when(on, (el) => el.bg(c.selected)).when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-        .accessibility_label(PERIOD_NAMES[kind])
-        .on_click((_e, cx) => this.pick(kind, 0, cx))
-        .child(div().text_size(12).text_color(on ? c.text : c.muted).child(PERIOD_NAMES[kind]));
-    };
+    const items = PERIODS.map((kind) => ({ key: kind, label: PERIOD_NAMES[kind] }));
     return h_flex().w_full().flex_wrap().gap(G.sm).items_center().justify_between()
-      .child(h_flex().gap(G.xs).items_center().children(PERIODS.map(tab)))
+      .child(segmented("shipped", items, this.kind, (kind, cx) => this.pick(kind, 0, cx), c))
       .child(h_flex().gap(G.xs).items_center()
         .child(iconButton("shipped-prev", "chevron-left", "Previous period", (cx) => this.pick(this.kind, this.offset - 1, cx), c))
         .child(div().min_w(96).text_center().text_size(12).text_color(c.text).child(periodLabel(this.kind, this.offset)))

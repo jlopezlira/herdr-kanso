@@ -12,7 +12,6 @@ export const ICON = 15;
 export const ICON_ROW = 14;
 export const SWITCH = { w: 28, h: 16, knob: 12 };
 // End of the generated sizes.
-export const SEG = { two: 188, three: 280 };
 export const EASE = { duration: 180, easing: "ease-out" };
 /** A second press within this long confirms a removal. */
 export const ARM_MS = 4000;
@@ -45,21 +44,6 @@ const TONE = {
 };
 export const toneColor = (c, tone) => c[TONE[tone] ?? "dim"];
 
-export function quietTabs(id, items, value, onChange, c) {
-  return h_flex().id(id).flex_wrap().gap(G.lg).items_center()
-    .children(items.map((item, index) => {
-      const on = value === item.key;
-      return Button.new(`${id}-${item.key}`).h(H.compact).items_center().cursor_pointer()
-        .selected(on)
-        .set_position(index + 1, items.length)
-        .accessibility_label(item.label)
-        .when(!on, (el) => el.hover((s) => s.opacity(0.7)))
-        .focus((s) => s.opacity(0.7))
-        .on_click((_e, cx) => { if (!on) onChange(item.key, cx); })
-        .child(div().text_size(13).text_color(on ? c.text : c.dim).when(on, (el) => el.font_medium()).child(item.label));
-    }));
-}
-
 const RGB = /^#[0-9a-f]{6}/i;
 // The kit's color-mix: `a` over an opaque `b`, `share` of the way.
 export function mix(a, b, share) {
@@ -70,6 +54,8 @@ export function mix(a, b, share) {
 
 export const WASH = { off: 0.04, hover: 0.88, press: 0.76 };
 const CLEAR = "#00000000";
+// The 4% wash: the segmented track and a disabled control's ground.
+const well = (c) => mix(c.text, c.background, WASH.off);
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
 const LOOKS = {
   solid: (c) => filled(c.primary, c.primaryText, c),
@@ -81,7 +67,7 @@ const LOOKS = {
 /** solid: the one primary action; tonal: a wash, no edge; quiet: text only; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path. */
 export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, disabled = false, spoken = label, armed = false, active = false, spin = false, color = null } = {}) {
   const square = kind === "icon";
-  const look = disabled ? { fill: kind === "quiet" ? null : mix(c.text, c.background, WASH.off), ink: c.dim }
+  const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
     : armed ? filled(c.accent, c.accentText, c)
       : active ? { ...LOOKS[kind](c), fill: c.selected, ink: c.text, hover: c.selected }
         : LOOKS[kind](c);
@@ -145,20 +131,24 @@ export class Armed {
   }
 }
 
-export function toggleSwitch(id, checked, onChange, c, { label = "Toggle" } = {}) {
-  // The 1px border sits inside the pill, so the knob meets its edge.
+/** One switch: off is raised with the input edge, on is the solid colour; only the knob moves. Disabled: the 4% wash, dim knob. */
+export function toggleSwitch(id, checked, onChange, c, { label = "Toggle", disabled = false } = {}) {
+  // The 1px edge sits inside the pill, so the knob meets it.
   const pad = (SWITCH.h - SWITCH.knob - 2) / 2;
-  const pill = h_flex().w(SWITCH.w).h(SWITCH.h).p(pad).items_center()
+  const fill = disabled ? well(c) : checked ? c.primary : c.raised;
+  const edge = disabled ? c.border : checked ? c.primary : c.input;
+  const pill = h_flex().id(`${id}-pill`).w(SWITCH.w).h(SWITCH.h).p(pad).items_center()
     .justify_start().when(checked, (el) => el.justify_end())
-    .rounded_full().bg(checked ? c.primary : c.raised).border_1().border_color(checked ? c.primary : c.input)
-    .child(div().size(SWITCH.knob).flex_none().rounded_full().bg(checked ? c.primaryText : c.muted));
-  // Focus recolours this border; it stays clear until then.
-  return Toggle.new(id).h(H.compact).px(G.xs).items_center().cursor_pointer()
-    .rounded(R.control).border_1().border_color("#00000000")
+    .rounded_full().bg(fill).border_1().border_color(edge)
+    .when(!disabled, (el) => el.hover((s) => (checked ? s.bg(mix(fill, c.background, WASH.hover)) : s.border_color(c.muted))))
+    .child(div().size(SWITCH.knob).flex_none().rounded_full().bg(disabled ? c.dim : checked ? c.primaryText : c.muted));
+  // The ring is a border kept clear at rest, as on a button.
+  return Toggle.new(id).h(H.compact).px(G.xs - G.hair).items_center()
+    .rounded(R.control).border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .pressed(checked)
+    .disabled(disabled)
     .accessibility_label(label)
-    .on_change((next, cx) => { onChange(next, cx); cx.notify(); })
-    .focus((s) => s.border_color(c.accent))
+    .when(!disabled, (el) => el.cursor_pointer().on_change((next, cx) => { onChange(next, cx); cx.notify(); }))
     .child(pill);
 }
 
@@ -196,7 +186,7 @@ export function field(id, text, c, { label = null, icon = null, onIcon = null, i
   const editor = disabled
     ? div().flex_1().min_w(0).text_color(c.dim).when(!multi, (el) => el.truncate()).child(text.value())
     : (multi ? Textarea : Input).new(text.state).flex_1().min_w(0).text_color(c.text);
-  const box = h_flex().id(`${id}-box`).rounded(R.control).border_1().bg(disabled ? mix(c.text, c.background, WASH.off) : c.canvas)
+  const box = h_flex().id(`${id}-box`).rounded(R.control).border_1().bg(disabled ? well(c) : c.canvas)
     .border_color(error ? c.blocked : c.input)
     .when(!disabled && !error, (el) => el.hover((s) => s.border_color(c.muted)))
     .when(multi, (el) => el.min_h(H.control * 2 + G.md).items_stretch())
@@ -213,30 +203,31 @@ export function field(id, text, c, { label = null, icon = null, onIcon = null, i
     : ring;
 }
 
-export function segmentAt(width, i, n, pad = 3, gap = 2) {
-  const w = (width - 2 * pad - gap * (n - 1)) / n;
-  return { left: pad + i * (w + gap), width: w };
-}
-
-export function segmented(id, items, value, onChange, c, { width = null, dot = null, sized = null } = {}) {
-  const ink = c.foreground ?? c.text;
-  const wash = c.raised ?? c.selected;
-  const at = width ? segmentAt(width, Math.max(0, items.findIndex((item) => item.key === value)), items.length) : null;
-  const thumb = at ? div().id(`${id}-thumb`).absolute().top(3).left(at.left).w(at.width).h(28).rounded(7)
-    .bg(wash).border_1().border_color(c.border)
-    .transition("left", { duration: 200, easing: "ease-out" }) : null;
-  const seg = (item) => {
+/** One segmented control: selection is a tone, never a weight, so nothing moves. Items: { key, label, icon, dot }; `dot` marks one
+ * while unselected. Collapsed: a column of icons, each label its tip. */
+export function segmented(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false } = {}) {
+  const seg = (item, index) => {
     const on = value === item.key;
-    return h_flex().id(`${id}-${item.key}`).flex_1().h(28).gap(6).items_center().justify_center().rounded(7).cursor_pointer()
-      .text_size(T.value).font_medium().text_color(on ? ink : c.muted)
-      .when(on && !at, (el) => el.bg(wash).border_1().border_color(c.border))
-      .when(!on, (el) => el.hover((s) => s.text_color(ink)))
-      .on_click((_e, cx) => { if (value !== item.key) onChange(item.key, cx); })
-      .child(div().child(item.label))
-      .when(dot === item.key && !on, (el) => el.child(div().size(6).rounded_full().bg(c.blocked ?? c.red)));
+    const ink = disabled ? c.dim : on ? c.text : c.muted;
+    const dot = div().size(G.sm).flex_none().rounded_full().bg(c.blocked);
+    return Button.new(`${id}-${item.key}`).items_center().justify_center().gap(G.xs).rounded(R.control)
+      .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
+      .when(collapsed, (el) => el.relative().size(H.icon).flex_none().tooltip(item.label))
+      .when(!collapsed, (el) => el.flex_1().h_full().px(G.sm - G.hair))
+      .selected(on)
+      .disabled(disabled)
+      .set_position(index + 1, items.length)
+      .accessibility_label(item.label)
+      .when(on, (el) => el.bg(c.selected))
+      .when(!disabled, (el) => el.cursor_pointer().when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => { if (!on) onChange(item.key, cx); }))
+      .when(Boolean(item.icon), (el) => el.child(svg(`${ICONS}${item.icon}.svg`).size(ICON_ROW).flex_none().text_color(ink)))
+      .when(!collapsed, (el) => el.child(div().whitespace_nowrap().text_size(T.value).text_color(ink).child(item.label)))
+      .when(Boolean(item.dot) && !on, (el) => el.child(collapsed ? dot.absolute().top(G.hair).right(G.hair) : dot));
   };
-  return h_flex().id(id).relative().p(3).gap(2).flex_none().rounded(10).bg(ink + "0a")
-    .when(Boolean(sized), (el) => el.on_size_change((s, cx) => sized(s.width, cx)))
-    .when(Boolean(thumb), (el) => el.child(thumb))
+  return (collapsed ? v_flex() : h_flex()).id(id).p(G.hair).gap(G.hair).flex_none().rounded(R.card).bg(well(c))
+    .when(!collapsed, (el) => el.h(H.control))
+    .when(Boolean(spoken), (el) => el.accessibility_label(spoken))
     .children(items.map(seg));
 }

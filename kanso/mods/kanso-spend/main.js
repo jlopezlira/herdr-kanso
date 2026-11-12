@@ -6,7 +6,7 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, R, PULSE, breathe, tokens, toggleSwitch, field, TextField, quietTabs, quietLink, iconButton, section, ghost } from "./ui.js";
+import { G, H, R, PULSE, breathe, tokens, toggleSwitch, field, TextField, segmented, quietLink, iconButton, section, ghost } from "./ui.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
 import { Share } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
@@ -572,7 +572,7 @@ export default class TokenSpend extends View {
     ].filter(Boolean).join(" and ");
     return v_flex().w_full().gap(G.md)
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).gap_y(G.sm).items_center().justify_between()
-        .child(quietTabs("ins-period", SPEND_PERIODS, this.cost.period, (key, cx) => this.setCost({ period: key, offset: 0 }, cx), c))
+        .child(segmented("ins-period", SPEND_PERIODS, this.cost.period, (key, cx) => this.setCost({ period: key, offset: 0 }, cx), c))
         .when(!inDetail, (row) => row.child(h_flex().gap(G.lg).items_center()
           .child(this.menu("project", c))
           .child(this.menu("model", c)))))
