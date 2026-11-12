@@ -60,13 +60,21 @@ async function open(prepare) {
   return { s, calls, closed, clock, sleepRefusal };
 }
 
+async function endLate(clock, n) {
+  await clock.until(n);
+  assert.equal(clock.waits.length, n, `step ${n} never armed its timer`);
+  assert.equal(clock.waits.at(-1).ms, 15_000);
+  clock.fireLast();
+  await clock.until(n + 1);
+  assert.equal(clock.waits.length, n + 1, "a lost step is tried once more");
+  assert.equal(clock.waits.at(-1).ms, 15_000);
+  clock.fireLast();
+}
+
 async function late(n, prepare) {
   const opened = await open(prepare);
-  await opened.clock.until(n);
-  assert.equal(opened.clock.waits.length, n, `step ${n} never armed its timer`);
-  assert.equal(opened.clock.waits.at(-1).ms, 15_000);
   assert.equal(opened.s.busy, "Going to sleep");
-  opened.clock.fireLast();
+  await endLate(opened.clock, n);
   await opened.clock.drain();
   assert.equal(opened.s.busy, null);
   assert.equal(opened.s.ordering, false);
@@ -87,7 +95,7 @@ test("a confirm read that never answers says so and brings the tab back", { time
   const { s, calls } = await late(2, (row) => {
     row.readTabs = () => { reads += 1; return reads === 1 ? shown : hang(); };
   });
-  assert.equal(reads, 2);
+  assert.equal(reads, 3);
   assert.equal(s.error, "This tab did not answer.");
   assert.equal(back(calls), true);
 });
@@ -102,6 +110,26 @@ test("asleep rows that never answer say so and bring the tab back", { timeout: 5
   const { s, calls } = await late(4, (row) => { row.store = { asleep: hang, sleep: async () => "id1" }; });
   assert.equal(s.error, "What's asleep did not answer.");
   assert.equal(back(calls), true);
+});
+
+test("a lost asleep read is tried once and then the tab sleeps", { timeout: 5_000 }, async () => {
+  let reads = 0;
+  let dropped = 0;
+  const { s, closed, clock } = await open((row) => {
+    row.store = {
+      kdb: { abandon() { dropped += 1; } },
+      asleep: () => { reads += 1; return reads === 1 ? hang() : []; },
+      sleep: async () => "id1",
+    };
+  });
+  await clock.until(4);
+  assert.equal(clock.waits.length, 4);
+  clock.fireLast();
+  await clock.drain();
+  assert.equal(reads, 2);
+  assert.equal(dropped, 1);
+  assert.equal(s.error, null);
+  assert.deepEqual(closed, ["close"]);
 });
 
 test("a save that never answers says so and brings the tab back", { timeout: 5_000 }, async () => {
@@ -133,9 +161,7 @@ test("a list that never answers, with nothing stored, brings the tab back", { ti
   s.conceal("tab", "tb", null);
   const clock = stepClock();
   const task = s.finishSleep(clock.cx);
-  await clock.until(4);
-  assert.equal(clock.waits.length, 4);
-  clock.fireLast();
+  await endLate(clock, 4);
   await task;
   assert.equal(s.error, "The list did not answer.");
   assert.equal(back(calls), true);

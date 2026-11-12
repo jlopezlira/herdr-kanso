@@ -67,3 +67,68 @@ test("an abandoned call no longer holds up its own view's next calls", async (t)
   db.abandon();
   assert.deepEqual(clone(await within(db.read("SELECT 2 AS two;"))), [{ two: 2 }]);
 });
+
+async function clocked(t) {
+  const dir = await temporary(t);
+  const waits = [];
+  const timer = { after(ms, fn) { waits.push({ ms, fn }); } };
+  let hang = false;
+  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], {
+    appHome: () => dir,
+    exec: (command, args) => (hang && command === "sqlite3" ? never() : exec(command, args)),
+  });
+  return { db: () => new Kdb(undefined, null, timer), waits, hang: (on) => { hang = on; } };
+}
+
+async function armed(waits, n) {
+  for (let i = 0; i < 80 && waits.length < n; i += 1) await Promise.resolve();
+}
+
+test("a call that never settles is dropped and the next read answers", async (t) => {
+  const { db: openDb, waits, hang } = await clocked(t);
+  const db = openDb();
+  await db.open();
+  const mark = waits.length;
+  hang(true);
+  const lost = db.read("SELECT 1 AS one;");
+  await armed(waits, mark + 1);
+  assert.equal(waits.at(-1).ms, 15_000);
+  const failed = assert.rejects(lost, /did not answer/);
+  waits.at(-1).fn();
+  await failed;
+  hang(false);
+  assert.deepEqual(clone(await within(db.read("SELECT 2 AS two;"))), [{ two: 2 }]);
+});
+
+test("a timer from a dropped call does not drop the next read", async (t) => {
+  const { db: openDb, waits, hang } = await clocked(t);
+  const db = openDb();
+  await db.open();
+  const mark = waits.length;
+  hang(true);
+  const lost = db.read("SELECT 1 AS one;");
+  await armed(waits, mark + 1);
+  const stale = waits.length - 1;
+  db.abandon();
+  hang(false);
+  const failed = assert.rejects(lost, /did not answer/);
+  waits[stale].fn();
+  const next = db.read("SELECT 2 AS two;");
+  assert.deepEqual(clone(await within(next)), [{ two: 2 }]);
+  await failed;
+});
+
+test("a create that never settles is dropped and the next open answers", async (t) => {
+  const { db: openDb, waits, hang } = await clocked(t);
+  hang(true);
+  const db = openDb();
+  const opening = db.open();
+  await armed(waits, 1);
+  assert.equal(waits.at(-1).ms, 15_000);
+  const failed = assert.rejects(opening, /did not answer/);
+  waits.at(-1).fn();
+  await failed;
+  hang(false);
+  await db.open();
+  assert.deepEqual(clone(await within(db.read("SELECT 2 AS two;"))), [{ two: 2 }]);
+});

@@ -161,6 +161,7 @@ export default class Spaces extends View {
   names = new Names(this);
 
   init(_props, cx) {
+    this.clock = cx.timer;
     // Opened as a row's right-click menu (props().menu): nothing else to run.
     if (props()?.menu || props()?.railMenu || props()?.spaceMenu || props()?.newAgent || props()?.worktree || props()?.newConversation || props()?.newProject || props()?.machineMenu) {
       // Nothing is chosen for you: no row lit until the keyboard moves.
@@ -274,7 +275,7 @@ export default class Spaces extends View {
   }
 
   leftNavStore() {
-    return (this.navStore ??= new Store());
+    return (this.navStore ??= new Store(new Kdb(undefined, null, this.clock)));
   }
 
   // A popup of this mod: what it shows that has to be read first is read here.
@@ -503,7 +504,7 @@ export default class Spaces extends View {
     if (had) return had;
     const place = await homePlace(machine);
     const dir = kansoDir(place.home, place.platform);
-    const store = new Store(new Kdb(dir, machine));
+    const store = new Store(new Kdb(dir, machine, this.clock));
     this.remoteStores.set(machine, store);
     return store;
   }

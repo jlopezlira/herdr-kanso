@@ -99,7 +99,7 @@ test("a local database and a local worker never call another computer", async (t
   assert.ok(calls.some((c) => c.c === "sqlite3"));
   for (const c of calls) {
     assert.equal(c.on, null, c.c);
-    assert.equal(c.timeout, null, c.c);
+    assert.equal(c.timeout, 15000, c.c);
   }
 });
 
@@ -122,13 +122,13 @@ test("the database folder follows the computer's system, not the shape of its ho
   assert.equal(dir.includes("AppData"), false);
 });
 
-test("a local database is unchanged: no machine and no timeout", async (t) => {
+test("a local database names no other computer, and each call is limited", async (t) => {
   const { kdb, calls } = await openDb(t, null);
   await kdb.read("SELECT 1 AS n;");
   assert.ok(calls.some((c) => c.c === "sqlite3"));
   for (const c of calls) {
     assert.equal(c.on, null, c.c);
-    assert.equal(c.timeout, null, c.c);
+    assert.equal(c.timeout, 15000, c.c);
   }
 });
 
@@ -417,7 +417,7 @@ test("a worker on another computer calls only there, and a local row never does"
   await mine.tick(local.cx, 1_000_000);
   await mine.tick(local.cx, 1_002_000);
   side(local.calls, local.reads, local.hcLog, null);
-  for (const c of local.calls) assert.equal(c.timeout, null, c.c);
+  for (const c of local.calls) assert.equal(c.timeout, 15000, c.c);
 });
 
 test("a shell-only tab on another computer is asleep on the first tick and nothing is asked", async (t) => {

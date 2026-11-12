@@ -6,7 +6,7 @@ import { fileApi } from "./platform-files.js";
 // Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
 import { appHome } from "herdr";
-import { mapSeries, parseOr } from "./pure.js";
+import { mapSeries, parseOr, bounded, LATE } from "./pure.js";
 
 export const DIR = "data/kanso";
 export const VERSION = 1;
@@ -19,7 +19,14 @@ export const SPACE_KEEP_MS = 7 * 86400_000; // a project gone this long is forgo
 export const forgetAgentsSql = () => "DELETE FROM agents WHERE status='gone' AND project_at IS NULL AND sleep_id IS NULL;";
 export const forgetSpacesSql = (now) => `DELETE FROM spaces WHERE gone IS NOT NULL AND gone < ${n(now - SPACE_KEEP_MS)};`;
 export const LEASE_MS = 20_000; // a sleep's owner (sleepwork.js) not heard from this long is gone: another window takes the row
-export const CALL_MS = 15_000; // one remote statement; past this the machine did not answer
+export const CALL_MS = 15_000; // one statement; past this the call did not answer
+class LostCall extends Error {
+  constructor() {
+    super("did not answer");
+    this.late = true;
+  }
+}
+const lostCall = () => new LostCall();
 export const REST_MS = 60_000; // a remote database, while this window is in front and nothing was ordered
 
 export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}'`);
@@ -178,10 +185,12 @@ class Schemas {
 const schemas = new Schemas();
 
 export class Kdb {
-  constructor(dir = paths.join(appHome(), DIR), machine = null) {
+  constructor(dir = paths.join(appHome(), DIR), machine = null, timer = null) {
     this.dir = dir;
     this.file = paths.join(dir, "kanso.db");
     this.machine = machine || null;
+    this.timer = timer?.after ? timer : null;
+    this.epoch = 0;
     this.ready = null;
     this.chain = Promise.resolve();
     this.queue = [];
@@ -189,9 +198,20 @@ export class Kdb {
     this.cachedAt = Date.now();
   }
 
+  // A lost exec never settles. A timer from a call already dropped must not drop the next one.
+  bound(promise) {
+    if (!this.timer?.after) return promise;
+    const epoch = this.epoch;
+    return bounded(promise, this.timer, CALL_MS).then((result) => {
+      if (result !== LATE) return result;
+      if (epoch === this.epoch) this.abandon();
+      throw lostCall();
+    });
+  }
+
   execute(text) {
     const sql = statements(text);
-    return serviceFor(sqliteApi, this.machine, CALL_MS, serviceOn).then((api) => api.unchecked(this.file, sql, { json: true }));
+    return this.bound(serviceFor(sqliteApi, this.machine, CALL_MS, serviceOn).then((api) => api.unchecked(this.file, sql, { json: true })));
   }
 
   async sql(text) {
@@ -205,13 +225,20 @@ export class Kdb {
 
   open() {
     const key = this.schemaKey();
-    return (this.ready ??= schemas.has(key) ? Promise.resolve() : this.create().then(() => schemas.made(key), (e) => { this.ready = null; throw e; }));
+    if (this.ready) return this.ready;
+    const pending = schemas.has(key) ? Promise.resolve() : this.create().then(() => schemas.made(key), (error) => {
+      if (this.ready === pending) this.ready = null; // a newer open may already be in its place
+      throw error;
+    });
+    this.ready = pending;
+    return pending;
   }
 
   async create() {
-    const ok = await serviceFor((_platform, run) => run("sqlite3", ["-version"]), this.machine, CALL_MS, serviceOn).catch(() => null);
+    const ok = await this.bound(serviceFor((_platform, run) => run("sqlite3", ["-version"]), this.machine, CALL_MS, serviceOn)).catch((error) => { if (error?.late) throw error; return null; });
     if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-    await (await serviceFor(fileApi, this.machine, CALL_MS, serviceOn)).mkdir(this.dir);
+    const files = await this.bound(serviceFor(fileApi, this.machine, CALL_MS, serviceOn));
+    await this.bound(files.mkdir(this.dir));
     await this.sql([...statements(SCHEMA), ONE_SLEEP]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));
@@ -229,7 +256,15 @@ export class Kdb {
   flush() {
     const batch = this.queue;
     this.queue = [];
-    const work = () => this.sendBatch(batch);
+    if (!batch.length) return;
+    const epoch = this.epoch;
+    const work = () => {
+      if (epoch !== this.epoch) {
+        for (const call of batch) call.reject(lostCall());
+        return;
+      }
+      return this.sendBatch(batch);
+    };
     this.chain = this.chain.then(work, work);
   }
 
@@ -249,10 +284,13 @@ export class Kdb {
 
   // Drops a call the host lost, so later calls start afresh instead of waiting behind it.
   abandon() {
+    const dropped = this.queue;
+    this.epoch += 1;
     this.ready = null;
     this.queue = [];
     this.chain = Promise.resolve();
     this.invalidate();
+    for (const call of dropped) call.reject(lostCall());
   }
 
   invalidate() {

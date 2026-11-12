@@ -24,9 +24,9 @@ class RemoteServices {
 }
 const remoteServices = new RemoteServices();
 export const serviceOn = (factory, on) => remoteServices.get(factory, on);
-// Timeout only when `machine` is set: a local service keeps today's runner.
+const withTimeout = (run, timeout) => (timeout == null ? run : (cmd, args, options = {}) => run(cmd, args, { timeout, ...options }));
+// The host ends a process that runs past the limit, on this computer and on another.
 export function serviceFor(factory, machine = null, timeout = null, remote = null) {
-  if (!machine) return Promise.resolve(localService(factory));
-  const timed = (run) => (cmd, args, options = {}) => run(cmd, args, { timeout, ...options });
-  return (remote ?? serviceOn)((platform, run) => factory(platform, timeout == null ? run : timed(run)), machine);
+  if (!machine) return Promise.resolve(localService((platform, run, write) => factory(platform, withTimeout(run, timeout), write)));
+  return (remote ?? serviceOn)((platform, run) => factory(platform, withTimeout(run, timeout)), machine);
 }

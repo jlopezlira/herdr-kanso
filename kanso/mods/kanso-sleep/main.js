@@ -11,12 +11,24 @@ import { listKey, moveTo } from "./listkeys.js";
 import { base, tilde, captureTab, commandOf, describe, programOf, projectOf, folderOfKey, openTab, openInto } from "./tabkit.js";
 import { resumeArgv, isClaude } from "./resume.js";
 import { runningOn, runningIn, stillThere, procOf, atPrompt, resumed, hidePlan, hideEntries, commandsOf, runCmds, rememberHide, claimHide, awayOf, awayLeft, releaseHide, wakeMidFlight, isAway, homeOf, homePlace } from "./sleepwork.js";
-import { aliasText, machineTitle, retry, tryOr, tryOrAsync, mapSeries, reduceSeries, bounded, LATE } from "./pure.js";
+import { aliasText, machineTitle, retry, tryOr, tryOrAsync, mapSeries, reduceSeries, bounded } from "./pure.js";
 import { skeleton, breathe, Armed } from "./ui.js";
 
 const settled = async (fn) => {
   try { return { ok: true, value: await fn() }; } catch (error) { return { ok: false, error }; }
 };
+const timedOut = (result) => result?.late === true || result?.error?.late === true;
+// A lost step is tried once more. The second miss is what the dialog says.
+async function onceMore(work, timer, ms, drop, abandon) {
+  const step = async () => {
+    const result = await bounded(settled(work), timer, ms);
+    return timedOut(result) ? { ok: false, late: true } : result;
+  };
+  const first = await step();
+  if (drop() || !first.late) return first;
+  abandon();
+  return step();
+}
 // settled(fn) plus `told`: the arguments of its first tell(...) (it may tell, then throw), null when it never told.
 const telling = (fn) => new Promise((done) => {
   const told = new Promise((tell) => {
@@ -85,8 +97,9 @@ export default class Sleep extends View {
     this.busy = null;
     this.error = null;
     const ask = props() ?? {};
+    this.clock = cx.timer;
     this.space = spaces().find((s) => s.id === ask.sleep?.space) ?? spaces().find((s) => s.active) ?? null;
-    this.store = new Store();
+    this.store = new Store(new Kdb(undefined, null, this.clock));
     this.remotes = new Map();
     this.kept = new Map();
     this.keptAt = new Map();
@@ -113,7 +126,7 @@ export default class Sleep extends View {
     if (had) return had;
     const place = await homePlace(machine);
     const dir = kansoDir(place.home, place.platform);
-    const store = new Store(new Kdb(dir, machine));
+    const store = new Store(new Kdb(dir, machine, this.clock));
     this.remotes.set(machine, store);
     return store;
   }
@@ -255,10 +268,8 @@ export default class Sleep extends View {
     this.hidden = null;
   }
 
-  async take(cx, work) {
-    const result = await bounded(settled(work), cx.timer, STEP_MS);
-    if (result === LATE || result?.late) return { ok: false, late: true };
-    return result;
+  async take(cx, work, db = this.store?.kdb) {
+    return onceMore(work, cx.timer, STEP_MS, () => this.drop, () => db?.abandon?.());
   }
 
   // Cancel and Esc put the tab back. A part already stored stays hidden.
@@ -320,7 +331,7 @@ export default class Sleep extends View {
       const placed = await this.take(cx, () => this.storeFor(machine));
       if (this.halt(placed, "That computer did not answer.")) return;
       const store = placed.value;
-      const was = await this.take(cx, async () => new Set((await store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)));
+      const was = await this.take(cx, async () => new Set((await store.asleep(true)).filter((a) => a.from === project).map((a) => a.name)), store?.kdb);
       if (this.halt(was, "What's asleep did not answer.")) return;
       // Each tab under a name no other tab asleep in the project has (nor one before it here).
       const named = list.reduce(({ out, taken }, r) => {
@@ -330,7 +341,7 @@ export default class Sleep extends View {
       // A tab that can't be written stops the ones after it; those written go on.
       const out = await reduceSeries(named, async (acc, r) => {
         if (acc.error || this.drop) return acc;
-        const w = await this.take(cx, () => store.sleep(project, this.intentOf(r)));
+        const w = await this.take(cx, () => store.sleep(project, this.intentOf(r)), store?.kdb);
         if (this.drop) return acc;
         if (!w.ok) return { ...acc, error: w.late ? "saving it did not answer" : w.error };
         setShared("kanso.sleep.hidden", claimHide(shared("kanso.sleep.hidden"), r.tab.id, w.value));

@@ -223,6 +223,26 @@ for (const platform of ["macos", "linux", "windows"]) {
   });
 }
 
+test("a local exec receives the timeout, and a remote one does too", async () => {
+  const r = stub();
+  const { serviceFor } = await load("kanso-panel/platform-host.js", ["serviceFor"], { exec: r.run, window: () => ({ platform: "macos" }) });
+  const local = await serviceFor((_platform, run) => ({ run }), null, 15000);
+  await local.run("sqlite3", ["-version"]);
+  assert.equal(r.calls.at(-1).options.timeout, 15000);
+  await local.run("sqlite3", ["-version"], { timeout: 4000 });
+  assert.equal(r.calls.at(-1).options.timeout, 4000);
+  const seen = [];
+  const remote = await serviceFor((_platform, run) => ({ run }), "other", 15000, async (factory) => factory("linux", (cmd, args, options) => {
+    seen.push({ cmd, args, options });
+    return { code: 0, stdout: "", stderr: "" };
+  }));
+  await remote.run("sqlite3", ["-version"]);
+  assert.equal(seen.at(-1).options.timeout, 15000);
+  const plain = await serviceFor((_platform, run) => ({ run }), null);
+  await plain.run("sqlite3", ["-version"]);
+  assert.equal(r.calls.at(-1).options, undefined);
+});
+
 test("Windows paths printed by agents retain their drive, separators and spaces", async () => {
   const { mentions, resolvePath } = await load("kanso-panel/look-model.js", ["mentions", "resolvePath"]);
   assert.deepEqual(clone(mentions('Saved "C:\\My Project\\a b.png" then C:\\repo\\out.png')), ["C:\\repo\\out.png", "C:\\My Project\\a b.png"]);

@@ -122,7 +122,7 @@ export default class Tabs extends View {
     this.holding = false;
     this.openRow = undefined;
     if (!this.arrange && cx) {
-      this.db = new Kdb();
+      this.db = new Kdb(undefined, null, cx.timer);
       this.watchOpens(cx);
       // The bar is always on screen and the sidebar's footer may not be, so the bar polls for releases.
       this.updater = new Updater();
