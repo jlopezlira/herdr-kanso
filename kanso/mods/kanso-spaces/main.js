@@ -86,10 +86,8 @@ const PS_GIVE_UP_MS = 10000;
 // Under the 30 s machine look, so a hung list is free before the next one.
 const MACHINE_READ_MS = 20_000;
 const SIDEBAR_W = 256;
-// Dragged narrower, rows keep one line under ONE_LINE_W, and under SNAP_W the sidebar folds to the rail as Hide sidebar does.
+// Dragged narrower, rows keep one line under ONE_LINE_W.
 const ONE_LINE_W = 240;
-const SNAP_W = 160;
-const HELD_MS = 400;
 
 // The same avatar colors in every mod that draws them: one strong color per hue.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
@@ -893,7 +891,6 @@ export default class Spaces extends View {
 
   openRail() {
     const width = shared("sidebar.width") ?? SIDEBAR_W;
-    this.lastWide = width;
     setShared("sidebar.collapsed", false);
     setRail(true, width);
   }
@@ -906,24 +903,13 @@ export default class Spaces extends View {
 
   toggleRail() {
     if (shared("sidebar.collapsed") === true) this.openRail();
-    else this.foldRail(this.width >= SNAP_W ? this.width : null);
+    else this.foldRail(this.width >= OPEN_MIN ? this.width : null);
   }
 
-  // Herdr sizes the sidebar as its edge is dragged. Only a drag reaches OPEN_MIN to SNAP_W (a stale tree jumps to the
-  // rail's width), and only once it was seen wide since it opened: there it folds, to open again at the width you had.
-  // The width you had is the last one held a moment (HELD_MS): a drag's sizes come a frame apart.
-  sized(w, cx, now = Date.now()) {
+  // Herdr sizes the sidebar as its edge is dragged, never narrower than OPEN_MIN: a drag changes the width and nothing else, only Hide sidebar folds it.
+  sized(w, cx) {
     const was = this.width ?? SIDEBAR_W;
-    const open = shared("sidebar.collapsed") !== true;
-    if (open && this.width != null && was >= SNAP_W && now - (this.sizedAt ?? 0) >= HELD_MS) this.lastWide = Math.round(was);
     this.width = w;
-    this.sizedAt = now;
-    if (!open) { this.seenWide = false; return; }
-    if (w >= SNAP_W) this.seenWide = true;
-    else if (this.seenWide && w >= OPEN_MIN - 1) {
-      this.seenWide = false;
-      this.foldRail(this.lastWide ?? null);
-    }
     if ((was < ONE_LINE_W) !== (w < ONE_LINE_W)) cx?.notify();
   }
 
