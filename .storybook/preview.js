@@ -15,6 +15,12 @@ const preview = {
     return story();
   }],
   parameters: {
+    options: {
+      storySort: {
+        order: ['Philosophy', 'Tokens', '*'],
+        method: 'alphabetical',
+      },
+    },
     backgrounds: { disabled: true },
     controls: {
       matchers: {
