@@ -50,6 +50,7 @@ release.
 
 ### Fixed
 
+- Dragging the sidebar's edge only changes its width: it no longer folds the sidebar to the rail, so it can no longer stay folded after you expand it. Hide sidebar still folds it.
 - Dragging a project in the sidebar shows where it will land and moves it there. A project stays among the projects of its own computer, and a worktree listed under its checkout keeps its place.
 
 ## [3.30.0] - 2026-11-11
