@@ -44,7 +44,6 @@ export function asleepRow(a, pad, t, row, wake, label) {
   const kbd = Boolean(row.kbd);
   return h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none()
     .pl(pad).pr(G.md).gap(G.md).items_center().rounded(R.card).cursor_pointer()
-    .when(Boolean(a.asleep?.quiet), (el) => el.opacity(0.55))
     .when(kbd, (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
     .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })

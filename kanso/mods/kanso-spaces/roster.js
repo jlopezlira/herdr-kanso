@@ -1,7 +1,8 @@
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { agentLabel, THREAD_LABEL } from "./agents.js";
 import { NAME_LABEL } from "./marks.js";
-import { spaceFor, conversationOf, WAKES_LABEL } from "./kdb.js";
+import { conversationOf } from "./kdb.js";
+import { RESUME_LABEL, asleepTerminal } from "./resume.js";
 import { parseOr } from "./pure.js";
 
 export const conversationOfThread = (th) => conversationOf(th?.file);
@@ -30,39 +31,27 @@ export function seenNow(sp, ctx, threads, kept, nameFor, since = {}) {
     const conversation = agentKey(th, k, ctx.alive), was = conversation ? kept.get(conversation) : null;
     return [[a.address, { conversation, given: a.name || null, name: nameFor(a), title: th?.title ?? was?.title ?? null, said: th?.said ?? th?.at ?? was?.said ?? null,
       space: w.id, tab: a.tab ?? null, pos: i, program: a.program ? JSON.stringify(a.program) : null, status: a.status || "unknown",
-      terminal: a.address, cwd: a.cwd ?? null, since: since[a.address]?.at ?? null, wakes: k?.labels?.[WAKES_LABEL] || null, pid: readNow(th, k, ctx.alive) ? th.pid : null }]];
+      terminal: a.address, cwd: a.cwd ?? null, since: since[a.address]?.at ?? null, pid: readNow(th, k, ctx.alive) ? th.pid : null }]];
   })));
 }
 
-// A terminal a sleep still holds leaves the awake list. One undoing, still live, returns to where it was.
-// An agent a wake already opened in another terminal is drawn there only, before the wake has written it.
-export function sleepingNow(sp, terms, asleep, home = () => "") {
-  const live = new Set(terms.map((k) => k.address)), ids = new Set(sp.map((w) => w.id));
-  const tabSpace = new Map(sp.flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, w.id])));
-  const woken = terms.filter((k) => (!k.state || k.state === "live") && k.labels?.[WAKES_LABEL]).map((k) => [k.labels[WAKES_LABEL], k.address]);
-  const awake = (p) => Boolean(p.resume) && woken.some(([resume, address]) => resume === p.resume && address !== p.terminal);
-  const each = (asleep ?? []).flatMap((s) => (s.agents ?? []).map((p, i) => ({ s, p, i }))).filter(({ p }) => !awake(p));
-  const going = (s) => s.going === true || s.state === "sleeping" || (s.state == null && Boolean(s.pending) && !s.stuck);
-  const back = (s, p) => s.state === "undoing" && Boolean(p.terminal) && live.has(p.terminal);
-  const held = (s) => s.state !== "undoing" && (going(s) || Boolean(s.stuck));
-  const dozing = new Set(each.filter(({ s, p }) => held(s) && p.terminal && live.has(p.terminal)).map(({ p }) => p.terminal));
-  const rows = each.filter((x) => !back(x.s, x.p)).map(({ s, p, i }) => {
-    const space = (p.spaceId && ids.has(p.spaceId) ? p.spaceId : null) || (s.into?.tabId && tabSpace.get(s.into.tabId))
-      || spaceFor({ spaceId: s.spaceId, spaceName: s.space, project: s.from }, sp, home())?.id || null;
-    const program = p.program ? parseOr(p.program) : null; // not JSON: no icon
-    return { address: `zz:${p.resume ?? `${s.id}:${i}`}`, pane: null, tab: null, space, status: "asleep", labels: {}, pin: null, seq: 0, turn: 0,
-      name: p.name, title: p.title ?? null, program,
-      asleep: { id: s.id, from: s.from, tab: s.name, n: (s.agents ?? []).length, saved: s.saved, busy: Boolean(s.busy), going: going(s) && !s.stuck, stuck: s.stuck ?? null, spaceName: s.space ?? null,
-        at: p.at ?? null, said: p.said ?? null, resume: p.resume ?? null, ...(s.quiet ? { quiet: s.quiet, asOf: s.asOf ?? null } : {}) } };
+// Asleep is Herdr's own state: a terminal with its conversation label at its shell prompt. A settled tab sleeps as one;
+// a terminal in a tab still shown (an agent alone, or another screen's settle) sleeps on its own.
+export function sleepingNow(sp, ps, terms, kept = new Map()) {
+  const term = new Map(terms.map((k) => [k.address, k]));
+  const tabOf = new Map(sp.flatMap((w) => (w.tabs ?? []).map((tb) => [tb.id, { w, tb }])));
+  const asleep = ps.filter((p) => tabOf.has(p.tab) && asleepTerminal(term.get(p.terminal)));
+  const rows = asleep.map((p) => {
+    const k = term.get(p.terminal), { w, tb } = tabOf.get(p.tab), resume = k.labels[RESUME_LABEL], was = kept.get(resume);
+    const name = k.labels[NAME_LABEL] || was?.name || was?.title || "Claude";
+    return { address: `zz:${p.terminal}`, pane: null, tab: null, space: w.id, status: "asleep", labels: {}, pin: null, seq: 0, turn: 0,
+      name, title: was?.title ?? null, program: was?.program ? parseOr(was.program) : null,
+      asleep: { id: tb.settled ? tb.id : p.terminal, spaceName: w.name, tab: tb.settled ? tb.name || `Tab ${(tb.index ?? 0) + 1}` : name,
+        n: tb.settled ? asleep.filter((x) => x.tab === p.tab).length : 1, saved: (tb.settled && tb.settled_at) || k.status_ms || null,
+        said: was?.said ?? null, resume, terminal: p.terminal, tabId: tb.id, settled: Boolean(tb.settled), space: w.id } };
   });
-  return { rows, dozing };
-}
-
-// Optimistic rows until the database has the same terminals. A row already there wins, so the list does not double.
-export function withAway(db, away) {
-  const covered = new Set((db ?? []).flatMap((s) => (s.agents ?? []).map((a) => a.terminal).filter(Boolean)));
-  const extra = (away?.rows ?? []).filter((s) => !(s.agents ?? []).some((a) => a.terminal && covered.has(a.terminal)));
-  return [...(db ?? []), ...extra];
+  const tabs = new Set(asleep.filter((p) => tabOf.get(p.tab).tb.settled).map((p) => p.tab));
+  return { rows, dozing: new Set([...asleep, ...ps.filter((p) => tabs.has(p.tab))].map((p) => p.terminal)) };
 }
 
 // One project with nothing awake is one group; a sleeping tab beside live agents is its own.
@@ -71,15 +60,9 @@ export function asleepGroups(rows, { asleepOf = (row) => row.asleep ?? null, key
   const asleep = tagged.filter((x) => x.z);
   if (!asleep.length) return { live: rows, groups: [] };
   const live = tagged.filter((x) => !x.z).map((x) => x.row);
-  const pack = (id, name, whole, list) => ({
-    id, name, whole, rows: list.map((x) => x.row),
-    stuck: [...new Set(list.filter((x) => x.z.stuck && !x.z.quiet).map((x) => x.z.id))],
-    going: [...new Set(list.filter((x) => x.z.going && !x.z.stuck && !x.z.quiet).map((x) => x.z.id))],
-    why: list.map((x) => (x.z.quiet ? x.z.quiet : typeof x.z.stuck === "string" ? x.z.stuck : null)).find((s) => typeof s === "string") ?? null,
-  });
+  const pack = (id, name, whole, list) => ({ id, name, whole, rows: list.map((x) => x.row) });
   if (!live.length) {
-    const z = asleep[0].z;
-    return { live: [], groups: [pack(`project:${key ?? z.from ?? "asleep"}`, null, true, asleep)] };
+    return { live: [], groups: [pack(`project:${key ?? asleep[0].row.space ?? "asleep"}`, null, true, asleep)] };
   }
   return { live, groups: [...Map.groupBy(asleep, (x) => x.z.id)].map(([id, list]) => pack(`sleep:${id}`, list[0].z.tab, false, list)) };
 }

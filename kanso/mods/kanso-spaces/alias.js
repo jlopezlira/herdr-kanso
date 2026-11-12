@@ -229,7 +229,7 @@ export class Names {
     const now = Date.now();
     const due = restDue({ readAt: this.view.remoteAt?.get(route) ?? null, ordered: false, now, active: this.view.inFront(), showing: true });
     if (due) {
-      Promise.resolve(this.view.loadAsleep()).then(() => {}, () => this.mark(route));
+      Promise.resolve(this.view.loadNames()).then(() => {}, () => this.mark(route));
       return;
     }
     Promise.resolve(this.view.storeOn(route)).then((store) => store.kdb.saveAlias({ route: "", name: placed.name, at: placed.at, pending: 0 }, now)).then((got) => {

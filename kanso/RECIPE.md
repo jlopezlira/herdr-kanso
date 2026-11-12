@@ -184,7 +184,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 - **Since you left**: after 5 minutes away, "While you were away" sits above
   the projects, and on Status and Threads. Up to three rows: mark, name,
-  outcome (Finished, Needs you, Failed, Went to sleep, Could not sleep, a
+  outcome (Finished, Needs you, Failed, a
   PR's state) and age; under it, dim, the line then (`did`, kept with the
   event). The agent in front is left out; one row per agent. +N expands
   inline. Enter or a click goes to the pane, a sleeper's Wake menu or the
@@ -536,10 +536,11 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     strip's columns; opening (tabkit.js) runs
     `tab.new`, then `terminal.open` per pane after a `strip.intent`, then
     `strip.req` widths.
-  - `kanso-sleep`: a dialog (520 wide); asleep is in that computer's `kanso.db`.
-    Sleep hides it; a last tab selects a neighbour (Undo returns) or stays alone.
-    One owner (20 s). Remote spaces sleep there. Lost calls expire and retry
-    once; later tries stay usable. Silent rows stay grey; Wake waits.
+  - `kanso-sleep`: a dialog (520 wide) that stores nothing. Sleep labels each
+    Claude terminal `kanso.resume=<id>` (from `~/.claude/sessions/<pid>.json`),
+    exits it, interrupts the rest, then `tab.settle` and shows another tab or
+    project. Asleep: that label on a terminal at its prompt. Wake: `tab.unsettle`,
+    clear the label, send `claude --resume <id>`. Remote by the machine address.
   - `open-with`: a popup (380 wide, at the top; 340 at the pointer from the
     menu and the header) that opens a folder in a code editor. Props
     `{folder, machine}`; without them, the focused pane's folder. With

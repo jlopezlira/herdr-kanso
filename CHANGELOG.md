@@ -12,7 +12,7 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
-## [3.31.0] - 2026-11-11
+## [4.0.0] - 2026-11-12
 
 ### Added
 
@@ -37,14 +37,19 @@ release.
 - An update no longer puts a dot on the settings gear, or beside "Update kansō to …" and "Settings · update ready". The row and the one notice per version stay.
 - What a waiting agent asks is the same sentence on its row and on the status bar, and it stops at 200 characters.
 - When memory is low, the notice says "Memory N% free", the same words as the status bar.
-- When a sleep cannot finish, the notice and the Asleep line say the same sentence. Retry and undo stay on that line.
+- Sleep keeps nothing of its own. Each Claude agent keeps its conversation as a label on its terminal and exits, anything else running in the tab is stopped, and the tab is put away in its project. Wake brings the tab back and runs `claude --resume` on that conversation in the same terminal. Options such as `--model` are not carried over.
+- An agent put to sleep alone leaves its pane as a shell, and Wake starts it there again.
+- If an agent does not exit, nothing is put away and the Sleep dialog says why.
 - Ports says "no pane" for a server no pane is running. Containers no longer counts failed ones above the rows that already say so.
+
+### Removed
+
+- The list of everything asleep, with its Undo, Retry and Forget. An asleep row wakes from the row or its menu.
+- Went to sleep and Could not sleep in While you were away.
+- What Sleep kept in kanso.db. Anything asleep before this update is not offered to wake: run `claude --resume <id>` in its folder.
 
 ### Fixed
 
-- Putting a tab to sleep no longer stays on the dialog with only Cancel. While it goes to sleep the dialog says so. If a step does not answer, the tab comes back and one sentence says what did not answer.
-- Waking a tab no longer shows its agents twice, awake and asleep. An agent leaves the asleep list as soon as its terminal opens. If the wake stops half way, the tab stops showing as asleep on its own.
-- Sleep and Wake try once more after a lost database call. Later tries keep working without restarting Herdr, and a slow database has time to answer.
 - Dragging a project in the sidebar shows where it will land and moves it there. A project stays among the projects of its own computer, and a worktree listed under its checkout keeps its place.
 
 ## [3.30.0] - 2026-11-11

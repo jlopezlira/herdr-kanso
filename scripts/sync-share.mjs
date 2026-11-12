@@ -11,7 +11,7 @@ const COMMON = [
   // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
   { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js", "kanso/mods/kanso-help/ui.js", "kanso/mods/kanso-dojo/ui.js", "kanso/mods/kanso-containers/ui.js", "kanso/mods/kanso-spaces/ui.js", "kanso/mods/kanso-sleep/ui.js", "kanso/mods/kanso-arrange/ui.js", "kanso/mods/kanso-sim/ui.js", "markdown-panel/mods/markdown-panel/ui.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
-  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sleep", "kanso-sim"].map((m) => `kanso/mods/${m}/pieces.js`) },
+  { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim"].map((m) => `kanso/mods/${m}/pieces.js`) },
   // An agent's state mark, program icon and name, the same in the tabs, headers, status bar, sidebar and Send.
   { source: "kanso/mods/kanso-spaces/marks.js", copies: ["kanso/mods/kanso-tabs/marks.js", "kanso/mods/kanso-strip/marks.js", "kanso/mods/kanso-status/marks.js", "kanso/mods/kanso-send/marks.js", "kanso/mods/kanso-settings/marks.js", "kanso/mods/kanso-help/marks.js", "kanso/mods/kanso-panel/marks.js"] },
   // Text for an agent, delivered the same from Send and from Look.
@@ -34,27 +34,23 @@ const COMMON = [
   { source: "kanso/mods/kanso-dojo/pets.js", copies: ["kanso/mods/kanso-help/pets.js"] },
   { source: "kanso/mods/kanso-dojo/store.js", copies: ["kanso/mods/kanso-help/store.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
-  { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-sleep/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js"] },
-  // Opening a tab from data: arrangements and sleeping tabs.
+  { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js"] },
+  // Opening a tab from data: arrangements; Sleep reads a few of its words.
   { source: "kanso/mods/kanso-arrange/tabkit.js", copies: ["kanso/mods/kanso-sleep/tabkit.js", "kanso/mods/kanso-spaces/tabkit.js"] },
   // Reading `ps`: the sidebar's tasks and liveness, the panel's ports.
-  { source: "kanso/mods/kanso-spaces/procs.js", copies: ["kanso/mods/kanso-panel/procs.js", "kanso/mods/kanso-guard/procs.js", "kanso/mods/kanso-sleep/procs.js"] },
-  // How a Claude Code command resumes a conversation: Sleep wakes with it, Memory
+  { source: "kanso/mods/kanso-spaces/procs.js", copies: ["kanso/mods/kanso-panel/procs.js", "kanso/mods/kanso-guard/procs.js"] },
+  // How a Claude Code command resumes a conversation: Sleep labels and wakes with it, Memory
   // recycles with it (under Node), and a tab opened fresh drops what it names.
   { source: "kanso/mods/kanso-sleep/resume.js", copies: ["kanso/mods/kanso-guard/resume.js", "kanso/mods/kanso-arrange/resume.js", "kanso/mods/kanso-spaces/resume.js"] },
-  // The left nav's one database and what sleeps in it (sleep is a state of an
-  // agent there): the sidebar owns them, Sleep uses the same files.
-  { source: "kanso/mods/kanso-spaces/since-left-model.js", copies: ["kanso-sleep", "kanso-panel"].map((m) => `kanso/mods/${m}/since-left-model.js`) },
+  // The left nav's one database: the sidebar owns it, the panels read the same files.
+  { source: "kanso/mods/kanso-spaces/since-left-model.js", copies: ["kanso/mods/kanso-panel/since-left-model.js"] },
   { source: "kanso/mods/kanso-spaces/since-left-store.js", copies: ["kanso/mods/kanso-panel/since-left-store.js"] },
-  { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-sleep/kdb.js", "kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js", "kanso/mods/kanso-spend/kdb.js"] },
+  { source: "kanso/mods/kanso-spaces/kdb.js", copies: ["kanso/mods/kanso-panel/kdb.js", "kanso/mods/kanso-tabs/kdb.js", "kanso/mods/kanso-spend/kdb.js"] },
   // Off is a saved row plus hc machine ls. Spend asks neither file from another mod.
   { source: "kanso/mods/kanso-spaces/machines.js", copies: ["kanso/mods/kanso-spend/machines.js"] },
   // Which panel is open, and the two hooks every panel uses to keep its own state.
   { source: "kanso/mods/kanso-panel/panel-state.js", copies: ["kanso/mods/kanso-tabs/panel-state.js"] },
   { source: "kanso/mods/kanso-sim/registration.js", copies: ["kanso/mods/kanso-tabs/sim-registration.js"] },
-  { source: "kanso/mods/kanso-spaces/store.js", copies: ["kanso/mods/kanso-sleep/store.js"] },
-  // Sleep as the sidebar's work: the dialog writes what is to sleep, the sidebar moves it step by step.
-  { source: "kanso/mods/kanso-spaces/sleepwork.js", copies: ["kanso/mods/kanso-sleep/sleepwork.js"] },
   // One key waiter: the sidebar's commands, and Preview's Save, each while that view is up.
   { source: "kanso/mods/kanso-spaces/sidebar.js", copies: ["kanso/mods/kanso-panel/sidebar.js"] },
   // No reassignment anywhere: retry, range, parseOr... in every mod.

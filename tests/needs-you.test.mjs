@@ -88,7 +88,7 @@ async function controller() {
   const sharedState = new Map(), ui = tape();
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], { ...ui.host,
     agents: () => state.list, terminals: () => state.terms, spaces: () => state.spaces, machines: () => state.layouts,
-    panes: () => [], props: () => ({}), theme: () => ({}), image: ui.host.div,
+    panes: () => state.panes ?? [], props: () => ({}), theme: () => ({}), image: ui.host.div,
     waitingQueue: (...args) => { state.builds++; return waitingQueue(...args); },
     shared: (key) => sharedState.get(key), setShared: (key, value) => { sharedState.set(key, value); state.writes++; },
     run: (...args) => state.runs.push(args), focused: () => ({ pane: "original" }), home: () => "C:\\Users\\person",
@@ -139,7 +139,9 @@ test("Redraws and focus reuse the queue, while agent changes rebuild it and avai
   state.list = [agent("a"), agent("b", "idle")];
   assert.equal(view.refreshNeeds().rows.length, 1);
   assert.equal(state.builds, 3);
-  sharedState.set("kanso.sleep.away", { rows: [{ going: true, state: "sleeping", agents: [{ terminal: "a" }] }] });
+  state.spaces = [{ id: "project", tabs: [{ id: "tab", settled: true }] }];
+  state.panes = [{ terminal: "a", tab: "tab" }];
+  state.terms = state.terms.map((t) => (t.address === "a" ? { ...t, labels: { "kanso.resume": "c1" }, program: { shell: true } } : t));
   assert.equal(view.refreshNeeds().rows.length, 0, "a sleep hides its agent without a status change");
   assert.equal(state.builds, 4);
 });

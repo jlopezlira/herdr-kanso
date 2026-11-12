@@ -35,8 +35,8 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
   });
   const ps = list.map((a, i) => ({ pane: a.pane, terminal: a.address, tab: a.tab, cwd: projects[i % 4].folder, status: a.status, program: a.program }));
   if (quiet === "sleeping") {
-    shared.set("kanso.asleep", projects.map((p) => ({ id: `sleep-${p.id}`, from: `:${p.folder}`, spaceId: p.id, state: "asleep", saved: state.now,
-      agents: list.filter((a) => a.space === p.id).map((a) => ({ terminal: a.address, resume: `session-${a.address}` })) })));
+    projects.forEach((p) => { p.tabs = p.tabs.map((tab) => ({ ...tab, active: false, settled: true, settled_at: state.now })); });
+    terms.forEach((t) => { t.labels["kanso.resume"] = `session-${t.address}`; t.program = { shell: true }; t.foreground = { pid: t.pid, argv: ["zsh"] }; });
   }
   if (quiet === "off") {
     state.layouts = [{ name: "remote", layout: "unavailable" }];

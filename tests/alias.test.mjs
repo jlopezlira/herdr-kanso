@@ -94,22 +94,21 @@ test("a computer Herdr lists stays listed with nothing open, and one it no longe
   assert.equal(restDue({ readAt: null, ordered: false, now: 2_000, active: false, showing: true }), false);
 });
 
-test("the alias rides the sleep read, and a write in that read is still one process", async (t) => {
+test("the alias read keeps its writes in the same process", async (t) => {
   const now = 1_700_000_000_000;
   const { db, calls } = await database(t);
-  await db.sleeps();
-  assert.equal(calls.length, 1, `sleep read started ${calls.length} processes`);
+  await db.aliases();
+  assert.equal(calls.length, 1, `alias read started ${calls.length} processes`);
   assert.match(sqlOf(calls[0]), /SELECT route, name, at, pending FROM computer_alias/);
   calls.length = 0;
-  await db.sleeps(null, now, { route: "", name: "Cave", at: now, pending: 0 });
+  const rows = await db.aliases([{ route: "", name: "Cave", at: now, pending: 0 }], now);
   assert.equal(calls.length, 1, `rename inside the read started ${calls.length} processes`);
   assert.match(sqlOf(calls[0]), /INSERT INTO computer_alias/);
-  assert.equal(db.seenAlias.find((row) => row.route === "").name, "Cave");
-  assert.equal((await db.read("SELECT name FROM computer_alias WHERE route='';"))[0].name, "Cave");
+  assert.equal(rows.find((row) => row.route === "").name, "Cave");
   calls.length = 0;
-  await db.sleeps(null, now, [{ route: "", name: "Cave", at: now, pending: 0 }, { route: "dark", name: "Night", at: now, pending: 0 }]);
+  const two = await db.aliases([{ route: "", name: "Cave", at: now, pending: 0 }, { route: "dark", name: "Night", at: now, pending: 0 }], now);
   assert.equal(calls.length, 1, `two rows inside the read started ${calls.length} processes`);
-  assert.equal(db.seenAlias.find((row) => row.route === "dark").name, "Night");
+  assert.equal(two.find((row) => row.route === "dark").name, "Night");
 });
 
 test("a failed local save stays pending and the next read writes it", async () => {

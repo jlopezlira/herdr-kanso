@@ -25,12 +25,9 @@ test("the spaces open when projects came in become projects; home and duplicates
     { folder: "/Users/me/Apps/agile/", machine: null }, { folder: "/Users/me/Apps/agile", machine: null },
     { folder: "/Users/me", machine: null }, { folder: "", machine: null }, { folder: "/srv/api", machine: "odin" },
   ];
-  // odin:/Users/me: a space at odin's home, kept under this computer's home.
-  assert.deepEqual(clone(startingProjects(sp, [":/Users/me/Apps/fury", ":/Users/me", "odin:/srv/api", "odin:/srv/web", "odin:/Users/me"], "/Users/me")), [
+  assert.deepEqual(clone(startingProjects(sp, "/Users/me")), [
     { name: "agile", folder: "/Users/me/Apps/agile", machine: "" },
     { name: "api", folder: "/srv/api", machine: "odin" },
-    { name: "fury", folder: "/Users/me/Apps/fury", machine: "" },
-    { name: "web", folder: "/srv/web", machine: "odin" },
   ]);
 });
 

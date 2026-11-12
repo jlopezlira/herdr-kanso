@@ -249,23 +249,6 @@ test("Windows paths printed by agents retain their drive, separators and spaces"
   assert.equal(resolvePath("out/shot.png", "C:\\My Project", "C:\\Users\\me"), "C:\\My Project\\out\\shot.png");
 });
 
-test("Windows stopping waits the existing three seconds before forcing the same foreground process", async () => {
-  let foreground = 42, elapsed = 0;
-  const stops = [];
-  const { stopIn } = await load("kanso-sleep/sleepwork.js", ["stopIn"], {
-    window: () => ({ platform: "windows" }),
-    hc: async () => ({ code: 0, stdout: JSON.stringify({ pid: 1, foreground: { pid: foreground, argv: foreground ? ["claude.exe"] : ["pwsh.exe"] } }) }),
-    exec: async (program, args) => {
-      assert.equal(program, "taskkill");
-      stops.push({ args: clone(args), elapsed });
-      if (args.includes("/F")) foreground = 0;
-      return { code: 0, stdout: "" };
-    },
-  });
-  assert.equal(await stopIn("terminal", { sleep: async (ms) => { elapsed += ms; } }, 42), true);
-  assert.deepEqual(stops, [{ args: ["/PID", "42"], elapsed: 0 }, { args: ["/PID", "42", "/F"], elapsed: 3000 }]);
-});
-
 test("Windows repository operations cover discovery, safety probes and metadata removal with injected commands", async () => {
   const r = stub((program, args) => {
     if (program === "git") {
