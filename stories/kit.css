@@ -72,9 +72,9 @@ p { margin-block: var(--k-sp-2); }
 .kit-switch.on i { background: var(--solidfg); }
 .kit-kbd {
   display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
-  height: var(--k-h-compact); min-width: var(--k-h-compact); padding: 0 var(--k-sp-1);
+  height: var(--k-h-compact); min-width: var(--k-h-compact); padding: 0 var(--k-sp-2);
   border-radius: var(--k-r-sm); box-shadow: inset 0 0 0 calc(var(--k-sp-hair) / 2) var(--border);
-  font: var(--k-fs-meta) var(--mono); color: var(--muted);
+  font: var(--k-fs-meta) var(--mono); color: var(--muted); letter-spacing: .1em;
 }
 
 .btn, .kst-btn, .acts > .ql {
