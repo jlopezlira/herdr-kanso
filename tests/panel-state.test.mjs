@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
 
 const enabled = ["files", "pr", "shipped", "worktrees", "ports", "look", "containers", "insights", "memory"];
 const exists = (path) => path === "/a/README.md";
@@ -25,11 +25,11 @@ test("a restart reads the same panel and state back from the database", async (t
   const dir = await temporary(t);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
   const { projectOpen, fileMemory, OPEN } = await load("kanso-panel/panel-state.js", ["projectOpen", "fileMemory", "OPEN"]);
-  const first = new Kdb(join(dir, "kanso"));
+  const first = new Kdb(databaseTimer, join(dir, "kanso"));
   await first.savePanelState("A", OPEN, { id: "preview" });
   await first.savePanelState("A", "preview", { path: "/a/README.md", back: "files", on: null });
   await first.savePanelState("B", OPEN, { id: null });
-  const again = new Kdb(join(dir, "kanso"));
+  const again = new Kdb(databaseTimer, join(dir, "kanso"));
   const back = projectOpen({ record: await again.panelState("A", OPEN), legacy: undefined, enabled, now: null, first: false });
   assert.equal(back.mount, "preview");
   assert.deepEqual(clone(fileMemory(await again.panelState("A", "preview"), exists)), { path: "/a/README.md", back: "files", on: null });

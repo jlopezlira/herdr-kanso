@@ -226,7 +226,7 @@ export class Shipped {
     this.kind = this.keptKind ?? "week"; this.offset = this.keptOffset ?? 0;
     this.github = {}; // by period key: the period query's data, or { error }
     this.stats = null; this.syncing = false; this.syncError = null; this.phase = null; this.rhythm = {};
-    this.store = new Store();
+    this.store = new Store(cx.timer);
     this.records = shared(RECORDS) ?? {}; this.fresh = new Set();
     this.loading = false; this.pending = false; this.reposOpen = false; this.width = 368;
     this.share = new Share("kanso-panel");

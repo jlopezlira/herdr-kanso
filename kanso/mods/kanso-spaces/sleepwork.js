@@ -17,7 +17,7 @@ import { sleepEvent, LOG_LIMITS } from "./since-left-model.js";
 import { hc, run, panes, terminals, readTextFile, home } from "herdr";
 import { promptEmpty, asksToExit, base } from "./resume.js";
 import { SHELLS, spaceBeside } from "./tabkit.js";
-import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries, parseOr } from "./pure.js";
+import { range, retry, tryOr, tryOrAsync, findAsync, mapSeries, reduceSeries, parseOr, onceMore } from "./pure.js";
 import { LEASE_MS, CALL_MS, seenAddress, localAddress } from "./kdb.js";
 
 export const LONG_MS = 5 * 60_000; // a row whose terminals this window can't see is taken anyway once left this long
@@ -514,6 +514,12 @@ export class SleepWork {
     this.seenKick = 0;
   }
 
+  async stage(text) {
+    const result = await onceMore(() => this.kdb.stage(text), this.kdb.timer, null, () => false, () => this.kdb.abandon());
+    if (!result.ok) throw result.error;
+    return result.value;
+  }
+
   // Runs while there is work this window holds; started on load, on a kick from the dialog and with the sidebar's poll.
   start(cx) {
     this.kicked = Date.now();
@@ -560,7 +566,7 @@ export class SleepWork {
   }
 
   async claim(now) {
-    const { wrote, rows } = await this.kdb.stage([
+    const { wrote, rows } = await this.stage([
       "SELECT id, step, sleep_id FROM agents WHERE sleep_id IS NOT NULL;",
       this.kdb.claimSql(this.me, now, this.liveIds(), LONG_MS, this.logLimits()),
     ]);
@@ -593,7 +599,7 @@ export class SleepWork {
     const texts = written.map((job) => (job.kind === "state"
       ? this.kdb.stateSql(job.row.id, this.me, job.row.state, job.plan.state, job.plan.why ?? null, now, this.fact(job.row.id, job.plan.state, job.plan.why))
       : this.kdb.endSql(job.row.id, this.me, this.keptLayout(job.row, job.agents))));
-    const { wrote, rows } = await this.kdb.stage(texts);
+    const { wrote, rows } = await this.stage(texts);
     this.take(rows);
     written.forEach((job, i) => {
       if (!wrote[i]?.length) return;
@@ -614,7 +620,7 @@ export class SleepWork {
     const probed = !eyes.length ? null : ids.length ? await probeMachine(this.machine, ids).catch(() => null) : { found: new Map() };
     if (eyes.length && !probed) {
       const holds = [...new Set(eyes.map((job) => job.row.id))].map((id) => this.kdb.holdSql(id, this.me, now));
-      if (holds.length) await this.kdb.stage(holds).then((out) => this.take(out.rows)).catch(() => null);
+      if (holds.length) await this.stage(holds).then((out) => this.take(out.rows)).catch(() => null);
       const backs = blind.map((job) => this.backPlan(job, now)).filter((plan) => !plan.flight || !this.pending.has(plan.flight));
       if (!backs.length) return this.held.size > 0;
       return this.stagePlans(backs, cx);
@@ -663,7 +669,7 @@ export class SleepWork {
   }
 
   async stagePlans(plans, cx) {
-    const out = await this.kdb.stage(plans.flatMap((plan) => plan.sql)).catch(() => null);
+    const out = await this.stage(plans.flatMap((plan) => plan.sql)).catch(() => null);
     if (!out) return this.held.size > 0;
     this.take(out.rows);
     const paired = plans.reduce((state, plan) => ({
@@ -692,7 +698,7 @@ export class SleepWork {
     const gone = stuck.filter((item) => probed.found.get(Number(item.agent.pid))?.alive === false);
     if (!gone.length) return false;
     const texts = gone.flatMap((item) => [this.kdb.unstickSql(item.row.id, item.agent.conversation, now), this.kdb.holdSql(item.row.id, this.me, now)]);
-    const { wrote, rows } = await this.kdb.stage(texts);
+    const { wrote, rows } = await this.stage(texts);
     this.take(rows);
     if (wrote.some((part) => part.length)) this.changed();
     return this.held.size > 0;
@@ -701,7 +707,7 @@ export class SleepWork {
   async renew(now) {
     const due = (this.rows ?? []).filter((row) => this.held.has(row.id) && now - Number(row.pending_at) > LEASE_MS - TICK_MS * 2);
     if (!due.length) return this.held.size > 0;
-    this.take((await this.kdb.stage(due.map((row) => this.kdb.holdSql(row.id, this.me, now)))).rows);
+    this.take((await this.stage(due.map((row) => this.kdb.holdSql(row.id, this.me, now)))).rows);
     return this.held.size > 0;
   }
 

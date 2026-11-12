@@ -1,7 +1,7 @@
 // A computer's name: one function, one row per route, the writer's clock.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
 
 const names = ["aliasOf", "renameTo", "placeAlias", "bookOf", "selfOf", "publishNames", "deliversNow", "catchUp", "mergeBooks", "takeAsks", "askedAlias", "Names"];
 const alias = await load("kanso-spaces/alias.js", names);
@@ -77,7 +77,7 @@ async function database(t) {
     appHome: () => dir,
     exec: (command, args) => { calls.push([command, args]); return exec(command, args); },
   });
-  const db = new Kdb();
+  const db = new Kdb(databaseTimer);
   await db.open();
   calls.length = 0;
   return { db, calls, machinesToAsk, restDue };

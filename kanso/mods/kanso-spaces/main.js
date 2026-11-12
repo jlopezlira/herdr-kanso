@@ -275,7 +275,7 @@ export default class Spaces extends View {
   }
 
   leftNavStore() {
-    return (this.navStore ??= new Store(new Kdb(undefined, null, this.clock)));
+    return (this.navStore ??= new Store(new Kdb(this.clock)));
   }
 
   // A popup of this mod: what it shows that has to be read first is read here.
@@ -504,7 +504,7 @@ export default class Spaces extends View {
     if (had) return had;
     const place = await homePlace(machine);
     const dir = kansoDir(place.home, place.platform);
-    const store = new Store(new Kdb(dir, machine, this.clock));
+    const store = new Store(new Kdb(this.clock, dir, machine));
     this.remoteStores.set(machine, store);
     return store;
   }

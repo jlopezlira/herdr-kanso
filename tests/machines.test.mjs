@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, clone, temporary, exec, context } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, context } from "./helpers.mjs";
 
 const record = { name: "dark", target: "dark.example", via: "", session: "", temporary: false };
 const darkKey = JSON.stringify(["dark", "/srv"]);
@@ -428,14 +428,14 @@ test("an off machine is still off after the database is opened again", async (t)
   const dir = await temporary(t);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
   const file = join(dir, "kanso");
-  await new Kdb(file).parkMachine({ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true });
-  assert.deepEqual(clone(await new Kdb(file).machinesOff()), [{ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true }]);
-  await new Kdb(file).forgetMachine("dark");
-  assert.deepEqual(clone(await new Kdb(file).machinesOff()), []);
-  await new Kdb(file).parkMachine({ name: "kept", target: "kept.example", via: "ssh -J jump", session: "sess", temporary: false });
-  await new Kdb(file).parkMachine({ name: "plain", target: "plain.example", via: "false", session: "null", temporary: false });
-  await new Kdb(file).parkMachine({ name: "mixed", target: "mixed.example", via: "null", session: "sess", temporary: false });
-  assert.deepEqual(clone(await new Kdb(file).machinesOff()), [
+  await new Kdb(databaseTimer, file).parkMachine({ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true });
+  assert.deepEqual(clone(await new Kdb(databaseTimer, file).machinesOff()), [{ name: "dark", target: "dark.example", via: "ssh -J jump", session: "sess", temporary: true }]);
+  await new Kdb(databaseTimer, file).forgetMachine("dark");
+  assert.deepEqual(clone(await new Kdb(databaseTimer, file).machinesOff()), []);
+  await new Kdb(databaseTimer, file).parkMachine({ name: "kept", target: "kept.example", via: "ssh -J jump", session: "sess", temporary: false });
+  await new Kdb(databaseTimer, file).parkMachine({ name: "plain", target: "plain.example", via: "false", session: "null", temporary: false });
+  await new Kdb(databaseTimer, file).parkMachine({ name: "mixed", target: "mixed.example", via: "null", session: "sess", temporary: false });
+  assert.deepEqual(clone(await new Kdb(databaseTimer, file).machinesOff()), [
     { name: "kept", target: "kept.example", via: "ssh -J jump", session: "sess", temporary: false },
     { name: "mixed", target: "mixed.example", via: "", session: "sess", temporary: false },
     { name: "plain", target: "plain.example", via: "", session: "", temporary: false },

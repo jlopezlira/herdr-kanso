@@ -40,6 +40,21 @@ export function bounded(promise, timer, ms = 30_000) {
   return Promise.race([promise, deadline]);
 }
 
+export const settled = async (work) => {
+  try { return { ok: true, value: await work() }; } catch (error) { return { ok: false, error }; }
+};
+
+export async function onceMore(work, timer, ms, drop = () => false, abandon = () => {}) {
+  const step = async () => {
+    const result = await (ms == null ? settled(work) : bounded(settled(work), timer, ms));
+    return result?.late || result?.error?.late ? { ok: false, late: true, error: result.error ?? new Error("did not answer") } : result;
+  };
+  const first = await step();
+  if (drop() || !first.late) return first;
+  abandon();
+  return step();
+}
+
 export async function retry(times, fn, { done = Boolean, between = async () => {} } = {}, k = 0) {
   const v = await fn(k);
   if (done(v) || k + 1 >= times) return v;

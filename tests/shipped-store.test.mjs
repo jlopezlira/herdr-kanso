@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, exec, temporary, clone, nativeWindow } from "./helpers.mjs";
+import { databaseTimer, load, exec, temporary, clone, nativeWindow } from "./helpers.mjs";
 
 const names = ["Store", "repoName", "parseLog", "insertCommits", "machineFile", "readMachineFile", "weekOf", "weeklyStats", "WEEK0"];
 const store = (host = {}) => load("kanso-panel/shipped-store.js", names, host);
@@ -74,7 +74,7 @@ async function setup(t, { otherMachine = null } = {}) {
 
 test("Shipped's store reads every branch of your repositories, by every identity of yours", async (t) => {
   const s = await setup(t);
-  const db = new s.Store();
+  const db = new s.Store(databaseTimer);
   await db.open();
   const scanned = await db.scanLocal(["me@example.invalid"], null);
   assert.equal(scanned, 1, "found under ~/Apps");
@@ -97,7 +97,7 @@ test("Shipped's store reads every branch of your repositories, by every identity
 
 test("Shipped's store keeps the larger of a repository's week, from git or from GitHub", async (t) => {
   const s = await setup(t);
-  const db = new s.Store();
+  const db = new s.Store(databaseTimer);
   await db.open();
   await db.scanLocal(["me@example.invalid"], null); // 15 lines this week in org/tool
   const week = s.weekOf(Math.floor(Date.now() / 1000)) * 1000;
@@ -116,7 +116,7 @@ test("Shipped's store shares your commits between machines through a private gis
   const other = { v: 1, machine: "other", updated: 1, identities: ["mequexample.invalid"], repos: ["org/tool", "org/elsewhere"],
     commits: [[1, "eeeeeeeeeeee", 1793000000, 300, 3], [0, "ffffffffffff", 1793000000, 1, 0]] };
   const s = await setup(t, { otherMachine: other });
-  const db = new s.Store();
+  const db = new s.Store(databaseTimer);
   await db.open();
   await db.scanLocal(["me@example.invalid"], null);
   const synced = clone(await db.syncMachines(["me@example.invalid"]));
@@ -137,7 +137,7 @@ test("Shipped's store shares your commits between machines through a private gis
 
 test("Shipped's store creates the private gist the first time", async (t) => {
   const s = await setup(t);
-  const db = new s.Store();
+  const db = new s.Store(databaseTimer);
   await db.open();
   await db.syncMachines(["me@example.invalid"]);
   assert.equal(s.sent[0].method, "POST");

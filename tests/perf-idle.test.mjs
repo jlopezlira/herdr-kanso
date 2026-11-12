@@ -1,7 +1,7 @@
 // Idle budgets: timers that used to redraw or read when nothing had changed.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { temporary, until } from "./helpers.mjs";
+import { databaseTimer, temporary, until } from "./helpers.mjs";
 import { fixture, loadMod } from "./perf-harness.mjs";
 
 const gitOf = (f) => f.state.processes.filter((p) => p.command === "git");
@@ -20,7 +20,7 @@ async function sidebar(t) {
   const redraws = countRedraws(f);
   const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
   f.host.Kdb = Kdb;
-  const db = new Kdb();
+  const db = new Kdb(databaseTimer);
   await db.open();
   await db.migrate();
   const { Spaces } = await loadMod("kanso-spaces/main.js", ["Spaces"], f.host);
@@ -102,7 +102,7 @@ async function look(t, { active = true, shown = true } = {}) {
   armLook(f);
   const { Look } = await loadMod("kanso-panel/look.js", ["Look"], f.host);
   const { Kdb } = await loadMod("kanso-panel/kdb.js", ["Kdb"], f.host);
-  const view = new Look(new Kdb());
+  const view = new Look(new Kdb(databaseTimer));
   view.init(f.cx, {});
   await f.settle();
   return { f, view };

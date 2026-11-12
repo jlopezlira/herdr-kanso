@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { load, context, exec as realExec, temporary } from "./helpers.mjs";
+import { databaseTimer, load, context, exec as realExec, temporary } from "./helpers.mjs";
 
 const AUTH = "github.com\n  Logged in to github.com account jj (keyring)\n  - Active account: true\n  - Token: gho_secret\n";
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -105,7 +105,7 @@ test("a fresh inbox is not fetched, and a hidden panel does not touch the networ
 
   const dir = await temporary(t);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: realExec, appHome: () => dir });
-  const db = new Kdb();
+  const db = new Kdb(databaseTimer);
   await db.open();
   await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,draft,author,role,updated_at,fetched_at) VALUES('https://github.com/o/r/pull/1','github','github.com','o','r',1,'Cached','OPEN',0,'ada','reviewer','2026-11-01T00:00:00Z',1);");
   const { refreshInbox } = await load("kanso-panel/pr-inbox.js", ["refreshInbox"], { exec: realExec, appHome: () => dir });
@@ -150,7 +150,7 @@ const tone = new Proxy({}, { get: () => "#888" });
 async function database(t) {
   const dir = await temporary(t);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: realExec, appHome: () => dir });
-  const db = new Kdb();
+  const db = new Kdb(databaseTimer);
   await db.open();
   return { dir, db, file: join(dir, "data/kanso/kanso.db") };
 }
@@ -170,7 +170,7 @@ async function panelFor(t, { gh, git, dir }) {
   const host = { ...ui, exec, appHome: () => dir, home: () => "/Users/x", key: () => "repo", location: () => ({ cwd: "/work/herdr-kanso", on: null }) };
   const { PullRequest } = await load("kanso-panel/pr.js", ["PullRequest"], host);
   const { Kdb } = await load("kanso-panel/kdb.js", ["Kdb"], host);
-  const panel = new PullRequest(new Kdb());
+  const panel = new PullRequest(new Kdb(databaseTimer));
   Object.assign(panel, { expanded: {}, openPrs: [], selected: null, threads: [] });
   return { panel, calls, ui };
 }

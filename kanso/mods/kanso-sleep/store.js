@@ -1,11 +1,11 @@
-import { localService } from "./platform-host.js";
+import { BUSY_MS } from "./platform-sqlite.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Kanso, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Shared "kanso.asleep" is only a copy of the database, for the other windows to draw at once.
-import { exec, appHome } from "herdr";
+import { appHome } from "herdr";
 import { programOf } from "./tabkit.js";
-import { Kdb, STALE_MS, newId } from "./kdb.js";
+import { STALE_MS, newId, q } from "./kdb.js";
 
 export { STALE_MS };
 const json = (text, fallback) => { try { return text == null ? fallback : JSON.parse(text); } catch { return fallback; } };
@@ -40,12 +40,12 @@ export function shownOf(a, now = Date.now()) {
 }
 
 // Any other failure throws, so the migration waits for a read it can trust; "none" only when ls's message ends in ": No such file or directory", which a path can't fake.
-async function legacyRows(file, table, sql) {
-  const there = await localService(fileApi).legacyStatus(file);
+async function legacyRows(db, file, table, sql) {
+  const there = await db.call((platform, run, write) => fileApi(platform, run, write).legacyStatus(file));
   if (there === "none") return null;
   if (there !== "file") throw new Error(`${file} could not be looked at: ${there || "no answer"}`);
   const read = async (text) => {
-    const r = await exec("sqlite3", ["-readonly", "-cmd", ".timeout 5000", "-json", file, text]);
+    const r = await db.call((_platform, run) => run("sqlite3", ["-readonly", "-cmd", `.timeout ${BUSY_MS}`, "-json", file, text]));
     if (r.code !== 0) throw new Error(`${file} could not be read: ${(r.stderr || "sqlite3 failed").trim().split("\n")[0]}`);
     return r.stdout.trim() ? JSON.parse(r.stdout) : [];
   };
@@ -78,7 +78,8 @@ export function planMigration(rows) {
 }
 
 export class Store {
-  constructor(kdb = new Kdb(), legacy = paths.join(appHome(), "data")) {
+  constructor(kdb, legacy = paths.join(appHome(), "data")) {
+    if (typeof kdb?.timer?.after !== "function") throw new TypeError("A store needs its database and view's timer");
     this.kdb = kdb;
     this.legacy = legacy;
     this.ready = null;
@@ -88,8 +89,8 @@ export class Store {
     return (this.ready ??= (async () => {
       await this.kdb.open();
       if (this.kdb.machine || await this.kdb.migrated()) return;
-      const sleeps = await legacyRows(`${this.legacy}/kanso-sleep/sleep.db`, "asleep", "SELECT project, name, layout, saved FROM asleep;");
-      const prefs = await legacyRows(`${this.legacy}/kanso-spaces/panel.db`, "prefs", "SELECT key, value FROM prefs;");
+      const sleeps = await legacyRows(this.kdb, `${this.legacy}/kanso-sleep/sleep.db`, "asleep", "SELECT project, name, layout, saved FROM asleep;");
+      const prefs = await legacyRows(this.kdb, `${this.legacy}/kanso-spaces/panel.db`, "prefs", "SELECT key, value FROM prefs;");
       await this.kdb.migrate({ sleeps: planMigration(sleeps), prefs: prefs ?? [] });
     })().catch((e) => { this.ready = null; throw e; }));
   }
@@ -103,7 +104,9 @@ export class Store {
     await this.open();
     const convs = (a.cols ?? []).flatMap((c) => c.panes).map((p) => p.resume).filter(Boolean);
     if (new Set(convs).size !== convs.length) throw new Error("two panes of it are on the same conversation; close one first");
-    const { id } = await this.kdb.sleepTab({ name: a.name, space: a.space, project, layout: { per: a.per ?? null, cols: a.cols ?? [], tab: a.tab ?? null }, into: a.into ?? null,
+    const request = a.id ?? newId();
+    if ((await this.kdb.read(`SELECT id FROM sleeps WHERE id=${q(request)};`)).length) return request;
+    const { id } = await this.kdb.sleepTab({ id: request, name: a.name, space: a.space, project, layout: { per: a.per ?? null, cols: a.cols ?? [], tab: a.tab ?? null }, into: a.into ?? null,
       agents: agentsOf(a.cols ?? []), saved: a.saved ?? Date.now(), requested: true });
     return id;
   }
@@ -117,9 +120,9 @@ export class Store {
     return this.kdb.narrow(id, layout, keptOf(cols), { wake: token }, { space, wait, restores });
   }
   // Null when another wake holds it or it is gone.
-  async claim(id) {
+  async claim(id, token = newId()) {
     await this.open();
-    const row = await this.kdb.claim(id);
+    const row = await this.kdb.claim(id, Date.now(), token);
     if (!row) return null;
     const [a] = rowsOf([{ ...row, agents: (await this.kdb.sleeps()).find((r) => r.id === id)?.agents ?? [] }]);
     return a ? { ...a, token: row.token } : null;

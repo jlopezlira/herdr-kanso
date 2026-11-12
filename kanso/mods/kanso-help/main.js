@@ -28,7 +28,7 @@ export default class Help extends View {
     this.handle = cx.focus_handle();
     this.handle.focus();
     this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
-    this.pal = new Companion();
+    this.pal = new Companion(cx.timer);
     this.pal.load(cx);
     // The agents' pets come the first time the dōjō's page shows.
     if (this.page === "dojo") this.pal.bring(cx);

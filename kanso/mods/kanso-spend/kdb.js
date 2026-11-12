@@ -1,12 +1,12 @@
-import { sqliteApi } from "./platform-sqlite.js";
-import { serviceFor, serviceOn } from "./platform-host.js";
 import { paths, pathApi, appHomeDir } from "./platform-paths.js";
-import { fileApi } from "./platform-files.js";
 // Kanso's one database, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Agents are keyed by conversation: a terminal's address is reused, and a wake gives it a new one.
 // Every change that needs to hold the row says whether it did, so a window that lost it never acts as if it had.
 import { appHome } from "herdr";
-import { mapSeries, parseOr, bounded, LATE } from "./pure.js";
+import { mapSeries, parseOr } from "./pure.js";
+import { Database, lostCall } from "./platform-database.js";
+import { sqliteLimit, CALL_MS } from "./platform-sqlite.js";
+export { CALL_MS };
 
 export const DIR = "data/kanso";
 export const VERSION = 1;
@@ -19,14 +19,6 @@ export const SPACE_KEEP_MS = 7 * 86400_000; // a project gone this long is forgo
 export const forgetAgentsSql = () => "DELETE FROM agents WHERE status='gone' AND project_at IS NULL AND sleep_id IS NULL;";
 export const forgetSpacesSql = (now) => `DELETE FROM spaces WHERE gone IS NOT NULL AND gone < ${n(now - SPACE_KEEP_MS)};`;
 export const LEASE_MS = 20_000; // a sleep's owner (sleepwork.js) not heard from this long is gone: another window takes the row
-export const CALL_MS = 15_000; // one statement; past this the call did not answer
-class LostCall extends Error {
-  constructor() {
-    super("did not answer");
-    this.late = true;
-  }
-}
-const lostCall = () => new LostCall();
 export const REST_MS = 60_000; // a remote database, while this window is in front and nothing was ordered
 
 export const q = (s) => (s == null ? "NULL" : `'${String(s).replace(/'/g, "''")}'`);
@@ -184,38 +176,22 @@ class Schemas {
 }
 const schemas = new Schemas();
 
-export class Kdb {
-  constructor(dir = paths.join(appHome(), DIR), machine = null, timer = null) {
+export class Kdb extends Database {
+  constructor(timer, dir = paths.join(appHome(), DIR), machine = null) {
+    super(timer, paths.join(dir, "kanso.db"), machine || null);
     this.dir = dir;
-    this.file = paths.join(dir, "kanso.db");
-    this.machine = machine || null;
-    this.timer = timer?.after ? timer : null;
-    this.epoch = 0;
-    this.ready = null;
     this.chain = Promise.resolve();
     this.queue = [];
     this.cache = new Map();
     this.cachedAt = Date.now();
   }
 
-  // A lost exec never settles. A timer from a call already dropped must not drop the next one.
-  bound(promise) {
-    if (!this.timer?.after) return promise;
-    const epoch = this.epoch;
-    return bounded(promise, this.timer, CALL_MS).then((result) => {
-      if (result !== LATE) return result;
-      if (epoch === this.epoch) this.abandon();
-      throw lostCall();
-    });
-  }
+  get machine() { return this.on; }
 
-  execute(text) {
-    const sql = statements(text);
-    return this.bound(serviceFor(sqliteApi, this.machine, CALL_MS, serviceOn).then((api) => api.unchecked(this.file, sql, { json: true })));
-  }
+  execute(text) { return super.execute(statements(text), { json: true }); }
 
   async sql(text) {
-    const r = await this.execute(text);
+    const r = await this.bound(this.execute(text), sqliteLimit(text));
     if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
     return rowsOfOutput(r.stdout);
   }
@@ -235,15 +211,12 @@ export class Kdb {
   }
 
   async create() {
-    const ok = await this.bound(serviceFor((_platform, run) => run("sqlite3", ["-version"]), this.machine, CALL_MS, serviceOn)).catch((error) => { if (error?.late) throw error; return null; });
-    if (ok?.code !== 0) throw new Error("Install sqlite3 to keep the sidebar's state.");
-    const files = await this.bound(serviceFor(fileApi, this.machine, CALL_MS, serviceOn));
-    await this.bound(files.mkdir(this.dir));
-    await this.sql([...statements(SCHEMA), ONE_SLEEP]);
+    await this.prepare(this.dir, "Install sqlite3 to keep the sidebar's state.");
+    await this.sql(["BEGIN;", ...statements(SCHEMA), ONE_SLEEP, "COMMIT;"]);
     // CREATE TABLE IF NOT EXISTS leaves an older table as it was, so later columns are added here.
     const has = Object.fromEntries(await mapSeries([...new Set(ADDED.map(([table]) => table))], async (table) => [table, (await this.sql(`PRAGMA table_info(${table});`)).map((c) => c.name)]));
     const missing = ADDED.filter(([table, name]) => !has[table].includes(name));
-    if (missing.length) await this.sql(missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`).join(""));
+    if (missing.length) await this.sql(["BEGIN;", ...missing.map(([table, name, type]) => `ALTER TABLE ${table} ADD COLUMN ${name} ${type};`), "COMMIT;"]);
   }
 
   enqueue(text) {
@@ -272,7 +245,7 @@ export class Kdb {
     const marker = `kanso-${newId()}`;
     try {
       const text = batch.flatMap((call, i) => [...statements(call.text), `.print ${marker}:${i}`]);
-      const result = await this.execute(text);
+      const result = await this.bound(this.execute(text), sqliteLimit(text));
       const chunks = String(result.stdout ?? "").split(new RegExp(`^${marker}:[0-9]+\\r?$`, "gm"));
       const completed = chunks.length - 1;
       chunks.slice(0, completed).forEach((chunk, i) => batch[i].resolve(rowsOfOutput(chunk)));
@@ -285,8 +258,7 @@ export class Kdb {
   // Drops a call the host lost, so later calls start afresh instead of waiting behind it.
   abandon() {
     const dropped = this.queue;
-    this.epoch += 1;
-    this.ready = null;
+    super.abandon();
     this.queue = [];
     this.chain = Promise.resolve();
     this.invalidate();
@@ -391,8 +363,8 @@ export class Kdb {
 
   // Throws when a tab of that name sleeps there already, or an agent of it sleeps in another sleep.
   // `requested`: the sidebar does the work (sleepwork.js), and any window may take it; else the caller holds `token`.
-  async sleepTab({ name, space, project, layout, into = null, agents, saved = Date.now(), now = Date.now(), requested = false }) {
-    const id = newId(), token = newId();
+  async sleepTab({ id = newId(), name, space, project, layout, into = null, agents, saved = Date.now(), now = Date.now(), requested = false }) {
+    const token = newId();
     // An agent still held by a sleep that stopped half way (pending, not renewed for ABANDON_MS, no wake on it) is
     // let go first, so the tab can sleep now; that sleep keeps the rest under a token its window never had, or goes.
     const ids = agents.filter((a) => a.conversation).map((a) => q(a.conversation)).join(",") || "NULL";
@@ -408,6 +380,7 @@ export class Kdb {
     await this.run(`BEGIN IMMEDIATE;${letGo}INSERT INTO sleeps(id,name,space_id,space_name,project,layout,into_tab,saved,pending,pending_at,state)
       VALUES(${q(id)},${q(name)},${q(space?.id)},${q(space?.name)},${q(project)},${q(JSON.stringify(layout))},${q(into && JSON.stringify(into))},${n(saved)},${requested ? "NULL" : q(token)},${n(now)},${requested ? "'sleeping'" : "NULL"});${marks.join("")}COMMIT;`)
       .catch((e) => {
+        if (e?.late) throw e;
         throw new Error(/UNIQUE/.test(e.message) ? `a tab named ${name} is already asleep in this project`
           : /already asleep/.test(e.message) ? "an agent of it is already asleep in another sleep; if that one is stuck, retry or undo it from Asleep" : e.message);
       });
@@ -423,9 +396,8 @@ export class Kdb {
   }
 
   // A sleep that stopped half way loses its token here for good; its `pending_at` stays, so the wake looks for agents of it still running.
-  async claim(id, now = Date.now()) {
-    const token = newId();
-    const [row] = await this.run(`UPDATE sleeps SET waking=${q(token)},waking_at=${n(now)},pending=NULL WHERE id=${q(id)} AND ${DONE} AND ${free("pending", now)} AND ${free("waking", now)} RETURNING *;`);
+  async claim(id, now = Date.now(), token = newId()) {
+    const [row] = await this.run(`UPDATE sleeps SET waking=${q(token)},waking_at=${n(now)},pending=NULL WHERE id=${q(id)} AND ${DONE} AND ${free("pending", now)} AND (${free("waking", now)} OR waking=${q(token)}) RETURNING *;`);
     return row ? { ...row, token } : null;
   }
   renew(id, token, now = Date.now()) { return this.held(`UPDATE sleeps SET waking_at=${n(now)} WHERE id=${q(id)} AND waking=${q(token)} RETURNING id;`); }

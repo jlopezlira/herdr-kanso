@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
 
 const spaces = [
   { id: "sp-shield", name: "shield", folder: "/Users/jj/Apps/fluenty" },
@@ -19,9 +19,27 @@ const layout = (...resumes) => ({ per: null, cols: [{ w: 1, panes: resumes.map((
 async function database(t, dir = null) {
   dir ??= await temporary(t);
   const mod = await load("kanso-spaces/kdb.js", ["Kdb", "spaceFor", "inPlace", "conversationOf", "STALE_MS", "ABANDON_MS", "GONE_MS", "SPACE_KEEP_MS"], { exec, appHome: () => dir });
-  return { ...mod, db: new mod.Kdb(join(dir, "kanso")), dir };
+  return { ...mod, db: new mod.Kdb(databaseTimer, join(dir, "kanso")), dir };
 }
 const sh = (file, sql) => exec("sqlite3", ["-bail", file, sql]);
+
+test("retrying a wake claim recovers its own token and never takes another window's", async (t) => {
+  const { db } = await database(t);
+  const { id, token } = await db.sleepTab({ name: "Tab", project, space: null, layout: layout(), agents: [] });
+  await db.settle(id, token);
+  assert.equal((await db.claim(id, 100, "wake-a")).token, "wake-a");
+  assert.equal((await db.claim(id, 101, "wake-a")).token, "wake-a");
+  assert.equal(await db.claim(id, 102, "wake-b"), null);
+});
+
+test("retrying a committed sleep request returns its row without writing it twice", async (t) => {
+  const dir = await temporary(t);
+  const { store, db } = await storeIn(t, dir);
+  const intent = { id: "request-1", name: "Tab", cols: [], saved: 100 };
+  assert.equal(await store.sleep(project, intent), "request-1");
+  assert.equal(await store.sleep(project, intent), "request-1");
+  assert.equal((await db.read("SELECT COUNT(*) n FROM sleeps;"))[0].n, 1);
+});
 
 test("a place is its space, not the first space that shares the folder", async (t) => {
   const { spaceFor, inPlace } = await database(t);
@@ -155,7 +173,7 @@ test("a database that failed to open is tried again", async (t) => {
   let fail = true;
   const flaky = async (c, a, o) => (fail && c === "sqlite3" && a[0] === "-version" ? { code: 1, stdout: "", stderr: "no" } : exec(c, a, o));
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: flaky, appHome: () => dir });
-  const db = new Kdb(join(dir, "kanso"));
+  const db = new Kdb(databaseTimer, join(dir, "kanso"));
   await assert.rejects(db.open(), /Install sqlite3/);
   fail = false;
   await db.open();
@@ -180,7 +198,7 @@ async function legacy(dir) {
 async function storeIn(t, dir, run = exec, host = {}) {
   const { Store } = await load("kanso-spaces/store.js", ["Store"], { exec: run, appHome: () => dir, ...host });
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: run, appHome: () => dir, ...host });
-  const db = new Kdb(join(dir, "kanso"));
+  const db = new Kdb(databaseTimer, join(dir, "kanso"));
   return { store: new Store(db, dir), db };
 }
 
@@ -496,7 +514,7 @@ test("an agent of a sleep seen running again is awake: the sleep lets it go, and
 
 test("two windows freeing different agents of one sleep never lose each other's change", async (t) => {
   const { db, dir } = await database(t);
-  const other = new (await database(t, dir)).Kdb(join(dir, "kanso"));
+  const other = new (await database(t, dir)).Kdb(databaseTimer, join(dir, "kanso"));
   const live = (c, pid) => ({ ...seen(c, null, "sp-kanso", 0, "idle", `t${pid}`), program: "{}", pid });
   const panes = { per: null, cols: [{ w: 1, panes: ["c1", "c2", "c3"].map((c, i) => ({ argv: ["claude"], resume: c, pid: i + 1 })) }] };
   const saved = Date.now();

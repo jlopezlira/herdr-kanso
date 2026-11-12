@@ -5,7 +5,7 @@ import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { powershell, psQuote } from "../kanso/mods/kanso-panel/platform-command.js";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
 
 const NAMES = ["petOf", "parsePets", "frameOf", "installedPets", "bringAgentPets", "AGENT_PETS", "ROWS", "FRAMES", "HACHI", "Companion"];
 const pets = (host = {}) => load("kanso-dojo/pets.js", NAMES, { div: () => null, image: () => null, exec, appHome: () => "/app", home: () => "/home", ...host });
@@ -172,7 +172,7 @@ test("kansō help's dōjō page shows your pet, and every pet to choose from the
 test("a share card carries your pet: Hachi in its squares, a pet's first frame cut from its atlas copied beside the card", async (t) => {
   const dir = await temporary(t);
   const { Companion, petOf, HACHI } = await pets({ appHome: () => dir });
-  const pal = new Companion({ pet: async () => null, setPet: async () => {} });
+  const pal = new Companion(databaseTimer, { pet: async () => null, setPet: async () => {} });
   const hachi = await pal.figure({ accent: "#e8728a", chrome: "#161615" }, join(dir, "share"), 160);
   assert.equal(hachi.width, 160);
   assert.ok(hachi.svg.includes('fill="#e8963a"') && !hachi.svg.includes("image"), "Hachi is drawn, square by square");

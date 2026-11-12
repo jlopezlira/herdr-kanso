@@ -114,7 +114,7 @@ export default class TokenSpend extends View {
     this.menuOptions = null;
     this.syncHolds = [];
     this.syncStored = [];
-    this.db = new Kdb(undefined, null, cx.timer);
+    this.db = new Kdb(cx.timer);
     this.syncKick = shared(SYNC_KICK);
 
     this.ticker = null;

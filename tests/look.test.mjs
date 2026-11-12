@@ -6,7 +6,7 @@ import { join, posix } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 import { paths } from "../kanso/mods/kanso-panel/platform-paths.js";
 import test from "node:test";
-import { load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until } from "./helpers.mjs";
+import { databaseTimer, load, clone, context, singleUse, exec as run, nativeWindow, nativePlatform, until } from "./helpers.mjs";
 
 const dirs = [];
 process.on("exit", () => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -155,7 +155,7 @@ async function panel({ screen = OUTPUT, files = ["/repo/tests/shot.png", "/repo/
   const { Kdb } = await load("kanso-panel/kdb.js", ["Kdb"], host);
   const { cx, drain } = context();
   cx.timer = { every() {}, after() {} };
-  const look = new Look(new Kdb());
+  const look = new Look(new Kdb(databaseTimer));
   look.init({ ...cx, focus_handle: () => ({}) }, {});
   await drain();
   return { look, cx, drain, calls, ons, say, store, world };

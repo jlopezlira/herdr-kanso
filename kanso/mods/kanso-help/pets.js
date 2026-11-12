@@ -117,7 +117,7 @@ export async function bringAgentPets(have = new Set(), list = AGENT_PETS) {
 // Your pet, wherever it shows (the dōjō, and kansō help's way into it): which it is, the ones to choose from,
 // and the agents' pets brought the first time you look at them. The choice is kept in the dōjō's own SQLite.
 export class Companion {
-  constructor(store = new Store()) {
+  constructor(timer, store = new Store(timer)) {
     this.store = store;
     this.pets = [HACHI]; this.id = HACHI.id;
     this.bringing = false; this.brought = false; this.error = null; this.frameKey = null;

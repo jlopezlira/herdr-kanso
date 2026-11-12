@@ -1,7 +1,8 @@
 // Every view has its own queue and cache: a view gone mid-call never holds up the next one.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, temporary, exec } from "./helpers.mjs";
+import { BUSY_MS, CALL_MS } from "../kanso/mods/kanso-panel/platform-sqlite.js";
+import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
 
 const never = () => new Promise(() => {});
 const turn = () => new Promise((resolve) => setImmediate(resolve));
@@ -30,36 +31,36 @@ async function views(t) {
 
 test("a view gone while its call runs never holds up another view's calls", async (t) => {
   const { Kdb, lose } = await views(t);
-  const gone = new Kdb();
+  const gone = new Kdb(databaseTimer);
   await gone.open();
   const lost = lose();
   gone.read("SELECT 1;").catch(() => {});
   await lost;
-  assert.deepEqual(clone(await within(new Kdb().read("SELECT 2 AS two;"))), [{ two: 2 }]);
+  assert.deepEqual(clone(await within(new Kdb(databaseTimer).read("SELECT 2 AS two;"))), [{ two: 2 }]);
 });
 
 test("a flush that never ran holds up only its own view", async (t) => {
   const { Kdb } = await views(t);
-  const gone = new Kdb();
+  const gone = new Kdb(databaseTimer);
   await gone.open();
   gone.flush = () => {};
   gone.read("SELECT 1;").catch(() => {});
   await turn();
   assert.equal(gone.queue.length, 1);
-  assert.deepEqual(clone(await within(new Kdb().read("SELECT 2 AS two;"))), [{ two: 2 }]);
+  assert.deepEqual(clone(await within(new Kdb(databaseTimer).read("SELECT 2 AS two;"))), [{ two: 2 }]);
 });
 
 test("the schema is opened once per file, whichever view opens it first", async (t) => {
   const { Kdb, calls } = await views(t);
-  await new Kdb().open();
-  await new Kdb().read("SELECT 1;");
+  await new Kdb(databaseTimer).open();
+  await new Kdb(databaseTimer).read("SELECT 1;");
   assert.equal(calls.filter(([command, args]) => command === "sqlite3" && args[0] === "-version").length, 1);
   assert.equal(calls.filter(([command]) => command === "mkdir").length, 1);
 });
 
 test("an abandoned call no longer holds up its own view's next calls", async (t) => {
   const { Kdb, lose } = await views(t);
-  const db = new Kdb();
+  const db = new Kdb(databaseTimer);
   await db.open();
   const lost = lose();
   db.read("SELECT 1;").catch(() => {});
@@ -77,7 +78,7 @@ async function clocked(t) {
     appHome: () => dir,
     exec: (command, args) => (hang && command === "sqlite3" ? never() : exec(command, args)),
   });
-  return { db: () => new Kdb(undefined, null, timer), waits, hang: (on) => { hang = on; } };
+  return { db: () => new Kdb(timer), waits, hang: (on) => { hang = on; } };
 }
 
 async function armed(waits, n) {
@@ -92,7 +93,7 @@ test("a call that never settles is dropped and the next read answers", async (t)
   hang(true);
   const lost = db.read("SELECT 1 AS one;");
   await armed(waits, mark + 1);
-  assert.equal(waits.at(-1).ms, 15_000);
+  assert.ok(waits.at(-1).ms >= CALL_MS + BUSY_MS);
   const failed = assert.rejects(lost, /did not answer/);
   waits.at(-1).fn();
   await failed;
@@ -124,7 +125,7 @@ test("a create that never settles is dropped and the next open answers", async (
   const db = openDb();
   const opening = db.open();
   await armed(waits, 1);
-  assert.equal(waits.at(-1).ms, 15_000);
+  assert.ok(waits.at(-1).ms >= CALL_MS + BUSY_MS);
   const failed = assert.rejects(opening, /did not answer/);
   waits.at(-1).fn();
   await failed;

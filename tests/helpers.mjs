@@ -119,12 +119,14 @@ export async function until(ready, limit = 30000) {
 // limit (30 s; `limit` in ms makes it shorter for a test).
 export async function exec(command, args, options = {}) {
   try {
-    const result = await runFile(command, args, { cwd: options.cwd, ...(options.env ? { env: options.env } : {}), maxBuffer: 4 * 1024 * 1024, timeout: options.limit ?? 30000, killSignal: "SIGKILL", windowsHide: true });
+    const result = await runFile(command, args, { cwd: options.cwd, ...(options.env ? { env: options.env } : {}), maxBuffer: 4 * 1024 * 1024, timeout: options.limit ?? options.timeout ?? 30000, killSignal: "SIGKILL", windowsHide: true });
     return { code: 0, ...result };
   } catch (error) {
     return { code: error.killed ? 137 : error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? String(error) };
   }
 }
+
+export const databaseTimer = { after(ms, fn) { const timer = setTimeout(fn, ms); timer.unref(); return { cancel: () => clearTimeout(timer) }; } };
 
 // A view context whose spawned tasks can be awaited.
 export function context() {

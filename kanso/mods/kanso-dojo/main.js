@@ -18,7 +18,7 @@ export default class Dojo extends View {
   init(_props, cx) {
     this.handle = cx.focus_handle();
     this.handle.focus();
-    this.store = new Store();
+    this.store = new Store(cx.timer);
     this.share = new Share("kanso-dojo", paths.join(appHome(), "data", "kanso-dojo", "share"));
     this.totals = { bests: {}, rounds: 0, rings: 0, fewest: 0, longest: 0, days: [], first: null };
     this.snippet = 0;
@@ -35,7 +35,7 @@ export default class Dojo extends View {
       cx.notify();
     });
     cx.timer.every(500, (cx) => { if (this.round || this.lit || this.armed) cx.notify(); });
-    this.pal = new Companion(this.store); this.choosing = false;
+    this.pal = new Companion(cx.timer, this.store); this.choosing = false;
     this.pal.load(cx);
     // A pet moves on its own: a redraw only when its frame changes.
     cx.timer.every(TICK_MS, (cx) => { const r = this.reaction(); if (this.pal.moved(r.state, r.since)) cx.notify(); });

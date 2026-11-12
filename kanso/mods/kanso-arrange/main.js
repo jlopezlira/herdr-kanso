@@ -42,7 +42,7 @@ export default class Arrange extends View {
     this.name.on("submit", (_e, cx) => this.save(cx));
     this.name.on("change", (_e, cx) => { this.error = null; cx.notify(); });
     this.space = spaces().find((s) => s.active) ?? null;
-    this.store = new Store();
+    this.store = new Store(cx.timer);
     this.target = null;
     cx.spawn(async (cx) => {
       try { this.take(await this.store.all()); }

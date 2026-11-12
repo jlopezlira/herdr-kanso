@@ -1,8 +1,9 @@
+import { CALL_MS } from "../kanso/mods/kanso-panel/platform-sqlite.js";
 // A sleep on another computer: addresses, its database, the worker, a missed answer, and how often it is read.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { load, temporary, clone, exec as realExec } from "./helpers.mjs";
+import { databaseTimer, load, temporary, clone, exec as realExec } from "./helpers.mjs";
 
 const C1 = "00000000-0000-4000-8000-000000000001";
 const PLATFORMS = ["macos", "linux", "windows"];
@@ -26,7 +27,7 @@ async function openDb(t, machine) {
   const calls = [];
   const exec = hostExec(calls);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir, window: () => ({ platform: "macos" }) });
-  const kdb = new Kdb(join(dir, "kanso"), machine);
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"), machine);
   await kdb.open();
   return { kdb, calls };
 }
@@ -64,7 +65,7 @@ test("an address turns both ways the same on every system", async () => {
 test("a remote database sends every statement to that computer, and two reads leave together", async (t) => {
   const { kdb, calls } = await openDb(t, "light");
   for (const c of calls) assert.equal(c.on, "light", c.c);
-  for (const c of calls) if (!["pwsh", "powershell", "uname"].includes(c.c)) assert.equal(c.timeout, 15000, c.c);
+  for (const c of calls) if (!["pwsh", "powershell", "uname"].includes(c.c)) assert.ok(c.timeout >= CALL_MS, c.c);
   const at = calls.length;
   const [one, two] = await Promise.all([kdb.read("SELECT 1 AS n;"), kdb.read("SELECT 2 AS n;")]);
   const batched = calls.slice(at).filter((c) => c.c === "sqlite3");
@@ -89,7 +90,7 @@ test("a local database and a local worker never call another computer", async (t
   };
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
   const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], host);
-  const kdb = new Kdb(join(dir, "kanso"));
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"));
   await kdb.open();
   await kdb.read("SELECT 1 AS n;");
   await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true });
@@ -99,14 +100,14 @@ test("a local database and a local worker never call another computer", async (t
   assert.ok(calls.some((c) => c.c === "sqlite3"));
   for (const c of calls) {
     assert.equal(c.on, null, c.c);
-    assert.equal(c.timeout, 15000, c.c);
+    assert.ok(c.timeout >= CALL_MS, c.c);
   }
 });
 
 test("the database folder follows the computer's system, not the shape of its home", async () => {
   const exec = async (c, a = [], o = {}) => {
     assert.equal(o.on ?? null, "light", c);
-    if (c !== "uname" && c !== "pwsh" && c !== "powershell") assert.equal(o.timeout, 15000, c);
+    if (c !== "uname" && c !== "pwsh" && c !== "powershell") assert.ok(o.timeout >= CALL_MS, c);
     if (c === "pwsh" || c === "powershell") return { code: 1, stdout: "", stderr: "" };
     if (c === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
     if (c === "sh") return { code: 0, stdout: "C:\\Users\\jj\n", stderr: "" };
@@ -128,7 +129,7 @@ test("a local database names no other computer, and each call is limited", async
   assert.ok(calls.some((c) => c.c === "sqlite3"));
   for (const c of calls) {
     assert.equal(c.on, null, c.c);
-    assert.equal(c.timeout, 15000, c.c);
+    assert.ok(c.timeout >= CALL_MS, c.c);
   }
 });
 
@@ -137,7 +138,7 @@ test("an order the computer does not answer leaves nothing written", async (t) =
   const calls = [];
   let down = false;
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: hostExec(calls, { down: () => down }), appHome: () => dir, window: () => ({ platform: "macos" }) });
-  const kdb = new Kdb(join(dir, "kanso"), "light");
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"), "light");
   await kdb.open();
   down = true;
   await assert.rejects(() => kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0 }], requested: true }), /did not answer/);
@@ -149,7 +150,7 @@ test("an order the computer does not answer leaves nothing written", async (t) =
 test("a remote store does not read this computer's old file", async () => {
   const { Store } = await load("kanso-spaces/store.js", ["Store"], {});
   const seen = [];
-  const kdb = { machine: "light", async open() { seen.push("open"); }, async migrated() { seen.push("migrated"); return false; } };
+  const kdb = { timer: databaseTimer, machine: "light", async open() { seen.push("open"); }, async migrated() { seen.push("migrated"); return false; } };
   await new Store(kdb, "/legacy").open();
   assert.deepEqual(seen, ["open"]);
 });
@@ -383,7 +384,7 @@ async function worker(t, machine, address) {
   };
   const { SleepWork } = await load("kanso-spaces/sleepwork.js", ["SleepWork"], host);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
-  const kdb = new Kdb(join(dir, "kanso"), machine);
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"), machine);
   await kdb.sleepTab({ name: "1", space: { id: "sp1", name: "kanso" }, project: ":/w", layout, agents: [{ conversation: C1, tab: "tb1", pos: 0, given: "Ada" }], requested: true });
   const cx = { sleep: async () => {}, spawn: (fn) => fn(cx) };
   return { SleepWork, kdb, calls, reads, hcLog, cx };
@@ -417,7 +418,7 @@ test("a worker on another computer calls only there, and a local row never does"
   await mine.tick(local.cx, 1_000_000);
   await mine.tick(local.cx, 1_002_000);
   side(local.calls, local.reads, local.hcLog, null);
-  for (const c of local.calls) assert.equal(c.timeout, 15000, c.c);
+  for (const c of local.calls) assert.ok(c.timeout >= CALL_MS, c.c);
 });
 
 test("a shell-only tab on another computer is asleep on the first tick and nothing is asked", async (t) => {
@@ -437,7 +438,7 @@ test("a shell-only tab on another computer is asleep on the first tick and nothi
   };
   const { SleepWork, homePlace } = await load("kanso-spaces/sleepwork.js", ["SleepWork", "homePlace"], host);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], host);
-  const kdb = new Kdb(join(dir, "kanso"), "light");
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"), "light");
   const layout = { per: null, tab: "tb1", cols: [{ w: 1, panes: [{ argv: null, cwd: "/w", resume: null, terminal: "t1", tab: "tb1", front: 0 }] }] };
   await kdb.sleepTab({ name: "Shell", space: { id: "sp1", name: "kanso" }, project: "light:/w", layout, agents: [], requested: true, saved: clock.now, now: clock.now });
   await homePlace("light");

@@ -211,6 +211,33 @@ test("a wake already coming back says so", async () => {
   assert.equal(s.error, "Coming back");
 });
 
+for (const dead of [false, true]) {
+  test(`Wake retries a lost claim once and ${dead ? "reports a dead store once" : "continues with the same claim token"}`, async () => {
+    const closed = [], notices = [], tokens = [];
+    const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host({ closed }));
+    const s = new Sleep(), clock = stepClock();
+    let abandoned = 0, opened = 0;
+    clock.cx.notify = () => { if (s.error) notices.push(s.error); };
+    s.store = {
+      kdb: { abandon() { abandoned += 1; } },
+      claim(_id, token) { tokens.push(token); return dead || tokens.length === 1 ? hang() : { id: "s1", token, cols: [], name: "Ada" }; },
+    };
+    s.refresh = async () => {};
+    s.wakeHeld = async () => { opened += 1; s.busy = null; return true; };
+    s.wake({ id: "s1", name: "Ada", state: "asleep" }, clock.cx);
+    if (dead) await endLate(clock, 1);
+    else { await clock.until(1); clock.fireLast(); }
+    await clock.drain();
+    assert.equal(tokens.length, 2);
+    assert.equal(tokens[0], tokens[1]);
+    assert.equal(abandoned, 1);
+    assert.equal(s.busy, null);
+    assert.equal(opened, dead ? 0 : 1);
+    assert.deepEqual(notices, dead ? ["Ada could not be woken: did not answer"] : []);
+    assert.deepEqual(closed, dead ? [] : ["close"]);
+  });
+}
+
 test("readTab drops an agent's hc-run children on purpose, both reads match, and the tab sleeps", async () => {
   const asked = [];
   const saved = [];

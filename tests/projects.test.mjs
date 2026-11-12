@@ -3,14 +3,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, stat, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { load, clone, temporary, exec, until } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, until } from "./helpers.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
 const database = async (t) => {
   const dir = await temporary(t);
   const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
-  return new Kdb(join(dir, "kanso"));
+  return new Kdb(databaseTimer, join(dir, "kanso"));
 };
 const git = async (cwd, ...args) => {
   const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", ...args], { cwd });
@@ -198,7 +198,7 @@ test("New project with a conversation: the name you give it, its folder, then wh
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => overlays.push(clone(o.props)),
   });
   const view = new Spaces();
-  Object.assign(view, { navStore: { kdb: new Kdb(join(dir, "kanso")) }, projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
+  Object.assign(view, { navStore: { kdb: new Kdb(databaseTimer, join(dir, "kanso")) }, projectFolder: "/Users/me/Apps/fury-api", projectName: { value: () => "Fury" } });
   const { cx, drain } = (await import("./helpers.mjs")).context();
   view.createProject(cx);
   await drain();
@@ -223,7 +223,7 @@ test("Remove project takes it out for good, closes its open space, and only then
     shared: (k) => shared.get(k) ?? null, setShared: (k, v) => shared.set(k, v),
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
   });
-  const kdb = new Kdb(join(dir, "kanso"));
+  const kdb = new Kdb(databaseTimer, join(dir, "kanso"));
   const { row } = await kdb.addProject({ name: "fury", folder: "/Users/me/fury" });
   const view = Object.assign(new Spaces(), { navStore: { kdb } });
   view.removeProject(row, { id: "sp-fury" });
