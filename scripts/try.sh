@@ -20,8 +20,7 @@ start() {
   if running; then
     HERDR_APP_HOME="$DEMO_HOME" sh "$ROOT/scripts/local-install.sh" >/dev/null
   else
-    # Its last step, layout.switch, needs an open window; the demo keeps the kansō layout.
-    HERDR_APP_HOME="$DEMO_HOME" sh "$ROOT/scripts/local-install.sh" >/dev/null || true
+    KANSO_NO_SWITCH=1 HERDR_APP_HOME="$DEMO_HOME" sh "$ROOT/scripts/local-install.sh" >/dev/null
     HERDR_APP_HOME="$DEMO_HOME" HC_SESSION="$SESSION" nohup herdr-app >/dev/null 2>&1 &
   fi
   dirty=$([ -z "$(git -C "$ROOT" status --porcelain)" ] || echo " with uncommitted changes")

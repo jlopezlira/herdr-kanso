@@ -45,7 +45,7 @@ test("Try start installs into the demo home and opens the demo with both variabl
   assert.match(result.stdout, /^Installed \S+ at [0-9a-f]{7,}.* in .*\.cache\/kd\.\n$/);
   const launch = `${demo}|kanso-demo|herdr-app `;
   await until(() => calls().includes(launch), 2000);
-  assert.ok(calls().includes(`${demo}||herdr-app do layout.switch --name kanso`));
+  assert.ok(!calls().some((c) => c.includes("layout.switch")));
   for (const call of calls()) assert.ok(call.startsWith(`${demo}|`), call);
 });
 
