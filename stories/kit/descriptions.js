@@ -24,6 +24,7 @@ export const descriptions = {
   Toast: ['A transient notice with its source and optional recovery action.', 'Use while the fact’s normal home is out of view; keep recoverable failures actionable.'],
   Header: ['A title, contextual digest and tools built from shared controls.', 'Use above the current pane; retain the facts that explain its work.'],
   Sidebar: ['The navigation surface composed from rows, marks, fields and buttons.', 'Use for projects, status and threads in open, collapsed or Dawn arrangements.'],
+  'Dawn Mode': ['The early channel’s mark in the sidebar header.', 'Dawn Mode only; Stable Mode shows nothing.'],
   Rail: ['The collapsed navigation surface composed from icon buttons and marks.', 'Use when the work needs the space occupied by the full sidebar.'],
   'Status bar': ['A compact row of facts whose normal home is out of view.', 'Use at the window edge; remove a stand-in when its owning surface opens.'],
   Bars: ['Tab, pane and tool strips assembled from shared controls.', 'Use to move between panes and expose tools at stable boundaries.'],

@@ -82,7 +82,7 @@ const primitive = {
   Toast: 'Toast', ToastWithItsSource: 'Toast', Snippet: 'Code', Reply: 'Markdown', Picture: 'Thumbnail',
 };
 const protoPage = {
-  'components-annotated-picture': 'Panels/Pins', 'components-choosing-the-channel': 'Panels/Settings',
+  'components-annotated-picture': 'Panels/Pins', 'components-choosing-the-channel': 'Compositions/Dawn Mode',
   'components-code': 'Primitives/Code', 'components-collapsed-rail': 'Compositions/Rail',
   'components-dialog': 'Primitives/Dialog', 'components-edges-and-minimap': 'Compositions/Edge and Minimap',
   'components-find-in-the-conversation': 'Panels/Find', 'components-header-digest': 'Compositions/Header',
@@ -97,9 +97,9 @@ const protoPage = {
   'compositions-bars': 'Compositions/Bars', 'compositions-controls': 'Primitives/Button', 'compositions-files-and-pr': 'Panels/PR',
   'compositions-menu-and-dialog': 'Primitives/Dialog', 'compositions-panel-pieces': 'Compositions/Panel shell',
   'compositions-sidebar-rows': 'Compositions/Sidebar', 'compositions-states': 'Compositions/State patterns',
-  'layouts-sidebar-at-rest': 'Compositions/Sidebar', 'layouts-sidebar-header-three-ways': 'Compositions/Header',
+  'layouts-sidebar-at-rest': 'Compositions/Sidebar', 'layouts-sidebar-header-three-ways': 'Compositions/Dawn Mode',
   'layouts-window-at-rest': 'Layouts/Window', 'layouts-right-click-any-piece': 'Layouts/Context menus', 'layouts-hjkl-dojo': 'Layouts/Practice',
-  'tokens-colour-and-wash': 'Tokens/Colour', 'tokens-dawn': 'Compositions/Sidebar', 'tokens-icons': 'Tokens/Icons', 'tokens-type': 'Tokens/Type',
+  'tokens-colour-and-wash': 'Tokens/Colour', 'tokens-dawn': 'Compositions/Dawn Mode', 'tokens-icons': 'Tokens/Icons', 'tokens-type': 'Tokens/Type',
 };
 const coveragePage = {
   Arrangements: 'Panels/Arrangements', SaveArrangement: 'Primitives/Dialog', SettingsMenu: 'Primitives/Menu', UpdateNotice: 'Compositions/Notifications', RuntimeNotice: 'Compositions/Notifications',
