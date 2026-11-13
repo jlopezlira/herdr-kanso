@@ -28,6 +28,7 @@ the branch's rules.
 
 - Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.
 - Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
+- Draw the remaining missing states in Storybook: arrangements from other projects, the Save and Overwrite headings, what an update did to your keys and layout, the Windows update failures, servers that cannot be attributed, a missing sqlite3, a pull request's files cut off, and a pin with no agent to send to.
 - Give Dawn Mode its own Storybook page, and show the Dawn Mode pill on the sidebar.
 - The Storybook link in the site's navigation opens in a new tab.
 - The window's title bar shows only the window controls.
