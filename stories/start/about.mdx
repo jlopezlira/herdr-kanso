@@ -3,30 +3,18 @@ import { version } from '../../kanso/mods/kanso-chrome/version.json';
 
 <Meta title="Start/About" />
 
-## About
+# About
 
-### What this is
-
-The kit is organised as Start, Tokens, Primitives, Compositions, Panels and Layouts.
-
-The source of truth for the app's look, and the guide for agents.
-
-### Version
-
-kansō {version}.
-
-### Links
+The kansō kit, version {version}: the source of truth for how the app looks.
 
 - Repository: [github.com/jlopezlira/herdr-kanso](https://github.com/jlopezlira/herdr-kanso)
 - Site: [jlopezlira.github.io/herdr-kanso](https://jlopezlira.github.io/herdr-kanso/)
 - Issues: [github.com/jlopezlira/herdr-kanso/issues](https://github.com/jlopezlira/herdr-kanso/issues)
 
-## How it is maintained
-
-The import scripts update a single shared catalog. Component pages and their variants are regenerated with `npm run build:stories`. A state belongs to its component page; a composition reuses the primitive fragments in that catalog.
+`stories/README.md` says where everything lives and how to rebuild the pages.
 
 ## Prompt for agents
 
 ```text
-Use this Storybook as the guide to the existing kansō kit. Start with Philosophy, choose the component page by its role, and use that page's prompt and specifications to implement its states.
+Use this Storybook as the guide to the kansō kit. Find the page by its role, then follow that page's states, specifications and prompt.
 ```

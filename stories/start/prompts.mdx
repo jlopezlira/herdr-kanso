@@ -4,14 +4,12 @@ import { Meta } from '@storybook/addon-docs/blocks';
 
 # How to use the prompt for agents
 
-Open the component’s Overview and press **Copy prompt**. Paste the text with the task, the required states and the target file or surface. The prompt names the shared kit classes and token references used by that component.
+Every page ends with a prompt: press **Copy prompt** and paste it with your task and the target file.
 
-Read the usage guidance and state specifications with the prompt. A copied prompt explains how to build the piece; the specifications explain what each state must show. For a larger surface, start with the composition or panel and follow its primitive dependencies.
-
-Run `npm run storybook` to expose the local MCP endpoint at `http://localhost:6006/mcp`. The published [docs manifest](https://jlopezlira.github.io/herdr-kanso/storybook/manifests/docs.json) makes the documentation discoverable without browsing each sidebar item.
+`npm run storybook` serves the MCP endpoint at `http://localhost:6006/mcp`. The published [docs manifest](https://jlopezlira.github.io/herdr-kanso/storybook/manifests/docs.json) holds every page as text.
 
 ## Prompt for agents
 
 ```text
-Implement the requested component with the kit identified by its page. Include the required states, preserve its specifications and keyboard behavior, and verify the result in both themes. Reuse the existing composition and primitives. Introduce no raw value where kanso/tokens.json already defines its role.
+Implement the requested component with the kit named on its page. Include every state, keep its specifications and keys, and check both themes. Reuse the existing compositions and primitives, and use kanso/tokens.json for every value.
 ```

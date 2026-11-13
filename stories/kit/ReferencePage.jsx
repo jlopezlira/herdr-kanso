@@ -38,7 +38,8 @@ export function ReferencePage({ page }) {
   const [copied, setCopied] = useState(false);
   const prompt = [
     `Build ${page} for kansō from the shared kit.`,
-    reference.status === "Proposed" ? "This design is Proposed and needs JJ's approval." : "Follow the approved reference drawings and guidelines below. Additional states are Proposed.",
+    reference.status === "Proposed" ? "This design is Proposed and needs approval." : "Follow the approved reference drawings and guidelines below. Additional states are Proposed.",
+    "Preserve every action. Use the shared kit tokens, primitives and state patterns.",
     ...reference.guidelines,
     ...(states.length ? [promptFor(states[0].page, states)] : []),
   ].join("\n\n");
