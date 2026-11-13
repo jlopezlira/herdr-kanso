@@ -25,6 +25,8 @@ export function normalizeCss(css, { kit = false } = {}) {
     css = base + COMPONENT_CSS + (extra === undefined ? '' : CSS_MARK + extra);
   }
   css = css.replaceAll('.kanso-button--tonal:first-of-type', '.kanso-button--tonal:not(.kanso-explain):first-of-type');
+  css = css.replace(/^:is\(\.kanso-state-block__actions,\.kanso-state-empty\)>\.kanso-button--tonal[^\n{]*\{[^}]*\}\n?/gm, '');
+  css = css.replaceAll('.kanso-state-block>.kanso-state-block__actions>.kanso-button--tonal{', '.kanso-state-block>.kanso-state-block__actions>:is(.kanso-button,.kanso-button--tonal){');
   css = css.replace('.kanso-button.kanso-control--off{background:var(--w4);color:var(--dim);cursor:not-allowed}', '.kanso-control--off{background:var(--w4);color:var(--dim);cursor:not-allowed;pointer-events:none}');
   const seen = new Set();
   const render = (text, context = '') => cssBlocks(text).map((rule) => {

@@ -22,5 +22,5 @@ export function mergeCoverage(records) {
 export function gapDocument(records) {
   const gaps = records.filter((record) => record.gap).sort((a, b) => a.page.localeCompare(b.page) || a.id.localeCompare(b.id));
   const cell = (text) => text.replaceAll('|', '\\|').replaceAll('\n', ' ');
-  return [`# ${GAP_TITLE}`, '', FEATURE_NOTE, '', `${gaps.length} feature states await design. The component pages list them under Prompt for agents as ${FEATURE_LABEL}.`, '', '| Module | State | Source |', '| --- | --- | --- |', ...gaps.map((record) => `| ${cell(record.page)} | ${cell(record.label)} | ${record.location} |`), ''].join('\n');
+  return [`# ${GAP_TITLE}`, '', FEATURE_NOTE, '', `${gaps.length} feature states await design. The component pages list them under Prompt for agents as ${FEATURE_LABEL}.`, '', 'This count tracks missing drawing references only. FEATURES.md and PANEL-AUDIT.md record the unfinished source and design review.', '', '| Module | State | Source |', '| --- | --- | --- |', ...gaps.map((record) => `| ${cell(record.page)} | ${cell(record.label)} | ${record.location} |`), ''].join('\n');
 }

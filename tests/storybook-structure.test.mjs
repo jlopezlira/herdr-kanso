@@ -48,7 +48,7 @@ test('all 490 original stories and 1026 states survive, with only documented com
       assert.ok(state.location, old.id);
       if (state.design) assert.ok(byId.get(state.design)?.html, old.id);
     } else {
-      if (old.revisedHash) assert.ok(['Explain component', 'Worktree row layout', 'Single panel frame', 'Sample session names', 'Section title token', 'Current session state', 'Armed tab tip', 'Visual match'].includes(old.revision), old.id);
+      if (old.revisedHash) assert.ok(['Explain component', 'Worktree row layout', 'Single panel frame', 'Sample session names', 'Section title token', 'Current session state', 'Armed tab tip', 'Visual match', 'Failure action hierarchy', 'One fact one home', 'Ledger and kit roles'].includes(old.revision), old.id);
       assert.equal(hash(state.html), old.revisedHash ?? old.hash, old.id);
     }
     assert.equal(hash(state.caption), old.revisedCaptionHash ?? old.captionHash, `${old.id}: caption`);
@@ -87,7 +87,7 @@ test('regeneration is deterministic, and replacing one import preserves the othe
     const next = expand(JSON.parse(readFileSync(join(dir, 'stories/catalog.json'), 'utf8')));
     assert.equal(next.filter((record) => record.source === 'proto').length, 1);
     assert.equal(next.filter((record) => record.source === 'coverage').length, 621);
-    assert.equal(next.filter((record) => record.source === 'panels').length, 290);
+    assert.equal(next.filter((record) => record.source === 'panels').length, records.filter((record) => record.source === 'panels').length);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -156,7 +156,8 @@ test('every retained state is selectable and renders through its published compo
   for (const [page] of pagesOf(records)) {
     const story = componentStory(page);
     const states = statesFor(page);
-    assert.equal(story.argTypes.state.options.length, states.length, page);
+    assert.equal(story.argTypes.state.options.length, states.length + 1, page);
+    assert.equal(story.argTypes.state.options[0], "all", page);
     for (const state of states) {
       assert.ok(story.argTypes.state.options.includes(state.value), state.id);
       assert.equal(story.render({ state: state.value }), content(state.markup), state.id);

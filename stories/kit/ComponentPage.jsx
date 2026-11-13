@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { ReferenceDrawings } from './ReferencePage.jsx';
+import { referenceFor } from './references.js';
 import { Canvas, Controls, Markdown, Source } from '@storybook/addon-docs/blocks';
 import { content, featuresFor, statesFor } from './catalog.js';
 import { descriptions } from './descriptions.js';
@@ -19,6 +21,7 @@ export function ComponentPage({ of, page }) {
   const notes = [...new Set(states.flatMap((state) => state.notes ?? []))];
   return <article className="kanso-docs">
     <h1>{name}</h1>
+    {referenceFor(page)?.approvedRecords?.length > 0 && <><h2>Approved reference</h2><ReferenceDrawings page={page} /></>}
     <h2>What it is</h2><p>{what}</p>
     <h2>When to use it</h2><p>{when}</p>
     {contexts.length > 0 && <><h2>Usage details</h2>{contexts.map((id) => <p key={id}>{content(id)}</p>)}</>}

@@ -224,3 +224,12 @@ test('every catalog state mounts and disposes the same delegated layer', () => {
   }
   assert.equal(count, catalog.filter((record) => record.html !== undefined).length);
 });
+
+test("Approved inline dialogs keep their drawn controls without adding launch buttons", () => {
+  const { root } = dom('<div class="kanso-dialog"><div class="kanso-field">checkout</div><button class="kanso-button">Save</button></div>');
+  const dispose = mountBehaviours(root, { inlineSurfaces: true });
+  assert.equal(root.querySelectorAll('button').length, 1);
+  assert.notEqual(root.querySelector('[role="dialog"]').hidden, true);
+  assert.ok(root.querySelector('[role="textbox"]'));
+  dispose();
+});

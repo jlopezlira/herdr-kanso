@@ -32,18 +32,35 @@ test('every overlapping coverage feature has one designed reference or one sourc
   }
 });
 
-test('Spend only draws designed states and lists its filter, plans and breakdown features for redesign', () => {
+test('Spend and PR feature states reference complete drawings', () => {
   const states = statesFor('Panels/Spend');
   assert.ok(states.length > 0);
   assert.ok(states.every((state) => ['proto', 'panels', 'kit'].includes(state.source)));
   assert.equal(states[0].id, 'panels/spend/SpendAtRestNow/Default');
-  for (const id of ['Spend/Filter picker', 'SpendSettings/Plans', 'SpendSettings/Plan added', 'SpendBreakdown/Projects', 'SpendBreakdown/Models', 'SpendBreakdown/Sessions', 'SpendBreakdown/Tasks']) {
-    assert.equal(byId.get(`coverage/spend/${id}`).gap, true, id);
+  for (const feature of records.filter((record) => record.source === 'coverage' && ['Panels/PR', 'Panels/Spend'].includes(record.page))) {
+    assert.equal(feature.gap, undefined, feature.id);
+    assert.ok(byId.get(feature.design)?.html, feature.id);
   }
   for (const file of ['arrange', 'chrome', 'menu', 'tabs', 'toast']) {
     const remaining = records.filter((record) => record.id.startsWith(`coverage/${file}/`));
     assert.ok(remaining.length > 0, file);
     assert.ok(remaining.every((record) => record.html !== undefined && !record.design && !record.gap), file);
+  }
+});
+
+test('Spend history includes its daily costs, zero days, peak and task filter', () => {
+  for (const state of ['Period bars', 'Task bars', 'Empty bars']) {
+    const feature = byId.get(`coverage/spend/SpendChart/${state}`);
+    const drawing = byId.get(feature.design);
+    assert.match(drawing.html, /kanso-chart--spend/, state);
+    const bars = [...drawing.html.matchAll(/role="listitem" aria-label="([^"]+)"/g)];
+    assert.equal(bars.length, 30, state);
+    assert.ok(bars.every(([, tip]) => /Nov \d+ · \$[\d.]+ · [\d,]+ tokens/.test(tip)), state);
+    assert.match(drawing.html, /kanso-chart__bar--empty/, state);
+    if (state !== 'Empty bars') assert.match(drawing.html, /kanso-chart__value/, state);
+    else assert.match(drawing.html, /No usage this month/);
+    if (state === 'Task bars') assert.match(drawing.html, /checkout/);
+    assert.match(drawing.caption, /^Proposed\. Sample /);
   }
 });
 
@@ -88,10 +105,10 @@ test('panel imports draw each frame once while preserving distinct frames and re
 });
 
 test('structure lint rejects overlapping drawings, missing design targets and missing feature lists', () => {
-  const feature = records.find((record) => record.gap), files = storyFiles(), template = read('stories/kit/ComponentPage.jsx');
+  const feature = { ...records.find(overlapFor), design: undefined, gap: true }, files = storyFiles(), template = read('stories/kit/ComponentPage.jsx');
   const raw = { ...feature, html: '<div class="kanso-panel">Legacy stub</div>' };
   assert.ok(structureErrors(files, pack([raw]), template).some((error) => /overlapping coverage/.test(error)));
   assert.ok(structureErrors(files, pack([{ ...feature, gap: undefined, design: 'missing' }]), template).some((error) => /missing designed drawing/.test(error)));
   assert.ok(structureErrors(files, pack([{ ...feature, location: '' }]), template).some((error) => /source location/.test(error)));
-  assert.ok(structureErrors(files, catalog, template.replace('<h3>{FEATURE_LABEL}</h3>', '')).some((error) => /plain feature list/.test(error)));
+  assert.ok(structureErrors(files, pack([feature]), template.replace('<h3>{FEATURE_LABEL}</h3>', '')).some((error) => /plain feature list/.test(error)));
 });

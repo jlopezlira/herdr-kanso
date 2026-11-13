@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { markupClasses, renameCss, renameMarkup, selectorClasses } from "./import-proto.mjs";
 import { expand, recordsFrom, replaceSource } from "./storybook-catalog.mjs";
 import { CSS_MARK, cssBlocks, normalizeCss } from "./storybook-css.mjs";
+import { panelStateRecords } from './storybook-panel-states.mjs';
 import { closeOf, withoutRepeats } from "./storybook-markup.mjs";
 export { cssBlocks } from "./storybook-css.mjs";
 export { closeOf, withoutRepeats } from "./storybook-markup.mjs";
@@ -262,7 +263,8 @@ export function generate(sourceDir, masterPath, notesPath, reportDir) {
     });
     return records;
   });
-  replaceSource("panels", records);
+  const references = expand(JSON.parse(readFileSync("stories/catalog.json", "utf8"))).filter((record) => record.source === "proto");
+  replaceSource("panels", [...records, ...panelStateRecords([...references, ...records])]);
   const master = readFileSync(masterPath, "utf8");
   writeFileSync("stories/proto.css", normalizeCss(css.content, { kit: true }));
   writeFileSync("stories/proto-sprite.svg", sprite);

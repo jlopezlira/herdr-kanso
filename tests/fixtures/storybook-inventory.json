@@ -46,8 +46,8 @@
       "id": "proto/components-header-digest/HeaderDigest/Default",
       "hash": "2c07a61933c82dd9ce822d6464f65c7b0964b1fd862d934c9897bdb6a7a0edb4",
       "captionHash": "e8cdd5e90d96e20dc0055fd174807be67fe3d3ebd7254b52d5a1bfb57510f89e",
-      "revisedHash": "e4028ae3c88fb4dc40619b0026167f12f9cea86de33e16acdb4cea5796407224",
-      "revision": "Sample session names"
+      "revisedHash": "36d20f951c8a013d3cd648cf7624e28fea5fb22c62d594a34d4f115f9d77faa6",
+      "revision": "One fact one home"
     },
     {
       "id": "proto/components-log/Log/Default",
@@ -83,8 +83,8 @@
       "id": "proto/components-pane-header/PaneHeader/Default",
       "hash": "7260dd6ee4f0747a2dda4d365bc96e50f818ed82e8bb67c7f96c46dfecffd8df",
       "captionHash": "082ecdd0c7ae0532f099b2d0f95753e3da980e11d11ebe32ab0ceaf34fcd10ac",
-      "revisedHash": "b767d7a96f07cdb3b2f7174af241dd9bada616c4217781bb93a4c563b88a9c55",
-      "revision": "Sample session names"
+      "revisedHash": "72466a3074b31c4e75a826433ebcd12dc0ed6daee5afbe997d474d6d4792ab0b",
+      "revision": "One fact one home"
     },
     {
       "id": "proto/components-pane-standing-in/PaneStandingIn/Default",
@@ -139,7 +139,9 @@
     {
       "id": "proto/components-shipped/Shipped/Default",
       "hash": "da3807d0bd9b6bf72c84f06e24f9ea53a336757f17037af8b491c1ee19483960",
-      "captionHash": "e4deb33249e1b7a5b00f7f1a4c86b1afde45c603d557b221ba7ff9e5eb6c9456"
+      "captionHash": "e4deb33249e1b7a5b00f7f1a4c86b1afde45c603d557b221ba7ff9e5eb6c9456",
+      "revisedHash": "aeef053d5d06018a6fe938e13f1d76edfaf73cbb99f878526e393c10f55f14d5",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "proto/components-simulator-screen/SimulatorScreen/Default",
@@ -149,12 +151,16 @@
     {
       "id": "proto/components-status-bar-working/StatusBarWorking/Default",
       "hash": "64055e171a3eea1231196363928170f5d59ebcf881fa532560fcdad0fa2e801c",
-      "captionHash": "2ad179b8f1faf87f3d8305c0b9cd6f8bc60f4967cdb2af3b898b9dc8a11fc233"
+      "captionHash": "2ad179b8f1faf87f3d8305c0b9cd6f8bc60f4967cdb2af3b898b9dc8a11fc233",
+      "revisedHash": "8b53ec866a1a06ab538fc582c349ffcb207096edc53c2a37f5122151097913fc",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "proto/components-status-bar/StatusBar/Default",
       "hash": "b0149acc1a9b9b7cf33715c0cd1e4d209297c42aa3aae8aba51c1a1d1793cdad",
-      "captionHash": "c625c3c77728c4754fdb699255a09576f73dcb45d3df6c4aa879e2115c9b5752"
+      "captionHash": "c625c3c77728c4754fdb699255a09576f73dcb45d3df6c4aa879e2115c9b5752",
+      "revisedHash": "e73a8e3a65b5ff85f12ce2308f095bdf95234e4c2dec1adbc6dc8ea0906adadc",
+      "revision": "One fact one home"
     },
     {
       "id": "proto/components-system-notification/SystemNotification/Default",
@@ -243,8 +249,8 @@
       "id": "proto/compositions-controls/ActionRows/Default",
       "hash": "0baedef653772aff4a940620fd36eb667dce23d53198f4504abfa76c3be12397",
       "captionHash": "c0b4115f10bebb8c8226be407fd10fd29952b666802acabeb3e6653bf6a26a2b",
-      "revisedHash": "ae476ea8354fb84af9fd74fc0abf4ad7a985b27598d6a7cebf6057fef97e3e70",
-      "revision": "Sample session names"
+      "revisedHash": "469bbb14d1a42d55e73fa499251cf59511b68cce0657146da60dcd7a263d45ea",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "proto/compositions-controls/ButtonWithAMark/Default",
@@ -291,7 +297,9 @@
     {
       "id": "proto/compositions-files-and-pr/Reply/Default",
       "hash": "aafe7246ce064739e223f4fddbb6d057a8f945f668c131a94cabc6bfa17bb9cc",
-      "captionHash": "c9a4ea3750d9714d146def472f406fa92bf0bd7c0033abd3802c341b25daee94"
+      "captionHash": "c9a4ea3750d9714d146def472f406fa92bf0bd7c0033abd3802c341b25daee94",
+      "revisedHash": "bd9737c6ff676b7a2d240215805b75e0ebc5e562fd674019f467a5f8347e06a5",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "proto/compositions-files-and-pr/Checks/Default",
@@ -318,7 +326,9 @@
     {
       "id": "proto/compositions-menu-and-dialog/Sleep/Default",
       "hash": "99f937a664b9ce9c11145a144bd3da0ebfd99afa4b2ae7c16bd9ccee0f19ec7d",
-      "captionHash": "f71369759220e6d58bfab4f755704eb335dfda90d37c4a68f7c0e707c366583d"
+      "captionHash": "f71369759220e6d58bfab4f755704eb335dfda90d37c4a68f7c0e707c366583d",
+      "revisedHash": "927ed8b5e7116c1a46b8cdeaa5fc71c9cc20327312c4fa4c4936e96b6417da92",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "proto/compositions-menu-and-dialog/Arrangement/Default",
@@ -407,12 +417,16 @@
     {
       "id": "proto/compositions-panel-pieces/ThumbnailStrip/Default",
       "hash": "08c0c9c2004f86369218e12851cf0733dd0188c4e5ef8857cb6dc28bddf43a23",
-      "captionHash": "4d92778e257cbbfffe77f6bd0f4b44c1f861324a6fbaa7ee16badbfd9016a9a8"
+      "captionHash": "4d92778e257cbbfffe77f6bd0f4b44c1f861324a6fbaa7ee16badbfd9016a9a8",
+      "revisedHash": "17ed256d740475f802466a3b3a9edcffac5b322621c4503f92438649df0bea5c",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "proto/compositions-sidebar-rows/Computer/Default",
       "hash": "b9538a7922ff6aed6685df3e35f8baf62494a66a7be0d2c504e4f5eebac54e28",
-      "captionHash": "fd3e97121b84b0205805aefdf47be63dea864af14f162f360b044417ace372a9"
+      "captionHash": "fd3e97121b84b0205805aefdf47be63dea864af14f162f360b044417ace372a9",
+      "revisedHash": "c14eb863c10f4fbe1705085b5aec94ffa7564013cc6c2a270ae76e34bb2e2fb3",
+      "revision": "One fact one home"
     },
     {
       "id": "proto/compositions-sidebar-rows/Project/Default",
@@ -496,8 +510,8 @@
       "id": "proto/compositions-states/FailureBlock/Default",
       "hash": "4189aab94a085c5cb96616c983acc55461ad025e8cb9a89ccac79648acfa5640",
       "captionHash": "9dfff8d995207b81345db8854278174b6ddcab0f4e80a48ae8550d18d450f3f2",
-      "revisedHash": "86971dea43c43758579b2afb96d74b4b16e0c33f80e400747151ef7af074f316",
-      "revision": "Sample session names"
+      "revisedHash": "d58faf5c3efad6b7cf41e6789efbf946d14923f5ccf5b2260c75a9ee4d76c026",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "proto/compositions-states/Empty/Default",
@@ -518,8 +532,8 @@
       "id": "proto/compositions-states/ThePatternEverywhere/Default",
       "hash": "916df2cadabceb00a98aa5c732c8539b34d36dea947d0cea384a023e422e57dc",
       "captionHash": "93fa243d56da5123e71f66f8f3b38f7e7ad5c16fccdea8cc0c36b0f26c6c8e0a",
-      "revisedHash": "e5625ec33416b37ae0736fb41b55ce4f5f5f8aba3028a30060af7051ee8f6612",
-      "revision": "Explain component"
+      "revisedHash": "95f766fdfa92180bd4e1480ce079a93435a4965ae1bcc76f504cf18cbb9b85d1",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "proto/layouts-hjkl-dojo/HjklDojo/Default",
@@ -530,8 +544,8 @@
       "id": "proto/layouts-right-click-any-piece/RightClickAnyPiece/Default",
       "hash": "4fe4fc1bcfb04f751652fdac0c65ee62d2e725ede085b367ec1cc3de11e32f23",
       "captionHash": "2abc57904c198bdfe01060017d04d5e6ed9b854ea51e17e02461b5eef88c6748",
-      "revisedHash": "d87a59f7cab6a9ab1d832aa7be9c3e1819d20bb93420a7d6a9e974f04f17bdb6",
-      "revision": "Visual match"
+      "revisedHash": "8210bc9073f90d9661fa1080efc7e4359146f2e0b01b4fcf6622feebb52b5498",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "proto/layouts-sidebar-at-rest/SidebarAtRest/Default",
@@ -547,8 +561,8 @@
       "id": "proto/layouts-window-at-rest/WindowAtRest/Default",
       "hash": "3ae2d32178c1e4e7d468956e125bffa4327f786ae41f450149d65665f9838c55",
       "captionHash": "209ae4ee80c20d281fc4869c8962f99ac3038bdee5934a8502352e7e68edd40f",
-      "revisedHash": "732796467691860502229be311fb0c959d1294ffcb5163bddf15a676328d05f5",
-      "revision": "Current session state"
+      "revisedHash": "7e902dddb0be01c6675f4d4fcfaba1f9fcc0bf2babc303c6d608b4d7168e84b4",
+      "revision": "One fact one home"
     },
     {
       "id": "proto/tokens-colour-and-wash/Washes/Default",
@@ -664,8 +678,8 @@
       "hash": "360850a1966e5b9de12d24fa079b69e104fda67ae7745539a7809b81e52d32a2",
       "captionHash": "a53111ec70c6c02f2ede10dec3693536f6d9488da592d76c5d55325375652361",
       "specHash": "046fc1f91cacb7202380654dbcb3b3b1a8bd24904581f7b33ebde0e4936553de",
-      "revisedHash": "2700a880f37fed61aea5bd28e211ef8e487a0746f839daffc526d511579d02d5",
-      "revision": "Single panel frame"
+      "revisedHash": "eda0cb33926cf19160d4908a51806262748f37d9ccb4cba8f13a49bb6630f96a",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/containers/ContainersDockerNotRunning/Default",
@@ -728,8 +742,8 @@
       "hash": "68e6e801f5aed46c2166a51186299c191ec0f3b2fa10dd77d3e9e9f9a529768c",
       "captionHash": "ff9f00d8aa694a7bf0ce1666c5adc6b03dbdc9003ebea67d8466c361f1e1d4f1",
       "specHash": "f8c2ffc4f683d893bcc0715cd5e731f5657171ccbc5a07301e47db6f79e37b8b",
-      "revisedHash": "31226892b80d0f7c815790d67506e563c8ba9a7636e6bb15115e0cac2dc54822",
-      "revision": "Single panel frame"
+      "revisedHash": "32a430a32c0d4f7d19ed463ec97a5592681e6c2ca3e4f8bf1304c261794ccf05",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/containers/ContainersNarrow300ActionsWrapImageHides/Default",
@@ -848,8 +862,8 @@
       "hash": "56faaa3aa731c81a2ec37741d2ad299d03f2d0595c3ee7a656f2230caba4fe7b",
       "captionHash": "584ef7c3a04ce2d01f992a61feb0124aa9e96aed57667b033857a7d09739ccfc",
       "specHash": "6f1248e05d7ef6b3a6d9285f7ab5e24ab863ca3ce1076ba46664be471c5df6e8",
-      "revisedHash": "0a0ddd3d55324734e36a6f10f77ff8b0727ef2252829c068f2f2ba8b2cf9ea41",
-      "revision": "Single panel frame"
+      "revisedHash": "b65db680b901d3b506f6724658b8a0f89d69e1143c480943e6883360e850adf8",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/files/FilesFirstRead/Default",
@@ -864,8 +878,8 @@
       "hash": "efda41cc01a4be5a7bf179a16a89484b6c39de09c5ec403d89c682ff62c28145",
       "captionHash": "720a556ade182daf9d4d13ed0402dd57ea3a8ba89f96ea35ca1fbf3f64547d33",
       "specHash": "a68e1d2805adffc850a47d85f1f175b07c30473d3f3b7fb194fb61eb3d81efc0",
-      "revisedHash": "83561a2366a9c2ceb1e74a115df08691c904528c78fad1489765ae4b2850286f",
-      "revision": "Single panel frame"
+      "revisedHash": "7ff6c98eb7d9c93f591024d2e017f57606ea3d63f3e4fd0c7c769ba0ac647c0c",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/files/FilesNoFolderForThisPane/Default",
@@ -896,8 +910,8 @@
       "hash": "20a657c47018da807029a9c4fa624ee347cca4408e588d22d2ac416363fc30ed",
       "captionHash": "13dbf2c5edf517aea3edfc75158cbbb52852babff8dd66bdeb728462ca3c4e6e",
       "specHash": "d9559917cfcf220c8a8cba73f4a58f1fe62c2f0f0ef0f87329297930cd537408",
-      "revisedHash": "b94cec22d6cd0b67f658f810b10073a19388f9905836f9a11b1e8c289202ddce",
-      "revision": "Single panel frame"
+      "revisedHash": "48fa987fbca34f51d1d3b2ded3eb254ce2e493a84bdb92de87849ace12b5bac5",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/files/FilesLight/Default",
@@ -944,8 +958,8 @@
       "hash": "a84e746ab5949fbfd63d7bf1078c7fe3869b15773301d551264f626d95927af3",
       "captionHash": "4162f492a25e93f83e956ecc63647db846007d0d03a04934a823ec841442e139",
       "specHash": "b88d9dab305cc8f6a608c04b2f58734941b59a610813ea645a328f74b3ad3917",
-      "revisedHash": "243af2bcdf2b3959c72a3d8d75bce582098eab96b8acb6627545070be7d31957",
-      "revision": "Single panel frame"
+      "revisedHash": "c4ce2a95c8b3b989ed7203346317357b2777d2e7c4adbebfce827da99f430ee7",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/images/ImagesAnotherComputerNotBroughtOverYet/Default",
@@ -992,8 +1006,8 @@
       "hash": "4b156196e02ba529320ade1128462dcae91f243aec3d0ab2c48c445d546ace41",
       "captionHash": "ff9f00d8aa694a7bf0ce1666c5adc6b03dbdc9003ebea67d8466c361f1e1d4f1",
       "specHash": "cfa0e00fcfde3dbc793c4ddfbac54c194ee368a960ff079730b97eff78aef15d",
-      "revisedHash": "f32ed4516cc65a1b71e7534f36a5b7c7a69d3f9fa82dd0cd8fbb82a2ef183ee2",
-      "revision": "Single panel frame"
+      "revisedHash": "5e170d010da6f3fdae189100964effde0678e1165a3f692319873b9aaf1d047d",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/images/ImagesNarrow300/Default",
@@ -1056,8 +1070,8 @@
       "hash": "5671579f8fbb119af7278347f00b4c85a0d283596bf32b392aa1f1b874766e9d",
       "captionHash": "22ed200b95dc727208eaef974fa7614b7888026c68ab9793163a95c5caf8ee6d",
       "specHash": "21487517ae23c7d7e147e8c62e5b5e9c9148159bb37371b70528b5bc1e769244",
-      "revisedHash": "977616f028eec0b697876dff4a84a96e7688be779c3e9df2b38b1e854c9f1388",
-      "revision": "Single panel frame"
+      "revisedHash": "d8298a3ababfccd133fa47edf966a1a570880141a5871a3054a7636b0313ed79",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/memory/MemoryGuardOff/Default",
@@ -1080,8 +1094,8 @@
       "hash": "20c8f08b5917df896f000a643fc5a5eb818bc40e9281aae3f8ae82315f90e090",
       "captionHash": "ff403a271a1b4ff8cdf1226795b9fa6ee8ff890f42fe354a75c42d4cffd4dd4a",
       "specHash": "be568ceff442c93257c3cf71b139a2b32d3d837b0e484f63973bae70b4819d7f",
-      "revisedHash": "317d381f756c36d9cce8929bf18f41a4e09914ffe6e98f304020d956f5d88076",
-      "revision": "Single panel frame"
+      "revisedHash": "3dc947129aa7d0806014a778775e7c9d02888696f1e25005c0fdf39e7cb6ee80",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/memory/MemoryStaleTheGuardStoppedAnswering/Default",
@@ -1232,16 +1246,16 @@
       "hash": "b8a3fa9405614b4d58af16f89b616a709aac379b338001f2087449d410744abb",
       "captionHash": "47762caf72fd1de9bac09df31f7511ad0383e3cfcee1aff7f53fa4d60a74fd15",
       "specHash": "0c6ef50c614285c1ddca166e49eb6360988b0a9478e9840b6b6aab75ad76920d",
-      "revisedHash": "cdcf14adde96091486573476c97109e73bdb3d5d15106b66ed10fcd9f615fa94",
-      "revision": "Single panel frame"
+      "revisedHash": "c9ca7a191b77f9f293261a76542c8a1f19694939270997d676ba0341340dfe15",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/pins/PinsCopyToDevboxRefused/Default",
       "hash": "e267026cceb344f7580bf17ab4383e77c17680f668eb16c979118e0647970191",
       "captionHash": "301c133d9563b7393550178fbace27ec473597a9921a4764787f417c9e1746e4",
       "specHash": "c0145b689b2cf1319bfe779919b949eb0509609a893a3d7b4ea9e6b83cd51a4b",
-      "revisedHash": "2203f0c6bfb9a746d7b0bb2baa01a9cdbb7246fdf57be5ecd990e62cf6340edb",
-      "revision": "Single panel frame"
+      "revisedHash": "f5c484ffa2ef9caefdd7246bf24b9dd842e4377d82e37a59bfd8548ebe2e1ca9",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/ports/PortsRestTwoWithNoPaneTwoInPanes/Default",
@@ -1264,8 +1278,8 @@
       "hash": "01fc37aae89e4f04fc221be2276a77f90426ed227b321943d89f5b26baf4b1d8",
       "captionHash": "dedee85ddabe632ce73832d09d435361ff37f141510c6bd84ca8377721e0b1ee",
       "specHash": "f4e9a6ba44fb2083a34cc72fc3d77b1fe1b0e19e85f51b9f96c7aa3eebf6c610",
-      "revisedHash": "e3461b34996c348c4e148a14f33472464500a0339b620f617b311d445c7484c6",
-      "revision": "Single panel frame"
+      "revisedHash": "12776de9989b8f11e69b1ad945d8c327cc70f29c1aefc97763256a51c8790a7f",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/ports/PortsHistoryOpenShareFromTheHeader/Default",
@@ -1312,16 +1326,16 @@
       "hash": "ae1ecfa19765e972e05d22664ddfc35827958b932e966fc137c61042b40a1f28",
       "captionHash": "ff9f00d8aa694a7bf0ce1666c5adc6b03dbdc9003ebea67d8466c361f1e1d4f1",
       "specHash": "fd603bd7c352e11134455586afebdeb6dc31a914e5e4a8b8cf79d2026edb7bf2",
-      "revisedHash": "eac4e275445d107a317c450d948335d061472963c060797c5b3b91722a057409",
-      "revision": "Single panel frame"
+      "revisedHash": "c40dc09114c70e7d130ac40c1e0a6d42c2b192bdcea7136b7b3796426913c526",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/ports/PortsFromTheStatusBarTheRowIsSelectedAndStopHasFocus/Default",
       "hash": "ea220b3488aa82b8351f39f32fbfcc4794caf1f685300cde73e5be9faa4aae50",
       "captionHash": "9076ba95b846bbe9428702a15586a4c86fd72c76b67615e9c7e244be724429c2",
       "specHash": "6d61b48231187da2c10c8ed3856d5228b979adc146b754ea5cb0dc5c0ce4dce7",
-      "revisedHash": "34c0c3888ddaa6e089882b8a6bab8a6032d74089eacb551d7e3b0beb7b2a39a7",
-      "revision": "Single panel frame"
+      "revisedHash": "9071ffad235af9bb011c5f889fe658f504d23cdafc6aa43c5f43aaf8e860fe6d",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/ports/PortsNarrow300TheCommandFoldsAway/Default",
@@ -1736,8 +1750,8 @@
       "hash": "6c54949a9f6296a538f931a20a9a60178c02e9a02175e86b91cfad39304289f5",
       "captionHash": "292ea0ce542970b131cae34edb7a042b2c0e467df40dd230b59f8ec500df396f",
       "specHash": "d838aea01c3280755edf823c99a02b410892bdb66e5015776b9f10d4e6244086",
-      "revisedHash": "89904060dc97e212b67eb4e6dedd8bd8eb012f76c29842aedc37d4b6741d6acf",
-      "revision": "Single panel frame"
+      "revisedHash": "1f44f57bcb9605a84f37775979c01a12ac6731d418979751f9d88dcc3ed08fe5",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/pr/PRActionsOnAnotherComputer/Default",
@@ -1808,8 +1822,8 @@
       "hash": "aeec99d4a347b22cb4b716933536ee563a89fec4775912b1d675098b6c37b80c",
       "captionHash": "e4efbe4acd5d51186f18ba08ec085da01f65033d26c5d373b504fd4250b0c39c",
       "specHash": "0317181e2e37d7c08a80c8262d6a6510f1073136c5ed9c2be3bb0e03b9f41b5c",
-      "revisedHash": "0877403a51d2db0ea99dc42c65247561617857b7b8069162c8fa0e53daa1c42c",
-      "revision": "Single panel frame"
+      "revisedHash": "b5180ed3551d9b2bc6db25d8510668429abb7833d6058e121d791479528e74d8",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/pr/PRDetailsLabelsStraightFromTheLocalStore/Default",
@@ -1920,8 +1934,8 @@
       "hash": "394b0cf994ea89a65eb8a635c102f740a8f69d98a5a3891e4b0057ea379acf38",
       "captionHash": "63ad800a8487f473f78789824c53f96ed350984e2ed5f94d5bf96b9b0fe37dc4",
       "specHash": "4869444d9c0ad97d250bd0ea83d064c036b1dee09ccde00a4997d93aa47a458e",
-      "revisedHash": "f556de9f1fdf9fad42915f5fcc1cfc46a89f539962623e5d9d902fd13b8a40f9",
-      "revision": "Single panel frame"
+      "revisedHash": "65047a752a91f2475d662ca263b86d8ea8275de5939db84f6f3b554ff3ad3b4c",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/pr/PRConversationOfflineKeptAndSaidOnce/Default",
@@ -2232,16 +2246,16 @@
       "hash": "ab43c47b58541aed074d3418efdbfca40051635120c2ba4e23d13674649977fb",
       "captionHash": "e77827b837ae190710be4faf9e11306dcd70474e7116cbb3e0362e6936aa8aed",
       "specHash": "04fc322255b85dbb1190d15acb0c374b8ea8ee176d7d626f71c1fd6fa8d5335f",
-      "revisedHash": "f8058464142638a06eb174adef5f355c0c403b9ed455714668b4bd4a784b2335",
-      "revision": "Single panel frame"
+      "revisedHash": "937c41dcaf5d32728d0966d1489b5d905a30e17e64ec2233711593daadf9bc45",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/shipped/ShippedAtRestBefore/Default",
       "hash": "977e137b8781e1277521e28e997928b49ae8927145a8c91ed2534d6bda1827c5",
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
-      "revisedHash": "6f215f8bac3eb3580023156c694e6fb4487303816c16d95739080c8ccd802c1d",
-      "revision": "Single panel frame"
+      "revisedHash": "e6781c65d18a71ddfb81a07aaff8767fd7317b5178d646e95177d5111a3d7307",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/shipped/ShippedAtRestNow/Default",
@@ -2336,8 +2350,8 @@
       "hash": "a5b74c55efbea5e3698ed701678af3d81822d4cf5ece56baa10e9b714ebe91ba",
       "captionHash": "117df079a719149144ea727b8ea4fe7409844d18eb41e298dc02bc989a8ef598",
       "specHash": "763722eb252a8c6508b4c3dc381be2976dcfe0bddd6abfca8d07b0c742baf00c",
-      "revisedHash": "ca19ad07e76884f7517b95fc1ee2ddb802376faa8fba6bded9e1e7d9192185c2",
-      "revision": "Single panel frame"
+      "revisedHash": "8c9a783818ba74c555e9c3c55001fe13c4b46c033e96614694c29c3867a21ce8",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/shipped/ShippedShareWhatLeavesThenWhere/Default",
@@ -2352,16 +2366,16 @@
       "hash": "98f9e93550f3836a192e684cc65e2d6243fb5a5ffc8baabab4f95186147a2b35",
       "captionHash": "97ac87a48e6bb77cd924230ec1069a47beddef7486bcb90b3e1942009ff7d5d0",
       "specHash": "9c05cc1b4556a5d711a4b6775021395b87cf77a49891d46c136876d7a5128b3e",
-      "revisedHash": "cbcd66d0b2632d57932ea4eefcd076eba6165c7a3adef775e2526616f9824b5b",
-      "revision": "Single panel frame"
+      "revisedHash": "3f4f228d10c9367c5a26e8b4adcca357340c8053bb8c2d24aabed635a8708c96",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/shipped/ShippedLightCard/Default",
       "hash": "98f9e93550f3836a192e684cc65e2d6243fb5a5ffc8baabab4f95186147a2b35",
       "captionHash": "10fc2c545b5e105684ad11700b5d6e9c32e25c8b7cd3e4d647ffb43757195030",
       "specHash": "47b7f40e4ff36a853560b71d17987a65a1d8edbb9963cd47f9ae231693084a5d",
-      "revisedHash": "cbcd66d0b2632d57932ea4eefcd076eba6165c7a3adef775e2526616f9824b5b",
-      "revision": "Single panel frame"
+      "revisedHash": "3f4f228d10c9367c5a26e8b4adcca357340c8053bb8c2d24aabed635a8708c96",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/simulator/SimulatorIOSThePicture/Default",
@@ -2416,8 +2430,8 @@
       "hash": "9c54c3dcb402d03c126e56eebe2f4014d7b3a05a4bec7abdbcedb4623f4f5e47",
       "captionHash": "6df751127f98fb7f0a170084cdf35e11a57a99d2e1c810c31ef29c57a42aa96a",
       "specHash": "dd5dd829f59fda5983736d3b475354d0716048a9c5f69c62318329dc2fb51432",
-      "revisedHash": "2af3da610c7b01b55ce7a8dccc6035d0e0fdeb1114db0e51b1905a0a6ff2025f",
-      "revision": "Single panel frame"
+      "revisedHash": "6a00d3c77f2b215365eea644fb3bd2d755c1c3c4e285e47c67cc52ddc5f6b484",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/simulator/SimulatorFirstRead/Default",
@@ -2498,8 +2512,8 @@
       "hash": "6d4a535569c5944d956af7c8d69e43360286986e397d58baf0cbf3e46d8c5dfa",
       "captionHash": "ff22bbf649bde11509963d625cd3722dbd83c58bf118804caa2cf4d14111ea3d",
       "specHash": "74d08c58fca04f32e37b5b6549e42a8b7d3ffc24c0ac1e5182e075db5b9bdad6",
-      "revisedHash": "f43e9ba53a687609505465810a1c9065023b300e0729fadfc026930d1ceef6ac",
-      "revision": "Single panel frame"
+      "revisedHash": "0eb24f7e0c8de0b6267cdf8ca5537d160f1e3433f9a4f79598a1949e0c56e697",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/simulator/SimulatorLightThreeNotes/Default",
@@ -2586,8 +2600,8 @@
       "hash": "5f9e8c4b0eb88fdf3ef6cd2875fecf06eb0208502a2d067ce06dd783ad8016dc",
       "captionHash": "172fa3b593e7a929083931382da8ebb3bd1ea3887ea8db076e0defed92b879c4",
       "specHash": "6375c4b4e46cce0b4fd1dffbffa06742d462df4f4a49b4d429b237d9e5907813",
-      "revisedHash": "3f903f93c291f84d8addfa334466475bdf869eae6e0e712fd1e59e2b63169c03",
-      "revision": "Single panel frame"
+      "revisedHash": "0e7a11e05e85738f5a0a625835f24b29eb438656d1fe5da02d166afc17a4826b",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/skeleton/SkeletonStaleAnotherComputerStoppedAnswering/Default",
@@ -2682,16 +2696,16 @@
       "hash": "193d6837ad6a2966338aa20e17abaacc8e6a677f2b246b7222886677e4266aac",
       "captionHash": "9660746a981a8e32f8d54308b0cdb7935ec0d531fae442a2d63e35a1b7d7861e",
       "specHash": "4d99b6e5b067eff7298de60850b9106e4e649a6a45e9c0f50c46e78c185a3ae1",
-      "revisedHash": "e75e3f38168a3b36a27a8f47cabdf622ce730e7c47d54413ade0f720a0a6e2e0",
-      "revision": "Single panel frame"
+      "revisedHash": "dccae9eb06e580514abc936cb1af064e7a5d6576dd43a6f6b2e983002cbe3f2a",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/spend/SpendAPlanThatCouldNotBeReadOnItsRow/Default",
       "hash": "acd9f3ce6eab681bca0079859225c8403492c26d53c956f11b3859a1dba66c9d",
       "captionHash": "0265aeba127bd16ba418804b300a5c65e56d4378e4c964892c8b09f49257750c",
       "specHash": "e2660e9ae817579b8816c776efea85ddfeadcb65968444bffc509432076c1593",
-      "revisedHash": "14c41217083df61c6b78a71d5fdd11de4e8a47c2315bc6a0eb77af92cbac7c97",
-      "revision": "Single panel frame"
+      "revisedHash": "ca56a0ca9c17b21d0f3e31d7f3e8644f5e613b198a78f897942bc656647a9732",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/spend/SpendAProjectOpenedFromItsRow/Default",
@@ -2746,16 +2760,16 @@
       "hash": "fb180e491d6ab2b87b349636f6f1a73586083ed2d2ec2196dd6010775571a5d2",
       "captionHash": "56030fdaebec3135d0ba10443feb4e2424090cf6bf084eb5b41d44ebc9b7368e",
       "specHash": "878f0622b2c2457ce3a37336b296752730f007926e25c12868ad1cc34dde3f40",
-      "revisedHash": "8b3e66901351743a36ca11e1347565c2325dd24a78ee715ad6767a7686337ef6",
-      "revision": "Single panel frame"
+      "revisedHash": "a546c7d1efe0e7c7f6b60a99b7eaf26be91c4eab00c242cc9b58a235c9af1b70",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/worktrees/WorktreesAtRestBefore/Default",
       "hash": "b29bead3baf9bfd7975a60976b50f8588e1d341e067ea15f21d549bc7a3f60da",
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
-      "revisedHash": "945e72bc249393d00d69f0e05f1300fa57d04f898b86a4d45f9de321854c4dd2",
-      "revision": "Single panel frame"
+      "revisedHash": "de1c9eda00d7df7f2a0803f7434e6a13147b552dc88d249a88b8095e07068a20",
+      "revision": "Ledger and kit roles"
     },
     {
       "id": "panels/worktrees/WorktreesAtRestNow/Default",
@@ -2858,16 +2872,16 @@
       "hash": "45972ea36b1edb01922bbb25cd4dd4d898c2db9eaf13cd1d7a9bcf0ec37bb6ea",
       "captionHash": "5c587160ad23d33f414496fb9b8053d9faf015e879e1866b7a0e9e55aed76cb4",
       "specHash": "fe6232aab439eadffacbac54cbbc2e509c6456f32fcaa898ef98e32a8797a57c",
-      "revisedHash": "8a7d8cb03a85cf96d542e9d624fe4536a319c593068385f7076612b3a3ccbed2",
-      "revision": "Single panel frame"
+      "revisedHash": "f11eac021079a700ef20f17b6162decf8ca74236502b6d300ac550e3d61fe358",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/worktrees/WorktreesARemovalRefused/Default",
       "hash": "0e38c14506b4c108b37ca998498e409d58db58e5556b49a58fd68c12fb4a6f8a",
       "captionHash": "489cbf8c05fa49b00cc17207ea48004b4cc937f2b0e7d691fa1ed815cd81dafb",
       "specHash": "e51b70977d1543cfdaf47d0e970f25ad184e85b1e2918a15922e925f54ccb431",
-      "revisedHash": "182dce5183f9e458ad3ea006ae56c3b09f8eb4e95b4a91b11f66ba1f55bd878d",
-      "revision": "Single panel frame"
+      "revisedHash": "4c613712aff47b3665c7b8ad485d8dd17a11efca9c0a426e5392811408f0b1c8",
+      "revision": "Failure action hierarchy"
     },
     {
       "id": "panels/worktrees/WorktreesOnAnotherComputerThenUnreachable/Default",

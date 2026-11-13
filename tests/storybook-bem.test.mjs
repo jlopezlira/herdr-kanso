@@ -30,7 +30,7 @@ test("kit, frame, preview and story classes use kanso BEM", () => {
   const preview = read(".storybook/preview.js");
   const [, canvas, docs] = /frame\.className = [^?]+\? '([^']+)' : '([^']+)'/.exec(preview);
   valid(`${canvas} ${docs}`.split(/\s+/), ".storybook/preview.js");
-  assert.deepEqual([...STORYBOOK_CLASSES], ["sb-show-main", "sbdocs", "sbdocs-wrapper", "sbdocs-content", "docs-story", "docblock-source"]);
+  assert.deepEqual([...STORYBOOK_CLASSES], ["sb-show-main", "sbdocs", "sbdocs-wrapper", "sbdocs-content", "docs-story", "docblock-source", "sbdocs-preview", "docblock-argstable", "docblock-argstable-body", "docblock-code-toggle"]);
 });
 
 test("the mapping covers the complete export class inventory without collisions", () => {
@@ -95,6 +95,7 @@ test("selector coverage respects structure, alternatives, states and both themes
   const tree = storyTree('<div class="a"><span class="b"></span><span class="c"></span></div>');
   const parent = tree.children[0].children[0].children[0], child = parent.children[0];
   assert.equal(matches(child, ".a > .b:first-child"), true);
+  assert.equal(matches(child, ".a\n.b"), true);
   assert.equal(matches(child, ".a.b"), false);
   assert.equal(matches(parent.children[1], ".b + .c:nth-child(2)"), true);
   assert.equal(matches(parent, ".a:has(>.c)"), true);

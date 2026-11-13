@@ -8,6 +8,7 @@ import { recordsFrom, replaceSource } from "./storybook-catalog.mjs";
 import { normalizeCss } from "./storybook-css.mjs";
 
 const CLASSES = {
+  "held": "kanso-control--held",
   "B": "kanso-mascot__pixel--blue",
   "C": "kanso-mascot__pixel--cream",
   "D": "kanso-mascot__pixel--light",
@@ -843,6 +844,7 @@ const RULE = /(^|[{}])([^{}]+)(?=\{)/g;
 
 export const STORYBOOK_CLASSES = new Set([
   "sb-show-main", "sbdocs", "sbdocs-wrapper", "sbdocs-content", "docs-story", "docblock-source",
+  "sbdocs-preview", "docblock-argstable", "docblock-argstable-body", "docblock-code-toggle",
 ]);
 export { CLASSES };
 

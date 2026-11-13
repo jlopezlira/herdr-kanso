@@ -9,7 +9,8 @@
       "Starting Docker": "panels/containers/ContainersStartingDocker/Default",
       "Read failed": "panels/containers/ContainersAReadFailed/Default",
       "Remote": "panels/containers/ContainersDockerOnAnotherMachineAContext/Default",
-      "Action failed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default"
+      "Action failed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
+      "Tool absent": "panels/containers/ContainerListToolabsent/Default"
     }
   },
   "containers/ContainerRow": {
@@ -19,7 +20,9 @@
       "Stopped": "panels/containers/ContainersRestOneExitedTwoRunningOneProjectNotStarted/Default",
       "Failed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
       "Remove armed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
-      "Details": "panels/containers/ContainersRunningSelectedDetailsOpen/Default"
+      "Details": "panels/containers/ContainersRunningSelectedDetailsOpen/Default",
+      "Pending": "panels/containers/ContainerRowPending/Default",
+      "Details absent": "panels/containers/ContainerRowDetailsabsent/Default"
     }
   },
   "containers/ComposeProject": {
@@ -39,7 +42,10 @@
       "Run image": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
       "Volumes": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
       "Cache": "panels/containers/ContainersDiskOpenPullAnImagesRunFormVolumesBuildCache/Default",
-      "Quit armed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default"
+      "Quit armed": "panels/containers/ContainersDownAndQuitArmedARemovalRefusedOnItsRowNotInAProject/Default",
+      "Invalid name": "panels/containers/ContainerDiskInvalidname/Default",
+      "Invalid port": "panels/containers/ContainerDiskInvalidport/Default",
+      "Prune armed": "panels/containers/ContainerDiskPrunearmed/Default"
     }
   },
   "guard/Memory": {
@@ -52,7 +58,10 @@
       "Unreadable": "panels/memory/MemoryStaleTheGuardStoppedAnswering/Default",
       "Installing": "panels/memory/MemoryTurnOnPending/Default",
       "Install failed": "panels/memory/MemoryTurnOnRefusedInTheInstallersWords/Default",
-      "Working set": "panels/memory/MemoryWindowsTheGuardReadsTheWorkingSet/Default"
+      "Working set": "panels/memory/MemoryWindowsTheGuardReadsTheWorkingSet/Default",
+      "Paused": "panels/memory/Memory/Paused",
+      "Stopped": "panels/memory/Memory/Stopped",
+      "Unsupported": "panels/memory/Memory/Unsupported"
     }
   },
   "guard/MemoryAgent": {
@@ -63,7 +72,12 @@
       "Needs user": "panels/memory/MemoryRestGuardOnOneAgentNeedsYouOnePastTheLimit/Default",
       "Focused idle": "panels/memory/MemoryOnlyTheAgentYouAreOnIsIdleNoBulkRecycle/Default",
       "Recycle armed": "panels/memory/MemoryRecycledOneRefusedOnItsRowAnAgentArmed/Default",
-      "Pending": "panels/memory/MemoryRecycle3IdleTwoConfirmedOnePending/Default"
+      "Pending": "panels/memory/MemoryRecycle3IdleTwoConfirmedOnePending/Default",
+      "Cannot recycle": "panels/memory/MemoryAgent/Cannot recycle",
+      "Close armed": "panels/memory/MemoryAgent/Close armed",
+      "More": "panels/memory/MemoryAgent/More",
+      "No agents": "panels/memory/MemoryAgent/No agents",
+      "Working": "panels/memory/MemoryAgent/Working"
     }
   },
   "guard/MemoryRecovery": {
@@ -72,25 +86,40 @@
       "Batch running": "panels/memory/MemoryRecycle3IdleTwoConfirmedOnePending/Default",
       "Batch completed": "panels/memory/MemoryRecycledOneRefusedOnItsRowAnAgentArmed/Default",
       "Batch refused": "panels/memory/MemoryRecycledOneRefusedOnItsRowAnAgentArmed/Default",
-      "Focused skipped": "panels/memory/MemoryOnlyTheAgentYouAreOnIsIdleNoBulkRecycle/Default"
+      "Focused skipped": "panels/memory/MemoryOnlyTheAgentYouAreOnIsIdleNoBulkRecycle/Default",
+      "Hung helpers": "panels/memory/MemoryRecovery/Hung helpers",
+      "Recovery failed": "panels/memory/MemoryRecovery/Recovery failed",
+      "Restart window": "panels/memory/MemoryRecovery/Restart window"
     }
   },
   "guard/MemoryHistory": {
     "page": "Panels/Memory",
     "states": {
       "History": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default",
-      "Refusal event": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default"
+      "Refusal event": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default",
+      "Share": "panels/memory/MemoryHistory/Share"
     }
   },
   "guard/MemoryChart": {
     "page": "Panels/Memory",
     "states": {
-      "Free memory": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default"
+      "Free memory": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default",
+      "Empty": "panels/memory/MemoryChart/Empty",
+      "Process spark": "panels/memory/MemoryChart/Process spark"
     }
   },
   "guard/SystemNotice": {
     "page": "Panels/Memory",
-    "states": {}
+    "states": {
+      "Batch": "panels/memory/SystemNotice/Batch",
+      "Did not resume": "panels/memory/SystemNotice/Did not resume",
+      "Recycled": "panels/memory/SystemNotice/Recycled",
+      "Restart loop": "panels/memory/SystemNotice/Restart loop",
+      "Restart needed": "panels/memory/SystemNotice/Restart needed",
+      "Restart scheduled": "panels/memory/SystemNotice/Restart scheduled",
+      "Terminal busy": "panels/memory/SystemNotice/Terminal busy",
+      "Window restarted": "panels/memory/SystemNotice/Window restarted"
+    }
   },
   "panel/Files": {
     "page": "Panels/Files",
@@ -102,7 +131,9 @@
       "No folder": "panels/files/FilesNoFolderForThisPane/Default",
       "Read failed": "panels/files/FilesErrorTheFoldersOwnWords/Default",
       "Stale": "panels/files/FilesStaleDevboxStoppedAnswering/Default",
-      "Keyboard": "panels/files/FilesRightClickARow/Default"
+      "Keyboard": "panels/files/FilesRightClickARow/Default",
+      "No files": "panels/files/FilesNofiles/Default",
+      "Limit": "panels/files/FilesLimit/Default"
     }
   },
   "panel/Preview": {
@@ -115,7 +146,11 @@
       "Too large": "panels/preview/PreviewTextOver1MBReadOnly/Default",
       "Binary": "panels/preview/PreviewTextBinary/Default",
       "Gone": "panels/preview/PreviewTextGoneFromDisk/Default",
-      "Conflict resolved": "panels/preview/PreviewTextAfterOverwriteOrReloadOneUndoNoQuestionBefore/Default"
+      "Conflict resolved": "panels/preview/PreviewTextAfterOverwriteOrReloadOneUndoNoQuestionBefore/Default",
+      "Loading": "panels/preview/FeaturePreview/Loading",
+      "Picture failed": "panels/preview/FeaturePreview/Picture failed",
+      "Read failed": "panels/preview/FeaturePreview/Read failed",
+      "Save failed": "panels/preview/FeaturePreview/Save failed"
     }
   },
   "panel/MarkdownEditing": {
@@ -128,14 +163,25 @@
       "Image deferred": "panels/preview/PreviewPicturesOnAnotherComputerOver2MBLoad/Default",
       "Read": "panels/preview/PreviewMarkdownFormatted/Default",
       "Editing": "panels/preview/PreviewMarkdownAClickEditsThatBlock/Default",
-      "Conflict": "panels/preview/PreviewTextChangedOnDiskWhileEdited/Default"
+      "Conflict": "panels/preview/PreviewTextChangedOnDiskWhileEdited/Default",
+      "Append": "panels/preview/FeatureMarkdownEditing/Append",
+      "Image failed": "panels/preview/FeatureMarkdownEditing/Image failed",
+      "Loading": "panels/preview/FeatureMarkdownEditing/Loading",
+      "Save failed": "panels/preview/FeatureMarkdownEditing/Save failed",
+      "Saving": "panels/preview/FeatureMarkdownEditing/Saving",
+      "Stale": "panels/preview/FeatureMarkdownEditing/Stale"
     }
   },
   "panel/ConversationFind": {
     "page": "Panels/Find",
     "states": {
       "Selected match": "proto/components-find-in-the-conversation/FindInTheConversation/Default",
-      "Full turn": "proto/components-find-in-the-conversation/FindInTheConversation/Default"
+      "Full turn": "proto/components-find-in-the-conversation/FindInTheConversation/Default",
+      "Empty query": "panels/find/ConversationFindEmptyquery/Default",
+      "Loading": "panels/find/ConversationFindLoading/Default",
+      "No matches": "panels/find/ConversationFindNomatches/Default",
+      "Stale": "panels/find/ConversationFindStale/Default",
+      "Unavailable": "panels/find/ConversationFindUnavailable/Default"
     }
   },
   "panel/Images": {
@@ -150,7 +196,11 @@
       "Sent": "panels/images/ImagesItsAgentWaitsOnYouSent/Default",
       "Blocked": "panels/images/ImagesItsAgentWaitsOnYouSent/Default",
       "Read failed": "panels/images/ImagesAReadFailed/Default",
-      "Stale": "panels/images/ImagesAnotherComputerUnreachable/Default"
+      "Stale": "panels/images/ImagesAnotherComputerUnreachable/Default",
+      "Sending": "panels/images/ImagesSending/Default",
+      "Send failed": "panels/images/ImagesSendfailed/Default",
+      "No conversation": "panels/images/ImagesNoconversation/Default",
+      "Wrong file type": "panels/images/ImagesWrongfiletype/Default"
     }
   },
   "panel/Ports": {
@@ -163,14 +213,19 @@
       "Loading": "panels/ports/PortsFirstRead/Default",
       "Empty": "panels/ports/PortsEmpty/Default",
       "Read failed": "panels/ports/PortsAReadFailed/Default",
-      "Remote stale": "panels/ports/PortsAnotherComputerUnreachable/Default"
+      "Remote stale": "panels/ports/PortsAnotherComputerUnreachable/Default",
+      "Force stop": "panels/ports/PortsForcestop/Default",
+      "Bulk stop": "panels/ports/PortsBulkstop/Default"
     }
   },
   "panel/PortHistory": {
     "page": "Panels/Ports",
     "states": {
       "Chart": "panels/ports/PortsHistoryOpenShareFromTheHeader/Default",
-      "History groups": "panels/ports/PortsHistoryOpenShareFromTheHeader/Default"
+      "History groups": "panels/ports/PortsHistoryOpenShareFromTheHeader/Default",
+      "Guard off": "panels/ports/PortHistoryGuardoff/Default",
+      "Unreadable": "panels/ports/PortHistoryUnreadable/Default",
+      "History stopped": "panels/ports/PortHistoryHistorystopped/Default"
     }
   },
   "panel/PullRequest": {
@@ -188,7 +243,12 @@
       "Merged": "panels/pr/PRListItsPullRequestWasMerged/Default",
       "Agent blocked": "panels/pr/PRActionsItsAgentWaitsOnYou/Default",
       "Stale": "panels/pr/PRActionsThatComputerUnreachable/Default",
-      "Write failed": "panels/pr/PRActionsMergeRefused/Default"
+      "Write failed": "panels/pr/PRActionsMergeRefused/Default",
+      "Changes requested": "panels/pr/PullRequestChangesrequested/Default",
+      "Closed": "panels/pr/PullRequestClosed/Default",
+      "Merge armed": "panels/pr/PullRequestMergearmed/Default",
+      "No agent": "panels/pr/PullRequestNoagent/Default",
+      "Send preview": "panels/pr/PullRequestSendpreview/Default"
     }
   },
   "panel/PullRequestContext": {
@@ -202,7 +262,12 @@
       "Loading": "panels/pr/PRListFirstRead/Default",
       "Read failed": "panels/pr/PRListGitHubNotAnswering/Default",
       "Rate limited": "panels/pr/PRListRateLimited/Default",
-      "Create pending": "panels/pr/PRListCreateAPullRequestInThePanel/Default"
+      "Create pending": "panels/pr/PRListCreateAPullRequestInThePanel/Default",
+      "Behind GitHub": "panels/pr/PullRequestContextBehindGitHub/Default",
+      "Detached": "panels/pr/PullRequestContextDetached/Default",
+      "No remote": "panels/pr/PullRequestContextNoremote/Default",
+      "Unpushed": "panels/pr/PullRequestContextUnpushed/Default",
+      "Unsupported remote": "panels/pr/PullRequestContextUnsupportedremote/Default"
     }
   },
   "panel/PullRequestList": {
@@ -210,7 +275,12 @@
     "states": {
       "Open": "panels/pr/PRListThePaneInFrontIsNotInGitTheListIsThePanel/Default",
       "Nothing open": "panels/pr/PRListNothingOpenAnywhere/Default",
-      "Inbox empty": "panels/pr/PRListAskedOfYouOpenedFromTheList/Default"
+      "Inbox empty": "panels/pr/PRListAskedOfYouOpenedFromTheList/Default",
+      "Closed": "panels/pr/PullRequestListClosed/Default",
+      "Loading closed": "panels/pr/PullRequestListLoadingclosed/Default",
+      "Nothing closed": "panels/pr/PullRequestListNothingclosed/Default",
+      "More": "panels/pr/PullRequestListMore/Default",
+      "Persist failed": "panels/pr/PullRequestListPersistfailed/Default"
     }
   },
   "panel/PullRequestDetails": {
@@ -222,7 +292,12 @@
       "Files": "panels/pr/PRDiffAFilesDiff/Default",
       "No text diff": "panels/pr/PRDiffDiffReadingAndNoText/Default",
       "Diff loading": "panels/pr/PRDiffDiffReadingAndNoText/Default",
-      "Truncated": "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default"
+      "Truncated": "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default",
+      "Copied link": "panels/pr/PullRequestDetailsCopiedlink/Default",
+      "Diff failed": "panels/pr/PullRequestDetailsDifffailed/Default",
+      "More checks": "panels/pr/PullRequestDetailsMorechecks/Default",
+      "No description": "panels/pr/PullRequestDetailsNodescription/Default",
+      "No people": "panels/pr/PullRequestDetailsNopeople/Default"
     }
   },
   "panel/PullRequestPicker": {
@@ -233,7 +308,10 @@
       "Pending": "panels/pr/PRDetailsReviewersThreeClicksNoWaiting/Default",
       "Loading": "panels/pr/PRDetailsTheVeryFirstOpenTheSkeletonOnceEver/Default",
       "No match": "panels/pr/PRDetailsNoMatchOffline/Default",
-      "Failed": "panels/pr/PRDetailsOneRefusedTheOthersUntouched/Default"
+      "Failed": "panels/pr/PRDetailsOneRefusedTheOthersUntouched/Default",
+      "Assignees": "panels/pr/PullRequestPickerAssignees/Default",
+      "Empty": "panels/pr/PullRequestPickerEmpty/Default",
+      "Truncated": "panels/pr/PullRequestPickerTruncated/Default"
     }
   },
   "panel/VerdictBody": {
@@ -243,7 +321,9 @@
       "Checks": "panels/pr/PRVerdictReviewRequiredWhoWasAsked/Default",
       "Log": "panels/pr/PRActionsFullLogAPageReadAlready/Default",
       "Comment": "panels/pr/PRConversationTheConversationInViewUnderTheVerdict/Default",
-      "Running": "panels/pr/PRVerdictChecksRunningAWaitNothingToExplain/Default"
+      "Running": "panels/pr/PRVerdictChecksRunningAWaitNothingToExplain/Default",
+      "No body": "panels/pr/VerdictBodyNobody/Default",
+      "Note": "panels/pr/VerdictBodyNote/Default"
     }
   },
   "panel/WorktreeVerdict": {
@@ -252,7 +332,16 @@
       "Changes": "panels/worktrees/WorktreesARowPickedRemoveArmed/Default",
       "Broken": "panels/worktrees/WorktreesItsRepositoryMovedRepair/Default",
       "Open": "panels/worktrees/WorktreesInATabGoToItInstead/Default",
-      "Checking": "panels/worktrees/WorktreesCheckingAgainTheLastScanKept/Default"
+      "Checking": "panels/worktrees/WorktreesCheckingAgainTheLastScanKept/Default",
+      "Detached": "panels/worktrees/FeatureWorktreeVerdict/Detached",
+      "Locked": "panels/worktrees/FeatureWorktreeVerdict/Locked",
+      "Lost": "panels/worktrees/FeatureWorktreeVerdict/Lost",
+      "Merged": "panels/worktrees/FeatureWorktreeVerdict/Merged",
+      "Missing": "panels/worktrees/FeatureWorktreeVerdict/Missing",
+      "Orphan": "panels/worktrees/FeatureWorktreeVerdict/Orphan",
+      "Recent": "panels/worktrees/FeatureWorktreeVerdict/Recent",
+      "Replaced": "panels/worktrees/FeatureWorktreeVerdict/Replaced",
+      "Unmerged": "panels/worktrees/FeatureWorktreeVerdict/Unmerged"
     }
   },
   "panel/Worktrees": {
@@ -267,12 +356,21 @@
       "Clean up armed": "panels/worktrees/WorktreesCleanUpArmed/Default",
       "Group actions": "panels/worktrees/WorktreesRemoveAllInAGroupArmed/Default",
       "Needs review": "panels/worktrees/WorktreesARowPickedRemoveArmed/Default",
-      "Remote stale": "panels/worktrees/WorktreesOnAnotherComputerThenUnreachable/Default"
+      "Remote stale": "panels/worktrees/WorktreesOnAnotherComputerThenUnreachable/Default",
+      "History failed": "panels/worktrees/FeatureWorktrees/History failed",
+      "Notice": "panels/worktrees/FeatureWorktrees/Notice",
+      "Removing": "panels/worktrees/FeatureWorktrees/Removing"
     }
   },
   "panel/WorktreeHistory": {
     "page": "Panels/Worktrees",
-    "states": {}
+    "states": {
+      "Disk split": "panels/worktrees/FeatureWorktreeHistory/Disk split",
+      "Freed": "panels/worktrees/FeatureWorktreeHistory/Freed",
+      "History loading": "panels/worktrees/FeatureWorktreeHistory/History loading",
+      "No history": "panels/worktrees/FeatureWorktreeHistory/No history",
+      "Repository split": "panels/worktrees/FeatureWorktreeHistory/Repository split"
+    }
   },
   "panel/Shipped": {
     "page": "Panels/Shipped",
@@ -281,23 +379,42 @@
       "Adding up": "panels/shipped/ShippedStillAddingUp/Default",
       "Sync failed": "panels/shipped/ShippedGitHubNotAnswering/Default",
       "Empty period": "panels/shipped/ShippedNothingInThisPeriod/Default",
-      "Records": "panels/shipped/ShippedThisWeek/Default"
+      "Records": "panels/shipped/ShippedThisWeek/Default",
+      "Past period": "panels/shipped/ShippedPastperiod/Default",
+      "No records": "panels/shipped/ShippedNorecords/Default",
+      "Repositories": "panels/shipped/ShippedRepositories/Default",
+      "Rhythm": "panels/shipped/ShippedRhythm/Default",
+      "Updating": "panels/shipped/ShippedUpdating/Default"
     }
   },
   "panel/Share": {
     "page": "Panels/Share",
     "states": {
       "Menu": "panels/share/ShareClosedOpenAPostPendingTheDojo/Default",
-      "Post ready": "panels/share/ShareClosedOpenAPostPendingTheDojo/Default"
+      "Post ready": "panels/share/ShareClosedOpenAPostPendingTheDojo/Default",
+      "Making": "panels/share/ShareMaking/Default",
+      "Failed": "panels/share/ShareFailed/Default",
+      "Saved": "panels/share/ShareSaved/Default",
+      "Clipboard fallback": "panels/share/ShareClipboardfallback/Default",
+      "Attach fallback": "panels/share/ShareAttachfallback/Default"
     }
   },
   "panel/ShareCard": {
     "page": "Panels/Share",
-    "states": {}
+    "states": {
+      "Ports": "panels/share/ShareCardPorts/Default",
+      "Memory": "panels/share/ShareCardMemory/Default",
+      "Spend": "panels/share/ShareCardSpend/Default",
+      "Dōjō": "panels/share/ShareCardDj/Default",
+      "Shipped": "panels/share/ShareCardShipped/Default"
+    }
   },
   "panel/CodeLimits": {
     "page": "Panels/Preview",
-    "states": {}
+    "states": {
+      "Truncated code": "panels/preview/FeatureCodeLimits/Truncated code",
+      "Truncated markdown": "panels/preview/FeatureCodeLimits/Truncated markdown"
+    }
   },
   "sim/Devices": {
     "page": "Panels/Simulator",
@@ -306,7 +423,13 @@
       "Off": "panels/simulator/SimulatorOff/Default",
       "Starting": "panels/simulator/SimulatorBooting/Default",
       "Booted": "panels/simulator/SimulatorDevicesTheListReplacesTheScreen/Default",
-      "Read failed": "panels/simulator/SimulatorError/Default"
+      "Read failed": "panels/simulator/SimulatorError/Default",
+      "Empty": "panels/simulator/FeatureDevices/Empty",
+      "Emulator binary missing": "panels/simulator/FeatureDevices/Emulator binary missing",
+      "Offline": "panels/simulator/FeatureDevices/Offline",
+      "Remote project": "panels/simulator/FeatureDevices/Remote project",
+      "Start timed out": "panels/simulator/FeatureDevices/Start timed out",
+      "Unauthorized": "panels/simulator/FeatureDevices/Unauthorized"
     }
   },
   "sim/DeviceControls": {
@@ -315,7 +438,9 @@
       "iOS": "panels/simulator/SimulatorIOSThePicture/Default",
       "Android device": "panels/simulator/SimulatorAndroidTouchKeysTheDevicesButtons/Default",
       "Android emulator": "panels/simulator/SimulatorAndroidTouchKeysTheDevicesButtons/Default",
-      "Command failed": "panels/simulator/SimulatorError/Default"
+      "Command failed": "panels/simulator/SimulatorError/Default",
+      "Acting": "panels/simulator/FeatureDeviceControls/Acting",
+      "URL invalid": "panels/simulator/FeatureDeviceControls/URL invalid"
     }
   },
   "sim/PictureState": {
@@ -323,7 +448,9 @@
     "states": {
       "First frame": "panels/simulator/SimulatorFirstRead/Default",
       "Stale frame": "panels/simulator/SimulatorThePictureStalled/Default",
-      "Touch": "panels/simulator/SimulatorAndroidTouchKeysTheDevicesButtons/Default"
+      "Touch": "panels/simulator/SimulatorAndroidTouchKeysTheDevicesButtons/Default",
+      "Key focus": "panels/simulator/FeaturePictureState/Key focus",
+      "No picture": "panels/simulator/FeaturePictureState/No picture"
     }
   },
   "spend/Spend": {
@@ -333,28 +460,52 @@
       "Loading": "panels/spend/SpendFirstRead/Default",
       "Empty": "panels/spend/SpendEmptyNothingThisMonth/Default",
       "Read failed": "panels/spend/SpendAReadFailedNothingKept/Default",
-      "Remote totals": "panels/spend/SpendSeveralComputersEachOnesSessionsSummed/Default"
+      "Remote totals": "panels/spend/SpendSeveralComputersEachOnesSessionsSummed/Default",
+      "Active sessions": "panels/spend/SpendActivesessions/Default",
+      "Filter active": "panels/spend/SpendFilteractive/Default",
+      "Filter picker": "panels/spend/SpendFilterpicker/Default",
+      "Partial scan": "panels/spend/SpendPartialscan/Default",
+      "Past period": "panels/spend/SpendPastperiod/Default",
+      "Refresh failed": "panels/spend/SpendRefreshfailed/Default",
+      "Remote unavailable": "panels/spend/SpendRemoteunavailable/Default",
+      "Runtime absent": "panels/spend/SpendRuntimeabsent/Default"
     }
   },
   "spend/SpendBreakdown": {
     "page": "Panels/Spend",
     "states": {
       "Task detail": "panels/spend/SpendATaskOpenedFromItsRow/Default",
-      "Project detail": "panels/spend/SpendAProjectOpenedFromItsRow/Default"
+      "Project detail": "panels/spend/SpendAProjectOpenedFromItsRow/Default",
+      "Projects": "panels/spend/SpendBreakdownProjects/Default",
+      "Models": "panels/spend/SpendBreakdownModels/Default",
+      "Tasks": "panels/spend/SpendBreakdownTasks/Default",
+      "Sessions": "panels/spend/SpendBreakdownSessions/Default",
+      "Model detail": "panels/spend/SpendBreakdownModeldetail/Default",
+      "More": "panels/spend/SpendBreakdownMore/Default"
     }
   },
   "spend/SpendSettings": {
     "page": "Panels/Spend",
     "states": {
       "Sources": "panels/spend/SpendSettingsSourcesAndPlansDetected/Default",
-      "Plan saved": "panels/spend/SpendAPlanCorrectedInPlace/Default"
+      "Plan saved": "panels/spend/SpendAPlanCorrectedInPlace/Default",
+      "Plans": "panels/spend/SpendSettingsPlans/Default",
+      "Plan added": "panels/spend/SpendSettingsPlanadded/Default",
+      "Plan invalid": "panels/spend/SpendSettingsPlaninvalid/Default",
+      "Settings failed": "panels/spend/SpendSettingsSettingsfailed/Default",
+      "Sources loading": "panels/spend/SpendSettingsSourcesloading/Default",
+      "Sources pending": "panels/spend/SpendSettingsSourcespending/Default",
+      "Prices": "panels/spend/SpendSettingsPrices/Default",
+      "Update policy": "panels/spend/SpendSettingsUpdatepolicy/Default",
+      "Share": "panels/spend/SpendSettingsShare/Default"
     }
   },
   "spend/SpendChart": {
     "page": "Panels/Spend",
     "states": {
-      "Period bars": "panels/spend/SpendAtRestNow/Default",
-      "Task bars": "panels/spend/SpendATaskOpenedFromItsRow/Default"
+      "Period bars": "panels/spend/FeatureSpendHistory/Period bars",
+      "Task bars": "panels/spend/FeatureSpendHistory/Task bars",
+      "Empty bars": "panels/spend/FeatureSpendHistory/Empty bars"
     }
   },
   "settings/Pieces": {
@@ -365,7 +516,10 @@
       "Status bar": "proto/components-settings-tabs/SettingsWhatShows/Default",
       "Tab bar and panels": "proto/components-settings-tabs/SettingsWhatShows/Default",
       "Notifications": "proto/components-settings-tabs/SettingsWhatShows/Default",
-      "Background": "proto/components-settings-tabs/SettingsWhatShows/Default"
+      "Background": "proto/components-settings-tabs/SettingsWhatShows/Default",
+      "Changed": "panels/settings/Pieces/Changed",
+      "Custom panel": "panels/settings/Pieces/Custom panel",
+      "No matches": "panels/settings/Pieces/No matches"
     }
   },
   "settings/Bindings": {
@@ -375,38 +529,100 @@
       "Sidebar": "proto/components-settings-tabs/Keys/Default",
       "Panes": "proto/components-settings-tabs/Keys/Default",
       "Vim keys": "proto/components-settings-tabs/Keys/Default",
-      "Moving along the strip": "proto/components-settings-tabs/Keys/Default"
+      "Moving along the strip": "proto/components-settings-tabs/Keys/Default",
+      "Capture": "panels/settings/Bindings/Capture",
+      "Changed": "panels/settings/Bindings/Changed",
+      "Conflict armed": "panels/settings/Bindings/Conflict armed",
+      "Family capture": "panels/settings/Bindings/Family capture",
+      "Invalid family": "panels/settings/Bindings/Invalid family",
+      "Memory, while its panel has the keyboard": "panels/settings/Bindings/Memory, while its panel has the keyboard",
+      "Preview, while it has the keyboard": "panels/settings/Bindings/Preview, while it has the keyboard",
+      "Spend, while its panel has the keyboard": "panels/settings/Bindings/Spend, while its panel has the keyboard",
+      "Unbound": "panels/settings/Bindings/Unbound",
+      "Write failed": "panels/settings/Bindings/Write failed"
     }
   },
   "settings/ReleaseControls": {
     "page": "Panels/Settings",
-    "states": {}
+    "states": {
+      "Cached": "panels/settings/ReleaseControls/Cached",
+      "Checking": "panels/settings/ReleaseControls/Checking",
+      "Checks off": "panels/settings/ReleaseControls/Checks off",
+      "Current": "panels/settings/ReleaseControls/Current",
+      "Early": "panels/settings/ReleaseControls/Early",
+      "Installing": "panels/settings/ReleaseControls/Installing",
+      "Loading": "panels/settings/ReleaseControls/Loading",
+      "Read failed": "panels/settings/ReleaseControls/Read failed",
+      "Stable": "panels/settings/ReleaseControls/Stable",
+      "Update ready": "panels/settings/ReleaseControls/Update ready"
+    }
   },
   "settings/CreditsLoading": {
     "page": "Panels/Settings",
-    "states": {}
+    "states": {
+      "Avatars pending": "panels/settings/CreditsLoading/Avatars pending",
+      "Avatars unavailable": "panels/settings/CreditsLoading/Avatars unavailable"
+    }
   },
   "markdown-panel/MarkdownFiles": {
     "page": "Panels/Markdown",
     "states": {
-      "Folder": "proto/components-markdown-window/MarkdownWindow/Default"
+      "Folder": "proto/components-markdown-window/MarkdownWindow/Default",
+      "Empty": "panels/markdown/FeatureMarkdownFiles/Empty",
+      "Keyboard": "panels/markdown/FeatureMarkdownFiles/Keyboard",
+      "Loading": "panels/markdown/FeatureMarkdownFiles/Loading",
+      "Recent": "panels/markdown/FeatureMarkdownFiles/Recent",
+      "Remote": "panels/markdown/FeatureMarkdownFiles/Remote",
+      "Review waiting": "panels/markdown/FeatureMarkdownFiles/Review waiting"
     }
   },
   "markdown-panel/MarkdownReview": {
     "page": "Panels/Markdown",
-    "states": {}
+    "states": {
+      "Another review": "panels/markdown/FeatureMarkdownReview/Another review",
+      "Marker failed": "panels/markdown/FeatureMarkdownReview/Marker failed",
+      "Review": "panels/markdown/FeatureMarkdownReview/Review",
+      "Save failed": "panels/markdown/FeatureMarkdownReview/Save failed",
+      "Saving": "panels/markdown/FeatureMarkdownReview/Saving"
+    }
   },
   "spaces/Sidebar": {
     "page": "Compositions/Sidebar",
-    "states": {}
+    "states": {
+      "Closed project": "proto/compositions-sidebar-features/Sidebar/Closed project",
+      "Incoming message": "proto/compositions-sidebar-features/Sidebar/Incoming message",
+      "Keyboard": "proto/compositions-sidebar-features/Sidebar/Keyboard",
+      "Loading": "proto/compositions-sidebar-features/Sidebar/Loading",
+      "Missing folder": "proto/compositions-sidebar-features/Sidebar/Missing folder",
+      "No agents": "proto/compositions-sidebar-features/Sidebar/No agents",
+      "No projects": "proto/compositions-sidebar-features/Sidebar/No projects",
+      "Pinned order": "proto/compositions-sidebar-features/Sidebar/Pinned order",
+      "Running command": "proto/compositions-sidebar-features/Sidebar/Running command",
+      "Search empty": "proto/compositions-sidebar-features/Sidebar/Search empty",
+      "Stacked panes": "proto/compositions-sidebar-features/Sidebar/Stacked panes",
+      "Stuck step": "proto/compositions-sidebar-features/Sidebar/Stuck step",
+      "Unread": "proto/compositions-sidebar-features/Sidebar/Unread"
+    }
   },
   "spaces/SidebarStatus": {
     "page": "Compositions/Sidebar",
-    "states": {}
+    "states": {
+      "Groups": "proto/compositions-sidebar-features/SidebarStatus/Groups",
+      "Empty": "proto/compositions-sidebar-features/SidebarStatus/Empty",
+      "Collapsed groups": "proto/compositions-sidebar-features/SidebarStatus/Collapsed groups"
+    }
   },
   "spaces/SidebarThreads": {
     "page": "Compositions/Sidebar",
-    "states": {}
+    "states": {
+      "Active": "proto/compositions-sidebar-features/SidebarThreads/Active",
+      "Asleep": "proto/compositions-sidebar-features/SidebarThreads/Asleep",
+      "Empty": "proto/compositions-sidebar-features/SidebarThreads/Empty",
+      "Pinned": "proto/compositions-sidebar-features/SidebarThreads/Pinned",
+      "Reading": "proto/compositions-sidebar-features/SidebarThreads/Reading",
+      "Settled": "proto/compositions-sidebar-features/SidebarThreads/Settled",
+      "Snoozed": "proto/compositions-sidebar-features/SidebarThreads/Snoozed"
+    }
   },
   "spaces/SidebarSort": {
     "page": "Compositions/Sidebar",
@@ -418,20 +634,39 @@
   },
   "spaces/ProjectGit": {
     "page": "Compositions/Sidebar",
-    "states": {}
+    "states": {
+      "Ahead": "proto/compositions-sidebar-features/ProjectGit/Ahead",
+      "Behind": "proto/compositions-sidebar-features/ProjectGit/Behind",
+      "Pulling": "proto/compositions-sidebar-features/ProjectGit/Pulling",
+      "Pull refused": "proto/compositions-sidebar-features/ProjectGit/Pull refused"
+    }
   },
   "spaces/Asleep": {
     "page": "Compositions/Sidebar",
-    "states": {}
+    "states": {
+      "Asleep menu": "proto/compositions-sidebar-features/Asleep/Asleep menu",
+      "Forget armed": "proto/compositions-sidebar-features/Asleep/Forget armed",
+      "Rail popup": "proto/compositions-sidebar-features/Asleep/Rail popup",
+      "Sleep stuck": "proto/compositions-sidebar-features/Asleep/Sleep stuck",
+      "Wake pending": "proto/compositions-sidebar-features/Asleep/Wake pending",
+      "Wake selected": "proto/compositions-sidebar-features/Asleep/Wake selected"
+    }
   },
   "spaces/NeedsQueue": {
     "page": "Compositions/Sidebar",
-    "states": {}
+    "states": {
+      "Empty": "proto/compositions-sidebar-features/NeedsQueue/Empty",
+      "Loading": "proto/compositions-sidebar-features/NeedsQueue/Loading",
+      "Queue": "proto/compositions-sidebar-features/NeedsQueue/Queue",
+      "Unavailable": "proto/compositions-sidebar-features/NeedsQueue/Unavailable"
+    }
   },
   "spaces/AwayEvents": {
     "page": "Compositions/Activity",
     "states": {
-      "Offscreen events": "proto/components-while-you-were-away/WhileYouWereAway/Default"
+      "Offscreen events": "proto/components-while-you-were-away/WhileYouWereAway/Default",
+      "No unseen events": "proto/compositions-sidebar-features/AwayEvents/No unseen events",
+      "Overflow": "proto/compositions-sidebar-features/AwayEvents/Overflow"
     }
   },
   "panel/HistoryChart/Ports": {
@@ -442,18 +677,26 @@
   },
   "panel/HistoryChart/Disk freed": {
     "page": "Panels/Worktrees",
-    "states": {}
+    "states": {
+      "Disk freed": "panels/worktrees/FeatureHistoryChart/Disk freed"
+    }
   },
   "panel/HistoryChart/Disk held": {
     "page": "Panels/Worktrees",
-    "states": {}
+    "states": {
+      "Disk held": "panels/worktrees/FeatureHistoryChart/Disk held"
+    }
   },
   "panel/HistoryChart/Shipping hours": {
     "page": "Panels/Shipped",
-    "states": {}
+    "states": {
+      "Shipping hours": "panels/shipped/HistoryChartShipping hoursShippinghours/Default"
+    }
   },
   "panel/HistoryChart/Shipped days": {
     "page": "Panels/Shipped",
-    "states": {}
+    "states": {
+      "Shipped days": "panels/shipped/HistoryChartShipped daysShippeddays/Default"
+    }
   }
 }

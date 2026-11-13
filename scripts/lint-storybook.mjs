@@ -6,6 +6,7 @@ import { SECTIONS, expand } from './storybook-catalog.mjs';
 import { explainErrors } from './storybook-components.mjs';
 import { gapDocument, overlapFor } from './storybook-coverage.mjs';
 import { descriptions } from '../stories/kit/descriptions.js';
+import references from "../stories/references.json" with { type: "json" };
 
 const STORY_FILE = /\.stories\.(?:js|jsx|mjs|ts|tsx)$/;
 
@@ -21,7 +22,7 @@ export function structureErrors(files, catalog, template) {
   const statePage = /(?:^|[ ,])(?:hover|focus|active|disabled|dimmed|loading|empty|failure|armed|pending|working|at rest|tab states)(?:$|[ ,])/i;
   const titleOf = (path, title) => {
     if (!SECTIONS.includes(title.split('/')[0]) || title.split('/').length !== 2) errors.push(`${path}: story outside the six sections`);
-    if (statePage.test(title.split('/')[1] ?? '')) errors.push(`${path}: state page instead of component`);
+    if (statePage.test(title.split('/')[1] ?? '') && !references.pages.some((reference) => reference.page === title && reference.boards.length)) errors.push(`${path}: state page instead of component`);
     if (titles.has(title)) errors.push(`${path}: duplicate title ${title}`);
     titles.set(title, path);
   };
@@ -39,7 +40,11 @@ export function structureErrors(files, catalog, template) {
     const explicit = /<Meta title="([^"]+)"/.exec(text)?.[1];
     if (explicit) {
       titleOf(path, explicit);
-      if (!/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
+      const named = /<ReferencePage page="([^"]+)" \/>/.exec(text)?.[1];
+      if (named) {
+        if (named !== explicit || !references.pages.some((reference) => reference.page === named && (!reference.existing || named.startsWith("Start/")))) errors.push(`${path}: unregistered named reference`);
+        docs.add(explicit);
+      } else if (!/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
     } else {
       const target = /import \* as stories from '\.\/([^']+)'/.exec(text)?.[1];
       const title = /page="([^"]+)"/.exec(text)?.[1];
