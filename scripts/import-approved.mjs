@@ -136,7 +136,6 @@ export function importApproved(file, root = ".") {
   writeFileSync(`${root}/stories/references.json`, `${JSON.stringify(references, null, 2).replaceAll("<", "\\u003c")}\n`);
   writeFileSync(`${root}/stories/proto.css`, css);
   replaceSource("proto", [...retained, ...records], root);
-  writeFileSync(`${root}/stories/ALIGNMENT.json`, `${JSON.stringify({ masterHash: hash(master), boards: evidence }, null, 2)}\n`);
   return { boards: evidence.length, drawings: records.length };
 }
 

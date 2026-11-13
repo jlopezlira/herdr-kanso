@@ -10,7 +10,7 @@ import { FEATURE_LABEL, FEATURE_NOTE } from './features.js';
 export function ComponentPage({ of, page }) {
   const states = statesFor(page);
   const name = page.split('/')[1];
-  const [what, when] = descriptions[name];
+  const description = descriptions[name];
   const [copied, setCopied] = useState(false);
   const [query, setQuery] = useState('');
   const visible = states.filter((state) => `${state.label} ${content(state.caption)}`.toLowerCase().includes(query.toLowerCase()));
@@ -21,12 +21,10 @@ export function ComponentPage({ of, page }) {
   const notes = [...new Set(states.flatMap((state) => state.notes ?? []))];
   return <article className="kanso-docs">
     <h1>{name}</h1>
+    <p>{description}</p>
     {referenceFor(page)?.approvedRecords?.length > 0 && <><h2>Approved reference</h2><ReferenceDrawings page={page} /></>}
-    <h2>What it is</h2><p>{what}</p>
-    <h2>When to use it</h2><p>{when}</p>
     {contexts.length > 0 && <><h2>Usage details</h2>{contexts.map((id) => <p key={id}>{content(id)}</p>)}</>}
     <h2>States</h2>
-    <p>Choose State to inspect a variant. The theme toolbar applies to every drawing. Fixtures use sample data.</p>
     <Canvas of={of.Variants} />
     <Controls of={of.Variants} />
     <label className="kanso-docs__filter">Find a state<input className="kanso-field" type="search" value={query} onChange={(event) => setQuery(event.target.value)} /></label>

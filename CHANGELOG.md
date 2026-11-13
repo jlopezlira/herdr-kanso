@@ -35,6 +35,7 @@ the branch's rules.
 - The count of commits behind is muted, not red.
 - Issue forms ask for steps to reproduce, test cases, acceptance criteria and what ready and done mean.
 - Storybook icons draw the exact Lucide shapes, and its checks run in under a second.
+- Storybook pages say what each piece is in one sentence and keep only the rules a drawing cannot show; its notes for contributors are one short guide.
 - Sidebar rows match their designs: an open project or computer shows no chevron, and folded it shows its most urgent mark and how many; a click on the current project folds it, and the count unfolds it. (#230)
 - A project shows + and the menu under the pointer, a detached checkout shows its commit, a kept project with a missing folder says Not found with Locate, and a project's name edits in place. (#230)
 - The behind and ahead counts say what a press does: pull from the upstream, or open the PR panel. (#230)

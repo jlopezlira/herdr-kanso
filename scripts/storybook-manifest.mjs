@@ -25,11 +25,11 @@ for (const entry of Object.values(index.entries).filter((entry) => entry.type ==
     continue;
   }
   const states = statesFor(doc.title);
-  const [what, when] = descriptions[doc.title.split('/')[1]];
+  const description = descriptions[doc.title.split('/')[1]];
   const contexts = [...new Set([...states, ...featuresFor(doc.title)].flatMap((state) => state.context === undefined ? [] : [state.context]))].map(content);
   const notes = [...new Set(states.flatMap((state) => state.notes ?? []))].map(content);
   doc.content = [
-    `# ${doc.title.split('/')[1]}`, '## What it is', what, '## When to use it', when, ...(contexts.length ? ['## Usage details', ...contexts] : []), '## States',
+    `# ${doc.title.split('/')[1]}`, description, ...(contexts.length ? ['## Usage details', ...contexts] : []), '## States',
     ...states.flatMap((state) => [`### ${state.label}`, content(state.caption), ...(state.location ? [`Source: ${state.location}`] : []), ...(state.spec ?? []).map(([label, value]) => `- **${content(label)}**: ${content(value)}`), ...state.coverage.map((feature) => `- ${feature.label}: ${content(feature.caption)} (${feature.location})`)]),
     ...(notes.length ? ['## Guidelines', ...notes] : []), '## Prompt for agents', '```text\n' + promptFor(doc.title, states) + '\n```',
     ...(featuresFor(doc.title).some((feature) => feature.gap) ? [`### ${FEATURE_LABEL}`, FEATURE_NOTE, ...featuresFor(doc.title).filter((feature) => feature.gap).map((feature) => `- ${feature.label}: ${content(feature.caption)} (${feature.location})`)] : []),
