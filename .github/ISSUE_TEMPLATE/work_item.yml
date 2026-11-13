@@ -1,0 +1,73 @@
+name: Work item
+description: "A change we plan: design, scope, acceptance criteria, ready and done."
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What changes and which modules.
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+  - type: input
+    id: design
+    attributes:
+      label: Design
+      description: The Storybook page or pages that define it.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: "One per line, each observable and testable: given, when, then."
+    validations:
+      required: true
+  - type: textarea
+    id: test-cases
+    attributes:
+      label: Test cases
+      description: "The tests that prove each criterion; name the file when it exists."
+  - type: checkboxes
+    id: ready
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: The Storybook page is approved and named above
+          required: true
+        - label: The modules to change are named
+          required: true
+        - label: Every feature the modules offer today is listed, so none is lost
+          required: true
+        - label: Each acceptance criterion is testable
+          required: true
+        - label: Out of scope is stated
+          required: true
+  - type: checkboxes
+    id: done
+    attributes:
+      label: Definition of Done
+      options:
+        - label: Every acceptance criterion is met, with evidence in the pull request
+          required: true
+        - label: Every listed feature still works and the pull request shows it
+          required: true
+        - label: The screen matches the Storybook page in both themes
+          required: true
+        - label: "Tests cover the change; npm test and the Storybook lint pass"
+          required: true
+        - label: CI is green on macOS, Windows and Linux
+          required: true
+        - label: CHANGELOG entry under Unreleased
+          required: true
+        - label: Merged to develop and verified in the running app on the beta
+          required: true

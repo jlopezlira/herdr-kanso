@@ -13,3 +13,10 @@ body:
       label: How you do it today
     validations:
       required: true
+  - type: textarea
+    id: works
+    attributes:
+      label: How we know it works
+      description: Observable outcomes, one per line.
+    validations:
+      required: true

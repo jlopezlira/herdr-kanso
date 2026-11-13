@@ -27,6 +27,7 @@ the branch's rules.
 ### Changed
 
 - The Storybook link in the site's navigation opens in a new tab.
+- Issue forms ask for steps to reproduce, test cases, acceptance criteria and what ready and done mean.
 
 ### Fixed
 
