@@ -45,7 +45,9 @@
     {
       "id": "proto/components-header-digest/HeaderDigest/Default",
       "hash": "2c07a61933c82dd9ce822d6464f65c7b0964b1fd862d934c9897bdb6a7a0edb4",
-      "captionHash": "e8cdd5e90d96e20dc0055fd174807be67fe3d3ebd7254b52d5a1bfb57510f89e"
+      "captionHash": "e8cdd5e90d96e20dc0055fd174807be67fe3d3ebd7254b52d5a1bfb57510f89e",
+      "revisedHash": "e4028ae3c88fb4dc40619b0026167f12f9cea86de33e16acdb4cea5796407224",
+      "revision": "Visual match"
     },
     {
       "id": "proto/components-log/Log/Default",
@@ -80,7 +82,9 @@
     {
       "id": "proto/components-pane-header/PaneHeader/Default",
       "hash": "7260dd6ee4f0747a2dda4d365bc96e50f818ed82e8bb67c7f96c46dfecffd8df",
-      "captionHash": "082ecdd0c7ae0532f099b2d0f95753e3da980e11d11ebe32ab0ceaf34fcd10ac"
+      "captionHash": "082ecdd0c7ae0532f099b2d0f95753e3da980e11d11ebe32ab0ceaf34fcd10ac",
+      "revisedHash": "b767d7a96f07cdb3b2f7174af241dd9bada616c4217781bb93a4c563b88a9c55",
+      "revision": "Visual match"
     },
     {
       "id": "proto/components-pane-standing-in/PaneStandingIn/Default",
@@ -160,7 +164,9 @@
     {
       "id": "proto/components-tab-bar/TabBar/Default",
       "hash": "43d9d376b6c672098b4b70da122275d5410b4eaa6d62e905f3eb0bf36d8f8d7c",
-      "captionHash": "a94f9d2c4285a87a196f11119be51ca4e1d63f0e55af70659c6cc67c701f4701"
+      "captionHash": "a94f9d2c4285a87a196f11119be51ca4e1d63f0e55af70659c6cc67c701f4701",
+      "revisedHash": "a13ce38a1631ca36b68b90dc03b85e42d7f86ccd27ecd543dbdf693d46b6740a",
+      "revision": "Visual match"
     },
     {
       "id": "proto/components-tab-states/TabStates/Default",
@@ -233,15 +239,15 @@
       "id": "proto/compositions-controls/ActionRows/Default",
       "hash": "0baedef653772aff4a940620fd36eb667dce23d53198f4504abfa76c3be12397",
       "captionHash": "c0b4115f10bebb8c8226be407fd10fd29952b666802acabeb3e6653bf6a26a2b",
-      "revisedHash": "1fdebe4d0e79a76880551a2a76508a28210c08a5ce1116b4561b3c19b96597ea",
-      "revision": "Explain component"
+      "revisedHash": "ae476ea8354fb84af9fd74fc0abf4ad7a985b27598d6a7cebf6057fef97e3e70",
+      "revision": "Visual match"
     },
     {
       "id": "proto/compositions-controls/ButtonWithAMark/Default",
       "hash": "ddfeb1aef9f2207ff3c5f328246637e40b776883e2a8b4113374eaf8e43ce5e0",
       "captionHash": "734be3e287bbe8c6f80ec01640176db22171f75bf7ff05b9136898040b4b60b7",
-      "revisedHash": "63c364f6a679eaa9d1af6ac85a2e92ed7ae4fd8c8987abb1119fd2ba701fa4bf",
-      "revision": "Explain component"
+      "revisedHash": "2120990c42fbb5751555daa729536cf26232c9747acc44f25c4d2a1933c7f7ce",
+      "revision": "Visual match"
     },
     {
       "id": "proto/compositions-controls/Armed/Default",
@@ -412,17 +418,23 @@
     {
       "id": "proto/compositions-sidebar-rows/AgentOneLine/Default",
       "hash": "bdc8e84c3da4c7504b23ee02f373c774da7111f69b231b86df07a999352ff68c",
-      "captionHash": "9d611416721290ca809afc75b2bfdb133d4e7bb349c08afc698c139a0409f656"
+      "captionHash": "9d611416721290ca809afc75b2bfdb133d4e7bb349c08afc698c139a0409f656",
+      "revisedHash": "ee912c78b87ae196cad8d7caff6b3680d8a46cd52a207b8cef8b7ab788f29b83",
+      "revision": "Visual match"
     },
     {
       "id": "proto/compositions-sidebar-rows/AgentTwoLines/Default",
       "hash": "f9a11cf62097c3c9055f7f99bfb14f152dab512353e18ad33330186222ffbd6c",
-      "captionHash": "aa9c7bd3e7cd32a522220b240b34acec91e62f7ad1543bf170f73c0239a5d0fc"
+      "captionHash": "aa9c7bd3e7cd32a522220b240b34acec91e62f7ad1543bf170f73c0239a5d0fc",
+      "revisedHash": "7ba6ad9d34df17a7e653672d4712d41184da4a45ac92d0d76a2b8665c3ac6427",
+      "revision": "Visual match"
     },
     {
       "id": "proto/compositions-sidebar-rows/SubAgent/Default",
       "hash": "52b3dc85c1b0091a9383b961b0c5731c19b84a7710c31a78aa200d398ddbc4fc",
-      "captionHash": "625298211f8b8ae448000fc2f5c60ab3024b38232b9086bfc127b08404a316e0"
+      "captionHash": "625298211f8b8ae448000fc2f5c60ab3024b38232b9086bfc127b08404a316e0",
+      "revisedHash": "679019ca1dfe882760403a41963e6f0305ac492695fd5ba01abafcc814b1c9e3",
+      "revision": "Visual match"
     },
     {
       "id": "proto/compositions-sidebar-rows/Asleep/Default",
@@ -478,8 +490,8 @@
       "id": "proto/compositions-states/FailureBlock/Default",
       "hash": "4189aab94a085c5cb96616c983acc55461ad025e8cb9a89ccac79648acfa5640",
       "captionHash": "9dfff8d995207b81345db8854278174b6ddcab0f4e80a48ae8550d18d450f3f2",
-      "revisedHash": "19a0f0bbefcf2be4e63f2965a4eb8b840147a2d3abd3860ded72c133cb37b605",
-      "revision": "Explain component"
+      "revisedHash": "86971dea43c43758579b2afb96d74b4b16e0c33f80e400747151ef7af074f316",
+      "revision": "Visual match"
     },
     {
       "id": "proto/compositions-states/Empty/Default",
@@ -500,8 +512,8 @@
       "id": "proto/compositions-states/ThePatternEverywhere/Default",
       "hash": "916df2cadabceb00a98aa5c732c8539b34d36dea947d0cea384a023e422e57dc",
       "captionHash": "93fa243d56da5123e71f66f8f3b38f7e7ad5c16fccdea8cc0c36b0f26c6c8e0a",
-      "revisedHash": "a6bf9ffe6e96ec47bee887f9be235934e167e433957dc05096f591bf9f2291fc",
-      "revision": "Explain component"
+      "revisedHash": "a78f3bd551c19500285ce59886599565d933c398ac0ace6e68495ead334b75d4",
+      "revision": "Visual match"
     },
     {
       "id": "proto/layouts-hjkl-dojo/HjklDojo/Default",
@@ -511,7 +523,9 @@
     {
       "id": "proto/layouts-right-click-any-piece/RightClickAnyPiece/Default",
       "hash": "4fe4fc1bcfb04f751652fdac0c65ee62d2e725ede085b367ec1cc3de11e32f23",
-      "captionHash": "2abc57904c198bdfe01060017d04d5e6ed9b854ea51e17e02461b5eef88c6748"
+      "captionHash": "2abc57904c198bdfe01060017d04d5e6ed9b854ea51e17e02461b5eef88c6748",
+      "revisedHash": "d87a59f7cab6a9ab1d832aa7be9c3e1819d20bb93420a7d6a9e974f04f17bdb6",
+      "revision": "Visual match"
     },
     {
       "id": "proto/layouts-sidebar-at-rest/SidebarAtRest/Default",
@@ -526,7 +540,9 @@
     {
       "id": "proto/layouts-window-at-rest/WindowAtRest/Default",
       "hash": "3ae2d32178c1e4e7d468956e125bffa4327f786ae41f450149d65665f9838c55",
-      "captionHash": "209ae4ee80c20d281fc4869c8962f99ac3038bdee5934a8502352e7e68edd40f"
+      "captionHash": "209ae4ee80c20d281fc4869c8962f99ac3038bdee5934a8502352e7e68edd40f",
+      "revisedHash": "588d590eda59885f5f8c2ea2d5ea3fc5171f721708f616900a82e7d7e8a780fb",
+      "revision": "Visual match"
     },
     {
       "id": "proto/tokens-colour-and-wash/Washes/Default",
@@ -571,7 +587,9 @@
     {
       "id": "proto/tokens-icons/PendingDotAndGlint/Default",
       "hash": "f8ff72f1972d7200cb9802085e9e19785496c6c447a779fac91cc4cbac36c912",
-      "captionHash": "cdad47a7d12d15990b97277faeb3ad7c5769fe6858be8a50176b17fddad9e5d2"
+      "captionHash": "cdad47a7d12d15990b97277faeb3ad7c5769fe6858be8a50176b17fddad9e5d2",
+      "revisedHash": "8094935e4e10ad46bc70473761cde9b37b86a70b2dcb18bf18da8164b53bf021",
+      "revision": "Visual match"
     },
     {
       "id": "proto/tokens-icons/TheWholeSet/Default",
@@ -591,7 +609,9 @@
     {
       "id": "proto/tokens-type/OneLineNeverWraps/Default",
       "hash": "e54700ac914a858d1a3da1a8b417a57d34a18d07ed2381f14479443fc68edb00",
-      "captionHash": "0f7332f0db22a902118402fc883a79a51983af710fe7d483eb3091b1a7965d23"
+      "captionHash": "0f7332f0db22a902118402fc883a79a51983af710fe7d483eb3091b1a7965d23",
+      "revisedHash": "8321406f6ed40b6d78645c684ef3da6c10a0474539d8ec184ab42a9dc6340af7",
+      "revision": "Visual match"
     },
     {
       "id": "panels/availability/AvailabilityAMacWithDockerXcodeAndTheGuard/Default",
