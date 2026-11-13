@@ -2,10 +2,10 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { markupClasses, renameCss, renameMarkup, selectorClasses } from "./import-proto.mjs";
 
 const OUT = "stories/panels";
 const CSS_MARK = "/* Additional panel drawing rules. Written by scripts/import-panels.mjs. */";
-export const CLASS_NAMES = {};
 const q = JSON.stringify;
 const plain = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const slug = (s) => plain(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -46,7 +46,8 @@ export function clean(s) {
 }
 
 const mdx = (s) => clean(s).split(/(`[^`]*`)/).map((part, i) => i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`)).join("");
-export const drawing = (html) => html.replace(/class="([^"]*)"/g, (_, classes) => `class="${classes.split(/\s+/).filter((c) => c !== "k-dark" && c !== "k-light").map((c) => CLASS_NAMES[c] ?? c).join(" ")}"`);
+const unthemed = (html) => html.replace(/class="([^"]*)"/g, (_, classes) => `class="${classes.split(/\s+/).filter((c) => c !== "k-dark" && c !== "k-light").join(" ")}"`);
+export const drawing = (html) => renameMarkup(unthemed(html));
 
 export function entriesOf(html) {
   const entries = [];
@@ -62,6 +63,24 @@ export function entriesOf(html) {
     if (!code) throw new Error(`Missing source reference: ${title}`);
     entries.push({ group, title, code, html: block(story, "st-ex"), spec: block(story, "st-doc") });
     tags.lastIndex = end;
+  }
+  return entries;
+}
+
+export function sourceEntries(sources, manifest, minimums = []) {
+  const entries = sources.flatMap((source, i) => {
+    const count = markupClasses(source).filter((name) => name === "story").length;
+    const extracted = entriesOf(source);
+    if (count < (minimums[i] ?? 1) || count !== extracted.length) throw new Error(`Source ${i + 1}: expected at least ${minimums[i] ?? 1} stories, found ${count}, extracted ${extracted.length}`);
+    return extracted;
+  });
+  const titles = entries.map((entry) => entry.title);
+  const listed = [...manifest.matchAll(/^- (.*)$/gm)];
+  if (!listed.length) throw new Error("The story list is empty");
+  for (const [, title] of listed) {
+    const i = titles.indexOf(decode(title));
+    if (i < 0) throw new Error(`Missing listed story: ${title}`);
+    titles.splice(i, 1);
   }
   return entries;
 }
@@ -83,7 +102,7 @@ const PANEL_CODES = {
   P01: "Files", P02: "Files", P03: "Preview", P04: "Preview", P05: "Preview",
   "06": "PR", "07": "PR", P06: "PR", P07: "PR", P08: "PR", P09: "PR", P10: "PR", P15: "PR", P16: "PR",
   P11: "Shipped", P12: "Shipped", P13: "Worktrees", P14: "Worktrees",
-  Q1: "Ports", S1: "Ports", Q2: "Containers", S2: "Containers", Q3: "Memory", S3: "Memory", Q4: "Spend", S4: "Spend", Q5: "Images", S5: "Images", Q6: "Simulator", S6: "Simulator",
+  Q1: "Ports", S1: "Ports", Q2: "Containers", S2: "Containers", Q3: "Memory", S3: "Memory", Q4: "Spend", S4: "Spend", Q5: "Images", S5: "Images", Q6: "Simulator", S6: "Simulator", Q11: "Simulator",
 };
 const CONTEXT = { P03: "Text", P04: "Markdown", P05: "Pictures", "06": "List", "07": "List, light", P06: "List", P07: "Verdict", P08: "Actions", P09: "Details", P10: "Diff", P15: "Long diff", P16: "Conversation" };
 const FOLDERS = {
@@ -120,7 +139,7 @@ function pageFor(entry, firstScreen) {
     if (!firstScreen.name) throw new Error("First screen without a panel");
     return firstScreen.name;
   }
-  const page = PANEL_CODES[entry.code];
+  const page = PANEL_CODES[entry.code] ?? entry.group;
   if (!DESCRIPTIONS[page]) throw new Error(`No page for ${entry.code}`);
   return page;
 }
@@ -142,11 +161,11 @@ export function cssBlocks(css) {
   return blocks;
 }
 
-function addCss(sources, markup) {
+export function panelCss(sources, markup) {
   const file = "stories/proto.css";
   const base = readFileSync(file, "utf8").split(CSS_MARK)[0].trimEnd();
   const existing = new Set();
-  const used = new Set([...markup.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)));
+  const used = new Set(markupClasses(markup));
   const additions = [];
   function visit(css, context = "", collect = false) {
     const kept = [];
@@ -158,15 +177,17 @@ function addCss(sources, markup) {
         const nested = visit(rule.slice(brace + 1, -1), key, collect);
         if (nested.length) kept.push(`${rule.slice(0, brace + 1)}${nested.join("\n")}}`);
       } else if (!collect) existing.add(key);
-      else if (!existing.has(key)) {
-        const classes = [...selector.matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
-        const chrome = /\b(?:board|bh|bg|notes|ctl-[\w-]+|lnav|grp-[\w-]+|st-doc|st-code|st-body|story|page|nav|top|k-dark|k-light)\b/;
+      else {
+        const classes = selectorClasses(selector);
+        const chrome = /^(?:board|bh|bg|notes|ctl-[\w-]+|lnav[\w-]*|grp-[\w-]+|st-doc|st-code|st-body|story|page|nav|top|k-dark|k-light)$/;
         const applies = selector.split(",").some((part) => {
-          const names = [...part.matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
+          const names = selectorClasses(part);
           return names.length && names.every((name) => used.has(name));
         });
         if (classes.length && applies && !classes.some((c) => chrome.test(c))) {
-          kept.push(rule); existing.add(key);
+          const mapped = renameCss(rule);
+          const mappedKey = `${context}|${mapped.slice(0, mapped.indexOf("{")).trim().replace(/\s+/g, " ")}`;
+          if (!existing.has(mappedKey)) { kept.push(mapped); existing.add(mappedKey); }
         }
       }
     }
@@ -188,13 +209,29 @@ function addCss(sources, markup) {
         }
       }
     }
-    if (declarations.length) additions.push(`:root[data-theme="${theme}"] .k{${declarations.join(";")}}`);
+    if (declarations.length) additions.push(renameCss(`:root[data-theme="${theme}"] .k{${declarations.join(";")}}`));
   }
-  writeFileSync(file, `${base}\n\n${CSS_MARK}\n${additions.join("\n")}\n`);
-  return additions.length;
+  return { content: `${base}\n\n${CSS_MARK}\n${additions.join("\n")}\n`, count: additions.length };
 }
 
-const canonical = (s) => drawing(s).replace(/<!--.*?-->/gs, "").replace(/ tabindex="0"/g, "").replace(/>\s+</g, "><").replace(/\s+/g, " ").trim();
+function panelSprite(sources, entries) {
+  let sprite = readFileSync("stories/proto-sprite.svg", "utf8");
+  const ids = new Set([...sprite.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
+  const additions = [];
+  for (const entry of entries) {
+    const local = new Set([...entry.html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
+    for (const [, id] of entry.html.matchAll(/href="#([^"]+)"/g)) {
+      if (ids.has(id) || local.has(id)) continue;
+      const symbol = sources.flatMap((source) => [...source.matchAll(/<symbol\b[^>]*>.*?<\/symbol>/gs)]).find((m) => m[0].includes(`id="${id}"`));
+      if (!symbol) throw new Error(`Missing symbol: ${id}`);
+      additions.push(renameMarkup(symbol[0])); ids.add(id);
+    }
+  }
+  if (additions.length) sprite = sprite.replace(/<\/svg>\s*$/, `${additions.join("\n")}\n</svg>\n`);
+  return sprite;
+}
+
+const canonical = (s) => s.replace(/<!--.*?-->/gs, "").replace(/ tabindex="0"/g, "").replace(/>\s+</g, "><").replace(/\s+/g, " ").trim();
 
 function inventory(master, reportDir) {
   const previous = readdirSync("stories/proto").filter((f) => f.endsWith(".json")).flatMap((f) => Object.values(JSON.parse(readFileSync(join("stories/proto", f), "utf8"))).map((s) => canonical(s.html)));
@@ -209,7 +246,7 @@ function inventory(master, reportDir) {
       if (!/class="([^"]*)"/.exec(k[0])[1].split(/\s+/).includes("k")) continue;
       const end = closeOf(body, k.index);
       const inner = body.slice(k.index + k[0].length, end - 6);
-      if (inner.trim()) frames.push(canonical(inner));
+      if (inner.trim()) frames.push(canonical(drawing(inner)));
       tags.lastIndex = end;
     }
     const covered = frames.length > 0 && frames.every((frame) => previous.some((story) => story.includes(frame)));
@@ -219,15 +256,13 @@ function inventory(master, reportDir) {
   }
   if (rows.length !== 95) throw new Error(`Expected 95 sections, found ${rows.length}`);
   mkdirSync(reportDir, { recursive: true });
-  writeFileSync(join(reportDir, "boards.md"), `# Drawing coverage before the panel import\n\nCoverage compares complete drawn frames against existing JSON markup, ignoring theme classes, whitespace and added keyboard focus attributes. A matching primitive or a matching title does not cover a full frame. Yes means every frame is present. No-frame reference tables are marked no; they are not missing panel states. Folders describe the content's home; the updated source limits this import to the supplied 280 panel stories.\n\n| Id | Title | Folder | Covered |\n| --- | --- | --- | --- |\n${rows.map((r) => `| ${r.id} | ${r.title.replaceAll("|", "\\|")} | ${r.folder} | ${r.covered ? "yes" : "no"} |`).join("\n")}\n\nTotal: ${rows.length}; covered before: ${rows.filter((r) => r.covered).length}; reference sections without drawn frames: ${rows.filter((r) => !r.frames).map((r) => r.id).join(", ")}.\n`);
+  writeFileSync(join(reportDir, "boards.md"), `# Drawing coverage before the panel import\n\nCoverage compares complete drawn frames against existing JSON markup, ignoring theme classes, whitespace and added keyboard focus attributes, with the shared BEM mapping applied to the source. A matching primitive or a matching title does not cover a full frame. Yes means every frame is present. No-frame reference tables are marked no; they are not missing panel states. Folders describe the content's home; the updated source limits this import to the supplied panel stories.\n\n| Id | Title | Folder | Covered |\n| --- | --- | --- | --- |\n${rows.map((r) => `| ${r.id} | ${r.title.replaceAll("|", "\\|")} | ${r.folder} | ${r.covered ? "yes" : "no"} |`).join("\n")}\n\nTotal: ${rows.length}; covered before: ${rows.filter((r) => r.covered).length}; reference sections without drawn frames: ${rows.filter((r) => !r.frames).map((r) => r.id).join(", ")}.\n`);
   return rows;
 }
 
 export function generate(sourceDir, masterPath, notesPath, reportDir) {
   const sources = ["a", "b", "c"].map((part) => readFileSync(join(sourceDir, `kanso-sb-panels-${part}.html`), "utf8"));
-  const entries = sources.flatMap(entriesOf);
-  const expected = [...readFileSync(join(sourceDir, "panel-stories.md"), "utf8").matchAll(/^- /gm)].length;
-  if (entries.length !== expected || expected !== 280) throw new Error(`Expected 280 states, found ${entries.length}, listed ${expected}`);
+  const entries = sourceEntries(sources, readFileSync(join(sourceDir, "panel-stories.md"), "utf8"), [92, 97, 101]);
   const notes = new Map(readFileSync(notesPath, "utf8").split(/^## /m).slice(1).map((part) => [part.split(" ")[0], part.slice(part.indexOf("\n") + 1).trim()]));
   const pages = new Map();
   const firstScreen = {};
@@ -252,6 +287,13 @@ export function generate(sourceDir, masterPath, notesPath, reportDir) {
     const before = entry.code === "P17" && (state === "At rest, Before" || state === "At rest, comparison");
     dest.stories[key] = { name, caption: `${before ? "The previous design is kept as a reference beside the current design. " : ""}${clean(entry.title)}.`, html: drawing(entry.html), spec: specRows(entry.spec) };
   }
+  const css = panelCss(sources, entries.map((entry) => entry.html).join(""));
+  const sprite = panelSprite(sources, entries);
+  for (const entry of entries) if (!notes.has(entry.code)) {
+    const specs = entries.filter((candidate) => candidate.code === entry.code).map((candidate) => new Map(specRows(candidate.spec)));
+    const guidelines = [...new Set(specs.map((spec) => `- **${spec.get("Principle")}** ${spec.get("Behaviour")}`))];
+    notes.set(entry.code, `### ${pageFor(entry, firstScreen)} guidelines\n\n${guidelines.join("\n")}`);
+  }
   mkdirSync(OUT, { recursive: true });
   const counts = {};
   for (const [page, { stories, codes }] of pages) {
@@ -267,9 +309,10 @@ export function generate(sourceDir, masterPath, notesPath, reportDir) {
     writeFileSync(join(OUT, `${file}.mdx`), `import { Canvas, Meta } from '@storybook/addon-docs/blocks';\nimport * as stories from './${file}.stories.js';\n\n<Meta title=${q(`Panels/${page}`)} />\n\n# ${page}\n\n${DESCRIPTIONS[page]}\n\n${canvases.join("\n\n")}\n\n${guidelines.join("\n\n")}\n\n## Prompt for agents\n\n\`\`\`text\nBuild ${page} for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.\n\`\`\`\n`);
   }
   const master = readFileSync(masterPath, "utf8");
-  const css = addCss(sources, entries.map((e) => e.html).join(""));
+  writeFileSync("stories/proto.css", css.content);
+  writeFileSync("stories/proto-sprite.svg", sprite);
   const rows = inventory(master, reportDir);
-  const summary = { boards: rows.length, coveredBefore: rows.filter((r) => r.covered).length, stories: entries.length, counts, cssRules: css };
+  const summary = { boards: rows.length, coveredBefore: rows.filter((r) => r.covered).length, stories: entries.length, sourceCounts: sources.map((source) => entriesOf(source).length), counts, cssRules: css.count };
   writeFileSync(join(reportDir, "import-summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
   return summary;
 }

@@ -12,8 +12,8 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const read = (file) => readFileSync(join(root, file), "utf8");
 const json = (file) => JSON.parse(read(file));
 const BEM = /^kanso-[a-z0-9]+(?:-[a-z0-9]+)*(__[a-z0-9-]+)?(--[a-z0-9-]+)?$/;
-const stories = Object.fromEntries(readdirSync(join(root, "stories/proto")).filter((file) => file.endsWith(".json"))
-  .flatMap((file) => Object.entries(json(`stories/proto/${file}`)).map(([name, story]) => [`${file}:${name}`, story.html])));
+const stories = Object.fromEntries(["proto", "panels"].flatMap((dir) => readdirSync(join(root, `stories/${dir}`)).filter((file) => file.endsWith(".json"))
+  .flatMap((file) => Object.entries(json(`stories/${dir}/${file}`)).map(([name, story]) => [`${dir}/${file}:${name}`, story.html]))));
 const valid = (names, source) => assert.deepEqual(names.filter((name) => !BEM.test(name) && !STORYBOOK_CLASSES.has(name)), [], source);
 
 // Compound blocks include state-block, menu-item, tab-bar and status-bar.
@@ -22,7 +22,7 @@ test("kit, frame, preview and story classes use kanso BEM", () => {
     valid(cssSelectors(read(file)).flatMap(selectorClasses), file);
   }
   for (const [id, html] of Object.entries(stories)) valid(markupClasses(html), id);
-  for (const dir of ["stories", "stories/proto"]) {
+  for (const dir of ["stories", "stories/proto", "stories/panels"]) {
     for (const file of readdirSync(join(root, dir)).filter((name) => name.endsWith(".mdx"))) valid(markupClasses(read(`${dir}/${file}`)), `${dir}/${file}`);
   }
   const preview = read(".storybook/preview.js");

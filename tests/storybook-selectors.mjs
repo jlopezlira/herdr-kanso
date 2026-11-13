@@ -24,7 +24,11 @@ export function storyTree(html, theme = "dark") {
   return root;
 }
 
+const splits = new Map();
+
 function split(selector, separators) {
+  const key = `${separators}:${selector}`;
+  if (splits.has(key)) return splits.get(key);
   const parts = [];
   let depth = 0, quote = "", start = 0;
   for (let i = 0; i < selector.length; i++) {
@@ -44,6 +48,7 @@ function split(selector, separators) {
     }
   }
   if (selector.slice(start).trim()) parts.push(selector.slice(start).trim());
+  splits.set(key, parts);
   return parts;
 }
 
