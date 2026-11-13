@@ -6,6 +6,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, terminals, machines, theme, run, window, props, shared, appHome, readTextFile } from "herdr";
 import { stateMark } from "./marks.js";
+import { stateLine, tokens, ICON_ROW } from "./ui.js";
 import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
 import { MEMORY_MS, computerOf, needsItem, questionOf, memoryLow } from "./model.js";
@@ -67,8 +68,9 @@ export default class WorkspaceStatus extends View {
       : working > 0 ? `${working} of ${list.length} working` : `${list.length} ${list.length === 1 ? "agent" : "agents"} idle`;
     return h_flex().size_full().px(12).gap(18).items_center().text_size(11.5).text_color(t.muted)
       .when(right && !left, (el) => el.justify_end())
-      .when(left && shown("status.computer", true, map), (el) => el.child(computer.command
-        ? act(chip(computer.icon, computer.words).text_color(t[computer.tone]), "status-computer", computer.tooltip, computer.command)
+      .when(left && shown("status.computer", true, map), (el) => el.child(computer.fix
+        ? stateLine("status-computer", stateMark(t, "blocked", ICON_ROW), computer.words, tokens(t), { label: computer.fix, onClick: () => run(computer.command) })
+          .text_color(t[computer.tone]).tooltip(computer.tooltip)
         : chip(computer.icon, computer.words))
         .when(Boolean(space?.branch), (row) => row.child(chip("branch", space.branch))))
       .when(left && right, (el) => el.child(div().flex_1()))

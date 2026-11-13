@@ -283,7 +283,7 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(down.texts.includes("Unreachable"), true);
   assert.equal(down.texts.includes("Unavailable"), false);
   assert.equal(down.tips.includes("ssh timed out"), true);
-  assert.equal(down.tips.includes("Retry"), true);
+  assert.equal(down.tips.includes("Refresh"), true);
   assert.equal(down.ids.includes("space-dark-sp"), false);
 
   const login = await sidebar({

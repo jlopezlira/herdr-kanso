@@ -6,6 +6,7 @@ import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
 import { sorted, admit, marked, keep } from "./stack.js";
+import { stateMark } from "./marks.js";
 
 const KEY = "kanso.toasts";
 // This window's mods, as they run now: the top of the file runs once for all their copies.
@@ -45,7 +46,9 @@ export default class Toast extends View {
         if (p.action?.name) run(p.action.name, p.action.args ?? {});
         this.dismiss();
       })
-      .child(p.icon ? image(p.icon).w(18).h(18).flex_none() : div().size(8).rounded(4).flex_none().bg(t[DOT[p.level] ?? "accent"]))
+      // A failure carries the blocked mark, the same as on every line that failed.
+      .child(p.icon ? image(p.icon).w(18).h(18).flex_none()
+        : p.level === "error" ? stateMark(t, "blocked", 14) : div().size(8).rounded(4).flex_none().bg(t[DOT[p.level] ?? "accent"]))
       .child(
         v_flex()
           .flex_1()

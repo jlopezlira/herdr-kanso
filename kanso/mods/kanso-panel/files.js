@@ -13,7 +13,8 @@ import { walkLayout } from "./layout.js";
 import { listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeStamp, staleView, asOf } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
-import { skeleton, breathe, quietLink, tokens } from "./ui.js";
+import { skeleton, breathe, quietLink, tokens, stateEmpty } from "./ui.js";
+import { failure } from "./lib.js";
 import { Front } from "./front.js";
 
 const PER_FOLDER = 500, TOTAL = 5000, WATCHED_MS = 60_000;
@@ -312,11 +313,10 @@ export class Files {
         .when(Boolean(this.held), (el) => el.child(h_flex().id("files-stale").px(8).py(4).gap(8).items_center()
           .child(div().text_size(12).text_color(t.dim).child(asOf(this.held.at, Date.now())))
           .child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), tokens(t)))))
-        .when(Boolean(this.error), (el) => el.child(h_flex().id("files-error").p(8).gap(8).items_center()
-          .child(div().text_size(12).text_color(t.dim).child(this.error))
-          .when(Boolean(this.on), (row) => row.child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), tokens(t))))))
+        .when(Boolean(this.error), (el) => el.child(div().p(8).child(failure("files-error", "Can't list the files", tokens(t),
+          { why: this.error, fixes: this.on ? [{ label: "Refresh", onClick: (cx) => this.retry(cx) }] : [] }))))
         .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
-        .when(!this.error && !this.loading && items.length === 0, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.changed ? "Nothing changed." : this.root ? "No files" : "No folder")))
+        .when(!this.error && !this.loading && items.length === 0, el => el.child(stateEmpty("files-empty", "file", this.changed ? "Nothing changed" : this.root ? "No files" : "No folder", tokens(t))))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }
 }

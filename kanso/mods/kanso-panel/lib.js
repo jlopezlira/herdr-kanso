@@ -3,6 +3,8 @@ import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
 import { spaces, panes, focused, layout, theme, settings, home } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
+import { stateBlock, ICON_ROW } from "./ui.js";
+import { stateMark } from "./marks.js";
 
 export function tilde(path) {
   if (!path) return "";
@@ -102,3 +104,11 @@ export function showPanel(id, content) {
   if (!walkLayout(layout(), "panel-body")) return false;
   return commitLayout({ panel: id ? { id, type: "block", content } : null });
 }
+
+// A panel's failure: the blocked mark, our words, the source's words in mono, then the fixes ({ label, onClick }).
+export const failure = (id, what, c, { why = null, fixes = [] } = {}) =>
+  stateBlock(id, { mark: stateMark(theme(), "blocked", ICON_ROW), what, why, fixes, font: monoFont() }, c);
+
+// A note for `failure`: our words, and the tool's words when there are any.
+export const said = (what, why = null) => ({ what, why: why === null || why === undefined ? null : String(why) });
+export const failNote = (id, note, c, fixes = []) => failure(id, note.what, c, { why: note.why, fixes });

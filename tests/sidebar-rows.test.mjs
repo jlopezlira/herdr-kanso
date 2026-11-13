@@ -24,7 +24,6 @@ test("plus stays on the active project and the menu stays on hover", () => {
 test("a count behind pulls with git on that computer at one press", () => {
   assert.equal(pullLabel(0), null);
   assert.equal(pullLabel(3), "\u21933");
-  assert.equal(pullLabel(3, true), "Pulling\u2026");
   assert.equal(pullKey("/work/app", "dark"), "pull:dark:/work/app");
   assert.equal(pullKey("/work/app", null), "pull::/work/app");
   assert.deepEqual(pullCommand("/work/app", "dark"), { command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], on: "dark" });
@@ -36,7 +35,7 @@ test("a count behind pulls with git on that computer at one press", () => {
   assert.deepEqual(rest.find((item) => item.kind === "behind").command, pullCommand(place.cwd, place.on));
   const pulling = gitControls(git, { folder: place.cwd, on: place.on, pulling: true });
   const behind = pulling.find((item) => item.kind === "behind");
-  assert.equal(behind.label, "Pulling\u2026");
+  assert.equal(behind.pulling, true, "drawn pending: the count gives way to the breathing dot");
   assert.equal(behind.command, null);
 });
 
@@ -53,7 +52,7 @@ test("a refusal shows git's own first line and a clean pull says nothing", async
   const failed = await runPull(exec, notify, { folder: "/work/app", on: "dark" });
   assert.equal(failed.code, 1);
   assert.deepEqual(calls, [{ command: "git", args: ["-C", "/work/app", "pull", "--ff-only"], options: { on: "dark" } }]);
-  assert.deepEqual(notes, [{ title: "fatal: no", level: "error" }]);
+  assert.deepEqual(notes, [{ title: "Pull refused", body: "fatal: no", level: "error" }]);
   const quiet = [];
   const ok = await runPull(async () => ({ code: 0, stdout: "Updating" }), (note) => quiet.push(note), { folder: "/work/app", on: null });
   assert.equal(ok.code, 0);
@@ -79,8 +78,8 @@ test("an agent's second line is full ink while it waits, quiet while it works, a
   assert.equal(activityTone("asleep"), "muted");
 });
 
-test("an unreachable computer's word is blocked and every other state stays dim", () => {
-  assert.equal(machineWordTone("unavailable"), "blocked");
+test("A computer's state on its row is a dim word, unreachable included", () => {
+  assert.equal(machineWordTone("unavailable"), "dim");
   assert.equal(machineWordTone("connected"), "dim");
   assert.equal(machineWordTone("off"), "dim");
   assert.equal(machineWordTone("login"), "dim");

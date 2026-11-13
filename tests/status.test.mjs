@@ -58,7 +58,7 @@ test("Needs you names the oldest blocked agent, and nothing when nobody waits", 
   assert.equal(needsItem([{ address: "a", status: "blocked", pane: "p", project: "kanso" }]).name, "Agent");
 });
 
-test("The computer says where you are, and Retry only when that computer is unreachable", async () => {
+test("The computer says where you are, and Can't reach with Refresh only when that computer is unreachable", async () => {
   const { computerOf } = await load("kanso-status/model.js", ["computerOf"]);
   const shown = (space, layouts, alias = "") => clone(computerOf(space, layouts, alias));
   assert.deepEqual(shown(null, []), { icon: "monitor", words: "This computer", tone: "muted", command: null, tooltip: null });
@@ -68,10 +68,10 @@ test("The computer says where you are, and Retry only when that computer is unre
   assert.deepEqual(shown({ machine: "devbox" }, []), { icon: "server", words: "devbox", tone: "muted", command: null, tooltip: null });
   assert.deepEqual(shown({ machine: "devbox" }, [{ name: "other", layout: "unavailable" }]), { icon: "server", words: "devbox", tone: "muted", command: null, tooltip: null });
   assert.deepEqual(shown({ machine: "devbox" }, [{ name: "devbox", layout: "unavailable" }]), {
-    icon: "server", words: "devbox · unreachable", tone: "blocked", command: "kanso-spaces.retry-machine:devbox", tooltip: "devbox · unreachable",
+    icon: "server", words: "Can't reach devbox", tone: "foreground", command: "kanso-spaces.retry-machine:devbox", tooltip: "Can't reach devbox", fix: "Refresh",
   });
   assert.deepEqual(shown({ machine: "devbox" }, [{ name: "devbox", layout: "unavailable" }], "Night"), {
-    icon: "server", words: "Night · unreachable", tone: "blocked", command: "kanso-spaces.retry-machine:devbox", tooltip: "Night · unreachable",
+    icon: "server", words: "Can't reach Night", tone: "foreground", command: "kanso-spaces.retry-machine:devbox", tooltip: "Can't reach Night", fix: "Refresh",
   });
   assert.deepEqual(shown(null, [], "Studio"), { icon: "monitor", words: "Studio", tone: "muted", command: null, tooltip: null });
 });
@@ -115,7 +115,7 @@ function bar() {
   };
   const state = { spaces: [], agents: [], terminals: [], machines: [], props: { side: "right" }, platform: "macos", shared: {}, file: null, reads: [] };
   const host = {
-    div: node, svg: node, h_flex: node, v_flex: node,
+    div: node, svg: node, h_flex: node, v_flex: node, Button: { new: (id) => node().id(id) },
     theme: () => new Proxy({ chrome: "chrome" }, { get: (obj, key) => (key in obj ? obj[key] : String(key)) }),
     spaces: () => state.spaces, agents: () => state.agents, terminals: () => state.terminals, machines: () => state.machines,
     props: () => state.props, window: () => ({ platform: state.platform }),
@@ -196,7 +196,7 @@ test("A title stands in for an empty question, and a quiet bar paints no waiting
   assert.deepEqual([...ui.handlers.keys()], ["palette"]);
 });
 
-test("The left side names this computer, and an unreachable one is the only computer button", async () => {
+test("The left side names this computer, and an unreachable one is a failure line whose Refresh is the only computer button", async () => {
   const ui = bar();
   const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], ui.host);
   ui.state.props = { side: "left" };
@@ -213,16 +213,18 @@ test("The left side names this computer, and an unreachable one is the only comp
   ui.state.machines = [{ name: "devbox", layout: "ready" }];
   view.render();
   assert.ok(ui.texts.includes("devbox"));
-  assert.equal(ui.texts.includes("devbox · unreachable"), false);
-  assert.equal(ui.handlers.has("status-computer"), false);
+  assert.equal(ui.texts.includes("Can't reach devbox"), false);
+  assert.equal(ui.handlers.has("status-computer-fix"), false);
   ui.texts.length = 0;
   ui.state.machines = [{ name: "devbox", layout: "unavailable" }];
   view.render();
-  assert.ok(ui.texts.includes("devbox · unreachable"));
+  assert.ok(ui.texts.includes("Can't reach devbox"));
+  assert.ok(ui.texts.includes("Refresh"));
   assert.ok(ui.texts.includes("feat/status-attention"));
-  assert.ok(ui.colors.includes("blocked"));
-  assert.equal(ui.tips.get("status-computer"), "devbox · unreachable");
-  ui.handlers.get("status-computer")();
+  assert.deepEqual(ui.marks.at(-1), ["blocked", 14, "blocked"]);
+  assert.equal(ui.colors.includes("blocked"), false, "the blocked colour stays on the mark");
+  assert.equal(ui.tips.get("status-computer"), "Can't reach devbox");
+  ui.handlers.get("status-computer-fix")();
   assert.deepEqual(ui.runs, ["kanso-spaces.retry-machine:devbox"]);
 });
 
@@ -277,7 +279,7 @@ test("The right side reads the guard file on a timer and does not start a proces
   assert.equal(timers.length, before);
 });
 
-test("An unreachable computer's click is the sidebar's Retry", async () => {
+test("An unreachable computer's Refresh is the sidebar's", async () => {
   const called = [];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     agents: () => [], terminals: () => [], spaces: () => [], machines: () => [], panes: () => [],

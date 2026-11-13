@@ -416,7 +416,7 @@ test("Images keeps the picture big and one circle per picture, the active one in
   assert.match(dots, /h_flex\(\)\.id\("look-dots"\)/, "a row of circles");
   assert.match(dots, /overflow_x_scrollbar\(\)/, "scrolled sideways when it does not fit");
   assert.match(src, /item\.color/, "the active circle uses the picture's color");
-  assert.match(src, /Pictures this agent writes show up here, from its conversation\./);
+  assert.match(src, /Pictures this agent writes show up here, from its conversation"/);
   assert.doesNotMatch(src, /look-strip|flex_wrap\(\)|thumbnail\(/, "no thumbnail strip and nothing wraps into a grid");
   const { look, cx, drain } = await panel();
   await drain();
@@ -517,10 +517,10 @@ test("a pin and its note stay on their picture until Send, including after anoth
 test("an agent with no pictures is told what shows up here", async () => {
   const { look, cx } = await panel({ screen: "nothing to see", files: [] });
   assert.equal(look.list().length, 0);
-  assert.equal(look.emptyLine(), "Pictures this agent writes show up here, from its conversation.");
+  assert.equal(look.emptyLine(), "Pictures this agent writes show up here, from its conversation");
   assert.ok(look.render(cx));
   const none = await panel({ focus: "t2" });
-  assert.equal(none.look.emptyLine(), "No agent in focus.");
+  assert.equal(none.look.emptyLine(), "No agent in focus");
   assert.ok(none.look.render(none.cx));
 });
 
@@ -668,7 +668,7 @@ test("a picture that will not open leaves the row and the next one is shown", as
   const only = await panel({ screen: "", files: [heic], session: { ...session, sessionId: "11111111-2222-4333-8444-555555555555" }, transcript: `${heic}\n`, bad: [heic] });
   assert.equal(only.look.list().length, 0);
   assert.equal(only.look.selected, null);
-  assert.equal(only.look.emptyLine(), "Pictures this agent writes show up here, from its conversation.");
+  assert.equal(only.look.emptyLine(), "Pictures this agent writes show up here, from its conversation");
   const drawing = await panel({ screen: "", files: [svg], session: { ...session, sessionId: "22222222-3333-4444-8555-666666666666" }, transcript: `${svg}\n` });
   assert.deepEqual(clone(drawing.look.list().map((i) => i.path)), [svg], "a picture that opens stays");
   const broken = await panel({ screen: "", files: [svg, good], session: { ...session, sessionId: "33333333-4444-4555-8666-777777777777" }, transcript: `${good}\n${svg}\n`, bad: [svg] });

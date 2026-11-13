@@ -167,8 +167,9 @@ test("the side panels show the shared skeleton before they are ready and while t
   assertSkeleton(trees.bones(c, true));
   trees.hist = null; trees.storeNote = null;
   assertSkeleton(trees.freed(c, true));
-  trees.storeNote = "The history could not be read.";
-  assert.equal(walk(trees.freed(c, true)).texts.includes("The history could not be read."), true);
+  trees.storeNote = { what: "Can't read the history", why: "database is locked" };
+  const texts = walk(trees.freed(c, true)).texts;
+  assert.equal(texts.includes("Can't read the history") && texts.includes("database is locked"), true, "our words, then the tool's words");
 
   const { Ports } = await load("kanso-panel/ports.js", ["Ports"], host);
   const ports = new Ports();

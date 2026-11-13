@@ -96,3 +96,30 @@ test("Clicking one away closes those past their clock too, so none is forgotten 
   assert.deepEqual(closed, ["t1", "t2"], "t1 is past its clock but maybe still drawn: closed, not just dropped");
   assert.deepEqual(up(), []);
 });
+
+test("A failed toast leads with the blocked mark, and the others keep their dot", async () => {
+  const marks = [], dots = [];
+  const node = () => {
+    const el = new Proxy({}, { get(_target, key) {
+      if (key === "then") return undefined;
+      if (key === "when") return (on, apply) => (on ? apply(el) : el);
+      if (key === "bg") return (value) => { dots.push(value); return el; };
+      return () => el;
+    } });
+    return el;
+  };
+  const current = { props: null };
+  const { Toast } = await load("kanso-toast/main.js", ["Toast"], {
+    div: node, image: node, h_flex: node, v_flex: node, run: () => {}, shared: () => undefined, setShared: () => {}, closeOverlay: () => {},
+    theme: () => ({ blocked: "blocked", done: "done", popover: "popover", hover: "hover" }), props: () => current.props,
+    stateMark: (_t, status, size) => { marks.push([status, size]); return node(); },
+  });
+  current.props = { overlay: "o1", level: "error", title: "Can't reach dark" };
+  new Toast().render();
+  assert.deepEqual(marks, [["blocked", 14]]);
+  current.props = { overlay: "o2", level: "success", title: "Merged" };
+  dots.length = 0;
+  new Toast().render();
+  assert.deepEqual(marks, [["blocked", 14]]);
+  assert.ok(dots.includes("done"));
+});
