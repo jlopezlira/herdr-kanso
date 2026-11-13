@@ -1,4 +1,9 @@
 import { Meta } from '@storybook/addon-docs/blocks';
+import { content, records } from '../kit/catalog.js';
+import { referenceFor } from '../kit/references.js';
+
+export const board = content(records.find((record) => record.id === referenceFor('Start/Philosophy').approvedRecords[0]).markup);
+export const rows = [...board.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(([, row]) => [...row.matchAll(/<t[hd]>([\s\S]*?)<\/t[hd]>/g)].map(([, cell]) => cell.replace(/<[^>]+>/g, '')));
 
 <Meta title="Start/Philosophy" />
 
@@ -17,16 +22,10 @@ This Storybook is a UI kit, so a contributor focuses on the functionality, not o
 
 <table>
   <thead>
-    <tr><th>Principle</th><th>What it means</th><th>How kansō applies it</th></tr>
+    <tr>{rows[0].map((cell) => <th key={cell}>{cell}</th>)}</tr>
   </thead>
   <tbody>
-    <tr><td>Kansō 簡素</td><td>Simplicity: leave out what is not needed.</td><td>One fact, one home. Nothing repeated, nothing explained twice, nothing you already know. Fewer presses.</td></tr>
-    <tr><td>Fukinsei 不均斉</td><td>Asymmetry: balance without forced symmetry.</td><td>The window balances by weight, not by mirror: a quiet sidebar against the work. Hierarchy comes from size and weight.</td></tr>
-    <tr><td>Kokō 枯高</td><td>Austerity: only the essential, the bare core.</td><td>One accent. State colour only on what asks for you. Exact Lucide icons, never our own.</td></tr>
-    <tr><td>Shizen 自然</td><td>Naturalness: nothing forced.</td><td>Motion only for live work (the ensō, the shimmer). Nothing jumps or resizes. Light is paper, not white, and reads like dark.</td></tr>
-    <tr><td>Yūgen 幽玄</td><td>Subtlety: suggest rather than show everything.</td><td>Detail appears when you open or point at something. A stand-in shows only while its home is out of view.</td></tr>
-    <tr><td>Datsuzoku 脱俗</td><td>Freedom from the conventional.</td><td>One memorable element: the ensō, and the dawn that rises once.</td></tr>
-    <tr><td>Seijaku 静寂</td><td>Tranquility.</td><td>A calm rest state. One drawing for each piece and each state, so nothing surprises.</td></tr>
+    {rows.slice(1).map((row) => <tr key={row[0]}>{row.map((cell) => <td key={cell}>{cell}</td>)}</tr>)}
   </tbody>
 </table>
 
@@ -34,6 +33,6 @@ This Storybook is a UI kit, so a contributor focuses on the functionality, not o
 
 kansō is named after one of the seven principles of Zen art described by Shin'ichi Hisamatsu in *Zen and the Fine Arts* (1971). The design follows all seven as one philosophy, not taste.
 
-Every guideline names the principle it serves. A decision that cannot name one is an opinion, and is not taken.
+Every guideline on these boards names the principle it serves. A decision that cannot name one is an opinion, and is not taken.
 
 One limit sits above them: kansō removes information, never options. Every action stays one press away.
