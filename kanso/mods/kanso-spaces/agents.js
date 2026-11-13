@@ -7,7 +7,7 @@ import { run, openOverlay } from "herdr";
 import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
-import { activityTone } from "./sidebar-rows.js";
+import { activityTone, foldTail, timePlace } from "./sidebar-rows.js";
 
 export { NAME_LABEL };
 
@@ -24,11 +24,11 @@ export function pill(id, y, h, color, inset = 8) {
 }
 
 // Must equal the height agentRow draws: lists sum these to place the pill.
-// `more.oneLine`: a narrow sidebar keeps the first line only.
-const twoLines = (more) => !more.oneLine && (Boolean(more.activity) || Boolean(more.project) || Boolean(more.steady));
+// `more.oneLine`: a narrow sidebar keeps the first line only. A second line only when there is something to say.
+const twoLines = (more) => !more.oneLine && Boolean(more.activity);
 export function agentRowH(a, more = {}) {
   const two = twoLines(more);
-  return two ? (more.roomy ? ROOMY : TWO) : a.sub ? ROW - 4 : ROW;
+  return two ? TWO : a.sub ? ROW - 4 : ROW;
 }
 
 // A row flush with the list's 10px inset (the Status and Threads views).
@@ -318,19 +318,18 @@ export function withTerminals(list, ps, ss) {
 
 export const mostUrgent = (list) => list.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
 
-// Folded, it tells how many agents and the most urgent state, so a blocked agent is never hidden.
+// Open, nothing: the row itself folds. Folded, the most urgent mark and how many; a click unfolds.
 export function agentFold(id, mine, open, onToggle, t) {
-  const top = mostUrgent(mine);
+  const tail = foldTail(open, mine.map((a) => a.status));
+  if (!tail) return null;
   return h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
-    .text_size(11).text_color(t.dim).cursor_pointer()
+    .text_size(11.5).text_color(t.dim).cursor_pointer()
     .hover((s) => s.bg(t.input).text_color(t.foreground))
     // The row selects on mouse up and drags on mouse down: keep both to the toggle.
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
-    .when(!open, (el) => el
-      .when(Boolean(top) && top !== "idle", (el) => el.child(statusMark(t, top)))
-      .child(div().child(String(mine.length))))
-    .child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none());
+    .when(Boolean(tail.mark), (el) => el.child(stateMark(t, tail.mark, 12)))
+    .child(div().child(String(tail.count)));
 }
 
 // One column per level, icon-wide, so a sub-agent's icon sits under its parent's name.
@@ -364,58 +363,54 @@ function shimmer(text, t, address) {
 
 // `more.steady` keeps the second line even with nothing to say, so the list never jumps.
 // Each event has one handler: a second one would replace the first.
-const ROW = 32, TWO = 50, ROOMY = 64;
+const ROW = 32, TWO = 50, G_HAIR = 2;
 export function agentRow(a, indent, t, row, more = {}) {
-  const project = more.project ?? null;
   const pic = programIcon(a.program, a.sub ? 13 : 15, t.foreground);
   const zz = Boolean(a.dozing);
   const live = !zz && (a.status === "working" || a.status === "blocked" || more.strong);
-  const ink = zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
+  const ink = more.quiet ? t.muted : zz ? t.dim : a.focused || live ? t.foreground : a.sub ? t.dim : t.muted;
   const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
   const pinned = a.pin != null, drag = row?.drag;
   const lines = more.lines ?? [];
   const two = twoLines(more);
   const tasks = a.status === "working" ? [] : more.tasks ?? [];
   const h = agentRowH(a, more);
-  const showPin = Boolean(row?.pin) && (pinned || row.hovered);
-  const actions = row?.hovered ? row.actions ?? [] : [];
-  // The program's icon leads; with a project line and no icon, a blank of its width keeps the names in a column.
-  const lead = pic?.opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75) ?? (project ? div().size(15).flex_none() : null);
-  const top = h_flex().h(two ? 22 : h).gap(10).items_center()
+  const hovered = Boolean(row?.hovered);
+  const actions = hovered ? row.actions ?? [] : [];
+  // Under the pointer, pin and the menu take the time's place; a pin already set stays before the mark.
+  const tools = hovered && (Boolean(row?.menu) || Boolean(row?.pin) || actions.length > 0);
+  const place = timePlace(two ? more.activity : null, more.time);
+  const word = more.directory ?? null;
+  // The program's icon leads; a terminal or an unknown program takes the terminal's.
+  const lead = (pic ?? svg("mods/kanso-chrome/icons/terminal.svg").size(a.sub ? 13 : 15).flex_none().text_color(t.muted))
+    .opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75);
+  const iconTool = (id, icon, tip, act, size = 12) => div().id(id).size(20).flex_none().rounded(6)
+    .flex().items_center().justify_center().text_color(t.muted).tooltip(tip)
+    .hover((s) => s.bg(t.input).text_color(t.foreground))
+    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+    .on_click((_e, cx) => { cx.stop_propagation(); act(cx); })
+    .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(size));
+  const top = h_flex().h(two ? 22 : h).gap(8).items_center()
     // One weight always: a changed weight would reflow the name and make the row jump.
     .child(a.status === "working" && !zz
       ? shimmer(more.label ?? agentLabel(a), t, a.address).text_size(13.5).font_medium()
       : div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(ink).child(more.label ?? agentLabel(a)))
-    .when(Boolean(machine), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(machine)))
-    .when(showPin, (el) => el.child(div().id(`pin-${a.address}`).size(20).flex_none().rounded(6)
-      .flex().items_center().justify_center().text_color(pinned ? t.foreground : t.dim).tooltip(pinned ? "Unpin" : "Pin to the top")
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); row.pin(cx); })
-      .child(svg("mods/kanso-chrome/icons/pin.svg").size(12))))
-    .when(Boolean(more.badge) && !actions.length, (el) => el.child(div().flex_none().px(6).h(18).rounded_full().bg(t.accent + "26")
-      .flex().items_center().text_size(11).font_semibold().text_color(t.accent).child(more.badge)))
-    .children(actions.map((x) => div().id(`act-${x.id}-${a.address}`).size(22).flex_none().rounded(6)
-      .flex().items_center().justify_center().text_color(t.muted).tooltip(x.tip)
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); x.act(cx); })
-      .child(svg(`mods/kanso-chrome/icons/${x.icon}.svg`).size(13))))
-    .when(Boolean(more.time) && !actions.length && !(row?.hovered && row?.pin && !pinned), (el) => el.child(div().flex_none().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.dim).child(more.time)))
+    .when(Boolean(machine) && !word && !more.noMachine, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(machine)))
+    .when(Boolean(word), (el) => el.child(div().flex_none().truncate().text_size(11.5).text_color(t.dim)
+      .when(Boolean(more.wordTip), (d) => d.tooltip(more.wordTip)).child(word)))
+    .when(Boolean(more.refresh), (el) => el.child(iconTool(`refresh-${a.address}`, "refresh", "Refresh", more.refresh)))
+    .when(pinned && !hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
+    .when(hovered && Boolean(row?.pin), (el) => el.child(iconTool(`pin-${a.address}`, "pin", pinned ? "Unpin" : "Pin to the top", (cx) => row.pin(cx))))
+    .children(actions.map((x) => iconTool(`act-${x.id}-${a.address}`, x.icon, x.tip, x.act)))
+    .when(place === "end" && !tools, (el) => el.child(div().flex_none().text_size(11.5).text_color(a.status === "blocked" ? t.blocked : t.dim).child(more.time)))
     .when(tasks.length > 0, (el) => el.child(div().id(`tasks-${a.address}`).flex_none().h(18).px(6).rounded_full().bg(t.foreground + "12")
       .flex().items_center().text_size(11).text_color(t.muted).tooltip(tasks.map((x) => `${x.command.length > 90 ? x.command.slice(0, 89) + "\u2026" : x.command} \u00b7 ${x.time}`).join("\n"))
       .child(String(tasks.length))))
-    .when(Boolean(row?.menu) && Boolean(row?.hovered), (el) => el.child(div().id(`dots-${a.address}`).size(20).flex_none().rounded(6)
-      .flex().items_center().justify_center().text_color(t.dim).tooltip("More")
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
-      .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13))))
+    .when(hovered && Boolean(row?.menu), (el) => el.child(iconTool(`dots-${a.address}`, "ellipsis", "More", (cx) => row.menu(cx), 14)))
     .child(statusMark(t, zz ? "asleep" : a.status));
-  const second = h_flex().h(18).mt(more.roomy ? 5 : 2).min_w(0).items_center().text_size(12)
-    .when(Boolean(project), (el) => el.child(div().flex_none().max_w(110).truncate().font_medium().text_color(project.fill).child(project.name)))
-    .when(Boolean(project) && Boolean(more.activity), (el) => el.child(div().flex_none().px(5).text_color(t.dim).child("\u00b7")))
-    .when(Boolean(more.activity), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t[activityTone(a.status)]).child(more.activity)))
+  const second = h_flex().h(20).mt(G_HAIR).min_w(0).items_center().text_size(11.5)
+    .when(Boolean(more.activity), (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t[activityTone(a.status)]).child(more.activity)))
+    .when(place === "line" && !tools, (el) => el.child(div().flex_none().pl(4).text_color(t.dim).child(`\u00b7 ${more.time}`)))
     .when(Boolean(more.step), (el) => el.child(div().flex_none().pl(5).text_color(more.step.stuck ? t.blocked : t.dim).child(more.step.time)));
   const body = two ? v_flex().flex_1().min_w(0).justify_center().child(top).child(second) : div().flex_1().min_w(0).child(top);
   return h_flex().id(`space-agent-${a.address}`).h(h).flex_none().pl(AGENT_PAD + indent).pr(12).gap(12)
@@ -432,6 +427,6 @@ export function agentRow(a, indent, t, row, more = {}) {
     .when(drag?.target === "before", (el) => el.border_t(2).border_color(t.accent))
     .when(drag?.target === "after", (el) => el.border_b(2).border_color(t.accent))
     .children(lines.map((l) => guide(l, h, t)))
-    .when(Boolean(lead), (el) => el.child(two ? v_flex().h(h).pt(Math.round((h - 45) / 2) + 3).flex_none().child(lead) : lead))
+    .child(two ? v_flex().h(h).pt(Math.round((h - 45) / 2) + 3).flex_none().child(lead) : lead)
     .child(body);
 }

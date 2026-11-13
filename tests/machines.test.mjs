@@ -76,8 +76,8 @@ test("a machine that is not connected keeps its one action, in muted", async () 
   assert.deepEqual(see("unavailable", true), ["retry"]);
   assert.deepEqual(see("off", false), ["power"]);
   assert.deepEqual(see("off", true), ["power"]);
-  assert.deepEqual(see("login", false), ["copy"]);
-  assert.deepEqual(see("login", true), ["copy"]);
+  assert.deepEqual(see("login", false), ["signin"]);
+  assert.deepEqual(see("login", true), ["signin"]);
   assert.deepEqual(see("connected", false), []);
   assert.deepEqual(see("connected", true), ["power", "plus"]);
   assert.deepEqual(see("loading", false), []);
@@ -205,7 +205,7 @@ test("each machine state is one row, and this computer has no power button", asy
     spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record], hover: "dark",
   });
   assert.equal(offHover.ids.includes("machine-power-dark"), true);
-  assert.equal(offHover.tips.includes("Turn on"), true);
+  assert.equal(offHover.tips.includes("Turn dark on"), true);
   assert.equal(offHover.ids.includes("machine-add-dark"), false);
   assert.equal(offHover.ids.includes("machine-retry-dark"), false);
 
@@ -226,7 +226,7 @@ test("each machine state is one row, and this computer has no power button", asy
   assert.equal(back.ids.includes("machine-power-dark"), true);
   assert.equal(back.ids.includes("machine-add-dark"), true);
   assert.equal(back.tips.includes("Turn off"), true);
-  assert.equal(back.tips.includes("New project"), true);
+  assert.equal(back.tips.includes("New project on dark"), true);
   assert.equal(back.texts.includes("Off"), false);
   assert.equal(back.tips.includes("Connected"), false);
 
@@ -284,7 +284,7 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(down.texts.includes("Unavailable"), false);
   assert.equal(down.tips.includes("ssh timed out"), true);
   assert.equal(down.tips.includes("Refresh"), true);
-  assert.equal(down.ids.includes("space-dark-sp"), false);
+  assert.equal(down.ids.includes("space-dark-sp"), true, "its projects stay, as last read");
 
   const login = await sidebar({
     spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record], login: new Set(["dark"]), hover: "dark",
@@ -296,14 +296,14 @@ test("loading, unreachable, and needs login each stay on that one row", async ()
   assert.equal(login.texts.includes("Needs login"), true);
   assert.equal(login.texts.includes("Needs a login"), false);
   assert.equal(login.texts.includes("hc machine login dark"), false);
-  assert.equal(login.tips.includes("hc machine login dark"), true);
+  assert.equal(login.tips.includes("Sign in"), true);
   assert.equal(login.ids.includes("space-dark-sp"), false);
 
   const loginQuiet = await sidebar({
     spaces: [local, remote], layouts: [{ name: null, layout: "ready" }], parked: [record], login: new Set(["dark"]),
   });
   assert.equal(oneRow(loginQuiet, "dark"), 1);
-  assert.equal(loginQuiet.ids.includes("machine-login-dark"), true, "copy stays on the row");
+  assert.equal(loginQuiet.ids.includes("machine-login-dark"), true, "Sign in stays on the row");
   assert.equal(loginQuiet.ids.includes("machine-power-dark"), false);
 
   const quiet = await sidebar({

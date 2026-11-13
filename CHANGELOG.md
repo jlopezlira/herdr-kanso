@@ -35,6 +35,14 @@ the branch's rules.
 - The count of commits behind is muted, not red.
 - Issue forms ask for steps to reproduce, test cases, acceptance criteria and what ready and done mean.
 - Storybook icons draw the exact Lucide shapes, and its checks run in under a second.
+- Sidebar rows match their designs: an open project or computer shows no chevron, and folded it shows its most urgent mark and how many; a click on the current project folds it, and the count unfolds it. (#230)
+- A project shows + and the menu under the pointer, a detached checkout shows its commit, a kept project with a missing folder says Not found with Locate, and a project's name edits in place. (#230)
+- The behind and ahead counts say what a press does: pull from the upstream, or open the PR panel. (#230)
+- Session rows lead with the terminal icon when the program has none, put the time after what the session is on, keep a pin before the mark, and give a sub-session that needs you its own line. (#230)
+- In Status and Threads a session shows its project after its name, and its computer when it is not this one; only Needs you carries a mark, and a section shows its count once folded. (#230)
+- Threads shows when a snoozed conversation wakes, Woke on one that did, and Can't read with Refresh on one that cannot be read; under the pointer a finished one offers Settle, and a project's + shows under the pointer. (#230)
+- A computer that needs a login offers Sign in, which runs the login in a terminal pane; one with no project says so with New project; an unreachable one keeps its projects, dimmed, as last read; Sync that cannot run says so on the row. (#230)
+- The first read of Status, Threads and a computer draws the skeleton at the rows' height, and the view switch names each view's key. (#230)
 
 ### Fixed
 

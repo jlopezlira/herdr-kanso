@@ -125,7 +125,7 @@ export function machineHot(name, hover, kbd, navKey) {
 }
 
 // Parked rows keep one action. A connected row shows turn off and + only while hot; a remote one keeps Sync while it is on.
-const PARKED_ACTION = { unavailable: ["retry"], off: ["power"], login: ["copy"] };
+const PARKED_ACTION = { unavailable: ["retry"], off: ["power"], login: ["signin"] };
 
 export function machineVisible(phase, hot, remote = false, syncing = false) {
   const parked = PARKED_ACTION[phase];

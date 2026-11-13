@@ -312,7 +312,7 @@ test("kanso-spaces passes an explicit machine to space.new for local, remote, an
 
   const cx = { stop_propagation() {}, notify() {} };
   clicks["machine-add-local"]({}, cx);
-  clicks["machine-new-local"]({}, cx);
+  clicks["machine-new-local-action"]({}, cx);
   view.hoverMachine = "odin";
   view.render();
   clicks["machine-add-odin"]({}, cx);
