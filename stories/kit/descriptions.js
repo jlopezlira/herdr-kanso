@@ -24,6 +24,7 @@ export const descriptions = {
   Toast: 'A short notice shown only while the fact’s own home is out of view, with at most one action.',
   Header: 'The title, digest and tools above the current pane.',
   Sidebar: 'The navigation surface for projects, status and threads, open or collapsed.',
+  'Dawn Mode': 'The early channel’s mark in the sidebar header; Stable Mode shows nothing.',
   Rail: 'The collapsed sidebar: icon buttons and marks in a narrow column.',
   'Status bar': 'A row of facts at the window edge, each shown only while its own home is out of view.',
   Bars: 'Tab, pane and tool strips for moving between panes and reaching tools.',

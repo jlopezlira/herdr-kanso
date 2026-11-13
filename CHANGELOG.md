@@ -28,6 +28,7 @@ the branch's rules.
 
 - Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.
 - Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
+- Give Dawn Mode its own Storybook page, and show the Dawn Mode pill on the sidebar.
 - The Storybook link in the site's navigation opens in a new tab.
 - The window's title bar shows only the window controls.
 - Empty, failed and pending states are drawn one way in the sidebar, the panels, the status bar and toasts: an empty view shows its icon and one quiet line; a failure shows the blocked mark, what went wrong, the tool's own words and the fix; a pull is shown done at once with a breathing dot until git answers, and a refused pull is a toast.
