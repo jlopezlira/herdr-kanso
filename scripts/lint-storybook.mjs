@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { SECTIONS, expand } from './storybook-catalog.mjs';
 import { explainErrors } from './storybook-components.mjs';
@@ -10,7 +11,7 @@ const STORY_FILE = /\.stories\.(?:js|jsx|mjs|ts|tsx)$/;
 
 export function storyFiles(root = 'stories') {
   return Object.fromEntries(readdirSync(root, { recursive: true, withFileTypes: true }).filter((file) => file.isFile() && (STORY_FILE.test(file.name) || /\.(mdx|json)$/.test(file.name))).map((file) => {
-    const path = join(file.parentPath, file.name);
+    const path = join(file.parentPath, file.name).replaceAll('\\', '/');
     return [path, readFileSync(path, 'utf8')];
   }));
 }
@@ -42,7 +43,7 @@ export function structureErrors(files, catalog, template) {
     } else {
       const target = /import \* as stories from '\.\/([^']+)'/.exec(text)?.[1];
       const title = /page="([^"]+)"/.exec(text)?.[1];
-      const storyPath = join(path.slice(0, path.lastIndexOf('/')), target ?? '');
+      const storyPath = posix.join(path.slice(0, path.lastIndexOf('/')), target ?? '');
       if (!target || titles.get(title) !== storyPath) errors.push(`${path}: unattached component docs`);
       if (!/<Meta of=\{stories\} name="Overview" \/>/.test(text) || !/<ComponentPage of=\{stories\} page="[^"]+" \/>/.test(text) || !/<h2>Prompt for agents<\/h2>/.test(template) || !template.includes('Copy prompt')) errors.push(`${path}: missing prompt block`);
       docs.add(title);
