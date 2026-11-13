@@ -30,6 +30,7 @@ the branch's rules.
 - Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
 - The Storybook link in the site's navigation opens in a new tab.
 - Issue forms ask for steps to reproduce, test cases, acceptance criteria and what ready and done mean.
+- Storybook icons draw the exact Lucide shapes, and its checks run in under a second.
 
 ### Fixed
 
