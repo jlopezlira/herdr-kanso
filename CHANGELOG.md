@@ -24,6 +24,10 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Changed
+
+- The Storybook link in the site's navigation opens in a new tab.
+
 ### Fixed
 
 - Storybook uses one tonal Explain button with the Lucide bot icon and a named destination everywhere; regeneration and structure checks enforce it.
