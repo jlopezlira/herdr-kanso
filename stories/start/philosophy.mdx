@@ -11,15 +11,6 @@ export const rows = [...board.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(([, row]) =
 
 This Storybook is a UI kit, so a contributor focuses on the functionality, not on how to design it. If a component does not exist, it is built from kit pieces; if that is impossible, it is proposed as a new kit piece, drawn once in the Storybook with all its states.
 
-- [Kit: every value and every element, once](?path=/docs/tokens-kit-every-value-and-every-element-once--docs)
-- [State pattern, designed](?path=/docs/compositions-state-pattern-designed--docs)
-- [Icons, one set](?path=/docs/tokens-icons-one-set--docs)
-- [Contrast, light and dark](?path=/docs/tokens-contrast-light-and-dark--docs)
-- [One fact, one home](?path=/docs/compositions-one-fact-one-home--docs)
-- [Right-click any piece](?path=/docs/layouts-right-click-any-piece--docs)
-- [One panel skeleton](?path=/docs/compositions-one-panel-skeleton--docs)
-- [One dialog skeleton](?path=/docs/panels-one-dialog-skeleton--docs)
-
 <table>
   <thead>
     <tr>{rows[0].map((cell) => <th key={cell}>{cell}</th>)}</tr>
