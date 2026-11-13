@@ -11,6 +11,7 @@ import { Share } from "./share.js";
 import { G, tokens, quietLink, iconButton, section, ghost, breathe, segmented } from "./ui.js";
 import { range, tryOrAsync, mapSeries } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
+import { failure } from "./lib.js";
 
 const DAY = 86400000;
 const RECORDS = "kanso.shipped.bests";
@@ -461,7 +462,7 @@ export class Shipped {
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(x.value))
           .child(div().text_size(11).text_color(c.dim).child(x.unit)))))
       .when(Boolean(s.everText), (el) => el.child(div().text_size(12).text_color(c.muted).child(s.everText)))
-      .when(Boolean(s.error), (el) => el.child(div().text_size(12).text_color(c.red).child(s.error)));
+      .when(Boolean(s.error), (el) => el.child(failure("sh-error", s.error, c)));
   }
 
   streak(c, width) {
@@ -529,7 +530,7 @@ export class Shipped {
   }
 
   status(c) {
-    if (this.syncError) return div().text_size(12).text_color(c.red).child(`Adding up stopped: ${this.syncError}`);
+    if (this.syncError) return failure("sh-sync", "Adding up stopped", c, { why: this.syncError });
     if (!this.syncing || !this.phase) return null;
     return div().text_size(12).text_color(this.firstRead ? c.muted : c.dim)
       .child(`${this.firstRead ? "Adding up" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a few minutes; after that only what changed is read." : ""}`);

@@ -7,7 +7,7 @@ import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { hc, panes, terminals, home, run, theme, appHome, readTextFile, shared } from "herdr";
-import { tilde } from "./lib.js";
+import { tilde, failure } from "./lib.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
@@ -169,7 +169,7 @@ export class Ports {
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
         this.list = await this.read(); this.note = this.attribution;
-      } catch (e) { this.note = `Could not read the ports: ${String(e?.message ?? e)}`; this.list = this.list ?? []; }
+      } catch (e) { this.note = `Can't read the ports: ${String(e?.message ?? e)}`; this.list = this.list ?? []; }
       finally { this.reading = false; then?.(); if (this.picture() !== before) cx.notify(); }
     });
   }
@@ -412,6 +412,6 @@ export class Ports {
           .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
             "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it.", G.sm)))
           .child(body)
-          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)))));
+          .when(Boolean(this.note), (el) => el.child(failure("pt-note", this.note, c)))));
   }
 }

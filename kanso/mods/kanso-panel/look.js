@@ -11,7 +11,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
 import { tilde } from "./lib.js";
-import { G, H, R, T, tokens, button, quietLink, iconButton, skeleton, breathe } from "./ui.js";
+import { G, H, R, T, tokens, button, quietLink, iconButton, skeleton, breathe, stateEmpty } from "./ui.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -26,8 +26,8 @@ const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
 const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept while the panel is closed
 const NOTE = "kanso.look.note"; // the dialogs' answers, by token: { [token]: { text, at } }, each taken once by the pin that asked
-const EMPTY = "Pictures this agent writes show up here, from its conversation.";
-const NO_AGENT = "No agent in focus.";
+const EMPTY = "Pictures this agent writes show up here, from its conversation";
+const NO_AGENT = "No agent in focus";
 // An agent's terminal that still runs, or null: a shell would run the note.
 function live(address) {
   if (!address) return null;
@@ -515,9 +515,7 @@ export class Look {
   }
 
   empty(c) {
-    return v_flex().id("look-empty").flex_1().w_full().items_center().justify_center().gap(G.md).px(G.xl)
-      .child(div().size(G.lg).rounded_full().border_1().border_color(c.border))
-      .child(div().text_size(T.card).text_color(c.muted).text_center().child(this.emptyLine()));
+    return v_flex().flex_1().w_full().justify_center().child(stateEmpty("look-empty", "eye", this.emptyLine(), c));
   }
 
   drawing(c) {

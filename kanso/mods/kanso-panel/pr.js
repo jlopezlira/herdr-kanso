@@ -5,7 +5,7 @@ import { openApi } from "./platform-open.js";
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
-import { location, key, diffRows, monoFont, tilde } from "./lib.js";
+import { location, key, diffRows, monoFont, tilde, failure } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, H, R, T, breathe, Armed, tokens, button, quietLink, segmented, iconButton, field, TextField, section, ghost, toneColor } from "./ui.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
@@ -218,7 +218,7 @@ export class PullRequest {
     const held = heldView(Boolean(this.pr), this.freshAt, Date.now());
     if (held.keep) { this.stale = { at: this.freshAt ?? Date.now() }; this.error = null; return; }
     const line = String(detail ?? "It took too long to answer.").split("\n")[0] || "It took too long to answer.";
-    this.error = { title: "GitHub could not be read.", detail: line };
+    this.error = { title: "Can't read GitHub", detail: line };
   }
 
   takeOpen(open, context) {
@@ -803,7 +803,7 @@ export class PullRequest {
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
       .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) }))))
-      .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
+      .when(Boolean(this.note), (el) => el.child(failure("pr-note", this.note, c)));
   }
 
   reviewCount() { return this.inbox?.needs?.length ?? 0; }
@@ -879,7 +879,7 @@ export class PullRequest {
 
   waiting(c, title, detail, action) {
     return v_flex().w_full().gap(G.sm)
-      .child(div().text_size(T.card).text_color(this.error ? c.red : c.muted).child(title))
+      .child(div().text_size(T.card).text_color(c.muted).child(title))
       .when(Boolean(detail), (el) => el.child(div().text_size(12).text_color(c.dim).child(detail)))
       .when(Boolean(action), (el) => el.child(h_flex().pt(G.xs).child(action)));
   }
@@ -1178,7 +1178,7 @@ export class PullRequest {
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
       .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil))))
-      .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note)));
+      .when(Boolean(this.note), (el) => el.child(failure("pr-note", this.note, c)));
   }
 
   body(c, narrow) {
@@ -1188,7 +1188,7 @@ export class PullRequest {
     if (kind === "pr") return this.hero(c);
     if (kind === "loading") return this.skeleton(c, narrow);
     if (kind === "wait") return this.waiting(c, this.wait);
-    if (kind === "error") return this.waiting(c, this.error.title, this.error.detail, quietLink("pr-retry", "Try again", (cx) => this.again(cx), c));
+    if (kind === "error") return failure("pr-failed", this.error.title, c, { why: this.error.detail, fixes: [{ label: "Refresh", onClick: (cx) => this.again(cx) }] });
     return drawEmpty(this, c);
   }
 

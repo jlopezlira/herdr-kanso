@@ -1,0 +1,287 @@
+// Kanso's panel kit, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
+// Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui.js.
+import { div, svg } from "gpui-kit";
+import { h_flex, v_flex, Button, Toggle, Input, InputState, Textarea, TextareaState } from "gpui-base";
+
+// Sizes generated from kanso/tokens.json by npm run build:ui-tokens.
+export const G = { hair: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+export const H = { control: 30, compact: 24, icon: 26, row: 40 };
+export const R = { control: 6, card: 8 };
+export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, body: 11.5, mono: 11.5 };
+export const ICON = 15;
+export const ICON_ROW = 14;
+export const SWITCH = { w: 28, h: 16, knob: 12 };
+// End of the generated sizes.
+export const EASE = { duration: 180, easing: "ease-out" };
+/** A second press within this long confirms what cannot be undone. */
+export const ARM_MS = 4000;
+export const BREATH = { from: 0.35, to: 0.8, period: 1800 };
+export const PULSE = { from: 0.35, to: 1, period: 2400 };
+// A native loop: it keeps going behind other windows, where a still mark reads as a stalled agent.
+export const breathe = (el, policy = BREATH) => el.loop("opacity", policy);
+const ICONS = "mods/kanso-chrome/icons/";
+
+export function tokens(t = {}) {
+  const canvas = t.canvas ?? t.background;
+  return {
+    canvas, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
+    border: t.border ?? t.input, input: t.input ?? t.border, subtle: t.hover ?? t.raised, raised: t.raised ?? canvas,
+    selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface ?? canvas,
+    primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
+    accent: t.accent ?? t.foreground, accentText: t.accent_foreground ?? t.background,
+    background: t.background ?? canvas,
+    blocked: t.blocked ?? t.ansi1, working: t.working ?? t.ansi3, done: t.done ?? t.ansi2,
+    highlight: t.selection ?? t.selected ?? t.hover,
+    red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
+  };
+}
+
+const TONE = {
+  red: "blocked", blocked: "blocked",
+  yellow: "working", working: "working",
+  green: "done", done: "done",
+  violet: "violet", dim: "dim", muted: "muted",
+};
+export const toneColor = (c, tone) => c[TONE[tone] ?? "dim"];
+
+const RGB = /^#[0-9a-f]{6}/i;
+// The kit's color-mix: `a` over an opaque `b`, `share` of the way.
+export function mix(a, b, share) {
+  if (!RGB.test(a ?? "") || !RGB.test(b ?? "")) return a;
+  const at = (hex, i) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return `#${[0, 1, 2].map((i) => Math.round(at(a, i) * share + at(b, i) * (1 - share)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export const WASH = { off: 0.04, hover: 0.88, press: 0.76 };
+const CLEAR = "#00000000";
+// The 4% wash: the segmented track and a disabled control's ground.
+const well = (c) => mix(c.text, c.background, WASH.off);
+const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
+/** The armed look: the accent fill, its hover and press washes, the accent foreground. */
+export const armedLook = (c) => filled(c.accent, c.accentText, c);
+const LOOKS = {
+  solid: (c) => filled(c.primary, c.primaryText, c),
+  tonal: (c) => ({ fill: c.subtle, ink: c.text, hover: c.selected, press: c.selected }),
+  quiet: (c) => ({ fill: null, ink: c.text, hover: c.subtle, press: c.selected }),
+  icon: (c) => ({ fill: null, ink: c.muted, hover: c.subtle, press: c.selected }),
+};
+
+export const pressAgain = (verb) => `Press again to ${verb}`;
+
+/** Both labels in one cell, the hidden one at no height: the box is the wider of the two at rest, so arming moves nothing. */
+export function armedLabel(label, verb, on, text, { start = false } = {}) {
+  const hidden = (el, hide) => (hide ? el.h(0).overflow_hidden() : el);
+  return v_flex().when(start, (el) => el.items_start()).when(!start, (el) => el.items_center())
+    .child(hidden(text(label).whitespace_nowrap(), on)).child(hidden(text(pressAgain(verb)).whitespace_nowrap(), !on));
+}
+
+/** solid: the one primary action; tonal: a wash, no edge; quiet: text only; icon: `label` is its tip. `icon`: a name in kanso-chrome's icons, or a path.
+ * `verb`: the action asks twice; `armed` fills it with the accent and reads "Press again to <verb>". */
+export function button(id, label, onClick, c, { kind = "solid", icon = null, small = false, disabled = false, spoken = label, verb = null, armed = false, active = false, spin = false, color = null } = {}) {
+  const square = kind === "icon", on = armed && !disabled;
+  const look = disabled ? { fill: kind === "quiet" ? null : well(c), ink: c.dim }
+    : on ? armedLook(c)
+      : active ? { ...LOOKS[kind](c), fill: c.selected, ink: c.text, hover: c.selected }
+        : LOOKS[kind](c);
+  const ink = disabled || on ? look.ink : color ?? (spin ? c.text : look.ink);
+  const side = small ? H.compact : square ? H.icon : H.control;
+  const text = (words) => div().text_size(small ? T.body : T.value).font_medium().text_color(ink).child(words);
+  const glyph = icon ? svg(icon.includes("/") ? icon : `${ICONS}${icon}.svg`).size(square ? ICON : ICON_ROW).flex_none().text_color(ink) : null;
+  // The ring is a border kept clear at rest, so focusing never resizes the box.
+  return Button.new(id).h(side).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
+    .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
+    .disabled(disabled)
+    .accessibility_label(on && verb ? pressAgain(verb) : spoken)
+    .when(square, (el) => el.w(side).tooltip(spoken))
+    .when(!square, (el) => el.px((small ? G.sm : G.md) - G.hair))
+    .when(Boolean(look.fill), (el) => el.bg(look.fill))
+    .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(look.hover)).active((s) => s.bg(look.press)))
+    .when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))
+    .when(Boolean(glyph), (el) => el.child(spin ? glyph.spin(900) : glyph))
+    .when(!square, (el) => el.child(verb ? armedLabel(label, verb, on, text, { start: kind === "quiet" }) : text(label)));
+}
+
+/** A quiet action on a line. */
+export const quietLink = (id, label, onClick, c, { label: spoken = label, ...o } = {}) => button(id, label, onClick, c, { color: c.muted, ...o, spoken, kind: "quiet", small: true });
+
+export const iconButton = (id, icon, tip, onClick, c, o = {}) => button(id, tip, onClick, c, { ...o, kind: "icon", icon });
+
+export function section(c, title, note) {
+  return h_flex().w_full().items_end().justify_between().gap(G.md).pb(G.sm)
+    .child(div().flex_none().text_size(T.title).text_color(c.text).child(title))
+    .child(div().min_w(0).truncate().text_size(12).text_color(c.dim).child(note ?? ""));
+}
+
+const SK_W = [120, 96, 140, 84, 110, 72];
+// A height is a fixed row with its icon; without one, the py(9) list row the panels already use.
+export function skeleton(c) {
+  const block = (w, h, radius = 3) => div().w(w).h(h).flex_none().rounded(radius).bg(c.border);
+  const line = (w, h = 9) => block(w, h, 3);
+  const row = (i, h) => {
+    const name = line(SK_W[(i ?? 0) % SK_W.length], 9);
+    const base = h_flex().w_full().items_center().gap(G.md);
+    return h
+      ? base.h(h).flex_none().px(8).child(block(14, 14, 4)).child(name).child(div().flex_1())
+      : base.py(9).child(name).child(div().flex_1()).child(block(40, 11));
+  };
+  const header = (titleW = 88, titleH = 14) => h_flex().w_full().items_center().justify_between().gap(G.md)
+    .child(line(titleW, titleH)).child(block(26, 26, 6));
+  return { line, block, row, header };
+}
+export const ghost = skeleton;
+
+/** What a view has armed: one `key` at a time, for ARM_MS. */
+export class Armed {
+  constructor() { this.key = null; this.at = 0; }
+
+  is(key) { return this.key === key && Date.now() - this.at <= ARM_MS; }
+
+  clear() { this.key = null; }
+
+  press(key, cx, act) {
+    if (this.is(key)) { this.key = null; act(cx); return; }
+    this.key = key; this.at = Date.now(); cx.notify();
+    cx.timer?.after(ARM_MS + 50, (cx) => { if (this.key === key && !this.is(key)) { this.key = null; cx.notify(); } });
+  }
+
+  /** A button that asks twice: the first press arms `key`, the second runs `act`. */
+  button(id, label, verb, key, act, c, o = {}) { return button(id, label, (cx) => this.press(key, cx, act), c, { ...o, verb, armed: this.is(key) }); }
+
+  link(id, label, verb, key, act, c, o = {}) { return quietLink(id, label, (cx) => this.press(key, cx, act), c, { ...o, verb, armed: this.is(key) }); }
+}
+
+/** A reversible action, done: what happened, and Undo at the end of its line. */
+export const undoLine = (id, text, onUndo, c) => h_flex().id(id).min_w(0).items_center().gap(G.md)
+  .child(div().min_w(0).truncate().text_size(T.body).font_medium().text_color(c.text).child(text))
+  .child(button(`${id}-undo`, "Undo", onUndo, c, { kind: "tonal", small: true }));
+
+const glyphOf = (icon) => (icon.includes("/") ? icon : `${ICONS}${icon}.svg`);
+
+/** Empty: the view's icon, one sentence and at most one tonal action, centred where the list would be. `action`: { label, onClick }. */
+export const stateEmpty = (id, icon, words, c, action = null) => v_flex().id(id).w_full().items_center().gap(G.sm).px(G.lg).py(G.xl)
+  .child(svg(glyphOf(icon)).size(20).flex_none().text_color(c.dim))
+  .child(div().w_full().text_center().text_size(T.value).text_color(c.muted).child(words))
+  .when(Boolean(action), (el) => el.child(button(`${id}-action`, action?.label, action?.onClick, c, { kind: "tonal" })));
+
+/** Failure, block: a blocked edge; the mark and our words, the source's words at most two lines, then the fixes: first solid, the rest tonal.
+ * `fixes`: [{ label, onClick }]; `font`: the evidence's mono family. */
+export function stateBlock(id, { mark, what, why = null, fixes = [], font = null }, c) {
+  const evidence = div().w_full().max_h(T.mono * 3).overflow_hidden().text_size(T.mono).line_height(1.5).text_color(c.muted).tooltip(why ?? "").child(why ?? "");
+  return v_flex().id(id).w_full().p(G.md).gap(G.xs).rounded(R.card).border_1().border_color(c.blocked)
+    .child(h_flex().w_full().min_w(0).items_center().gap(G.sm).child(mark)
+      .child(div().flex_1().min_w(0).text_size(T.card).font_medium().text_color(c.text).child(what)))
+    .when(Boolean(why), (el) => el.child(h_flex().w_full().pl(ICON_ROW + G.sm).child(font ? evidence.font_family(font) : evidence)))
+    .when(fixes.length > 0, (el) => el.child(h_flex().w_full().pl(ICON_ROW + G.sm).pt(G.xs).gap(G.sm)
+      .children(fixes.map((f, i) => button(`${id}-fix-${i}`, f.label, f.onClick, c, { kind: i ? "tonal" : "solid" }).flex_1()))));
+}
+
+/** Failure on a line (status bar, pane header, toast): the mark, our words, and the one fix as a small tonal button. `fix`: { label, onClick }. */
+export const stateLine = (id, mark, what, c, fix = null) => h_flex().id(id).min_w(0).items_center().gap(G.sm)
+  .child(mark)
+  .child(div().min_w(0).truncate().text_color(c.text).child(what))
+  .when(Boolean(fix), (el) => el.child(button(`${id}-fix`, fix?.label, fix?.onClick, c, { kind: "tonal", small: true })));
+
+/** Pending: the new state drawn at once at this opacity, with `pendingDot` breathing beside it until the write is confirmed. */
+export const PENDING = 0.8;
+export const pendingDot = (id, c) => breathe(div().id(id).size(G.xs).flex_none().rounded_full().bg(c.muted));
+
+/** One switch: off is raised with the input edge, on is the solid colour; only the knob moves. Disabled: the 4% wash, dim knob. */
+export function toggleSwitch(id, checked, onChange, c, { label = "Toggle", disabled = false } = {}) {
+  // The 1px edge sits inside the pill, so the knob meets it.
+  const pad = (SWITCH.h - SWITCH.knob - 2) / 2;
+  const fill = disabled ? well(c) : checked ? c.primary : c.raised;
+  const edge = disabled ? c.border : checked ? c.primary : c.input;
+  const pill = h_flex().id(`${id}-pill`).w(SWITCH.w).h(SWITCH.h).p(pad).items_center()
+    .justify_start().when(checked, (el) => el.justify_end())
+    .rounded_full().bg(fill).border_1().border_color(edge)
+    .when(!disabled, (el) => el.hover((s) => (checked ? s.bg(mix(fill, c.background, WASH.hover)) : s.border_color(c.muted))))
+    .child(div().size(SWITCH.knob).flex_none().rounded_full().bg(disabled ? c.dim : checked ? c.primaryText : c.muted));
+  // The ring is a border kept clear at rest, as on a button.
+  return Toggle.new(id).h(H.compact).px(G.xs - G.hair).items_center()
+    .rounded(R.control).border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
+    .pressed(checked)
+    .disabled(disabled)
+    .accessibility_label(label)
+    .when(!disabled, (el) => el.cursor_pointer().on_change((next, cx) => { onChange(next, cx); cx.notify(); }))
+    .child(pill);
+}
+
+/** The most lines a multi-line field grows to before it scrolls. */
+export const FIELD_LINES = 10;
+
+/** A field's text. Create it in init or a handler, never in render. */
+export class TextField {
+  constructor(options = {}, { multiline = false } = {}) {
+    this.multiline = multiline;
+    this.focused = false;
+    this.state = multiline ? TextareaState.new(options) : InputState.new(options);
+    if (multiline) this.state.set_auto_grow(1, FIELD_LINES);
+    // Herdr styles no focus on a text frame, so the ring follows these.
+    this.state.on("focus", (_e, cx) => { this.focused = true; cx.notify(); });
+    this.state.on("blur", (_e, cx) => { this.focused = false; cx.notify(); });
+  }
+
+  value() { return this.state.value(); }
+
+  set_value(next) { this.state.set_value(next); }
+
+  set_selected_range(range) { this.state.set_selected_range(range); }
+
+  on(event, handler) { return this.state.on(event, handler); }
+
+  focus() { this.state.focus(); }
+
+  release() { return this.state.release(); }
+}
+
+/** One text field. `text` is a TextField; `icon` adds a trailing icon button, `iconTip` its name. */
+export function field(id, text, c, { label = null, icon = null, onIcon = null, iconTip = label, error = false, disabled = false, spoken = label } = {}) {
+  const multi = text.multiline;
+  const editor = disabled
+    ? div().flex_1().min_w(0).text_color(c.dim).when(!multi, (el) => el.truncate()).child(text.value())
+    : (multi ? Textarea : Input).new(text.state).flex_1().min_w(0).text_color(c.text);
+  const box = h_flex().id(`${id}-box`).rounded(R.control).border_1().bg(disabled ? well(c) : c.canvas)
+    .border_color(error ? c.blocked : c.input)
+    .when(!disabled && !error, (el) => el.hover((s) => s.border_color(c.muted)))
+    .when(multi, (el) => el.min_h(H.control * 2 + G.md).items_stretch())
+    .when(!multi, (el) => el.h(H.control))
+    .child(editor.text_size(T.value).pl(G.md).when(!icon, (el) => el.pr(G.md)).when(multi, (el) => el.py(G.sm))
+      .when(Boolean(spoken), (el) => el.accessibility_label(spoken)))
+    .when(Boolean(icon), (el) => el.gap(G.sm).pr(G.xs)
+      .child(iconButton(`${id}-icon`, icon, iconTip ?? icon, onIcon, c, { small: true, disabled })));
+  // The ring sits outside the edge and takes no room, as an outline would; Herdr has none.
+  const ring = v_flex().id(id).m(-G.hair).rounded(R.control + G.hair).border_2()
+    .border_color(text.focused && !disabled ? c.accent : CLEAR).child(box);
+  return label
+    ? v_flex().gap(G.sm).child(div().text_size(T.value).font_medium().text_color(c.muted).child(label)).child(ring)
+    : ring;
+}
+
+/** One segmented control: selection is a tone, never a weight, so nothing moves. Items: { key, label, icon, dot }; `dot` marks one
+ * while unselected. Collapsed: a column of icons, each label its tip. */
+export function segmented(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false } = {}) {
+  const seg = (item, index) => {
+    const on = value === item.key;
+    const ink = disabled ? c.dim : on ? c.text : c.muted;
+    const dot = div().size(G.sm).flex_none().rounded_full().bg(c.blocked);
+    return Button.new(`${id}-${item.key}`).items_center().justify_center().gap(G.xs).rounded(R.control)
+      .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
+      .when(collapsed, (el) => el.relative().size(H.icon).flex_none().tooltip(item.label))
+      .when(!collapsed, (el) => el.flex_1().h_full().px(G.sm - G.hair))
+      .selected(on)
+      .disabled(disabled)
+      .set_position(index + 1, items.length)
+      .accessibility_label(item.label)
+      .when(on, (el) => el.bg(c.selected))
+      .when(!disabled, (el) => el.cursor_pointer().when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => { if (!on) onChange(item.key, cx); }))
+      .when(Boolean(item.icon), (el) => el.child(svg(`${ICONS}${item.icon}.svg`).size(ICON_ROW).flex_none().text_color(ink)))
+      .when(!collapsed, (el) => el.child(div().whitespace_nowrap().text_size(T.value).text_color(ink).child(item.label)))
+      .when(Boolean(item.dot) && !on, (el) => el.child(collapsed ? dot.absolute().top(G.hair).right(G.hair) : dot));
+  };
+  return (collapsed ? v_flex() : h_flex()).id(id).p(G.hair).gap(G.hair).flex_none().rounded(R.card).bg(well(c))
+    .when(!collapsed, (el) => el.h(H.control))
+    .when(Boolean(spoken), (el) => el.accessibility_label(spoken))
+    .children(items.map(seg));
+}

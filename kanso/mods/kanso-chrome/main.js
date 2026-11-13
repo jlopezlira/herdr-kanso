@@ -4,10 +4,10 @@ import { systemApi } from "./platform-system.js";
 // Derived from the `workspace-chrome` mod shipped with Herdr (Apache-2.0, https://github.com/herdrdev/herdr-app).
 // Modified by 0OZ: brand bar, solid sidebar footer with Settings, Add machine and an account chip.
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
-// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), Herdr's mark beside the traffic lights; an "Update Kanso" row for Kanso's own releases (update.js).
-import { View, div, svg, image } from "gpui-kit";
+// Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights only; an "Update Kanso" row for Kanso's own releases (update.js).
+import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, shared, setShared, updates, agents, home, window, nextCommand, openOverlay, appHome, notify } from "herdr";
+import { theme, run, props, shared, setShared, updates, agents, home, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 import { tryOrAsync } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
@@ -118,9 +118,7 @@ export default class WorkspaceChrome extends View {
         .child(div().h(8).flex_none())
         .child(chip);
     }
-    const lights = window()?.platform === "macos" ? 76 : 14;
-    return h_flex().size_full().bg(t.chrome).items_center().justify_end().pl(lights).pr(14).gap(8)
-      .when(!collapsed, el => el.child(image("frame/welcome/herdr.png").size(20).rounded(6))
-        .child(div().font_semibold().text_size(13).text_color(t.foreground).child("Herdr")));
+    // The title bar holds the window's own lights, nothing else.
+    return div().size_full().bg(t.chrome);
   }
 }

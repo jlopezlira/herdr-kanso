@@ -10,10 +10,9 @@ export function projectControls({ active, hovered, place }) {
 
 export const pullKey = (folder, on) => `pull:${on ?? ""}:${folder ?? ""}`;
 
-export function pullLabel(n, pulling = false) {
+export function pullLabel(n) {
   const count = Number(n) || 0;
-  if (count <= 0) return null;
-  return pulling ? "Pulling\u2026" : `\u2193${count}`;
+  return count > 0 ? `\u2193${count}` : null;
 }
 
 export function pullCommand(folder, on) {
@@ -36,7 +35,7 @@ export function aheadOpen(count, place) {
 export function gitControls(git, { folder, on, id, active, pulling } = {}) {
   if (!git || !folder) return [];
   const open = Number(git.ahead) > 0 ? aheadOpen(git.ahead, { folder, on, id, active }) : null;
-  const behindLabel = pullLabel(git.behind, pulling);
+  const behindLabel = pullLabel(git.behind);
   const ahead = open ? { kind: "ahead", label: `\u2191${git.ahead}`, open } : null;
   const behind = behindLabel ? { kind: "behind", label: behindLabel, pulling: Boolean(pulling), command: pulling ? null : pullCommand(folder, on) } : null;
   return [ahead, behind].filter(Boolean);
@@ -47,7 +46,7 @@ export async function runPull(exec, notify, place) {
   if (!command) return null;
   const result = await exec(command.command, command.args, { on: command.on });
   const line = refusalLine(result);
-  if (line) notify({ title: line, level: "error" });
+  if (line) notify({ title: "Pull refused", body: line, level: "error" });
   return result;
 }
 
@@ -58,7 +57,8 @@ export function activityTone(status) {
   return "muted";
 }
 
-export const machineWordTone = (phase) => (phase === "unavailable" ? "blocked" : "dim");
+// A state on the row is a word: the blocked colour is only for an edge and a mark.
+export const machineWordTone = () => "dim";
 
 export const canWake = (row) => Boolean(row?.asleep);
 

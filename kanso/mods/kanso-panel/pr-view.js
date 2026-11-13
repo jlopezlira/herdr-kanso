@@ -6,6 +6,7 @@ import { G, H, R, T, button, quietLink, section, toneColor } from "./ui.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictCard, VIEW } from "./pr-body.js";
+import { failure } from "./lib.js";
 
 const ICON = "mods/kanso-chrome/icons/";
 
@@ -169,7 +170,7 @@ function heroTop(panel, c, view) {
 export function heroPieces(panel, c) {
   const view = panel.view();
   const veil = (el) => view.dimmed ? el.opacity(VIEW.stale) : el;
-  const note = panel.note ? [["remark", veil(div().text_size(T.value).text_color(c.red).child(panel.note)).id("remark")]] : [];
+  const note = panel.note ? [["remark", veil(failure("remark", panel.note, c))]] : [];
   const foot = footnote(panel, c);
   const tail = foot ? [["foot", foot.id("foot")]] : [];
   return [
@@ -195,6 +196,6 @@ export function drawEmpty(panel, c) {
     .child(panel.waiting(c, view.text, null, action))
     .when(Boolean(card), (el) => el.child(card))
     .when(view.details, (el) => el.child(fold(panel, c, view)))
-    .when(Boolean(panel.note), (el) => el.child(div().text_size(T.value).text_color(c.red).child(panel.note)))
+    .when(Boolean(panel.note), (el) => el.child(failure("pr-view-note", panel.note, c)))
     .when(Boolean(foot), (el) => el.child(foot));
 }

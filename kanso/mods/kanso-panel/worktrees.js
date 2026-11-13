@@ -10,8 +10,8 @@ import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
 import { Share, postText } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { tilde, pool } from "./lib.js";
-import { G, PULSE, breathe, Armed, tokens, button, quietLink, iconButton, section, ghost } from "./ui.js";
+import { tilde, pool, failure } from "./lib.js";
+import { G, PULSE, breathe, Armed, tokens, button, quietLink, iconButton, section, ghost, stateEmpty } from "./ui.js";
 import { aliasText, machineTitle, range, reduceSeries } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 
@@ -425,7 +425,7 @@ export class Worktrees {
         if (id !== this.scan) return;
         this.phase = null; this.done = true; this.scannedAt = Date.now();
       } catch (e) {
-        if (id === this.scan) { this.phase = null; this.note = `Scan failed: ${e}`; }
+        if (id === this.scan) { this.phase = null; this.note = String(e?.message ?? e); }
       } finally { if (id === this.scan) cx.notify(); }
     });
     cx.notify();
@@ -677,7 +677,7 @@ export class Worktrees {
           .child(div().text_size(12).text_color(armed ? c.red : c.dim)
             .child(armed ? "Merged branches go too; the others stay." : "Nothing uncommitted, every commit on a branch, idle a day.")))
         .when(Boolean(this.notice), (el) => el.child(div().text_size(12).text_color(c.muted).child(this.notice)))
-        .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(c.red).child(this.note))));
+        .when(Boolean(this.note), (el) => el.child(failure("wt-note", this.note, c))));
   }
 
   row(w, c) {
@@ -813,7 +813,7 @@ export class Worktrees {
   freed(c, narrow) {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(section(c, "Freed"))
-      .child(this.storeNote ? div().text_size(12).text_color(c.red).child(this.storeNote) : this.freedBones(c, narrow));
+      .child(this.storeNote ? failure("wt-store", this.storeNote, c) : this.freedBones(c, narrow));
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
     const stats = [
@@ -889,9 +889,9 @@ export class Worktrees {
       : b.items.length - a.items.length);
     const shown = this.allRepos ? groups : groups.slice(0, REPOS);
     const body = !scanned && this.phase ? this.skeleton(c, narrow)
-      : !scanned ? v_flex().w_full().gap(G.sm)
-        .child(div().text_size(15).text_color(this.note ? c.red : c.muted).child(this.note ? "The scan failed." : "No worktrees besides your checkouts."))
-        .child(div().text_size(12).text_color(c.dim).child(this.note ?? "Nothing left behind either."))
+      : !scanned ? (this.note
+        ? failure("wt-failed", "Can't scan for worktrees", c, { why: this.note, fixes: [{ label: "Refresh", onClick: (cx) => { if (!this.working) this.refresh(cx); } }] })
+        : stateEmpty("wt-empty", "worktree", "No worktrees besides your checkouts", c))
         : this.page(c, narrow, groups, shown);
     return v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })

@@ -1,7 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { run } from "herdr";
-import { G, R, T, tokens, quietLink } from "./ui.js";
+import { G, R, T, tokens, quietLink, pendingDot, PENDING } from "./ui.js";
 import { commitLayout } from "./layout.js";
 import { ASLEEP_ROW, asleepControls, gitControls, pullKey } from "./sidebar-rows.js";
 
@@ -24,11 +24,14 @@ export function gitTail(g, tree, name, t, place, act) {
   const repo = tree || same(g.name) ? "" : g.name;
   const count = (control) => {
     const base = div().id(`git-${control.kind}-${act.id}`).flex_none();
-    if (control.pulling) return base.text_size(T.body).text_color(t.muted).child(control.label);
+    // A pull is drawn done at once; the dot breathes until git answers.
+    if (control.pulling) return pendingDot(`git-pending-${act.id}`, tokens(t));
     const go = control.kind === "ahead" ? act.open : act.pull;
-    return stop(base.text_size(T.body).text_color(control.kind === "ahead" ? t.ansi2 : t.ansi1), go).child(control.label);
+    return stop(base.text_size(T.body).text_color(control.kind === "ahead" ? t.ansi2 : t.muted), go).child(control.label);
   };
+  const pending = controls.some((control) => control.pulling);
   return h_flex().flex_1().min_w(0).gap(5).justify_end().items_center().text_size(T.body).text_color(t.dim)
+    .opacity(pending ? PENDING : 1)
     .when(Boolean(repo), (el) => el.child(div().min_w(0).truncate().child(repo)))
     .when(Boolean(branch), (el) => el
       .child(svg("mods/kanso-chrome/icons/branch.svg").size(12).flex_none().text_color(t.muted))

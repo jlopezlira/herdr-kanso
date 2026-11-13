@@ -27,7 +27,7 @@ import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW } from "./sidebar-rows.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, stateEmpty, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -1794,7 +1794,7 @@ export default class Spaces extends View {
     const button = {
       copy: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t),
       power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", tip[phase] ?? "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
-      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Retry", (cx) => this.retryMachine(m, cx), t),
+      retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Refresh", (cx) => this.retryMachine(m, cx), t),
       plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New project", () => run("space.new", { machine: m ?? "" }), t),
       sync: () => this.syncButton(m, t),
     };
@@ -2036,7 +2036,7 @@ export default class Spaces extends View {
     const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
     const held = this.held?.done ? this.held.address : null;
     const sections = bySection(entries, since, held, this.statusOrder);
-    if (!sections.length) return [item(this.empty(t, "No agents yet", "Start one from + in the tab bar; it shows here by what it needs from you."))];
+    if (!sections.length) return [item(stateEmpty("agents-empty", "activity", "No agents running", tokens(t)))];
     const project = this.projectOf(sp, t);
     return sections.flatMap((s, i) => {
       const id = `section-${s.id}`;
@@ -2092,12 +2092,6 @@ export default class Spaces extends View {
         .child(h_flex().items_center().child(line(titles[i], 10)).child(div().flex_1()).child(block(22, 8)))
         .child(line(seconds[i], 8)));
     return breathe(v_flex().id("kanso-skeleton").w_full()).children([0, 1, 2, 3, 4].map(row));
-  }
-
-  empty(t, title, body) {
-    return v_flex().px(10).py(12).gap(4)
-      .child(div().text_size(13).font_medium().text_color(t.foreground).child(title))
-      .child(div().text_size(12).text_color(t.muted).child(body));
   }
 
   projectOf(sp, t) {
@@ -2240,7 +2234,7 @@ export default class Spaces extends View {
       .map((a) => ({ a, th: shownThread(this.threads[a.address], this.termBy?.get(a.address), this.alive) }))
       // Asleep, a conversation keeps its place among the others (by your last message in it).
       .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
-    if (!rows.length) return [item(this.empty(t, "No conversations open", "Start Claude Code or Codex in a tab; each conversation shows here, named on its own."))];
+    if (!rows.length) return [item(stateEmpty("threads-empty", "message", "No conversations open", tokens(t)))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
     const row = ({ a, th }, nested = false) => {

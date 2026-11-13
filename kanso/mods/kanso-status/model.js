@@ -49,9 +49,10 @@ export function computerOf(space, layouts, alias = "") {
   const name = machineTitle(remote, "", alias);
   const icon = remote ? "server" : "monitor";
   const layout = remote ? (layouts ?? []).find((row) => row?.name === remote)?.layout : null;
+  // A failure on the bar's line: the mark, our words, Refresh.
   if (remote && layout === "unavailable") {
-    const words = `${name} · unreachable`;
-    return { icon, words, tone: "blocked", command: `kanso-spaces.retry-machine:${remote}`, tooltip: words };
+    const words = `Can't reach ${name}`;
+    return { icon, words, tone: "foreground", command: `kanso-spaces.retry-machine:${remote}`, tooltip: words, fix: "Refresh" };
   }
   return { icon, words: name, tone: "muted", command: null, tooltip: null };
 }

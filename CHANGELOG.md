@@ -27,6 +27,10 @@ the branch's rules.
 ### Changed
 
 - The Storybook link in the site's navigation opens in a new tab.
+- The window's title bar shows only the window controls.
+- Empty, failed and pending states are drawn one way in the sidebar, the panels, the status bar and toasts: an empty view shows its icon and one quiet line; a failure shows the blocked mark, what went wrong, the tool's own words and the fix; a pull is shown done at once with a breathing dot until git answers, and a refused pull is a toast.
+- A computer that cannot be reached says "Can't reach" with Refresh in the status bar, and its sidebar row keeps a dim word with Refresh.
+- The count of commits behind is muted, not red.
 
 ### Fixed
 
