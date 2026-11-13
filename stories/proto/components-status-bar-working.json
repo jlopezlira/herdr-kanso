@@ -1,6 +1,0 @@
-{
- "StatusBarWorking": {
-  "caption": "Left the place, right the count of working agents with the mark, and the palette key.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__bar\" style=\"width:620px\"><div class=\"kanso-status-bar--grid kanso-story__bars-frame\" style=\"width:100%\"><div class=\"kanso-status-bar__left\"></div><div class=\"kanso-status-bar__middle\"></div><div class=\"kanso-status-bar__right\"><span class=\"kanso-status-bar__item\"><svg class=\"kanso-mark kanso-mark--working kanso-mark--small\"><use href=\"#e-work\"/></svg>2 of 4 working</span><span class=\"kanso-status-bar__item\">⌘⇧P</span></div></div></div></div></div>"
- }
-}

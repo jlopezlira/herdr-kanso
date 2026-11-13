@@ -1,6 +1,0 @@
-{
- "FindInTheConversation": {
-  "caption": "⌘F: a field with the count and the two arrows; a hit shows who, when and the line with the match.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div style=\"width:420px\"><div class=\"kanso-search__bar\"><div class=\"kanso-field kanso-control--focus\" tabindex=\"0\"><svg class=\"kanso-icon kanso-icon--row\"><use href=\"#lu-search\"/></svg><span class=\"kanso-search__input\">Retry-After<i class=\"kanso-tab__caret\"></i></span><span class=\"kanso-search__count\">1 of 3</span><span class=\"kanso-button--icon\" tabindex=\"0\"><svg class=\"kanso-icon kanso-icon--row\"><use href=\"#lu-chevron-up\"/></svg></span><span class=\"kanso-button--icon\" tabindex=\"0\"><svg class=\"kanso-icon kanso-icon--row\"><use href=\"#lu-chevron-down\"/></svg></span></div></div><div class=\"kanso-search__day\">Today</div><div class=\"kanso-row--interactive kanso-search__hit\" tabindex=\"0\"><div class=\"kanso-search__author\">You<span>14:02</span></div><div class=\"kanso-search__excerpt\">Rate limit POST /checkout per customer and send a <span class=\"kanso-search__match\">Retry-After</span> header</div></div></div></div></div>"
- }
-}

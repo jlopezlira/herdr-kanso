@@ -1,6 +1,0 @@
-{
- "PaneHeader": {
-  "caption": "34 high; name medium with its mark, place and branch meta, tools 26, grip dim. Selected on w7.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__bar\" style=\"width:620px\"><div class=\"kanso-header--rest kanso-row--selected\"><span class=\"kanso-header__name\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg>Bix</span><span class=\"kanso-header__branch\">app-audit</span><span class=\"kanso-header__branch\"><svg class=\"kanso-icon \"><use href=\"#lu-git-branch\"/></svg>audit/app-errors</span><span class=\"kanso-layout__spacer\"></span><span class=\"kanso-tab-bar__button\"><svg class=\"kanso-icon \"><use href=\"#lu-moon\"/></svg></span><span class=\"kanso-tab-bar__button\"><svg class=\"kanso-icon \"><use href=\"#lu-send\"/></svg></span><svg class=\"kanso-icon kanso-header__grip\"><use href=\"#lu-grip-vertical\"/></svg></div></div></div></div>"
- }
-}

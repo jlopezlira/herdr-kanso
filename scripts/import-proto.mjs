@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-// Reads the prototype's Storybook export (sb-atomic-stories.json, sb-atomic.css, sb-atomic-sprite.svg, board-notes.md) from <dir> and writes stories/proto*.
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// Import the external kit export through the shared component catalog.
+import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
+import { recordsFrom, replaceSource } from "./storybook-catalog.mjs";
+import { normalizeCss } from "./storybook-css.mjs";
 
 const CLASSES = {
   "B": "kanso-mascot__pixel--blue",
@@ -866,7 +869,6 @@ export const markupClasses = (html) => [...html.matchAll(/\b(?:class|className)=
 export function importProto(src) {
   if (!src) throw new Error("usage: node scripts/import-proto.mjs <dir>");
   const read = (name) => readFileSync(join(src, name), "utf8");
-  const OUT = "stories/proto";
 
   const LAYOUTS = ["Window at rest", "Sidebar at rest", "Sidebar header, three ways", "hjkl dōjō", "Right-click any piece"];
   const SETTINGS = ["Settings", "Settings, what shows", "Keys", "Window map", "What's new", "Credits"];
@@ -1085,55 +1087,14 @@ export function importProto(src) {
     return `${open}<p class="cap">Live</p>${trigger}<p class="cap">Drawn</p>${drawn}</div></div>`;
   }
 
-  const text = (html) => html.replace(/<svg.*?<\/svg>/gs, "").replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
-  const q = (s) => JSON.stringify(s);
-  const mdxText = (text) => stripRefs(text).split(/(`[^`]*`)/).map((part, i) => (i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`))).join("");
-  const cell = (tag, value, span) => `<${tag}${span ? ` colSpan={${span}}` : ""}>{${q(stripRefs(value))}}</${tag}>`;
-  const jsxTable = (head, rows) => `<table>\n<thead><tr>${head.map((h) => cell("th", h)).join("")}</tr></thead>\n<tbody>\n${rows.map((r) => `<tr>${r}</tr>`).join("\n")}\n</tbody>\n</table>`;
-
-  function tableOf(html) {
-    if (html.includes("<table")) {
-      const [, cap, table] = /<p class="cap">([^<]*)<\/p>(?:<div[^>]*>)?\s*(<table.*?<\/table>)/s.exec(html);
-      const [head, ...rows] = [...table.matchAll(/<tr>(.*?)<\/tr>/gs)].map((m) =>
-        [...m[1].matchAll(/<(td|th)([^>]*)>(.*?)<\/\1>/gs)].map(([, , attrs, inner]) => ({ value: text(inner), span: /colspan="(\d+)"/.exec(attrs)?.[1] })));
-      return `${mdxText(text(cap))}\n\n${jsxTable(head.map((c) => c.value), rows.map((r) => r.map((c) => cell("td", c.value, c.span)).join("")))}`;
-    }
-    const out = [];
-    let rows = [];
-    const flush = () => {
-      if (!rows.length) return;
-      const values = rows.some((r) => r.value);
-      out.push(jsxTable(values ? ["Token", "Value", "Use"] : ["Token", "Use"], rows.map((r) => (values ? [r.name, r.value, r.use] : [r.name, r.use]).map((v) => cell("td", v)).join(""))));
-      rows = [];
-    };
-    for (const m of html.matchAll(/<span class="p-t">(.*?)<\/span>|<div class="p-scope">(.*?)<\/div>|<div class="sect">(.*?)<\/div>|<div class="kbx-t">(.*?)<\/div>/gs)) {
-      if (m[4]) {
-        const part = (c) => text(new RegExp(`<span class="${c}"[^>]*>(.*?)</span>`, "s").exec(m[4])[1]);
-        const value = part("kbx-s");
-        rows.push({ name: part("kbx-n"), value: value === "Aa" ? "" : value, use: part("r") });
-        continue;
-      }
-      flush();
-      if (m[1]) out.push(`### ${mdxText(text(m[1]))}`);
-      if (m[2]) out.push(`{${q(text(m[2]))}}`);
-      if (m[3]) out.push(`#### ${mdxText(text(m[3]))}`);
-    }
-    flush();
-    return out.join("\n\n");
-  }
-
   const folders = new Map();
-  const tables = {};
   for (const entry of exportedStories) {
     const folder = place(entry);
     if (!folder) continue;
     const [, title, caption] = /<div class="st-h"><b>(.*?)<\/b><span>(.*?)<\/span>/s.exec(entry.html);
     if (title !== entry.title) throw new Error(`title mismatch: ${entry.title}`);
     if (!folders.has(folder)) folders.set(folder, {});
-    if (TABLES.includes(title)) {
-      (tables[folder] ??= []).push({ title, body: `${mdxText(text(caption))}\n\n${tableOf(entry.html)}` });
-      continue;
-    }
+    if (TABLES.includes(title)) continue;
     const stories = folders.get(folder);
     // The export still combines these two independent Bars pieces.
     const pieces = title === "Edges and minimap" ? [
@@ -1160,67 +1121,15 @@ export function importProto(src) {
     if (folder !== "Philosophy" && !folders.has(folder)) throw new Error(`no folder ${folder}`);
   }
 
-  const cssRules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, sel, body]) => ({
-    classes: (sel.match(/\.[\w-]+/g) ?? []).map((c) => c.slice(1)),
-    vars: [...body.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]),
-  }));
-  const isToken = (v) => tokens.has(v) || /^--w\d+$/.test(v);
-
-  function prompt(folder, stories, boards) {
-    const html = Object.values(stories).map((s) => s.html).join("");
-    const used = new Set([...html.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(/\s+/)));
-    const vars = new Set([...html.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]));
-    for (const r of cssRules) if (r.classes.length && r.classes.every((c) => used.has(c))) r.vars.forEach((v) => vars.add(v));
-    const kit = [...used].filter((c) => /^(kit|kst)-/.test(c)).sort();
-    const sentences = boards.flatMap((b) => b.body.split("\n").filter((l) => l.startsWith("- ")).flatMap((l) => l.replace(/^- (\*\*[^*]+\*\* )?/, "").split(/(?<=\.)\s+(?=[A-Z"])/)));
-    const defects = sentences.filter((s) => /\bdefect\b|^(Never|No)\b/.test(s) && !/^No \w+ is\b/.test(s));
-    const [level, sub] = folder.split("/");
-    return [
-      `Build ${sub} (${level}) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.`,
-      ...(vars.size ? [`Use these tokens: ${[...vars].filter(isToken).sort().join(", ")}.`] : []),
-      ...(html ? [`Draw these pieces: ${Object.values(stories).map((s) => s.title).join("; ")}.`] : []),
-      ...(kit.length ? [`Reuse these kit classes: ${kit.map(renamed).join(", ")}.`] : []),
-      ...(html ? ["Follow these rules:", ...Object.values(stories).map((s) => `- ${s.title}: ${s.caption}`)] : []),
-      ...(boards.length ? [`Apply every guideline of ${boards.map((b) => b.name).join("; ")}.`] : []),
-      ...(defects.length ? ["Treat as a defect:", ...defects.map((s) => `- ${s}`)] : []),
-    ].join("\n");
-  }
-
-
-  rmSync(OUT, { recursive: true, force: true });
-  mkdirSync(OUT, { recursive: true });
-  writeFileSync(join(OUT, "story.js"), "export const story = ({ html, caption }) => ({ render: () => html, parameters: { docs: { description: { story: caption } } } });\n");
-  for (const [folder, stories] of folders) {
-    const file = slug(folder);
-    const boards = why[folder] ?? [];
-    const drawn = Object.keys(stories).length > 0;
-    if (drawn) writeFileSync(join(OUT, `${file}.json`), `${JSON.stringify(stories, (k, v) => (k === "title" ? undefined : k === "html" ? renameMarkup(v) : v), 1)}\n`);
-    if (drawn) writeFileSync(join(OUT, `${file}.stories.js`), `import stories from './${file}.json';
-import { story } from './story.js';
-
-export default { title: ${q(folder)} };
-
-${Object.entries(stories).map(([k, s]) => `export const ${k} = { name: ${q(s.title)}, ...story(stories.${k}) };`).join("\n")}
-`);
-    const h1 = folder.split("/")[1];
-    const pieces = [...Object.entries(stories).map(([k, s]) => ({ title: s.title, body: `${mdxText(s.caption)}\n\n<Canvas of={stories.${k}} />` })), ...(tables[folder] ?? [])];
-    const piece = (p) => (pieces.length > 1 && p.title !== h1 ? `## ${mdxText(p.title)}\n\n${p.body}` : p.body);
-    writeFileSync(join(OUT, `${file}.mdx`), `import { Canvas, Meta } from '@storybook/addon-docs/blocks';
-${drawn ? `import * as stories from './${file}.stories.js';\n` : ""}
-<Meta title=${q(folder)} />
-
-# ${mdxText(h1)}
-
-${pieces.map(piece).join("\n\n")}
-${boards.map((b) => `\n${b.name === h1 ? "" : `## ${mdxText(b.name)}\n\n`}${mdxText(b.body)}\n`).join("")}
-## Prompt for agents
-
-\`\`\`text
-${prompt(folder, stories, boards)}
-\`\`\`
-`);
-  }
-  writeFileSync("stories/proto.css", `/* The prototype's own CSS, minus its page chrome; palettes follow site/tokens.css. Written by scripts/import-proto.mjs. */\n${renameCss(css)}`);
+  const records = [...folders].flatMap(([folder, stories]) => {
+    const records = recordsFrom("proto", `${slug(folder)}.json`, Object.fromEntries(Object.entries(stories).map(([key, story]) => [key, { ...story, html: renameMarkup(story.html) }])));
+    if (records.length && why[folder]?.length) records[0].notes = why[folder].map((note) => `### ${note.name}\n\n${note.body}`);
+    return records;
+  });
+  const type = records.find((record) => record.page === "Tokens/Type");
+  if (type && why["Tokens/Every value"]?.length) type.notes = [...(type.notes ?? []), ...why["Tokens/Every value"].map((note) => `### ${note.name}\n\n${note.body}`)];
+  replaceSource("proto", records);
+  writeFileSync("stories/proto.css", normalizeCss(renameCss(css), { kit: true }));
   writeFileSync("stories/proto-sprite.svg", read("sb-atomic-sprite.svg"));
 }
 

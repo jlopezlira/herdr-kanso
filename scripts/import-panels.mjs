@@ -1,28 +1,19 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { markupClasses, renameCss, renameMarkup, selectorClasses } from "./import-proto.mjs";
+import { expand, recordsFrom, replaceSource } from "./storybook-catalog.mjs";
+import { CSS_MARK, cssBlocks, normalizeCss } from "./storybook-css.mjs";
+import { closeOf, withoutRepeats } from "./storybook-markup.mjs";
+export { cssBlocks } from "./storybook-css.mjs";
+export { closeOf, withoutRepeats } from "./storybook-markup.mjs";
 
-const OUT = "stories/panels";
-const CSS_MARK = "/* Additional panel drawing rules. Written by scripts/import-panels.mjs. */";
-const q = JSON.stringify;
 const plain = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const slug = (s) => plain(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const identifier = (s) => plain(s).replace(/'/g, "").split(/[^a-z0-9]+/i).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
 const decode = (s) => s.replace(/&(?:amp|lt|gt|quot|apos|#39|nbsp);/g, (v) => ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&#39;": "'", "&nbsp;": " " })[v]);
 const text = (s) => decode(s.replace(/<[^>]*>/g, "")).trim();
-
-export function closeOf(html, start) {
-  const tags = /<(\/?)div\b[^>]*>/g;
-  tags.lastIndex = start;
-  let depth = 0;
-  for (let m; (m = tags.exec(html)); ) {
-    depth += m[1] ? -1 : 1;
-    if (depth === 0) return tags.lastIndex;
-  }
-  throw new Error(`Unbalanced div at ${start}`);
-}
 
 function block(html, className) {
   const m = new RegExp(`<div class="${className}"[^>]*>`).exec(html);
@@ -47,7 +38,7 @@ export function clean(s) {
 
 const mdx = (s) => clean(s).split(/(`[^`]*`)/).map((part, i) => i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`)).join("");
 const unthemed = (html) => html.replace(/class="([^"]*)"/g, (_, classes) => `class="${classes.split(/\s+/).filter((c) => c !== "k-dark" && c !== "k-light").join(" ")}"`);
-export const drawing = (html) => renameMarkup(unthemed(html));
+export const drawing = (html) => withoutRepeats(renameMarkup(unthemed(html)));
 
 export function entriesOf(html) {
   const entries = [];
@@ -114,23 +105,7 @@ const FOLDERS = {
   D1: "Components/Dialog", D6: "Compositions/Menu and dialog", D7: "Compositions/Menu and dialog", D8: "Panels/Send", D9: "Panels/Look", D10: "Panels/Markdown", D15: "Components/Dialog",
   D11a: "Panels/Dojo", D11b: "Panels/Dojo", D11c: "Panels/Dojo",
 };
-const DESCRIPTIONS = {
-  Skeleton: "The shared panel shell appears wherever a tool opens beside the current pane.",
-  Share: "Share opens from a panel header to send or copy its current result.",
-  Pins: "Pins attach notes to a picture or device screen when sending feedback to an agent.",
-  Availability: "Panel availability follows the tools installed on the current computer.",
-  Files: "Files shows the current pane's changed files or repository tree when opened from its header or the panel bar.",
-  Preview: "Preview opens a selected file for reading, editing or annotating beside the current pane.",
-  PR: "PR shows pull requests and their checks, reviews and changes when opened from the current branch or the panel bar.",
-  Shipped: "Shipped shows contribution totals for the selected period when opened from the panel bar.",
-  Worktrees: "Worktrees lists repository checkouts and cleanup actions when opened from the project or the panel bar.",
-  Ports: "Ports lists listening services and their panes when opened from the panel bar or status bar.",
-  Containers: "Containers shows Docker projects, running containers and disk use when Docker is available.",
-  Memory: "Memory shows free memory, agent use and guard controls when the computer supports the guard.",
-  Spend: "Spend shows plan use and session costs when opened from the panel bar.",
-  Images: "Images collects pictures and pinned notes when preparing feedback for an agent.",
-  Simulator: "Simulator shows connected devices and their screens when simulator tools are available.",
-};
+const PANEL_NAMES = new Set(['Skeleton', 'Share', 'Pins', 'Availability', 'Files', 'Preview', 'PR', 'Shipped', 'Worktrees', 'Ports', 'Containers', 'Memory', 'Spend', 'Images', 'Simulator']);
 
 function pageFor(entry, firstScreen) {
   if (entry.code === "P17") {
@@ -140,25 +115,8 @@ function pageFor(entry, firstScreen) {
     return firstScreen.name;
   }
   const page = PANEL_CODES[entry.code] ?? entry.group;
-  if (!DESCRIPTIONS[page]) throw new Error(`No page for ${entry.code}`);
+  if (!PANEL_NAMES.has(page)) throw new Error(`No page for ${entry.code}`);
   return page;
-}
-
-export function cssBlocks(css) {
-  const blocks = [];
-  let start = 0, depth = 0, quote = "", comment = false;
-  for (let i = 0; i < css.length; i++) {
-    const c = css[i], next = css[i + 1];
-    if (comment) { if (c === "*" && next === "/") { comment = false; i++; if (!depth) start = i + 1; } continue; }
-    if (quote) { if (c === "\\") i++; else if (c === quote) quote = ""; continue; }
-    if (c === "/" && next === "*") { comment = true; i++; continue; }
-    if (c === '"' || c === "'") { quote = c; continue; }
-    if (c === ";" && depth === 0) { start = i + 1; continue; }
-    if (c === "{") depth++;
-    if (c === "}" && --depth === 0) { blocks.push(css.slice(start, i + 1).trim()); start = i + 1; }
-  }
-  if (depth || quote || comment) throw new Error("Unbalanced CSS");
-  return blocks;
 }
 
 export function panelCss(sources, markup) {
@@ -185,7 +143,7 @@ export function panelCss(sources, markup) {
           return names.length && names.every((name) => used.has(name));
         });
         if (classes.length && applies && !classes.some((c) => chrome.test(c))) {
-          const mapped = renameCss(rule);
+          const mapped = normalizeCss(renameCss(rule)).trim();
           const mappedKey = `${context}|${mapped.slice(0, mapped.indexOf("{")).trim().replace(/\s+/g, " ")}`;
           if (!existing.has(mappedKey)) { kept.push(mapped); existing.add(mappedKey); }
         }
@@ -234,7 +192,7 @@ function panelSprite(sources, entries) {
 const canonical = (s) => s.replace(/<!--.*?-->/gs, "").replace(/ tabindex="0"/g, "").replace(/>\s+</g, "><").replace(/\s+/g, " ").trim();
 
 function inventory(master, reportDir) {
-  const previous = readdirSync("stories/proto").filter((f) => f.endsWith(".json")).flatMap((f) => Object.values(JSON.parse(readFileSync(join("stories/proto", f), "utf8"))).map((s) => canonical(s.html)));
+  const previous = expand(JSON.parse(readFileSync("stories/catalog.json", "utf8"))).filter((record) => record.source === "proto").map((record) => canonical(record.html));
   const rows = [];
   for (const m of master.matchAll(/<section class="board" id="([^"]+)">(.*?)<\/section>/gs)) {
     const [, id, body] = m;
@@ -294,22 +252,19 @@ export function generate(sourceDir, masterPath, notesPath, reportDir) {
     const guidelines = [...new Set(specs.map((spec) => `- **${spec.get("Principle")}** ${spec.get("Behaviour")}`))];
     notes.set(entry.code, `### ${pageFor(entry, firstScreen)} guidelines\n\n${guidelines.join("\n")}`);
   }
-  mkdirSync(OUT, { recursive: true });
   const counts = {};
-  for (const [page, { stories, codes }] of pages) {
-    const file = slug(page);
+  const records = [...pages].flatMap(([page, { stories, codes }]) => {
     counts[page] = Object.keys(stories).length;
-    writeFileSync(join(OUT, `${file}.json`), `${JSON.stringify(stories, null, 1)}\n`);
-    writeFileSync(join(OUT, `${file}.stories.js`), `import stories from './${file}.json';\nimport { story } from '../proto/story.js';\n\nexport default { title: ${q(`Panels/${page}`)} };\n\n${Object.entries(stories).map(([key, s]) => `export const ${key} = { name: ${q(s.name)}, ...story(stories.${key}) };`).join("\n")}\n`);
-    const canvases = Object.entries(stories).map(([key, s]) => `## ${mdx(s.name)}\n\n${mdx(s.caption)}\n\n<Canvas of={stories.${key}} />\n\n<table>\n<tbody>\n${s.spec.map(([label, value]) => `<tr><th>{${q(label)}}</th><td>{${q(value)}}</td></tr>`).join("\n")}\n</tbody>\n</table>`);
-    const guidelines = [...codes].map((code) => {
+    const records = recordsFrom("panels", `${slug(page)}.json`, stories);
+    records[0].notes = [...codes].map((code) => {
       if (!notes.has(code)) throw new Error(`Missing guidelines for ${code}`);
-      return mdx(notes.get(code));
+      return notes.get(code);
     });
-    writeFileSync(join(OUT, `${file}.mdx`), `import { Canvas, Meta } from '@storybook/addon-docs/blocks';\nimport * as stories from './${file}.stories.js';\n\n<Meta title=${q(`Panels/${page}`)} />\n\n# ${page}\n\n${DESCRIPTIONS[page]}\n\n${canvases.join("\n\n")}\n\n${guidelines.join("\n\n")}\n\n## Prompt for agents\n\n\`\`\`text\nBuild ${page} for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.\n\`\`\`\n`);
-  }
+    return records;
+  });
+  replaceSource("panels", records);
   const master = readFileSync(masterPath, "utf8");
-  writeFileSync("stories/proto.css", css.content);
+  writeFileSync("stories/proto.css", normalizeCss(css.content, { kit: true }));
   writeFileSync("stories/proto-sprite.svg", sprite);
   const rows = inventory(master, reportDir);
   const summary = { boards: rows.length, coveredBefore: rows.filter((r) => r.covered).length, stories: entries.length, sourceCounts: sources.map((source) => entriesOf(source).length), counts, cssRules: css.count };

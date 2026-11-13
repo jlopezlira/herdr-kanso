@@ -1,6 +1,0 @@
-{
- "NewProject": {
-  "caption": "Title 15, field labels meta, Choose… quiet in the field, Create off until a folder is chosen.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-sidebar__dialog\"><div class=\"kanso-sidebar__dialog-title\">New project</div><div class=\"kanso-sidebar__field-label\">Folder</div><div class=\"kanso-field \" tabindex=\"0\"><span class=\"kanso-sidebar__placeholder\">None chosen</span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-button--quiet kanso-text--foreground\" tabindex=\"0\">Choose…</span></div><div class=\"kanso-sidebar__field-label\">Name</div><div class=\"kanso-field kanso-control--focus\" tabindex=\"0\"><span class=\"kanso-sidebar__caret\"></span><span class=\"kanso-sidebar__placeholder\">Its folder's name</span><span class=\"kanso-layout__grow\"></span></div><div class=\"kanso-sidebar__dialog-actions\"><span class=\"kanso-button--quiet kanso-text--foreground\" tabindex=\"0\">Cancel</span><span class=\"kanso-button kanso-control--off\" tabindex=\"0\">Create</span></div></div></div></div>"
- }
-}

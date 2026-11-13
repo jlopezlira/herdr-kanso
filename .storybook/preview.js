@@ -37,12 +37,12 @@ const preview = {
     options: {
       storySort: {
         order: [
-          'Philosophy',
-          'Tokens', ['How to use it', 'Every value', 'Type', 'Colour and wash', 'Icons', 'Dawn'],
-          'Compositions', ['Controls', 'Sidebar rows', 'Panel pieces', 'States', 'Bars', 'Files and PR', 'Menu and dialog'],
-          'Components', ['While you were away', 'Title and tools', 'Collapsed rail', 'New project', 'Menu', 'Dialog', 'Rename', 'Pick list', 'Markdown window', 'Settings tabs', 'Tab bar', 'Pane header', 'Status bar', 'Tab states', 'Panel menu', 'Header digest', 'Pane standing in', 'Edges and minimap', 'Status bar, working', 'Find in the conversation', 'System notification', 'Simulator screen', 'Annotated picture', 'Code', 'Markdown', 'Log', 'Shipped', 'Worktree row, open', 'New worktree', 'Choosing the channel'],
-          'Layouts', ['hjkl dōjō', 'Sidebar header, three ways', 'Sidebar at rest', 'Window at rest', 'Right-click any piece'],
-          'About',
+          'Start', ['Philosophy', 'About', 'How to read this Storybook', 'How to use the prompt for agents'],
+          'Tokens', ['Colour', 'Type', 'Spacing', 'Radius', 'Motion', 'Icons'],
+          'Primitives',
+          'Compositions', ['Header', 'Sidebar', 'Rail', 'Status bar', 'Bars', 'Edge and Minimap', 'State patterns'],
+          'Panels',
+          'Layouts',
         ],
       },
     },

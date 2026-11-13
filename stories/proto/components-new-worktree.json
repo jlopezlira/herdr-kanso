@@ -1,6 +1,0 @@
-{
- "NewWorktree": {
-  "caption": "Name field, the path it will take, the program as a segmented, Create at the end.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog--worktree\">\n              <div class=\"kanso-content__text\">New worktree in acme-shop</div>\n              <div class=\"kanso-field kanso-control--focus\" tabindex=\"0\">rate-limit-v2<span class=\"kanso-code__caret\" style=\"margin-left:0\"></span></div>\n              <div class=\"kanso-field__hint\">~/.kanso/worktrees/acme-shop/rate-limit-v2</div>\n              <div class=\"kanso-segmented--options\"><span class=\"kanso-control--on\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg>Claude</span><span><svg class=\"kanso-icon--program\"><use href=\"#p-codex\"/></svg>Codex</span><span>Terminal</span></div>\n              <div class=\"kanso-actions kanso-panel__actions--end\" style=\"margin-top:var(--k-sp-4)\"><span class=\"kanso-button--quiet\" tabindex=\"0\">Cancel</span><span class=\"kanso-button\" tabindex=\"0\">Create</span></div>\n            </div></div></div>"
- }
-}

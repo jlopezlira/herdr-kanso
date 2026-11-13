@@ -1,0 +1,120 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Start/Philosophy" />
+
+## Kansō 簡素
+
+### What it means
+
+Simplicity: leave out what is not needed.
+
+### How kansō applies it
+
+One fact, one home. Nothing repeated, nothing explained twice, nothing you already know. Fewer presses.
+
+## Fukinsei 不均斉
+
+### What it means
+
+Asymmetry: balance without forced symmetry.
+
+### How kansō applies it
+
+The window balances by weight, not by mirror: a quiet sidebar against the work. Hierarchy comes from size and weight.
+
+## Kokō 枯高
+
+### What it means
+
+Austerity: only the essential, the bare core.
+
+### How kansō applies it
+
+One accent. State colour only on what asks for you. Exact Lucide icons, never our own.
+
+## Shizen 自然
+
+### What it means
+
+Naturalness: nothing forced.
+
+### How kansō applies it
+
+Motion only for live work (the ensō, the shimmer). Nothing jumps or resizes. Light is paper, not white, and reads like dark.
+
+## Yūgen 幽玄
+
+### What it means
+
+Subtlety: suggest rather than show everything.
+
+### How kansō applies it
+
+Detail appears when you open or point at something. A stand-in shows only while its home is out of view.
+
+## Datsuzoku 脱俗
+
+### What it means
+
+Freedom from the conventional.
+
+### How kansō applies it
+
+One memorable element: the ensō, and the dawn that rises once.
+
+## Seijaku 静寂
+
+### What it means
+
+Tranquility.
+
+### How kansō applies it
+
+A calm rest state. One drawing for each piece and each state, so nothing surprises.
+
+## Why
+
+- kansō is named after one of the seven principles of Zen art described by Shin'ichi Hisamatsu in *Zen and the Fine Arts* (1971). The design follows all seven as one philosophy, not taste.
+- Every guideline names the principle it serves. A decision that cannot name one is an opinion, and is not taken.
+- One limit sits above them: kansō simplifies information and interaction. Every action stays one press away.
+
+## One fact, one home
+
+Each fact, its one home, where else it may show and why, where never.
+
+<table>
+<thead><tr><th>Fact</th><th>Its one home</th><th>Also shown, and why</th><th>Never shown in</th></tr></thead>
+<tbody><tr><td>An agent needs you</td><td>Its sidebar row: blocked wash, mark and the question (sidebar-agent).</td><td>Status bar, only while the row is out of view, as its stand-in.</td><td>Pane header and tab: no mark, no wash, no words; the pane shows the question itself. A dot on the view switch or the rail. A "Needs you" card.</td></tr>
+<tr><td>What it asks</td><td>Its sidebar row's tooltip and its pane (sidebar-agent).</td><td>Status bar, only while the row is off screen, in the same words and the same cut.</td><td>A second, longer copy anywhere.</td></tr>
+<tr><td>An agent finished, and its last words</td><td>Its pane. The row turns to the done mark until you look (sidebar-agent).</td><td>Nowhere else.</td><td>A digest on the done row.</td></tr>
+<tr><td>What the turn changed: files, diff</td><td>Pane header segments (bars-header, bars-digest).</td><td>Nowhere else. A file's own stat in Files is a different fact.</td><td>A total in the Files panel. The same numbers on the sidebar row.</td></tr>
+<tr><td>This agent is working</td><td>Its sidebar row: spinning ensō and name shimmer (sidebar-agent).</td><td>Nowhere else.</td><td>Pane header and tabs: no ensō. Edge dots.</td></tr>
+<tr><td>How many agents are working</td><td>The spinning rows themselves (sidebar-agent); the Status view lists them.</td><td>Nowhere else.</td><td>A count on the status bar or the footer: it repeats the rows.</td></tr>
+<tr><td>A command still running after the turn</td><td>The agent's row, by name ("pnpm dev") (sidebar-agent).</td><td>Nowhere else while Ports is closed.</td><td>A bare number.</td></tr>
+<tr><td>The project's branch</td><td>Project row. A worktree's name is its branch (sidebar-project).</td><td>Nowhere else.</td><td>Pane header (folder and branch). Status bar.</td></tr>
+<tr><td>Commits not pushed</td><td>Project row ↑N; a click opens Push (sidebar-project).</td><td>Nowhere else.</td><td>Pane header "N commits". Arrows that do nothing.</td></tr>
+<tr><td>Behind upstream</td><td>Project row ↓N; a press pulls (sidebar-project).</td><td>Nowhere else. "Behind main" on a pull request is its base and lives in the header verdict.</td><td>Arrows that do nothing.</td></tr>
+<tr><td>Pull request state</td><td>Pane header: #N and its verdict in words (bars-header).</td><td>Nowhere else at rest. The PR panel, when you open it, holds the detail.</td><td>A dot without words.</td></tr>
+<tr><td>A check failed</td><td>The same pane header segment (bars-header).</td><td>Away card or toast, only when no header in view shows that PR.</td><td>The done row.</td></tr>
+<tr><td>Reviews asked of me</td><td>PR list, first group, "Asked of you" (pr).</td><td>Status bar "2 reviews"; a click opens that group.</td><td>A count pill in the list.</td></tr>
+<tr><td>A kansō update exists</td><td>The Settings menu in the footer, in words (sidebar-footer).</td><td>Toast, only while the footer is out of view, as its stand-in.</td><td>A dot on the gear or the footer. A banner in Settings.</td></tr>
+<tr><td>Herdr has an update</td><td>The Settings menu, "Update Herdr" (sidebar-footer).</td><td>Nowhere else.</td><td>"Settings · update ready".</td></tr>
+<tr><td>Which channel I am on</td><td>The sidebar header band, the pill, or nothing (dawn).</td><td>Nowhere else.</td><td>Toasts, the footer.</td></tr>
+<tr><td>A computer's name</td><td>Its row at the head of its projects (sidebar-computer).</td><td>Nowhere else.</td><td>The status bar. A row for the only computer.</td></tr>
+<tr><td>A computer stopped answering</td><td>Said once, when it happens: the away card, or a toast while you are here (sidebar-away).</td><td>Its actions stay one press away under + → Computers.</td><td>A standing "Unreachable" or "Off" on the list or the status bar.</td></tr>
+<tr><td>Memory is low</td><td>Status bar, "Memory 8% free" (bars-status).</td><td>A system notice in the same words, only while no kansō window is on screen.</td><td>The status bar while the Memory panel is open: the panel holds it then.</td></tr>
+<tr><td>A tab is asleep</td><td>The Asleep group; folded, its count is the summary (sidebar-asleep).</td><td>Nowhere else.</td><td>A second list in the Sleep dialog. A count beside the open rows.</td></tr>
+<tr><td>Could not sleep</td><td>The asleep row: reason, Retry, Undo (sidebar-asleep).</td><td>Toast in the same words, only while the group is off screen.</td><td>The toast while the group is in view.</td></tr>
+<tr><td>What happened while you were away</td><td>The away card: only facts no row in view shows (sidebar-away).</td><td>Nowhere else.</td><td>Needs you or Finished for a row in view. A count.</td></tr>
+<tr><td>A server with no pane</td><td>Status bar ":6006 no pane"; a click opens Ports on that row (bars-status).</td><td>Nowhere else.</td><td>The status bar while Ports is open. A hero, a legend or a second line in Ports.</td></tr>
+<tr><td>A container failed</td><td>Its row in Containers: "exited 1 · 3 min" (panels-b-containers).</td><td>Status bar "api-db exited 1", only while the panel is closed, as its stand-in.</td><td>Hero counts. "Docker is not installed".</td></tr>
+<tr><td>Spend</td><td>The Spend panel, one number (panels-b-spend).</td><td>Nowhere else.</td><td>A dollar amount on the status bar. Crumbs, section counts, footnotes.</td></tr>
+<tr><td>A file the agent named</td><td>Files, "Named by checkout" (panels-a-files).</td><td>Nowhere else.</td><td>A second listing under Also changed.</td></tr>
+<tr><td>The command palette key</td><td>Settings · Keys, the one list of every key (dialogs-keys).</td><td>Nowhere else: you already know it.</td><td>The status bar. A second keyboard in Help.</td></tr></tbody>
+</table>
+
+## Prompt for agents
+
+```text
+Apply the seven principles and the information placement table on this page. Use the component pages for their states, specifications and shared kit instructions.
+```
