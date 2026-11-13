@@ -5,11 +5,13 @@ import { normalizeComponent } from './storybook-components.mjs';
 import { normalizeCss } from './storybook-css.mjs';
 import { kitRecords, tokenRecords } from './storybook-kit.mjs';
 import { gapDocument, mergeCoverage } from './storybook-coverage.mjs';
-import { sampleText } from './storybook-markup.mjs';
+import { referenceText, sampleText } from './storybook-markup.mjs';
+import { panelStateRecords } from './storybook-panel-states.mjs';
+import { generateReferences } from "./storybook-references.mjs";
 
 export const SECTIONS = ['Start', 'Tokens', 'Primitives', 'Compositions', 'Panels', 'Layouts'];
 export const slug = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-export const cleanText = (s = '') => sampleText(s).replace(/; [^;.]+ keeps this component and its states in the shared kit\./g, '.').replace(/\b(?:prototype|board)(?:s|'s)?\b/gi, 'example').replace(/\bdesigners?\b/gi, 'reader').replace(/\bagents?\b/gi, (s) => s[0] === 'A' ? 'Session' : 'session').replace(/\ban? session\b/gi, 'a session').replace(/\bsubtracted\b/gi, 'simplified').replace(/\bremoved facts?\b/gi, 'simplified information').replace(/\bremoved\b/gi, 'cleared');
+export const cleanText = (s = '') => sampleText(referenceText(s)).replace(/; [^;.]+ keeps this component and its states in the shared kit\./g, '.').replace(/\b(?:prototype|board)(?:s|'s)?\b/gi, 'example').replace(/\bdesigners?\b/gi, 'reader').replace(/\bagents?\b/gi, (s) => s[0] === 'A' ? 'Session' : 'session').replace(/\ban? session\b/gi, 'a session').replace(/\bsubtracted\b/gi, 'simplified').replace(/\bremoved facts?\b/gi, 'simplified information').replace(/\bremoved\b/gi, 'cleared');
 const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
 
 export function pack(records) {
@@ -154,7 +156,9 @@ export function pagesOf(records) {
 
 export function generate(root = '.') {
   const file = join(root, 'stories/catalog.json');
-  const originals = mergeCoverage(expand(read(file)).filter((record) => !['kit', 'tokens'].includes(record.source)).map((record) => record.html === undefined ? record : normalizeComponent(record)));
+  const retained = expand(read(file)).filter((record) => !['kit', 'tokens'].includes(record.source));
+  const drawings = panelStateRecords(retained), regenerated = new Set(drawings.map((record) => record.id));
+  const originals = mergeCoverage([...retained.filter((record) => !regenerated.has(record.id)), ...drawings].map((record) => record.html === undefined ? record : normalizeComponent(record)));
   const tokenFile = join(root, 'kanso/tokens.json');
   const tokens = existsSync(tokenFile) ? read(tokenFile) : null;
   const catalog = pack([...originals, ...kitRecords(originals).map(normalizeComponent), ...(tokens ? tokenRecords(tokens) : [])]);
@@ -171,6 +175,7 @@ export function generate(root = '.') {
     writeFileSync(join(out, `${file}.stories.js`), `import { componentStory } from '../kit/story.js';\n\nexport default { title: ${JSON.stringify(page)} };\nexport const Variants = componentStory(${JSON.stringify(page)});\n`);
     writeFileSync(join(out, `${file}.mdx`), `import { Meta } from '@storybook/addon-docs/blocks';\nimport * as stories from './${file}.stories.js';\nimport { ComponentPage } from '../kit/ComponentPage.jsx';\n\n<Meta of={stories} name="Overview" />\n<ComponentPage of={stories} page=${JSON.stringify(page)} />\n`);
   }
+  generateReferences(root);
   return { stories: pages.length, states: catalog.records.filter((record) => record.markup !== undefined).length, covered: catalog.records.filter((record) => record.design).length, gaps: catalog.records.filter((record) => record.gap).length };
 }
 

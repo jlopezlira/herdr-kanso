@@ -32,8 +32,8 @@ test("CSS extraction balances nested media, comments and quoted braces", () => {
   assert.deepEqual(cssBlocks(css), ['.one{content:"}"}', '@media (width < 600px){.two{color:red}/* nested } */}']);
   assert.throws(() => cssBlocks('.one{color:red'), /Unbalanced CSS/);
   assert.throws(() => panelCss(['<style>.btn,.unknown{color:red}</style>'], '<div class="btn"></div>'), /unmapped prototype class: unknown/);
-  const mapped = panelCss(['<style>.sim-notes{margin-top:16px}</style>'], '<div class="sim-notes"></div>');
-  assert.match(mapped.content, /\.kanso-simulator__notes\{margin-top:16px\}/);
+  const mapped = panelCss(['<style>.sim-notes.c-fg{margin-top:16px}</style>'], '<div class="sim-notes c-fg"></div>');
+  assert.match(mapped.content, /\.kanso-simulator__notes\.kanso-text--foreground\{margin-top:16px\}/);
   assert.doesNotMatch(mapped.content, /\.sim-notes\{/);
 });
 

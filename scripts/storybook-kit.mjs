@@ -27,6 +27,13 @@ export function kitRecords(records) {
       add(name, label, html, `${label} appearance of the shared ${name.toLowerCase()}.`);
     }
   }
+  const photo = 'https://avatars.githubusercontent.com/u/9919?s=96';
+  const avatar = (size, inner) => `<span class="kanso-avatar--round${size ? ` kanso-avatar--${size}` : ''}">${inner}</span>`;
+  const img = `<img src="${photo}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+  add('Avatar', 'Image', avatar('', img), 'A picture from a URL, local or external, cropped to the circle.');
+  add('Avatar', 'Small', `<span class="kanso-actions">${avatar('small', 'S')}${avatar('small', img)}</span>`, 'Inside a line of text.');
+  add('Avatar', 'Large', `<span class="kanso-actions">${avatar('large', 'S')}${avatar('large', img)}</span>`, 'A card or a header.');
+  add('Avatar', 'Image failed', avatar('', `<img src="https://invalid.example/avatar.png" alt="" onerror="this.remove()">S`), 'When the picture cannot load, the initial stays.');
   for (const state of ['working', 'blocked', 'done', 'idle']) {
     const html = first(`kanso-mark--${state}`);
     if (html) add('Mark', state[0].toUpperCase() + state.slice(1), html, `The owning item is ${state}.`);
@@ -65,10 +72,24 @@ export function kitRecords(records) {
 export function tokenRecords(tokens) {
   const groups = { Colour: ['colour'], Type: ['type'], Spacing: ['space', 'height', 'switch'], Radius: ['radius'], Motion: ['motion'], Icons: ['icon'] };
   return Object.entries(groups).map(([name, keys]) => {
-    const rows = keys.flatMap((key) => key === 'colour'
-      ? Object.entries(tokens.colour).flatMap(([theme, values]) => values.map((row) => ({ ...row, group: theme })))
-      : tokens[key].map((row) => ({ ...row, group: key })));
-    const html = `<table class="kanso-tokens"><thead><tr><th>Group</th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escape(row.group)}</td><td>--${escape(row.name)}</td><td>${escape(row.value)}</td><td>${escape(row.role)}</td></tr>`).join('')}</tbody></table>`;
+    if (keys[0] === 'colour') {
+      const names = [...new Set(Object.values(tokens.colour).flatMap((values) => values.map((row) => row.name)))];
+      const value = (theme, n) => tokens.colour[theme].find((row) => row.name === n);
+      const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${names.map((n) => `<tr><td><span class="kanso-tokens__swatch" style="background:var(--${escape(n)})"></span></td><td class="kanso-tokens__name">--${escape(n)}</td><td class="kanso-tokens__name">${Object.keys(tokens.colour).map((theme) => `<span class="kanso-tokens__value kanso-tokens__value--${theme}">${escape(value(theme, n)?.value ?? '')}</span>`).join('')}</td><td>${escape((value('dark', n) ?? value('light', n)).role)}</td></tr>`).join('')}</tbody></table>`;
+      return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
+    }
+    const rows = keys.flatMap((key) => tokens[key].map((row) => ({ ...row, group: key })));
+    const sample = ({ group, name: n }) => {
+      const v = `var(--${escape(n)})`;
+      if (group === 'type') return /^k-fw-/.test(n) ? `<span style="font-weight:${v}">Aa Quiet sessions</span>` : /^k-lh-/.test(n) ? `<span class="kanso-tokens__lines" style="line-height:${v}">Two lines<br>of text</span>` : `<span style="font-size:${v}${n === 'k-fs-mono' ? ';font-family:var(--mono)' : ''}">Aa Quiet sessions</span>`;
+      if (group === 'space') return `<span class="kanso-tokens__space" style="inline-size:${v}"></span>`;
+      if (group === 'radius') return `<span class="kanso-tokens__radius" style="border-radius:${v}"></span>`;
+      if (group === 'height' || group === 'switch') return `<span class="kanso-tokens__height" style="${/-w$/.test(n) ? 'inline-size' : 'block-size'}:${v}"></span>`;
+      if (group === 'icon') return `<svg class="kanso-icon" style="inline-size:${v};block-size:${v}" aria-hidden="true"><use href="#lu-bot"/></svg>`;
+      return '';
+    };
+    const role = (text) => text.replace(/:? ?ui\.js [\w.]+/g, '').replace(/ ?\(\d+ merged here\)/g, '').replace(/^4-based$/, 'base step').trim();
+    const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${rows.map((row) => `<tr><td class="kanso-tokens__example">${sample(row)}</td><td class="kanso-tokens__name">--${escape(row.name)}</td><td class="kanso-tokens__name">${escape(row.value)}</td><td>${escape(role(row.role))}</td></tr>`).join('')}</tbody></table>`;
     return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
   });
 }

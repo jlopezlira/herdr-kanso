@@ -3,6 +3,7 @@ import { descriptions } from '../stories/kit/descriptions.js';
 import { content, featuresFor, statesFor } from '../stories/kit/catalog.js';
 import { promptFor } from '../stories/kit/prompt.js';
 import { FEATURE_LABEL, FEATURE_NOTE } from '../stories/kit/features.js';
+import { referenceFor, referenceStates } from "../stories/kit/references.js";
 
 const file = 'storybook-static/manifests/docs.json';
 const manifest = JSON.parse(readFileSync(file, 'utf8'));
@@ -10,6 +11,19 @@ const index = JSON.parse(readFileSync('storybook-static/index.json', 'utf8'));
 for (const entry of Object.values(index.entries).filter((entry) => entry.type === 'docs' && !entry.title.startsWith('Start/'))) {
   const doc = { id: entry.id, name: entry.name, path: entry.importPath, title: entry.title };
   manifest.docs[doc.id] = doc;
+  const reference = referenceFor(doc.title);
+  if (reference && !reference.existing) {
+    doc.content = [
+      `# ${doc.title.split("/")[1]}`, reference.status,
+      ...(reference.boards.length ? [`Reference: ${reference.boards.join(", ")}`] : []),
+      ...reference.guidelines, "## States", reference.approvedRecords?.length ? "Approved reference drawings; additional states are Proposed." : "Proposed",
+      ...(reference.proposedPredicates ?? []).map((predicate) => `Proposed: ${predicate.label} (${predicate.location})`),
+      ...referenceStates(doc.title).flatMap((state) => [`### ${reference.approvedRecords?.includes(state.id) ? "" : "Proposed: "}${state.label}`, content(state.caption)]),
+      "## Components", ...reference.components,
+      "## Prompt for agents", `Build ${doc.title} from the shared kit. Preserve every action and apply the guidelines above.`,
+    ].join("\n\n");
+    continue;
+  }
   const states = statesFor(doc.title);
   const [what, when] = descriptions[doc.title.split('/')[1]];
   const contexts = [...new Set([...states, ...featuresFor(doc.title)].flatMap((state) => state.context === undefined ? [] : [state.context]))].map(content);

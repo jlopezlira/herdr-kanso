@@ -26,15 +26,22 @@ the branch's rules.
 
 ### Changed
 
+- Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.
+- Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
 - The Storybook link in the site's navigation opens in a new tab.
 - The window's title bar shows only the window controls.
 - Empty, failed and pending states are drawn one way in the sidebar, the panels, the status bar and toasts: an empty view shows its icon and one quiet line; a failure shows the blocked mark, what went wrong, the tool's own words and the fix; a pull is shown done at once with a breathing dot until git answers, and a refused pull is a toast.
 - A computer that cannot be reached says "Can't reach" with Refresh in the status bar, and its sidebar row keeps a dim word with Refresh.
 - The count of commits behind is muted, not red.
 - Issue forms ask for steps to reproduce, test cases, acceptance criteria and what ready and done mean.
+- Storybook icons draw the exact Lucide shapes, and its checks run in under a second.
 
 ### Fixed
 
+- Storybook gives approved designs and features such as Open with, Sleep and Arrangements their own pages, with shared reference drawings and additional states marked Proposed.
+- Storybook draws all missing Sidebar and Activity feature states with the shared kit, including queues, sleeping conversations, Git controls and activity overflow.
+- Storybook draws missing Settings and Memory feature states with the shared kit and source-linked coverage.
+- Storybook draws all missing pull request and Spend feature states with the shared kit.
 - Cmd+J (Ctrl+Shift+J on Windows) jumps to finished agents again, after the ones waiting for you.
 - Storybook panel and layout stories draw at real size without a frame card, with the row actions, header marks, device rows, skeleton bars, checks list and code lines of the approved designs.
 - Storybook controls respond with sample data: selection, editing, toggles, Armed confirmation and Undo, menus, dialogs, navigation folds, filtering and copy feedback reset with the State control.

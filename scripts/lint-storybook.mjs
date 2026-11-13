@@ -5,9 +5,12 @@ import { pathToFileURL } from 'node:url';
 import { SECTIONS, expand } from './storybook-catalog.mjs';
 import { explainErrors } from './storybook-components.mjs';
 import { gapDocument, overlapFor } from './storybook-coverage.mjs';
+import { STORYBOOK_CLASSES, cssSelectors, markupClasses, selectorClasses } from './import-proto.mjs';
 import { descriptions } from '../stories/kit/descriptions.js';
+import references from "../stories/references.json" with { type: "json" };
 
 const STORY_FILE = /\.stories\.(?:js|jsx|mjs|ts|tsx)$/;
+const BEM = /^kanso-[a-z0-9]+(?:-[a-z0-9]+)*(__[a-z0-9-]+)?(--[a-z0-9-]+)?$/;
 
 export function storyFiles(root = 'stories') {
   return Object.fromEntries(readdirSync(root, { recursive: true, withFileTypes: true }).filter((file) => file.isFile() && (STORY_FILE.test(file.name) || /\.(mdx|json)$/.test(file.name))).map((file) => {
@@ -21,7 +24,7 @@ export function structureErrors(files, catalog, template) {
   const statePage = /(?:^|[ ,])(?:hover|focus|active|disabled|dimmed|loading|empty|failure|armed|pending|working|at rest|tab states)(?:$|[ ,])/i;
   const titleOf = (path, title) => {
     if (!SECTIONS.includes(title.split('/')[0]) || title.split('/').length !== 2) errors.push(`${path}: story outside the six sections`);
-    if (statePage.test(title.split('/')[1] ?? '')) errors.push(`${path}: state page instead of component`);
+    if (statePage.test(title.split('/')[1] ?? '') && !references.pages.some((reference) => reference.page === title && reference.boards.length)) errors.push(`${path}: state page instead of component`);
     if (titles.has(title)) errors.push(`${path}: duplicate title ${title}`);
     titles.set(title, path);
   };
@@ -39,7 +42,11 @@ export function structureErrors(files, catalog, template) {
     const explicit = /<Meta title="([^"]+)"/.exec(text)?.[1];
     if (explicit) {
       titleOf(path, explicit);
-      if (!/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
+      const named = /<ReferencePage page="([^"]+)" \/>/.exec(text)?.[1];
+      if (named) {
+        if (named !== explicit || !references.pages.some((reference) => reference.page === named && (!reference.existing || named.startsWith("Start/")))) errors.push(`${path}: unregistered named reference`);
+        docs.add(explicit);
+      } else if (!/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
     } else {
       const target = /import \* as stories from '\.\/([^']+)'/.exec(text)?.[1];
       const title = /page="([^"]+)"/.exec(text)?.[1];
@@ -79,6 +86,16 @@ export function lint(root = '.') {
   const catalog = JSON.parse(readFileSync(join(root, 'stories/catalog.json'), 'utf8'));
   const errors = structureErrors(storyFiles(join(root, 'stories')), catalog, readFileSync(join(root, 'stories/kit/ComponentPage.jsx'), 'utf8'));
   if (readFileSync(join(root, 'stories/GAPS.md'), 'utf8') !== gapDocument(expand(catalog))) errors.push('GAPS.md: feature inventory differs from component pages');
+  const read = (file) => readFileSync(join(root, file), 'utf8');
+  const [, canvas, docs] = /frame\.className = [^?]+\? '([^']+)' : '([^']+)'/.exec(read('.storybook/preview.js')) ?? [];
+  const classes = [
+    ['.storybook/preview.js', `${canvas ?? ''} ${docs ?? ''}`.split(/\s+/).filter(Boolean)],
+    ...['stories/proto.css', 'stories/frame.css', '.storybook/preview-head.html'].map((file) => [file, cssSelectors(read(file)).flatMap(selectorClasses)]),
+    ...expand(catalog).filter((record) => record.html !== undefined).map((record) => [record.id, markupClasses(record.html)]),
+    ...['stories/start', 'stories/components', 'stories/kit'].flatMap((dir) => readdirSync(join(root, dir)).filter((name) => /\.(mdx|jsx)$/.test(name)).map((name) => [`${dir}/${name}`, markupClasses(read(`${dir}/${name}`))])),
+  ];
+  for (const [source, names] of classes) for (const name of names) if (!BEM.test(name) && !STORYBOOK_CLASSES.has(name)) errors.push(`${source}: ${name} is not kanso BEM`);
+  if (!canvas) errors.push('.storybook/preview.js: frame classes not found');
   return errors;
 }
 

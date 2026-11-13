@@ -27,6 +27,14 @@ export function withoutRepeats(html) {
   return open[0] + kept + '</div>';
 }
 const SAMPLE_NAMES = { 'kylo-ren': 'Atlas', bix: 'Juno', wren: 'Iris', groot: 'Orion', fury: 'Nova', rey: 'Vega' };
+export const referenceText = (s) => s
+  .replace(/\b[\w-]+'s \+ and [\w-]+'s ⋯ are not drawn at rest/g, "project and session row actions are not drawn at rest")
+  .replace(/\([^(),]+, after the unified menu\)/g, "(after the unified menu)")
+  .replace(/(Tab bar|app\.settings) \([A-Z][a-z]+\)/g, "$1")
+  .replace(/(the tab bar keeps no gear and no \?), [A-Z][a-z]+(?=\))/g, "$1")
+  .replace(/\b[A-Z][a-z]+'s (?=pax-)/g, "")
+  .replace(/(editor conflict), [A-Z][a-z]+'s markup(?=:)/g, "$1")
+  .replace(/Drawn at Only when needed: [^.]+ works and [^.]+ waits, so they show a second line\./g, "At Only when needed, working and waiting sessions show a second line.");
 export const sampleText = (s) => s.replace(/\bReviewing board (\d+)/g, 'Reviewing step $1').replace(/\b(kylo-ren|bix|wren|groot|fury|rey)\b/gi, (name) => name[0] === name[0].toLowerCase() ? SAMPLE_NAMES[name.toLowerCase()].toLowerCase() : SAMPLE_NAMES[name.toLowerCase()]);
 export const escapeMarkup = (s) => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
 export const textOf = (html) => html.replace(/<svg\b[^]*?<\/svg>/gi, '').replace(/<[^>]*>/g, '').replace(/&(?:amp|lt|gt|quot|apos|nbsp|#\d+|#x[0-9a-f]+);/gi, (s) => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&nbsp;': ' ' })[s] ?? String.fromCodePoint(s.startsWith('&#x') ? parseInt(s.slice(3), 16) : Number(s.slice(2, -1)))).trim();

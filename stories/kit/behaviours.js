@@ -2,6 +2,7 @@ import { content, statesFor } from './catalog.js';
 
 export const ARM_MS = 4000;
 export const behaviours = {
+  'kanso-reference__link': 'action',
   'kanso-segmented': 'select',
   'kanso-segmented--options': 'select',
   'kanso-segmented--sidebar': 'select',
@@ -77,7 +78,7 @@ export function matchingState(states, label, current) {
   return candidates.find((state) => family && state.label.startsWith(`${family} · `)) ?? candidates.find((state) => normal(state.label) === wanted) ?? candidates[0];
 }
 
-export function mountBehaviours(root, { page, state, updateArgs = () => {} } = {}) {
+export function mountBehaviours(root, { page, state, inlineSurfaces = false, updateArgs = () => {} } = {}) {
   const doc = root.ownerDocument;
   const states = statesFor(page);
   const abort = new AbortController();
@@ -329,6 +330,7 @@ export function mountBehaviours(root, { page, state, updateArgs = () => {} } = {
   for (const surface of root.querySelectorAll(surfaces)) {
     if (surface.parentElement.closest(surfaces)) continue;
     surface.setAttribute('role', surface.matches('.kanso-menu') ? 'menu' : 'dialog');
+    if (inlineSurfaces) continue;
     const trigger = doc.createElement('button');
     trigger.className = 'kanso-button--tonal';
     trigger.type = 'button';
@@ -342,6 +344,7 @@ export function mountBehaviours(root, { page, state, updateArgs = () => {} } = {
   on(root, 'click', (event) => {
     const { node, kind } = control(event.target);
     if (!node) return;
+    if (node.matches('a.kanso-reference__link')) return;
     if (!event.target.closest('[contenteditable="true"],input,textarea')) event.preventDefault();
     if (disabled(node)) return;
     if (triggers.has(node)) {
