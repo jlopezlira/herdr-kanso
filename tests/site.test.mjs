@@ -110,6 +110,6 @@ test("every site page loads the tokens before its stylesheet", () => {
 test("every site page's nav links storybook/", () => {
   for (const path of PAGES) {
     const nav = /<nav class="nav-links"[\s\S]*?<\/nav>/.exec(read(path))[0];
-    assert.match(nav, /href="storybook\/">Storybook</, path);
+    assert.match(nav, /href="storybook\/" target="_blank" rel="noopener">Storybook</, path);
   }
 });
