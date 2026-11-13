@@ -1,50 +1,50 @@
 {
   "OpenWith": {
-    "caption": "When Open with is invoked, available destinations are grouped by where the file will open; Seijaku keeps this component and its states in the shared kit.",
+    "caption": "When Open with is invoked, available destinations are grouped by where the file will open.",
     "variants": {
       "Folder": {
         "when": "A local folder is selected.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Open with · ~/acme\"><div class=\"mh\">Open with · ~/acme</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Cursor</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Visual Studio Code</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Zed</div><div class=\"mr\"></div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">In a split</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Neovim</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Vim</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Open with · ~/acme\"><div class=\"kanso-menu__heading\">Open with · ~/acme</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Cursor</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Visual Studio Code</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Zed</div><div class=\"kanso-menu__separator\"></div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">In a split</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Neovim</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Vim</div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "File": {
         "when": "A text file is selected.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Open with · src/session.ts\"><div class=\"mh\">Open with · src/session.ts</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Preview</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Cursor</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Visual Studio Code</div><div class=\"mr\"></div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">In a split</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Neovim</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Open with · src/session.ts\"><div class=\"kanso-menu__heading\">Open with · src/session.ts</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Preview</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Cursor</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Visual Studio Code</div><div class=\"kanso-menu__separator\"></div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">In a split</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Neovim</div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "Image": {
         "when": "A picture is selected.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Open with · screenshot.png\"><div class=\"mh\">Open with · screenshot.png</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Images</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Preview</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Cursor</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Open with · screenshot.png\"><div class=\"kanso-menu__heading\">Open with · screenshot.png</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Images</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Preview</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Cursor</div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "Remote": {
         "when": "The file is on another computer.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Open with · devbox: ~/acme/src/session.ts\"><div class=\"mh\">Open with · devbox: ~/acme/src/session.ts</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Preview</div><div class=\"mr\"></div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">In a split</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Neovim</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Vim</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Open with · devbox: ~/acme/src/session.ts\"><div class=\"kanso-menu__heading\">Open with · devbox: ~/acme/src/session.ts</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Preview</div><div class=\"kanso-menu__separator\"></div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">In a split</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Neovim</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Vim</div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "Looking": {
         "when": "Editor detection is pending.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Open with\"><div class=\"mh\">Open with</div></div><div class=\"kit-skl skw\" aria-label=\"Loading\" role=\"status\"><div class=\"prow\"><span class=\"sk\" style=\"width:calc(var(--k-h-control) * 5);height:var(--k-sp-2)\"></span></div><div class=\"prow\"><span class=\"sk\" style=\"width:calc(var(--k-h-control) * 5);height:var(--k-sp-2)\"></span></div><div class=\"prow\"><span class=\"sk\" style=\"width:calc(var(--k-h-control) * 5);height:var(--k-sp-2)\"></span></div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Open with\"><div class=\"kanso-menu__heading\">Open with</div></div><div class=\"kanso-skeleton__list kanso-skeleton--breathing\" aria-label=\"Loading\" role=\"status\"><div class=\"kanso-row\"><span class=\"kanso-skeleton\" style=\"width:calc(var(--k-h-control) * 5);height:var(--k-sp-2)\"></span></div><div class=\"kanso-row\"><span class=\"kanso-skeleton\" style=\"width:calc(var(--k-h-control) * 5);height:var(--k-sp-2)\"></span></div><div class=\"kanso-row\"><span class=\"kanso-skeleton\" style=\"width:calc(var(--k-h-control) * 5);height:var(--k-sp-2)\"></span></div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "No editor": {
         "when": "No compatible code editor was found.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Open with\"><div class=\"mh\">Open with</div></div><div class=\"kst-empty\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-search\"/></svg><div class=\"t\">No code editor found</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Open with\"><div class=\"kanso-menu__heading\">Open with</div></div><div class=\"kanso-state-empty\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-search\"/></svg><div class=\"kanso-content__text\">No code editor found</div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "Detection failed": {
         "when": "The editor probe failed.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-block\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><div class=\"kst-what\">Could not look for editors</div><div class=\"kst-why\" title=\"Process could not be started\">Process could not be started</div><div class=\"kst-acts\"><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"btn\">Refresh</button><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Explain to checkout</button></div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-state-block\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><div class=\"kanso-state-block__what\">Could not look for editors</div><div class=\"kanso-state-block__why\" title=\"Process could not be started\">Process could not be started</div><div class=\"kanso-state-block__actions\"><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button\">Refresh</button><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain to checkout</button></div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "Keyboard": {
         "when": "The picker is navigated with the keyboard.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Open with · src/session.ts\"><div class=\"mh\">Open with · src/session.ts</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">1  Preview</div><div class=\"mi hov sbx-ring\" role=\"menuitem\" tabindex=\"0\">2  Cursor</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">3  Visual Studio Code</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Open with · src/session.ts\"><div class=\"kanso-menu__heading\">Open with · src/session.ts</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">1  Preview</div><div class=\"kanso-menu-item kanso-control--hover kanso-sidebar--focus\" role=\"menuitem\" tabindex=\"0\">2  Cursor</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">3  Visual Studio Code</div></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       },
       "Open failed": {
         "when": "The chosen editor did not open.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Cursor did not open: executable not found</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Open with</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Cursor did not open: executable not found</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Open with</button></div></div></div>",
         "source": "kanso/mods/open-with/main.js:185"
       }
     }

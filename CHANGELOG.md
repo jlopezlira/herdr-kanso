@@ -35,6 +35,7 @@ the branch's rules.
 ### Added
 
 - Storybook coverage for every app module, with selectable interaction, loading, empty, failure and recovery states built from the shared kit.
+- Storybook coverage stories use the kit's classes, so they draw with the real styles, and their captions no longer carry a design name.
 - Panel stories show each panel once instead of twice.
 - Storybook includes 290 panel states with reference comparisons, specifications and usage guidelines under Panels.
 - Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
