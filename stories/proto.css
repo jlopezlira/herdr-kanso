@@ -145,7 +145,7 @@
 .kanso-metric .kanso-metric__unit{font-size:12.5px;color:var(--dim)}
 .kanso-skeleton--breathing{animation:ghost 1.8s ease-in-out infinite alternate}
 .kanso-avatar--round{width:20px;height:20px;border-radius:50%;background:var(--w12);display:grid;place-items:center;font-size:11.5px;color:var(--muted);flex:none}
-.kanso-dialog--settings{width:860px;background:var(--popover);border-radius:8px;padding:24px;box-sizing:border-box;box-shadow:var(--shadow),0 0 0 1px var(--border)}
+.kanso-dialog--settings{width:860px;background:var(--popover);border-radius:8px;padding:var(--k-sp-6);box-sizing:border-box;box-shadow:var(--shadow),0 0 0 1px var(--border)}
 .kanso-dialog__heading{display:flex;align-items:center;gap:var(--k-sp-4)}
 .kanso-dialog--settings>.kanso-actions{margin-top:var(--k-sp-4)}
 .kanso-dialog__heading .kanso-content__text{font-size:15px;font-weight:600}
@@ -649,7 +649,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-worktree__details .kanso-worktree__path{font:11.5px var(--mono);color:var(--dim);margin-top:var(--k-sp-1)}
 .kanso-worktree__loss{font-size:12.5px;line-height:1.5;color:var(--blocked);margin-top:var(--k-sp-1)}
 .kanso-worktree__details .kanso-content__actions{display:flex;gap:var(--k-sp-2);align-items:center;margin-top:var(--k-sp-2);flex-wrap:wrap}
-.kanso-dialog--worktree{width:440px;background:var(--popover);border-radius:8px;padding:16px;box-sizing:border-box;box-shadow:var(--shadow),0 0 0 1px var(--border)}
+.kanso-dialog--worktree{width:440px;background:var(--popover);border-radius:8px;padding:var(--k-sp-6);box-sizing:border-box;box-shadow:var(--shadow),0 0 0 1px var(--border)}
 .kanso-dialog--worktree>.kanso-actions{margin-top:var(--k-sp-4)}
 .kanso-dialog--worktree .kanso-content__text{font-size:15px;font-weight:600}
 .kanso-field__hint{font:11.5px var(--mono);color:var(--dim);margin-top:var(--k-sp-2);min-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -791,7 +791,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-panel__triple span{display:flex;align-items:center;gap:var(--k-sp-2)}
 .kanso-section .kanso-segmented--options{margin-left:auto}
 .kanso-panel__row-actions{flex:none;width:176px;display:flex;justify-content:flex-end;gap:var(--k-sp-2)}
-.kanso-dialog{width:480px;background:var(--popover);border-radius:8px;padding:16px;box-sizing:border-box;box-shadow:var(--shadow),0 0 0 1px var(--border);display:flex;flex-direction:column;flex:none}
+.kanso-dialog{width:480px;background:var(--popover);border-radius:8px;padding:var(--k-sp-6);box-sizing:border-box;box-shadow:var(--shadow),0 0 0 1px var(--border);display:flex;flex-direction:column;flex:none}
 .kanso-dialog--small{width:340px;padding:4px}
 .kanso-dialog__header{display:flex;align-items:center;gap:var(--k-sp-2);min-height:26px}
 .kanso-dialog--small .kanso-dialog__header{padding:4px 8px 0}
