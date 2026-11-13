@@ -6,6 +6,7 @@ import { content, featuresFor, statesFor } from './catalog.js';
 import { descriptions } from './descriptions.js';
 import { promptFor } from './prompt.js';
 import { FEATURE_LABEL, FEATURE_NOTE } from './features.js';
+import { PageStatus } from './PageStatus.jsx';
 
 export function ComponentPage({ of, page }) {
   const states = statesFor(page);
@@ -21,6 +22,7 @@ export function ComponentPage({ of, page }) {
   const notes = [...new Set(states.flatMap((state) => state.notes ?? []))];
   return <article className="kanso-docs">
     <h1>{name}</h1>
+    <PageStatus page={page} />
     <p>{description}</p>
     {referenceFor(page)?.approvedRecords?.length > 0 && <><h2>Approved reference</h2><ReferenceDrawings page={page} /></>}
     {contexts.length > 0 && <><h2>Usage details</h2>{contexts.map((id) => <p key={id}>{content(id)}</p>)}</>}

@@ -3,7 +3,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { Markdown, Source } from "@storybook/addon-docs/blocks";
 import { content } from "./catalog.js";
 import { mountBehaviours } from "./behaviours.js";
-import { referenceFor, referenceStates } from "./references.js";
+import { referenceFor, referenceStates, statusFor } from "./references.js";
+import { PageStatus } from "./PageStatus.jsx";
+import { STATUS_PROMPT } from "./status.js";
 import { promptFor } from "./prompt.js";
 
 export function ReferenceDrawings({ page }) {
@@ -38,15 +40,14 @@ export function ReferencePage({ page }) {
   const [copied, setCopied] = useState(false);
   const prompt = [
     `Build ${page} for kansō from the shared kit.`,
-    reference.status === "Proposed" ? "This design is Proposed and needs approval." : "Follow the approved reference drawings and guidelines below. Additional states are Proposed.",
+    STATUS_PROMPT[statusFor(page)],
     "Preserve every action. Use the shared kit tokens, primitives and state patterns.",
     ...reference.guidelines,
     ...(states.length ? [promptFor(states[0].page, states)] : []),
   ].join("\n\n");
   return <article className="kanso-docs">
     <h1>{page.split("/")[1]}</h1>
-    <p>{reference.status}</p>
-    {reference.boards.length > 0 && <p>Reference: {reference.boards.join(", ")}</p>}
+    <PageStatus page={page} />
     {reference.guidelines.map((note, index) => <Markdown key={index}>{note}</Markdown>)}
     <ReferenceDrawings page={page} />
     {reference.components.length > 0 && <><h2>Components</h2><ul>{reference.components.map((component) => <li key={component}><a href={`./?path=/docs/${component.toLowerCase().replace(/[^a-z0-9]+/g, "-")}--overview`}>{component.split("/")[1]}</a></li>)}</ul></>}

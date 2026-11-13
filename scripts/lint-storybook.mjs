@@ -7,10 +7,12 @@ import { explainErrors } from './storybook-components.mjs';
 import { gapDocument, overlapFor } from './storybook-coverage.mjs';
 import { STORYBOOK_CLASSES, cssSelectors, markupClasses, selectorClasses } from './import-proto.mjs';
 import { descriptions } from '../stories/kit/descriptions.js';
+import { STATUSES, statusOf } from '../stories/kit/status.js';
 import references from "../stories/references.json" with { type: "json" };
 
 const STORY_FILE = /\.stories\.(?:js|jsx|mjs|ts|tsx)$/;
 const BEM = /^kanso-[a-z0-9]+(?:-[a-z0-9]+)*(__[a-z0-9-]+)?(--[a-z0-9-]+)?$/;
+const CODE = /\b(?:[SBPQDI]\d{1,2}[a-e]?)\b|proto\/|approved-/;
 
 export function storyFiles(root = 'stories') {
   return Object.fromEntries(readdirSync(root, { recursive: true, withFileTypes: true }).filter((file) => file.isFile() && (STORY_FILE.test(file.name) || /\.(mdx|json)$/.test(file.name))).map((file) => {
@@ -21,9 +23,16 @@ export function storyFiles(root = 'stories') {
 
 export function structureErrors(files, catalog, template) {
   const errors = [], titles = new Map(), docs = new Set();
+  const records = expand(catalog);
+  const statusErrors = (path, title, tags) => {
+    const found = (tags ?? '').match(/"[^"]*"/g)?.map((tag) => JSON.parse(tag)).filter((tag) => STATUSES.includes(tag)) ?? [];
+    if (found.length !== 1) errors.push(`${path}: needs exactly one status tag`);
+    else if (found[0] !== statusOf(title, records, references.pages)) errors.push(`${path}: status ${found[0]} differs from ${statusOf(title, records, references.pages)}`);
+  };
   const statePage = /(?:^|[ ,])(?:hover|focus|active|disabled|dimmed|loading|empty|failure|armed|pending|working|at rest|tab states)(?:$|[ ,])/i;
   const titleOf = (path, title) => {
     if (!SECTIONS.includes(title.split('/')[0]) || title.split('/').length !== 2) errors.push(`${path}: story outside the six sections`);
+    if (CODE.test(title)) errors.push(`${path}: code in title ${title}`);
     if (statePage.test(title.split('/')[1] ?? '') && !references.pages.some((reference) => reference.page === title && reference.boards.length)) errors.push(`${path}: state page instead of component`);
     if (titles.has(title)) errors.push(`${path}: duplicate title ${title}`);
     titles.set(title, path);
@@ -32,6 +41,7 @@ export function structureErrors(files, catalog, template) {
     const title = /export default\s*\{\s*title:\s*"([^"]+)"/.exec(text)?.[1];
     if (!title) { errors.push(`${path}: missing component title`); continue; }
     titleOf(path, title);
+    statusErrors(path, title, /export default\s*\{[^}]*\btags:\s*\[([^\]]*)\]/.exec(text)?.[1]);
     if (!descriptions[title.split('/')[1]]) errors.push(`${path}: missing component usage`);
     if (!/export const Variants = componentStory\("[^"]+"\);/.test(text) || /(?:html|render)\s*[:=][\s\S]*["'`]</.test(text)) errors.push(`${path}: repeated story markup outside the shared catalog`);
     if (!text.includes(`componentStory(${JSON.stringify(title)})`)) errors.push(`${path}: preview references another page`);
@@ -42,6 +52,7 @@ export function structureErrors(files, catalog, template) {
     const explicit = /<Meta title="([^"]+)"/.exec(text)?.[1];
     if (explicit) {
       titleOf(path, explicit);
+      statusErrors(path, explicit, /<Meta [^>]*\btags=\{\[([^\]]*)\]\}/.exec(text)?.[1]);
       const named = /<ReferencePage page="([^"]+)" \/>/.exec(text)?.[1];
       if (named) {
         if (named !== explicit || !references.pages.some((reference) => reference.page === named && (!reference.existing || named.startsWith("Start/")))) errors.push(`${path}: unregistered named reference`);
@@ -56,6 +67,7 @@ export function structureErrors(files, catalog, template) {
       docs.add(title);
     }
   }
+  for (const reference of references.pages) if (CODE.test([reference.page, ...reference.guidelines].join(' '))) errors.push(`references.json: code in visible text of ${reference.page}`);
   for (const [title, path] of titles) if (!title.startsWith('Start/') && !docs.has(title)) errors.push(`${path}: missing component page and prompt block`);
   const parts = new Set();
   for (const part of catalog.parts) {
@@ -67,7 +79,7 @@ export function structureErrors(files, catalog, template) {
     if (/<[a-z]/i.test(text)) errors.push(`${path}: repeated story markup outside the shared catalog`);
   }
   const ids = new Set();
-  const records = expand(catalog), byId = new Map(records.map((record) => [record.id, record]));
+  const byId = new Map(records.map((record) => [record.id, record]));
   if (records.some((record) => record.gap) && (!template.includes('<h3>{FEATURE_LABEL}</h3>') || template.indexOf('<h3>{FEATURE_LABEL}</h3>') < template.indexOf('<Source code={prompt}'))) errors.push('component page: missing plain feature list under Prompt for agents');
   for (const record of records) {
     if (ids.has(record.id)) errors.push(`catalog: duplicate state ${record.id}`);
@@ -77,6 +89,7 @@ export function structureErrors(files, catalog, template) {
     if (record.design && (!byId.get(record.design)?.html || byId.get(record.design).page !== record.page || byId.get(record.design).source === 'coverage')) errors.push(`${record.id}: missing designed drawing`);
     if ((record.design || record.gap) && (record.html !== undefined || !/^[\w./-]+:\d+(?:-\d+)?$/.test(record.location ?? ''))) errors.push(`${record.id}: feature must have a source location and no independent drawing`);
     if (!docs.has(record.page)) errors.push(`catalog: unreachable state ${record.id}`);
+    if (CODE.test([record.caption, record.context ?? '', record.label, ...(record.notes ?? []), ...(record.spec ?? []).flat()].join(' '))) errors.push(`catalog: code in visible text of ${record.id}`);
     if (/\b(?:prototypes?|boards?|designers?|agents?|subtracted|removed)\b/i.test([record.caption, record.context ?? '', record.label, ...(record.notes ?? []), ...(record.spec ?? []).flat()].join(' '))) errors.push(`catalog: source reference or outdated feature wording in ${record.id}`);
   }
   return errors;

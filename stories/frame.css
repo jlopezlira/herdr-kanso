@@ -13,6 +13,7 @@
 .kanso-docs dt { font-weight: var(--k-fw-medium); }
 .kanso-docs dd { margin: 0 0 var(--k-sp-2); }
 .kanso-docs__note { margin-block: var(--k-sp-4); }
+.kanso-docs__status { display: flex; margin-block: var(--k-sp-2) var(--k-sp-4); }
 .kanso-story__viewport [hidden] { display: none !important; }
 .kanso-field__editor { flex: 1; min-width: 0; outline: none; white-space: pre-wrap; cursor: text; }
 .kanso-field__editor:empty::before { content: attr(aria-label); color: var(--dim); }
