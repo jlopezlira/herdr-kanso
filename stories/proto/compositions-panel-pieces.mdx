@@ -107,12 +107,12 @@ Images: one thumbnail per shot, the chosen one on w12.
 
 ### First screens guidelines
 
-- **Kansō** Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud.
+- **Kansō** Simplify information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud.
 - **Seijaku** Measured in the browser on the six first screens: rows 103 → 76 · glyphs 35 → 19 · colours 33 → 25 · lines 150 → 88. Preview's 14 lines are the file itself, so its chrome is what halves: 2 rows to 1.
 - **Kansō** One fact, one place. The folder, branch, files and lines are in the pane header, so the panels drop their scope and facts lines. Header icons, the period switch, Reply and Comment fields, Everyone's, Explain, Remove all and Prune all stay.
-- **Kansō** Nothing is lost: each removed fact says where it lives now, and the options audit lists every control. Both are in panels-a-elements.md.
+- **Kansō** Nothing is lost: each fact moved off the first screen says where it lives now.
 
-## Panels, subtracted
+## Panels, simplified
 
 ### Panels guidelines
 
@@ -158,7 +158,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Shizen** Narrow under 340: title 15, the command hides, "Open in the browser" becomes "Open".
 - **Kokō** Cost: open and in front, one lsof + ps every 30 s. Behind or closed: none. Another computer: one remote listener read (about 1 KB) every 60 s, ps only when the set of ports changed. History is one file read when the fold opens.
 
-## Ports, subtracted
+## Ports, simplified
 
 ### At rest, measured
 
@@ -190,7 +190,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Kansō** No Docker installed: the panel is absent. The "Docker is not installed" line goes.
 - **Kokō** Cost: open and in front, docker ps -a every 15 s; inspect only for new ids; stats every third read; images, volumes and system df only while Disk is open. Another computer: the same ps over the wire every 30 s (about 2 KB), nothing else at rest.
 
-## Containers, subtracted
+## Containers, simplified
 
 ### At rest, measured
 
@@ -224,7 +224,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Kansō** No guard on this platform (Linux): the panel is absent, not a sentence.
 - **Kokō** Cost: three small local files every 15 s while open and in front. Another computer with the guard installed: one now.json read there every 60 s (about 3 KB); history only when the fold opens.
 
-## Memory, subtracted
+## Memory, simplified
 
 ### At rest, measured
 
@@ -260,7 +260,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Kokō** Cost: three small local files, read when the panel opens and once an hour after. Another computer: its plan and its month's rows come over the existing sync exchange, one call per synced computer per minute while the panel is open and in front, under 2 KB; nothing when closed.
 - **Seijaku** New to build: the detector (three readers), plans.json, a Grok session reader (Spend reads Claude Code, Codex and Pi, core/config.mjs:10-35), the month-per-plan figure in costs.mjs, the plan row in the sync payload.
 
-## Spend, subtracted
+## Spend, simplified
 
 ### At rest, measured
 
@@ -289,7 +289,7 @@ Images: one thumbnail per shot, the chosen one on w12.
 - **Kansō** Empty states state facts: "No pictures in this conversation", "No agent in focus". The sentence that explained the panel goes.
 - **Kokō** Cost: this computer, one stat of the conversation per change check, a read only when it changed. Another computer: one remote stat per check with backoff, the file list on change; a picture moves only on Load. Thumbnails are drawn from copies already made, never fetched for the strip.
 
-## Images, subtracted
+## Images, simplified
 
 ### At rest, measured
 
@@ -324,7 +324,7 @@ Follow these rules:
 - Setting row with a value: Switch row where the sentence carries the value in strong.
 - In a tab: A row says where it runs: working colour on the place, the age dim.
 - Thumbnail strip: Images: one thumbnail per shot, the chosen one on w12.
-Apply every guideline of One panel skeleton; First screens: only what you would miss; Panels, subtracted; No tool, no panel; Second half, light; Ports; Ports, subtracted; Containers; Containers, subtracted; Memory; Memory, subtracted; Spend; Spend, subtracted; Images; Images, subtracted.
+Apply every guideline of One panel skeleton; First screens: only what you would miss; Panels, simplified; No tool, no panel; Second half, light; Ports; Ports, simplified; Containers; Containers, simplified; Memory; Memory, simplified; Spend; Spend, simplified; Images; Images, simplified.
 Treat as a defect:
 - Never a count of the rows below it.
 - No teaching footers.

@@ -19,7 +19,7 @@
       },
       "Failure": {
         "when": "An action failed.",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Cannot open file: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Cannot open file: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div></div></div>",
         "source": "kanso/mods/kanso-toast/main.js:33"
       },
       "With action": {
@@ -29,7 +29,7 @@
       },
       "Long source": {
         "when": "The source words are longer than one line.",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Cannot open /Users/example/projects/acme/src/auth/session.ts: EACCES: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Cannot open /Users/example/projects/acme/src/auth/session.ts: EACCES: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div></div></div>",
         "source": "kanso/mods/kanso-toast/main.js:33"
       }
     }
@@ -39,7 +39,7 @@
     "variants": {
       "Three notices": {
         "when": "Three independent results have arrived.",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">Conversation copied</span></div><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Archive failed</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">Update available</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Update</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">Conversation copied</span></div><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Archive failed</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">Update available</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Update</button></div></div></div>",
         "source": "kanso/mods/kanso-toast/main.js:35"
       },
       "Duplicate coalesced": {

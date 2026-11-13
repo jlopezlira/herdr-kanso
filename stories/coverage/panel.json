@@ -1089,7 +1089,7 @@
       },
       "3 · Could not ask reviewer for a review": {
         "when": "This action completed away from its source: failed.",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Could not ask reviewer for a review</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Could not ask reviewer for a review</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div></div></div>",
         "source": "kanso/mods/kanso-panel/pr.js:680"
       },
       "4 · New record: commits in a day": {
@@ -1114,7 +1114,7 @@
       },
       "8 · Could not start the agent": {
         "when": "This action completed away from its source: \"Could not start the agent\".",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Could not start the agent</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Could not start the agent</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div></div></div>",
         "source": "kanso/mods/kanso-panel/worktrees.js:755"
       }
     }

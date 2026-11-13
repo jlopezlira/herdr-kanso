@@ -378,13 +378,13 @@
   ]
  },
  "SimulatorANoteRemovedOnePressUndoInTheToast": {
-  "name": "Simulator, A note removed: one press, Undo in the toast",
-  "caption": "A note removed: one press, Undo in the toast.",
+  "name": "Simulator, A note deleted: one press, Undo in the toast",
+  "caption": "A note deleted: one press, Undo in the toast.",
   "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Simulator<span class=\"kanso-panel__qualifier\">iPhone 16 Pro</span></span><span class=\"kanso-button--icon kanso-control--on\"><svg class=\"kanso-icon\"><use href=\"#lu-message-square-plus\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-smartphone\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"kanso-simulator\"><div class=\"kanso-simulator__screen kanso-simulator__screen--annotating\" style=\"width:200px;height:420px\"><div class=\"kanso-simulator__app\"><div class=\"kanso-content__time\"><span>9:41</span><span>●●●</span></div><div class=\"kanso-content__text\">Checkout</div><div class=\"kanso-simulator__line\"><span>Trail runner, 42</span><span>$64</span></div><div class=\"kanso-simulator__line\"><span>Wool socks ×2</span><span>$12</span></div><div class=\"kanso-simulator__line\"><span>Shipping</span><span>$8</span></div><div class=\"kanso-simulator__line\"><span>Held for</span><span>09:42</span></div><div class=\"kanso-simulator__payment\">Pay $84.00</div></div></div><div class=\"kanso-simulator__note-layer\"><span class=\"kanso-simulator__note-point\" style=\"left:80%;top:10%\">1</span><span class=\"kanso-simulator__note-point\" style=\"left:72%;top:55%\">2</span></div></div><div class=\"kanso-simulator__notes\"><div class=\"kanso-row\"><span class=\"kanso-simulator__note-point\">1</span><span class=\"kanso-row__name\">The clock overlaps the status bar</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-x\"/></svg></span></div><div class=\"kanso-row\"><span class=\"kanso-simulator__note-point\">2</span><span class=\"kanso-row__name\">Held for should count down</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-x\"/></svg></span></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-button--quiet kanso-text--foreground\">Clear</span></div></div><div class=\"kanso-toast\" style=\"width:100%;margin-top:var(--k-sp-3)\"><svg class=\"kanso-mark kanso-mark--done\"><use href=\"#e-done\"/></svg><span class=\"kanso-content__text\">Note removed</span><span class=\"kanso-button--tonal\">Undo</span></div></div></div></div>",
   "spec": [
    [
     "Anatomy",
-    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A note removed: one press, Undo in the toast"
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A note deleted: one press, Undo in the toast"
    ],
    [
     "Values",
@@ -392,7 +392,7 @@
    ],
    [
     "States",
-    "A note removed: one press, Undo in the toast"
+    "A note deleted: one press, Undo in the toast"
    ],
    [
     "Behaviour",

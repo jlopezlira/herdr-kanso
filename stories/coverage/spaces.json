@@ -479,7 +479,7 @@
       },
       "2 · The folder was not changed": {
         "when": "This action completed away from its source: \"The folder was not changed\".",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">The folder was not changed</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">The folder was not changed</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div></div></div>",
         "source": "kanso/mods/kanso-spaces/main.js:1454"
       },
       "3 · feat/checkout already had a worktree": {
@@ -489,12 +489,12 @@
       },
       "4 · Sync devbox was not changed": {
         "when": "This action completed away from its source: `Sync ${m} was not changed`.",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Sync devbox was not changed</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Sync devbox was not changed</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div></div></div>",
         "source": "kanso/mods/kanso-spaces/main.js:1818"
       },
       "5 · fatal: Not possible to fast-forward, aborting.": {
         "when": "This action completed away from its source: line.",
-        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">fatal: Not possible to fast-forward, aborting.</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Explain</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">fatal: Not possible to fast-forward, aborting.</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-bot\"/></svg>Explain</button></div></div></div>",
         "source": "kanso/mods/kanso-spaces/sidebar-rows.js:51"
       }
     }
