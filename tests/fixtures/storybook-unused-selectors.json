@@ -2,6 +2,7 @@
   ".kanso-mark.kanso-mark--large",
   ".kanso-text--shimmer",
   ".kanso-dot--blocked",
+  ".kanso-dot--done",
   ".kanso-dot--violet",
   ".kanso-sidebar__header",
   ".kanso-brand",

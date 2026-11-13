@@ -1,5 +1,5 @@
 /* The Storybook's own frame around the prototype's drawings. */
-.kanso-story__viewport { width: max-content; min-width: 100%; box-sizing: border-box; padding: var(--k-sp-4); }
+.kanso-story__viewport { width: max-content; min-width: 100%; box-sizing: border-box; padding: var(--k-sp-4); -webkit-font-smoothing: antialiased; }
 .kanso-story__viewport.kanso-story--canvas { padding: 2%; }
 .kanso-story__viewport :has(> .kanso-toast) { min-width: min-content; }
 .kanso-story__viewport .kanso-story__frame > .kanso-story__caption { margin: var(--k-sp-4) 0 var(--k-sp-2); font-size: var(--k-fs-meta); color: var(--muted); }
