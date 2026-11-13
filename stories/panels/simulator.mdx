@@ -1,0 +1,396 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './simulator.stories.js';
+
+<Meta title="Panels/Simulator" />
+
+# Simulator
+
+Simulator shows connected devices and their screens when simulator tools are available.
+
+## Simulator, iOS: the picture
+
+iOS: the picture.
+
+<Canvas of={stories.SimulatorIOSThePicture} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: iOS: the picture"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"iOS: the picture"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"kansō's own, on the platform's tools only. iOS: the picture is xcrun simctl io screenshot; Open in Simulator appears on pointer over the device, for touch and typing. Android: the emulator's own picture, touch and drag on it, typing while it has focus (the kit's focus ring), and Back, Home, Rotate, volume and Lock under it. The serve-sim download through npx goes."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Android: touch, keys, the device's buttons
+
+Android: touch, keys, the device's buttons.
+
+<Canvas of={stories.SimulatorAndroidTouchKeysTheDevicesButtons} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Android: touch, keys, the device's buttons"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Android: touch, keys, the device's buttons"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"kansō's own, on the platform's tools only. iOS: the picture is xcrun simctl io screenshot; Open in Simulator appears on pointer over the device, for touch and typing. Android: the emulator's own picture, touch and drag on it, typing while it has focus (the kit's focus ring), and Back, Home, Rotate, volume and Lock under it. The serve-sim download through npx goes."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Devices: the list replaces the screen
+
+Devices: the list replaces the screen.
+
+<Canvas of={stories.SimulatorDevicesTheListReplacesTheScreen} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Devices: the list replaces the screen"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Devices: the list replaces the screen"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The header: title and the device beside it (iPhone 16 Pro); Pin, Devices and Refresh appear with the pointer, the system on pointer over the device name. \"Booted\", Boot and Change stop sharing one 13.5 line."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Off
+
+Off.
+
+<Canvas of={stories.SimulatorOff} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Off"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Off"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Booting
+
+Booting.
+
+<Canvas of={stories.SimulatorBooting} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Booting"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Booting"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Off draws the device's outline with Boot in it. Booting breathes the same outline. A stalled picture stays at 55% with its time; it reconnects on its own and Refresh forces it."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, The picture stalled
+
+The picture stalled.
+
+<Canvas of={stories.SimulatorThePictureStalled} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: The picture stalled"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"The picture stalled"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Off draws the device's outline with Boot in it. Booting breathes the same outline. A stalled picture stays at 55% with its time; it reconnects on its own and Refresh forces it."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Error
+
+Error.
+
+<Canvas of={stories.SimulatorError} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Error"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Error"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, First read
+
+First read.
+
+<Canvas of={stories.SimulatorFirstRead} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"First read"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Behind other windows the picture stops being read (work, not motion) and resumes on return. \"The stream stopped.\" and Reconnect go."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Narrow, 300: the device scales
+
+Narrow, 300: the device scales.
+
+<Canvas of={stories.SimulatorNarrow300TheDeviceScales} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Narrow, 300: the device scales"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Narrow, 300: the device scales"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Notes on: the screen takes points, not touches
+
+Notes on: the screen takes points, not touches.
+
+<Canvas of={stories.SimulatorNotesOnTheScreenTakesPointsNotTouches} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Notes on: the screen takes points, not touches"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Notes on: the screen takes points, not touches"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"One switch: the note icon in the header turns notes on (w12, like every on). While on, a click on the screen places a point instead of touching the app; off, the screen is the device again. Nothing about notes shows while off and empty."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Placing: the note is written where the point is
+
+Placing: the note is written where the point is.
+
+<Canvas of={stories.SimulatorPlacingTheNoteIsWrittenWhereThePointIs} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Placing: the note is written where the point is"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Placing: the note is written where the point is"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The note is written where the point is: placing opens the kit field on a popover under the point; Enter keeps it, Escape drops the point. Clicking a point opens its note again."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Three notes: one hovered, one chosen; Send names the agent in front
+
+Three notes: one hovered, one chosen; Send names the agent in front.
+
+<Canvas of={stories.SimulatorThreeNotesOneHoveredOneChosenSendNamesTheAgentInFront} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Three notes: one hovered, one chosen; Send names the agent in front"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Three notes: one hovered, one chosen; Send names the agent in front"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"One action: Send to <agent in front> is solid and names who gets it; Clear is quiet. The agent gets the frozen screenshot with the points drawn, and the notes as a numbered list with each point's position."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Fukinsei"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Sending: the rows wait, nothing else moves
+
+Sending: the rows wait, nothing else moves.
+
+<Canvas of={stories.SimulatorSendingTheRowsWaitNothingElseMoves} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Sending: the rows wait, nothing else moves"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Sending: the rows wait, nothing else moves"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The list repeats the points in order as list rows: the same 20 point, the note in one line with ellipsis, × on pointer. × removes at once (one press, nothing lost: Undo in the toast for 8 s)."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Sent: the points clear, one line says where they went
+
+Sent: the points clear, one line says where they went.
+
+<Canvas of={stories.SimulatorSentThePointsClearOneLineSaysWhereTheyWent} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Sent: the points clear, one line says where they went"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Sent: the points clear, one line says where they went"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Sending is the kit's pending: rows at 80%, Send off. Sent clears the points and leaves one done line that fades with the next change."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, A note removed: one press, Undo in the toast
+
+A note removed: one press, Undo in the toast.
+
+<Canvas of={stories.SimulatorANoteRemovedOnePressUndoInTheToast} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: A note removed: one press, Undo in the toast"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"A note removed: one press, Undo in the toast"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The list repeats the points in order as list rows: the same 20 point, the note in one line with ellipsis, × on pointer. × removes at once (one press, nothing lost: Undo in the toast for 8 s)."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, No agent in front: Send waits for one
+
+No agent in front: Send waits for one.
+
+<Canvas of={stories.SimulatorNoAgentInFrontSendWaitsForOne} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: No agent in front: Send waits for one"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"No agent in front: Send waits for one"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"One action: Send to <agent in front> is solid and names who gets it; Clear is quiet. The agent gets the frozen screenshot with the points drawn, and the notes as a numbered list with each point's position."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Fukinsei"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Could not send: the notes stay
+
+Could not send: the notes stay.
+
+<Canvas of={stories.SimulatorCouldNotSendTheNotesStay} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Could not send: the notes stay"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Could not send: the notes stay"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"No agent in the tab: Send is off and says why in meta; the notes wait. Failure is the kit's block with the agent's words and Retry; the notes stay."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kokō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Light: three notes
+
+Light: three notes.
+
+<Canvas of={stories.SimulatorLightThreeNotes} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light: three notes"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Light: three notes"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"One switch: the note icon in the header turns notes on (w12, like every on). While on, a click on the screen places a point instead of touching the app; off, the screen is the device again. Nothing about notes shows while off and empty."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Light: placing
+
+Light: placing.
+
+<Canvas of={stories.SimulatorLightPlacing} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light: placing"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Light: placing"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The note is written where the point is: placing opens the kit field on a popover under the point; Enter keeps it, Escape drops the point. Clicking a point opens its note again."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, At rest, Now
+
+Now, at rest.
+
+<Canvas of={stories.SimulatorAtRestNow} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, at rest"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Pin, Devices, Refresh: in the header → gone. pointer in the panel or keyboard focus."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, At rest, Now, light
+
+Now, light.
+
+<Canvas of={stories.SimulatorAtRestNowLight} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, light"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Pin, Devices, Refresh: in the header → gone. pointer in the panel or keyboard focus."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Simulator, Pointer on the device
+
+Pointer on the device.
+
+<Canvas of={stories.SimulatorPointerOnTheDevice} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Pointer on the device"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Pointer on the device"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Scope: device, OS, computer: a line → iPhone 16 Pro beside the title. pointer: iOS 18.2; another computer: its name."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+### Simulator guidelines
+
+- **Kansō** At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged.
+- **Kansō** kansō's own, on the platform's tools only. iOS: the picture is xcrun simctl io screenshot; Open in Simulator appears on pointer over the device, for touch and typing. Android: the emulator's own picture, touch and drag on it, typing while it has focus (the kit's focus ring), and Back, Home, Rotate, volume and Lock under it. The serve-sim download through npx goes.
+- **Seijaku** No toolbar on iOS: nothing there could act (simctl injects no touch).
+- **Yūgen** The header: title and the device beside it (iPhone 16 Pro); Pin, Devices and Refresh appear with the pointer, the system on pointer over the device name. "Booted", Boot and Change stop sharing one 13.5 line.
+- **Seijaku** Devices is a page with ‹: iOS and Android sections, On or Off per row, an unusable image dimmed with its reason.
+- **Shizen** Off draws the device's outline with Boot in it. Booting breathes the same outline. A stalled picture stays at 55% with its time; it reconnects on its own and Refresh forces it.
+- **Kansō** Behind other windows the picture stops being read (work, not motion) and resumes on return. "The stream stopped." and Reconnect go.
+- **Seijaku** The device's corner follows the device (content, not chrome), so the frame's radius is not from the kit scale.
+- **Kansō** The REMOTE and iOS-only captions go: another computer is named beside the title, and a computer with neither tool has no Simulator at all.
+- **Kokō** Cost: local only, by nature: simulators run where Xcode and the Android SDK are. iOS: one screenshot a second while open and in front. Android: the emulator's frame stream while open and in front. Nothing remote.
+
+### Simulator guidelines
+
+- **Kansō** One switch: the note icon in the header turns notes on (w12, like every on). While on, a click on the screen places a point instead of touching the app; off, the screen is the device again. Nothing about notes shows while off and empty.
+- **Shizen** The note is written where the point is: placing opens the kit field on a popover under the point; Enter keeps it, Escape drops the point. Clicking a point opens its note again.
+- **Fukinsei** One action: Send to \<agent in front\> is solid and names who gets it; Clear is quiet. The agent gets the frozen screenshot with the points drawn, and the notes as a numbered list with each point's position.
+- **Kansō** The list repeats the points in order as list rows: the same 20 point, the note in one line with ellipsis, × on pointer. × removes at once (one press, nothing lost: Undo in the toast for 8 s).
+- **Shizen** Sending is the kit's pending: rows at 80%, Send off. Sent clears the points and leaves one done line that fades with the next change.
+- **Kokō** No agent in the tab: Send is off and says why in meta; the notes wait. Failure is the kit's block with the agent's words and Retry; the notes stay.
+
+### At rest, measured
+
+### Element · before → now · when it appears
+
+- Pin, Devices, Refresh: in the header → gone. pointer in the panel or keyboard focus.
+- Scope: device, OS, computer: a line → iPhone 16 Pro beside the title. pointer: iOS 18.2; another computer: its name.
+- Open in Simulator: a button → gone. pointer on the device.
+
+## Prompt for agents
+
+```text
+Build Simulator for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.
+```

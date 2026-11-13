@@ -1,0 +1,303 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './memory.stories.js';
+
+<Meta title="Panels/Memory" />
+
+# Memory
+
+Memory shows free memory, agent use and guard controls when the computer supports the guard.
+
+## Memory, Rest: guard on, one agent needs you, one past the limit
+
+Rest: guard on, one agent needs you, one past the limit.
+
+<Canvas of={stories.MemoryRestGuardOnOneAgentNeedsYouOnePastTheLimit} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Rest: guard on, one agent needs you, one past the limit"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Rest: guard on, one agent needs you, one past the limit"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Agents follow after a gap, one line each: name and size. Over the guard's limit the size turns working; an agent that needs you keeps the blocked mark. Program, state and uptime show on pointer or selection; working lives in the sidebar."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Low · the window past its limit
+
+Low · the window past its limit.
+
+<Canvas of={stories.MemoryLowTheWindowPastItsLimit} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Low · the window past its limit"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Low · the window past its limit"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The stats row goes. Herdr is one row with its total; Window and Core on pointer, or as rows when one is past its limit. Hung helpers keep their row with End. Recycles, restarts and freed move to History."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Recycle 3 idle: two confirmed, one pending
+
+Recycle 3 idle: two confirmed, one pending.
+
+<Canvas of={stories.MemoryRecycle3IdleTwoConfirmedOnePending} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Recycle 3 idle: two confirmed, one pending"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Recycle 3 idle: two confirmed, one pending"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Recycled · one refused, on its row · an agent armed
+
+Recycled · one refused, on its row · an agent armed.
+
+<Canvas of={stories.MemoryRecycledOneRefusedOnItsRowAnAgentArmed} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Recycled · one refused, on its row · an agent armed"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Recycled · one refused, on its row · an agent armed"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Agents follow after a gap, one line each: name and size. Over the guard's limit the size turns working; an agent that needs you keeps the blocked mark. Program, state and uptime show on pointer or selection; working lives in the sidebar."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Guard off
+
+Guard off.
+
+<Canvas of={stories.MemoryGuardOff} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Guard off"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Guard off"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Turn on, pending
+
+Turn on, pending.
+
+<Canvas of={stories.MemoryTurnOnPending} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Turn on, pending"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Turn on, pending"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Off: one line and Turn on. Off, unreadable and stopped share it; a failed install prints the installer's words."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Turn on refused, in the installer's words
+
+Turn on refused, in the installer's words.
+
+<Canvas of={stories.MemoryTurnOnRefusedInTheInstallersWords} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Turn on refused, in the installer's words"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Turn on refused, in the installer's words"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Off: one line and Turn on. Off, unreadable and stopped share it; a failed install prints the installer's words."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Stale: the guard stopped answering
+
+Stale: the guard stopped answering.
+
+<Canvas of={stories.MemoryStaleTheGuardStoppedAnswering} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Stale: the guard stopped answering"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Stale: the guard stopped answering"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Memory, First read
+
+First read.
+
+<Canvas of={stories.MemoryFirstRead} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"First read"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Cost: three small local files every 15 s while open and in front. Another computer with the guard installed: one on read there every 60 s (about 3 KB); history only when the fold opens."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kokō"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Windows: the guard reads the working set
+
+Windows: the guard reads the working set.
+
+<Canvas of={stories.MemoryWindowsTheGuardReadsTheWorkingSet} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Windows: the guard reads the working set"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Windows: the guard reads the working set"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Agents follow after a gap, one line each: name and size. Over the guard's limit the size turns working; an agent that needs you keeps the blocked mark. Program, state and uptime show on pointer or selection; working lives in the sidebar."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Another computer · narrow, 300
+
+Another computer · narrow, 300.
+
+<Canvas of={stories.MemoryAnotherComputerNarrow300} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Another computer · narrow, 300"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Another computer · narrow, 300"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Memory, History open: free over time, then what the guard did
+
+History open: free over time, then what the guard did.
+
+<Canvas of={stories.MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: History open: free over time, then what the guard did"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"History open: free over time, then what the guard did"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Only the agent you are on is idle: no bulk recycle
+
+Only the agent you are on is idle: no bulk recycle.
+
+<Canvas of={stories.MemoryOnlyTheAgentYouAreOnIsIdleNoBulkRecycle} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Only the agent you are on is idle: no bulk recycle"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Only the agent you are on is idle: no bulk recycle"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"When the only idle agent is the one you are on, the section has no bulk link; its row says \"you are on it\" and keeps its own Recycle. The sentence \"Only the agent you are on is idle…\" goes."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Memory, At rest, Now
+
+Now, at rest.
+
+<Canvas of={stories.MemoryAtRestNow} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, at rest"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Share, Refresh: in the header → gone. pointer in the panel or keyboard focus."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Memory, At rest, Now, light
+
+Now, light.
+
+<Canvas of={stories.MemoryAtRestNowLight} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, light"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Share, Refresh: in the header → gone. pointer in the panel or keyboard focus."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Memory, Pointer on docs
+
+Pointer on docs.
+
+<Canvas of={stories.MemoryPointerOnDocs} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Pointer on docs"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Pointer on docs"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Share, Refresh: in the header → gone. pointer in the panel or keyboard focus."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+### Memory guidelines
+
+- **Kansō** At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged.
+- **Yūgen** The free number is the panel's one big fact, with the total beside it; swap on pointer. It turns blocked under the guard's floor, and only then a primary appears: Recycle 2 idle · 1.7 GB back.
+- **Kansō** The stats row goes. Herdr is one row with its total; Window and Core on pointer, or as rows when one is past its limit. Hung helpers keep their row with End. Recycles, restarts and freed move to History.
+- **Yūgen** Agents follow after a gap, one line each: name and size. Over the guard's limit the size turns working; an agent that needs you keeps the blocked mark. Program, state and uptime show on pointer or selection; working lives in the sidebar.
+- **Kansō** When the only idle agent is the one you are on, the section has no bulk link; its row says "you are on it" and keeps its own Recycle. The sentence "Only the agent you are on is idle…" goes.
+- **Kansō** Recycle and Close show on the selected row; both arm "Press again" in accent. The sparks and the third bulk action ("Only the 2 over 500 MB") go: the guard does that on its own.
+- **Yūgen** A batch draws in place: the spinning ensō while it runs, each agent's before and after, refusals in blocked, then Dismiss.
+- **Shizen** Guard folds to one line, Guard on (with any switch that is off: "restart off"); opened, its three switches with their limits in the label, writing the guard's on.
+- **Seijaku** Off: one line and Turn on. Off, unreadable and stopped share it; a failed install prints the installer's words.
+- **Shizen** History folds the chart (lowest bars in blocked, the lowest marked in accent) and Events, one 32 row each with its time; refusals in blocked, the low notice in working.
+- **Kansō** Heaviest processes go: no action follows from them in kansō. The low notice already names the heaviest.
+- **Kansō** No guard on this platform (Linux): the panel is absent, not a sentence.
+- **Kokō** Cost: three small local files every 15 s while open and in front. Another computer with the guard installed: one on read there every 60 s (about 3 KB); history only when the fold opens.
+
+### At rest, measured
+
+### Element · before → now · when it appears
+
+- Share, Refresh: in the header → gone. pointer in the panel or keyboard focus.
+- Scope "This computer": a line → gone. another computer: its name beside the title.
+- Swap: beside the number → gone. pointer on the number.
+- Herdr: title, Window, Core: four lines → one row: Herdr 1.4 GB. pointer on the row: Window 1.1 GB, Core 210 MB.
+- 2 hung helpers · 60 MB · End: a row → unchanged. it needs you: stays.
+- Agents title, Recycle 2 idle: a section title → gone (a gap). pointer on the agents: Recycle 2 idle beside the first.
+- Program icon per agent: Claude, Codex → gone. pointer on the row (its second line).
+- State and uptime per agent: a second line → gone. pointer or selection on the row; working lives in the sidebar.
+- cart-ui needs you: mark and words → the blocked mark. pointer on the row: "left as it is".
+- docs 980 MB in working: coloured → unchanged. past the guard's 900 MB: stays.
+- Guard title and three switches: four lines → Guard on. Guard on opened.
+- History summary: lowest 18% · 6 recycles · 2.3 GB freed → History. History opened.
+
+## Prompt for agents
+
+```text
+Build Memory for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.
+```

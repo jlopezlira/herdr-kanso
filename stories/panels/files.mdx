@@ -1,0 +1,362 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './files.stories.js';
+
+<Meta title="Panels/Files" />
+
+# Files
+
+Files shows the current pane's changed files or repository tree when opened from its header or the panel bar.
+
+## Files, At rest, comparison
+
+The previous design is kept as a reference beside the current design. Files · rows 11 → 6 · glyphs 4 → 2 · colours 5 → 3 · lines 11 → 6.
+
+<Canvas of={stories.FilesAtRestComparison} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Files · rows 11 → 6 · glyphs 4 → 2 · colours 5 → 3 · lines 11 → 6"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Files · rows 11 → 6 · glyphs 4 → 2 · colours 5 → 3 · lines 11 → 6"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Measured in the browser on the six first screens: rows 103 → 76 · glyphs 35 → 19 · colours 33 → 25 · lines 150 → 88. Preview's 14 lines are the file itself, so its chrome is what halves: 2 rows to 1."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Files, At rest, Before
+
+The previous design is kept as a reference beside the current design. Before.
+
+<Canvas of={stories.FilesAtRestBefore} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Before"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Before"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Files, At rest, Now
+
+Now, at rest.
+
+<Canvas of={stories.FilesAtRestNow} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, at rest"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Files, On the pointer
+
+Now, pointer on a row: more facts, the same controls.
+
+<Canvas of={stories.FilesOnThePointer} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, pointer on a row: more facts, the same controls"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, pointer on a row: more facts, the same controls"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Files, At rest, Now, light
+
+Now, light.
+
+<Canvas of={stories.FilesAtRestNowLight} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, light"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Files, Changed, opened from the digest
+
+Changed, opened from the digest.
+
+<Canvas of={stories.FilesChangedOpenedFromTheDigest} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Changed, opened from the digest"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Changed, opened from the digest"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Opened from the digest's files segment it lands on Changed. From the tab bar it opens on the last view used. In a folder that is not a repository there is only the tree."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Files, All files, with marks
+
+All files, with marks.
+
+<Canvas of={stories.FilesAllFilesWithMarks} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: All files, with marks"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"All files, with marks"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The files the focused agent named come first, newest first, with no title: the panel opened from that agent. A named file that also changed carries its stat there and is not listed again. Named files that did not change sit on one dim line by name, each name a link. Also changed holds only the rest. The named part exists only for an agent pane with a conversation (piece files.named, S; Hide stops the transcript read)."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Files, Right-click a row
+
+Right-click a row.
+
+<Canvas of={stories.FilesRightClickARow} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Right-click a row"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Right-click a row"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"A row opens the file in Preview. Its stat +14 −3 is a control too: it opens the diff (the PR panel's diff page,, read with git diff). Right-click gets a menu (Open the diff, Open, Open with…, Copy path) instead of going straight to Open with."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Files, A shell pane: nothing named
+
+A shell pane: nothing named.
+
+<Canvas of={stories.FilesAShellPaneNothingNamed} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: A shell pane: nothing named"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"A shell pane: nothing named"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The files the focused agent named come first, newest first, with no title: the panel opened from that agent. A named file that also changed carries its stat there and is not listed again. Named files that did not change sit on one dim line by name, each name a link. Also changed holds only the rest. The named part exists only for an agent pane with a conversation (piece files.named, S; Hide stops the transcript read)."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Files, Nothing changed
+
+Nothing changed.
+
+<Canvas of={stories.FilesNothingChanged} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Nothing changed"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Nothing changed"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The kit header: Files. Changed and All files are the two quiet words at its right, then Refresh. No scope line: the pane header already says the folder and branch."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Files, Not a repository: the tree only
+
+Not a repository: the tree only.
+
+<Canvas of={stories.FilesNotARepositoryTheTreeOnly} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Not a repository: the tree only"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Not a repository: the tree only"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Opened from the digest's files segment it lands on Changed. From the tab bar it opens on the last view used. In a folder that is not a repository there is only the tree."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Files, First read
+
+First read.
+
+<Canvas of={stories.FilesFirstRead} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"First read"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"First read: kit skeleton rows at 32, breathing. Later reads keep the rows and spin Refresh."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+## Files, Error: the folder's own words
+
+Error: the folder's own words.
+
+<Canvas of={stories.FilesErrorTheFoldersOwnWords} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Error: the folder's own words"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Error: the folder's own words"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Errors are the folder's own words in blocked, with Refresh, here and on another computer alike."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Files, No folder for this pane
+
+No folder for this pane.
+
+<Canvas of={stories.FilesNoFolderForThisPane} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: No folder for this pane"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"No folder for this pane"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"A pane with no folder says so, instead of \"No folder\"."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Files, On another computer
+
+On another computer.
+
+<Canvas of={stories.FilesOnAnotherComputer} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: On another computer"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"On another computer"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Errors are the folder's own words in blocked, with Refresh, here and on another computer alike."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Yūgen"}</td></tr>
+</tbody>
+</table>
+
+## Files, Stale: devbox stopped answering
+
+Stale: devbox stopped answering.
+
+<Canvas of={stories.FilesStaleDevboxStoppedAnswering} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Stale: devbox stopped answering"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Stale: devbox stopped answering"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Stale takes the scope slot: Read 14:02 · devbox unreachable · next try 14:03, rows at 55%. \"Unreachable\" is the sidebar's word for the same fact."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Files, Unreachable before the first read
+
+Unreachable before the first read.
+
+<Canvas of={stories.FilesUnreachableBeforeTheFirstRead} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Unreachable before the first read"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Unreachable before the first read"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"First read: kit skeleton rows at 32, breathing. Later reads keep the rows and spin Refresh."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+## Files, Light
+
+Light.
+
+<Canvas of={stories.FilesLight} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Light"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Light: the same marks; only U is coloured. Selected rows use selected, never a hex."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kokō"}</td></tr>
+</tbody>
+</table>
+
+## Files, Light, all files
+
+Light, all files.
+
+<Canvas of={stories.FilesLightAllFiles} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light, all files"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Light, all files"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Light: the same marks; only U is coloured. Selected rows use selected, never a hex."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kokō"}</td></tr>
+</tbody>
+</table>
+
+## Files, Narrow, 300
+
+Narrow, 300.
+
+<Canvas of={stories.FilesNarrow300} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Narrow, 300"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Narrow, 300"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Narrow: title 15, the folder part truncates before the name."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Shizen"}</td></tr>
+</tbody>
+</table>
+
+### First screens guidelines
+
+- **Kansō** Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud.
+- **Seijaku** Measured in the browser on the six first screens: rows 103 → 76 · glyphs 35 → 19 · colours 33 → 25 · lines 150 → 88. Preview's 14 lines are the file itself, so its chrome is what halves: 2 rows to 1.
+- **Kansō** One fact, one place. The folder, branch, files and lines are in the pane header, so the panels drop their scope and facts lines. Header icons, the period switch, Reply and Comment fields, Everyone's, Explain, Remove all and Prune all stay.
+- **Kansō** Nothing is lost: each removed fact says where it lives now, and the options audit lists every control. Both are in panels-a-elements.md.
+
+### Files guidelines
+
+- **Seijaku** The kit header: Files. Changed and All files are the two quiet words at its right, then Refresh. No scope line: the pane header already says the folder and branch.
+- **Yūgen** Opened from the digest's files segment it lands on Changed. From the tab bar it opens on the last view used. In a folder that is not a repository there is only the tree.
+- **Seijaku** The files the focused agent named come first, newest first, with no title: the panel opened from that agent. A named file that also changed carries its stat there and is not listed again. Named files that did not change sit on one dim line by name, each name a link. Also changed holds only the rest. The named part exists only for an agent pane with a conversation (piece files.named, S; Hide stops the transcript read).
+- **Kansō** No totals: the header's digest already says 3 files +42 −7. Each row carries its own stat.
+- **Kansō** Modified is the normal case and carries no mark. A and D sit where the file icon goes, dim; U alone is in blocked, because a conflict needs you. A folder shows how many changed files it holds.
+- **Seijaku** Rows 32, 12.5 type, 16 per level, selected on selected. j k move, Enter opens, Esc returns to the pane.
+- **Seijaku** A row opens the file in Preview. Its stat +14 −3 is a control too: it opens the diff (the PR panel's diff page,, read with git diff). Right-click gets a menu (Open the diff, Open, Open with…, Copy path) instead of going straight to Open with.
+- **Seijaku** The 500-per-folder cap is said inside the folder it cut, as a dim row. A folder that cannot be read says so in its own place.
+- **Kokō** Remote calls: none on this computer (a folder watch). On another computer, one tree read per open folder, then one stat every 5 s while the panel is in front, 30 s after three quiet reads, none when the panel is hidden.
+
+### Files guidelines
+
+- **Shizen** First read: kit skeleton rows at 32, breathing. Later reads keep the rows and spin Refresh.
+- **Yūgen** Errors are the folder's own words in blocked, with Refresh, here and on another computer alike.
+- **Seijaku** Stale takes the scope slot: Read 14:02 · devbox unreachable · next try 14:03, rows at 55%. "Unreachable" is the sidebar's word for the same fact.
+- **Seijaku** A pane with no folder says so, instead of "No folder".
+- **Shizen** Narrow: title 15, the folder part truncates before the name.
+- **Kokō** Light: the same marks; only U is coloured. Selected rows use selected, never a hex.
+
+## Prompt for agents
+
+```text
+Build Files for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.
+```

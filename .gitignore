@@ -5,7 +5,7 @@ kanso/mods/*/gpui-kit.d.ts
 kanso/mods/*/jsconfig.json
 */mods/*/gpui-kit.d.ts
 */mods/*/jsconfig.json
-node_modules/
+node_modules
 .DS_Store
 site/CHANGELOG.md
 

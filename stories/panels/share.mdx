@@ -1,0 +1,38 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './share.stories.js';
+
+<Meta title="Panels/Share" />
+
+# Share
+
+Share opens from a panel header to send or copy its current result.
+
+## Share, Closed · open · a post pending · the dōjō
+
+Closed · open · a post pending · the dōjō.
+
+<Canvas of={stories.ShareClosedOpenAPostPendingTheDojo} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Closed · open · a post pending · the dōjō"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Closed · open · a post pending · the dōjō"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Cost: none until chosen; then a local render. The post opens in the browser."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kokō"}</td></tr>
+</tbody>
+</table>
+
+### Share guidelines
+
+- **Seijaku** One menu (the kit's, 252 wide) from the header's share icon, in Ports, Memory, Spend and the hjkl dōjō. Its header is the privacy fact: "Counts and sizes only" (Ports, Memory), "Totals and days only" (Spend), "Scores and practice days only" (dōjō, shown once a round is played; draws only the header icon).
+- **Yūgen** The icon shows only when there is something to share: history in Ports and Memory, an unfiltered home page in Spend.
+- **Seijaku** While the image is made, that row says so and the others dim; the result is the toast.
+- **Kansō** The inline row of four bordered buttons and its sentence go.
+- **Kokō** Cost: none until chosen; then a local render. The post opens in the browser.
+
+## Prompt for agents
+
+```text
+Build Share for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.
+```

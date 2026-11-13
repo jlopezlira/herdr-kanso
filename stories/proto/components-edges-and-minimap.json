@@ -1,6 +1,10 @@
 {
- "EdgesAndMinimap": {
-  "caption": "Off-screen panes at the edge as tiles; the minimap and zoom in the status bar.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__bar\" style=\"width:400px\"><div class=\"kanso-edge\">‹<span class=\"kanso-minimap__tile kanso-button--inline-icon\" tabindex=\"0\"><svg class=\"kanso-icon--program\"><use href=\"#p-codex\"/></svg></span></div><div class=\"kanso-status-bar__slot\"><span class=\"kanso-minimap\"><i class=\"kanso-content__summary\" style=\"width:24px\"></i><i style=\"width:24px\"></i></span><span style=\"width:8px\"></span><span class=\"kanso-text--dim\">−</span><span class=\"kanso-text--muted\" style=\"margin:0 var(--k-sp-1)\">2</span><span class=\"kanso-text--dim\">+</span></div></div></div></div>"
+ "Edge": {
+  "caption": "Off-screen pane tiles on either side of an empty pane in the strip.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme\"><div class=\"kanso-pane-strip\" style=\"width:400px;height:120px\"><div class=\"kanso-edge\">‹<span class=\"kanso-minimap__tile kanso-button--inline-icon\" tabindex=\"0\"><svg class=\"kanso-icon--program\"><use href=\"#p-codex\"/></svg></span></div><div class=\"kanso-pane\" style=\"flex:1\"></div><div class=\"kanso-edge\">›<span class=\"kanso-minimap__tile kanso-button--inline-icon\" tabindex=\"0\"><svg class=\"kanso-icon--program\"><use href=\"#p-codex\"/></svg></span><span class=\"kanso-minimap__tile kanso-button--inline-icon\" tabindex=\"0\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg></span><span class=\"kanso-minimap__tile kanso-button--inline-icon\" tabindex=\"0\"><svg class=\"kanso-icon--program\"><use href=\"#lu-terminal\"/></svg></span></div></div></div></div>"
+ },
+ "MinimapSlot": {
+  "caption": "The minimap and zoom control in their own status bar slot.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme\"><div class=\"kanso-status-bar__slot\"><span class=\"kanso-minimap\"><i class=\"kanso-content__summary\" style=\"width:24px\"></i><i style=\"width:24px\"></i></span><span style=\"width:8px\"></span><span class=\"kanso-text--dim\">−</span><span class=\"kanso-text--muted\" style=\"margin:0 var(--k-sp-1)\">2</span><span class=\"kanso-text--dim\">+</span></div></div></div>"
  }
 }
