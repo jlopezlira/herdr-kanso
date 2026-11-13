@@ -46,7 +46,7 @@ export function structureErrors(files, catalog, template) {
       if (named) {
         if (named !== explicit || !references.pages.some((reference) => reference.page === named && (!reference.existing || named.startsWith("Start/")))) errors.push(`${path}: unregistered named reference`);
         docs.add(explicit);
-      } else if (!/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
+      } else if (!explicit.startsWith('Start/') && !/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
     } else {
       const target = /import \* as stories from '\.\/([^']+)'/.exec(text)?.[1];
       const title = /page="([^"]+)"/.exec(text)?.[1];
