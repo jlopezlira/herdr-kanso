@@ -1,0 +1,353 @@
+{
+ "ImagesTwoNotesReadyToSend": {
+  "name": "Images, Two notes, ready to send",
+  "caption": "Two notes, ready to send.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\">\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-button--inline-icon kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div><div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-button--quiet\">Open</span><span class=\"kanso-button--quiet\">Clear 2 pins</span></div></div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\">\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-button--inline-icon kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div><div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-button--quiet\">Open</span><span class=\"kanso-button--quiet\">Clear 2 pins</span></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Two notes, ready to send"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Two notes, ready to send"
+   ],
+   [
+    "Behaviour",
+    "The panel skeleton: title 20 with \"1 of 3\" beside it. Stay on this agent and Refresh appear with the pointer; the lock stays while you have pinned it. The Send button names the agent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesANewPinItsNoteTypedBesideIt": {
+  "name": "Images, A new pin: its note typed beside it",
+  "caption": "A new pin: its note typed beside it.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-picture--annotated\" style=\"cursor:crosshair\">\n                <div class=\"kanso-picture__content\">\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation kanso-annotation--inactive\" style=\"left:84%;top:74%\">2</span><div class=\"kanso-annotation__note\" style=\"left:30%;top:80%\">Total should be bold<span class=\"kanso-panel__caret\"></span></div>\n              </div>\n              <div class=\"kanso-panel__file\"><span>cart-countdown.png</span><span class=\"kanso-text--dim kanso-text--truncate\" style=\"font-size:var(--k-fs-meta)\">~/acme-shop/shots · 14:02</span><span class=\"kanso-button--quiet\" style=\"margin-left:auto\">Open</span></div>\n              <div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-button--inline-icon kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div>\n              <div style=\"margin-top:var(--k-sp-4)\">\n                <div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div>\n                <div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Total should be bold</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div>\n              </div>\n              <div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-button--quiet\">Open</span><span class=\"kanso-button--quiet\">Clear pins</span></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-picture--annotated\" style=\"cursor:crosshair\">\n                <div class=\"kanso-picture__content\">\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation kanso-annotation--inactive\" style=\"left:84%;top:74%\">2</span><div class=\"kanso-annotation__note\" style=\"left:30%;top:80%\">Total should be bold<span class=\"kanso-panel__caret\"></span></div>\n              </div>\n              <div class=\"kanso-panel__file\"><span>cart-countdown.png</span><span class=\"kanso-text--dim kanso-text--truncate\" style=\"font-size:var(--k-fs-meta)\">~/acme-shop/shots · 14:02</span><span class=\"kanso-button--quiet\" style=\"margin-left:auto\">Open</span></div>\n              <div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-button--inline-icon kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div>\n              <div style=\"margin-top:var(--k-sp-4)\">\n                <div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div>\n                <div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Total should be bold</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div>\n              </div>\n              <div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-button--quiet\">Open</span><span class=\"kanso-button--quiet\">Clear pins</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A new pin: its note typed beside it"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "A new pin: its note typed beside it"
+   ],
+   [
+    "Behaviour",
+    "The picture fills the width; a click drops a numbered pin, a drag a region, and the note is typed beside it: the one pin component of. The dialog overlay goes."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesItsAgentWaitsOnYouSent": {
+  "name": "Images, Its agent waits on you · sent",
+  "caption": "Its agent waits on you · sent.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel__column\">\n              <div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">cart-ui</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div style=\"margin-top:var(--k-sp-4)\">\n                  <div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">Badge overlaps the cart icon at 320 px</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div>\n                </div>\n                <div class=\"kanso-state-block\"><svg class=\"kanso-mark kanso-mark--blocked\"><use href=\"#e-blk\"/></svg><div class=\"kanso-state-block__what\">cart-ui needs you first</div><div class=\"kanso-state-block__actions\"><span class=\"kanso-button--tonal\">Go to cart-ui</span></div></div>\n              </div>\n              <div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">checkout</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kanso-panel__file\" style=\"margin-top:var(--k-sp-4)\"><span>cart-countdown.png</span><span class=\"kanso-text--dim\" style=\"font-size:var(--k-fs-meta)\">Sent to checkout 14:06</span></div>\n              </div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel__column\">\n              <div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">cart-ui</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div style=\"margin-top:var(--k-sp-4)\">\n                  <div class=\"kanso-panel__annotation kanso-row--interactive\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">Badge overlaps the cart icon at 320 px</span><svg class=\"kanso-icon kanso-icon--inline kanso-content__body\"><use href=\"#lu-x\"/></svg></div>\n                </div>\n                <div class=\"kanso-state-block\"><svg class=\"kanso-mark kanso-mark--blocked\"><use href=\"#e-blk\"/></svg><div class=\"kanso-state-block__what\">cart-ui needs you first</div><div class=\"kanso-state-block__actions\"><span class=\"kanso-button--tonal\">Go to cart-ui</span></div></div>\n              </div>\n              <div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">checkout</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kanso-panel__file\" style=\"margin-top:var(--k-sp-4)\"><span>cart-countdown.png</span><span class=\"kanso-text--dim\" style=\"font-size:var(--k-fs-meta)\">Sent to checkout 14:06</span></div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Its agent waits on you · sent"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Its agent waits on you · sent"
+   ],
+   [
+    "Behaviour",
+    "An agent that waits on you gets no Send; the line says \"cart-ui needs you first\", the PR panel's words."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "ImagesAnotherComputerNotBroughtOverYet": {
+  "name": "Images, Another computer: not brought over yet",
+  "caption": "Another computer: not brought over yet.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">migrate on devbox</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-picture--annotated\" style=\"height:200px;display:grid;place-items:center;background:var(--canvas)\">\n                <div style=\"text-align:center\"><div style=\"font-size:var(--k-fs-name)\">schema-diagram.png</div><div class=\"kanso-text--dim\" style=\"font-size:var(--k-fs-body);margin-top:var(--k-sp-1)\">2.4 MB on devbox</div><div class=\"kanso-actions\" style=\"justify-content:center;margin-top:var(--k-sp-3)\"><span class=\"kanso-button\">Load</span></div></div>\n              </div>\n              </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">migrate on devbox</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-picture--annotated\" style=\"height:200px;display:grid;place-items:center;background:var(--canvas)\">\n                <div style=\"text-align:center\"><div style=\"font-size:var(--k-fs-name)\">schema-diagram.png</div><div class=\"kanso-text--dim\" style=\"font-size:var(--k-fs-body);margin-top:var(--k-sp-1)\">2.4 MB on devbox</div><div class=\"kanso-actions\" style=\"justify-content:center;margin-top:var(--k-sp-3)\"><span class=\"kanso-button\">Load</span></div></div>\n              </div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Another computer: not brought over yet"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Another computer: not brought over yet"
+   ],
+   [
+    "Behaviour",
+    "At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesAnotherComputerUnreachable": {
+  "name": "Images, Another computer, unreachable",
+  "caption": "Another computer, unreachable.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"kanso-panel--stale\">\n                <div class=\"kanso-picture--annotated\" style=\"height:200px;background:var(--raised)\">\n                  <div class=\"kanso-picture__content\"><div class=\"kanso-content__heading\"><span>relay schema</span></div><div class=\"kanso-picture__line\"><span>events</span><span>12 cols</span></div><div class=\"kanso-picture__line\"><span>deliveries</span><span>9 cols</span></div><div class=\"kanso-picture__line\"><span>receivers</span><span>6 cols</span></div></div>\n                </div>\n                </div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"kanso-panel--stale\">\n                <div class=\"kanso-picture--annotated\" style=\"height:200px;background:var(--raised)\">\n                  <div class=\"kanso-picture__content\"><div class=\"kanso-content__heading\"><span>relay schema</span></div><div class=\"kanso-picture__line\"><span>events</span><span>12 cols</span></div><div class=\"kanso-picture__line\"><span>deliveries</span><span>9 cols</span></div><div class=\"kanso-picture__line\"><span>receivers</span><span>6 cols</span></div></div>\n                </div>\n                </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Another computer, unreachable"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Another computer, unreachable"
+   ],
+   [
+    "Behaviour",
+    "Another computer: nothing large crosses the wire unasked. The picture is a name, its size and Load; thumbnails are the picture's colour until loaded. Unreachable keeps the last picture at 55%."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "ImagesEmpty": {
+  "name": "Images, Empty",
+  "caption": "Empty.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">docs</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kanso-state-empty\"><svg class=\"kanso-icon\"><use href=\"#lu-eye\"/></svg><div class=\"kanso-content__text\">No pictures in this conversation</div></div>\n              </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">docs</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kanso-state-empty\"><svg class=\"kanso-icon\"><use href=\"#lu-eye\"/></svg><div class=\"kanso-content__text\">No pictures in this conversation</div></div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Empty"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Empty"
+   ],
+   [
+    "Behaviour",
+    "One primary that names the agent: Send to checkout, ⌘↩ beside it when it has focus. No pins, no button. Clear goes: Backspace on an empty note, or × on hover, removes a mark."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesNoAgentInFocus": {
+  "name": "Images, No agent in focus",
+  "caption": "No agent in focus.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">web</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kanso-state-empty\"><svg class=\"kanso-icon\"><use href=\"#lu-monitor\"/></svg><div class=\"kanso-content__text\">No agent in focus</div></div>\n              </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n                <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">web</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n                <div class=\"kanso-state-empty\"><svg class=\"kanso-icon\"><use href=\"#lu-monitor\"/></svg><div class=\"kanso-content__text\">No agent in focus</div></div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: No agent in focus"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "No agent in focus"
+   ],
+   [
+    "Behaviour",
+    "One primary that names the agent: Send to checkout, ⌘↩ beside it when it has focus. No pins, no button. Clear goes: Backspace on an empty note, or × on hover, removes a mark."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesLoadingThePicturePinnedToOneAgent": {
+  "name": "Images, Loading the picture · pinned to one agent",
+  "caption": "Loading the picture · pinned to one agent.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">checkout</span></span><span class=\"kanso-button--icon\" style=\"background:var(--w12);color:var(--fg)\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div style=\"margin-top:var(--k-sp-4)\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:336px;height:200px;border-radius:6px\"></span></div>\n              </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">checkout</span></span><span class=\"kanso-button--icon\" style=\"background:var(--w12);color:var(--fg)\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div style=\"margin-top:var(--k-sp-4)\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:336px;height:200px;border-radius:6px\"></span></div>\n              </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Loading the picture · pinned to one agent"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Loading the picture · pinned to one agent"
+   ],
+   [
+    "Behaviour",
+    "The panel skeleton: title 20 with \"1 of 3\" beside it. Stay on this agent and Refresh appear with the pointer; the lock stays while you have pinned it. The Send button names the agent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesAReadFailed": {
+  "name": "Images, A read failed",
+  "caption": "A read failed.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">checkout</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-state-block\"><svg class=\"kanso-mark kanso-mark--blocked\"><use href=\"#e-blk\"/></svg><div class=\"kanso-state-block__what\">Can't show cart-old.png</div><div class=\"kanso-state-block__why\" title=\"sips: cart-old.png is not a picture\">sips: cart-old.png is not a picture</div><div class=\"kanso-state-block__actions\"><span class=\"kanso-button--tonal\">Refresh</span><span class=\"kanso-button--tonal\"><svg class=\"kanso-icon\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">checkout</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-state-block\"><svg class=\"kanso-mark kanso-mark--blocked\"><use href=\"#e-blk\"/></svg><div class=\"kanso-state-block__what\">Can't show cart-old.png</div><div class=\"kanso-state-block__why\" title=\"sips: cart-old.png is not a picture\">sips: cart-old.png is not a picture</div><div class=\"kanso-state-block__actions\"><span class=\"kanso-button--tonal\">Refresh</span><span class=\"kanso-button--tonal\"><svg class=\"kanso-icon\"><use href=\"#lu-bot\"/></svg>Explain to checkout</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A read failed"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "A read failed"
+   ],
+   [
+    "Behaviour",
+    "Cost: this computer, one stat of the conversation per change check, a read only when it changed. Another computer: one remote stat per check with backoff, the file list on change; a picture moves only on Load. Thumbnails are drawn from copies already made, never fetched for the strip."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "ImagesNarrow300": {
+  "name": "Images, Narrow, 300",
+  "caption": "Narrow, 300.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\" style=\"width:300px\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\" style=\"font-size:var(--k-fs-heading)\">Images</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\">\n                  <div class=\"kanso-content__heading\"><span>Your cart</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:80%;top:42%\">1</span>\n              </div><div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-button--inline-icon kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div>\n              <div class=\"kanso-panel__annotation kanso-row--interactive\" style=\"margin-top:var(--k-sp-3)\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count</span></div>\n              <div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-button--quiet\">Open</span><span class=\"kanso-button--quiet\">Clear pins</span></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\" style=\"width:300px\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\" style=\"font-size:var(--k-fs-heading)\">Images</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\">\n                  <div class=\"kanso-content__heading\"><span>Your cart</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:80%;top:42%\">1</span>\n              </div><div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-button--inline-icon kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail kanso-button--inline-icon\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div>\n              <div class=\"kanso-panel__annotation kanso-row--interactive\" style=\"margin-top:var(--k-sp-3)\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count</span></div>\n              <div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-button--quiet\">Open</span><span class=\"kanso-button--quiet\">Clear pins</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Narrow, 300"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Narrow, 300"
+   ],
+   [
+    "Behaviour",
+    "At rest only what you would miss: header icons appear with the pointer in the panel or keyboard focus; the scope line goes, and a panel's one qualifier (another computer, the month, the device, 1 of 3) sits beside the title in dim; second lines and row actions appear on pointer or selection; folds keep their word. States that need you are unchanged."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesAtRestNow": {
+  "name": "Images, At rest, Now",
+  "caption": "Now, at rest.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div data-m=\"images-after\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\" data-skip>\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span></div><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span></div></div></div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div data-m=\"images-after\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\" data-skip>\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span></div><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, at rest"
+   ],
+   [
+    "Behaviour",
+    "Pin to this agent, Refresh: in the header → gone. pointer or focus; the lock stays while you have pinned it."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesAtRestNowLight": {
+  "name": "Images, At rest, Now, light",
+  "caption": "Now, light.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\" data-skip>\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span></div><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span></div></div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\" data-skip>\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span></div><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Now, light"
+   ],
+   [
+    "Behaviour",
+    "Pin to this agent, Refresh: in the header → gone. pointer or focus; the lock stays while you have pinned it."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "ImagesPointerOnThePicture": {
+  "name": "Images, Pointer on the picture",
+  "caption": "Pointer on the picture.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\" data-skip>\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div class=\"kanso-panel__file\"><span>cart-countdown.png</span><span class=\"kanso-text--dim kanso-text--truncate\" style=\"font-size:var(--k-fs-meta)\">~/acme-shop/shots · 14:02</span><span class=\"kanso-button--quiet\" style=\"margin-left:auto\">Open</span></div>\n              <div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span></div><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-text--dim\" style=\"font-size:var(--k-fs-meta)\">⌘↩</span></div></div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Images<span class=\"kanso-panel__qualifier\">1 of 3</span></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-lock\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"kanso-picture--annotated\">\n                <div class=\"kanso-picture__content\" data-skip>\n                  <div class=\"kanso-content__heading\"><span>Your cart</span><span style=\"font-weight:400;color:var(--muted)\">3 items</span></div>\n                  <div class=\"kanso-picture__banner\">Prices held for 09:42</div>\n                  <div class=\"kanso-picture__line\"><span>Trail runner, 42</span><span>$64.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Wool socks ×2</span><span>$12.00</span></div>\n                  <div class=\"kanso-picture__line\"><span>Shipping</span><span>$8.00</span></div>\n                  <div class=\"kanso-picture__total\"><span>Total</span><span>$84.00</span></div>\n                  <div class=\"kanso-picture__action\">Checkout</div>\n                </div>\n                <span class=\"kanso-annotation\" style=\"left:78%;top:24%\">1</span>\n                <span class=\"kanso-annotation\" style=\"left:30%;top:88%\">2</span>\n              </div><div class=\"kanso-panel__file\"><span>cart-countdown.png</span><span class=\"kanso-text--dim kanso-text--truncate\" style=\"font-size:var(--k-fs-meta)\">~/acme-shop/shots · 14:02</span><span class=\"kanso-button--quiet\" style=\"margin-left:auto\">Open</span></div>\n              <div class=\"kanso-picture__thumbnails\"><span class=\"kanso-thumbnail kanso-control--on\"><i style=\"top:6px;right:16px\"></i><i class=\"kanso-brand__wordmark\" style=\"top:12px\"></i><i style=\"top:22px\"></i><i style=\"top:29px\"></i></span><span class=\"kanso-thumbnail\"><i style=\"top:10px;right:18px\"></i><i style=\"top:18px\"></i></span><span class=\"kanso-thumbnail\"><i style=\"top:7px\"></i><i style=\"top:14px\"></i><i style=\"top:21px;right:10px\"></i><i style=\"top:28px;right:20px\"></i></span></div><div style=\"margin-top:var(--k-sp-4)\"><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">1</span><span class=\"kanso-text--truncate\">The timer covers the item count on narrow screens</span></div><div class=\"kanso-panel__annotation\"><span class=\"kanso-annotation\">2</span><span class=\"kanso-text--truncate\">Checkout should say the held price, not a plain label</span></div></div><div class=\"kanso-actions\"><span class=\"kanso-button\">Send to checkout</span><span class=\"kanso-text--dim\" style=\"font-size:var(--k-fs-meta)\">⌘↩</span></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Pointer on the picture"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Pointer on the picture"
+   ],
+   [
+    "Behaviour",
+    "Scope: agent, folder: a line → gone. the button names the agent; the folder on pointer on the picture."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ }
+}

@@ -26,13 +26,15 @@ the branch's rules.
 
 ### Fixed
 
+- Storybook shows Edge and Minimap slot as separate pieces, with the edges around an empty pane and the minimap in its own frame.
+
 - Storybook documentation and captions read on their own without prototype references; imported text strips those references on regeneration.
 - Storybook uses one token spacing rhythm for matching pairs of elements in rows, controls, blocks and containers.
 
 ### Added
 
 - Storybook coverage for every app module, with selectable interaction, loading, empty, failure and recovery states built from the shared kit.
-
+- Storybook includes 290 panel states with reference comparisons, specifications and usage guidelines under Panels.
 - Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
 - Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
 - Any file that is not a picture opens from Files into Preview. Any text file up to 1 MB can be edited, on this computer or another, and saved with Save or Cmd+S (Ctrl+S on Windows). A bigger or binary one stays a view. A Markdown file on another computer can be edited too: Save, that key, or leaving the file writes it, and it does not save while you type. On this computer a Markdown file still saves after a pause. An edit you have not saved comes back when you open the file again, and Read again asks before it discards it.

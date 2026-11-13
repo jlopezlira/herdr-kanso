@@ -1,0 +1,316 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './shipped.stories.js';
+
+<Meta title="Panels/Shipped" />
+
+# Shipped
+
+Shipped shows contribution totals for the selected period when opened from the panel bar.
+
+## Shipped, At rest, comparison
+
+The previous design is kept as a reference beside the current design. Shipped · rows 28 → 15 · glyphs 14 → 4 · colours 4 → 4 · lines 41 → 16.
+
+<Canvas of={stories.ShippedAtRestComparison} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Shipped · rows 28 → 15 · glyphs 14 → 4 · colours 4 → 4 · lines 41 → 16"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Shipped · rows 28 → 15 · glyphs 14 → 4 · colours 4 → 4 · lines 41 → 16"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Measured in the browser on the six first screens: rows 103 → 76 · glyphs 35 → 19 · colours 33 → 25 · lines 150 → 88. Preview's 14 lines are the file itself, so its chrome is what halves: 2 rows to 1."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, At rest, Before
+
+The previous design is kept as a reference beside the current design. Before.
+
+<Canvas of={stories.ShippedAtRestBefore} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Before"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Before"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, At rest, Now
+
+Now, at rest.
+
+<Canvas of={stories.ShippedAtRestNow} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, at rest"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, at rest"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, On the pointer
+
+Now, pointer on a row: more facts, the same controls.
+
+<Canvas of={stories.ShippedOnThePointer} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, pointer on a row: more facts, the same controls"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, pointer on a row: more facts, the same controls"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, At rest, Now, light
+
+Now, light.
+
+<Canvas of={stories.ShippedAtRestNowLight} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Now, light"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Now, light"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, This week
+
+This week.
+
+<Canvas of={stories.ShippedThisWeek} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: This week"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"This week"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The kit header with the period as the scope: This week. Under it the kit segmented Day · Week · Month · Year with ‹ and ›; Share and Refresh are the header's icons."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, Light
+
+Light.
+
+<Canvas of={stories.ShippedLight} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Light"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The kit header with the period as the scope: This week. Under it the kit segmented Day · Week · Month · Year with ‹ and ›; Share and Refresh are the header's icons."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, A day, narrow 300
+
+A day, narrow 300.
+
+<Canvas of={stories.ShippedADayNarrow300} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: A day, narrow 300"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"A day, narrow 300"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The kit header with the period as the scope: This week. Under it the kit segmented Day · Week · Month · Year with ‹ and ›; Share and Refresh are the header's icons."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, First read
+
+First read.
+
+<Canvas of={stories.ShippedFirstRead} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"First read"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"First read: the kit skeleton in the hero's shape. Later reads keep the numbers and spin Refresh."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, Still adding up
+
+Still adding up.
+
+<Canvas of={stories.ShippedStillAddingUp} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Still adding up"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Still adding up"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Adding up: the hero says \"lines so far\", and the count left lives in Refresh's tooltip. The sentence \"The first time takes a few minutes…\" goes."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kansō"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, Nothing in this period
+
+Nothing in this period.
+
+<Canvas of={stories.ShippedNothingInThisPeriod} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Nothing in this period"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Nothing in this period"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Empty: one line naming the period."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, Not signed in to GitHub
+
+Not signed in to GitHub.
+
+<Canvas of={stories.ShippedNotSignedInToGitHub} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Not signed in to GitHub"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Not signed in to GitHub"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Not signed in and GitHub CLI not installed use the PR panel's words and the same actions (Sign in opens gh auth login in a pane)."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, GitHub CLI not installed
+
+GitHub CLI not installed.
+
+<Canvas of={stories.ShippedGitHubCLINotInstalled} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: GitHub CLI not installed"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"GitHub CLI not installed"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Not signed in and GitHub CLI not installed use the PR panel's words and the same actions (Sign in opens gh auth login in a pane)."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, GitHub not answering
+
+GitHub not answering.
+
+<Canvas of={stories.ShippedGitHubNotAnswering} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: GitHub not answering"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"GitHub not answering"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"GitHub not answering: the kit stale line, the last numbers at 55%."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, Share: what leaves, then where
+
+Share: what leaves, then where.
+
+<Canvas of={stories.ShippedShareWhatLeavesThenWhere} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Share: what leaves, then where"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Share: what leaves, then where"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"Share is a menu, not a row of bordered buttons. Its one header line is the privacy fact (totals only), not a paragraph. A network being prepared turns dim while the image is made."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Seijaku"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, The card it makes (1200 wide, shown at half)
+
+The card it makes (1200 wide, shown at half).
+
+<Canvas of={stories.ShippedTheCardItMakes1200WideShownAtHalf} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: The card it makes (1200 wide, shown at half)"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"The card it makes (1200 wide, shown at half)"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The card is an image we draw ourselves (SVG to PNG), in the panel's own look: ink, no accent, the done ensō and \"kansō for Herdr\" at the foot."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kokō"}</td></tr>
+</tbody>
+</table>
+
+## Shipped, Light card
+
+Light card.
+
+<Canvas of={stories.ShippedLightCard} />
+
+<table>
+<tbody>
+<tr><th>{"Anatomy"}</th><td>{"the panel as the app draws it: header, scope, body from the kit primitives\nstate: Light card"}</td></tr>
+<tr><th>{"Values"}</th><td>{"panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"}</td></tr>
+<tr><th>{"States"}</th><td>{"Light card"}</td></tr>
+<tr><th>{"Behaviour"}</th><td>{"The card is an image we draw ourselves (SVG to PNG), in the panel's own look: ink, no accent, the done ensō and \"kansō for Herdr\" at the foot."}</td></tr>
+<tr><th>{"Principle"}</th><td>{"Kokō"}</td></tr>
+</tbody>
+</table>
+
+### First screens guidelines
+
+- **Kansō** Subtract information, never options. At rest a panel drops facts that repeat or say nothing now: scope lines, second lines, labels, marks and colour with no reason. Those facts come back under the pointer or keyboard. Every action and option, those the app has and those we added, stays visible and one press away. Colour stays only on what asks for you, and failures stay loud.
+- **Seijaku** Measured in the browser on the six first screens: rows 103 → 76 · glyphs 35 → 19 · colours 33 → 25 · lines 150 → 88. Preview's 14 lines are the file itself, so its chrome is what halves: 2 rows to 1.
+- **Kansō** One fact, one place. The folder, branch, files and lines are in the pane header, so the panels drop their scope and facts lines. Header icons, the period switch, Reply and Comment fields, Everyone's, Explain, Remove all and Prune all stay.
+- **Kansō** Nothing is lost: each removed fact says where it lives now, and the options audit lists every control. Both are in panels-a-elements.md.
+
+### Shipped guidelines
+
+- **Seijaku** The kit header with the period as the scope: This week. Under it the kit segmented Day · Week · Month · Year with ‹ and ›; Share and Refresh are the header's icons.
+- **Kansō** The hero is the kit metric (48): lines added, lines removed in muted, then one line for the change, in words with an arrow, in muted. A colour on it would read as an agent state.
+- **Kansō** The counts are one dim line: PRs merged, commits, reviews and the streak. "Repositories" goes: By repository counts them. "Contributions" is GitHub's sum of the others, so it leads only on a Day, where line sums don't exist.
+- **Seijaku** The streak is part of that line; a click on it opens the heat map. Longest streak is a record, and it is in Records.
+- **Kansō** At rest the only record shown is a new one ("new", in ink). Records, When you ship and Computers are one row each, with their count or their one-word answer, and open on click. Their charts are drawn in ink (foreground at 25 to 100%), never accent.
+- **Kansō** The all-time sentence ("1,204 pull requests merged … since you joined GitHub in 2014") goes. It leads nowhere, and the bests are in Records.
+- **Kansō** By repository: the top 3, one line each, then Show 8 more. Commits show under the pointer; the bars go.
+- **Seijaku** Every row here is the one row with a value on the right, the value at 12.5 in foreground.
+- **Kokō** Remote calls: one GitHub GraphQL read per period, on open or Refresh. Line sums come from git on each computer, read once and then only what changed. No poll.
+
+### Shipped guidelines
+
+- **Seijaku** First read: the kit skeleton in the hero's shape. Later reads keep the numbers and spin Refresh.
+- **Kansō** Adding up: the hero says "lines so far", and the count left lives in Refresh's tooltip. The sentence "The first time takes a few minutes…" goes.
+- **Seijaku** Empty: one line naming the period.
+- **Seijaku** Not signed in and GitHub CLI not installed use the PR panel's words and the same actions (Sign in opens gh auth login in a pane).
+- **Seijaku** GitHub not answering: the kit stale line, the last numbers at 55%.
+- **Seijaku** Share is a menu, not a row of bordered buttons. Its one header line is the privacy fact (totals only), not a paragraph. A network being prepared turns dim while the image is made.
+- **Kokō** The card is an image we draw ourselves (SVG to PNG), in the panel's own look: ink, no accent, the done ensō and "kansō for Herdr" at the foot.
+- **Seijaku** Share is disabled until the first read lands.
+
+## Prompt for agents
+
+```text
+Build Shipped for kansō from the states and specifications above. Use the shared tokens and kit primitives. Preserve the drawn geometry, content, state transitions and principle-tagged guidelines. Keep each action available in its documented context.
+```

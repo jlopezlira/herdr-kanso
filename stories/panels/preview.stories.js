@@ -1,0 +1,34 @@
+import stories from './preview.json';
+import { story } from '../proto/story.js';
+
+export default { title: "Panels/Preview" };
+
+export const PreviewAtRestComparison = { name: "Preview, At rest, comparison", ...story(stories.PreviewAtRestComparison) };
+export const PreviewAtRestBefore = { name: "Preview, At rest, Before", ...story(stories.PreviewAtRestBefore) };
+export const PreviewAtRestNow = { name: "Preview, At rest, Now", ...story(stories.PreviewAtRestNow) };
+export const PreviewOnThePointer = { name: "Preview, On the pointer", ...story(stories.PreviewOnThePointer) };
+export const PreviewAtRestNowLight = { name: "Preview, At rest, Now, light", ...story(stories.PreviewAtRestNowLight) };
+export const PreviewTextOpenedFromFiles = { name: "Preview, Text, Opened from Files", ...story(stories.PreviewTextOpenedFromFiles) };
+export const PreviewTextEditedSaveAppears = { name: "Preview, Text, Edited: Save appears", ...story(stories.PreviewTextEditedSaveAppears) };
+export const PreviewTextSavingThenSaved = { name: "Preview, Text, Saving, then Saved", ...story(stories.PreviewTextSavingThenSaved) };
+export const PreviewTextChangedOnDiskWhileEdited = { name: "Preview, Text, Changed on disk while edited", ...story(stories.PreviewTextChangedOnDiskWhileEdited) };
+export const PreviewTextTheComputerIsGoneItSavesOnItsOwnWhenItIsBack = { name: "Preview, Text, The computer is gone: it saves on its own when it is back", ...story(stories.PreviewTextTheComputerIsGoneItSavesOnItsOwnWhenItIsBack) };
+export const PreviewTextAfterOverwriteOrReloadOneUndoNoQuestionBefore = { name: "Preview, Text, After Overwrite or Reload: one Undo, no question before", ...story(stories.PreviewTextAfterOverwriteOrReloadOneUndoNoQuestionBefore) };
+export const PreviewTextOver1MBReadOnly = { name: "Preview, Text, Over 1 MB: read only", ...story(stories.PreviewTextOver1MBReadOnly) };
+export const PreviewTextBinary = { name: "Preview, Text, Binary", ...story(stories.PreviewTextBinary) };
+export const PreviewTextGoneFromDisk = { name: "Preview, Text, Gone from disk", ...story(stories.PreviewTextGoneFromDisk) };
+export const PreviewMarkdownFormatted = { name: "Preview, Markdown, Formatted", ...story(stories.PreviewMarkdownFormatted) };
+export const PreviewMarkdownAClickEditsThatBlock = { name: "Preview, Markdown, A click edits that block", ...story(stories.PreviewMarkdownAClickEditsThatBlock) };
+export const PreviewMarkdownATableCellByCell = { name: "Preview, Markdown, A table, cell by cell", ...story(stories.PreviewMarkdownATableCellByCell) };
+export const PreviewMarkdownSource = { name: "Preview, Markdown, Source", ...story(stories.PreviewMarkdownSource) };
+export const PreviewMarkdownLight = { name: "Preview, Markdown, Light", ...story(stories.PreviewMarkdownLight) };
+export const PreviewMarkdownNarrow300 = { name: "Preview, Markdown, Narrow, 300", ...story(stories.PreviewMarkdownNarrow300) };
+export const PreviewPicturesAPictureOnThisComputer = { name: "Preview, Pictures, A picture on this computer", ...story(stories.PreviewPicturesAPictureOnThisComputer) };
+export const PreviewPicturesOnAnotherComputerOver2MBLoad = { name: "Preview, Pictures, On another computer, over 2 MB: Load", ...story(stories.PreviewPicturesOnAnotherComputerOver2MBLoad) };
+export const PreviewPicturesLoading = { name: "Preview, Pictures, Loading", ...story(stories.PreviewPicturesLoading) };
+export const PreviewPicturesOver20MB = { name: "Preview, Pictures, Over 20 MB", ...story(stories.PreviewPicturesOver20MB) };
+export const PreviewPicturesAPictureInsideANote = { name: "Preview, Pictures, A picture inside a note", ...story(stories.PreviewPicturesAPictureInsideANote) };
+export const PreviewPicturesLight = { name: "Preview, Pictures, Light", ...story(stories.PreviewPicturesLight) };
+export const PreviewPicturesPinsClickDragType = { name: "Preview, Pictures, Pins: click, drag, type", ...story(stories.PreviewPicturesPinsClickDragType) };
+export const PreviewPicturesSentTheListWasTheMessage = { name: "Preview, Pictures, Sent: the list was the message", ...story(stories.PreviewPicturesSentTheListWasTheMessage) };
+export const PreviewPicturesLight2 = { name: "Preview, Pictures, Light, alternate 2", ...story(stories.PreviewPicturesLight2) };
