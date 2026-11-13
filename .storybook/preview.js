@@ -1,4 +1,5 @@
-import { addons } from 'storybook/preview-api';
+import { addons, useArgs, useEffect } from 'storybook/preview-api';
+import { mountBehaviours } from '../stories/kit/behaviours.js';
 import { GLOBALS_UPDATED, SET_GLOBALS } from 'storybook/internal/core-events';
 import sprite from '../stories/proto-sprite.svg?raw';
 import '../site/tokens.css';
@@ -25,12 +26,14 @@ const preview = {
   },
   initialGlobals: { theme: 'dark' },
   decorators: [(story, context) => {
+    const [, updateArgs] = useArgs();
     applyTheme(context.globals.theme);
     const frame = document.createElement('div');
     frame.className = context.viewMode === 'story' ? 'kanso-story__viewport kanso-story--canvas' : 'kanso-story__viewport';
     const content = story();
     if (typeof content === 'string') frame.innerHTML = content;
     else frame.append(content);
+    useEffect(() => mountBehaviours(frame, { page: context.title, state: context.args.state, updateArgs }), [frame]);
     return frame;
   }],
   parameters: {
