@@ -8,6 +8,7 @@ const primary = (text) => `<button type="button" class="kanso-button">${text}</b
 const tool = (name, title) => `<button type="button" class="kanso-button--icon" aria-label="${title}" title="${title}">${icon(name)}</button>`;
 const actions = (...items) => `<div class="kanso-actions">${items.join('')}</div>`;
 const note = (text) => `<div class="kanso-panel__note">${text}</div>`;
+const refused = (text) => `<div class="kanso-panel__note kanso-text--blocked">${text}</div>`;
 const section = (text) => `<div class="kanso-section">${text}</div>`;
 const row = (name, value, focused = false) => `<div class="kanso-row${focused ? ' kanso-row--selected kanso-control--focus' : ''}" tabindex="0"><span class="kanso-row__name kanso-story__ellipsis" title="${esc(name)}">${name}</span><span class="kanso-row__value kanso-story__ellipsis" title="${esc(value)}">${value}</span></div>`;
 const pending = (text) => `<span class="kanso-state-line kanso-state-line--pending"><span class="kanso-state-line__pending-dot"></span>${text}</span>`;
@@ -51,11 +52,12 @@ export function panelStateRecords(records) {
     const anatomy = 'The dialog shell: heading, scope, list and actions.';
     put('Panels/Arrangements', 'Arrangements', 'This project and other projects', dialog('Arrangements', 'Opens in acme-shop', list(group('This project'), arrangement('web and api', '', true), arrangement('review pair'), group('Other projects, opened here'), arrangement('i18n', 'docs-site'), arrangement('release', 'infra')) + actions(button('Close'), button('Save this tab', 'tonal'))), 'Arrangements saved in other projects follow this project’s, under their own heading; each names the project it came from and opens here.', anatomy);
     put('Panels/Arrangements', 'Arrangements', 'Only other projects', dialog('Arrangements', 'Opens in acme-shop', list(group('From other projects, opened here'), arrangement('i18n', 'docs-site', true), arrangement('release', 'infra')) + actions(button('Close'), button('Save this tab', 'tonal'))), 'With none saved in this project, the list is the other projects’ arrangements, opened here.', anatomy);
-    put('Panels/Arrangements', 'Arrangements', 'sqlite3 missing', dialog('Arrangements', 'Opens in acme-shop', blocked('Install sqlite3 to keep arrangements.') + actions(button('Close'), primary('Save this tab'))), 'Without sqlite3 nothing can be read or kept; the dialog says what to install.', anatomy);
+    put('Panels/Arrangements', 'Arrangements', 'sqlite3 missing', dialog('Arrangements', 'Opens in acme-shop', empty('layers', 'No arrangement yet.') + refused('Install sqlite3 to keep arrangements.') + actions(button('Close'), primary('Save this tab'))), 'Without sqlite3 nothing can be read or kept; one line under the list says what to install.', anatomy);
     const shape = elements(arranged, 'kanso-arrangement')[0];
+    const kept = note("Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh.");
     const field = (name) => `<div class="kanso-field kanso-control--focus kanso-dialog__section">${name}<span class="kanso-field__caret"></span></div>`;
-    put('Primitives/Dialog', 'Save Arrangement', 'Save header', dialog('Save this tab', 'An arrangement for acme-shop', field('checkout and docs') + shape + actions(button('Back'), primary('Save'))), 'Save this tab names the project the arrangement is for.', anatomy);
-    put('Primitives/Dialog', 'Save Arrangement', 'Overwrite header', dialog('Overwrite web and api', 'With this tab as it is now', field('web and api') + shape + note('This replaces the arrangement named web and api.') + actions(button('Back'), primary('Overwrite'))), 'Overwrite on a row opens the save with that arrangement named in the heading; the tab as it is now replaces it.', anatomy);
+    put('Primitives/Dialog', 'Save Arrangement', 'Save header', dialog('Save this tab', 'An arrangement for acme-shop', field('checkout and docs') + shape + kept + actions(button('Back'), primary('Save'))), 'Save this tab names the project the arrangement is for.', anatomy);
+    put('Primitives/Dialog', 'Save Arrangement', 'Overwrite header', dialog('Overwrite web and api', 'With this tab as it is now', field('web and api') + shape + kept + note('This replaces the arrangement named web and api.') + actions(button('Back'), primary('Overwrite'))), 'Overwrite on a row opens the save with that arrangement named in the heading; the tab as it is now replaces it.', anatomy);
   }
   const toast = (mark, text, fix = '') => free(`<div class="kanso-toast">${mark}<span class="kanso-content__text" title="${esc(text)}">${text}</span>${fix}</div>`);
   const done = '<svg class="kanso-icon kanso-icon--row" aria-hidden="true"><use href="#lu-check"/></svg>';
@@ -76,7 +78,7 @@ export function panelStateRecords(records) {
   const pinned = find('panels/images/ImagesTwoNotesReadyToSend/Default');
   if (pinned) {
     const one = swap(swap(pinned, '<span class="kanso-annotation" style="left:30%;top:88%">2</span>', ''), elements(pinned, 'kanso-panel__annotation')[1], '');
-    put('Panels/Images', 'Images', 'One pin, no session to send to', swap(one, '<div class="kanso-actions"><span class="kanso-button">Send to checkout</span><span class="kanso-button--quiet">Open</span><span class="kanso-button--quiet">Clear 2 pins</span></div>', blocked('No agent to send to') + actions(primary('Send'), button('Open'), button('Clear the pin'))), 'Send with no session in focus says so and keeps the pin; Clear the pin removes it.', 'The panel: picture, pin list, the failure block and the action row.');
+    put('Panels/Images', 'Images', 'One pin, no session to send to', swap(one, '<div class="kanso-actions"><span class="kanso-button">Send to checkout</span><span class="kanso-button--quiet">Open</span><span class="kanso-button--quiet">Clear 2 pins</span></div>', refused('No agent to send to') + actions(primary('Send'), button('Open'), button('Clear the pin'))), 'Send with no session in focus says so and keeps the pin; Clear the pin removes it.', 'The panel: picture, pin list, the failure block and the action row.');
   }
   const dojo = find('proto/layouts-hjkl-dojo/HjklDojo/Default');
   if (dojo) put('Panels/Dojo', 'Practice Feedback', 'sqlite3 missing', swap(dojo, 'Make a move to start: 10 targets, in as few moves as you can.', 'Install sqlite3 to keep your rounds.'), 'Without sqlite3 the dōjō plays, and the line under Hachi says rounds are not kept.', 'The dōjō: path, board, feedback line and keyboard.');
