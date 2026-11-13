@@ -572,8 +572,6 @@
 .kanso-panel--narrow{width:300px!important}
 .kanso-panel--narrow .kanso-panel__title{font-size:15px}
 .kanso-panel__note{font-size:12.5px;color:var(--muted);margin-top:var(--k-sp-2)}
-section[id^="panels-a-"] .kanso-panel,#pr .kanso-panel,#pr-light .kanso-panel{overflow:hidden;height:auto!important;padding:16px}
-section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-panel>*{flex-shrink:0}
 .kanso-button.kanso-button--pending{opacity:.6}
 .kanso-panel__tooltip{position:absolute;right:-4px;top:34px;margin:0}
 .kanso-code{font:12.5px/1.6 var(--mono);white-space:pre;margin:var(--k-sp-3) calc(-1 * var(--k-sp-4)) 0;padding:0 16px 0 0;overflow:hidden;color:var(--fg)}
@@ -663,7 +661,6 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-panel__scrim{background:var(--canvas);box-shadow:0 0 0 1px var(--border);padding:24px;border-radius:12px}
 .kanso-review__line{display:flex;gap:var(--k-sp-2);font-size:12.5px;line-height:1.5;margin-top:var(--k-sp-hair)}
 .kanso-review__line:first-child{margin-top:0}
-.kanso-review__line .kanso-story__theme{color:var(--dim);flex:none;min-width:0}
 .kanso-review__line .kanso-mark{font:11.5px/1.6 var(--mono);color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:auto;height:auto;display:inline}
 .kanso-review__snippet{margin:var(--k-sp-2) calc(-1 * var(--k-sp-3)) 0;font:11.5px/20px var(--mono);white-space:pre;overflow:hidden}
 .kanso-review__snippet .kanso-diff__line.kanso-control--on{background:var(--w7)}
@@ -1341,6 +1338,14 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-worktree--open :is(.kanso-worktree__meta,.kanso-worktree__size,.kanso-worktree__path){font-size:var(--k-fs-meta);color:var(--dim)}
 .kanso-worktree--open .kanso-worktree__path{font-family:var(--mono)}
 .kanso-worktree__actions>.kanso-button--quiet{background:transparent}
+:where(span.kanso-skeleton){height:9px}
+:where(.kanso-content__primary>span.kanso-skeleton){height:11px}
+:where(.kanso-button--quiet){font-weight:var(--k-fw-regular)}
+.kanso-panel--fit .kanso-panel{overflow:hidden;height:auto!important}
+.kanso-panel--fit .kanso-panel>*{flex-shrink:0}
+.kanso-review__line+.kanso-review__line{margin-top:var(--k-sp-1)}
+.kanso-review__line .kanso-review__key{color:var(--dim);flex:none;min-width:0}
+.kanso-review__snippet+.kanso-prose{margin-top:var(--k-sp-3)}
 
 /* Additional panel drawing rules. Written by scripts/import-panels.mjs. */
 .kanso-story__caption{font-size:12px;color:#8a867d;margin:0 0 var(--k-sp-2);font-weight:500}
@@ -1360,8 +1365,6 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-row.kanso-control--hover,.kanso-row--two-lines.kanso-control--hover{background:var(--hover)}
 .kanso-panel__controls .kanso-segmented{flex:1}
 .kanso-panel__controls .kanso-segmented span{flex:1;justify-content:center}
-.kanso-review__line.kanso-review__line--checked .kanso-story__theme{color:var(--fg)}
-.kanso-review__line.kanso-review__line--checked .kanso-story__theme+span{margin-left:auto;color:var(--dim);font-size:var(--k-fs-meta);white-space:nowrap}
 .kanso-review__reply .kanso-card__header b{font-weight:var(--k-fw-medium)}
 .kanso-thumbnail i{position:absolute;left:5px;right:5px;height:3px;border-radius:4px;background:var(--input);display:block}
 .kanso-thumbnail i.kanso-brand__wordmark{height:6px;background:color-mix(in srgb,var(--working) 45%,var(--raised))}

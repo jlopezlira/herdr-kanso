@@ -32,6 +32,8 @@ export function worktreeRowOpen({ name, size, summary, age, reason, path, target
   return frame(`<div class="kanso-worktree kanso-worktree--open"><div class="kanso-worktree__heading"><span class="kanso-worktree__name">${escapeMarkup(name)}</span><span class="kanso-worktree__size">${escapeMarkup(size)}</span></div><div class="kanso-worktree__body"><div class="kanso-worktree__summary"><span class="kanso-text--blocked">${escapeMarkup(summary)}</span><span class="kanso-worktree__meta"> · ${escapeMarkup(age)}</span></div><div class="kanso-worktree__reason kanso-text--blocked">${escapeMarkup(reason)}</div><div class="kanso-worktree__path">${escapeMarkup(path)}</div></div><div class="kanso-actions kanso-worktree__actions"><button type="button" class="kanso-button--quiet">Open in a new tab</button>${explainButton(target)}<button type="button" class="kanso-button--quiet kanso-action kanso-action--armed"><span>Remove</span><span>Press again to remove</span></button></div></div>`);
 }
 
+const FIT_PAGES = ['Panels/Files', 'Panels/Preview', 'Panels/PR', 'Panels/Shipped', 'Panels/Worktrees'];
+
 export function normalizeComponent(record) {
   let html = record.source === 'panels' ? withoutRepeats(record.html) : record.html;
   if (record.id.includes('/components-worktree-row-open/') && !html.includes('kanso-worktree--open')) {
@@ -43,6 +45,12 @@ export function normalizeComponent(record) {
     const target = action && /^Explain to\s+(.+)$/i.exec(textOf(html.slice(action.open, action.close)))?.[1];
     html = worktreeRowOpen({ name, size: value('kanso-row__value'), summary, age, reason: value('kanso-worktree__reason'), path: value('kanso-worktree__path'), target });
   }
+  html = html.replace(/(class="kanso-skeleton[^"]*" style="[^"]*?);?height:var\(--k-sp-2\)/g, '$1')
+    .replace(/font-size:var\(--k-fs-heading\)/g, 'font-size:var(--k-fs-section)').replace(/(class="kanso-button" style="[^"]*?);?height:26px/g, '$1').replace(/ style=""/g, '')
+    .replace(/kanso-review__line kanso-review__line--checked/g, 'kanso-review__line')
+    .replace(/(<div class="kanso-review__line"><span class=")kanso-story__theme"/g, '$1kanso-review__key"')
+    .replace(/(<div class="kanso-diff__line[^"]*"><span class="kanso-row__name">[^<]*<\/span><span class="kanso-row__detail">[^<]*<\/span>)(?!<span class="kanso-diff__code">)((?:(?!<\/div>).)*<span class="kanso-code__token(?:(?!<\/div>).)*)<\/div>/g, '$1<span class="kanso-diff__code">$2</span></div>');
+  if (record.source === 'panels' && FIT_PAGES.includes(record.page)) html = html.replace('kanso-story__frame kanso-panel"', 'kanso-story__frame kanso-panel kanso-panel--fit"');
   return { ...record, html: normalizeExplain(html), ...(record.notes ? { notes: record.notes.map((note) => note.replace('Explain is beside it, quiet.', 'Explain is beside it, tonal with the Lucide bot icon.')) } : {}) };
 }
 
@@ -57,4 +65,12 @@ export const COMPONENT_CSS = `
 .kanso-worktree--open :is(.kanso-worktree__meta,.kanso-worktree__size,.kanso-worktree__path){font-size:var(--k-fs-meta);color:var(--dim)}
 .kanso-worktree--open .kanso-worktree__path{font-family:var(--mono)}
 .kanso-worktree__actions>.kanso-button--quiet{background:transparent}
+:where(span.kanso-skeleton){height:9px}
+:where(.kanso-content__primary>span.kanso-skeleton){height:11px}
+:where(.kanso-button--quiet){font-weight:var(--k-fw-regular)}
+.kanso-panel--fit .kanso-panel{overflow:hidden;height:auto!important}
+.kanso-panel--fit .kanso-panel>*{flex-shrink:0}
+.kanso-review__line+.kanso-review__line{margin-top:var(--k-sp-1)}
+.kanso-review__line .kanso-review__key{color:var(--dim);flex:none;min-width:0}
+.kanso-review__snippet+.kanso-prose{margin-top:var(--k-sp-3)}
 `;
