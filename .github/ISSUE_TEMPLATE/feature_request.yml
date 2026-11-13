@@ -1,16 +1,25 @@
 name: Feature request
-description: Something you are trying to do with kansō.
+description: Something kansō could do, or do better.
+labels: ["enhancement"]
 body:
   - type: textarea
     id: trying
     attributes:
       label: What you are trying to do
+      description: What gets in the way. Not the solution.
     validations:
       required: true
   - type: textarea
     id: today
     attributes:
       label: How you do it today
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: What you would like to happen, in a few sentences.
     validations:
       required: true
   - type: textarea

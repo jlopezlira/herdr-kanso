@@ -1,5 +1,6 @@
-name: Bug report
-description: Something in kansō did not do what you expected.
+name: Bug
+description: Something does not work the way kansō says it does.
+labels: ["bug"]
 body:
   - type: input
     id: kanso-version
@@ -55,8 +56,14 @@ body:
     id: saw
     attributes:
       label: What you saw
+      description: One or two sentences. What you saw, not what you think the cause is.
     validations:
       required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A screenshot or the last lines of an error. Remove anything private first.
   - type: textarea
     id: test-cases
     attributes:

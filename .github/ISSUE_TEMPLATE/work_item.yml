@@ -1,5 +1,6 @@
 name: Work item
 description: "A change we plan: design, scope, acceptance criteria, ready and done."
+labels: ["enhancement"]
 body:
   - type: textarea
     id: problem
