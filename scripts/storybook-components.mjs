@@ -1,4 +1,4 @@
-import { elements, escapeMarkup, explainActions, frame, sampleText, textOf, withoutRepeats } from './storybook-markup.mjs';
+import { elements, escapeMarkup, markupElements, explainActions, frame, sampleText, textOf, withoutRepeats } from './storybook-markup.mjs';
 
 export function explainButton(target = 'checkout', { modifiers = [], disabled = false, role } = {}) {
   const classes = [role === 'menuitem' ? 'kanso-menu-item' : 'kanso-button--tonal', 'kanso-explain', ...modifiers];
@@ -34,6 +34,15 @@ export function worktreeRowOpen({ name, size, summary, age, reason, path, target
   return frame(`<div class="kanso-worktree kanso-worktree--open"><div class="kanso-worktree__heading"><span class="kanso-worktree__name">${escapeMarkup(name)}</span><span class="kanso-worktree__size">${escapeMarkup(size)}</span></div><div class="kanso-worktree__body"><div class="kanso-worktree__summary"><span class="kanso-text--blocked">${escapeMarkup(summary)}</span><span class="kanso-worktree__meta"> · ${escapeMarkup(age)}</span></div><div class="kanso-worktree__reason kanso-text--blocked">${escapeMarkup(reason)}</div><div class="kanso-worktree__path">${escapeMarkup(path)}</div></div><div class="kanso-actions kanso-worktree__actions"><button type="button" class="kanso-button--quiet">Open in a new tab</button>${explainButton(target)}<button type="button" class="kanso-button--quiet kanso-action kanso-action--armed"><span>Remove</span><span>Press again to remove</span></button></div></div>`);
 }
 
+const FIT_PAGES = ['Panels/Files', 'Panels/Preview', 'Panels/PR', 'Panels/Shipped', 'Panels/Worktrees'];
+
+export function realSize(html) {
+  const scaled = markupElements(html).find((node) => /^transform:scale\(/.test(node.attrs.style ?? '') && /overflow:hidden/.test(node.parent?.attrs.style ?? ''));
+  if (!scaled) return html;
+  const wrapper = scaled.parent;
+  return realSize(html.slice(0, wrapper.start) + html.slice(scaled.open, scaled.close) + html.slice(wrapper.end));
+}
+
 export function normalizeComponent(record) {
   let html = sampleText(record.source === 'panels' ? withoutRepeats(record.html) : record.html).replaceAll('var(--k-fs-heading)', 'var(--k-fs-section)');
   if (record.id.includes('/components-worktree-row-open/') && !html.includes('kanso-worktree--open')) {
@@ -47,6 +56,13 @@ export function normalizeComponent(record) {
   }
   html = html.replace(/class="([^"]*\bkanso-(?:agent|sidebar__row)\b[^"]*)"/g, (_, classes) => `class="${classes.replace(/\bkanso-control--focus\b/, 'kanso-row--current')}"`);
   html = html.replace(/<span class="kanso-tab--rest kanso-action--armed">([^<]+)((?:<svg\b[^]*?<\/svg>)?)<\/span>/g, (_, name, close) => `<span class="kanso-tab--rest kanso-action--armed kanso-story__bars-anchor">${name}${close}<span class="kanso-tooltip__anchor kanso-tab__tip"><span class="kanso-tooltip">Press again to close ${name} <span>4 s</span></span></span></span>`);
+  html = realSize(html).replace(/(class="kanso-skeleton[^"]*" style="[^"]*?);?height:var\(--k-sp-2\)/g, '$1')
+    .replace(/font-size:var\(--k-fs-heading\)/g, 'font-size:var(--k-fs-section)').replace(/(class="kanso-button" style="[^"]*?);?height:26px/g, '$1').replace(/ style=""/g, '')
+    .replace(/(kanso-header__segment[^>]*>)<i class="kanso-dot kanso-dot--(done|working|blocked)"><\/i>/g, (_, open, state) => `${open}<svg class="kanso-mark kanso-mark--${state} kanso-mark--small"><use href="#e-${({ done: 'done', working: 'work', blocked: 'blk' })[state]}"/></svg>`)
+    .replace(/kanso-review__line kanso-review__line--checked/g, 'kanso-review__line')
+    .replace(/(<div class="kanso-review__line"><span class=")kanso-story__theme"/g, '$1kanso-review__key"')
+    .replace(/(<div class="kanso-diff__line[^"]*"><span class="kanso-row__name">[^<]*<\/span><span class="kanso-row__detail">[^<]*<\/span>)(?!<span class="kanso-diff__code">)((?:(?!<\/div>).)*<span class="kanso-code__token(?:(?!<\/div>).)*)<\/div>/g, '$1<span class="kanso-diff__code">$2</span></div>');
+  if (record.source === 'panels' && FIT_PAGES.includes(record.page)) html = html.replace('kanso-story__frame kanso-panel"', 'kanso-story__frame kanso-panel kanso-panel--fit"');
   return { ...record, html: normalizeExplain(html), ...(record.notes ? { notes: record.notes.map((note) => note.replace('Explain is beside it, quiet.', 'Explain is beside it, tonal with the Lucide bot icon.')) } : {}) };
 }
 
@@ -65,4 +81,16 @@ export const COMPONENT_CSS = `
 .kanso-worktree__summary{font-size:var(--k-fs-meta)}
 .kanso-worktree--open .kanso-worktree__path{font-family:var(--mono)}
 .kanso-worktree__actions>.kanso-button--quiet{background:transparent}
+:where(span.kanso-skeleton){height:9px}
+:where(.kanso-content__primary>span.kanso-skeleton){height:11px}
+:where(.kanso-button--quiet){font-weight:var(--k-fw-regular)}
+:where(.kanso-section .kanso-button--quiet){font-weight:var(--k-fw-medium)}
+.kanso-story__frame:not(.kanso-panel){padding:0;background:none;box-shadow:none}
+.kanso-panel--fit .kanso-panel{overflow:hidden;height:auto!important}
+.kanso-panel--fit .kanso-panel>*{flex-shrink:0}
+.kanso-review__line+.kanso-review__line{margin-top:var(--k-sp-1)}
+.kanso-review__line .kanso-review__key{color:var(--dim);flex:none;min-width:0}
+.kanso-review__snippet+.kanso-prose{margin-top:var(--k-sp-3)}
+.kanso-row>:is(.kanso-panel__row-value,.kanso-button--quiet)~.kanso-button--quiet{margin-left:0}
+.kanso-row>.kanso-panel__row-value+.kanso-button--quiet{margin-left:var(--k-sp-1)}
 `;
