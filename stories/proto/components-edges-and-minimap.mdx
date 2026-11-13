@@ -5,9 +5,17 @@ import * as stories from './components-edges-and-minimap.stories.js';
 
 # Edges and minimap
 
-Off-screen panes at the edge as tiles; the minimap and zoom in the status bar.
+## Edge
 
-<Canvas of={stories.EdgesAndMinimap} />
+Off-screen pane tiles on either side of an empty pane in the strip.
+
+<Canvas of={stories.Edge} />
+
+## Minimap slot
+
+The minimap and zoom control in their own status bar slot.
+
+<Canvas of={stories.MinimapSlot} />
 
 ## Off-screen panes and the minimap
 
@@ -25,10 +33,11 @@ Off-screen panes at the edge as tiles; the minimap and zoom in the status bar.
 
 ```text
 Build Edges and minimap (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --chrome, --dim, --fg, --input, --k-fs-body, --k-fs-name, --k-h-bar, --k-ic-control, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-4, --k-sp-hair, --muted, --w12, --w7.
-Draw these pieces: Edges and minimap.
+Use these tokens: --bg, --border, --chrome, --dim, --fg, --input, --k-fs-meta, --k-fs-name, --k-h-bar, --k-ic-control, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-4, --k-sp-hair, --muted, --w12, --w7.
+Draw these pieces: Edge; Minimap slot.
 Reuse these kit classes: kanso-button--inline-icon.
 Follow these rules:
-- Edges and minimap: Off-screen panes at the edge as tiles; the minimap and zoom in the status bar.
+- Edge: Off-screen pane tiles on either side of an empty pane in the strip.
+- Minimap slot: The minimap and zoom control in their own status bar slot.
 Apply every guideline of Off-screen panes and the minimap.
 ```
