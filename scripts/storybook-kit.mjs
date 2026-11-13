@@ -54,7 +54,7 @@ export function kitRecords(records) {
   const pillHeader = headers.find((html) => html.includes('kanso-badge--count'));
   const pill = pillHeader && elements(pillHeader, 'kanso-badge--count')[0];
   for (const [name, variants] of [
-    ['Header', { Open: headers.find((html) => !html.includes('kanso-dawn')) ?? first('kanso-header'), Collapsed: first('kanso-rail__brand'), Dawn: dawn }],
+    ['Header', { Open: headers.find((html) => !html.includes('kanso-dawn')) ?? first('kanso-header'), Collapsed: first('kanso-rail__brand') }],
     ['Sidebar', { Open: sidebar, Collapsed: rail, Dawn: sidebar && band ? sidebar.replace(/(<div[^>]*>)/, `$1${band}`) : undefined, 'Dawn Mode pill': sidebar && pill ? sidebar.replace(/(<span class="kanso-window__controls">[^]*?<\/span>)/, `$1${pill}`) : undefined }],
     ['Rail', { Open: sidebar, Collapsed: rail, Dawn: rail && band ? rail.replace(/(<div class="kanso-rail__brand"[^>]*>)/, `$1${band}`) : undefined }],
   ]) for (const [label, html] of Object.entries(variants)) if (html) results.push({ id: `kit/${name}/${label}`, source: 'kit', page: `Compositions/${name}`, label: name === 'Sidebar' && label === 'Dawn' ? 'Dawn Mode artwork' : label, html: frame(html), caption: `${label} navigation arrangement, composed from the shared kit.` });
@@ -62,17 +62,16 @@ export function kitRecords(records) {
   const choices = elements(byId('proto/components-choosing-the-channel/ChoosingTheChannel/Default'), 'kanso-update');
   const sky = elements(byId('proto/tokens-dawn/TheBand/Default'), 'kanso-dawn--preview')[0];
   const mark = elements(byId('proto/approved-dawn/Reference/12'), 'kanso-settings__piece-choice')[0];
-  for (const [label, html, caption] of [
-    ['Artwork', dawn, 'Default in Dawn Mode.'],
+  for (const [label, html, caption, id] of [
+    ['Artwork', dawn, 'Default in Dawn Mode.', 'kit/Header/Dawn'],
     ['Pill', pillHeader, 'Dawn Mode, right of the lights.'],
-    ['Hidden', headers.at(-1), 'No mark.'],
-    ['Stable Mode', headers.at(-1), 'Stable Mode shows nothing.'],
+    ['Hidden / Stable Mode', headers.at(-1), 'No mark. Stable Mode always shows this.'],
     ['Sunrise', sky && `${sky}<button class="kanso-dawn__replay" type="button">Play the sunrise</button>`, 'Once on open and on switch, 2.6 s. Reduced motion shows the last frame.'],
     ['Channel mark', mark && `<div class="kanso-update">${mark}</div>`, 'Artwork, Pill or Hidden.'],
     ['Switch row · Stable Mode', choices[0], 'One press switches.'],
     ['Switch row · Dawn Mode', choices[1], 'One press switches.'],
     ['Switch row · Dawn Mode beta', choices[2], 'One press switches.'],
-  ]) if (html) results.push({ id: `kit/Dawn Mode/${label}`, source: 'kit', page: 'Compositions/Dawn Mode', label, html: frame(html), caption });
+  ]) if (html) results.push({ id: id ?? `kit/Dawn Mode/${label}`, source: 'kit', page: 'Compositions/Dawn Mode', label, html: frame(html), caption });
   const spend = originals.find((record) => record.id === 'panels/spend/SpendWellUsedTheMonthPerPlanThenToday/Default');
   if (spend) for (const [label, total, unit, factor] of [
     ['Today', '$41.20', 'today', 1], ['Month', '$824.00', 'this month', 20], ['30 days', '$1,236.00', 'over 30 days', 30],
