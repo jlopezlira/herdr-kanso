@@ -35,6 +35,7 @@ the branch's rules.
 ### Added
 
 - Storybook coverage for every app module, with selectable interaction, loading, empty, failure and recovery states built from the shared kit.
+- Panel stories show each panel once instead of twice.
 - Storybook includes 290 panel states with reference comparisons, specifications and usage guidelines under Panels.
 - Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
 - Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.

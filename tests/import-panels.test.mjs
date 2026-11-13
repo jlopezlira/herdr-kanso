@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
-import { clean, closeOf, cssBlocks, drawing, entriesOf, panelCss, sourceEntries } from "../scripts/import-panels.mjs";
+import { clean, closeOf, cssBlocks, drawing, entriesOf, panelCss, sourceEntries, withoutRepeats } from "../scripts/import-panels.mjs";
 import { markupClasses } from "../scripts/import-proto.mjs";
 
 test("Panel extraction keeps nested drawings and separates specifications from folded markup", () => {
@@ -55,6 +55,7 @@ test("Every imported panel state has a canvas, specification and usable symbol r
       assert.doesNotMatch(state.name + state.caption + state.spec.flat().join(' '), /\b(?:boards?|prototype|[A-Z]\d{1,2}[a-z]?)\b/);
       const local = new Set([...state.html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
       for (const [, id] of state.html.matchAll(/href="#([^"]+)"/g)) assert.ok(symbols.has(id) || local.has(id), `Missing symbol ${id}`);
+      assert.equal(withoutRepeats(state.html), state.html, `${key}: a frame is drawn twice`);
       if (state.name.endsWith(', Before')) assert.match(state.caption, /previous design/);
     }
   }
