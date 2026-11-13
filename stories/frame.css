@@ -25,3 +25,4 @@
 .kanso-sidebar--collapsed .kanso-sidebar__actions { flex-wrap: wrap; }
 .kanso-story__viewport :is(.kanso-row--selected,[aria-pressed="true"]) { background-color: var(--selected); }
 .kanso-story__viewport [role="button"]:focus-visible,.kanso-story__viewport [role="switch"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kanso-story--free > :is(.kanso-field, .kanso-row) { inline-size: 21rem; box-sizing: border-box; }
