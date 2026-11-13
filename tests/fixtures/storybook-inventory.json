@@ -47,7 +47,7 @@
       "hash": "2c07a61933c82dd9ce822d6464f65c7b0964b1fd862d934c9897bdb6a7a0edb4",
       "captionHash": "e8cdd5e90d96e20dc0055fd174807be67fe3d3ebd7254b52d5a1bfb57510f89e",
       "revisedHash": "e4028ae3c88fb4dc40619b0026167f12f9cea86de33e16acdb4cea5796407224",
-      "revision": "Visual match"
+      "revision": "Sample session names"
     },
     {
       "id": "proto/components-log/Log/Default",
@@ -84,7 +84,7 @@
       "hash": "7260dd6ee4f0747a2dda4d365bc96e50f818ed82e8bb67c7f96c46dfecffd8df",
       "captionHash": "082ecdd0c7ae0532f099b2d0f95753e3da980e11d11ebe32ab0ceaf34fcd10ac",
       "revisedHash": "b767d7a96f07cdb3b2f7174af241dd9bada616c4217781bb93a4c563b88a9c55",
-      "revision": "Visual match"
+      "revision": "Sample session names"
     },
     {
       "id": "proto/components-pane-standing-in/PaneStandingIn/Default",
@@ -166,12 +166,14 @@
       "hash": "43d9d376b6c672098b4b70da122275d5410b4eaa6d62e905f3eb0bf36d8f8d7c",
       "captionHash": "a94f9d2c4285a87a196f11119be51ca4e1d63f0e55af70659c6cc67c701f4701",
       "revisedHash": "a13ce38a1631ca36b68b90dc03b85e42d7f86ccd27ecd543dbdf693d46b6740a",
-      "revision": "Visual match"
+      "revision": "Sample session names"
     },
     {
       "id": "proto/components-tab-states/TabStates/Default",
       "hash": "43ee492a0bc74db9b1c224bb462de324d12bf991a3527fafc304076aee6730eb",
-      "captionHash": "9e2132d1cb8ffc7a0873d21076fe320df1a23369de00ab237876f4a7e6dfeb9f"
+      "captionHash": "9e2132d1cb8ffc7a0873d21076fe320df1a23369de00ab237876f4a7e6dfeb9f",
+      "revisedHash": "34dfbff57fa5b9dd9f223b7cdc279bfc90fbba6f290dd6ceb725279a7a151e29",
+      "revision": "Armed tab tip"
     },
     {
       "id": "proto/components-title-and-tools/TitleAndTools/Default",
@@ -181,7 +183,9 @@
     {
       "id": "proto/components-while-you-were-away/WhileYouWereAway/Default",
       "hash": "5ce930ed73d8312333dce35220c0cf642f8ce7878e58656158b8051f6dbae230",
-      "captionHash": "0ed80e12de86271f8d0968935ffa61a0e8e7d7e38b7a1b729621655d9bed45b0"
+      "captionHash": "0ed80e12de86271f8d0968935ffa61a0e8e7d7e38b7a1b729621655d9bed45b0",
+      "revisedHash": "df21a995f73e15b8f86f968763e8b037ce1ec484ea863c9faf61985ef0b61f4a",
+      "revision": "Sample session names"
     },
     {
       "id": "proto/components-worktree-row-open/WorktreeRowOpen/Default",
@@ -240,14 +244,14 @@
       "hash": "0baedef653772aff4a940620fd36eb667dce23d53198f4504abfa76c3be12397",
       "captionHash": "c0b4115f10bebb8c8226be407fd10fd29952b666802acabeb3e6653bf6a26a2b",
       "revisedHash": "ae476ea8354fb84af9fd74fc0abf4ad7a985b27598d6a7cebf6057fef97e3e70",
-      "revision": "Visual match"
+      "revision": "Sample session names"
     },
     {
       "id": "proto/compositions-controls/ButtonWithAMark/Default",
       "hash": "ddfeb1aef9f2207ff3c5f328246637e40b776883e2a8b4113374eaf8e43ce5e0",
       "captionHash": "734be3e287bbe8c6f80ec01640176db22171f75bf7ff05b9136898040b4b60b7",
       "revisedHash": "2120990c42fbb5751555daa729536cf26232c9747acc44f25c4d2a1933c7f7ce",
-      "revision": "Visual match"
+      "revision": "Sample session names"
     },
     {
       "id": "proto/compositions-controls/Armed/Default",
@@ -419,27 +423,29 @@
       "id": "proto/compositions-sidebar-rows/AgentOneLine/Default",
       "hash": "bdc8e84c3da4c7504b23ee02f373c774da7111f69b231b86df07a999352ff68c",
       "captionHash": "9d611416721290ca809afc75b2bfdb133d4e7bb349c08afc698c139a0409f656",
-      "revisedHash": "ee912c78b87ae196cad8d7caff6b3680d8a46cd52a207b8cef8b7ab788f29b83",
-      "revision": "Visual match"
+      "revisedHash": "80c4ffb60369464af4c2d5a18d6b80fe8b6a66abe1c7697931ad471937e5e8c8",
+      "revision": "Current session state"
     },
     {
       "id": "proto/compositions-sidebar-rows/AgentTwoLines/Default",
       "hash": "f9a11cf62097c3c9055f7f99bfb14f152dab512353e18ad33330186222ffbd6c",
       "captionHash": "aa9c7bd3e7cd32a522220b240b34acec91e62f7ad1543bf170f73c0239a5d0fc",
-      "revisedHash": "7ba6ad9d34df17a7e653672d4712d41184da4a45ac92d0d76a2b8665c3ac6427",
-      "revision": "Visual match"
+      "revisedHash": "0d1c78928ff6fe9ce1172a81c8ba772deea494fb9f7ae73b951f39d1d6b11d74",
+      "revision": "Sample session names"
     },
     {
       "id": "proto/compositions-sidebar-rows/SubAgent/Default",
       "hash": "52b3dc85c1b0091a9383b961b0c5731c19b84a7710c31a78aa200d398ddbc4fc",
       "captionHash": "625298211f8b8ae448000fc2f5c60ab3024b38232b9086bfc127b08404a316e0",
-      "revisedHash": "679019ca1dfe882760403a41963e6f0305ac492695fd5ba01abafcc814b1c9e3",
-      "revision": "Visual match"
+      "revisedHash": "8829f97c6c8dcf80f7fef335ccff040f9acec92dd2712f100b8aca9372556e18",
+      "revision": "Current session state"
     },
     {
       "id": "proto/compositions-sidebar-rows/Asleep/Default",
       "hash": "79bb6b86c6437af30e7d6560d2da93254a8ee869bcb4b180d5fe84605930838a",
-      "captionHash": "73012392c10ebc045295801d77f992ed05c707c7d3161f27ee2d4cf210625ccd"
+      "captionHash": "73012392c10ebc045295801d77f992ed05c707c7d3161f27ee2d4cf210625ccd",
+      "revisedHash": "799ebd173f70467db9930bc458587aca7dd2eafb9bd482446280f013bc5de749",
+      "revision": "Sample session names"
     },
     {
       "id": "proto/compositions-sidebar-rows/Footer/Default",
@@ -491,7 +497,7 @@
       "hash": "4189aab94a085c5cb96616c983acc55461ad025e8cb9a89ccac79648acfa5640",
       "captionHash": "9dfff8d995207b81345db8854278174b6ddcab0f4e80a48ae8550d18d450f3f2",
       "revisedHash": "86971dea43c43758579b2afb96d74b4b16e0c33f80e400747151ef7af074f316",
-      "revision": "Visual match"
+      "revision": "Sample session names"
     },
     {
       "id": "proto/compositions-states/Empty/Default",
@@ -512,8 +518,8 @@
       "id": "proto/compositions-states/ThePatternEverywhere/Default",
       "hash": "916df2cadabceb00a98aa5c732c8539b34d36dea947d0cea384a023e422e57dc",
       "captionHash": "93fa243d56da5123e71f66f8f3b38f7e7ad5c16fccdea8cc0c36b0f26c6c8e0a",
-      "revisedHash": "a78f3bd551c19500285ce59886599565d933c398ac0ace6e68495ead334b75d4",
-      "revision": "Visual match"
+      "revisedHash": "e5625ec33416b37ae0736fb41b55ce4f5f5f8aba3028a30060af7051ee8f6612",
+      "revision": "Explain component"
     },
     {
       "id": "proto/layouts-hjkl-dojo/HjklDojo/Default",
@@ -541,8 +547,8 @@
       "id": "proto/layouts-window-at-rest/WindowAtRest/Default",
       "hash": "3ae2d32178c1e4e7d468956e125bffa4327f786ae41f450149d65665f9838c55",
       "captionHash": "209ae4ee80c20d281fc4869c8962f99ac3038bdee5934a8502352e7e68edd40f",
-      "revisedHash": "588d590eda59885f5f8c2ea2d5ea3fc5171f721708f616900a82e7d7e8a780fb",
-      "revision": "Visual match"
+      "revisedHash": "732796467691860502229be311fb0c959d1294ffcb5163bddf15a676328d05f5",
+      "revision": "Current session state"
     },
     {
       "id": "proto/tokens-colour-and-wash/Washes/Default",
@@ -589,7 +595,7 @@
       "hash": "f8ff72f1972d7200cb9802085e9e19785496c6c447a779fac91cc4cbac36c912",
       "captionHash": "cdad47a7d12d15990b97277faeb3ad7c5769fe6858be8a50176b17fddad9e5d2",
       "revisedHash": "8094935e4e10ad46bc70473761cde9b37b86a70b2dcb18bf18da8164b53bf021",
-      "revision": "Visual match"
+      "revision": "Sample session names"
     },
     {
       "id": "proto/tokens-icons/TheWholeSet/Default",
@@ -610,8 +616,8 @@
       "id": "proto/tokens-type/OneLineNeverWraps/Default",
       "hash": "e54700ac914a858d1a3da1a8b417a57d34a18d07ed2381f14479443fc68edb00",
       "captionHash": "0f7332f0db22a902118402fc883a79a51983af710fe7d483eb3091b1a7965d23",
-      "revisedHash": "8321406f6ed40b6d78645c684ef3da6c10a0474539d8ec184ab42a9dc6340af7",
-      "revision": "Visual match"
+      "revisedHash": "1a055ff34138f711a71b8c8cfadab0e7dbfa22faaf7c10672f71004b8f54a4c7",
+      "revision": "Sample session names"
     },
     {
       "id": "panels/availability/AvailabilityAMacWithDockerXcodeAndTheGuard/Default",
@@ -675,7 +681,7 @@
       "captionHash": "bc8cdb16712f0ceddb82e6f3f7c6b0736deb80e1328e688a20d21b0aca08b0d4",
       "specHash": "59b274bd2dfd288506d2f7ce8707737d3811edffc2e95fbd1e8be9cffc88ff75",
       "revisedHash": "e3b154efcca73aedf3653bdd84404e51f9893ca6827409d59d039a1f974ef736",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/containers/ContainersEmptyWithAStackAProjectCanBringUp/Default",
@@ -691,7 +697,7 @@
       "captionHash": "015fd16f9944e119e735ac059de09270acbb844c71232eb2b20d175b41f09d79",
       "specHash": "ee32bb18b1f3d3a8a548c9260083c07dc61f295d463fb24c254717ae1f50fdec",
       "revisedHash": "2780c71793a564a016250820529a1a63ae43904478b2f8379db6cb35c05a1a8c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/containers/ContainersDockerOnAnotherMachineAContext/Default",
@@ -715,7 +721,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "d343e044d605c903e6b89536bc5711e478002b4541da19d888dd749cdff6098a",
       "revisedHash": "2e408eb3a78bbc12f403da96cb0880f3952ebf28260601319bd2bd67016f467a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/containers/ContainersAReadFailed/Default",
@@ -731,7 +737,7 @@
       "captionHash": "f5842c8cad019f0ce5791e764c7a0abc6a7d75c430d53d0e569d92ebdc734645",
       "specHash": "d2f1c451111879624fea0b6e7053ceb4118fde486164977e103c35bda053df2f",
       "revisedHash": "eda6a71068d7daba8a063d73be04e888543be129f17c36bbd1320a93ee50ed11",
-      "revision": "Visual match"
+      "revision": "Section title token"
     },
     {
       "id": "panels/containers/ContainersAtRestNow/Default",
@@ -763,7 +769,7 @@
       "captionHash": "1856e8e10360687d115b142eecbc5d42c26e03d24e80d693d3948685454fec8c",
       "specHash": "99e410babc7c877739d8ae8f0920652b9baa66ae07b2852fa1221e4a43798069",
       "revisedHash": "4435f75487ed9741e1e9b352f30ed3276415977f88b6825f4b684700562c2767",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesAtRestBefore/Default",
@@ -771,7 +777,7 @@
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
       "revisedHash": "f72a410df2bcb4553bf1c55763bc37ce2655b23d0c34a754b5fba3cb59656ff7",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesAtRestNow/Default",
@@ -779,7 +785,7 @@
       "captionHash": "5b2a124ad7482cab9806979d3da3fd09e0e237194af844f8c0ee78cea86bb629",
       "specHash": "81ed54b89d96c6ec962ccf41ed0bff0ac8e125bec92266201fbf9ac02dd6bdb2",
       "revisedHash": "97e9d1b99327fa7e7349061985fbcae9c335bb3278d2a95cfaca69fe58d70d7c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesOnThePointer/Default",
@@ -787,7 +793,7 @@
       "captionHash": "1c4c15cae39c9a2b0a8d8f093122720694669fc438e6fdd0824b9660b15676fc",
       "specHash": "a2f549655e6fc6de535bd01dd220f32946e146197d1c3695fe40d1b48f1a7868",
       "revisedHash": "834b8ccb2fee7fa923bfad04ccefe7d41bfefa70e0cdecea06289af1bbf3e121",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesAtRestNowLight/Default",
@@ -795,7 +801,7 @@
       "captionHash": "ae5590d5a700318808fa35a24da5fa0cab1bbb1aa8c31ae580b2cdccb9726fce",
       "specHash": "fa0e38326a57a3480c5ca4d38d6bdec43265038557154c3f1ef46c85234da9d2",
       "revisedHash": "97e9d1b99327fa7e7349061985fbcae9c335bb3278d2a95cfaca69fe58d70d7c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesChangedOpenedFromTheDigest/Default",
@@ -803,7 +809,7 @@
       "captionHash": "93800740f9d721ca1743cd872e4a472dfcd88fcaaa125db5e2869b3127a25c89",
       "specHash": "9befc660fb1b00274ffdc07cfb4464a4425dc49671f26d8466d6e2248df18e8a",
       "revisedHash": "99bcc6d1b3282397639a3be811b34f778b3c23655527dfc469b8e3a958549e8c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesAllFilesWithMarks/Default",
@@ -811,7 +817,7 @@
       "captionHash": "3855b1243bdbcb44b68da19fad17f8b6a68dccb8cde57a1e6bae144497381072",
       "specHash": "553cfd4973fcae0cf76ee89c3ad7312f695c7d1a9db52622ad64460c685f7a31",
       "revisedHash": "f9497e3951132c2f0436ab1f791d265ebba2b66f922d5d364106e81c2ad1c880",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesRightClickARow/Default",
@@ -819,7 +825,7 @@
       "captionHash": "36f7d30e6cd82ea9210d95ee639d8dc3231449565e339ace46d2f6b9944c0676",
       "specHash": "608047aa9ceaf66527dce65b8b9ea9789601e2f40d8dd91292bfa68c7449bf13",
       "revisedHash": "c62d5cf626dac882e49db3724fb849d18ff38017cb9d67b6f0214544901e2554",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesAShellPaneNothingNamed/Default",
@@ -827,7 +833,7 @@
       "captionHash": "d04d6ec0b02e43c0cceffe7d2cc0fc7cf914e9f0375520b86c9f9ca48452950d",
       "specHash": "ab3cccf4dbaddb09ee9e05e9fb986711ff2d7b74343d51bd733b433812018ac7",
       "revisedHash": "a9b9d7aa4c4c3635f9e6081833ba273b9f403222aa42c3ef8f35c8f1b182c120",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesNothingChanged/Default",
@@ -835,7 +841,7 @@
       "captionHash": "874ab5c8955355725b6a71355d53af1f16a93f2d630fd1c446d4a8214c1b987f",
       "specHash": "e210397a0cfe1853529578d1e7010e1d6893392ceaf7b56fe3198bbc2ba33255",
       "revisedHash": "0beb4bfb70b7669c19b7e91c68f2b63898d8125801d07217d74101ebd16c37f2",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesNotARepositoryTheTreeOnly/Default",
@@ -843,7 +849,7 @@
       "captionHash": "584ef7c3a04ce2d01f992a61feb0124aa9e96aed57667b033857a7d09739ccfc",
       "specHash": "6f1248e05d7ef6b3a6d9285f7ab5e24ab863ca3ce1076ba46664be471c5df6e8",
       "revisedHash": "0a0ddd3d55324734e36a6f10f77ff8b0727ef2252829c068f2f2ba8b2cf9ea41",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesFirstRead/Default",
@@ -851,7 +857,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "e8fbec79985bd318d6a50d03a0cbb06709a972552082a5024061744cf7e6849e",
       "revisedHash": "2b1643f931444bdcbf52d8d4bfe4cd891f5fadfaa4ca0587c45806f9c1e98e38",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesErrorTheFoldersOwnWords/Default",
@@ -859,7 +865,7 @@
       "captionHash": "720a556ade182daf9d4d13ed0402dd57ea3a8ba89f96ea35ca1fbf3f64547d33",
       "specHash": "a68e1d2805adffc850a47d85f1f175b07c30473d3f3b7fb194fb61eb3d81efc0",
       "revisedHash": "83561a2366a9c2ceb1e74a115df08691c904528c78fad1489765ae4b2850286f",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesNoFolderForThisPane/Default",
@@ -867,7 +873,7 @@
       "captionHash": "5376f78132a40d433402f71761a3317181021a3daafd82329d361a9d04712b74",
       "specHash": "d5ee7c227957fd1abe0fab67953e6d134b40044dacd5fe6f68fb267a2c8815f3",
       "revisedHash": "b40d43b24e258e6c3ef0782441a56d29e11f90b19efba023bd43ee1a2e8226d4",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesOnAnotherComputer/Default",
@@ -875,7 +881,7 @@
       "captionHash": "b5dbd715dea360aae2e9d21a4de4662434694b709511f46740b47c72cbb23e9b",
       "specHash": "688bae2de1d6eb6f6d0b8300ec49407f7c1fd835243c109d984952197978c02a",
       "revisedHash": "d8a6f301924da62f9f0380f830eece08e356751d85b101bec6e4340b93c6af40",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesStaleDevboxStoppedAnswering/Default",
@@ -883,7 +889,7 @@
       "captionHash": "9582d200b9f450d11efa1c4e85057e6a062483e597474b5d2dad20a2751cf214",
       "specHash": "81c7b3d2b27a06415a93d9d59284d46e20a493aff38f768c8591a1074ac65490",
       "revisedHash": "05141e295c381da55cf638c5284c7498f90d921343bbfc53a2b58df0c273a30a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesUnreachableBeforeTheFirstRead/Default",
@@ -891,7 +897,7 @@
       "captionHash": "13dbf2c5edf517aea3edfc75158cbbb52852babff8dd66bdeb728462ca3c4e6e",
       "specHash": "d9559917cfcf220c8a8cba73f4a58f1fe62c2f0f0ef0f87329297930cd537408",
       "revisedHash": "b94cec22d6cd0b67f658f810b10073a19388f9905836f9a11b1e8c289202ddce",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesLight/Default",
@@ -899,7 +905,7 @@
       "captionHash": "4c48d1a58c24388966af677815641effdebb0f3e93bd968cdf24244910905c96",
       "specHash": "278d2035e0e74aa09fda2e9ded0191473dd16362d2b681dfe86f9d14d4f2562d",
       "revisedHash": "99bcc6d1b3282397639a3be811b34f778b3c23655527dfc469b8e3a958549e8c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesLightAllFiles/Default",
@@ -907,7 +913,7 @@
       "captionHash": "5c970a9c6bd5719234c09ec8102a372d764220d70318e0d769c0acf2fe35177b",
       "specHash": "dab076a9b3263a7dbedff029827a7ad23a1db501a8d2eaacdd13afa4a2d828d9",
       "revisedHash": "40aa9854625e694a1df61902965143679912f09abc1564dbdb642c8eb42b8fe6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/files/FilesNarrow300/Default",
@@ -915,7 +921,7 @@
       "captionHash": "32f82dcb23cd04d3bffcd3e1746867fae5f96fba73cd0df7b3bc6689774a2d75",
       "specHash": "f2390ecd65d9ce9269a72e3a64c7879e2e820b0d464bca851ade8bedc32876e4",
       "revisedHash": "da46aa5fe18c26189c808cb9fd2d59e31fc1d4a487e2f6d4a3c76d20276307d5",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/images/ImagesTwoNotesReadyToSend/Default",
@@ -995,7 +1001,7 @@
       "captionHash": "32f82dcb23cd04d3bffcd3e1746867fae5f96fba73cd0df7b3bc6689774a2d75",
       "specHash": "6a17f862257ecc8a6a0906ad9eaa1292708365f441242ddbce222d2300c355b7",
       "revisedHash": "3e9b079a54b43dbdb09d18a0ef0ba3fc7b524d95b4fdc1597202c67d7893fa78",
-      "revision": "Visual match"
+      "revision": "Section title token"
     },
     {
       "id": "panels/images/ImagesAtRestNow/Default",
@@ -1091,7 +1097,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "aa4d95bbe8b52eca913913df0c79ee64e19713a9ab95e321e66488ce9b9a90d0",
       "revisedHash": "e0c2b4b96991478d8140208b803ab8f7d237272230b2b296a13f6a33265d9d7e",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/memory/MemoryWindowsTheGuardReadsTheWorkingSet/Default",
@@ -1107,7 +1113,7 @@
       "captionHash": "d44953171515a81fb96c755ddc872e1c9f4887c2e20ec9a1b45f8350024016f7",
       "specHash": "8340ce4a0ac24d32d8fd310c202ea4f551c46e980b7258fce78cd4197944859a",
       "revisedHash": "9e5d7466777ccb086fbd9dea336a1bd73d09efa50118afed32f9f3a86358e752",
-      "revision": "Visual match"
+      "revision": "Section title token"
     },
     {
       "id": "panels/memory/MemoryHistoryOpenFreeOverTimeThenWhatTheGuardDid/Default",
@@ -1291,7 +1297,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "530c308d84277f6212ac8b374f12712b77aaeec8dc544d105c8b686f7e9aa8e2",
       "revisedHash": "f9cbbc9e63a78b06982c9337951d9d77a26277a528485d44a6ad0df4458b7791",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/ports/PortsEmpty/Default",
@@ -1323,7 +1329,7 @@
       "captionHash": "426f51a3722e548417a630f0a885a13a2674181d6b863ebb237abcbd8fc9a088",
       "specHash": "72a977b83abfff1a0736bd633ab804e6e3136a3ec4c274104c0dc5402b8c825b",
       "revisedHash": "37031ff6518268876757db87ad71d4bb4833e885925506fd59cb3982e4417488",
-      "revision": "Visual match"
+      "revision": "Section title token"
     },
     {
       "id": "panels/ports/PortsAtRestNow/Default",
@@ -1355,7 +1361,7 @@
       "captionHash": "c6f9383c0e9c5ce63c97b05ecc3a633bc11324341551c7c08059fcd28b88e309",
       "specHash": "9d612665618f15f963ffc8ef069f153245fbda11f48e5776a69f1bc67aa5aad4",
       "revisedHash": "375a89567e10db90f3fc0564c8fd98f55dabc83f0e9b8a4fe8a028d0d76dbb99",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRAtRestBefore/Default",
@@ -1363,7 +1369,7 @@
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
       "revisedHash": "4c4b3c0cf09311b8603ffa917d61dd094a795131060be95cf546b79ae5be17ee",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRAtRestNow/Default",
@@ -1371,7 +1377,7 @@
       "captionHash": "5b2a124ad7482cab9806979d3da3fd09e0e237194af844f8c0ee78cea86bb629",
       "specHash": "81ed54b89d96c6ec962ccf41ed0bff0ac8e125bec92266201fbf9ac02dd6bdb2",
       "revisedHash": "5e6865e90c219da3709f6c7e2ea32adf4a857f049135dea8c07b6dbb568f167c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PROnThePointer/Default",
@@ -1379,7 +1385,7 @@
       "captionHash": "1c4c15cae39c9a2b0a8d8f093122720694669fc438e6fdd0824b9660b15676fc",
       "specHash": "a2f549655e6fc6de535bd01dd220f32946e146197d1c3695fe40d1b48f1a7868",
       "revisedHash": "bb28af1caf4f8a0aaea98167c3c3ee2b328b9b4d9680f8378103937ad822be71",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRAtRestNowLight/Default",
@@ -1387,7 +1393,7 @@
       "captionHash": "ae5590d5a700318808fa35a24da5fa0cab1bbb1aa8c31ae580b2cdccb9726fce",
       "specHash": "fa0e38326a57a3480c5ca4d38d6bdec43265038557154c3f1ef46c85234da9d2",
       "revisedHash": "5e6865e90c219da3709f6c7e2ea32adf4a857f049135dea8c07b6dbb568f167c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRAtRestComparison2/Default",
@@ -1395,7 +1401,7 @@
       "captionHash": "705a9f5c843e4a392953d0046100a6d475599d06fe07f1e9533f78683b5dc99e",
       "specHash": "a0459a7fc1720ebecb674149d4b10e3fcadef04b35c39e90b1cd02f29b08e1f3",
       "revisedHash": "50e42469f8941ae675da4a32dc0fd593e6c33f45c0ed7b8e3c422246dbd342da",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRAtRestBefore2/Default",
@@ -1403,7 +1409,7 @@
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
       "revisedHash": "be775b07aacf851d3f068eb81010c289d487cae822df6dc10dd9fbe9523d84e3",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRAtRestNow2/Default",
@@ -1411,7 +1417,7 @@
       "captionHash": "5b2a124ad7482cab9806979d3da3fd09e0e237194af844f8c0ee78cea86bb629",
       "specHash": "81ed54b89d96c6ec962ccf41ed0bff0ac8e125bec92266201fbf9ac02dd6bdb2",
       "revisedHash": "ef8dbf15b8c300a61e65e4f3fa54672288cbfa0a6c0d510583a03f78152caebc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PROnThePointer2/Default",
@@ -1419,7 +1425,7 @@
       "captionHash": "1c4c15cae39c9a2b0a8d8f093122720694669fc438e6fdd0824b9660b15676fc",
       "specHash": "a2f549655e6fc6de535bd01dd220f32946e146197d1c3695fe40d1b48f1a7868",
       "revisedHash": "7c3bfbe63b72ac7098cb3369649c35a1ac28e59e1981a5124a6d13eac380a8f6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRAtRestNowLight2/Default",
@@ -1427,7 +1433,7 @@
       "captionHash": "ae5590d5a700318808fa35a24da5fa0cab1bbb1aa8c31ae580b2cdccb9726fce",
       "specHash": "fa0e38326a57a3480c5ca4d38d6bdec43265038557154c3f1ef46c85234da9d2",
       "revisedHash": "ef8dbf15b8c300a61e65e4f3fa54672288cbfa0a6c0d510583a03f78152caebc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListThePaneInFrontIsNotInGitTheListIsThePanel/Default",
@@ -1435,7 +1441,7 @@
       "captionHash": "3674fce97098c7a50a77ef0f6c806bf8f1db306435a5aadfabf8f20869ae47c2",
       "specHash": "eebed8f78261f96d6ba1c547bbfcf31ae6fbbb9eaae6b48df7b5c8238a690c7f",
       "revisedHash": "4e29b59cb84ce52effb0ba5e5c597beac365acd6ed2afcfb2d56bca0e7343abc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListABranchWithNoPullRequestItsRowComesFirst/Default",
@@ -1443,7 +1449,7 @@
       "captionHash": "dec6a55505019e97d1c478547737e5f97760a957c5b4deec8c08caabf04d3592",
       "specHash": "0224913cba900e17d63cb50bcfbee0a18d26aad915af60fc7e100fe9eb2982e2",
       "revisedHash": "649c0576988c6705016b3b546cf57ccea549953de6ad5d2f2ccb9827757b9785",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListTheBranchInFrontHasOneThePanelOpensOnIt/Default",
@@ -1451,7 +1457,7 @@
       "captionHash": "03cbe5758f721606da0a9af74fc389ef2f96b76d9fc666a2fcff7464381af931",
       "specHash": "d4b38cf1927c9c629322ed422dd970f66fce710094bc92ca53662536ec58c98e",
       "revisedHash": "253eeb78c05559bf54d6e5f3d379e3e49a7c9f11310553535df5e98375a4a6ba",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListFirstRead/Default",
@@ -1459,7 +1465,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "490ce6342972fdeadfae56006531c724448258fef992b98448c83c28ee2f6137",
       "revisedHash": "d3ae1dcb3cbf899b4a0694f8a75e27901334f3c1117cafd4d4c947100d455908",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListNothingOpenAnywhere/Default",
@@ -1467,7 +1473,7 @@
       "captionHash": "3e01d92b86ce93f4eb9e426d1b948ee478866bc920a3d3578f92a263d7b60590",
       "specHash": "f2f6bd380a6d7bf9a06cab13f3a2a6ff2092c49c4bbfcf739907dfaefaa11f5c",
       "revisedHash": "669cb42777357e66b3d09cda336b4236babc746948572f5cdf7ceeef39462b28",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListNothingOpenABranchWithoutOne/Default",
@@ -1475,7 +1481,7 @@
       "captionHash": "1e9fe16d3c041004f224a9289ec1bd94cd35b495e5b03f737de9689223249cd5",
       "specHash": "e77a95d650076da470bcabd9055245c91c3a5e994cbe16810c0decf62936f6ce",
       "revisedHash": "1cb5720999a4e5d50a9a7a75646e60e077f9af81ccc5f9aecde08bf4905d4191",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListNotSignedInToGitHub/Default",
@@ -1483,7 +1489,7 @@
       "captionHash": "34e21665c8e61e0e58ae92c3d9f57da86640b14156e986a596e6a23d340f5d81",
       "specHash": "ad307d85d06885ec947cdc571f174be7d79ef803820e1b93ac18276d9d0bce55",
       "revisedHash": "03f8098168a12b746a416fb78284924cca143b16ade2b9d56e395caaebd0a655",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListGitHubCLINotInstalled/Default",
@@ -1491,7 +1497,7 @@
       "captionHash": "2aa6d4ba4464e79e63c4c8a7815d5ce02699052b2ab78c8b011e985f490eb0d9",
       "specHash": "53172a7498071ab0428c02ff7f18fc82873bd1e7ddb5d02786238d647304ab7b",
       "revisedHash": "1b1bc5af8d5baece1464f4f2b634da5694d09f9dd055290a293d25515f3c3e44",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListRateLimited/Default",
@@ -1499,7 +1505,7 @@
       "captionHash": "9fd01298f4e028ba54007247e9c09aaaf679178148d96112209a0845b3a16315",
       "specHash": "f8f2c55e732f713a44bf64eb3680aad048824c1698c3e33a17a3c960bd254249",
       "revisedHash": "3c863ac119edc8a491da82933e210bd137dde1bff1e0115c5db93ba78c3da3b5",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListGitHubNotAnswering/Default",
@@ -1507,7 +1513,7 @@
       "captionHash": "117df079a719149144ea727b8ea4fe7409844d18eb41e298dc02bc989a8ef598",
       "specHash": "69969919d30d5d10c9ecce29c9300dbd183dbd8a183dc4811271ae5046d0be4d",
       "revisedHash": "2aa4f7330aba7c65591d24711d1608af4932d744acc900ea0deab09573e11f39",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListThePaneInFrontIsOnDevbox/Default",
@@ -1515,7 +1521,7 @@
       "captionHash": "c90d1e9f4021c4ac207d300f0acccf0e0e90ea389a67f53cd5a90b5dc563980c",
       "specHash": "138dbdaa5c2e522ca54c16ea6ac2b0714524c90389b584277f47367e7ac4e9dc",
       "revisedHash": "250de73de7247c87fe8e5d08dc4111cbcca5896554d44a3826459727b42a37fc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListAskedOfYouOpenedFromTheList/Default",
@@ -1523,7 +1529,7 @@
       "captionHash": "dbac544eb96b1dc41b3a2a6606194c50b6535662cda8e27411a97029cfbb9fc5",
       "specHash": "49cc3b724ccc2e3ba35326ae6f9966a086cc9e99ccaa8f0a1921b56742895aa0",
       "revisedHash": "992febfa3cce1a972ddc18061cda2d2346d32f6df455c464ad020b57fbe78adb",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListEveryonesBeingRead/Default",
@@ -1531,7 +1537,7 @@
       "captionHash": "7b9acad518adde3289854c173e95313de17f2fa5b0786f3695d62c90a1e6068f",
       "specHash": "d367491efbf89fdc5b202f09c9839cbfe3af83a15f6c373691786fdd7e0a6647",
       "revisedHash": "19f6ba1845fc43782037b5aaf34ed04578556c993f4aa076e518202197e119e2",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListAskedOfYouOpenedFromTheList2/Default",
@@ -1539,7 +1545,7 @@
       "captionHash": "dbac544eb96b1dc41b3a2a6606194c50b6535662cda8e27411a97029cfbb9fc5",
       "specHash": "49cc3b724ccc2e3ba35326ae6f9966a086cc9e99ccaa8f0a1921b56742895aa0",
       "revisedHash": "992febfa3cce1a972ddc18061cda2d2346d32f6df455c464ad020b57fbe78adb",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListNarrow300/Default",
@@ -1547,7 +1553,7 @@
       "captionHash": "32f82dcb23cd04d3bffcd3e1746867fae5f96fba73cd0df7b3bc6689774a2d75",
       "specHash": "da6c0b0bab08453185f2a0e1ffb0fe58bafaf83dec08df265f167f6b478f1ef6",
       "revisedHash": "1808870f16fb49ff419165229612c66ba9edb6aaa961dbaebecdbd82beff4b1b",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListFirstPaintOfTheBranchsPullRequestFromTheHeader/Default",
@@ -1555,7 +1561,7 @@
       "captionHash": "35f10e42489c875e2778405c696acb1f7a72774ed9fbe53214aeabdf4ab2b15a",
       "specHash": "6b4f7e01ae5d67be923ca956f51a2b04073facbc026ba8eb562b41f89460ab2f",
       "revisedHash": "96b4ed832dc132e0dfa8c9edabf15ceb9c92fd673217af203773e298f8df46c3",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListItsPullRequestWasMerged/Default",
@@ -1563,7 +1569,7 @@
       "captionHash": "f5eeb29d57a381d30c371798d63b65b815e8ca57a8147012de85168ca66cdd82",
       "specHash": "fcccd496d034381eb8eae3c1cd21858080e3faa5395766f0ecd6d6c961b2ba0c",
       "revisedHash": "30ca36e9e59053405aaa30a0750ea93da24427eb0bc2601992c1416de263c18a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListTheDefaultBranchNoBranchRow/Default",
@@ -1571,7 +1577,7 @@
       "captionHash": "75c118b9fce03b458f83149b5cc415edf2e3d087079eea8785a13e233437d391",
       "specHash": "b7ed4bf626dc845a4d446526bcb09da7c350c53c90635c75c9eda99eff2fb806",
       "revisedHash": "575819b63e73ad93bcfd3826e4c376c12f6a87a769f8c5d0d9f5a44a65489869",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListCreateAPullRequestInThePanel/Default",
@@ -1579,7 +1585,7 @@
       "captionHash": "b8aeddc27fa78dabe24a976312794630bfcb7b6b314e76af6662362d565d08e4",
       "specHash": "57f7e35f1a337826e0b931c7ce2ab92b983784fbe8c3b259dc2d45fa86f61755",
       "revisedHash": "c33653f7ca29dfe9d985b99dac5a3084fc11e4485402332fdbaea0fa3f1c1002",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListLightThePaneInFrontIsNotInGitTheListIsThePanel/Default",
@@ -1587,7 +1593,7 @@
       "captionHash": "3674fce97098c7a50a77ef0f6c806bf8f1db306435a5aadfabf8f20869ae47c2",
       "specHash": "5c782702a689a2f6b60eacad729b2edaebabc9dc612b967661780caa026ea618",
       "revisedHash": "4e29b59cb84ce52effb0ba5e5c597beac365acd6ed2afcfb2d56bca0e7343abc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListLightABranchWithNoPullRequestItsRowComesFirst/Default",
@@ -1595,7 +1601,7 @@
       "captionHash": "dec6a55505019e97d1c478547737e5f97760a957c5b4deec8c08caabf04d3592",
       "specHash": "f0e4a88992a7562904fe0c1c44df60ba040fcefcd43e7ff0530ddb858673d63f",
       "revisedHash": "649c0576988c6705016b3b546cf57ccea549953de6ad5d2f2ccb9827757b9785",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRListLightTheBranchInFrontHasOneThePanelOpensOnIt/Default",
@@ -1603,7 +1609,7 @@
       "captionHash": "03cbe5758f721606da0a9af74fc389ef2f96b76d9fc666a2fcff7464381af931",
       "specHash": "a08f5924ad8267259326a6c8548c6b4c539b0d7626f531c636885e8c08008ece",
       "revisedHash": "253eeb78c05559bf54d6e5f3d379e3e49a7c9f11310553535df5e98375a4a6ba",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictDraftTheAuthorsChoiceNotAFault/Default",
@@ -1611,7 +1617,7 @@
       "captionHash": "7c2ef30999c6c491e1fe9dac312cf36d7bf2c90b508f68bde556894ad0265faa",
       "specHash": "98b0aedbab01735ce6f392fd6f28a0ad3dd90180ca0dfd9355070bfef8e58d39",
       "revisedHash": "9c87185226dfcb9bda60f4072c4e668204742203036c99438e6a8c7317e42003",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictChecksRunningAWaitNothingToExplain/Default",
@@ -1619,7 +1625,7 @@
       "captionHash": "9526109b15078920577a5c65576ae2ffef07b116e3c84a8ee83bb6561d880209",
       "specHash": "5fb2569a50426cd04f129e2aecae570e81fbce4581b7163e04f54996ba1d48cb",
       "revisedHash": "bfe2b483256325be00289a45831e3115163726e1efe59aae1167133fa39ae8f8",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictGitHubStillDecidingNothingMore/Default",
@@ -1627,7 +1633,7 @@
       "captionHash": "f5b2917a7d84334ce43113cc744c2096b3b72519a7f1d7a1b4eb9274aeee97a9",
       "specHash": "c54c8a049217add9ea869463eb153d8505290cd3d615bbaeb412a97070f916d8",
       "revisedHash": "5bc829af0624c085738b5919c0717461168b97835781eb54166a735eb0f2301d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictConflictsTheFiles/Default",
@@ -1635,7 +1641,7 @@
       "captionHash": "3d44709fa4f0c151db828eb9ef71bbe9f0b4151252ed61f8c6f3372c24737f59",
       "specHash": "146983ab45d654070728e14f61ffe03b028d0d012cefeb56edfa7acbf4c2827a",
       "revisedHash": "baee618663fbaead5633c8caf0199109c9c66f80d44bd1e04ffa0213374f7ba6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictBehindItsBaseTheCommitsItLacks/Default",
@@ -1643,7 +1649,7 @@
       "captionHash": "aefa7b50c8f7f0764ad65070e913852f0cfa94f5135617c2372fd7543680cffc",
       "specHash": "c0ba2495588c646d481a3d9a0dd2c0e254ae49f9d9e4c832e32f7f2f55064a4e",
       "revisedHash": "8402b356c36eb62646bf3990ce90fb8b3f7024ab55a2924267fc5464a407bdd6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictBlockedByBranchRulesTheUnmetRules/Default",
@@ -1651,7 +1657,7 @@
       "captionHash": "d3b603b9e3493dfb946cca393e1c08083f92beea090219bd8c3f9d3d86a44d41",
       "specHash": "20cf7a40aa65089f9ef620b653a86a410cdfc8deebf25ebac1030c1f61796dbb",
       "revisedHash": "075bf3838bae3162fa59e9537f4254fcbd7170d1ccf324ca128575a3a1823b55",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictReviewRequiredWhoWasAsked/Default",
@@ -1659,7 +1665,7 @@
       "captionHash": "07c2ca420c18a7db4552a7b80d0df739680f5c2cfb1b266e1542163e0229d038",
       "specHash": "cf564977bea5bf6588f6270efaa964f7fcdf4cfbe0bba081a617cf46915a24f1",
       "revisedHash": "d849a7b14f4f421dd99fc092ba5742f30b73d34ce940f4428bd0382346f5e600",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictNoPermissionWhatIsMissingWhoCanMerge/Default",
@@ -1667,7 +1673,7 @@
       "captionHash": "39fb862e063fc440cd3085ed09cc4416af7a74c238e5fe6720ccc680a1f9f50e",
       "specHash": "fa96b78c1b2373066c040b519c053c9b058a7b8992a229d7bb215a7dee215e96",
       "revisedHash": "e4af37faf89d5b2ed1d29b09645e53a8259c05cd50a828f908c450488c7d4ec3",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictChecksThatDidNotRunWhichAndWhy/Default",
@@ -1675,7 +1681,7 @@
       "captionHash": "a61e7731104cb74edd4b30f95839094a3bcb34f0d9a0e9ae9afc2a75ba1688fb",
       "specHash": "f052f111a7e0c724dd0e4fa54117a45be4b971d1a43bc007dfdb84a29ff52c6c",
       "revisedHash": "179bb026b491ff9a2af56fdf52b1b425f6d2a307a5d921733a6bb55f017026fc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictLightConflicts/Default",
@@ -1683,7 +1689,7 @@
       "captionHash": "b776b835560dcc00f994d1ecc3ecc755c6cb390fca667a426d75596a6ae433d1",
       "specHash": "a9286954fe8a4150dd17707b0a41614df4bc8fe02afd18825c67c35a22dafec9",
       "revisedHash": "b36dc27048e3a4714b5d789394e24a8ae14f464e5571dd7c3b224ad8cfe7f84d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRVerdictLightBlockedByBranchRules/Default",
@@ -1691,7 +1697,7 @@
       "captionHash": "460a3e894600fc0f364a7f4a5313509a69e28cf69465e7285acf5f4c689d250a",
       "specHash": "eb30ea82aff3f5e0fc1e411a3230aef83321f0039e616b7afe5f3a407ad264f5",
       "revisedHash": "075bf3838bae3162fa59e9537f4254fcbd7170d1ccf324ca128575a3a1823b55",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsItsAgentWaitsOnYou/Default",
@@ -1699,7 +1705,7 @@
       "captionHash": "df94560c19d317f60115667e713e5d338bee3a4265533948c8801d01254c18ae",
       "specHash": "503b1849f0204f8889403ecc0ab81a539f345e1f867ef43d6f99850747d92db9",
       "revisedHash": "625ad743015b7b39b1e1c4bfc018aa2422fb85153ccebfea053f2a329cbae450",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsExplainedOnePress/Default",
@@ -1707,7 +1713,7 @@
       "captionHash": "dca90fd2931d17638d296537a0568ed21f175b96d99ef094c9299b51393b831e",
       "specHash": "6513afccac789429ea585c058afcbf1a218153a356404f88218b29a119612b7a",
       "revisedHash": "47d81d54f409c1285ef5bc2539a00be561cccb2d76284ee2df547eb48fc52de1",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsExplainRefused/Default",
@@ -1715,7 +1721,7 @@
       "captionHash": "71102851ede1ba0e153a1ebd06684d6d31b5bbe6a75e6952ac917c8ca36e797f",
       "specHash": "5e1ed5c6805af9520253693d9e90eabf02254237aac1bccef9f6ddad5023af8e",
       "revisedHash": "e0d46da00a1e773bd55b02c41d6004f3db731e7a17db2cf350e3943c2bf424be",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsMerging/Default",
@@ -1723,7 +1729,7 @@
       "captionHash": "3929423a7544d6f7c87d2bbee611a7d9d824fb5ed1ab3d62c7af3c07b8ca946a",
       "specHash": "3db9dd38fca1ceaf963420d02975140dba2771c9e58c05d96e92523d0a33443f",
       "revisedHash": "2a57da898a7ebb484c38606cbfe0b43ba9e8211c4a81882d82e4386957898bd5",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsMergeRefused/Default",
@@ -1731,7 +1737,7 @@
       "captionHash": "292ea0ce542970b131cae34edb7a042b2c0e467df40dd230b59f8ec500df396f",
       "specHash": "d838aea01c3280755edf823c99a02b410892bdb66e5015776b9f10d4e6244086",
       "revisedHash": "89904060dc97e212b67eb4e6dedd8bd8eb012f76c29842aedc37d4b6741d6acf",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsOnAnotherComputer/Default",
@@ -1739,7 +1745,7 @@
       "captionHash": "b5dbd715dea360aae2e9d21a4de4662434694b709511f46740b47c72cbb23e9b",
       "specHash": "454722b27cabb159c17c5f0254a4f0ce1f5870d65b2ce913a07ac6de88d1f8a7",
       "revisedHash": "e3b2d56d90fee44dce8238e2f14279a31e299b8592afc67af2eebd83462b0aca",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsThatComputerUnreachable/Default",
@@ -1747,7 +1753,7 @@
       "captionHash": "ab2fadd0fdebb5f69abfd6b752449de969aea5900df9d137e60b80a4b59aa310",
       "specHash": "8676b5c13ba3c7dc93107e1d140035bebf3750c77192cd7e3e45670757a0e70e",
       "revisedHash": "e3dbac87edfa3232dc1e2c6373a2b595fa65516729d62bdd43aeb1670d44e03e",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsNarrow300/Default",
@@ -1755,7 +1761,7 @@
       "captionHash": "32f82dcb23cd04d3bffcd3e1746867fae5f96fba73cd0df7b3bc6689774a2d75",
       "specHash": "624ad9dcaab53001548bbdb124ec1f7b72e426c4038832cebd8c78e3e4ddd225",
       "revisedHash": "cd476bde51c8252db92ecc866c73808b78698520ade8bb4e1ded3493675b83bb",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsFullLogAPageReadAlready/Default",
@@ -1763,7 +1769,7 @@
       "captionHash": "9b32703f150507425af7c16a4865a1bdb4fc32b747f661f475070c566bfd7c79",
       "specHash": "c9cca80044f98de6966b5ddab7fa00854a31d2b5e6a4bd18cdd468a012b9297b",
       "revisedHash": "5949561137f000787b284187f9e9d01bb1ac3cae7e59980e2a602e16d3f5c3ec",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsLightConflicts/Default",
@@ -1771,7 +1777,7 @@
       "captionHash": "b776b835560dcc00f994d1ecc3ecc755c6cb390fca667a426d75596a6ae433d1",
       "specHash": "a9286954fe8a4150dd17707b0a41614df4bc8fe02afd18825c67c35a22dafec9",
       "revisedHash": "1429e95e909ac44d0ecdf16bdc4e3378076e35120019af74674ffea103d94407",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRActionsLightChecksRunning/Default",
@@ -1779,7 +1785,7 @@
       "captionHash": "94ccfcb8c28d18c9a63697726254638a48c75985589bcf990f3f0f0d582e6a57",
       "specHash": "9bde409182ced6aac6b4216328316431aa86578ad8b18eed22ee91379b9305c6",
       "revisedHash": "890c2be730169a7dddbfd90d2e210fd2b0aafdd867a0df9624857a043096c1a0",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDetailsDetailsOpen/Default",
@@ -1787,7 +1793,7 @@
       "captionHash": "43a0cedefbd4eca0bbfbd9763af6be9880b91e11ab7e6e1b0c645fdadeb26e97",
       "specHash": "f839b2b9566f9b712a20a755269a24943ee9b2c1d2926af64169adb4e07769f7",
       "revisedHash": "2478f9f208b7c9c37105750f50105198981f6888a88a3541d0a9fff9fb2ca98c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDetailsReviewersThreeClicksNoWaiting/Default",
@@ -1819,7 +1825,7 @@
       "captionHash": "c0cad69912cca48f2cbfa842a3922d365e6b23ecf95b4f80bf677e9e5bb419af",
       "specHash": "e6b432d08898a58ed72964a7acd1db292708db469e1428ab34ce8456b15278e1",
       "revisedHash": "7cde71f79acc34a212f972220867939f59b5bbfad45fb6e98dc533104837a13e",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDetailsNoMatchOffline/Default",
@@ -1835,7 +1841,7 @@
       "captionHash": "4795aa85d0fe610287ffe0d57213dd7291e1cbdec10a40d01aba2641f0710fa1",
       "specHash": "0f1a4916d396bf75f6e191c59f7c536fbf305aa122803df79e4886eb013439f6",
       "revisedHash": "0c3e23e7a5b1d11fb96d6bb09c248bb7ca45f0cdd5e5ff4599508f455f5ac2a7",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDiffACommentOnThatLineRightThere/Default",
@@ -1843,7 +1849,7 @@
       "captionHash": "4659ed5e9b549d8524dfd9b25e9aca7f96fdaab16da29371637b13fe1a79c33b",
       "specHash": "c99d9cb2375c92d8eefcefa3927e6193c30bebed973314217b263e9a8289a5d0",
       "revisedHash": "b35d8e2eee7f8e807c7f0cac8f4d6895d784d0ffc9d2348d0f07597774605537",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDiffAskedOfYouItWaitsForTheReview/Default",
@@ -1851,7 +1857,7 @@
       "captionHash": "944e9d26c54b380ac4d54c72772dfa761cc653afdece8c702d650c11af8b2341",
       "specHash": "c9f2a8059def3a71e39afb20765cef445e7a17741ef9c2c8259769d2d707e8f0",
       "revisedHash": "ee59ff2a845b0b16018487783b5d23a7845baf89f66ea6e103d7f6b1562a47c8",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDiffAThreadOnItsLineAnswerableThere/Default",
@@ -1859,7 +1865,7 @@
       "captionHash": "392ad0f7745caa8ffb52f84ed2edb2444db99cbb010954f9c1c5a76fe1774860",
       "specHash": "8df3d761044453473fad941c067cb172ab83d31b3601b16523d6df297d2d764c",
       "revisedHash": "ce6a2031eded40c4f49eae863807128bea9faf12f21ea35785d8da5fb4081d93",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDiffAFilesDiff/Default",
@@ -1867,7 +1873,7 @@
       "captionHash": "5bd985ef8e5ea3619acdae62da8eb1288a4d5506c16d27f4b450856ee02fc6c6",
       "specHash": "d14f196625c41a0caa97ca4d7a7bcd3afe3bdf7637d2190d40152cd8b767dc87",
       "revisedHash": "8849c34697ec403d1d5bcd57c0b533e14b83f69928e69001e66abd0c2666059f",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDiffDiffReadingAndNoText/Default",
@@ -1875,7 +1881,7 @@
       "captionHash": "29769177883a766c0ceba4c95384dfec32a6ef02ae7c1f921d33b43599c5ee62",
       "specHash": "deb360924972b7ab4203aa0703529b81c28d8a674ae7b4b86988937e6cf5e73d",
       "revisedHash": "7df6d92550f346ee212dd4cc39074a2aa0f7dc3bcc0d640f747c10964a0e1851",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRDiffLightTheDiff/Default",
@@ -1883,7 +1889,7 @@
       "captionHash": "00355a86e400484e9ab1f032dca9cd349aca4c4645c1e74bc1c2bc2da02fb2d2",
       "specHash": "ff9dc028316d594e71470b6ded8daf33ddd0d48f8244f9e4aed74f90c00db1c1",
       "revisedHash": "3bb172f1c5194d9b223188ea920a83c4d20428594bda1fd94c3814ea1e3d5378",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationTheConversationInViewUnderTheVerdict/Default",
@@ -1891,7 +1897,7 @@
       "captionHash": "3b6d5ec2660aca484dd4ead7632a2412086651794c0ee0667d12bab4305a9f59",
       "specHash": "78a1d97aa2d45c60fb68e6bf0681f2192ee407164cc0ae7265594409e1d7268a",
       "revisedHash": "0419b2eba8b78f00d3fb8c66e9a2fbd6a076101d5077338d46cbfdd3f09254fd",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationReplyingClickType/Default",
@@ -1899,7 +1905,7 @@
       "captionHash": "cab2f72d2f1b49dfe37f2b1304a361b45866cfbcd0316712e889a60d51efb126",
       "specHash": "04dee6013a15e4e72b98cbf5792008d271bdc697a6ce2f684f1bd3f008b283a3",
       "revisedHash": "565be4403bc9c15714fcb11127ed50df0401287ee75b51dda557eeb9ab15cc2a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationSentInTheThreadAtOnceQuietUntilGitHubConfirms/Default",
@@ -1907,7 +1913,7 @@
       "captionHash": "75d9e434485b2d2591ed89ceb1ad0947aff08547aff8d0bf137f331544ee0317",
       "specHash": "918a1ce433cc1247ead73d0420c55e57f824ff0115a0612be7953706ac550cef",
       "revisedHash": "3479deaa8d4424585dea2d0329fcff2edef3b8c1a9c5ca934d5490278e1fc76f",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationRefusedGhsWordsTheTextKept/Default",
@@ -1915,7 +1921,7 @@
       "captionHash": "63ad800a8487f473f78789824c53f96ed350984e2ed5f94d5bf96b9b0fe37dc4",
       "specHash": "4869444d9c0ad97d250bd0ea83d064c036b1dee09ccde00a4997d93aa47a458e",
       "revisedHash": "f556de9f1fdf9fad42915f5fcc1cfc46a89f539962623e5d9d902fd13b8a40f9",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationOfflineKeptAndSaidOnce/Default",
@@ -1923,7 +1929,7 @@
       "captionHash": "9c8a673d2a75b646111e51b1de1e65505bd8c761551fa571f49b26c298922f77",
       "specHash": "1e489e2a9a3ec4c27b5561f1b773e5eda43c2c2add9c14fd67ceb3e8c892704d",
       "revisedHash": "26f584bedae05daac36c555d20e54656cec7ad34e9752c7ed1e55eb7f54d891f",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationResolvedOneLineUndoAfter/Default",
@@ -1931,7 +1937,7 @@
       "captionHash": "9439617ab1882e84ea70a23c68b1cdd8b276737bdf42f4087dd1e19881a2a27e",
       "specHash": "4aa178ba97f5eb233d0af5d84995e8c48d853397d56fff4b84643bc82046e7ce",
       "revisedHash": "3884f36cb3e19e70c53ff35c39a32f1468c3a2946a853aead93ca5a7a0619a7a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationExplainToTheAgentThenPostItsAnswer/Default",
@@ -1939,7 +1945,7 @@
       "captionHash": "db465eaff173ddba0b27bc861dbe690fd7befbd89c54ca2dbdf7b18ed1664ad9",
       "specHash": "27f6665249e83a7a719ff2fff62db56eeea2cec83ce98a31df2a13be4478ae57",
       "revisedHash": "31d7d1637a056f057a1dd5a46a6cb87b483ba1282398f3161803e704dad22e41",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationAskedOfYouReviewHereOneSubmit/Default",
@@ -1947,7 +1953,7 @@
       "captionHash": "3648fc1dede5770a8def4a4e67f029dc7bf96a8bdc2b61c6cf13f89c46ffeeac",
       "specHash": "caac994749169262c825f7bbd72cf6ccda4951eff8a86cc6e1f6d7c54188bef6",
       "revisedHash": "f6bff8f76dd579f1eded3bbab60b8f606a4a7901f65d6b5ab53ac63954cd0dd0",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationReviewSentItJoinsTheConversationAtOnce/Default",
@@ -1955,7 +1961,7 @@
       "captionHash": "432aba86b29d9e148e1e1d7ad73bf2d20c6dd34880ccf7c37c7281c6ae99430e",
       "specHash": "d08da098fed5624f869a12586abfa920b7f30a5ccd304663d4fab66c01cdedb9",
       "revisedHash": "de92dbebc1bd2513f533c8d3b7678a47d595a47280f17658f51313f1d40a1b15",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationLight/Default",
@@ -1963,7 +1969,7 @@
       "captionHash": "4c48d1a58c24388966af677815641effdebb0f3e93bd968cdf24244910905c96",
       "specHash": "ccbc429bbd919a1a4b4bc4afcede30d356d811a990e4cec89641d9aba7ada90e",
       "revisedHash": "9d53caa41588dc3f38358b16f342724a8aa9ce10bac8ec1b497c0ff8c77e6cb1",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRConversationLightAReview/Default",
@@ -1971,7 +1977,7 @@
       "captionHash": "8ab5dcf6b246e329fb0dbe0599a064065cd6773cebb9e191d0aa0109bbd5cb2c",
       "specHash": "6c1f90af20526f4b751a8a08b5f66ec8ead8c50abbcfd0873880c045fdf2fd45",
       "revisedHash": "f6bff8f76dd579f1eded3bbab60b8f606a4a7901f65d6b5ab53ac63954cd0dd0",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default",
@@ -1979,7 +1985,7 @@
       "captionHash": "f1044831d602ddf2ed549e1bf5fe97b0a266963b46e780a47a50c3a16333b92b",
       "specHash": "c8330b862ef7b7b3c2bcca034ce3378dbea0bba66c11e16a4ad5cfcdb697d0bc",
       "revisedHash": "4ab41c5a2c50e12e23da8ff3143022fdda4dde494c85efe7f300d06b0536de14",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewAtRestComparison/Default",
@@ -1987,7 +1993,7 @@
       "captionHash": "e1941dd3a5dad650647b15662cc07be0eca596e666ac62e5b4e51dfc2b9fc742",
       "specHash": "53f0c449569b028e8de4296ec64d5462d6106b89a92454f8ef3e0cdeaa4c9813",
       "revisedHash": "74023960013b69105a334288b05a6d38e0bb60577f73bd7631474f51283ad77d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewAtRestBefore/Default",
@@ -1995,7 +2001,7 @@
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
       "revisedHash": "2ae8db4858ed88ea2709f02e2cdba0c825a90d6fd2c0278892f3d0ae49db8ff9",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewAtRestNow/Default",
@@ -2003,7 +2009,7 @@
       "captionHash": "5b2a124ad7482cab9806979d3da3fd09e0e237194af844f8c0ee78cea86bb629",
       "specHash": "81ed54b89d96c6ec962ccf41ed0bff0ac8e125bec92266201fbf9ac02dd6bdb2",
       "revisedHash": "b4868c14d66f0cfe2fc05af50c34e8d933949d9a2d592220e793d95d3baf21aa",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewOnThePointer/Default",
@@ -2011,7 +2017,7 @@
       "captionHash": "1c4c15cae39c9a2b0a8d8f093122720694669fc438e6fdd0824b9660b15676fc",
       "specHash": "a2f549655e6fc6de535bd01dd220f32946e146197d1c3695fe40d1b48f1a7868",
       "revisedHash": "6ab4652ebfe9416d9466584493630bb412d43232151726132f14b0e459db7879",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewAtRestNowLight/Default",
@@ -2019,7 +2025,7 @@
       "captionHash": "ae5590d5a700318808fa35a24da5fa0cab1bbb1aa8c31ae580b2cdccb9726fce",
       "specHash": "fa0e38326a57a3480c5ca4d38d6bdec43265038557154c3f1ef46c85234da9d2",
       "revisedHash": "b4868c14d66f0cfe2fc05af50c34e8d933949d9a2d592220e793d95d3baf21aa",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextOpenedFromFiles/Default",
@@ -2027,7 +2033,7 @@
       "captionHash": "a9a7adb85e735df438bbeb70f85bc35cc7518f389e9ec3a599e4fce79b9d096a",
       "specHash": "717ff23df5f8484eb50f9e910a6d1b2298d566956be9e75df23be713d61aab93",
       "revisedHash": "4e2956263831ac8fab343d7249ddc5f7445f789b2d8f3cb8e37d6401fab5aa45",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextEditedSaveAppears/Default",
@@ -2035,7 +2041,7 @@
       "captionHash": "f14a4aa911d94bd001defef2762d6276706248af16d94caf00e8f49ff924586a",
       "specHash": "3a2cfbef19dc31036694c389091df015a68032de90f70a809d96da0f7186e288",
       "revisedHash": "aacdf7bd2c43bf3321b1883116731c2d4fa18699cb09d9fa309f15ed488225dd",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextSavingThenSaved/Default",
@@ -2043,7 +2049,7 @@
       "captionHash": "0b83e2379b473feff7da6b6d6f9343e0be61a414621a2d8bd9a7f0ccb5131c72",
       "specHash": "c0f802474a4bcfe14e9e0c1b9264e2768817d4680f61d21905a7d5ae96699885",
       "revisedHash": "bcec3f9e0462ecfaca0aa475121df936718fe33e0b08254518db20298bcc2cc6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextChangedOnDiskWhileEdited/Default",
@@ -2051,7 +2057,7 @@
       "captionHash": "147a6542168b77e43b656f702090f6d211ae99bf92100cbd02f927bdf8c3db91",
       "specHash": "8a1a290f1eeac4f2438283055071fc16ec2fdee6780457fcdf04ae486ed7390d",
       "revisedHash": "674085cd2f3e4847c6199b4f45243292d929636c1fa714bcd046bbb7c040a1c9",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextTheComputerIsGoneItSavesOnItsOwnWhenItIsBack/Default",
@@ -2059,7 +2065,7 @@
       "captionHash": "2c78f0f4da3b22a7991915a13a76a9010144f1380e4c891750d76816945dfd39",
       "specHash": "d408b91ff47655ec069b0bf0c8e994f201b9b81717a13377cb338e9a9a36de1c",
       "revisedHash": "b01ba6df111f5afe10503bbf1879291ea945f2ac660f362848f5fea8109366f2",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextAfterOverwriteOrReloadOneUndoNoQuestionBefore/Default",
@@ -2067,7 +2073,7 @@
       "captionHash": "086e4a86896843065c6cc668f3ec47cfdf0ae90f4214ae07d1baf7c0759cc91e",
       "specHash": "31ec90f359a9713594b57d482d4ee70b72437b4bca0e336f7481d75ff6ecf5dc",
       "revisedHash": "f12e7ab6b7726a3f61e5e93dd5d0c7db039700c9c3f4817aa3afa38dd1d2ee1a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextOver1MBReadOnly/Default",
@@ -2075,7 +2081,7 @@
       "captionHash": "ff5bf94cc625c5643977a79d6d07cd4b30236ef418017dabd483ab8704cb315f",
       "specHash": "807e5ed8ed5abddba51982f15166d87edf97d4b909ecdf223d6b7d241d2ca6b0",
       "revisedHash": "6c6ba851878dc2a9eb5c08b4435b16bb052dfc4931324627bf51f894ea531cdf",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextBinary/Default",
@@ -2083,7 +2089,7 @@
       "captionHash": "6d098ec004939ba528f0284b8d65e068212d3883bdc74a3d2e99120b8d274ada",
       "specHash": "e4c49d9f64a3f1e51b421b0431017750846fd5926d4a04f428b36bfc2cce1a6b",
       "revisedHash": "9e08e278af412bc09bbc409881df64a5f469c3e32067ef47f20c18001b5d0745",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewTextGoneFromDisk/Default",
@@ -2091,7 +2097,7 @@
       "captionHash": "84267a8bbfe8f2cacde402a638afbdce44629ef48a052dacec3a35b59b885542",
       "specHash": "17b607086ef17eab037337500cb177bfb7938dfbeb001c6a769c257875e9556c",
       "revisedHash": "03a65cad389252f816b7b49e0e86c99ae004e11b1777643a082b8fc2e41a62f4",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewMarkdownFormatted/Default",
@@ -2099,7 +2105,7 @@
       "captionHash": "79e72faa122ae6394baaa971d1f0744a7a3cc2e6315c9908746b875c5865c969",
       "specHash": "aa17d0d7b18ab13557e4ed73571afed3b4e83cc5bd7a12658c8a5ca6d475d5eb",
       "revisedHash": "b7472283e7846598863391902f9a5c8eaa7ab11f17a0faa962a86271b1640a58",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewMarkdownAClickEditsThatBlock/Default",
@@ -2107,7 +2113,7 @@
       "captionHash": "59baba3aa12e1166b5b3b3f9cd54b3d114cfc98a5c368dc8c1ee1893689db713",
       "specHash": "2a524c8e8ea8c7e2f6d858b7f4e37b1b7a767228f13e2163bf10e25c1a99b481",
       "revisedHash": "84dea894ae98356f6492e37aee4e5310cce656b68ff939b5350b4ad838668298",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewMarkdownATableCellByCell/Default",
@@ -2115,7 +2121,7 @@
       "captionHash": "de7e0d9c397cbce49667a823ce7307fcc10eaee49b9f7fbdfd801d84b34c6d51",
       "specHash": "0cf2cf4df0c0ed3cb0f7972d55bb53b4c4fbc7618d2b39333a314e56260a6d27",
       "revisedHash": "4110517d9415bb825b3ccc14f947f7b94eaa91f0e98b0894854ba21f59640e4a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewMarkdownSource/Default",
@@ -2123,7 +2129,7 @@
       "captionHash": "a1484bf1466bbed0de88d9790a20f5d511798a8eed0dbaac2f9b912728f42250",
       "specHash": "1573015be8c6324743c209a4a12546867dda59c845725795983fe7d98071e862",
       "revisedHash": "93f4b117db2aa7ff94ec40b6faa7d806f605274c8ef4ff80e7a3d9823f2d534d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewMarkdownLight/Default",
@@ -2131,7 +2137,7 @@
       "captionHash": "4c48d1a58c24388966af677815641effdebb0f3e93bd968cdf24244910905c96",
       "specHash": "b233eb2a63ff9f05899d71ad9fa59fba2e4a144bb0306a7a2470af18ba551e86",
       "revisedHash": "1b066eb942e220c0c47ddc3893f1465a702aac790fc5bb97eef5c50dad7ab7dc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewMarkdownNarrow300/Default",
@@ -2139,7 +2145,7 @@
       "captionHash": "32f82dcb23cd04d3bffcd3e1746867fae5f96fba73cd0df7b3bc6689774a2d75",
       "specHash": "c18b695ae5c70c99da0400ecc13b591385d933f0703c159cb6f783f426b944cf",
       "revisedHash": "955f11f788f8022490fb4ed2b9e1b392c6e16d3da1b06a84c99f2b48bf2fab6d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesAPictureOnThisComputer/Default",
@@ -2147,7 +2153,7 @@
       "captionHash": "35d4e13013ed0aa38da85568637183c979a829aca600267c9998441b6cc29bb8",
       "specHash": "9ca8441722183427c7e47e24a6b1ca4aa3a14f0c17964251532a1988ad0658fa",
       "revisedHash": "0ab823279e2bdb7dfca7280b4600422c0b99f98b39b46d49cf09ffd38410c6e3",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesOnAnotherComputerOver2MBLoad/Default",
@@ -2155,7 +2161,7 @@
       "captionHash": "6ea0ab18f994c0fceda6ead9631816b9cfcaa6fd786d5f80d782d84d444449fa",
       "specHash": "bb7fd311594c9663d0f50c5370cfc87984daf17cf495623efbb83e8387c96b58",
       "revisedHash": "f20deabd0a73cd4342009a1c7857ce27167bd3800a401e40870e0ec1543867c4",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesLoading/Default",
@@ -2163,7 +2169,7 @@
       "captionHash": "264b67c506ab67a54e80ae22b2110129d1ea374b589e3c8540aac6b8c2738b82",
       "specHash": "804dd5b2d119b50130ce152856173d57c790ff07c36716da0d874180fdebc51c",
       "revisedHash": "9ebb780af4b5857befb92b09000a464ff2d9024675f764416fc67c3011628003",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesOver20MB/Default",
@@ -2171,7 +2177,7 @@
       "captionHash": "8aaf168bc8ba8d584b682c7717934c016e0a66a277d08fc09bbd9f1057b08f8e",
       "specHash": "36d8bd221735b085e74e2ed767c4b977c28e9dcafcbe211b4d0e427d3e79b255",
       "revisedHash": "26a164617e6391668cb4fc99e53c594712dfe4aa53941619fc1b5f20203e8e7b",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesAPictureInsideANote/Default",
@@ -2179,7 +2185,7 @@
       "captionHash": "d6ccd6bfe14ec0db9232531d46832c4ece02463f397a8128c015a4ab92ecbbf9",
       "specHash": "ddad8f61a77b3e864a64213508b4e32e03b58a0409af56596c3a047b431d0c14",
       "revisedHash": "810f6b563cfc000707d2d2fccc5c87a43609018194331b79554c59c3349449b3",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesLight/Default",
@@ -2187,7 +2193,7 @@
       "captionHash": "4c48d1a58c24388966af677815641effdebb0f3e93bd968cdf24244910905c96",
       "specHash": "b233eb2a63ff9f05899d71ad9fa59fba2e4a144bb0306a7a2470af18ba551e86",
       "revisedHash": "03e2abace25bbbc0597142d3d6c6c8b60205d77313c1c6ecf3a3eac2176d02d6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesPinsClickDragType/Default",
@@ -2195,7 +2201,7 @@
       "captionHash": "ef75136b5317429bfe8dcc1e6c17b7324ddc59217bd11dce60a13aaed53b2c21",
       "specHash": "f4d4ea043bb02d161f11fa9be9bc9b25fc2d6c07c8eecc46967e241c761b77a0",
       "revisedHash": "ed141e9f533f6de65d49594db7e287eaa74c5d6120c97706916f406a5a62a2b4",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesSentTheListWasTheMessage/Default",
@@ -2203,7 +2209,7 @@
       "captionHash": "6284b217c28024c5d23eafc7453345f898598b9dc7d8bec6fa4af21e24f1b052",
       "specHash": "78cf3227648ce5cae788b2714b69c027c2410a056beb89205250d41153d523c4",
       "revisedHash": "b2e365bd7007cd3b1f32ae0b9b556eaefb02d44eee9c4a39cb3c69acb7ba8bc3",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/preview/PreviewPicturesLight2/Default",
@@ -2211,7 +2217,7 @@
       "captionHash": "4c48d1a58c24388966af677815641effdebb0f3e93bd968cdf24244910905c96",
       "specHash": "b233eb2a63ff9f05899d71ad9fa59fba2e4a144bb0306a7a2470af18ba551e86",
       "revisedHash": "ed141e9f533f6de65d49594db7e287eaa74c5d6120c97706916f406a5a62a2b4",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/share/ShareClosedOpenAPostPendingTheDojo/Default",
@@ -2227,7 +2233,7 @@
       "captionHash": "e77827b837ae190710be4faf9e11306dcd70474e7116cbb3e0362e6936aa8aed",
       "specHash": "04fc322255b85dbb1190d15acb0c374b8ea8ee176d7d626f71c1fd6fa8d5335f",
       "revisedHash": "f8058464142638a06eb174adef5f355c0c403b9ed455714668b4bd4a784b2335",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedAtRestBefore/Default",
@@ -2235,7 +2241,7 @@
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
       "revisedHash": "6f215f8bac3eb3580023156c694e6fb4487303816c16d95739080c8ccd802c1d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedAtRestNow/Default",
@@ -2243,7 +2249,7 @@
       "captionHash": "5b2a124ad7482cab9806979d3da3fd09e0e237194af844f8c0ee78cea86bb629",
       "specHash": "81ed54b89d96c6ec962ccf41ed0bff0ac8e125bec92266201fbf9ac02dd6bdb2",
       "revisedHash": "1078477ca5880ce70010c53a5deee6dfbca0bd68f2dcef582369ab06757a29cd",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedOnThePointer/Default",
@@ -2251,7 +2257,7 @@
       "captionHash": "1c4c15cae39c9a2b0a8d8f093122720694669fc438e6fdd0824b9660b15676fc",
       "specHash": "a2f549655e6fc6de535bd01dd220f32946e146197d1c3695fe40d1b48f1a7868",
       "revisedHash": "5cd42ce695d61eea1db583188b3d800d7de7e7187c38314805d58c5441e2aad1",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedAtRestNowLight/Default",
@@ -2259,7 +2265,7 @@
       "captionHash": "ae5590d5a700318808fa35a24da5fa0cab1bbb1aa8c31ae580b2cdccb9726fce",
       "specHash": "fa0e38326a57a3480c5ca4d38d6bdec43265038557154c3f1ef46c85234da9d2",
       "revisedHash": "1078477ca5880ce70010c53a5deee6dfbca0bd68f2dcef582369ab06757a29cd",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedThisWeek/Default",
@@ -2267,7 +2273,7 @@
       "captionHash": "6654dcf5cb58977cc12f109530d1217c9f0de0c7109db0b6800a985526411dcb",
       "specHash": "388b42b1531835ec43ba13c84dab126601050d32bc5dee0b6b0177186e8613c4",
       "revisedHash": "4f297370536b180da85ebc66f231cf096a2e5f3e5705424a84cf08cfdc9ff196",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedLight/Default",
@@ -2275,7 +2281,7 @@
       "captionHash": "4c48d1a58c24388966af677815641effdebb0f3e93bd968cdf24244910905c96",
       "specHash": "d85f34e35c518d8ab109b7e4c45881577833af6015deae1f9ef18b659e0a6c0d",
       "revisedHash": "4f297370536b180da85ebc66f231cf096a2e5f3e5705424a84cf08cfdc9ff196",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedADayNarrow300/Default",
@@ -2283,7 +2289,7 @@
       "captionHash": "ae1e1897452ea75604fd06375a2d4f89c84bf7ce39b25b5b93cb08ca81b5817e",
       "specHash": "0cd6baad2351de483f415f8276e9819da11520e64afbc3f0c74bc45371c61298",
       "revisedHash": "35f8f3f9440be8964341d498138fee73520ebc7c50c3ca8d498e3651e51601fd",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedFirstRead/Default",
@@ -2291,7 +2297,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "5e7c9dddfbbfa576034be9da76cca33631f705f3936097992d84d9bbe1dfaa7e",
       "revisedHash": "3b12088b04aa92e4ed340bb9f4f9273e4112c9a148825cd92049695e581086f0",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedStillAddingUp/Default",
@@ -2299,7 +2305,7 @@
       "captionHash": "c92af5b58dbc4f40a58fcdb095ec6802ce3cf1ddf309591543087635490f93f0",
       "specHash": "91502db7aad0ffef2d99df0392b37361641bcb28b28b51beb9a7210b1d82e08b",
       "revisedHash": "21c6b5165451d883d2f824ae48456650ed616afb9559185e0350fb511c883f56",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedNothingInThisPeriod/Default",
@@ -2307,7 +2313,7 @@
       "captionHash": "fa62c1a8c1344d86ca9d526babbd3906d2b514577b13e9fdb249c3037c7c1cf7",
       "specHash": "718f8733acb7c7c295c4a083f28c5f8a0d51ae7ded08fcdec5086ac5a666ad4b",
       "revisedHash": "44ee2c3fbc2d70f89a2b2d1b1db36574fb516e235592af2d9b74d0fae88f872f",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedNotSignedInToGitHub/Default",
@@ -2315,7 +2321,7 @@
       "captionHash": "34e21665c8e61e0e58ae92c3d9f57da86640b14156e986a596e6a23d340f5d81",
       "specHash": "a8ca879246ae8e6cc8659bd13b00b29fefb134ffde237fbb41630b0b950cfbe8",
       "revisedHash": "9679c50eed60f59dc605f77d068658d602455ec968ba250e33fa17da0448b93f",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedGitHubCLINotInstalled/Default",
@@ -2323,7 +2329,7 @@
       "captionHash": "2aa6d4ba4464e79e63c4c8a7815d5ce02699052b2ab78c8b011e985f490eb0d9",
       "specHash": "dda590f4da4001ac1a1083f386a6c137818ec1d7520ba82d134d86dd65731ffc",
       "revisedHash": "909e5bd14520085823f8c8e1ff7a444c7a106b7ebc0e4a881acddc233a9973fc",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedGitHubNotAnswering/Default",
@@ -2331,7 +2337,7 @@
       "captionHash": "117df079a719149144ea727b8ea4fe7409844d18eb41e298dc02bc989a8ef598",
       "specHash": "763722eb252a8c6508b4c3dc381be2976dcfe0bddd6abfca8d07b0c742baf00c",
       "revisedHash": "ca19ad07e76884f7517b95fc1ee2ddb802376faa8fba6bded9e1e7d9192185c2",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedShareWhatLeavesThenWhere/Default",
@@ -2339,7 +2345,7 @@
       "captionHash": "e2e026f0f02b1b410787a813d30d4c4a0aaa20b9395f9c35b343d64435a778ed",
       "specHash": "7c8a02846cde8fff5bea3a4357abd7e213126875c4bb15d074c4548ebe4dcf8f",
       "revisedHash": "4db76e52fcd8651fd63786349126026f4fc5b1a152ff59b083a184351667024a",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/shipped/ShippedTheCardItMakes1200WideShownAtHalf/Default",
@@ -2419,7 +2425,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "a83bb147e6ace6dcb804bf2f6320891174b3902336a55c41965a3846bda8e8ec",
       "revisedHash": "81674ad424c1c6a85757a584364ed4e0b454486e714f0f6be38103cdebcdf85c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/simulator/SimulatorNarrow300TheDeviceScales/Default",
@@ -2427,7 +2433,7 @@
       "captionHash": "0314da8efdf6909af765e74981b09f1579f41a6e896d468337c548fc7b246f7e",
       "specHash": "eff37dcb00a0ab4f520437ea6d20c23ab8bc8b68722d051f53a800cf4bd143cf",
       "revisedHash": "ea89b3cc4601d0a718b26f96524a35879fa1ba1fdd7d269b38b871cdf4369d64",
-      "revision": "Visual match"
+      "revision": "Section title token"
     },
     {
       "id": "panels/simulator/SimulatorNotesOnTheScreenTakesPointsNotTouches/Default",
@@ -2565,7 +2571,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "0e806a9592a7a3cc86b7cd146080916a50312412a977086c7aaf39bf40d22ede",
       "revisedHash": "42dbd7132918c3b63440fb9167204eeb69e43e34979f3d63c4d19007655f383e",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/skeleton/SkeletonEmpty/Default",
@@ -2597,7 +2603,7 @@
       "captionHash": "101689c861507071fc01a1ee8403297b08663907392132158ffc89cfde761631",
       "specHash": "52d533bccb4b9330f79c5bddfbf76942a4daeca9fb6783dda2ddccc21cc030e9",
       "revisedHash": "cf41be924a5e7d4afd24c050bf8d7cebf92b6cfce65734974437d868236f966f",
-      "revision": "Visual match"
+      "revision": "Section title token"
     },
     {
       "id": "panels/spend/SpendWellUsedTheMonthPerPlanThenToday/Default",
@@ -2661,7 +2667,7 @@
       "captionHash": "74b8456969b4cf5836f68db74e4c9baf760a2ee60f6a8d911f356f58901a8a1c",
       "specHash": "27678d2dd6334ea1d2fad0fca5588d08dce9f3128f97e41143351b8dc3190dbd",
       "revisedHash": "75545f94ec90abe329fced8f6cad527aed40ea83cda56c4f1929e979ed7e97ff",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/spend/SpendEmptyNothingThisMonth/Default",
@@ -2709,7 +2715,7 @@
       "captionHash": "32f82dcb23cd04d3bffcd3e1746867fae5f96fba73cd0df7b3bc6689774a2d75",
       "specHash": "6a17f862257ecc8a6a0906ad9eaa1292708365f441242ddbce222d2300c355b7",
       "revisedHash": "1645ac20fbc466f2e6445f87c33cbac9a6e09b7ec29eec96a1fa3e5a2a6dbbd3",
-      "revision": "Visual match"
+      "revision": "Section title token"
     },
     {
       "id": "panels/spend/SpendAtRestNow/Default",
@@ -2741,7 +2747,7 @@
       "captionHash": "56030fdaebec3135d0ba10443feb4e2424090cf6bf084eb5b41d44ebc9b7368e",
       "specHash": "878f0622b2c2457ce3a37336b296752730f007926e25c12868ad1cc34dde3f40",
       "revisedHash": "8b3e66901351743a36ca11e1347565c2325dd24a78ee715ad6767a7686337ef6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesAtRestBefore/Default",
@@ -2749,7 +2755,7 @@
       "captionHash": "6755ba668664ac58781dea7bf6e8ce71eaf03ca61788cebaa9be6679b7b7d970",
       "specHash": "77f923cead2353c58d486da5cf59224a77ca23cd82fa3e46be5f7b85f1d325f8",
       "revisedHash": "945e72bc249393d00d69f0e05f1300fa57d04f898b86a4d45f9de321854c4dd2",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesAtRestNow/Default",
@@ -2757,7 +2763,7 @@
       "captionHash": "5b2a124ad7482cab9806979d3da3fd09e0e237194af844f8c0ee78cea86bb629",
       "specHash": "81ed54b89d96c6ec962ccf41ed0bff0ac8e125bec92266201fbf9ac02dd6bdb2",
       "revisedHash": "50a40db4687dc34b9f2637a96424041bd90d1a8cf9d5ac4fc23e7f48306ee01e",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesOnThePointer/Default",
@@ -2765,7 +2771,7 @@
       "captionHash": "1c4c15cae39c9a2b0a8d8f093122720694669fc438e6fdd0824b9660b15676fc",
       "specHash": "a2f549655e6fc6de535bd01dd220f32946e146197d1c3695fe40d1b48f1a7868",
       "revisedHash": "46554004ceb26c4c385e1e4ff1c6aa97ce3e6a2546544b49f0eac14969857987",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesAtRestNowLight/Default",
@@ -2773,7 +2779,7 @@
       "captionHash": "ae5590d5a700318808fa35a24da5fa0cab1bbb1aa8c31ae580b2cdccb9726fce",
       "specHash": "fa0e38326a57a3480c5ca4d38d6bdec43265038557154c3f1ef46c85234da9d2",
       "revisedHash": "50a40db4687dc34b9f2637a96424041bd90d1a8cf9d5ac4fc23e7f48306ee01e",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesAtRest/Default",
@@ -2781,7 +2787,7 @@
       "captionHash": "8b651c85fce142a95af80a54558f02f06c930cb6f168b893ad1300e450d5b712",
       "specHash": "62790ec86454e8249cc1782a53e159e8ee91d1c70ef4d5a3f82c9968a948cd66",
       "revisedHash": "d97a60f126b2c501055ab34444d3291cdfb9d8cd313cb2535fff0dd75b130925",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesARowPickedRemoveArmed/Default",
@@ -2789,7 +2795,7 @@
       "captionHash": "7303185d2b00783293fe044a2755e0f9ea6fdaa42cdcee3f674c549efeb72887",
       "specHash": "dc2d44724bc596c72af9185c12ecc60abb4a574db99ca39bf46ea6c44d60dce2",
       "revisedHash": "cbaa8089409a33ee307f2376cce3c002fdeca02b2dabd575cdaa00ef4a2640fb",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesInATabGoToItInstead/Default",
@@ -2797,7 +2803,7 @@
       "captionHash": "4f7eceec70ae677c47edcf864fbe6cf998aa0789fa05ef88ef7961e99bf94f89",
       "specHash": "96cc637814f1a32eb89f0cfdc0a4de9b0ece5022684493ad9fd72fd043e2449a",
       "revisedHash": "92c0af44b634a3d7444f68ac574a73f4b36e1f62abd1a79f8be01e49710a64b6",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesCleanUpArmed/Default",
@@ -2805,7 +2811,7 @@
       "captionHash": "e068f26688b9ee9e3cebe6031b8e94520765e483830992361d2e733ee7309d98",
       "specHash": "48d14d6172295259d1a4617e274ddb93b304ddebb45fbc35cfeb94385ca86052",
       "revisedHash": "dc8d55dd34dc035d4db54b19b886ccf7a1fdaca60d90307ad52d8d0b613e3013",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesItsRepositoryMovedRepair/Default",
@@ -2813,7 +2819,7 @@
       "captionHash": "7c9edc2dab81406db21e1498bbe4ec0866b339425954a6f1879c175b85768df2",
       "specHash": "2d5e45c79b421394f16071003526b45142bc0e9c12e6f47a4510b6f65ec0a1ca",
       "revisedHash": "b66b125e6163aecae4273404107191c00ccb679e26fdff5d69d26dbf1874dcef",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesLight/Default",
@@ -2821,7 +2827,7 @@
       "captionHash": "4c48d1a58c24388966af677815641effdebb0f3e93bd968cdf24244910905c96",
       "specHash": "7273ab9db88e8ef92aa7583a7851188dfac6ceb2ca94cb1ce33d790a6a0386a5",
       "revisedHash": "d97a60f126b2c501055ab34444d3291cdfb9d8cd313cb2535fff0dd75b130925",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesFirstScan/Default",
@@ -2829,7 +2835,7 @@
       "captionHash": "fb7ede6573e14f5e010de1b7d3a13246a8f472304e26ec552164819a00987799",
       "specHash": "5c51d692e792b56bfb411439cd33fba9ec6fba01fc70fb2a1ff144da52af0a8c",
       "revisedHash": "c8d634703e86ec88ec9e35573e1dd8561011991ba6a6b9d01399d425d1a1e087",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesCheckingAgainTheLastScanKept/Default",
@@ -2837,7 +2843,7 @@
       "captionHash": "56d11013ba3ad0b26c0e02808cebf636c3669465b8f409bc3c9728680fc8d967",
       "specHash": "426a64547edf15b55e8267a01a9831f44bfeb82582851f985b02ad9092f7dda2",
       "revisedHash": "c4db9f227e97db826348fecfac60129529b672ae1497468278047337dfbc0c0d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesNone/Default",
@@ -2845,7 +2851,7 @@
       "captionHash": "903ea500e7ccf842c1312b6c2f964e3e98ff146456cecec717e9a0e122bf735f",
       "specHash": "a976e32384b0bb4c7df3965b6e958084044e305aacec53be0edb7fa4a6f9cf5e",
       "revisedHash": "462d56ead6a85588645b8fb18b24fee38a02591c78b7ed51176ae2a66947351c",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesTheScanFailed/Default",
@@ -2853,7 +2859,7 @@
       "captionHash": "5c587160ad23d33f414496fb9b8053d9faf015e879e1866b7a0e9e55aed76cb4",
       "specHash": "fe6232aab439eadffacbac54cbbc2e509c6456f32fcaa898ef98e32a8797a57c",
       "revisedHash": "8a7d8cb03a85cf96d542e9d624fe4536a319c593068385f7076612b3a3ccbed2",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesARemovalRefused/Default",
@@ -2861,7 +2867,7 @@
       "captionHash": "489cbf8c05fa49b00cc17207ea48004b4cc937f2b0e7d691fa1ed815cd81dafb",
       "specHash": "e51b70977d1543cfdaf47d0e970f25ad184e85b1e2918a15922e925f54ccb431",
       "revisedHash": "182dce5183f9e458ad3ea006ae56c3b09f8eb4e95b4a91b11f66ba1f55bd878d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesOnAnotherComputerThenUnreachable/Default",
@@ -2869,7 +2875,7 @@
       "captionHash": "b054537589dc7327ac24a2681efa0205f7a8d84c79cc233039322d080bc41d77",
       "specHash": "fdbf7cb86033eb422d2eaba098583718bd86ed2971d3eef331c7a8804cf7061a",
       "revisedHash": "58b14c34750f5fbfabc833dfc31c9f3d99fb64e4a6a239d0fd1577c2d63d0a3b",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesNewWorktreeFromHereOrOnTheProjectRow/Default",
@@ -2909,7 +2915,7 @@
       "captionHash": "c2f44d4ded6e7b6bb1abd680838498a895da3dbba803c4f3b38b1bc9bbeb8d0f",
       "specHash": "22f9f3adab8f471a2a61983441115abbc35767b03300edea56fb5c66ee0b7b63",
       "revisedHash": "90c0729df002226b8c5a81289b501d47d674baa2d58946d805d9e5c6674562d2",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesNothingLostTheLineSaysSo/Default",
@@ -2917,7 +2923,7 @@
       "captionHash": "49d331347d4b6fe81d6a78c8a49aa91fcbc152a749c9748131a9566003c0adb9",
       "specHash": "b82507fcd719e2c115ea8f0826dad5b9a706c61916cb9dede119eef4b50f16a1",
       "revisedHash": "610d0311b620ce02ab9c4f4a753690da4610aa1d78110f88cde40580f3b4fb2d",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesMoreThanEightRepositories/Default",
@@ -2925,7 +2931,7 @@
       "captionHash": "a047f91b8915ddc75a1878f43ac704ccc8e451452f866a30e81a8e4eed73bdc9",
       "specHash": "00032f687661afc6b832f9c208ae1bed7b575dd929285f1d1156242cb12416e7",
       "revisedHash": "93b3bf7dc467f476fd085d482b14941d022801df59526088a3e64cd2f54472ad",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "panels/worktrees/WorktreesNarrow300/Default",
@@ -2933,7 +2939,7 @@
       "captionHash": "32f82dcb23cd04d3bffcd3e1746867fae5f96fba73cd0df7b3bc6689774a2d75",
       "specHash": "199cbd9947c3f40a6d7b8e73f113f5600db4878f0eaa52d78379834384a0805a",
       "revisedHash": "98ff7696d706e73b0ea060b7d3f5b25ba43f68c1a01c92eb5b9a46a8869912ae",
-      "revision": "Visual match"
+      "revision": "Single panel frame"
     },
     {
       "id": "coverage/arrange/Arrangements/Saved",

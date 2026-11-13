@@ -5,21 +5,21 @@ export function kitRecords(records) {
   const originals = records.filter((record) => record.html !== undefined && !['kit', 'tokens'].includes(record.source));
   const results = [];
   const add = (name, label, html, caption) => results.push({ id: `kit/${name}/${label}`, source: 'kit', page: `Primitives/${name}`, label, html: frame(html), caption });
-  const first = (className) => [...originals.filter((record) => record.id.includes('compositions-controls/')), ...originals].flatMap((record) => elements(record.html, className))[0];
+  const first = (className, prefer = 'compositions-controls/') => [...originals.filter((record) => record.id.includes(prefer)), ...originals].flatMap((record) => elements(record.html, className))[0];
   const definitions = [
     ['Button', 'kanso-button', ['Default', 'Hover', 'Focus', 'Active', 'Disabled', 'Dimmed']],
     ['Field', 'kanso-field', ['Default', 'Hover', 'Focus', 'Disabled', 'Failure']],
     ['Segmented', 'kanso-segmented', ['Default', 'Hover', 'Focus', 'Disabled']],
     ['Switch', 'kanso-switch', ['Default', 'On', 'Hover', 'Focus', 'Active', 'Disabled']],
     ['Mark', 'kanso-mark', ['Default']], ['Chip', 'kanso-badge', ['Default']], ['Avatar', 'kanso-avatar--round', ['Default']],
-    ['Row', 'kanso-row', ['Default', 'Hover', 'Focus', 'Active', 'Dimmed']],
+    ['Row', 'kanso-row', ['Default', 'Hover', 'Focus', 'Active', 'Dimmed'], 'compositions-panel-pieces/SectionAndRows/'],
     ['Tab', 'kanso-tab', ['Default', 'Hover', 'Focus', 'Active', 'Disabled']],
     ['Menu', 'kanso-menu', ['Default']], ['Dialog', 'kanso-dialog', ['Default']],
-    ['Skeleton', 'kanso-skeleton', ['Loading']], ['Drag handle', 'kanso-header__grip', ['Default']], ['Key hint', 'kanso-key', ['Default']],
+    ['Skeleton', 'kanso-skeleton__list', ['Loading'], 'panels/files/FilesFirstRead/'], ['Drag handle', 'kanso-header__grip', ['Default']], ['Key hint', 'kanso-key', ['Default']],
   ];
   const modifiers = { Hover: 'kanso-control--hover', Focus: 'kanso-control--focus', Active: 'kanso-control--active', Disabled: 'kanso-control--off', Dimmed: 'kanso-control--dim', Failure: 'kanso-field--invalid', On: 'kanso-control--on' };
-  for (const [name, className, states] of definitions) {
-    const source = first(className);
+  for (const [name, className, states, prefer] of definitions) {
+    const source = first(className, prefer);
     if (!source) continue;
     for (const label of states) {
       const modifier = modifiers[label];
@@ -35,7 +35,10 @@ export function kitRecords(records) {
   if (armed) add('Button', 'Armed', armed, 'A second press within four seconds confirms an irreversible action.');
   const button = first('kanso-button'), working = first('kanso-mark--working');
   if (button && working) add('Button', 'Loading', button.replace(/>[\s\S]*<\/([a-z]+)>$/, ` aria-busy="true">${working}Working…</$1>`), 'The action is waiting for its result.');
-  const sidebar = first('kanso-sidebar');
+  const asleep = first('kanso-project', 'compositions-sidebar-rows/Asleep/');
+  const machines = '<div class="kanso-sidebar__row-group"><div class="kanso-sidebar__row kanso-row--machine"';
+  const open = first('kanso-sidebar'), at = open?.lastIndexOf(machines) ?? -1;
+  const sidebar = asleep && at > 0 ? `${open.slice(0, at)}<div class="kanso-sidebar__row-group">${asleep}</div>${open.slice(at)}` : open;
   const rail = first('kanso-rail');
   const headerRecord = originals.find((record) => record.id.includes('layouts-sidebar-header-three-ways/'));
   const headers = headerRecord ? elements(headerRecord.html, 'kanso-sidebar--header-preview') : [];

@@ -32,7 +32,7 @@
   ".kanso-agent__meta .kanso-agent__project",
   ".kanso-agent.kanso-row--blocked .kanso-agent__name",
   ".kanso-agent.kanso-row--blocked .kanso-agent__meta",
-  ".kanso-agent.kanso-control--focus .kanso-agent__name",
+  ".kanso-agent.kanso-row--current .kanso-agent__name",
   ".kanso-agent.kanso-agent--idle .kanso-agent__name",
   ".kanso-agent__time",
   ".kanso-machine .kanso-machine__name",
@@ -193,9 +193,6 @@
   ".kanso-pane__drop-zone",
   ".kanso-pane--focus",
   ".kanso-tab-bar__tools",
-  ".kanso-story__bars-anchor",
-  ".kanso-tooltip__anchor",
-  ".kanso-tooltip__anchor .kanso-tooltip",
   ".kanso-pane-strip .kanso-pane .kanso-header",
   ".kanso-edge.kanso-edge--target",
   ".kanso-minimap__tile.kanso-row--hover",
@@ -465,6 +462,5 @@
   ".kanso-story__frame .kanso-tokens .kanso-story__layout-row",
   ".kanso-control--ring",
   ".kanso-header--rest .kanso-state-line",
-  ".kanso-control--dim :is(.kanso-row__name,.kanso-row__task,.kanso-row__meta)",
   ".kanso-tab-bar__button.kanso-control--on"
 ]
