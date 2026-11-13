@@ -534,8 +534,8 @@ export default class Spaces extends View {
     return this.needsQueue;
   }
 
-  jumpNeeds(row, cx) {
-    const live = this.refreshNeeds().rows.find((a) => a.address === row.address && a.pane === row.pane);
+  jumpNeeds(row, cx, rows = this.refreshNeeds().rows) {
+    const live = rows.find((a) => a.address === row.address && a.pane === row.pane);
     if (!live) return;
     this.needsCursor = live;
     this.leaveList(cx, false);
@@ -543,8 +543,10 @@ export default class Spaces extends View {
   }
 
   nextNeeds(cx) {
-    const row = nextWaiting(this.refreshNeeds().rows, this.needsCursor);
-    if (row) { this.jumpNeeds(row, cx); return; }
+    const terms = terminals(), asleep = this.sleepingNow(spaces(), terms);
+    const rows = waitingQueue(agents(), terms, asleep.dozing, this.refreshNeeds().rows, Date.now(), ["blocked", "done"]);
+    const row = nextWaiting(rows, this.needsCursor);
+    if (row) { this.jumpNeeds(row, cx, rows); return; }
     this.needsCursor = null;
     this.needsEmpty = true;
     const at = (this.needsEmptyAt ?? 0) + 1;
