@@ -1,0 +1,30 @@
+import stories from './worktrees.json';
+import { story } from '../proto/story.js';
+
+export default { title: "Panels/Worktrees" };
+
+export const WorktreesAtRestComparison = { name: "Worktrees, At rest, comparison", ...story(stories.WorktreesAtRestComparison) };
+export const WorktreesAtRestBefore = { name: "Worktrees, At rest, Before", ...story(stories.WorktreesAtRestBefore) };
+export const WorktreesAtRestNow = { name: "Worktrees, At rest, Now", ...story(stories.WorktreesAtRestNow) };
+export const WorktreesOnThePointer = { name: "Worktrees, On the pointer", ...story(stories.WorktreesOnThePointer) };
+export const WorktreesAtRestNowLight = { name: "Worktrees, At rest, Now, light", ...story(stories.WorktreesAtRestNowLight) };
+export const WorktreesAtRest = { name: "Worktrees, At rest", ...story(stories.WorktreesAtRest) };
+export const WorktreesARowPickedRemoveArmed = { name: "Worktrees, A row picked, Remove armed", ...story(stories.WorktreesARowPickedRemoveArmed) };
+export const WorktreesInATabGoToItInstead = { name: "Worktrees, In a tab: go to it instead", ...story(stories.WorktreesInATabGoToItInstead) };
+export const WorktreesCleanUpArmed = { name: "Worktrees, Clean up armed", ...story(stories.WorktreesCleanUpArmed) };
+export const WorktreesItsRepositoryMovedRepair = { name: "Worktrees, Its repository moved: repair", ...story(stories.WorktreesItsRepositoryMovedRepair) };
+export const WorktreesLight = { name: "Worktrees, Light", ...story(stories.WorktreesLight) };
+export const WorktreesFirstScan = { name: "Worktrees, First scan", ...story(stories.WorktreesFirstScan) };
+export const WorktreesCheckingAgainTheLastScanKept = { name: "Worktrees, Checking again, the last scan kept", ...story(stories.WorktreesCheckingAgainTheLastScanKept) };
+export const WorktreesNone = { name: "Worktrees, None", ...story(stories.WorktreesNone) };
+export const WorktreesTheScanFailed = { name: "Worktrees, The scan failed", ...story(stories.WorktreesTheScanFailed) };
+export const WorktreesARemovalRefused = { name: "Worktrees, A removal refused", ...story(stories.WorktreesARemovalRefused) };
+export const WorktreesOnAnotherComputerThenUnreachable = { name: "Worktrees, On another computer, then unreachable", ...story(stories.WorktreesOnAnotherComputerThenUnreachable) };
+export const WorktreesNewWorktreeFromHereOrOnTheProjectRow = { name: "Worktrees, New worktree, from + here or on the project row", ...story(stories.WorktreesNewWorktreeFromHereOrOnTheProjectRow) };
+export const WorktreesRefusedInGitsWords = { name: "Worktrees, Refused, in git's words", ...story(stories.WorktreesRefusedInGitsWords) };
+export const WorktreesCreatingOnDevbox = { name: "Worktrees, Creating, on devbox", ...story(stories.WorktreesCreatingOnDevbox) };
+export const WorktreesLight2 = { name: "Worktrees, Light, alternate 2", ...story(stories.WorktreesLight2) };
+export const WorktreesRemoveAllInAGroupArmed = { name: "Worktrees, Remove all in a group, armed", ...story(stories.WorktreesRemoveAllInAGroupArmed) };
+export const WorktreesNothingLostTheLineSaysSo = { name: "Worktrees, Nothing lost: the line says so", ...story(stories.WorktreesNothingLostTheLineSaysSo) };
+export const WorktreesMoreThanEightRepositories = { name: "Worktrees, More than eight repositories", ...story(stories.WorktreesMoreThanEightRepositories) };
+export const WorktreesNarrow300 = { name: "Worktrees, Narrow, 300", ...story(stories.WorktreesNarrow300) };

@@ -1,0 +1,218 @@
+{
+ "SkeletonHeaderScopePeriodTheNumber": {
+  "name": "Skeleton, Header, scope, period, the number",
+  "caption": "Header, scope, period, the number.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Spend</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-share\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-settings\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer and devbox · synced 14:02</div>\n              <div class=\"kanso-panel__metric-controls\"><span class=\"kanso-segmented\"><span class=\"kanso-control--on\">Today</span><span>Month</span><span>30 days</span><span>Year</span><span>All</span></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon kanso-icon--row\"><use href=\"#lu-chevron-left\"/></svg></span><span class=\"kanso-button--icon\" style=\"color:var(--input)\"><svg class=\"kanso-icon kanso-icon--row\"><use href=\"#lu-chevron-right\"/></svg></span></div>\n              <div class=\"kanso-panel__metric-hero\"><span class=\"kanso-metric__value\">$41.20</span><span class=\"kanso-metric__unit\">API value</span></div>\n              <div class=\"kanso-panel__facts\"><span>14 tasks</span><span>$2.94 a task</span><span>9.1M tokens</span></div>\n              <div class=\"kanso-section\"><span class=\"kanso-segmented\"><span class=\"kanso-control--on\">Projects</span><span>Models</span></span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><span class=\"kanso-avatar--round\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">A</span><span class=\"kanso-text--truncate\">acme-shop</span><span class=\"kanso-panel__row-value\">$28.40</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">6.2M tokens</div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><span class=\"kanso-avatar--round\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">D</span><span class=\"kanso-text--truncate\">docs-site</span><span class=\"kanso-panel__row-value\">$9.10</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">2.1M tokens</div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><span class=\"kanso-avatar--round\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">R</span><span class=\"kanso-text--truncate\">relay</span><span class=\"kanso-panel__row-value\">$3.70</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">0.8M tokens</div></div>\n              <div class=\"kanso-button--quiet\" style=\"margin-top:var(--k-sp-2)\">Show 4 more</div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Spend</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-share\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-settings\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer and devbox · synced 14:02</div>\n              <div class=\"kanso-panel__metric-controls\"><span class=\"kanso-segmented\"><span class=\"kanso-control--on\">Today</span><span>Month</span><span>30 days</span><span>Year</span><span>All</span></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon kanso-icon--row\"><use href=\"#lu-chevron-left\"/></svg></span><span class=\"kanso-button--icon\" style=\"color:var(--input)\"><svg class=\"kanso-icon kanso-icon--row\"><use href=\"#lu-chevron-right\"/></svg></span></div>\n              <div class=\"kanso-panel__metric-hero\"><span class=\"kanso-metric__value\">$41.20</span><span class=\"kanso-metric__unit\">API value</span></div>\n              <div class=\"kanso-panel__facts\"><span>14 tasks</span><span>$2.94 a task</span><span>9.1M tokens</span></div>\n              <div class=\"kanso-section\"><span class=\"kanso-segmented\"><span class=\"kanso-control--on\">Projects</span><span>Models</span></span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><span class=\"kanso-avatar--round\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">A</span><span class=\"kanso-text--truncate\">acme-shop</span><span class=\"kanso-panel__row-value\">$28.40</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">6.2M tokens</div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><span class=\"kanso-avatar--round\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">D</span><span class=\"kanso-text--truncate\">docs-site</span><span class=\"kanso-panel__row-value\">$9.10</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">2.1M tokens</div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><span class=\"kanso-avatar--round\" style=\"width:16px;height:16px;font-size:var(--k-fs-meta)\">R</span><span class=\"kanso-text--truncate\">relay</span><span class=\"kanso-panel__row-value\">$3.70</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">0.8M tokens</div></div>\n              <div class=\"kanso-button--quiet\" style=\"margin-top:var(--k-sp-2)\">Show 4 more</div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Header, scope, period, the number"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Header, scope, period, the number"
+   ],
+   [
+    "Behaviour",
+    "Period: the kit segmented control, natural width, with the stepper (two icon buttons) at its right; a past period adds Now at the number's right. Spend, Shipped and every History range use it; no text tabs. Under 340 the stepper moves to the number's line."
+   ],
+   [
+    "Principle",
+    "Fukinsei"
+   ]
+  ]
+ },
+ "SkeletonSectionsAndTheOneRowRestHoverSelectedArmed": {
+  "name": "Skeleton, Sections and the one row: rest, hover, selected, armed",
+  "caption": "Sections and the one row: rest, hover, selected, armed.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Worktrees</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-plus\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-section\">acme-shop<span class=\"kanso-row__name\">1.6 GB</span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--working kanso-mark--small\"><use href=\"#e-work\"/></svg><span class=\"kanso-text--truncate\">acme-shop-cart</span><span class=\"kanso-panel__row-value\">310 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--working\">In a tab: cart-ui</span>· today</div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">rate-limit-v1</span><span class=\"kanso-panel__row-value\">412 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--done\">Merged</span>· 3 d</div></div>\n              <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--blocked kanso-mark--small\"><use href=\"#e-blk\"/></svg><span class=\"kanso-text--truncate\">promo-banner</span><span class=\"kanso-panel__row-value\">380 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--blocked\">2 uncommitted changes</span>· 6 d</div><div class=\"kanso-content__actions kanso-panel__row--indented\"><span class=\"kanso-button--quiet kanso-text--foreground\">Open in a new tab</span><span class=\"kanso-button--quiet\">Explain it</span><span class=\"kanso-button--quiet kanso-action kanso-action--armed\"><span>Remove</span><span>Press again to remove</span></span></div></div>\n              <div class=\"kanso-section\">relay<span class=\"kanso-button--quiet\">Clean up 1</span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">relay-hotfix</span><span class=\"kanso-panel__row-value\">120 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--done\">Merged</span>· 9 d</div></div>\n              <div class=\"kanso-section--collapsible\"><svg class=\"kanso-icon kanso-icon--inline\"><use href=\"#lu-chevron-right\"/></svg>Freed<span class=\"kanso-row__detail\">12.4 GB across 31 worktrees</span></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Worktrees</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-plus\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-section\">acme-shop<span class=\"kanso-row__name\">1.6 GB</span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--working kanso-mark--small\"><use href=\"#e-work\"/></svg><span class=\"kanso-text--truncate\">acme-shop-cart</span><span class=\"kanso-panel__row-value\">310 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--working\">In a tab: cart-ui</span>· today</div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">rate-limit-v1</span><span class=\"kanso-panel__row-value\">412 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--done\">Merged</span>· 3 d</div></div>\n              <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--blocked kanso-mark--small\"><use href=\"#e-blk\"/></svg><span class=\"kanso-text--truncate\">promo-banner</span><span class=\"kanso-panel__row-value\">380 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--blocked\">2 uncommitted changes</span>· 6 d</div><div class=\"kanso-content__actions kanso-panel__row--indented\"><span class=\"kanso-button--quiet kanso-text--foreground\">Open in a new tab</span><span class=\"kanso-button--quiet\">Explain it</span><span class=\"kanso-button--quiet kanso-action kanso-action--armed\"><span>Remove</span><span>Press again to remove</span></span></div></div>\n              <div class=\"kanso-section\">relay<span class=\"kanso-button--quiet\">Clean up 1</span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">relay-hotfix</span><span class=\"kanso-panel__row-value\">120 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--done\">Merged</span>· 9 d</div></div>\n              <div class=\"kanso-section--collapsible\"><svg class=\"kanso-icon kanso-icon--inline\"><use href=\"#lu-chevron-right\"/></svg>Freed<span class=\"kanso-row__detail\">12.4 GB across 31 worktrees</span></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Sections and the one row: rest, hover, selected, armed"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Sections and the one row: rest, hover, selected, armed"
+   ],
+   [
+    "Behaviour",
+    "The one row: name 12.5 (truncates), the value at the right 12.5 tabular in foreground (a state colour when the value is a state), meta under the name in 11.5 dim. An optional mark goes first (a 6 dot, a program icon, an ensō, a project square) and the meta lines up under the name. Without meta it is the 32 one-line form. Rest; hover = 7% wash; selected = selected fill, and only then its actions line: at most one primary, the rest quiet, a removal arms \"Press again\" in accent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "SkeletonWithAMarkAndTheOneLineForm": {
+  "name": "Skeleton, With a mark, and the one-line form",
+  "caption": "With a mark, and the one-line form.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Memory</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-share\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-metric\"><span class=\"kanso-metric__value\">31%</span><span class=\"kanso-metric__unit\">free of 16 GB · 2.4 GB swap</span></div>\n              <div class=\"kanso-section\">Herdr</div>\n              <div class=\"kanso-row\">Window<span class=\"kanso-panel__row-value\">1.1 GB</span></div>\n              <div class=\"kanso-row\">2 hung helpers<span class=\"kanso-panel__row-value\">60 MB</span><span class=\"kanso-button--quiet\" style=\"margin-left:var(--k-sp-4)\">End</span></div>\n              <div class=\"kanso-section\">Agents<span class=\"kanso-button--quiet\">Recycle 2 idle · 1.7 GB</span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg><span class=\"kanso-text--truncate\">checkout</span><span class=\"kanso-panel__row-value\">1.2 GB</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\"><svg class=\"kanso-mark kanso-mark--working kanso-mark--small\"><use href=\"#e-work\"/></svg>working · up 3 d</div></div>\n              <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-icon--program\"><use href=\"#p-codex\"/></svg><span class=\"kanso-text--truncate\">docs</span><span class=\"kanso-panel__row-value kanso-text--working\">980 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">idle 3 h · up 2 d</div><div class=\"kanso-content__actions kanso-panel__row--deep\"><span class=\"kanso-button--quiet kanso-text--foreground\">Recycle</span><span class=\"kanso-button--quiet\">Close</span></div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg><span class=\"kanso-text--truncate\">cart-ui</span><span class=\"kanso-panel__row-value\">760 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\"><svg class=\"kanso-mark kanso-mark--blocked kanso-mark--small\"><use href=\"#e-blk\"/></svg>needs you · left as it is</div></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Memory</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-share\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-metric\"><span class=\"kanso-metric__value\">31%</span><span class=\"kanso-metric__unit\">free of 16 GB · 2.4 GB swap</span></div>\n              <div class=\"kanso-section\">Herdr</div>\n              <div class=\"kanso-row\">Window<span class=\"kanso-panel__row-value\">1.1 GB</span></div>\n              <div class=\"kanso-row\">2 hung helpers<span class=\"kanso-panel__row-value\">60 MB</span><span class=\"kanso-button--quiet\" style=\"margin-left:var(--k-sp-4)\">End</span></div>\n              <div class=\"kanso-section\">Agents<span class=\"kanso-button--quiet\">Recycle 2 idle · 1.7 GB</span></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg><span class=\"kanso-text--truncate\">checkout</span><span class=\"kanso-panel__row-value\">1.2 GB</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\"><svg class=\"kanso-mark kanso-mark--working kanso-mark--small\"><use href=\"#e-work\"/></svg>working · up 3 d</div></div>\n              <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-icon--program\"><use href=\"#p-codex\"/></svg><span class=\"kanso-text--truncate\">docs</span><span class=\"kanso-panel__row-value kanso-text--working\">980 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\">idle 3 h · up 2 d</div><div class=\"kanso-content__actions kanso-panel__row--deep\"><span class=\"kanso-button--quiet kanso-text--foreground\">Recycle</span><span class=\"kanso-button--quiet\">Close</span></div></div>\n              <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg><span class=\"kanso-text--truncate\">cart-ui</span><span class=\"kanso-panel__row-value\">760 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--deep\"><svg class=\"kanso-mark kanso-mark--blocked kanso-mark--small\"><use href=\"#e-blk\"/></svg>needs you · left as it is</div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: With a mark, and the one-line form"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "With a mark, and the one-line form"
+   ],
+   [
+    "Behaviour",
+    "The one row: name 12.5 (truncates), the value at the right 12.5 tabular in foreground (a state colour when the value is a state), meta under the name in 11.5 dim. An optional mark goes first (a 6 dot, a program icon, an ensō, a project square) and the meta lines up under the name. Without meta it is the 32 one-line form. Rest; hover = 7% wash; selected = selected fill, and only then its actions line: at most one primary, the rest quiet, a removal arms \"Press again\" in accent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ },
+ "SkeletonFirstRead": {
+  "name": "Skeleton, First read",
+  "caption": "First read.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Worktrees</span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"kanso-panel__scope\">This computer</div><div class=\"kanso-panel__skeleton\"><div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:130px;height:var(--k-sp-2)\"></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"kanso-content__secondary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:90px;height:var(--k-sp-2)\"></span></div></div><div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:100px;height:var(--k-sp-2)\"></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"kanso-content__secondary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:120px;height:var(--k-sp-2)\"></span></div></div><div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:150px;height:var(--k-sp-2)\"></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"kanso-content__secondary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:80px;height:var(--k-sp-2)\"></span></div></div></div></div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\"><div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Worktrees</span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div><div class=\"kanso-panel__scope\">This computer</div><div class=\"kanso-panel__skeleton\"><div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:130px;height:var(--k-sp-2)\"></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"kanso-content__secondary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:90px;height:var(--k-sp-2)\"></span></div></div><div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:100px;height:var(--k-sp-2)\"></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"kanso-content__secondary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:120px;height:var(--k-sp-2)\"></span></div></div><div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:150px;height:var(--k-sp-2)\"></span><span class=\"kanso-layout__grow\"></span><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:40px;height:var(--k-sp-2)\"></span></div><div class=\"kanso-content__secondary\"><span class=\"kanso-skeleton kanso-skeleton--breathing\" style=\"width:80px;height:var(--k-sp-2)\"></span></div></div></div></div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: First read"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "First read"
+   ],
+   [
+    "Behaviour",
+    "First read: the kit skeleton shaped like the rows it will hold. Empty: one muted line. Error: the tool's words in blocked, with Refresh."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "SkeletonEmpty": {
+  "name": "Skeleton, Empty",
+  "caption": "Empty.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Ports</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-state-empty\"><svg class=\"kanso-icon\"><use href=\"#lu-plug\"/></svg><div class=\"kanso-content__text\">No servers listening</div></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Ports</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-state-empty\"><svg class=\"kanso-icon\"><use href=\"#lu-plug\"/></svg><div class=\"kanso-content__text\">No servers listening</div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Empty"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Empty"
+   ],
+   [
+    "Behaviour",
+    "First read: the kit skeleton shaped like the rows it will hold. Empty: one muted line. Error: the tool's words in blocked, with Refresh."
+   ],
+   [
+    "Principle",
+    "Kokō"
+   ]
+  ]
+ },
+ "SkeletonAReadFailedWhereTheListWouldStart": {
+  "name": "Skeleton, A read failed: where the list would start",
+  "caption": "A read failed: where the list would start.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Worktrees</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">devbox</div>\n              <div class=\"kanso-state-block\"><svg class=\"kanso-mark kanso-mark--blocked\"><use href=\"#e-blk\"/></svg><div class=\"kanso-state-block__what\">Can't list worktrees on devbox</div><div class=\"kanso-state-block__why\" title=\"git worktree list: timed out after 30 s\">git worktree list: timed out after 30 s</div><div class=\"kanso-state-block__actions\"><span class=\"kanso-button--tonal\">Refresh</span><span class=\"kanso-button--tonal\"><svg class=\"kanso-icon\"><use href=\"#lu-bot\"/></svg>Explain to migrate</span></div></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Worktrees</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">devbox</div>\n              <div class=\"kanso-state-block\"><svg class=\"kanso-mark kanso-mark--blocked\"><use href=\"#e-blk\"/></svg><div class=\"kanso-state-block__what\">Can't list worktrees on devbox</div><div class=\"kanso-state-block__why\" title=\"git worktree list: timed out after 30 s\">git worktree list: timed out after 30 s</div><div class=\"kanso-state-block__actions\"><span class=\"kanso-button--tonal\">Refresh</span><span class=\"kanso-button--tonal\"><svg class=\"kanso-icon\"><use href=\"#lu-bot\"/></svg>Explain to migrate</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: A read failed: where the list would start"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "A read failed: where the list would start"
+   ],
+   [
+    "Behaviour",
+    "Header 40: title 20 (15 under 340), at most two context icons, Refresh last; its tooltip says when it was read. A page inside a panel puts ‹ before its title."
+   ],
+   [
+    "Principle",
+    "Yūgen"
+   ]
+  ]
+ },
+ "SkeletonStaleAnotherComputerStoppedAnswering": {
+  "name": "Skeleton, Stale: another computer stopped answering",
+  "caption": "Stale: another computer stopped answering.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Containers</span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"kanso-panel--stale\">\n                <div class=\"kanso-section\"><span class=\"kanso-panel__state\"><span class=\"kanso-avatar--round\">R</span>relay</span></div>\n                <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">db</span><span class=\"kanso-panel__row-value\">212 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-row__command\">postgres:16</span><span>:5432</span><span>· up 3 d</span></div></div>\n                <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">queue</span><span class=\"kanso-panel__row-value\">48 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-row__command\">rabbitmq:3.13</span><span>:5672</span><span>· up 3 d</span></div><div class=\"kanso-content__actions kanso-panel__row--indented\"><span class=\"kanso-button kanso-control--off\">Stop</span></div></div>\n              </div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\">Containers</span><span class=\"kanso-button--icon kanso-button--spinning\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">Read 14:02 · devbox unreachable · next try 14:07</div>\n              <div class=\"kanso-panel--stale\">\n                <div class=\"kanso-section\"><span class=\"kanso-panel__state\"><span class=\"kanso-avatar--round\">R</span>relay</span></div>\n                <div class=\"kanso-row--two-lines\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">db</span><span class=\"kanso-panel__row-value\">212 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-row__command\">postgres:16</span><span>:5432</span><span>· up 3 d</span></div></div>\n                <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--done kanso-mark--small\"><use href=\"#e-done\"/></svg><span class=\"kanso-text--truncate\">queue</span><span class=\"kanso-panel__row-value\">48 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-row__command\">rabbitmq:3.13</span><span>:5672</span><span>· up 3 d</span></div><div class=\"kanso-content__actions kanso-panel__row--indented\"><span class=\"kanso-button kanso-control--off\">Stop</span></div></div>\n              </div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Stale: another computer stopped answering"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Stale: another computer stopped answering"
+   ],
+   [
+    "Behaviour",
+    "Scope line 11.5 dim: the project, branch or computer, or what the page is. A stale read takes its place (\"Read 14:02 · devbox unreachable · next try 14:07\") and the body drops to 55%; writes are disabled."
+   ],
+   [
+    "Principle",
+    "Seijaku"
+   ]
+  ]
+ },
+ "SkeletonNarrow300Title15MetaTruncates": {
+  "name": "Skeleton, Narrow, 300: title 15, meta truncates",
+  "caption": "Narrow, 300: title 15, meta truncates.",
+  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\" style=\"width:300px\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\" style=\"font-size:var(--k-fs-heading)\">Worktrees</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-plus\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-section\">acme-shop<span class=\"kanso-row__name\">1.6 GB</span></div>\n              <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--blocked kanso-mark--small\"><use href=\"#e-blk\"/></svg><span class=\"kanso-text--truncate\">promo-banner</span><span class=\"kanso-panel__row-value\">380 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--blocked kanso-text--truncate\">2 uncommitted changes</span>· 6 d</div><div class=\"kanso-content__actions kanso-panel__actions\"><span class=\"kanso-button--quiet kanso-text--foreground\">Open in a new tab</span><span class=\"kanso-button--quiet\">Explain it</span><span class=\"kanso-button--quiet\">Remove</span></div></div>\n            </div></div><div class=\"kanso-story__theme kanso-story__frame kanso-panel\"><div class=\"kanso-panel\" style=\"width:300px\">\n              <div class=\"kanso-panel__header\"><span class=\"kanso-panel__title\" style=\"font-size:var(--k-fs-heading)\">Worktrees</span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-plus\"/></svg></span><span class=\"kanso-button--icon\"><svg class=\"kanso-icon\"><use href=\"#lu-refresh-cw\"/></svg></span></div>\n              <div class=\"kanso-panel__scope\">This computer</div>\n              <div class=\"kanso-section\">acme-shop<span class=\"kanso-row__name\">1.6 GB</span></div>\n              <div class=\"kanso-row--two-lines kanso-row--selected\"><div class=\"kanso-content__primary\" style=\"align-items:center\"><svg class=\"kanso-mark kanso-mark--blocked kanso-mark--small\"><use href=\"#e-blk\"/></svg><span class=\"kanso-text--truncate\">promo-banner</span><span class=\"kanso-panel__row-value\">380 MB</span></div><div class=\"kanso-content__secondary kanso-panel__row--indented\"><span class=\"kanso-text--blocked kanso-text--truncate\">2 uncommitted changes</span>· 6 d</div><div class=\"kanso-content__actions kanso-panel__actions\"><span class=\"kanso-button--quiet kanso-text--foreground\">Open in a new tab</span><span class=\"kanso-button--quiet\">Explain it</span><span class=\"kanso-button--quiet\">Remove</span></div></div>\n            </div></div></div>",
+  "spec": [
+   [
+    "Anatomy",
+    "the panel as the app draws it: header, scope, body from the kit primitives\nstate: Narrow, 300: title 15, meta truncates"
+   ],
+   [
+    "Values",
+    "panel 368 wide · padding 16 · rows 32 · meta 11.5 dim\nonly kit tokens; no colour but the marks"
+   ],
+   [
+    "States",
+    "Narrow, 300: title 15, meta truncates"
+   ],
+   [
+    "Behaviour",
+    "The one row: name 12.5 (truncates), the value at the right 12.5 tabular in foreground (a state colour when the value is a state), meta under the name in 11.5 dim. An optional mark goes first (a 6 dot, a program icon, an ensō, a project square) and the meta lines up under the name. Without meta it is the 32 one-line form. Rest; hover = 7% wash; selected = selected fill, and only then its actions line: at most one primary, the rest quiet, a removal arms \"Press again\" in accent."
+   ],
+   [
+    "Principle",
+    "Kansō"
+   ]
+  ]
+ }
+}
