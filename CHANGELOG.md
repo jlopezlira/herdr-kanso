@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Fixed
 
+- Storybook keeps stale and unavailable text readable in muted ink instead of reducing its opacity.
 - Storybook shows Edge and Minimap slot as separate pieces, with the edges around an empty pane and the minimap in its own frame.
 
 - Storybook documentation and captions read on their own without prototype references; imported text strips those references on regeneration.
