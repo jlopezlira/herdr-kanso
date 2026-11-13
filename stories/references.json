@@ -7202,7 +7202,9 @@
         "coverage/arrange/SaveArrangement/Capture loading",
         "coverage/arrange/SaveArrangement/Overwrite",
         "coverage/arrange/SaveArrangement/Save",
-        "coverage/arrange/SaveArrangement/Save failed"
+        "coverage/arrange/SaveArrangement/Save failed",
+        "panels/dialog/FeatureSaveArrangement/Save header",
+        "panels/dialog/FeatureSaveArrangement/Overwrite header"
       ],
       "components": [
         "Panels/Arrangements",
@@ -7323,7 +7325,13 @@
         "coverage/chrome/UpdateNotice/Check failed",
         "coverage/chrome/UpdateNotice/Current",
         "coverage/chrome/UpdateNotice/Install failed",
-        "coverage/chrome/UpdateNotice/Installed"
+        "coverage/chrome/UpdateNotice/Installed",
+        "panels/notifications/FeatureUpdateNotice/Installed, keys updated",
+        "panels/notifications/FeatureUpdateNotice/Installed, kept your keys",
+        "panels/notifications/FeatureUpdateNotice/Installed, keys.json unreadable",
+        "panels/notifications/FeatureUpdateNotice/Installed, new layout",
+        "panels/notifications/FeatureUpdateNotice/Install failed, Windows tool missing",
+        "panels/notifications/FeatureUpdateNotice/Install failed, Windows folder not moved"
       ],
       "components": [
         "Panels/Settings",
@@ -7553,7 +7561,8 @@
         "coverage/dojo/PracticeFeedback/Go pending",
         "coverage/dojo/PracticeFeedback/Miss",
         "coverage/dojo/PracticeFeedback/Sleeping",
-        "coverage/dojo/PracticeFeedback/Streak"
+        "coverage/dojo/PracticeFeedback/Streak",
+        "panels/dojo/FeaturePracticeFeedback/sqlite3 missing"
       ],
       "components": [
         "Panels/Dojo"
@@ -8573,7 +8582,8 @@
         "panels/pr/PullRequestDetailsNodescription/Default",
         "panels/pr/PullRequestDetailsNopeople/Default",
         "panels/pr/PRConversationTheConversationInViewUnderTheVerdict/Default",
-        "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default"
+        "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default",
+        "panels/pr/FeaturePullRequestDetails/Files cut off"
       ],
       "components": [
         "Panels/PR"
