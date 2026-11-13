@@ -5,11 +5,11 @@ import { normalizeComponent } from './storybook-components.mjs';
 import { normalizeCss } from './storybook-css.mjs';
 import { kitRecords, tokenRecords } from './storybook-kit.mjs';
 import { gapDocument, mergeCoverage } from './storybook-coverage.mjs';
-import { sampleNames } from './storybook-markup.mjs';
+import { sampleText } from './storybook-markup.mjs';
 
 export const SECTIONS = ['Start', 'Tokens', 'Primitives', 'Compositions', 'Panels', 'Layouts'];
 export const slug = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-export const cleanText = (s = '') => sampleNames(s).replace(/; [^;.]+ keeps this component and its states in the shared kit\./g, '.').replace(/\b(?:prototype|board)(?:s|'s)?\b/gi, 'example').replace(/\bdesigners?\b/gi, 'reader').replace(/\bagents?\b/gi, (s) => s[0] === 'A' ? 'Session' : 'session').replace(/\ban? session\b/gi, 'a session').replace(/\bsubtracted\b/gi, 'simplified').replace(/\bremoved facts?\b/gi, 'simplified information').replace(/\bremoved\b/gi, 'cleared');
+export const cleanText = (s = '') => sampleText(s).replace(/; [^;.]+ keeps this component and its states in the shared kit\./g, '.').replace(/\b(?:prototype|board)(?:s|'s)?\b/gi, 'example').replace(/\bdesigners?\b/gi, 'reader').replace(/\bagents?\b/gi, (s) => s[0] === 'A' ? 'Session' : 'session').replace(/\ban? session\b/gi, 'a session').replace(/\bsubtracted\b/gi, 'simplified').replace(/\bremoved facts?\b/gi, 'simplified information').replace(/\bremoved\b/gi, 'cleared');
 const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
 
 export function pack(records) {

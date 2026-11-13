@@ -164,7 +164,9 @@
     {
       "id": "proto/components-tab-bar/TabBar/Default",
       "hash": "43d9d376b6c672098b4b70da122275d5410b4eaa6d62e905f3eb0bf36d8f8d7c",
-      "captionHash": "a94f9d2c4285a87a196f11119be51ca4e1d63f0e55af70659c6cc67c701f4701"
+      "captionHash": "a94f9d2c4285a87a196f11119be51ca4e1d63f0e55af70659c6cc67c701f4701",
+      "revisedHash": "a13ce38a1631ca36b68b90dc03b85e42d7f86ccd27ecd543dbdf693d46b6740a",
+      "revision": "Sample session names"
     },
     {
       "id": "proto/components-tab-states/TabStates/Default",
@@ -422,7 +424,7 @@
       "id": "proto/compositions-sidebar-rows/AgentTwoLines/Default",
       "hash": "f9a11cf62097c3c9055f7f99bfb14f152dab512353e18ad33330186222ffbd6c",
       "captionHash": "aa9c7bd3e7cd32a522220b240b34acec91e62f7ad1543bf170f73c0239a5d0fc",
-      "revisedHash": "5fd67b0c67e9b924706b65c3262523afe2dc07210585ca9d1764cc4d2d28a849",
+      "revisedHash": "0d1c78928ff6fe9ce1172a81c8ba772deea494fb9f7ae73b951f39d1d6b11d74",
       "revision": "Sample session names"
     },
     {
@@ -537,7 +539,7 @@
       "id": "proto/layouts-window-at-rest/WindowAtRest/Default",
       "hash": "3ae2d32178c1e4e7d468956e125bffa4327f786ae41f450149d65665f9838c55",
       "captionHash": "209ae4ee80c20d281fc4869c8962f99ac3038bdee5934a8502352e7e68edd40f",
-      "revisedHash": "80b97acd1053ddf45431d494f646af45a157262e743bdcf7188c1272d385905d",
+      "revisedHash": "9eb9698623ecbb96823dff4dbfeabbeac12bc96d93f104649055a32165639d3b",
       "revision": "Sample session names"
     },
     {
@@ -605,7 +607,9 @@
     {
       "id": "proto/tokens-type/OneLineNeverWraps/Default",
       "hash": "e54700ac914a858d1a3da1a8b417a57d34a18d07ed2381f14479443fc68edb00",
-      "captionHash": "0f7332f0db22a902118402fc883a79a51983af710fe7d483eb3091b1a7965d23"
+      "captionHash": "0f7332f0db22a902118402fc883a79a51983af710fe7d483eb3091b1a7965d23",
+      "revisedHash": "1a055ff34138f711a71b8c8cfadab0e7dbfa22faaf7c10672f71004b8f54a4c7",
+      "revision": "Sample session names"
     },
     {
       "id": "panels/availability/AvailabilityAMacWithDockerXcodeAndTheGuard/Default",
