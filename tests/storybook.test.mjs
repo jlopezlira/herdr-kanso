@@ -77,10 +77,15 @@ test("A page is the old look when any state it shows is the app's current markup
     ["Ready", "Ready", "In review", "Proposal", "Old look", "Old look", "Old look", "Old look", "Ready"]);
 });
 
-test("A page without its status tag, or with a code in its title, fails the lint", () => {
+test("A page without its status tag, with two, with one its data contradicts, or with a code in its title, fails the lint", () => {
   const catalog = json("stories/catalog.json"), template = read("stories/kit/ComponentPage.jsx");
   const untagged = { ...files, "stories/components/primitives-button.stories.js": files["stories/components/primitives-button.stories.js"].replace(/, tags: \[[^\]]*\]/, "") };
   assert.ok(structureErrors(untagged, catalog, template).includes("stories/components/primitives-button.stories.js: needs exactly one status tag"));
+  const button = files["stories/components/primitives-button.stories.js"];
+  const doubled = { ...files, "stories/components/primitives-button.stories.js": button.replace(/tags: \[("[^"]*")\]/, 'tags: [$1, "Proposal"]') };
+  assert.ok(structureErrors(doubled, catalog, template).includes("stories/components/primitives-button.stories.js: needs exactly one status tag"));
+  const mismatched = { ...files, "stories/components/primitives-button.stories.js": button.replace(/tags: \["[^"]*"\]/, 'tags: ["Proposal"]') };
+  assert.ok(structureErrors(mismatched, catalog, template).includes(`stories/components/primitives-button.stories.js: status Proposal differs from ${statusOf("Primitives/Button", records, references.pages)}`));
   const coded = { ...files, "stories/start/extra.mdx": '<Meta title="Start/S12 notes" tags={["Ready"]} />\n\n## Prompt for agents\n\n```text\nRead.\n```\n' };
   assert.ok(structureErrors(coded, catalog, template).includes("stories/start/extra.mdx: code in title Start/S12 notes"));
 });

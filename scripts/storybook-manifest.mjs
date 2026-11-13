@@ -34,5 +34,9 @@ for (const entry of Object.values(index.entries).filter((entry) => entry.type ==
     ...(featuresFor(doc.title).some((feature) => feature.gap) ? [`### ${FEATURE_LABEL}`, FEATURE_NOTE, ...featuresFor(doc.title).filter((feature) => feature.gap).map((feature) => `- ${feature.label}: ${content(feature.caption)} (${feature.location})`)] : []),
   ].join('\n\n');
 }
+for (const doc of Object.values(manifest.docs).filter((doc) => doc.title?.startsWith('Start/') && doc.content)) {
+  const status = `Status: ${statusFor(doc.title)}`;
+  doc.content = /<PageStatus page="[^"]+" \/>/.test(doc.content) ? doc.content.replace(/<PageStatus page="[^"]+" \/>/, status) : doc.content.replace(/(<Meta [^>]*\/>)/, `$1\n\n${status}`);
+}
 writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
 console.log(`${Object.keys(manifest.docs).length} documentation pages exported with usage, states and prompts`);
