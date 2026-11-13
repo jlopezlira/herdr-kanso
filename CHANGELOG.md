@@ -29,6 +29,7 @@ the branch's rules.
 - Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.
 - Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
 - The Storybook link in the site's navigation opens in a new tab.
+- Issue forms ask for steps to reproduce, test cases, acceptance criteria and what ready and done mean.
 
 ### Fixed
 
@@ -36,6 +37,7 @@ the branch's rules.
 - Storybook draws all missing Sidebar and Activity feature states with the shared kit, including queues, sleeping conversations, Git controls and activity overflow.
 - Storybook draws missing Settings and Memory feature states with the shared kit and source-linked coverage.
 - Storybook draws all missing pull request and Spend feature states with the shared kit.
+- Cmd+J (Ctrl+Shift+J on Windows) jumps to finished agents again, after the ones waiting for you.
 - Storybook panel and layout stories draw at real size without a frame card, with the row actions, header marks, device rows, skeleton bars, checks list and code lines of the approved designs.
 - Storybook controls respond with sample data: selection, editing, toggles, Armed confirmation and Undo, menus, dialogs, navigation folds, filtering and copy feedback reset with the State control.
 - Storybook uses one tonal Explain button with the Lucide bot icon and a named destination everywhere; regeneration and structure checks enforce it.

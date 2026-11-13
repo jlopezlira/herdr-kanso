@@ -119,6 +119,36 @@ test("The command only focuses live agents and publishes the same queue used by 
   assert.equal(state.runs.length, 3, "a stale click cannot wake or open a closed agent");
 });
 
+test("The jump reaches a finished agent while the list stays empty", async () => {
+  const { state, view, cx, sharedState } = await controller();
+  state.list = [agent("finished", "done")];
+  state.terms = [terminal("finished", 1)];
+  view.command("needs-you.next", cx);
+  assert.deepEqual(clone(state.runs), [["agent.focus", { terminal: "finished" }]]);
+  assert.deepEqual(clone(sharedState.get(NEEDS_YOU).rows), []);
+  assert.equal(view.needsEmpty, undefined);
+});
+
+test("The jump cycles through waiting agents before finished agents, oldest first, then wraps", async () => {
+  const { state, view, cx, sharedState } = await controller();
+  state.list = [agent("done-new", "done"), agent("blocked-new"), agent("done-old", "done"), agent("blocked-old")];
+  state.terms = [terminal("done-new", 2), terminal("blocked-new", 40), terminal("done-old", 1), terminal("blocked-old", 30)];
+  for (let i = 0; i < 5; i++) view.command("needs-you.next", cx);
+  assert.deepEqual(state.runs.map(([, args]) => args.terminal), ["blocked-old", "blocked-new", "done-old", "done-new", "blocked-old"]);
+  assert.deepEqual(addresses(view.refreshNeeds().rows), ["blocked-old", "blocked-new"]);
+  assert.deepEqual(addresses(sharedState.get(NEEDS_YOU).rows), ["blocked-old", "blocked-new"]);
+});
+
+test("The jump excludes sleeping, dozing, closed and unfocusable finished agents", async () => {
+  const { state, view, cx } = await controller();
+  state.list = [agent("sleep", "done", { asleep: {} }), agent("dozing", "done", { dozing: true }),
+    agent("excluded", "done"), agent("closed", "done"), agent("no-pane", "done", { pane: null }), agent("live", "done")];
+  state.terms = [terminal("closed", 1, { state: "finished" }), terminal("live", 2)];
+  view.sleepingNow = () => ({ dozing: new Set(["excluded"]) });
+  view.command("needs-you.next", cx);
+  assert.deepEqual(clone(state.runs), [["agent.focus", { terminal: "live" }]]);
+});
+
 test("Redraws and focus reuse the queue, while agent changes rebuild it and availability keeps its rows", async () => {
   const { state, view, sharedState } = await controller();
   const first = view.refreshNeeds();
