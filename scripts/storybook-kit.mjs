@@ -46,6 +46,16 @@ export function kitRecords(records) {
     ['Sidebar', { Open: sidebar, Collapsed: rail, Dawn: sidebar && band ? sidebar.replace(/(<div[^>]*>)/, `$1${band}`) : undefined }],
     ['Rail', { Open: sidebar, Collapsed: rail, Dawn: rail && band ? rail.replace(/(<div class="kanso-rail__brand"[^>]*>)/, `$1${band}`) : undefined }],
   ]) for (const [label, html] of Object.entries(variants)) if (html) results.push({ id: `kit/${name}/${label}`, source: 'kit', page: `Compositions/${name}`, label, html: frame(html), caption: `${label} navigation arrangement, composed from the shared kit.` });
+  const spend = originals.find((record) => record.id === 'panels/spend/SpendWellUsedTheMonthPerPlanThenToday/Default');
+  if (spend) for (const [label, total, unit, factor] of [
+    ['Today', '$41.20', 'today', 1], ['Month', '$824.00', 'this month', 20], ['30 days', '$1,236.00', 'over 30 days', 30],
+    ['Year', '$9,888.00', 'this year', 240], ['All time', '$14,832.00', 'all time', 360],
+  ]) {
+    const html = spend.html.replace(/<span class="kanso-segmented">[^]*?<\/span><span class="kanso-layout__grow">/, `<span class="kanso-segmented">${['Today', 'Month', '30 days', 'Year', 'All time'].map((period) => `<span${period === label ? ' class="kanso-control--on"' : ''}>${period}</span>`).join('')}</span><span class="kanso-layout__grow">`)
+      .replace('$41.20', total).replace('API value today', `API value ${unit}`)
+      .replace(/(<span class="kanso-panel__row-value">)\$([\d.]+)/g, (_, tag, value) => `${tag}$${(Number(value) * factor).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+    results.push({ id: `kit/Spend/${label}`, source: 'kit', page: 'Panels/Spend', label, html, caption: `Sample API value ${unit}. Choose a period to update the total and breakdown.` });
+  }
   return results;
 }
 
