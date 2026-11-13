@@ -141,7 +141,7 @@
 .kanso-row--two-lines.kanso-row--selected{background:var(--selected)}
 .kanso-row--two-lines .kanso-content__primary{display:flex;align-items:baseline;gap:var(--k-sp-2);font-size:12.5px;white-space:nowrap}
 .kanso-row--two-lines .kanso-content__secondary{display:flex;align-items:center;gap:var(--k-sp-2);font-size:11.5px;color:var(--dim);margin-top:var(--k-sp-2)}
-.kanso-row--two-lines .kanso-content__actions{display:flex;align-items:center;gap:var(--k-sp-2);margin-top:var(--k-sp-2)}
+.kanso-row--two-lines .kanso-content__actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--k-sp-2);margin-top:var(--k-sp-2)}
 .kanso-metric .kanso-metric__unit{font-size:12.5px;color:var(--dim)}
 .kanso-skeleton--breathing{animation:ghost 1.8s ease-in-out infinite alternate}
 .kanso-avatar--round{width:20px;height:20px;border-radius:50%;background:var(--w12);display:grid;place-items:center;font-size:11.5px;color:var(--muted);flex:none}
@@ -1196,7 +1196,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-panel__pair{justify-content:space-between}
 .kanso-panel__spacer{height:12px;flex:none}
 .kanso-panel__qualifier{font-size:12.5px;color:var(--dim);margin-left:var(--k-sp-2);letter-spacing:0}
-.kanso-panel__compact-row{gap:var(--k-sp-2)}
+.kanso-panel__compact-row{display:flex;align-items:baseline;gap:var(--k-sp-2);min-width:0}
 .kanso-panel__tools{display:flex;justify-content:center;gap:var(--k-sp-2);margin-top:var(--k-sp-2)}
 .kanso-badge{height:var(--k-h-compact);padding:0 var(--k-sp-2);border-radius:var(--k-r-control);background:var(--w7);font-size:var(--k-fs-meta);display:flex;align-items:center;color:var(--fg);margin-right:0;white-space:nowrap}
 .kanso-row{display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-row);padding:0 var(--k-sp-2);margin:0 calc(-1 * var(--k-sp-2));border-radius:var(--k-r-control);font-size:var(--k-fs-body)}
@@ -1204,6 +1204,8 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 :is(.kanso-sidebar__row,.kanso-row,.kanso-row--two-lines,.kanso-row--interactive,.kanso-menu-item)+:is(.kanso-sidebar__row,.kanso-row,.kanso-row--two-lines,.kanso-row--interactive,.kanso-menu-item){margin-top:var(--k-sp-hair)}
 .kanso-segmented--tabs{display:flex;gap:var(--k-sp-1);font-size:var(--k-fs-body);color:var(--dim)}
 .kanso-section{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--k-sp-3);padding:var(--k-sp-6) 0 var(--k-sp-2);font-size:var(--k-fs-section)}
+.kanso-section:has(>.kanso-button--quiet){align-items:center}
+.kanso-section>.kanso-button--quiet{margin-right:calc(-1 * var(--k-sp-3))}
 .kanso-skeleton{background-color:var(--border);border-radius:var(--k-r-sm);display:block}
 .kanso-window--rest{width:1240px;height:820px}
 .kanso-window--rest .kanso-sidebar{padding:0 var(--k-sp-2);display:flex;flex-direction:column}
@@ -1316,7 +1318,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-story__frame{padding:16px;border-radius:12px;background:var(--canvas);box-shadow:0 0 0 1px var(--border);color:var(--fg);font-size:var(--k-fs-body)}
 .kanso-story__frame.kanso-story--sidebar{padding:0;background:transparent;box-shadow:none}
 .kanso-story__frame.kanso-story--sidebar .kanso-sidebar--slice{display:flex;flex-direction:column}
-.kanso-story__frame.kanso-panel{padding:0}
+.kanso-story__frame.kanso-panel{padding:0;width:max-content}
 .kanso-story__frame.kanso-panel .kanso-panel{box-shadow:none}
 .kanso-story__frame .kanso-story__bar{background:var(--chrome);border-radius:8px;box-shadow:0 0 0 1px var(--border);padding:0 8px;box-sizing:border-box}
 .kanso-story__type{display:flex;flex-direction:column;gap:var(--k-sp-3)}
@@ -1340,6 +1342,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-worktree__size{margin-left:auto}
 .kanso-worktree__body{display:flex;flex-direction:column;gap:var(--k-sp-1);margin-top:var(--k-sp-1);font-size:var(--k-fs-body);line-height:var(--k-lh-body)}
 .kanso-worktree--open :is(.kanso-worktree__meta,.kanso-worktree__size,.kanso-worktree__path){font-size:var(--k-fs-meta);color:var(--dim)}
+.kanso-worktree__summary{font-size:var(--k-fs-meta)}
 .kanso-worktree--open .kanso-worktree__path{font-family:var(--mono)}
 .kanso-worktree__actions>.kanso-button--quiet{background:transparent}
 

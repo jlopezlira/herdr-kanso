@@ -1,4 +1,4 @@
-import { elements, escapeMarkup, explainActions, frame, textOf, withoutRepeats } from './storybook-markup.mjs';
+import { elements, escapeMarkup, explainActions, frame, sampleNames, textOf, withoutRepeats } from './storybook-markup.mjs';
 
 export function explainButton(target = 'checkout', { modifiers = [], disabled = false, role } = {}) {
   const classes = ['kanso-button--tonal', 'kanso-explain', ...modifiers];
@@ -33,7 +33,7 @@ export function worktreeRowOpen({ name, size, summary, age, reason, path, target
 }
 
 export function normalizeComponent(record) {
-  let html = record.source === 'panels' ? withoutRepeats(record.html) : record.html;
+  let html = sampleNames(record.source === 'panels' ? withoutRepeats(record.html) : record.html).replaceAll('var(--k-fs-heading)', 'var(--k-fs-section)');
   if (record.id.includes('/components-worktree-row-open/') && !html.includes('kanso-worktree--open')) {
     const value = (name) => textOf(elements(html, name)[0] ?? '');
     const primary = elements(html, 'kanso-content__primary')[0];
@@ -55,6 +55,7 @@ export const COMPONENT_CSS = `
 .kanso-worktree__size{margin-left:auto}
 .kanso-worktree__body{display:flex;flex-direction:column;gap:var(--k-sp-1);margin-top:var(--k-sp-1);font-size:var(--k-fs-body);line-height:var(--k-lh-body)}
 .kanso-worktree--open :is(.kanso-worktree__meta,.kanso-worktree__size,.kanso-worktree__path){font-size:var(--k-fs-meta);color:var(--dim)}
+.kanso-worktree__summary{font-size:var(--k-fs-meta)}
 .kanso-worktree--open .kanso-worktree__path{font-family:var(--mono)}
 .kanso-worktree__actions>.kanso-button--quiet{background:transparent}
 `;
