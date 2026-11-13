@@ -26,6 +26,8 @@ export function withoutRepeats(html) {
   }
   return open[0] + kept + '</div>';
 }
+const SAMPLE_NAMES = { 'Kylo-ren': 'Atlas', Bix: 'Juno', Wren: 'Iris', Groot: 'Orion', Fury: 'Nova', Rey: 'Vega' };
+export const sampleNames = (s) => s.replace(/\b(Kylo-ren|Bix|Wren|Groot|Fury|Rey)\b/g, (name) => SAMPLE_NAMES[name]);
 export const escapeMarkup = (s) => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
 export const textOf = (html) => html.replace(/<svg\b[^]*?<\/svg>/gi, '').replace(/<[^>]*>/g, '').replace(/&(?:amp|lt|gt|quot|apos|nbsp|#\d+|#x[0-9a-f]+);/gi, (s) => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&nbsp;': ' ' })[s] ?? String.fromCodePoint(s.startsWith('&#x') ? parseInt(s.slice(3), 16) : Number(s.slice(2, -1)))).trim();
 export const frame = (html) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${html}</div></div>`;

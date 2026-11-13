@@ -48,7 +48,7 @@ test('all 490 original stories and 1026 states survive, with only documented com
       assert.ok(state.location, old.id);
       if (state.design) assert.ok(byId.get(state.design)?.html, old.id);
     } else {
-      if (old.revisedHash) assert.ok(['Explain component', 'Worktree row layout', 'Single panel frame'].includes(old.revision), old.id);
+      if (old.revisedHash) assert.ok(['Explain component', 'Worktree row layout', 'Single panel frame', 'Sample session names', 'Section title token'].includes(old.revision), old.id);
       assert.equal(hash(state.html), old.revisedHash ?? old.hash, old.id);
     }
     assert.equal(hash(state.caption), old.revisedCaptionHash ?? old.captionHash, `${old.id}: caption`);
