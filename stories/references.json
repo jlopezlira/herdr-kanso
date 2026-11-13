@@ -10362,33 +10362,6 @@
         "proto/approved-kit/Reference/4",
         "proto/approved-kit/Reference/5"
       ]
-    },
-    {
-      "page": "Start/Philosophy reference",
-      "existing": false,
-      "boards": [
-        "Z",
-        "L"
-      ],
-      "status": "Approved reference",
-      "guidelines": [
-        "The rules on Start/Philosophy and the fact table on Compositions/One fact, one home apply to every page."
-      ],
-      "records": [
-        "proto/approved-philosophy/Reference/1",
-        "proto/approved-ledger/Reference/1"
-      ],
-      "components": [
-        "Compositions/State patterns",
-        "Start/Philosophy",
-        "Compositions/One fact, one home"
-      ],
-      "features": [],
-      "proposedPredicates": [],
-      "approvedRecords": [
-        "proto/approved-philosophy/Reference/1",
-        "proto/approved-ledger/Reference/1"
-      ]
     }
   ],
   "masterHash": "03f317321197cbed6a1cf10db85a33fc7b6ea1032f0779dd11c99e84a557239c"

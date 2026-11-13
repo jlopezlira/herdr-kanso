@@ -1,5 +1,29 @@
 import { Meta } from '@storybook/addon-docs/blocks';
-import { ReferencePage } from '../kit/ReferencePage.jsx';
+import { content, records } from '../kit/catalog.js';
+import { referenceFor } from '../kit/references.js';
+
+export const board = content(records.find((record) => record.id === referenceFor('Start/Philosophy').approvedRecords[0]).markup);
+export const rows = [...board.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(([, row]) => [...row.matchAll(/<t[hd]>([\s\S]*?)<\/t[hd]>/g)].map(([, cell]) => cell.replace(/<[^>]+>/g, '')));
 
 <Meta title="Start/Philosophy" />
-<ReferencePage page="Start/Philosophy" />
+
+# Philosophy
+
+This Storybook is a UI kit, so a contributor focuses on the functionality, not on how to design it. If a component does not exist, it is built from kit pieces; if that is impossible, it is proposed as a new kit piece, drawn once in the Storybook with all its states.
+
+<table>
+  <thead>
+    <tr>{rows[0].map((cell) => <th key={cell}>{cell}</th>)}</tr>
+  </thead>
+  <tbody>
+    {rows.slice(1).map((row) => <tr key={row[0]}>{row.map((cell) => <td key={cell}>{cell}</td>)}</tr>)}
+  </tbody>
+</table>
+
+## Why
+
+kansō is named after one of the seven principles of Zen art described by Shin'ichi Hisamatsu in *Zen and the Fine Arts* (1971). The design follows all seven as one philosophy, not taste.
+
+Every guideline on these boards names the principle it serves. A decision that cannot name one is an opinion, and is not taken.
+
+One limit sits above them: kansō removes information, never options. Every action stays one press away.

@@ -40,7 +40,7 @@ const preview = {
     options: {
       storySort: {
         order: [
-          'Start', ['Philosophy', 'About', 'How to read this Storybook', 'How to use the prompt for agents'],
+          'Start',
           'Tokens', ['Colour', 'Type', 'Spacing', 'Radius', 'Motion', 'Icons'],
           'Primitives',
           'Compositions', ['Header', 'Sidebar', 'Rail', 'Status bar', 'Bars', 'Edge and Minimap', 'State patterns'],
