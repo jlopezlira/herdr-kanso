@@ -17,7 +17,7 @@ export const statesFor = (page) => {
   const rank = (record) => record.source === 'tokens' || (record.source === 'kit' && record.label === 'Default') ? 0
     : record.source === 'kit' && record.label === 'Open' ? 1
     : /(?:^|, )At rest, Now$|^(Rest|Default)$/.test(record.label) ? 2 : 10;
-  return records.filter((record) => record.page === page && record.markup !== undefined).sort((a, b) => rank(a) - rank(b)).map((record) => {
+  return records.filter((record) => record.page === page && record.markup !== undefined && !record.fragment).sort((a, b) => rank(a) - rank(b)).map((record) => {
     const label = record.label.replace(new RegExp(`^${page.split('/')[1]}[, ·]+`, 'i'), '');
     const n = (used.get(label) ?? 0) + 1;
     used.set(label, n);

@@ -71,6 +71,7 @@ export function kitRecords(records) {
     ['Channel mark', mark && `<div class="kanso-update">${mark}</div>`, 'Artwork, Pill or Hidden.'],
     ['Switch row · Stable Mode', choices[0], 'One press switches.'],
     ['Switch row · Dawn Mode', choices[1], 'One press switches.'],
+    ['Switch row · Dawn Mode beta', choices[2], 'One press switches.'],
   ]) if (html) results.push({ id: `kit/Dawn Mode/${label}`, source: 'kit', page: 'Compositions/Dawn Mode', label, html: frame(html), caption });
   const spend = originals.find((record) => record.id === 'panels/spend/SpendWellUsedTheMonthPerPlanThenToday/Default');
   if (spend) for (const [label, total, unit, factor] of [
