@@ -1,20 +1,20 @@
 {
   "SettingsMenu": {
-    "caption": "When pressing the footer gear, the menu names the two owners of settings; Seijaku keeps this component and its states in the shared kit.",
+    "caption": "When pressing the footer gear, the menu names the two owners of settings.",
     "variants": {
       "Rest": {
         "when": "The footer gear is pressed.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Settings\"><div class=\"mh\">Settings</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">kansō settings</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Herdr settings</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Settings\"><div class=\"kanso-menu__heading\">Settings</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">kansō settings</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Herdr settings</div></div></div></div>",
         "source": "kanso/mods/kanso-chrome/main.js:115"
       },
       "Host update": {
         "when": "A host update is ready.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Settings\"><div class=\"mh\">Settings</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">kansō settings</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Herdr settings</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Update Herdr to 0.1.16</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Settings\"><div class=\"kanso-menu__heading\">Settings</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">kansō settings</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Herdr settings</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Update Herdr to 0.1.16</div></div></div></div>",
         "source": "kanso/mods/kanso-chrome/main.js:115"
       },
       "Restart armed": {
         "when": "Restarting the host needs a second press.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"menu\" role=\"menu\" aria-label=\"Settings\"><div class=\"mh\">Settings</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">kansō settings</div><div class=\"mi\" role=\"menuitem\" tabindex=\"0\">Herdr settings</div><div class=\"mi kit-armed\" role=\"menuitem\" tabindex=\"0\">Press again to restart herdr</div></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-menu\" role=\"menu\" aria-label=\"Settings\"><div class=\"kanso-menu__heading\">Settings</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">kansō settings</div><div class=\"kanso-menu-item\" role=\"menuitem\" tabindex=\"0\">Herdr settings</div><div class=\"kanso-menu-item kanso-action--armed\" role=\"menuitem\" tabindex=\"0\">Press again to restart herdr</div></div></div></div>",
         "source": "kanso/mods/kanso-chrome/main.js:115"
       }
     }
@@ -24,42 +24,42 @@
     "variants": {
       "Installed": {
         "when": "Installation completed.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">kansō updated to 3.31.0</span></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">kansō updated to 3.31.0</span></div></div></div>",
         "source": "kanso/mods/kanso-chrome/update.js:350"
       },
       "Available": {
         "when": "The footer is out of view.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">kansō 3.31.0 is available</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Update</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">kansō 3.31.0 is available</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Update</button></div></div></div>",
         "source": "kanso/mods/kanso-chrome/update.js:350"
       },
       "Current": {
         "when": "A manual check found no update.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">kansō is up to date</span></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">kansō is up to date</span></div></div></div>",
         "source": "kanso/mods/kanso-chrome/update.js:350"
       },
       "Check failed": {
         "when": "The release service cannot be read.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">GitHub could not be reached</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Refresh</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">GitHub could not be reached</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Refresh</button></div></div></div>",
         "source": "kanso/mods/kanso-chrome/update.js:350"
       },
       "Install failed": {
         "when": "An update failed.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">kansō was not updated: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Update</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">kansō was not updated: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Update</button></div></div></div>",
         "source": "kanso/mods/kanso-chrome/update.js:350"
       },
       "Already updating": {
         "when": "Another window owns installation.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">kansō is already being updated</span></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-icon kanso-icon--row\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"kanso-content__text\">kansō is already being updated</span></div></div></div>",
         "source": "kanso/mods/kanso-chrome/update.js:350"
       }
     }
   },
   "RuntimeNotice": {
-    "caption": "When the mod runtime exhausts memory, its notice offers the recovery action; Seijaku keeps this component and its states in the shared kit.",
+    "caption": "When the mod runtime exhausts memory, its notice offers the recovery action.",
     "variants": {
       "Out of memory": {
         "when": "The runtime is out of memory.",
-        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Herdr’s mod runtime is out of memory</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Restart</button></div></div></div>",
+        "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame\" style=\"max-width:100%\"><div class=\"kanso-toast\"><svg class=\"kanso-mark kanso-mark--blocked\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"kanso-content__text\">Herdr’s mod runtime is out of memory</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kanso-button--tonal\">Restart</button></div></div></div>",
         "source": "kanso/mods/kanso-chrome/main.js:76"
       }
     }

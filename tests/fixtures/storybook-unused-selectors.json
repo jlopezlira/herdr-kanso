@@ -440,8 +440,6 @@
   ".kanso-dojo__character",
   ".kanso-dojo__character.kanso-cell--current",
   ".kanso-dojo__character.kanso-cell--goal",
-  ".kanso-dojo__mascot .kanso-mascot__pixel--accent",
-  ".kanso-dojo__mascot .kanso-mascot__pixel--blue",
   ".kanso-dojo__sleep-label",
   ".kanso-dojo__feedback.kanso-feedback--success",
   ".kanso-dojo__feedback.kanso-feedback--missed",
