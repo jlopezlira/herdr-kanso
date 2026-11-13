@@ -31,18 +31,17 @@ the branch's rules.
 - Empty, failed and pending states are drawn one way in the sidebar, the panels, the status bar and toasts: an empty view shows its icon and one quiet line; a failure shows the blocked mark, what went wrong, the tool's own words and the fix; a pull is shown done at once with a breathing dot until git answers, and a refused pull is a toast.
 - A computer that cannot be reached says "Can't reach" with Refresh in the status bar, and its sidebar row keeps a dim word with Refresh.
 - The count of commits behind is muted, not red.
+- Issue forms ask for steps to reproduce, test cases, acceptance criteria and what ready and done mean.
 
 ### Fixed
 
 - Cmd+J (Ctrl+Shift+J on Windows) jumps to finished agents again, after the ones waiting for you.
-
 - Storybook panel and layout stories draw at real size without a frame card, with the row actions, header marks, device rows, skeleton bars, checks list and code lines of the approved designs.
 - Storybook controls respond with sample data: selection, editing, toggles, Armed confirmation and Undo, menus, dialogs, navigation folds, filtering and copy feedback reset with the State control.
 - Storybook uses one tonal Explain button with the Lucide bot icon and a named destination everywhere; regeneration and structure checks enforce it.
 - The open worktree row follows the kit type and spacing scale, with equal-height actions, quiet navigation and Armed removal.
 - Storybook keeps stale and unavailable text readable in muted ink instead of reducing its opacity.
 - Storybook shows Edge and Minimap slot as separate pieces, with the edges around an empty pane and the minimap in its own frame.
-
 - Storybook documentation and captions read on their own without prototype references; imported text strips those references on regeneration.
 - Storybook uses one token spacing rhythm for matching pairs of elements in rows, controls, blocks and containers.
 
