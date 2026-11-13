@@ -70,8 +70,8 @@
 .kanso-agent__meta .kanso-agent__project{font-weight:500}
 .kanso-agent.kanso-row--blocked{background:color-mix(in srgb,var(--blocked) 8%,transparent)}
 .kanso-agent.kanso-row--blocked .kanso-agent__name,.kanso-agent.kanso-row--blocked .kanso-agent__meta{color:var(--fg)}
-.kanso-agent.kanso-control--focus{background:var(--w7)}
-.kanso-agent.kanso-control--focus .kanso-agent__name{color:var(--fg)}
+.kanso-agent.kanso-row--current{background:var(--w7)}
+.kanso-agent.kanso-row--current .kanso-agent__name{color:var(--fg)}
 .kanso-agent.kanso-agent--idle .kanso-agent__name{color:var(--dim)}
 .kanso-agent__time{font-size:11.5px;color:var(--dim);width:28px;text-align:right;flex:none}
 .kanso-machine .kanso-machine__name{font-size:13.5px;font-weight:500;color:var(--muted)}
@@ -290,7 +290,7 @@
 :is(.kanso-row,.kanso-row--two-lines).kanso-row--selected:is(:is(:hover,.kanso-control--hover),:is(:active,.kanso-control--active)){background-color:var(--selected)}
 .kanso-tab.kanso-control--on:is(:is(:hover,.kanso-control--hover),:is(:active,.kanso-control--active)){background-color:var(--w12)}
 .kanso-project.kanso-control--on:is(:is(:hover,.kanso-control--hover),:is(:active,.kanso-control--active)){background-color:var(--w14)}
-.kanso-agent.kanso-control--focus:is(:is(:hover,.kanso-control--hover),:is(:active,.kanso-control--active)){background-color:var(--w7)}
+.kanso-agent.kanso-row--current:is(:is(:hover,.kanso-control--hover),:is(:active,.kanso-control--active)){background-color:var(--w7)}
 .kanso-agent.kanso-row--blocked:is(:is(:hover,.kanso-control--hover),:is(:active,.kanso-control--active)){background-color:color-mix(in srgb,var(--blocked) 8%,transparent)}
 .kanso-button--icon.kanso-button--active:is(:is(:hover,.kanso-control--hover),:is(:active,.kanso-control--active)){background-color:var(--w12)}
 :is(.kanso-button,.kanso-button--tonal,.kanso-button--quiet,.kanso-actions>.kanso-button--quiet,.kanso-actions>.kanso-badge,.kanso-row--two-lines .kanso-content__secondary>.kanso-button--quiet,.kanso-state-block__actions>.kanso-button--quiet){height:var(--k-h-control);padding:0 var(--k-sp-3);margin:0;border-radius:var(--k-r-control);font-size:var(--k-fs-body);font-weight:var(--k-fw-medium);line-height:1;gap:var(--k-sp-2);display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;white-space:nowrap;flex:none}
@@ -1221,7 +1221,7 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-sidebar__row .kanso-row__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:var(--k-fw-medium)}
 .kanso-sidebar__row.kanso-row--machine .kanso-row__name,.kanso-sidebar__row.kanso-project .kanso-row__name{color:var(--fg)}
 .kanso-sidebar__row.kanso-project .kanso-row__name{font-weight:var(--k-fw-strong);flex:none;max-width:60%}
-.kanso-sidebar__row.kanso-row--live .kanso-row__name,.kanso-sidebar__row.kanso-control--focus .kanso-row__name{color:var(--fg)}
+.kanso-sidebar__row.kanso-row--live .kanso-row__name,.kanso-sidebar__row.kanso-row--current .kanso-row__name{color:var(--fg)}
 .kanso-sidebar__row.kanso-row--child .kanso-row__name{color:var(--dim)}
 .kanso-sidebar__row.kanso-row--child.kanso-row--live .kanso-row__name{color:var(--fg)}
 .kanso-sidebar__row.kanso-row--asleep .kanso-row__name{color:var(--dim);font-weight:var(--k-fw-medium)}

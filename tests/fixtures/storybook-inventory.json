@@ -417,8 +417,8 @@
       "id": "proto/compositions-sidebar-rows/AgentOneLine/Default",
       "hash": "bdc8e84c3da4c7504b23ee02f373c774da7111f69b231b86df07a999352ff68c",
       "captionHash": "9d611416721290ca809afc75b2bfdb133d4e7bb349c08afc698c139a0409f656",
-      "revisedHash": "af2f37dd55b4bdc8a1fcc46eb76af2f4b2aa2db601d31cb58040fccc4ca33e0f",
-      "revision": "Sample session names"
+      "revisedHash": "80c4ffb60369464af4c2d5a18d6b80fe8b6a66abe1c7697931ad471937e5e8c8",
+      "revision": "Current session state"
     },
     {
       "id": "proto/compositions-sidebar-rows/AgentTwoLines/Default",
@@ -431,8 +431,8 @@
       "id": "proto/compositions-sidebar-rows/SubAgent/Default",
       "hash": "52b3dc85c1b0091a9383b961b0c5731c19b84a7710c31a78aa200d398ddbc4fc",
       "captionHash": "625298211f8b8ae448000fc2f5c60ab3024b38232b9086bfc127b08404a316e0",
-      "revisedHash": "6255afe5b812a34dacca33c31fa5085af204b9b8ffde2b6f4af5fd5f7df0fb54",
-      "revision": "Sample session names"
+      "revisedHash": "8829f97c6c8dcf80f7fef335ccff040f9acec92dd2712f100b8aca9372556e18",
+      "revision": "Current session state"
     },
     {
       "id": "proto/compositions-sidebar-rows/Asleep/Default",
@@ -539,8 +539,8 @@
       "id": "proto/layouts-window-at-rest/WindowAtRest/Default",
       "hash": "3ae2d32178c1e4e7d468956e125bffa4327f786ae41f450149d65665f9838c55",
       "captionHash": "209ae4ee80c20d281fc4869c8962f99ac3038bdee5934a8502352e7e68edd40f",
-      "revisedHash": "9eb9698623ecbb96823dff4dbfeabbeac12bc96d93f104649055a32165639d3b",
-      "revision": "Sample session names"
+      "revisedHash": "7fcdefbcbe28a2204220e88ae0f313c75b6c2fe49d6244c791bee2570fd2b8b0",
+      "revision": "Current session state"
     },
     {
       "id": "proto/tokens-colour-and-wash/Washes/Default",

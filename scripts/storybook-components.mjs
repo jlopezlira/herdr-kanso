@@ -43,6 +43,7 @@ export function normalizeComponent(record) {
     const target = action && /^Explain to\s+(.+)$/i.exec(textOf(html.slice(action.open, action.close)))?.[1];
     html = worktreeRowOpen({ name, size: value('kanso-row__value'), summary, age, reason: value('kanso-worktree__reason'), path: value('kanso-worktree__path'), target });
   }
+  html = html.replace(/class="([^"]*\bkanso-(?:agent|sidebar__row)\b[^"]*)"/g, (_, classes) => `class="${classes.replace(/\bkanso-control--focus\b/, 'kanso-row--current')}"`);
   return { ...record, html: normalizeExplain(html), ...(record.notes ? { notes: record.notes.map((note) => note.replace('Explain is beside it, quiet.', 'Explain is beside it, tonal with the Lucide bot icon.')) } : {}) };
 }
 
