@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { clean, closeOf, cssBlocks, drawing, entriesOf, panelCss, sourceEntries, withoutRepeats } from "../scripts/import-panels.mjs";
-import { expand } from "../scripts/storybook-catalog.mjs";
+import { clean, closeOf, cssBlocks, drawing, entriesOf, keptNotes, panelCss, sourceEntries, withoutRepeats } from "../scripts/import-panels.mjs";
+import { expand, pack } from "../scripts/storybook-catalog.mjs";
 import { markupClasses } from "../scripts/import-proto.mjs";
 
 test("Panel extraction keeps nested drawings and separates specifications from folded markup", () => {
@@ -53,4 +53,12 @@ test("Every imported panel state has a canvas, specification and usable symbol r
     if (state.label.endsWith(', Before')) assert.match(state.caption, /previous design/);
   }
   assert.ok(count >= 280, `Expected the complete initial set and later states, found ${count}`);
+});
+
+test("A panel import keeps the guidelines already written in the Storybook", () => {
+  const catalog = pack([
+    { id: "panels/files/Rest/Default", source: "panels", page: "Panels/Files", label: "Rest", caption: "Files at rest.", notes: ["Rows 32."] },
+    { id: "panels/files/Empty/Default", source: "panels", page: "Panels/Files", label: "Empty", caption: "No files." },
+  ]);
+  assert.deepEqual([...keptNotes(catalog)], [["panels/files/Rest/Default", ["Rows 32."]]]);
 });

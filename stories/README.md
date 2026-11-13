@@ -31,8 +31,9 @@ The Storybook is the design source for kansō: every component, its states and t
 
 ## Imports
 
-- `scripts/import-approved.mjs <master.html>` imports the approved reference drawings and overwrites the guidelines of those pages from the master. Rewrite them after an import.
+- `scripts/import-approved.mjs <master.html>` imports the approved reference drawings.
 - `scripts/import-panels.mjs` and `scripts/import-proto.mjs` import panel and kit drawings into the catalog.
+- Guidelines are written here; `import-approved` and `import-panels` keep them.
 
 ## Feature inventory
 

@@ -219,6 +219,9 @@ function inventory(master, reportDir) {
   return rows;
 }
 
+// The Storybook owns the guidelines: an import keeps the notes already in the catalog.
+export const keptNotes = (catalog) => new Map(expand(catalog).filter((record) => record.source === "panels" && record.notes?.length).map((record) => [record.id, record.notes]));
+
 export function generate(sourceDir, masterPath, notesPath, reportDir) {
   const sources = ["a", "b", "c"].map((part) => readFileSync(join(sourceDir, `kanso-sb-panels-${part}.html`), "utf8"));
   const entries = sourceEntries(sources, readFileSync(join(sourceDir, "panel-stories.md"), "utf8"), [92, 97, 101]);
@@ -254,10 +257,11 @@ export function generate(sourceDir, masterPath, notesPath, reportDir) {
     notes.set(entry.code, `### ${pageFor(entry, firstScreen)} guidelines\n\n${guidelines.join("\n")}`);
   }
   const counts = {};
+  const kept = keptNotes(JSON.parse(readFileSync("stories/catalog.json", "utf8")));
   const records = [...pages].flatMap(([page, { stories, codes }]) => {
     counts[page] = Object.keys(stories).length;
     const records = recordsFrom("panels", `${slug(page)}.json`, stories);
-    records[0].notes = [...codes].map((code) => {
+    records[0].notes = kept.get(records[0].id) ?? [...codes].map((code) => {
       if (!notes.has(code)) throw new Error(`Missing guidelines for ${code}`);
       return notes.get(code);
     });

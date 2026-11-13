@@ -71,9 +71,7 @@ export function approvedDrawings(master, board) {
     return { source, caption, theme: node.classes.includes("k-light") ? "light" : node.classes.includes("k-dark") ? "dark" : "both", hash: hash(source) };
   });
   if (!drawings.length) throw new Error(`No drawings: ${board.code}`);
-  const notes = nodes.filter((node) => node.tag === "aside" && node.classes.includes("notes"));
-  const guidelines = notes.flatMap((aside) => nodes.filter((node) => node.start > aside.open && node.end < aside.close && ["li", "p"].includes(node.tag)).map((node) => referenceText(textOf(section.slice(node.open, node.close)))));
-  return { drawings, guidelines, hash: hash(section) };
+  return { drawings, hash: hash(section) };
 }
 
 export function importApproved(file, root = ".") {
@@ -105,7 +103,6 @@ export function importApproved(file, root = ".") {
     reference.components = [...new Set([owner, ...reference.components])];
     reference.approvedRecords = ids;
     reference.status = "Approved reference";
-    if (extracted.guidelines.length) reference.guidelines = extracted.guidelines;
     reference.sourceHash = extracted.hash;
     evidence.push({ code: board.code, page: board.page, result: "fixed", sourceHash: extracted.hash, drawings: ids.length, states: ids });
   }
