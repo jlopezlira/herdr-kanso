@@ -28,24 +28,20 @@ the branch's rules.
 
 - Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.
 - Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
-
 - The Storybook link in the site's navigation opens in a new tab.
 
 ### Fixed
 
 - Storybook gives approved designs and features such as Open with, Sleep and Arrangements their own pages, with shared reference drawings and additional states marked Proposed.
 - Storybook draws all missing Sidebar and Activity feature states with the shared kit, including queues, sleeping conversations, Git controls and activity overflow.
-- Storybook draws the 47 missing Settings and Memory feature states with the shared kit and source-linked coverage.
-
+- Storybook draws missing Settings and Memory feature states with the shared kit and source-linked coverage.
 - Storybook draws all missing pull request and Spend feature states with the shared kit.
-
 - Storybook panel and layout stories draw at real size without a frame card, with the row actions, header marks, device rows, skeleton bars, checks list and code lines of the approved designs.
 - Storybook controls respond with sample data: selection, editing, toggles, Armed confirmation and Undo, menus, dialogs, navigation folds, filtering and copy feedback reset with the State control.
 - Storybook uses one tonal Explain button with the Lucide bot icon and a named destination everywhere; regeneration and structure checks enforce it.
 - The open worktree row follows the kit type and spacing scale, with equal-height actions, quiet navigation and Armed removal.
 - Storybook keeps stale and unavailable text readable in muted ink instead of reducing its opacity.
 - Storybook shows Edge and Minimap slot as separate pieces, with the edges around an empty pane and the minimap in its own frame.
-
 - Storybook documentation and captions read on their own without prototype references; imported text strips those references on regeneration.
 - Storybook uses one token spacing rhythm for matching pairs of elements in rows, controls, blocks and containers.
 

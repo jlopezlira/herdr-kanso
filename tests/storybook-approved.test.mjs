@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { additionalCss, approvedDrawings } from "../scripts/import-approved.mjs";
-import { expand } from "../scripts/storybook-catalog.mjs";
+import { additionalCss, approvedDrawings, sharedThemeCss } from "../scripts/import-approved.mjs";
+import { cleanText, expand } from "../scripts/storybook-catalog.mjs";
 import { normalizeComponent } from "../scripts/storybook-components.mjs";
 import { markupElements, textOf } from "../scripts/storybook-markup.mjs";
+import { cssBlocks } from "../scripts/storybook-css.mjs";
 import references from "../stories/references.json" with { type: "json" };
 import alignment from "../stories/ALIGNMENT.json" with { type: "json" };
 
@@ -14,6 +15,41 @@ const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf
 const records = expand(JSON.parse(read("stories/catalog.json")));
 const byId = new Map(records.map((record) => [record.id, record]));
 const hash = (value) => createHash("sha256").update(value).digest("hex");
+
+test("Public reference guidance describes roles instead of named sample sessions", () => {
+  const prose = [...references.pages.flatMap((page) => page.guidelines ?? []), ...records.flatMap((record) => record.notes ?? [])].join("\n");
+  assert.doesNotMatch(prose, /\b[\w-]+'s \+ and [\w-]+'s ⋯ are not drawn at rest/);
+  assert.doesNotMatch(prose, /\([^(),]+, after the unified menu\)/);
+  assert.doesNotMatch(prose, /Drawn at Only when needed: [^.]+ works and [^.]+ waits/);
+  assert.doesNotMatch(prose, /(?:Tab bar|app\.settings) \([A-Z][a-z]+\)|no \?, [A-Z][a-z]+\)|\b[A-Z][a-z]+'s (?:pax-|markup)/);
+});
+
+test("Imported reference drawings inherit the shared theme instead of competing palettes", () => {
+  const check = (css) => {
+    for (const rule of cssBlocks(css)) {
+      const brace = rule.indexOf("{"), selector = rule.slice(0, brace), body = rule.slice(brace + 1, -1);
+      if (/^@(media|supports|layer)\b/.test(selector)) { check(body); continue; }
+      if (/\.kanso-story--(?:dark|light)\b/.test(selector)) assert.doesNotMatch(body, /(?:^|;)\s*--[\w-]+\s*:/, selector);
+      if (/kanso-prototype__theme-control|\.kanso-story--(?:dark|light)\b/.test(selector)) assert.doesNotMatch(body, /#[\da-f]{3,8}\b/i, selector);
+    }
+  };
+  check(read("stories/proto.css"));
+});
+
+test("Regeneration cleans reference prose and uses semantic colors without losing layout rules", () => {
+  const prose = "demo's + and Sample's ⋯ are not drawn at rest. (Sample, after the unified menu) Drawn at Only when needed: Sample works and Another waits, so they show a second line.";
+  const source = `<section class="board" id="sample"><div class="k k-dark">Session</div><aside class="notes"><ul><li>${prose}</li></ul></aside></section>`;
+  const expected = "project and session row actions are not drawn at rest. (after the unified menu) At Only when needed, working and waiting sessions show a second line.";
+  assert.equal(cleanText(prose), expected);
+  assert.equal(cleanText("Tab bar (Sample): app.settings (Sample), (the tab bar keeps no gear and no ?, Sample). (Sample's pax-fail) editor conflict, Sample's markup:"), "Tab bar: app.settings, (the tab bar keeps no gear and no ?). (pax-fail) editor conflict:");
+  assert.deepEqual(approvedDrawings(source, { code: "S", anchor: "sample", title: "Sessions" }).guidelines, [expected]);
+  const input = ".kanso-story--light{--input:#817b72;padding:8px}.kanso-story--light{--input:#d4cec4}@media (width > 1px){.kanso-story--dark{--fg:#d8d4cb}}.kanso-prototype__theme-control td{color:#bdb8ad;border-bottom:1px solid #1f1f1d}.kanso-prototype__theme-control th{color:#6b6862;border-bottom:1px solid #272725}.kanso-prototype__theme-control td a{color:#d8d4cb}";
+  const output = sharedThemeCss(input);
+  assert.equal(output, ".kanso-story--light{padding:8px}\n.kanso-prototype__theme-control td{color:var(--muted);border-bottom:1px solid var(--border)}\n.kanso-prototype__theme-control th{color:var(--dim);border-bottom:1px solid var(--border)}\n.kanso-prototype__theme-control td a{color:var(--fg)}");
+  assert.equal(sharedThemeCss(output), output);
+  assert.equal(additionalCss(output, sharedThemeCss(input)), "");
+  assert.equal(sharedThemeCss(".kanso-story--light .kanso-dojo__mascot .kanso-mascot__pixel--eye{background:#161615}"), "");
+});
 
 test("Approved references retain every imported drawing and its source comparison", () => {
   assert.equal(alignment.boards.length, 94);

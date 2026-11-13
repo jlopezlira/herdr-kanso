@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { renameMarkup, renameCss } from "./import-proto.mjs";
 import { expand, replaceSource } from "./storybook-catalog.mjs";
-import { markupElements, textOf } from "./storybook-markup.mjs";
+import { markupElements, referenceText, textOf } from "./storybook-markup.mjs";
 import { normalizeComponent, COMPONENT_CSS } from "./storybook-components.mjs";
 import { selectorCoverage, selectorList } from "./storybook-selectors.mjs";
 import { cssBlocks, normalizeCss } from "./storybook-css.mjs";
@@ -18,6 +18,21 @@ const withoutNavigation = (css) => cssBlocks(css).flatMap((rule) => {
     return nested ? `${selector}{${nested}}` : [];
   }
   return selector.includes("kanso-prototype__sidebar") ? [] : [rule];
+}).join("\n");
+export const sharedThemeCss = (css) => cssBlocks(css).flatMap((rule) => {
+  const brace = rule.indexOf("{"), selector = rule.slice(0, brace);
+  let body = rule.slice(brace + 1, -1);
+  if (/^@(media|supports|layer)\b/.test(selector)) {
+    const nested = sharedThemeCss(body);
+    return nested ? `${selector}{${nested}}` : [];
+  }
+  if (/\.kanso-story--(?:dark|light)\b/.test(selector)) body = body.split(";").filter((declaration) => !/^\s*--[\w-]+\s*:/.test(declaration)).join(";");
+  if (selector.includes("kanso-prototype__theme-control")) {
+    const colors = { "#6b6862": "dim", "#272725": "border", "#1f1f1d": "border", "#bdb8ad": "muted", "#d8d4cb": "fg" };
+    body = body.replace(/#[\da-f]{3,8}\b/gi, (color) => colors[color.toLowerCase()] ? `var(--${colors[color.toLowerCase()]})` : color);
+  }
+  if (selector.includes(".kanso-story--light .kanso-dojo__mascot")) return [];
+  return body.trim() ? `${selector}{${body}}` : [];
 }).join("\n");
 export function additionalCss(existing, incoming) {
   const known = new Set();
@@ -50,14 +65,14 @@ export function approvedDrawings(master, board) {
   const tables = nodes.filter((node) => node.tag === "table" && !hasParent(node, themed));
   const drawings = [...frames, ...tables].sort((a, b) => a.start - b.start).map((node, index) => {
     const previous = nodes.filter((item) => item.end <= node.start && item.classes.includes("cap")).at(-1);
-    const caption = previous ? textOf(section.slice(previous.open, previous.close)) : board.title;
+    const caption = referenceText(previous ? textOf(section.slice(previous.open, previous.close)) : board.title);
     const source = section.slice(node.start, node.end);
     if (node.end === node.open) throw new Error(`Unclosed drawing: ${board.code}/${index}`);
     return { source, caption, theme: node.classes.includes("k-light") ? "light" : node.classes.includes("k-dark") ? "dark" : "both", hash: hash(source) };
   });
   if (!drawings.length) throw new Error(`No drawings: ${board.code}`);
   const notes = nodes.filter((node) => node.tag === "aside" && node.classes.includes("notes"));
-  const guidelines = notes.flatMap((aside) => nodes.filter((node) => node.start > aside.open && node.end < aside.close && ["li", "p"].includes(node.tag)).map((node) => textOf(section.slice(node.open, node.close))));
+  const guidelines = notes.flatMap((aside) => nodes.filter((node) => node.start > aside.open && node.end < aside.close && ["li", "p"].includes(node.tag)).map((node) => referenceText(textOf(section.slice(node.open, node.close)))));
   return { drawings, guidelines, hash: hash(section) };
 }
 
@@ -104,8 +119,8 @@ export function importApproved(file, root = ".") {
   references.masterHash = hash(master);
   const masterCss = [...master.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]).join("\n");
   const approvedCss = cssBlocks(masterCss).filter((rule) => !rule.includes(".kanso-spend-") && !rule.includes(".ks-nav") && !/^(?:body|html|:root\{color-scheme|img\{|\[hidden\])/.test(rule)).join("\n");
-  const currentCss = withoutNavigation(readFileSync(`${root}/stories/proto.css`, "utf8"));
-  const missingCss = additionalCss(currentCss, normalizeCss(withoutNavigation(renameCss(approvedCss)).replace(/section\[id\^=/g, "section[data-reference-board^=").replace(/#(pr-light|pr)(?=\s)/g, '[data-reference-board="$1"]')));
+  const currentCss = sharedThemeCss(withoutNavigation(readFileSync(`${root}/stories/proto.css`, "utf8")));
+  const missingCss = additionalCss(currentCss, normalizeCss(sharedThemeCss(withoutNavigation(renameCss(approvedCss))).replace(/section\[id\^=/g, "section[data-reference-board^=").replace(/#(pr-light|pr)(?=\s)/g, '[data-reference-board="$1"]')));
   const unused = new Set(selectorCoverage(missingCss, Object.fromEntries([...retained, ...records].filter((record) => record.html).map((record) => [record.id, record.html]))).unused);
   const usedCss = (text) => cssBlocks(text).flatMap((rule) => {
     const brace = rule.indexOf("{"), selector = rule.slice(0, brace), body = rule.slice(brace + 1, -1);
