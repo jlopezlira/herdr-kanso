@@ -1,0 +1,32 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Start/How to read this Storybook" />
+
+# How to read this Storybook
+
+Use search for the piece’s name. The sidebar follows the way a screen is assembled:
+
+1. **Start** explains the principles and how to navigate the kit.
+2. **Tokens** holds colour, type, spacing, radius, motion and icon values from `kanso/tokens.json`.
+3. **Primitives** holds the smallest reusable controls and content pieces.
+4. **Compositions** combines primitives into navigation, bars and shared state patterns.
+5. **Panels** holds each module’s complete panel.
+6. **Layouts** shows whole-window arrangements.
+
+Open **Overview** for what a piece is, when to use it, its state specifications and its prompt. Open **Variants** and choose **State** in Controls to inspect any variant, including the earlier reference comparisons. The theme toolbar switches the complete drawing between dark and light.
+
+A state modifies one component. Hover, focus, active, disabled, dimmed, loading, empty, failure and armed appearances live on that component’s page. Some combinations only apply to particular components; the state list records the supported cases.
+
+When coverage overlaps a designed module, its features reference the designed states on that module’s page. Existing features awaiting a simplified experience appear in the plain **Not designed yet** list below **Prompt for agents**, with their code locations. The complete inventory is `stories/GAPS.md`, titled **Features to redesign**.
+
+## Token sources
+
+- `kanso/tokens.json`: names, values and roles, including both colour themes.
+- `kanso/mods/kanso-panel/ui.js`: application drawing constants `G`, `H`, `R`, `T`, `ICON`, `SWITCH` and `ARM_MS`.
+- `kanso/themes/kanso.json` and `kanso/themes/kanso-day.json`: the installed palettes.
+
+## Prompt for agents
+
+```text
+Find the component by its role in the six sections. Read its Overview, inspect the relevant Variants states in both themes, then copy its prompt. Use the existing tokens and primitive fragments when composing a larger surface.
+```

@@ -1,6 +1,0 @@
-{
- "SystemNotification": {
-  "caption": "When you are not looking: icon 17, title with its age, one line of body.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-notification\"><span class=\"kanso-notification__icon\"><svg class=\"kanso-icon kanso-icon--chrome\"><use href=\"#lu-memory-stick\"/></svg></span><div class=\"kanso-content__body\"><div class=\"kanso-content__text\">Memory 8% free<span>now</span></div><div class=\"kanso-content__secondary\">Heaviest: cart-ui, 2.4 GB</div></div></div></div></div>"
- }
-}

@@ -1,6 +1,0 @@
-{
- "HeaderDigest": {
-  "caption": "After the name: files with their delta, the PR with its dot. Stale digest dim.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__bar\" style=\"width:620px\"><div class=\"kanso-header--rest kanso-row--selected\"><span class=\"kanso-header__name\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg>Kylo-ren</span><span class=\"kanso-header__branch\">herdr-kanso</span><span class=\"kanso-header__digest\"><span class=\"kanso-header__segment kanso-header__digest kanso-digest--stale\">3 files <span class=\"kanso-header__process\">+42 −7</span></span><span class=\"kanso-header__segment\"><i class=\"kanso-dot kanso-dot--working\"></i>#166 · checks running</span></span><span class=\"kanso-layout__spacer\"></span></div></div></div></div>"
- }
-}

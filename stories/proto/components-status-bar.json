@@ -1,6 +1,0 @@
-{
- "StatusBar": {
-  "caption": "Meta size muted; items with 12 icons; minimap; zoom with the value foreground.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__bar\" style=\"width:620px\"><div class=\"kanso-status-bar--rest\"><span class=\"kanso-status-bar__item\"><svg class=\"kanso-icon\"><use href=\"#lu-monitor\"/></svg>light</span><span class=\"kanso-status-bar__item\"><svg class=\"kanso-icon\"><use href=\"#lu-git-branch\"/></svg>audit/app-errors</span><span class=\"kanso-layout__spacer\"></span><span class=\"kanso-minimap--rest\"></span><span class=\"kanso-layout__spacer\"></span><span class=\"kanso-status-bar__counts\"><span>−</span><span class=\"kanso-content__value\">2</span><span>+</span></span></div></div></div></div>"
- }
-}

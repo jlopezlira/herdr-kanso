@@ -1,6 +1,0 @@
-{
- "PaneStandingIn": {
-  "caption": "While a pane is dragged its place shows the mark and the name, and the ruler marks the drop.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-story__bar\" style=\"width:400px\"><div class=\"kanso-pane kanso-pane--drop-preview kanso-tab--held\"><div class=\"kanso-header\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg><span class=\"kanso-header__name\">tests</span></div><div class=\"kanso-pane__body\"><div class=\"kanso-pane__placeholder\"><svg class=\"kanso-icon--program\"><use href=\"#p-claude\"/></svg>tests</div></div><div class=\"kanso-pane__drop-ruler\"></div></div></div></div></div>"
- }
-}

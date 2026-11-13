@@ -19,7 +19,9 @@
     "build:ui-tokens": "node scripts/build-ui-tokens.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build && node scripts/storybook-manifest.mjs",
+    "build:stories": "node scripts/storybook-catalog.mjs",
+    "lint:storybook": "node scripts/lint-storybook.mjs"
   },
   "devDependencies": {
     "storybook": "^10.6.7",

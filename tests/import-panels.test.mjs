@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { clean, closeOf, cssBlocks, drawing, entriesOf, panelCss, sourceEntries, withoutRepeats } from "../scripts/import-panels.mjs";
+import { expand } from "../scripts/storybook-catalog.mjs";
 import { markupClasses } from "../scripts/import-proto.mjs";
 
 test("Panel extraction keeps nested drawings and separates specifications from folded markup", () => {
@@ -37,27 +38,19 @@ test("CSS extraction balances nested media, comments and quoted braces", () => {
 });
 
 test("Every imported panel state has a canvas, specification and usable symbol references", () => {
-  const root = new URL('../stories/panels/', import.meta.url);
+  const states = expand(JSON.parse(readFileSync(new URL('../stories/catalog.json', import.meta.url), 'utf8'))).filter((record) => record.source === 'panels');
   const sprite = readFileSync(new URL('../stories/proto-sprite.svg', import.meta.url), 'utf8');
   const symbols = new Set([...sprite.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
   let count = 0;
-  for (const file of readdirSync(root).filter((f) => f.endsWith('.json'))) {
-    const states = JSON.parse(readFileSync(new URL(file, root), 'utf8'));
-    const docs = readFileSync(new URL(file.replace('.json', '.mdx'), root), 'utf8');
-    const exports = readFileSync(new URL(file.replace('.json', '.stories.js'), root), 'utf8');
-    assert.match(docs, /## Prompt for agents/);
-    for (const [key, state] of Object.entries(states)) {
-      count++;
-      assert.ok(exports.includes(`export const ${key} =`));
-      assert.ok(docs.includes(`<Canvas of={stories.${key}} />`));
-      assert.deepEqual(state.spec.map(([label]) => label), ['Anatomy', 'Values', 'States', 'Behaviour', 'Principle']);
-      assert.ok(markupClasses(state.html).every((name) => /^kanso-[a-z0-9-]+(?:__[a-z0-9-]+)?(?:--[a-z0-9-]+)?$/.test(name)), `${key}: BEM classes`);
-      assert.doesNotMatch(state.name + state.caption + state.spec.flat().join(' '), /\b(?:boards?|prototype|[A-Z]\d{1,2}[a-z]?)\b/);
-      const local = new Set([...state.html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
-      for (const [, id] of state.html.matchAll(/href="#([^"]+)"/g)) assert.ok(symbols.has(id) || local.has(id), `Missing symbol ${id}`);
-      assert.equal(withoutRepeats(state.html), state.html, `${key}: a frame is drawn twice`);
-      if (state.name.endsWith(', Before')) assert.match(state.caption, /previous design/);
-    }
+  for (const state of states) {
+    count++;
+    assert.deepEqual(state.spec.map(([label]) => label), ['Anatomy', 'Values', 'States', 'Behaviour', 'Principle']);
+    assert.ok(markupClasses(state.html).every((name) => /^kanso-[a-z0-9-]+(?:__[a-z0-9-]+)?(?:--[a-z0-9-]+)?$/.test(name)), `${state.id}: BEM classes`);
+    assert.doesNotMatch(state.label + state.caption + state.spec.flat().join(' '), /\b(?:boards?|prototype|[A-Z]\d{1,2}[a-z]?)\b/);
+    const local = new Set([...state.html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
+    for (const [, id] of state.html.matchAll(/href="#([^"]+)"/g)) assert.ok(symbols.has(id) || local.has(id), `Missing symbol ${id}`);
+    assert.equal(withoutRepeats(state.html), state.html, `${state.id}: a frame is drawn twice`);
+    if (state.label.endsWith(', Before')) assert.match(state.caption, /previous design/);
   }
   assert.ok(count >= 280, `Expected the complete initial set and later states, found ${count}`);
 });

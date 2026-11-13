@@ -7,3 +7,9 @@
 .kanso-tooltip__trigger { display: inline-flex; flex-direction: column; align-items: flex-start; }
 .kanso-tooltip__trigger > .kanso-tooltip { visibility: hidden; opacity: 0; transition: opacity var(--k-hover-out) var(--k-ease-out), visibility 0s linear var(--k-hover-out); }
 .kanso-tooltip__trigger > :is(:hover, :focus-visible) + .kanso-tooltip { visibility: visible; opacity: 1; transition: opacity var(--k-hover-in) var(--k-ease-in); }
+.kanso-docs { max-width: 100%; }
+.kanso-docs table { width: 100%; }
+.kanso-docs td { vertical-align: top; }
+.kanso-docs dt { font-weight: var(--k-fw-medium); }
+.kanso-docs dd { margin: 0 0 var(--k-sp-2); }
+.kanso-docs__note { margin-block: var(--k-sp-4); }

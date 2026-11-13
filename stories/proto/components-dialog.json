@@ -1,6 +1,0 @@
-{
- "Dialog": {
-  "caption": "Popover ground, radius 8, 24 inside. Title 15 strong, actions at the end: solid then quiet.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog--settings\" style=\"width:380px\"><div class=\"kanso-dialog__heading\"><span class=\"kanso-content__text\">New project</span></div><div class=\"kanso-field\" tabindex=\"0\"><span class=\"kanso-prototype__text\">Folder</span></div><div class=\"kanso-actions kanso-panel__actions--end\" style=\"margin-top:var(--k-sp-4)\"><span class=\"kanso-button--quiet kanso-text--foreground\" tabindex=\"0\">Cancel</span><span class=\"kanso-button\" tabindex=\"0\">Create</span></div></div></div></div>"
- }
-}

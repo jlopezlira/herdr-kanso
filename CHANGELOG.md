@@ -26,6 +26,8 @@ the branch's rules.
 
 ### Fixed
 
+- Storybook uses one tonal Explain button with the Lucide bot icon and a named destination everywhere; regeneration and structure checks enforce it.
+- The open worktree row follows the kit type and spacing scale, with equal-height actions, quiet navigation and Armed removal.
 - Storybook keeps stale and unavailable text readable in muted ink instead of reducing its opacity.
 - Storybook shows Edge and Minimap slot as separate pieces, with the edges around an empty pane and the minimap in its own frame.
 
@@ -37,6 +39,7 @@ the branch's rules.
 - Storybook coverage for every app module, with selectable interaction, loading, empty, failure and recovery states built from the shared kit.
 - Storybook coverage stories use the kit's classes, so they draw with the real styles, and their captions no longer carry a design name.
 - Panel stories show each panel once instead of twice.
+- Overlapping coverage features reference their designed component states; features awaiting a simplified experience are listed under Prompt for agents and in Features to redesign.
 - Storybook includes 290 panel states with reference comparisons, specifications and usage guidelines under Panels.
 - Storybook holds kansō's whole design, by level: the philosophy, then tokens, compositions, components and whole-window layouts, each page with the reasons behind it and a prompt for agents, in the theme you choose; published with the site at /storybook. The values live in kanso/tokens.json. (#175)
 - Every piece can be shown, shown only when it has something to say, or hidden. Hiding it stops the work behind it. Settings opens on that list.
@@ -46,6 +49,7 @@ the branch's rules.
 
 ### Changed
 
+- Storybook follows Start, Tokens, Primitives, Compositions, Panels and Layouts, with one page per component, searchable state variants, shared kit fragments and copyable implementation prompts. Imports regenerate the same structure, and tests enforce its organisation and account for every existing feature state.
 - Storybook classes use descriptive kanso-prefixed BEM names, enforced when importing and testing the component kit.
 - The pull request panel opens on what stops it (the failing step and its last log lines, or the review comment), with one action. Send to the agent in front replaces Explain it, Address feedback and Resolve conflicts. A branch with no pull request no longer shows the newest open one. Description, people, labels, files and checks sit behind Details. Squash and merge and Close still ask for a second press. The line that explained how often it rereads is gone.
 - A pane header keeps files, commits and the pull request while the agent works. Files opens the diff, commits opens the unpushed work, and the pull request opens on the check or review it names. Sleep and Send stay on the pane you are in once it has finished, and a pane that is waiting on you has no Send.

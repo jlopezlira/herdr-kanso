@@ -1,6 +1,0 @@
-{
- "PickList": {
-  "caption": "Rows with name and a second line; selected on w12; a pending one at 80% with the dot.",
-  "html": "<div class=\"kanso-story\"><div class=\"kanso-story__theme kanso-story__frame kanso-story--free\"><div class=\"kanso-dialog--settings kanso-settings\" style=\"width:420px;padding:16px 24px\"><div class=\"kanso-dialog__list\"><div class=\"kanso-dialog__row kanso-dialog__row--two-lines kanso-row--selected kanso-state-line--pending\"><svg class=\"kanso-icon kanso-icon--row kanso-text--muted\"><use href=\"#lu-layers\"/></svg><div class=\"kanso-dialog__text\"><div class=\"kanso-dialog__name\">web and api</div><div class=\"kanso-dialog__detail\">3 panes · claude, codex, vite</div></div><span class=\"kanso-state-line__pending-dot\"></span></div></div><div class=\"kanso-dialog__list\"><div class=\"kanso-dialog__row kanso-row--selected\"><span class=\"kanso-dialog__text kanso-dialog__name\">web and api</span><span class=\"kanso-button--quiet\" tabindex=\"0\">Overwrite</span><span class=\"kanso-button--quiet\" tabindex=\"0\">Delete</span></div><div class=\"kanso-dialog__row\"><span class=\"kanso-dialog__text kanso-dialog__name\">review pair</span></div><div class=\"kanso-dialog__row\"><span class=\"kanso-dialog__text kanso-dialog__name\">i18n</span><span class=\"kanso-dialog__meta\">docs-site</span></div></div></div></div></div>"
- }
-}

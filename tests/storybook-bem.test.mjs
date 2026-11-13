@@ -6,29 +6,26 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { CLASSES, STORYBOOK_CLASSES, cssSelectors, markupClasses, renameCss, renameMarkup, selectorClasses } from "../scripts/import-proto.mjs";
+import { expand } from "../scripts/storybook-catalog.mjs";
 import { matches, selectorCoverage, storyTree } from "./storybook-selectors.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const read = (file) => readFileSync(join(root, file), "utf8");
 const json = (file) => JSON.parse(read(file));
 const BEM = /^kanso-[a-z0-9]+(?:-[a-z0-9]+)*(__[a-z0-9-]+)?(--[a-z0-9-]+)?$/;
-const stories = Object.fromEntries(["proto", "panels"].flatMap((dir) => readdirSync(join(root, `stories/${dir}`)).filter((file) => file.endsWith(".json"))
-  .flatMap((file) => Object.entries(json(`stories/${dir}/${file}`)).map(([name, story]) => [`${dir}/${file}:${name}`, story.html]))));
-for (const file of readdirSync(join(root, "stories/coverage")).filter((name) => name.endsWith(".json"))) {
-  for (const [name, story] of Object.entries(json(`stories/coverage/${file}`))) {
-    for (const [state, variant] of Object.entries(story.variants)) stories[`coverage/${file}:${name}:${state}`] = variant.html;
-  }
-}
+const records = expand(json("stories/catalog.json"));
+const stories = Object.fromEntries(records.filter((record) => record.html !== undefined).map((record) => [record.id, record.html]));
 const valid = (names, source) => assert.deepEqual(names.filter((name) => !BEM.test(name) && !STORYBOOK_CLASSES.has(name)), [], source);
 
 // Compound blocks include state-block, menu-item, tab-bar and status-bar.
 test("kit, frame, preview and story classes use kanso BEM", () => {
+  assert.equal(records.filter((record) => record.source === 'coverage').length, 621);
   for (const file of ["stories/proto.css", "stories/frame.css", ".storybook/preview-head.html"]) {
     valid(cssSelectors(read(file)).flatMap(selectorClasses), file);
   }
   for (const [id, html] of Object.entries(stories)) valid(markupClasses(html), id);
-  for (const dir of ["stories", "stories/proto", "stories/panels", "stories/coverage"]) {
-    for (const file of readdirSync(join(root, dir)).filter((name) => name.endsWith(".mdx"))) valid(markupClasses(read(`${dir}/${file}`)), `${dir}/${file}`);
+  for (const dir of ["stories/start", "stories/components", "stories/kit"]) {
+    for (const file of readdirSync(join(root, dir)).filter((name) => /\.(mdx|jsx)$/.test(name))) valid(markupClasses(read(`${dir}/${file}`)), `${dir}/${file}`);
   }
   const preview = read(".storybook/preview.js");
   const [, canvas, docs] = /frame\.className = [^?]+\? '([^']+)' : '([^']+)'/.exec(preview);
@@ -70,11 +67,12 @@ test("generation renames output and rejects unmapped classes before replacing fi
     const run = () => spawnSync(process.execPath, [join(root, "scripts/import-proto.mjs"), dir], { cwd: dir, encoding: "utf8" });
     let result = run();
     assert.equal(result.status, 0, result.stderr);
-    const output = readFileSync(join(dir, "stories/proto/components-field.json"), "utf8");
-    valid(markupClasses(JSON.parse(output).Field.html), "generated HTML");
-    assert.match(output, /kanso-field kanso-control--focus/);
+    const output = readFileSync(join(dir, "stories/catalog.json"), "utf8");
+    const states = expand(JSON.parse(output));
+    valid(states.flatMap((state) => markupClasses(state.html)), "generated HTML");
+    assert.ok(states.some((state) => state.html.includes("kanso-field kanso-control--focus")));
     assert.match(output, /tabindex/);
-    assert.match(readFileSync(join(dir, "stories/proto/components-field.mdx"), "utf8"), /Reuse these kit classes: kanso-field/);
+    assert.match(readFileSync(join(dir, "stories/components/primitives-field.mdx"), "utf8"), /ComponentPage/);
     assert.match(readFileSync(join(dir, "stories/proto.css"), "utf8"), /\.kanso-field\.kanso-control--focus\{color:red\}/);
     assert.equal(readFileSync(join(dir, "stories/proto-sprite.svg"), "utf8"), '<svg><symbol id="lu-check"/></svg>');
     source.push({ group: "Excluded", html: '<div class="unknown">Excluded from output</div>' });
@@ -82,7 +80,7 @@ test("generation renames output and rejects unmapped classes before replacing fi
     result = run();
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /unmapped prototype class: unknown/);
-    assert.equal(readFileSync(join(dir, "stories/proto/components-field.json"), "utf8"), output);
+    assert.equal(readFileSync(join(dir, "stories/catalog.json"), "utf8"), output);
     source.pop(); save();
     writeFileSync(join(dir, "sb-atomic.css"), ".page .unknown{color:red}\n.kit-field{cursor:pointer;transition:color 80ms}");
     result = run();
@@ -107,7 +105,7 @@ test("selector coverage respects structure, alternatives, states and both themes
   });
 });
 
-test("no additional kit selectors are unused; existing unused selectors are retained", () => {
+test("kit selector coverage stays at the reviewed catalog baseline", () => {
   const coverage = selectorCoverage(read("stories/proto.css"), stories);
-  assert.deepEqual(coverage.unused, json("tests/fixtures/storybook-unused-selectors.json"), "Review unused selectors; do not remove them as part of the naming change.");
+  assert.deepEqual(coverage.unused, json("tests/fixtures/storybook-unused-selectors.json"), "Review uncovered selectors when changing the catalog or kit.");
 });
