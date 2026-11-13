@@ -1336,6 +1336,9 @@ section[id^="panels-a-"] .kanso-panel>*,#pr .kanso-panel>*,#pr-light .kanso-pane
 .kanso-text--dimmed{color:var(--muted)}
 :is(.kanso-text--dimmed,.kanso-panel--stale,.kanso-update--stale,.kanso-tab--dim,.kanso-sidebar--dim,.kanso-sidebar__row--removed,.kanso-toast--removed,.kanso-dialog__row.kanso-control--off) :not(svg,svg *){color:var(--muted)!important}
 :is(.kanso-explain,.kanso-worktree__actions>button){border:0;font-family:inherit}
+.kanso-tab__tip{left:0;top:calc(100% + var(--k-sp-1))}
+.kanso-story__bar:has(.kanso-tab__tip){padding-bottom:var(--k-sp-8)}
+.kanso-menu-item.kanso-explain{width:100%;background:transparent;color:inherit;font-size:inherit;text-align:left}
 .kanso-actions>.kanso-action.kanso-button--quiet{display:inline-grid}
 .kanso-worktree--open{padding:var(--k-sp-3);background:var(--selected);border-radius:var(--k-r-control);max-width:72ch;box-sizing:border-box}
 .kanso-worktree__heading{display:flex;align-items:baseline;gap:var(--k-sp-2)}

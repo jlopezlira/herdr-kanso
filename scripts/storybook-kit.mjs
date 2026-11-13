@@ -35,7 +35,10 @@ export function kitRecords(records) {
   if (armed) add('Button', 'Armed', armed, 'A second press within four seconds confirms an irreversible action.');
   const button = first('kanso-button'), working = first('kanso-mark--working');
   if (button && working) add('Button', 'Loading', button.replace(/>[\s\S]*<\/([a-z]+)>$/, ` aria-busy="true">${working}Working…</$1>`), 'The action is waiting for its result.');
-  const sidebar = first('kanso-sidebar');
+  const asleep = first('kanso-project', 'compositions-sidebar-rows/Asleep/');
+  const machines = '<div class="kanso-sidebar__row-group"><div class="kanso-sidebar__row kanso-row--machine"';
+  const open = first('kanso-sidebar'), at = open?.lastIndexOf(machines) ?? -1;
+  const sidebar = asleep && at > 0 ? `${open.slice(0, at)}<div class="kanso-sidebar__row-group">${asleep}</div>${open.slice(at)}` : open;
   const rail = first('kanso-rail');
   const headerRecord = originals.find((record) => record.id.includes('layouts-sidebar-header-three-ways/'));
   const headers = headerRecord ? elements(headerRecord.html, 'kanso-sidebar--header-preview') : [];

@@ -171,7 +171,9 @@
     {
       "id": "proto/components-tab-states/TabStates/Default",
       "hash": "43ee492a0bc74db9b1c224bb462de324d12bf991a3527fafc304076aee6730eb",
-      "captionHash": "9e2132d1cb8ffc7a0873d21076fe320df1a23369de00ab237876f4a7e6dfeb9f"
+      "captionHash": "9e2132d1cb8ffc7a0873d21076fe320df1a23369de00ab237876f4a7e6dfeb9f",
+      "revisedHash": "34dfbff57fa5b9dd9f223b7cdc279bfc90fbba6f290dd6ceb725279a7a151e29",
+      "revision": "Armed tab tip"
     },
     {
       "id": "proto/components-title-and-tools/TitleAndTools/Default",
@@ -512,8 +514,8 @@
       "id": "proto/compositions-states/ThePatternEverywhere/Default",
       "hash": "916df2cadabceb00a98aa5c732c8539b34d36dea947d0cea384a023e422e57dc",
       "captionHash": "93fa243d56da5123e71f66f8f3b38f7e7ad5c16fccdea8cc0c36b0f26c6c8e0a",
-      "revisedHash": "a78f3bd551c19500285ce59886599565d933c398ac0ace6e68495ead334b75d4",
-      "revision": "Sample session names"
+      "revisedHash": "e5625ec33416b37ae0736fb41b55ce4f5f5f8aba3028a30060af7051ee8f6612",
+      "revision": "Explain component"
     },
     {
       "id": "proto/layouts-hjkl-dojo/HjklDojo/Default",
