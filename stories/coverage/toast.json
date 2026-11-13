@@ -1,0 +1,62 @@
+{
+  "Notice": {
+    "caption": "When a result happens away from its visible home, one line stands in until it is read; Seijaku keeps this component and its states in the shared kit.",
+    "variants": {
+      "Information": {
+        "when": "An informational result has no visible home.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">Conversation copied</span></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:33"
+      },
+      "Success": {
+        "when": "An action completed away from view.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">Saved arrangement</span></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:33"
+      },
+      "Warning": {
+        "when": "An action needs attention.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Agent did not exit</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Retry</button></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:33"
+      },
+      "Failure": {
+        "when": "An action failed.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Cannot open file: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Explain</button></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:33"
+      },
+      "With action": {
+        "when": "The result has one immediate action.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">kansō update available</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Update</button></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:33"
+      },
+      "Long source": {
+        "when": "The source words are longer than one line.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Cannot open /Users/example/projects/acme/src/auth/session.ts: EACCES: permission denied</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Explain</button></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:33"
+      }
+    }
+  },
+  "NoticeStack": {
+    "caption": "When several distinct results arrive, at most three share the notification corner; Seijaku keeps this component and its states in the shared kit.",
+    "variants": {
+      "Three notices": {
+        "when": "Three independent results have arrived.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">Conversation copied</span></div><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Archive failed</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Explain</button></div><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">Update available</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Update</button></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:35"
+      },
+      "Duplicate coalesced": {
+        "when": "The same title and action arrive again.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">Conversation copied</span></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:35"
+      },
+      "Different actions": {
+        "when": "The same title has different actions.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Cannot connect</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Retry</button></div><div class=\"kst-toast\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span class=\"t\">Cannot connect</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Open settings</button></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:35"
+      },
+      "Expired": {
+        "when": "Older notices have expired.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"kst-toast\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-check\"/></svg><span class=\"t\">Update available</span><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"kst-btn\">Update</button></div></div></div>",
+        "source": "kanso/mods/kanso-toast/main.js:35"
+      }
+    }
+  }
+}

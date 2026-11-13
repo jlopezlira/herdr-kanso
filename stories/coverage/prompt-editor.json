@@ -1,0 +1,17 @@
+{
+  "MultilinePrompt": {
+    "caption": "When the legacy editor is opened directly, its multiline input uses the shared prompt skeleton; Seijaku keeps this component and its states in the shared kit.",
+    "variants": {
+      "Editing": {
+        "when": "A direct mod invocation supplies multiline text.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Review note</div><div class=\"kit-field tall foc\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Keep the title.\nMove the action below it.</div></div><div class=\"acts\"><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"btn\">Save</button><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer;background:transparent\" class=\"ql\">Cancel</button></div></div></div></div>",
+        "source": "kanso/mods/kanso-prompt-editor/main.js:30"
+      },
+      "Hint": {
+        "when": "The invocation supplies a necessary scope.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Review note</div><div class=\"p-scope\">src/checkout.ts</div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Move the action below it.</div></div><div class=\"acts\"><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"btn\">Save</button><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer;background:transparent\" class=\"ql\">Cancel</button></div></div></div></div>",
+        "source": "kanso/mods/kanso-prompt-editor/main.js:30"
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './settings.stories.js';
+
+<Meta title="Coverage/Settings" />
+
+# Settings
+
+Choose **State** in Controls to inspect each drawing; the global theme toolbar owns the palette. These visual fixtures use sample data; they do not connect to live services.
+
+## Pieces
+
+When kansō settings changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.Pieces} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Sidebar | The Pieces page shows the sidebar settings. | `kanso/mods/kanso-settings/main.js:226` |
+| Pane header | The Pieces page shows the pane header settings. | `kanso/mods/kanso-settings/main.js:226` |
+| Status bar | The Pieces page shows the status bar settings. | `kanso/mods/kanso-settings/main.js:226` |
+| Tab bar and panels | The Pieces page shows the tab bar and panels settings. | `kanso/mods/kanso-settings/main.js:226` |
+| Notifications | The Pieces page shows the notifications settings. | `kanso/mods/kanso-settings/main.js:226` |
+| Background | The Pieces page shows the background settings. | `kanso/mods/kanso-settings/main.js:226` |
+| No matches | Find matches no piece. | `kanso/mods/kanso-settings/main.js:226` |
+| Custom panel | A registered panel is not a built-in. | `kanso/mods/kanso-settings/main.js:226` |
+| Changed | A choice differs from its default. | `kanso/mods/kanso-settings/main.js:226` |
+
+## Bindings
+
+When keys changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.Bindings} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Panels | Keys shows the panels bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Sidebar | Keys shows the sidebar bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Panes | Keys shows the panes bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Vim keys | Keys shows the vim keys bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Moving along the strip | Keys shows the moving along the strip bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Spend, while its panel has the keyboard | Keys shows the spend, while its panel has the keyboard bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Preview, while it has the keyboard | Keys shows the preview, while it has the keyboard bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Memory, while its panel has the keyboard | Keys shows the memory, while its panel has the keyboard bindings. | `kanso/mods/kanso-settings/main.js:180` |
+| Capture | A chord is selected for rebinding. | `kanso/mods/kanso-settings/main.js:180` |
+| Family capture | A numbered family is selected. | `kanso/mods/kanso-settings/main.js:180` |
+| Invalid family | The chord has no digit. | `kanso/mods/kanso-settings/main.js:180` |
+| Conflict armed | A chord already belongs to another command. | `kanso/mods/kanso-settings/main.js:180` |
+| Unbound | A binding was removed. | `kanso/mods/kanso-settings/main.js:180` |
+| Changed | A binding differs from the shipped keys. | `kanso/mods/kanso-settings/main.js:180` |
+| Write failed | keys.json cannot be saved. | `kanso/mods/kanso-settings/main.js:180` |
+
+## Release controls
+
+When what’s new changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.ReleaseControls} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Loading | The changelog is being read. | `kanso/mods/kanso-settings/main.js:275` |
+| Cached | The network failed but a changelog is cached. | `kanso/mods/kanso-settings/main.js:275` |
+| Read failed | No cached changelog is available. | `kanso/mods/kanso-settings/main.js:275` |
+| Stable | Stable is the selected update channel. | `kanso/mods/kanso-settings/main.js:275` |
+| Early | Early is the selected channel. | `kanso/mods/kanso-settings/main.js:275` |
+| Checks off | Automatic checks are disabled. | `kanso/mods/kanso-settings/main.js:275` |
+| Checking | A manual check is pending. | `kanso/mods/kanso-settings/main.js:275` |
+| Update ready | A release is available. | `kanso/mods/kanso-settings/main.js:275` |
+| Installing | A requested update is installing. | `kanso/mods/kanso-settings/main.js:275` |
+| Current | The installed release is current. | `kanso/mods/kanso-settings/main.js:275` |
+
+## Credits assets
+
+When credits changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.CreditsLoading} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Avatars pending | Contributor avatars are downloading. | `kanso/mods/kanso-settings/main.js:332` |
+| Avatars unavailable | Avatars could not be downloaded. | `kanso/mods/kanso-settings/main.js:332` |
+
+## Prompt for agents
+
+```text
+Build the Settings surfaces for kansō from the kit in stories/proto.css and kanso/tokens.json.
+Keep one component with its states as variants. Use the existing button, field, segmented, switch, Armed, row, state line/block, skeleton and exact sprite symbols.
+At rest retain only what would be missed. Keep one fact in one home; colour only the thing asking for attention. Expose secondary actions on hover, selection or keyboard focus.
+Use the global theme. Preserve keyboard focus and reduced-motion behavior. Irreversible actions use the shared four-second Armed control; ordinary reversible actions take one press.
+Failures retain source words beside their recovery action. Keep the last successful read during a refresh failure. An unavailable capability has no toolbar destination.
+Do not copy the native renderer’s conflicting visual treatments. The states above are the reviewable kit composition; their source references identify the behavior they represent.
+```
