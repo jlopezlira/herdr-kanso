@@ -12,6 +12,12 @@ Technical debt (a change that keeps what you see and do) merges without a
 version of its own, listed under `## [Unreleased]`, and goes out with the next
 release.
 
+## [3.31.0] - 2026-11-12
+
+### Added
+
+- Snippets saves reusable terminal commands and agent prompts. New snippets start as terminal commands; run commands in the current or a new tab, and launch prompts in a new tab. Edit, copy or delete saved snippets, with an optional working folder for new tabs.
+
 ## [3.30.0] - 2026-11-11
 
 ### Added

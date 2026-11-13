@@ -36,6 +36,7 @@ const PANELS = {
   insights: { mod: "kanso-spend" },
   memory: { mod: "kanso-guard" },
   sim: { mod: "kanso-sim" },
+  snippets: { mod: "kanso-snippets", props: { panel: true } },
 };
 
 function customPanels() {
@@ -64,11 +65,12 @@ const BUILTIN = [
   { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
   { id: "look", label: "Images", icon: `${ICON}eye.svg` },
   { id: "sim", label: "Simulator", icon: `${ICON}smartphone.svg` },
+  { id: "snippets", label: "Snippets", icon: `${ICON}file-text.svg` },
 ];
 const list = (key) => { const v = shared(key); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; };
 
 // Panels you never placed keep their catalog place after the ones you dragged.
-function panelList() {
+export function panelList() {
   const all = [...BUILTIN, ...customPanels().map((p) => ({ id: p.id, label: p.label ?? p.id, icon: p.icon }))];
   const order = list(ORDER), off = new Set(list(OFF));
   const rank = new Map(all.map((p, i) => [p.id, order.includes(p.id) ? order.indexOf(p.id) : order.length + i]));
