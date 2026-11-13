@@ -232,13 +232,13 @@ test("spaces, sleep and arrangements show the shape they are about to draw", asy
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], host);
   const spaces = new Spaces();
   const open = assertSkeleton(spaces.machineBones({ border: "#ccc" }, false, null), "machine-loading-local");
-  assert.equal(open.calls.some(([p, a]) => p === "h" && a[0] === 36), true);
+  assert.equal(open.calls.some(([p, a]) => p === "h" && a[0] === 32), true, "a computer's first read is one row at the rows' height");
+  assert.equal(open.calls.some(([p, a]) => p === "w" && a[0] === 96), true);
   const rail = assertSkeleton(spaces.machineBones({ border: "#ccc" }, true, "odin"), "machine-loading-odin");
   assert.equal(rail.calls.some(([p, a]) => p === "h" && a[0] === 46), true);
   const threads = assertSkeleton(spaces.threadsView({ border: "#ccc" })[0].el);
-  assert.equal(threads.calls.filter(([p, a]) => p === "h" && a[0] === 64).length >= 5, true);
-  assert.equal(threads.calls.some(([p, a]) => p === "w" && a[0] === 132), true);
-  assert.equal(threads.calls.some(([p, a]) => p === "w" && a[0] === 170), true);
+  assert.equal(threads.calls.filter(([p, a]) => p === "h" && a[0] === 32).length, 3, "three rows at the rows' height");
+  assert.deepEqual(threads.calls.filter(([p, a]) => p === "w" && [120, 96, 140].includes(a[0])).map(([, a]) => a[0]), [120, 96, 140]);
 
   const { Sleep } = await load("kanso-sleep/main.js", ["Sleep"], host);
   const sleep = new Sleep();

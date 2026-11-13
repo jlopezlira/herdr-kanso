@@ -18,7 +18,7 @@ import { Kdb, restDue, machinesToAsk, kansoDir } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
-import { stateMark } from "./marks.js";
+import { stateMark, glyphs } from "./marks.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
@@ -26,8 +26,8 @@ import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layou
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
-import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW } from "./sidebar-rows.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, stateEmpty, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook } from "./ui.js";
+import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, stateEmpty, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook, pendingDot } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -54,7 +54,7 @@ const TREE_ROW = 32;
 const MENU_ROW = 30; // a popup row: the conversation picker's virtual list places rows by it
 const RAIL_MARK = 46; // one group in the collapsed rail
 const RAIL_MENU_ROWS = 10; // a rail popup shows this many rows; the rest scroll
-const PLAIN_ROW = 36;
+const PLAIN_ROW = 32;
 const GUIDE_X = 13; // under the parent's name, just in from its first letter: 8px row padding + 5
 const ELBOW_W = 11;
 const GUIDE_OVERLAP = 4; // the line reaches up into the row above, so it never breaks
@@ -290,7 +290,7 @@ export default class Spaces extends View {
   }
 
   close() {
-    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); } catch { /* already gone */ }
+    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.renaming?.text.release(); } catch { /* already gone */ }
   }
 
   menuPlace(m) {
@@ -428,9 +428,9 @@ export default class Spaces extends View {
   }
 
   // A project's + : asks which agent, of the ones installed.
-  plus(id, t, place) {
-    return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.dim)
-      .tooltip("New conversation")
+  plus(id, t, place, tip = "New conversation") {
+    return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted)
+      .tooltip(tip)
       .hover((s) => s.bg(t.input).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
@@ -1198,9 +1198,11 @@ export default class Spaces extends View {
       const lines = r.stdout.split("\n");
       const head = lines.findLast((line) => line.startsWith("# branch.head "));
       const ab = lines.findLast((line) => line.startsWith("# branch.ab "));
+      const oid = lines.findLast((line) => line.startsWith("# branch.oid "))?.slice(13) ?? null;
+      const upstream = lines.findLast((line) => line.startsWith("# branch.upstream "))?.slice(18) ?? null;
       const [a, b] = ab ? ab.slice(12).split(" ") : [];
       this.git[key] = {
-        name, branch: head ? head.slice(14) : null,
+        name, branch: head ? head.slice(14) : null, oid: oid === "(initial)" ? null : oid, upstream,
         ahead: ab ? Math.abs(parseInt(a, 10)) || 0 : 0, behind: ab ? Math.abs(parseInt(b, 10)) || 0 : 0,
         repo: JSON.stringify([on, repo]), linked: repo !== `${top}/.git`,
       };
@@ -1242,17 +1244,27 @@ export default class Spaces extends View {
     const name = names.get(project.id) ?? project.name;
     const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, at: "pointer", props: { spaceMenu: { key } } });
     const missing = Boolean(project.missing);
+    const controls = closedControls({ hovered: this.hoverSpace === key, missing });
     const row = h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
       .hover((s) => s.bg(t.foreground + "0c"))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
       .when(this.navMark(`closed-project:${key}`, open), (el) => el.border_1().border_color(t.accent))
       .on_click((_e, cx) => { open(); cx.notify(); })
       .on_mouse_down("right", open)
-      .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_semibold().text_color(missing ? t.dim : t.muted).child(name))
-      .when(missing, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Folder not found")))
-      .when(this.hoverSpace === key, (el) => el.child(this.dots(`closed-dots-${key}`, t, open)))
-      .when(!missing, (el) => el.child(this.plus(`closed-plus-${key}`, t, placeOfKey(key, project))));
+      .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_semibold().text_color(t.muted).child(name))
+      .when(missing, (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child("Not found")))
+      .when(controls.plus, (el) => el.child(this.plus(`closed-plus-${key}`, t, placeOfKey(key, project), `New agent in ${name}`)))
+      .when(controls.dots, (el) => el.child(this.dots(`closed-dots-${key}`, t, open)))
+      .when(controls.locate && !project.machine, (el) => el.child(iconButton(`closed-locate-${key}`, "folder", "Locate", () => this.locate(project), tokens(t), { small: true })
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())));
     return row;
+  }
+
+  // A project whose folder is gone: pick where it is now.
+  locate(project) {
+    pickFolder({ prompt: "Use this folder" }).then((folder) => folder && this.db().relocateProject(project.id, trimmed(folder)))
+      .then(() => this.publishRegistry(this.db()))
+      .catch((e) => notify({ title: "The folder was not changed", body: String(e?.message ?? e), level: "error" }));
   }
 
   asleepOpenOf(id) {
@@ -1565,8 +1577,9 @@ export default class Spaces extends View {
     return { out, h: Math.max(0, y - 1), focus, focusH };
   }
 
-  more(e, ctx, project = null) {
-    const a = e.a, show = this.showActivity !== false && !a.sub;
+  // `directory`: in Status and Threads, the project after the name and the computer when not this one.
+  more(e, ctx, directory = null) {
+    const a = e.a, show = this.showActivity !== false && (!a.sub || a.status === "blocked");
     const timed = (value) => (this.showTime === false ? null : value);
     return {
       label: this.nameOf(a),
@@ -1574,10 +1587,8 @@ export default class Spaces extends View {
       time: timed(a.sub ? null : elapsed(a, this.since ?? {}, ctx.now)),
       // A message sent to it from Send and not seen yet: who it is from.
       activity: show ? (fromOf(a) ? `Message from ${fromOf(a)}` : activityOf(a)) : null,
-      // An agent's row keeps its second line, so the list never jumps.
-      steady: show && Boolean(a.status),
       ...this.extras(a, ctx, show),
-      project,
+      directory,
       oneLine: this.narrow,
     };
   }
@@ -1703,10 +1714,7 @@ export default class Spaces extends View {
 
   orderPicker(t) {
     const view = this.showSwitch === false ? "spaces" : this.view;
-    const [orders, current, key, head] = view === "agents" ? [STATUS_ORDERS, this.statusOrder, "statusOrder", "In each section, by"]
-      : view === "threads" ? [THREAD_ORDERS, this.threadOrder, "threadOrder", "Threads, pinned first, then by"]
-      : [ORDERS, this.order, "order", "Agents, pinned first, then by"];
-    const plain = current === Object.keys(orders)[0] || (view === "spaces" && current === DEFAULT_ORDER);
+    const { orders, current, key, head, plain } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
     const trigger = div().id("spaces-order").size(28).flex_none().rounded(6).flex().items_center().justify_center().cursor_pointer()
       .text_color(plain ? t.dim : t.muted).tooltip(`Sort: ${orders[current]}`)
       .hover((s) => s.bg(t.hover).text_color(t.foreground))
@@ -1789,13 +1797,13 @@ export default class Spaces extends View {
 
   machineActions(m, phase, hot, t) {
     const key = m ?? "local";
-    const line = m ? loginLine(m) : "";
-    const tip = { connected: "Turn off", off: "Turn on" };
+    const title = this.names.title(m);
     const button = {
-      copy: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "copy", line, (cx) => cx.write_to_clipboard?.(line), t),
-      power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", tip[phase] ?? "Turn on", (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
+      // Sign in runs the login in a terminal pane; a click on the row still copies its command.
+      signin: () => m && this.machineButton(`machine-login:${key}`, `machine-login-${m}`, "key", "Sign in", () => run("terminal.open", signInCommand(m)), t),
+      power: () => m && this.machineButton(`machine-power:${key}`, powerId(m), "power", phase === "connected" ? "Turn off" : `Turn ${title} on`, (cx) => this.setPower(m, this.phaseOf(m) === "off", cx), t),
       retry: () => m && this.machineButton(`machine-retry:${key}`, `machine-retry-${m}`, "refresh", "Refresh", (cx) => this.retryMachine(m, cx), t),
-      plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", "New project", () => run("space.new", { machine: m ?? "" }), t),
+      plus: () => this.machineButton(`machine-add:${key}`, `machine-add-${key}`, "plus", `New project on ${title}`, () => run("space.new", { machine: m ?? "" }), t),
       sync: () => this.syncButton(m, t),
     };
     return machineVisible(phase, hot, Boolean(m), peerOn(this.sync.config, m)).map((name) => button[name]()).filter(Boolean);
@@ -1805,7 +1813,7 @@ export default class Spaces extends View {
     const icon = syncIcon({ name: m, ...this.sync, now: Date.now() });
     const c = tokens(t);
     const tone = { on: c.text, off: c.dim, cannot: c.yellow }[icon.state];
-    return this.machineButton(`machine-sync:${m}`, `machine-sync-${m}`, "sync", icon.tip, (cx) => this.toggleSync(m, cx), t, tone);
+    return this.machineButton(`machine-sync:${m}`, `machine-sync-${m}`, "arrow-right-left", icon.tip, (cx) => this.toggleSync(m, cx), t, tone);
   }
 
   // The icon turns at once; a save that fails turns it back and says so.
@@ -1834,10 +1842,11 @@ export default class Spaces extends View {
     cx.notify();
   }
 
-  machineHead(m, phase, t, collapsed, folded) {
+  machineHead(m, phase, t, collapsed, folded, tail = null) {
     const key = m ?? "local";
     const title = this.names.title(m);
-    const word = machineState(phase);
+    const syncWord = m && phase === "connected" && peerOn(this.sync.config, m) && syncIcon({ name: m, ...this.sync, now: Date.now() }).state === "cannot";
+    const word = machineState(phase) || (syncWord ? "Sync can't run" : "");
     const hint = m ? ((this.hints ?? {})[m] ?? "") : "";
     const connected = phase === "connected";
     const ink = t[machineInk(phase)];
@@ -1845,7 +1854,8 @@ export default class Spaces extends View {
     const ring = this.navMark(`machine:${key}`, go);
     const hot = !collapsed && machineHot(m, this.hoverMachine, this.kbd, this.navKey);
     const tools = collapsed ? [] : this.machineActions(m, phase, hot, t);
-    const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(ink);
+    const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(phase === "connected" ? t.muted : ink);
+    const pending = phase === "loading" && Boolean(m) && this.waking?.has(m);
     const wash = t.foreground + "0c";
     return h_flex().id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
       .px(collapsed ? 0 : G.sm).gap(G.sm).items_center().rounded(R.card).text_color(ink)
@@ -1859,10 +1869,13 @@ export default class Spaces extends View {
       .when(collapsed, (el) => el.tooltip(machineTip(title, phase, hint)).child(icon))
       .when(!collapsed, (el) => el.child(icon)
         .child(div().flex_1().min_w(0).truncate().text_size(T.card).font_medium().text_color(ink).child(title))
-        .when(phase === "loading", (row) => row.child(breathe(skeleton(tokens(t)).line(G.xl * 3).id(`machine-loading-${key}`))))
-        .when(Boolean(word), (row) => row.child(div().flex_none().text_size(T.body).text_color(t[machineWordTone(phase)]).when(Boolean(hint), (el) => el.tooltip(hint)).child(word)))
+        .when(Boolean(word), (row) => row.child(div().flex_none().text_size(T.body).text_color(t[machineWordTone(phase)])
+          .when(Boolean(hint) || syncWord, (el) => el.tooltip(syncWord && !hint ? syncIcon({ name: m, ...this.sync, now: Date.now() }).tip : hint)).child(word)))
+        .when(pending, (row) => row.child(pendingDot(`machine-pending-${key}`, tokens(t))))
         .when(tools.length > 0, (row) => tools.reduce((el, tool) => el.child(tool), row))
-        .when(connected, (row) => row.child(svg(`mods/kanso-chrome/icons/chevron-${folded ? "right" : "down"}.svg`).size(ICON).flex_none().text_color(t.dim))));
+        .when(connected && folded && Boolean(tail), (row) => row.child(h_flex().id(`machine-count-${key}`).flex_none().gap(4).items_center().text_size(T.body).text_color(t.dim)
+          .when(Boolean(tail?.mark), (el) => el.child(stateMark(t, tail.mark, 12)))
+          .child(div().child(String(tail?.count ?? 0))))));
   }
 
   machineBlock(m, block) {
@@ -1870,14 +1883,20 @@ export default class Spaces extends View {
     const phase = this.phaseOf(m, layouts);
     const folded = phase === "connected" && (this.folded ?? new Set()).has(m);
     const mine = rows.filter((r) => (r.w.machine ?? null) === m);
-    const headItem = item(this.machineHead(m, phase, t, collapsed, folded), collapsed ? RAIL_MARK : PLAIN_ROW);
+    if (phase === "connected") (this.seenOn ??= {})[m ?? ""] = ctx.now;
+    // Folded: the most urgent mark of its sessions and how many projects.
+    const tail = folded ? { mark: foldTail(false, mine.flatMap((r) => (ctx.rowsBy.get(r.w.id) ?? []).map((a) => a.status))).mark, count: mine.length + this.closedOn(m, ctx).length } : null;
+    const headItem = item(this.machineHead(m, phase, t, collapsed, folded, tail), collapsed ? RAIL_MARK : PLAIN_ROW);
+    if (phase === "loading" && !collapsed) return [headItem, loadingRow(m)];
+    // Unreachable: its projects as last read, dim, with when.
+    if (phase === "unavailable" && !collapsed && mine.length) {
+      const when = readWord(this.seenOn?.[m ?? ""]);
+      return [headItem, ...mine.flatMap(draw).map((it) => ({ ...it, el: it.el.opacity(0.55).when(Boolean(when), (el) => el.tooltip(when)) }))];
+    }
     if (phase !== "connected" || folded) return [headItem];
-    const empty = h_flex().id(`machine-new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(R.control)
-      .text_size(12).text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .on_click(() => run("space.new", { machine: m ?? "" }))
-      .child(svg("mods/kanso-chrome/icons/plus.svg").size(14)).tooltip("New project");
+    const empty = stateEmpty(`machine-new-${m ?? "local"}`, "folder", noProjectsOn(this.names.title(m)), tokens(t), { label: "New project", onClick: () => run("space.new", { machine: m ?? "" }) });
     const kept = this.closedOn(m, ctx).length > 0;
-    return [headItem, ...(mine.length ? mine.flatMap(draw) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
+    return [headItem, ...(mine.length ? mine.flatMap(draw) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty)]), ...closed(m)];
   }
 
   pull(place, cx) {
@@ -1895,9 +1914,38 @@ export default class Spaces extends View {
     ];
   }
 
+  // Folded: the most urgent mark and how many, and a click there unfolds. Open, the row itself folds.
   fold(w, mine, t) {
     const open = !this.agentsFolded.has(w.id);
-    return agentFold(w.id, mine, open, (cx) => { this.setAgentsFolded(w.id, open, cx); cx.notify(); }, t);
+    return agentFold(w.id, mine, open, (cx) => { this.setAgentsFolded(w.id, open, cx); cx.notify(); }, t) ?? div().flex_none();
+  }
+
+  // Rename in place: the name becomes a field; Enter keeps it, Esc leaves it as it was.
+  startRename(w) {
+    this.endRename();
+    const text = new TextField({ placeholder: w.name });
+    text.set_value(w.name);
+    text.on("submit", (_e, cx) => this.endRename(true, cx));
+    this.renaming = { id: w.id, name: w.name, text };
+    text.focus();
+  }
+
+  endRename(keep = false, cx = null) {
+    const r = this.renaming;
+    if (!r) return;
+    this.renaming = null;
+    const name = r.text.value().trim();
+    if (keep && name !== r.name) run("space.rename", { id: r.id, name });
+    try { r.text.release(); } catch { /* already gone */ }
+    cx?.notify();
+  }
+
+  renameField(t) {
+    return div().id("space-rename").flex_1().min_w(0)
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_mouse_up("left", (_e, cx) => cx.stop_propagation())
+      .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { cx.stop_propagation(); this.endRename(false, cx); } })
+      .child(field("space-rename-field", this.renaming.text, tokens(t)));
   }
 
   setAgentsFolded(id, folded, cx = null) {
@@ -1942,11 +1990,11 @@ export default class Spaces extends View {
   }
 
   dots(id, t, open) {
-    return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.dim).tooltip("More")
+    return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted).tooltip("More")
       .hover((s) => s.bg(t.input).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); open(); })
-      .child(svg("mods/kanso-chrome/icons/more-vertical.svg").size(13));
+      .child(svg("mods/kanso-chrome/icons/ellipsis.svg").size(14));
   }
 
   row({ w, g, tree, place }, t, mine = [], group = null) {
@@ -1978,7 +2026,7 @@ export default class Spaces extends View {
       .on_mouse_down("left", (e) => {
         this.pressed = tree || e.click_count === 2 ? null : w.id;
         this.over = null;
-        if (e.click_count === 2) run("space.rename", { id: w.id });
+        if (e.click_count === 2) this.startRename(w);
       })
       .on_mouse_move((_e, cx) => this.hold(this.takes(w, tree) ? w.id : null, cx))
       .on_mouse_up("left", (_e, cx) => {
@@ -2004,10 +2052,11 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
-          .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
-          .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.pull(place, cx), open: () => openAhead(w) }) : div().flex_1())
+          .child(this.renaming?.id === w.id ? this.renameField(t)
+            : div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
+          .child(g && !asleep && this.renaming?.id !== w.id && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.pull(place, cx), open: () => openAhead(w) }) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, group)))
-          .when(controls.plus, (el) => el.child(this.plus(`space-plus-${w.id}`, t, spot)))
+          .when(controls.plus, (el) => el.child(this.plus(`space-plus-${w.id}`, t, spot, `New agent in ${w.name}`)))
           .when(controls.dots, (el) => el.child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
           .when(!asleep && mine.length > 0, (el) => el.child(this.fold(w, mine, t))),
       );
@@ -2036,7 +2085,8 @@ export default class Spaces extends View {
     const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
     const held = this.held?.done ? this.held.address : null;
     const sections = bySection(entries, since, held, this.statusOrder);
-    if (!sections.length) return [item(stateEmpty("agents-empty", "activity", "No agents running", tokens(t)))];
+    if (!sections.length) return machines().some((m) => m.layout === "loading") ? [item(this.silhouette(t), 3 * 32 + 4)]
+      : [item(stateEmpty("agents-empty", "activity", "No agents running", tokens(t)))];
     const project = this.projectOf(sp, t);
     return sections.flatMap((s, i) => {
       const id = `section-${s.id}`;
@@ -2046,52 +2096,48 @@ export default class Spaces extends View {
         open ? this.sectionsFolded.add(s.id) : this.sectionsFolded.delete(s.id);
         this.panel.set("spaces.sections", [...this.sectionsFolded]);
         this.toggleFold(id, !open, cx);
-      }, s.id === "other" ? null : statusMark(t, s.id), s.label, count, s.id === "blocked" ? t.blocked : t.foreground);
+      }, sectionMarkOf(s.id) ? statusMark(t, sectionMarkOf(s.id)) : null, s.label, sectionCount(open, count), t.foreground);
       const laid = this.unfolded(id, open, ctx.now) ? (s.id === "asleep" ? this.asleepStatus(s, t, ctx) : s.entries.map((e) => {
         if (e.a.asleep) return { focused: false, rh: ASLEEP_ROW, el: this.asleepLine(e.a, FLUSH, t) };
-        const m = this.more(e, ctx, e.lines.length ? null : project(e.a.space)), rh = agentRowH(e.a, m);
+        const m = this.more(e, ctx, e.lines.length ? null : rowDirectory(project(e.a.space)?.name, machineOf(e.a.address))), rh = agentRowH(e.a, m);
         return { focused: e.a.focused, rh, el: agentRow(e.a, FLUSH, t, this.navRow(e.a, this.rowFor(e.a)), m) };
       })) : [];
       const { h, focus, focusH } = laid.reduce((acc, r) => ({ h: acc.h + r.rh + 1, focus: r.focused ? acc.h : acc.focus, focusH: r.focused ? r.rh : acc.focusH }), { h: 0, focus: null, focusH: 0 });
       const rows = laid.map((r) => r.el);
       const box = this.foldBox(id, open, rows, ctx.now)
         .map((el) => item(el, open ? (this.foldH[id] ?? Math.max(0, h - 1)) : 0, open && focus != null ? agentMark(focus, focusH) : null));
-      return [item(head, i ? 44 : 32), ...box];
+      return [item(head, i ? 32 + G.lg : 32), ...box];
     });
   }
 
   bareHead(t, id, name, count, ink, extra) {
-    return this.sectionHead(t, id, 0, false, null, null, name, count, ink, { extra, lift: 0, chevron: false });
+    return this.sectionHead(t, id, 0, false, null, null, name, count, ink, { extra, lift: 0 });
   }
 
-  // `lift`: the space above the header (12 under an earlier section).
-  sectionHead(t, id, i, open, toggle, mark, name, count, ink, { extra = null, lift = i ? 12 : 0, chevron = true } = {}) {
-    const row = h_flex().id(id).h(32 + lift).pt(lift).px(12).flex_none().gap(10).items_center()
-      .text_size(13).font_semibold().text_color(ink)
-      .when(chevron, (el) => el.cursor_pointer().on_click((_e, cx) => { toggle(cx); cx.notify(); }))
+  // `lift`: the space above the header (16 under an earlier section). No chevron: a click on the head folds or unfolds it.
+  sectionHead(t, id, i, open, toggle, mark, name, count, ink, { extra = null, lift = i ? G.lg : 0, onHover = null } = {}) {
+    return h_flex().id(id).h(32 + lift).pt(lift).px(G.sm).flex_none().gap(G.sm).items_center()
+      .text_size(T.card).font_semibold().text_color(ink)
+      .when(Boolean(toggle), (el) => el.cursor_pointer().on_click((_e, cx) => { toggle(cx); cx.notify(); }))
+      .when(Boolean(onHover), (el) => el.on_hover((h, cx) => onHover(h, cx)))
       .when(Boolean(mark), (el) => el.child(mark))
-      .child(div().child(name))
-      .when(count != null, (el) => el.child(div().font_normal().text_color(t.dim).child(String(count))))
+      .child(div().min_w(0).truncate().child(name))
+      .when(count != null, (el) => el.child(div().font_normal().text_size(T.body).text_color(t.dim).child(String(count))))
       .child(div().flex_1())
       .when(Boolean(extra), (el) => el.child(extra));
-    return chevron ? row.child(svg(`mods/kanso-chrome/icons/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim)) : row;
   }
 
   machineBones(t, collapsed, m) {
     const { block, line } = skeleton({ border: t.border });
     if (collapsed) return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).w_full().h(RAIL_MARK).flex_none().justify_center().items_center()).child(block(28, 32, 6));
-    return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).h(PLAIN_ROW).flex_none().px(8).gap(9).items_center()).child(block(16, 16, 4)).child(line(112, 11));
+    return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).h(PLAIN_ROW).flex_none().px(8).items_center()).child(line(96, 11));
   }
 
+  // First read: the kit skeleton at the rows' height.
   silhouette(t) {
     const { block, line } = skeleton({ border: t.border });
-    const titles = [132, 104, 150, 92, 118], seconds = [170, 138, 120, 160, 100];
-    const row = (i) => h_flex().h(64).mb(6).px(12).gap(12).items_center()
-      .child(v_flex().h(64).pt(11).flex_none().child(block(20, 20, 6)))
-      .child(v_flex().flex_1().min_w(0).gap(9)
-        .child(h_flex().items_center().child(line(titles[i], 10)).child(div().flex_1()).child(block(22, 8)))
-        .child(line(seconds[i], 8)));
-    return breathe(v_flex().id("kanso-skeleton").w_full()).children([0, 1, 2, 3, 4].map(row));
+    const row = (w) => h_flex().h(32).px(G.sm).gap(G.sm).flex_none().items_center().child(block(15, 15, 4)).child(line(w, 11));
+    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.hair)).children([120, 96, 140].map(row));
   }
 
   projectOf(sp, t) {
@@ -2219,7 +2265,9 @@ export default class Spaces extends View {
   // The three views; collapsed, the rail's column of icons.
   viewSwitch(t, sp, collapsed = false) {
     const asks = sp.some((s) => s.status === "blocked");
-    const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label, icon: collapsed ? VIEWS[key].icon : null, dot: asks && key === "agents" }));
+    const platform = window()?.platform;
+    const tipOf = (key) => { const chord = viewChord(key, platform); return chord ? `${VIEWS[key].label} ${glyphs(chord, platform)}` : VIEWS[key].label; };
+    const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label, icon: collapsed ? VIEWS[key].icon : null, dot: asks && key === "agents", tip: tipOf(key) }));
     const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
     return collapsed
       ? segmented("rail-view", items, this.view, pick, tokens(t), { collapsed }).mt(4)
@@ -2227,36 +2275,35 @@ export default class Spaces extends View {
   }
 
   threadsView(t, sp, ps, ctx) {
-    if (!this.threads) return [item(this.silhouette(t))];
+    if (!this.threads) return [item(this.silhouette(t), 3 * 32 + 4)];
     const project = this.projectOf(sp, t);
     const rows = ctx.all
       .filter((a) => !a.address.includes("/") && (this.threads[a.address] || a.program?.agent || a.status))
       .map((a) => ({ a, th: shownThread(this.threads[a.address], this.termBy?.get(a.address), this.alive) }))
       // Asleep, a conversation keeps its place among the others (by your last message in it).
       .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
-    if (!rows.length) return [item(stateEmpty("threads-empty", "message", "No conversations open", tokens(t)))];
+    if (!rows.length) return [item(stateEmpty("threads-empty", "message", "No conversations yet", tokens(t)))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
     const row = ({ a, th }, nested = false) => {
       if (a.asleep) return { rh: ASLEEP_ROW, el: this.asleepLine(a, nested ? NESTED : FLUSH, t) };
       const when = (this.threadOrder === "started" ? th?.began : th?.said ?? th?.at) ?? this.since?.[a.address]?.at;
       const unread = isUnread(a.labels), up = woke(a, ctx.now), settled = Boolean(settledOf(a.labels)) && !backFromSettled(a);
-      const snoozed = snoozedUntil(a.labels) > ctx.now;
-      const free = a.status !== "working" && a.status !== "blocked";
-      const actions = [
-        settled ? { id: "unsettle", icon: "undo", tip: "Bring back", act: () => label(a.address, SETTLED_LABEL) }
-          : free && a.pin == null ? { id: "settle", icon: "check", tip: "Settle", act: () => label(a.address, SETTLED_LABEL, `${Date.now()}:${a.turn ?? 0}`) } : null,
-        { id: "pin", icon: "pin", tip: a.pin != null ? "Unpin" : "Pin to the top", act: () => this.pinThread(a) },
-      ].filter(Boolean);
+      const unreadable = this.threads[a.address]?.unavailable ?? null;
+      // Pin and the rest stay in the menu; under the pointer, Settle or Bring back.
+      const acts = { settle: () => label(a.address, SETTLED_LABEL, `${Date.now()}:${a.turn ?? 0}`), unsettle: () => label(a.address, SETTLED_LABEL) };
+      const actions = threadActions({ settled, status: a.status, pinned: a.pin != null }).map((x) => ({ ...x, act: acts[x.id] }));
+      const word = threadWord({ unreadable: Boolean(unreadable), snoozedUntil: snoozedUntil(a.labels), woke: up, now: ctx.now });
       const more = {
         label: this.nameOf(a),
-        time: this.showTime === false ? null : snoozed ? new Date(snoozedUntil(a.labels)).toTimeString().slice(0, 5) : when ? duration(Math.max(0, ctx.now - when)) : null,
-        badge: up ? "Woke" : null,
+        time: this.showTime === false || !when || word ? null : duration(Math.max(0, ctx.now - when)),
+        directory: word ?? (nested ? null : project(a.space)?.name ?? null),
+        wordTip: unreadable,
+        quiet: Boolean(unreadable),
+        refresh: unreadable ? (cx) => this.refreshThreads(cx) : null,
         strong: unread || up,
-        project: nested ? null : project(a.space),
         // What the agent says it is on, or said last; else the last thing you wrote.
-        activity: this.threads[a.address]?.unavailable ?? said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
-        roomy: true,
+        activity: unreadable ? null : said(a) ?? (th?.prompt ? `You: ${th.prompt}` : null),
         oneLine: this.narrow,
         ...this.extras(a, ctx),
       };
@@ -2287,10 +2334,7 @@ export default class Spaces extends View {
       };
       const p = s.project ? project(s.project) : null;
       // A project's name alone heads its conversations: the structure tells the group.
-      const mark = whole ? stateMark(t, "asleep") : p ? null
-        : s.id === "pinned" ? svg("mods/kanso-chrome/icons/pin.svg").size(13).flex_none().text_color(t.muted)
-        : s.id === "snoozed" ? svg("mods/kanso-chrome/icons/clock.svg").size(14).flex_none().text_color(t.muted)
-        : s.id === "settled" ? svg("mods/kanso-chrome/icons/check.svg").size(14).flex_none().text_color(t.muted) : null;
+      const mark = whole ? stateMark(t, "asleep") : null;
       // Alone, the active list is the inbox itself: no header. Asleep rows park at the end, one project each.
       if (s.id === "active" && sections.length === 1) {
         const live = s.rows.filter((r) => !r.a.asleep);
@@ -2299,16 +2343,15 @@ export default class Spaces extends View {
         if (!groups.length) return s.rows.map((r) => { const { rh, el } = row(r); return item(el, rh, r.a.focused ? agentMark(0, rh) : null); });
         return [...live.map((r) => { const { rh, el } = row(r); return item(el, rh, r.a.focused ? agentMark(0, rh) : null); }), ...groups.flatMap((g) => quiet(g, false))];
       }
-      // A project's conversations: its + starts a new one there.
+      // A project's conversations: under the pointer its + starts a new one there.
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
-      const tail = whole ? this.asleepTail(t, whole, { mark: false, count: false }) : [];
-      const extra = tail.length
-        ? h_flex().flex_none().gap(8).items_center().children([...tail, ...(w ? [this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w))] : [])])
-        : w ? this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w)) : null;
-      // A project starts after a wider breath than the gap inside it, so each reads as one group.
-      const lift = i ? (p ? 18 : 12) : 0;
+      const plus = w && this.hoverHead === s.id ? [this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w), `New conversation in ${w.name}`)] : [];
+      const tail = [...(whole ? this.asleepTail(t, whole, { mark: false, count: false }) : []), ...plus];
+      const extra = tail.length ? h_flex().flex_none().gap(8).items_center().children(tail) : null;
+      const onHover = w ? (h, cx) => { if (h ? this.hoverHead !== s.id : this.hoverHead === s.id) { this.hoverHead = h ? s.id : null; cx.notify(); } } : null;
+      const lift = i ? G.lg : 0;
       const headName = p ? p.name : whole ? whole.rows[0].a.asleep.spaceName : (s.label ?? "Active");
-      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, s.rows.length, folds ? t.muted : t.foreground, { extra, lift }), 32 + lift)];
+      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, sectionCount(open, s.rows.length), t.foreground, { extra, lift, onHover }), 32 + lift)];
       const body = whole ? s.rows : split.live;
       const show = this.unfolded(foldId, open, ctx.now);
       const laid = show ? body.map((r) => row(r, Boolean(s.project))) : [];

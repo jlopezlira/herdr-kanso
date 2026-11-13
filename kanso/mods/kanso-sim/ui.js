@@ -257,7 +257,7 @@ export function field(id, text, c, { label = null, icon = null, onIcon = null, i
     : ring;
 }
 
-/** One segmented control: selection is a tone, never a weight, so nothing moves. Items: { key, label, icon, dot }; `dot` marks one
+/** One segmented control: selection is a tone, never a weight, so nothing moves. Items: { key, label, icon, dot, tip }; `dot` marks one
  * while unselected. Collapsed: a column of icons, each label its tip. */
 export function segmented(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false } = {}) {
   const seg = (item, index) => {
@@ -267,7 +267,7 @@ export function segmented(id, items, value, onChange, c, { disabled = false, spo
     return Button.new(`${id}-${item.key}`).items_center().justify_center().gap(G.xs).rounded(R.control)
       .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
       .when(collapsed, (el) => el.relative().size(H.icon).flex_none().tooltip(item.label))
-      .when(!collapsed, (el) => el.flex_1().h_full().px(G.sm - G.hair))
+      .when(!collapsed, (el) => el.flex_1().h_full().px(G.sm - G.hair).when(Boolean(item.tip), (b) => b.tooltip(item.tip)))
       .selected(on)
       .disabled(disabled)
       .set_position(index + 1, items.length)

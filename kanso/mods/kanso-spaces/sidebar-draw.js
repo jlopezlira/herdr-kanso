@@ -3,7 +3,7 @@ import { h_flex } from "gpui-base";
 import { run } from "herdr";
 import { G, R, T, tokens, quietLink, pendingDot, PENDING } from "./ui.js";
 import { commitLayout } from "./layout.js";
-import { ASLEEP_ROW, asleepControls, gitControls, pullKey } from "./sidebar-rows.js";
+import { ASLEEP_ROW, asleepControls, gitControls, gitTask, pullKey } from "./sidebar-rows.js";
 
 const stop = (el, go) => el.cursor_pointer()
   .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -19,24 +19,24 @@ export function gitTail(g, tree, name, t, place, act) {
   const folder = place?.cwd ?? "";
   const on = place?.on ?? null;
   const controls = gitControls(g, { folder, on, id: act.id, active: act.active, pulling: act.pulling === pullKey(folder, on) });
-  const same = (value) => value.toLowerCase() === String(name ?? "").toLowerCase();
-  const branch = tree ? "" : (g.branch ?? "detached");
-  const repo = tree || same(g.name) ? "" : g.name;
+  const { repo, branch, commit } = gitTask(g, name, tree);
   const count = (control) => {
-    const base = div().id(`git-${control.kind}-${act.id}`).flex_none();
+    const base = div().id(`git-${control.kind}-${act.id}`).flex_none().tooltip(control.tip);
     // A pull is drawn done at once; the dot breathes until git answers.
-    if (control.pulling) return pendingDot(`git-pending-${act.id}`, tokens(t));
+    if (control.pulling) return base.child(pendingDot(`git-pending-${act.id}`, tokens(t)));
     const go = control.kind === "ahead" ? act.open : act.pull;
-    return stop(base.text_size(T.body).text_color(control.kind === "ahead" ? t.ansi2 : t.muted), go).child(control.label);
+    return stop(base.px(4).py(2).rounded(4).text_size(T.body).text_color(t.muted).hover((s) => s.bg(t.foreground + "1f").text_color(t.foreground)), go).child(control.label);
   };
   const pending = controls.some((control) => control.pulling);
-  return h_flex().flex_1().min_w(0).gap(5).justify_end().items_center().text_size(T.body).text_color(t.dim)
+  return h_flex().flex_1().min_w(0).gap(4).items_center().text_size(T.body).text_color(t.dim)
     .opacity(pending ? PENDING : 1)
     .when(Boolean(repo), (el) => el.child(div().min_w(0).truncate().child(repo)))
     .when(Boolean(branch), (el) => el
-      .child(svg("mods/kanso-chrome/icons/branch.svg").size(12).flex_none().text_color(t.muted))
+      .child(svg("mods/kanso-chrome/icons/branch.svg").size(12).flex_none().text_color(t.dim))
       .child(div().min_w(0).truncate().text_color(t.muted).child(branch)))
-    .children(controls.map(count));
+    .when(Boolean(commit), (el) => el.child(div().flex_none().child(commit)))
+    .children(controls.map(count))
+    .child(div().flex_1());
 }
 
 export function asleepRow(a, pad, t, row, wake, label) {
