@@ -5143,7 +5143,7 @@
         "Hero: the 48 metric: lines added, lines removed muted, then the change in words with an arrow, muted.",
         "Counts are one dim line: PRs merged, commits, reviews, streak. On a Day, Contributions leads.",
         "A click on the streak opens the heat map. Longest streak is in Records.",
-        "At rest only a new record shows (\"new\"). Records, When you ship and Computers are one row each and open on click. Charts in ink, never accent.",
+        "At rest only a new record shows (\"new\"). Records, When you ship and Computers are one row each and open on click. Charts in ink (foreground at 25 to 100%), never accent.",
         "By repository: top 3, then Show 8 more. Commits on hover.",
         "Rows use the one row with the value at the right, 12.5 foreground.",
         "Remote: one GitHub GraphQL read per period on open or Refresh. Line sums from git per computer, read once then incrementally. No poll."
