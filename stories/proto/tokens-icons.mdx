@@ -37,11 +37,11 @@ Pending = 80% plus one breathing dot. A working name shimmers; nothing else move
 
 ## The whole set
 
-I1: every icon in use, its Lucide name and what it means. Nothing outside this list.
+every icon in use, its Lucide name and what it means. Nothing outside this list.
 
 <Canvas of={stories.TheWholeSet} />
 
-## I1 Icons, one set
+## Icons, one set
 
 ### Adding an icon
 
@@ -50,24 +50,24 @@ This list is the only set. If you need another icon, take it from Lucide (lucide
 ### Icon guidelines
 
 - Every icon is Lucide 1.72.0, the icon's own markup, unchanged: 24 grid, stroke 2, round caps and joins. Ids are lu- and the Lucide name.
-- One name per meaning across every board: one close (lu-x), one more (lu-ellipsis), one pin, one sync, one share, one layers, one terminal.
+- One name per meaning: one close (lu-x), one more (lu-ellipsis), one pin, one sync, one share, one layers, one terminal.
 - A plain shell is lu-terminal, the same as the Terminal row in the + menu.
-- Not icons, kept: the ensō marks and spinner, the blocked mark, the Claude Code and Codex marks, Hachi's pixel art, the Dawn artwork, the kansō wordmark, the macOS window lights, the board pointer.
+- Not icons, kept: the ensō marks and spinner, the blocked mark, the Claude Code and Codex marks, Hachi's pixel art, the Dawn artwork, the kansō wordmark, the macOS window lights, the example pointer.
 - Flagged: Android has no Lucide icon (proposal: the word "Android" on the button). iOS uses lu-apple, the fruit, as the app does.
 
 ## Prompt for agents
 
 ```text
 Build Icons (Tokens) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --blocked, --border, --canvas, --dim, --done, --fg, --idle, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-ic-control, --k-ic-row, --k-r-sm, --k-sp-2, --muted, --w12, --w7, --working.
+Use these tokens: --bg, --blocked, --border, --canvas, --dim, --done, --fg, --idle, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-ic-control, --k-ic-row, --k-r-sm, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --w12, --w7, --working.
 Draw these pieces: Lucide, four sizes; The set; Program marks; Ensō marks; Pending dot and glint; The whole set.
-Reuse these kit classes: kit-glint, kst-pdot, kst-pend.
+Reuse these kit classes: kanso-text--glint, kanso-state-line__pending-dot, kanso-state-line--pending.
 Follow these rules:
 - Lucide, four sizes: 12 inline · 14 row · 15 control · 17 chrome. Exact Lucide, stroke as drawn.
 - The set: One icon per meaning, used the same everywhere.
 - Program marks: A program is its mark at 100%: Claude, Codex, a plain terminal. 15 on a row.
 - Ensō marks: Working spins, idle is the open ring, done the full ring, blocked the mark that asks. 14 on a row.
 - Pending dot and glint: Pending = 80% plus one breathing dot. A working name shimmers; nothing else moves.
-- The whole set: I1: every icon in use, its Lucide name and what it means. Nothing outside this list.
-Apply every guideline of I1 Icons, one set.
+- The whole set: every icon in use, its Lucide name and what it means. Nothing outside this list.
+Apply every guideline of Icons, one set.
 ```

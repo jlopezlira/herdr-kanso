@@ -9,13 +9,13 @@ Name field, the path it will take, the program as a segmented, Create at the end
 
 <Canvas of={stories.NewWorktree} />
 
-## P14 Worktrees: scanning, failing, elsewhere, and a new one
+## Worktrees: scanning, failing, elsewhere, and a new one
 
 ### Worktrees guidelines
 
 - **Seijaku** The scan's progress takes the scope slot ("checking 12 of 40") instead of an 11 phase label squeezed beside the icons. The first scan uses the kit skeleton. Later scans keep the last result and draw Clean up disabled until the scan is done.
 - **Yūgen** Empty: "No worktrees".
-- **Seijaku** Failures follow P00: the scan's failure sits where the list would start, with Refresh and Explain to checkout; a refused removal sits on its row, with Remove and Explain to checkout, and the row's path and other links step aside.
+- **Seijaku** Failures follow the state pattern: the scan's failure sits where the list would start, with Refresh and Explain to checkout; a refused removal sits on its row, with Remove and Explain to checkout, and the row's path and other links step aside.
 - **Seijaku** On another computer (an addition): the panel follows the focused project's computer, so the scope says devbox and every command runs there. Unreachable: the kit stale line, writes disabled.
 - **Kansō** New worktree is the dialog the sidebar already has, on the dialog skeleton: title 15 semibold, no paragraph, the branch field focused, the folder it will make as a live fact under it, the agent to start (the last one used is preselected), Create solid, Cancel quiet, Enter and Esc. One dialog, two ways in: + here and "New agent in a worktree…" on the project row.
 - **Kokō** Create uses solid, not accent: accent is only for a second press.
@@ -27,10 +27,10 @@ Name field, the path it will take, the program as a segmented, Create at the end
 Build New worktree (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
 Use these tokens: --accent, --bg, --border, --canvas, --dim, --fg, --input, --k-ease-in, --k-fs-body, --k-fw-medium, --k-h-control, --k-hover-in, --k-ic-control, --k-lh-body, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --popover, --raised, --shadow, --solid, --solidfg, --w12, --w4, --w7.
 Draw these pieces: New worktree.
-Reuse these kit classes: kit-field.
+Reuse these kit classes: kanso-field.
 Follow these rules:
 - New worktree: Name field, the path it will take, the program as a segmented, Create at the end.
-Apply every guideline of P14 Worktrees: scanning, failing, elsewhere, and a new one.
+Apply every guideline of Worktrees: scanning, failing, elsewhere, and a new one.
 Treat as a defect:
 - No poll.
 ```

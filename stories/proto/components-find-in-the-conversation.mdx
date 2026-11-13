@@ -9,14 +9,14 @@ import * as stories from './components-find-in-the-conversation.stories.js';
 
 <Canvas of={stories.FindInTheConversation} />
 
-## B7 Find in the conversation, ⌘F
+## Find in the conversation, ⌘F
 
 ### Find in the conversation guidelines
 
 - **Fukinsei** It opens under the focused pane's header, right-aligned, 420 wide: next to what it searches, not in the middle of the window.
 - **Kansō** A row shows the time only. The day is its header, so "2026-11-11 14:02" on every row goes.
 - **Seijaku** Previous and Next are drawn in dim while there is nothing to move to.
-- **Seijaku** Failure and empty use the state pattern (S21, state.css) where the matches start. A missing file is the BLOCK: "Can't read checkout's conversation", the path as evidence, Refresh, Explain to checkout. No matches is the EMPTY plate with the search icon, and the count slot stays empty.
+- **Seijaku** Failure and empty use the state pattern where the matches start. A missing file is the BLOCK: "Can't read checkout's conversation", the path as evidence, Refresh, Explain to checkout. No matches is the EMPTY plate with the search icon, and the count slot stays empty.
 - **Seijaku** A plain shell gets the terminal's own search.
 - **Kokō** Remote, on devbox: one read when it opens, then one when the agent stops or you press Enter.
 
@@ -24,10 +24,10 @@ import * as stories from './components-find-in-the-conversation.stories.js';
 
 ```text
 Build Find in the conversation (Components) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --accent, --bg, --border, --canvas, --dim, --fg, --input, --k-fs-body, --k-fs-meta, --k-h-compact, --k-h-control, --k-h-icon, --k-ic-control, --k-lh-body, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-hair, --muted, --w12, --w7.
+Use these tokens: --accent, --bg, --border, --canvas, --dim, --fg, --input, --k-fs-body, --k-fs-meta, --k-h-compact, --k-h-control, --k-h-icon, --k-ic-control, --k-lh-body, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-hair, --muted, --w12, --w7.
 Draw these pieces: Find in the conversation.
-Reuse these kit classes: kit-field, kit-row.
+Reuse these kit classes: kanso-field, kanso-row--interactive.
 Follow these rules:
 - Find in the conversation: ⌘F: a field with the count and the two arrows; a hit shows who, when and the line with the match.
-Apply every guideline of B7 Find in the conversation, ⌘F.
+Apply every guideline of Find in the conversation, ⌘F.
 ```

@@ -9,15 +9,13 @@ import * as stories from './layouts-window-at-rest.stories.js';
 
 <Canvas of={stories.WindowAtRest} />
 
-## 01 Window at rest
-
 ### The real window, polished
 
 - **Shizen** Drawn from the app as it is (capture 2026-11-12, kanso-spaces/main.js, kanso-chrome/main.js, kanso-tabs/main.js, kanso-strip/main.js, kanso-status/main.js). Same regions, same controls, same places. Polish only: nothing new, nothing removed.
 - **Seijaku** One grid. A lead is 15 and its name follows 8 after, so each level steps 23: a machine's icon and a project's name at 8, its agents' icons under the machine's name at 31, a sub-agent's icon under its parent's name at 54. Rows are 32 (50 with a second line), groups 12 apart.
-- **Seijaku** One size per role, from K. Chrome (+, sort, search, hide, footer) 32 with 17. Bars (tabs, panels, pane tools) 26 with 15. Row buttons (+, power) 20 with 12; row tails (chevron, branch) 12; marks 14. Names 13.5, tabs and headers 12.5, secondary 11.5. Controls radius 6, panes 8.
-- **Kokō** Colour only for a state. ↓12 is a count, not a failure: muted, not red. Blocked lives on the mark (S21).
-- **Shizen** The user chooses what a row says. Right-click an agent (board 10): What it is on, Time in its state and Commands still running each take Show, Only when needed or Hide. Drawn at Only when needed: Kylo-ren works and Fury waits, so they show a second line.
+- **Seijaku** One size per role,. Chrome (+, sort, search, hide, footer) 32 with 17. Bars (tabs, panels, pane tools) 26 with 15. Row buttons (+, power) 20 with 12; row tails (chevron, branch) 12; marks 14. Names 13.5, tabs and headers 12.5, secondary 11.5. Controls radius 6, panes 8.
+- **Kokō** Colour only for a state. ↓12 is a count, not a failure: muted, not red. Blocked lives on the mark.
+- **Shizen** The user chooses what a row says. Right-click an agent: What it is on, Time in its state and Commands still running each take Show, Only when needed or Hide. Drawn at Only when needed: Kylo-ren works and Fury waits, so they show a second line.
 - **Kansō** Title bar: the lights only. Herdr's mark and name leave. The footer: Update kansō while one is ready, then Settings, whose menu holds kansō settings, Herdr settings and Help. The tab bar's own gear and help go there; the account chip goes (its agent count was a second home).
 - **Fukinsei** The status bar is balanced: computer and branch at the left, the minimap in the middle, − 2 + at the right. Everything it shows stays.
 - **Yūgen** No fold chevron: the row itself folds. Open and at rest, a row is its name: you can see what it holds. Folded, it shows what it hides in its place: the most urgent mark and how many. The header shows the worktree by its last name (app-audit), the full path on hover, so the branch is never cut.
@@ -29,12 +27,12 @@ import * as stories from './layouts-window-at-rest.stories.js';
 
 ```text
 Build Window at rest (Layouts) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --accent, --bg, --blocked, --border, --canvas, --chrome, --dim, --done, --fg, --idle, --input, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-fw-regular, --k-fw-strong, --k-h-badge, --k-h-bar, --k-h-header, --k-h-icon, --k-h-pane, --k-h-row, --k-h-row2, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-code, --k-r-card, --k-r-control, --k-r-full, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-6, --k-sp-hair, --muted, --shadow, --w12, --w14, --w7, --working.
+Use these tokens: --accent, --bg, --blocked, --border, --canvas, --chrome, --dim, --done, --fg, --idle, --input, --k-fs-body, --k-fs-meta, --k-fs-name, --k-fw-medium, --k-fw-regular, --k-fw-strong, --k-h-badge, --k-h-bar, --k-h-header, --k-h-icon, --k-h-pane, --k-h-row, --k-h-row2, --k-ic-chrome, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-code, --k-r-card, --k-r-control, --k-r-full, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-6, --muted, --shadow, --w12, --w14, --w7, --working.
 Draw these pieces: Window at rest.
-Reuse these kit classes: kit-row.
+Reuse these kit classes: kanso-row--interactive.
 Follow these rules:
 - Window at rest: 01 at 60%: sidebar, tab bar, pane with its header, status bar.
-Apply every guideline of 01 Window at rest.
+Apply every guideline of Window at rest.
 Treat as a defect:
 - No fold chevron: the row itself folds.
 - No counting dots after a working name.

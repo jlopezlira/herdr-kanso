@@ -325,8 +325,6 @@ export default class Memory extends View {
       totals ? { value: String(totals.restarts), unit: totals.restarts === 1 ? "restart" : "restarts" } : null,
       totals && totals.freedMB > 0 ? { value: size(totals.freedMB), unit: "freed", tip: totals.since ? `Since ${clock(totals.since)}` : null } : null,
     ].filter(Boolean);
-    const armedRestart = this.armed.is("restart");
-    const armedReap = this.armed.is("reap");
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().gap(G.xs)
         .child(h_flex().flex_wrap().items_end().gap_x(G.md)
@@ -338,11 +336,11 @@ export default class Memory extends View {
           .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.red : c.text).child(s.value))
           .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
       .child(h_flex().w_full().flex_wrap().gap_x(G.lg).items_center()
-        .when(Boolean(w.pid), (el) => el.child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : armedRestart ? "Press again to restart the window" : "Restart window",
-          (cx) => { if (!this.busy.restart) this.armed.press("restart", cx, (cx) => this.restartWindow(cx)); }, c, { color: armedRestart ? c.red : c.muted })))
-        .when(data.helpers > 0 || Boolean(this.busy.reap), (el) => el.child(quietLink("guard-reap",
-          this.busy.reap ? "Cleaning up…" : armedReap ? `Press again to end ${data.helpers}` : `Clean up ${data.helpers} hung ${data.helpers === 1 ? "helper" : "helpers"}`,
-          (cx) => { if (!this.busy.reap) this.armed.press("reap", cx, (cx) => this.reap(cx)); }, c, { color: armedReap ? c.red : c.muted }))))
+        .when(Boolean(w.pid), (el) => el.child(quietLink("guard-restart", this.busy.restart ? "Restarting the window…" : "Restart window",
+          (cx) => { if (!this.busy.restart) this.restartWindow(cx); }, c)))
+        .when(data.helpers > 0 || Boolean(this.busy.reap), (el) => el.child(this.armed.link("guard-reap",
+          this.busy.reap ? "Cleaning up…" : `Clean up ${data.helpers} hung ${data.helpers === 1 ? "helper" : "helpers"}`, `end ${data.helpers}`,
+          "reap", (cx) => this.reap(cx), c, { disabled: Boolean(this.busy.reap) }))))
       .when(Boolean(w.reason), (el) => el.child(div().text_size(T.body).text_color(c.muted).child(w.reason)));
   }
 
@@ -384,22 +382,17 @@ export default class Memory extends View {
       working.length ? `${working.length} working` : null,
       other.length ? `${other.length} can't be recycled` : null,
     ].filter(Boolean).join(" · ");
-    const armedAll = this.armed.is("all"), armedHeavy = this.armed.is("heavy"), armedStale = this.armed.is("stale");
     const staleMin = num(data.limits.staleIdleMin) ?? 2880;
     const stale = staleAgents(list, staleMin, data.focused);
     const actions = h_flex().w_full().flex_wrap().gap_x(G.xl).gap_y(G.sm).items_center()
       .when(batchable.length > 0, (el) => el.child(quietLink("guard-recycle-all",
-        armedAll ? `Press again to recycle ${batchable.length}` : `Recycle all ${batchable.length} idle · about ${size(freedEstimate(batchable))} back`,
-        (cx) => this.armed.press("all", cx, (cx) => this.recycleAll(0, cx)), c,
-        { color: armedAll ? c.red : c.text, label: "Recycle every idle agent" })))
+        `Recycle all ${batchable.length} idle · about ${size(freedEstimate(batchable))} back`,
+        (cx) => this.recycleAll(0, cx), c, { color: c.text, label: "Recycle every idle agent" })))
       .when(heavy.length > 0 && heavy.length < batchable.length, (el) => el.child(quietLink("guard-recycle-heavy",
-        armedHeavy ? `Press again to recycle ${heavy.length}` : `Only the ${heavy.length} over ${size(over)}`,
-        (cx) => this.armed.press("heavy", cx, (cx) => this.recycleAll(over, cx)), c,
-        { color: armedHeavy ? c.red : c.muted })))
-      .when(stale.length > 0, (el) => el.child(quietLink("guard-close-stale",
-        armedStale ? `Press again to close ${stale.length}` : `Close the ${stale.length} not used for ${idleWords(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`,
-        (cx) => this.armed.press("stale", cx, (cx) => this.closeStale(staleMin, cx)), c,
-        { color: armedStale ? c.red : c.muted, label: "Close agents not used for a long time" })));
+        `Only the ${heavy.length} over ${size(over)}`, (cx) => this.recycleAll(over, cx), c)))
+      .when(stale.length > 0, (el) => el.child(this.armed.link("guard-close-stale",
+        `Close the ${stale.length} not used for ${idleWords(staleMin)} · ${size(stale.reduce((t, a) => t + (a.mb ?? 0), 0))} back`, `close ${stale.length}`,
+        "stale", (cx) => this.closeStale(staleMin, cx), c, { label: "Close agents not used for a long time" })));
     return v_flex().w_full().gap(G.xl)
       .child(v_flex().w_full().gap(G.sm)
         .child(section(c, "Agents", list.length ? size(agentsMB(data)) : ""))
@@ -446,8 +439,8 @@ export default class Memory extends View {
   }
 
   agentRow(c, a, index, { limit, action, reason }) {
-    const key = `recycle:${a.pid}`, armed = this.armed.is(key), busy = Boolean(this.busy[key]);
-    const closeKey = `close:${a.pid}`, armedClose = this.armed.is(closeKey), closing = Boolean(this.busy[closeKey]);
+    const busy = Boolean(this.busy[`recycle:${a.pid}`]);
+    const closeKey = `close:${a.pid}`, closing = Boolean(this.busy[closeKey]);
     const closable = a.closeable !== false && a.kind === "claude" && Boolean(a.session) && a.status !== "working" && a.terminal !== this.now?.data?.focused && !(this.busy.batch || (this.batch && !this.batch.finished));
     const spark = sparkFor(this.digest?.sparks, a);
     const over = typeof limit === "number" && typeof a.mb === "number" && a.mb > limit;
@@ -465,14 +458,10 @@ export default class Memory extends View {
           .when(Boolean(spark), (el) => el.child(this.spark(c, spark.ratios)))
           .child(div().text_size(15).font_light().text_color(over ? c.yellow : reason ? c.muted : c.text).whitespace_nowrap().child(size(a.mb))))
         .child(h_flex().gap(G.md).items_center()
-          .when(closable || closing, (el) => el.child(quietLink(`guard-close-${a.pid}`,
-            closing ? "Closing…" : armedClose ? "Press again to close" : "Close",
-            (cx) => { if (!closing) this.armed.press(closeKey, cx, (cx) => this.closeAgent(a, cx)); }, c,
-            { color: armedClose ? c.red : c.dim, label: `Close ${a.name || a.pid}` })))
-          .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`,
-            busy ? "Recycling…" : armed ? "Press again" : "Recycle",
-            (cx) => { if (!busy) this.armed.press(key, cx, (cx) => this.recycle(a, cx)); }, c,
-            { color: armed ? c.red : c.muted, label: `Recycle ${a.name || a.pid}` })))));
+          .when(closable || closing, (el) => el.child(this.armed.link(`guard-close-${a.pid}`, closing ? "Closing…" : "Close", "close",
+            closeKey, (cx) => this.closeAgent(a, cx), c, { color: c.dim, disabled: closing, label: `Close ${a.name || a.pid}` })))
+          .when((action && a.recyclable) || busy, (el) => el.child(quietLink(`guard-recycle-${a.pid}`, busy ? "Recycling…" : "Recycle",
+            (cx) => { if (!busy) this.recycle(a, cx); }, c, { label: `Recycle ${a.name || a.pid}` })))));
   }
 
   heaviest(c, data) {

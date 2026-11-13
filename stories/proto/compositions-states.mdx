@@ -37,23 +37,23 @@ Mark, text one line, small tonal fix. Popover ground.
 
 ## The pattern, everywhere
 
-S21: failure, empty, pending and loading drawn one way in every place.
+failure, empty, pending and loading drawn one way in every place.
 
 <Canvas of={stories.ThePatternEverywhere} />
 
-## S21 State pattern, designed
+## State pattern, designed
 
 ### State guidelines
 
 - **Seijaku** One drawing per state, everywhere, in the same words at every size. A view never invents its own.
-- **Kansō** Failure in the sidebar is a word on the row, as Off: the row keeps its icon and name, then the state in words (11.5 dim) and the fix as a row button at its end (Refresh, 20 with 12). No block grows under a row, so nothing moves and nothing shouts. The source's words, the fixes and Explain to \<agent\> live in the row's right-click menu, as its own actions (board 10).
+- **Kansō** Failure in the sidebar is a word on the row, as Off: the row keeps its icon and name, then the state in words (11.5 dim) and the fix as a row button at its end (Refresh, 20 with 12). No block grows under a row, so nothing moves and nothing shouts. The source's words, the fixes and Explain to \<agent\> live in the row's right-click menu, as its own actions.
 - **Kansō** Failure, block (panel): a 1 px blocked edge, no fill, radius 8, 12 inside. A 14 mark, then our words (13.5 medium, foreground), then the source's words as evidence (mono 11.5 muted, at most two lines; only when they are cut, the full text on hover, selectable, beside the block at the evidence's first line, never over the buttons). Buttons are 30 high and share the text column's width equally, 8 below it (where both do not fit on one line, each takes the full width): the fix first, solid (Refresh, or the write's own name), then Explain to \<agent\>, tonal, with the Lucide bot icon and the agent named in words, never a program mark, since any model can be behind it. No edges on these buttons. The row it belongs to does not repeat the state.
 - **Kansō** Where the block sits. Panel: where the list would start; a refused write, 2 under its row. In the sidebar a refused write is a toast, and the row returns to its state before the press.
 - **Kansō** Failure, line (toast, a one-line row): the mark, our words, and the fix at the end of the line, 24 high. A click on the line does the fix. No Explain at this size.
 - **Fukinsei** Failure in a bar (status bar 26, pane header 34): the mark, our words, and the fix right after them as a quiet button 20 high with no edge, so it keeps the bar's proportion.
 - **Yūgen** Empty: centred in the empty region, 24 above and below: the view's icon (20, dim), one sentence (12.5 muted, wraps balanced) and at most one tonal button. The action invites; it never shouts. No plate, no second sentence, no indent of its own.
 - **Shizen** Pending: the new state is drawn at once at 80% with a 4 px muted dot breathing beside it. Confirmed, both go. Refused, the old state returns with the failure block under it.
-- **Kokō** Colour: blocked only on the edge and the mark; words stay in foreground and muted. Contrast as in A.
+- **Kokō** Colour: blocked only on the edge and the mark; words stay in foreground and muted. Contrast.
 
 ## Prompt for agents
 
@@ -61,15 +61,15 @@ S21: failure, empty, pending and loading drawn one way in every place.
 Build States (Compositions) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
 Use these tokens: --bg, --blocked, --border, --canvas, --chrome, --dim, --done, --fg, --k-fs-body, --k-fs-meta, --k-fs-mono, --k-fs-name, --k-fs-title, --k-fw-medium, --k-fw-strong, --k-h-badge, --k-h-compact, --k-h-control, --k-h-header, --k-h-icon, --k-h-row, --k-ic-control, --k-ic-inline, --k-ic-row, --k-lh-line, --k-lh-tight, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --k-sp-6, --k-sp-hair, --muted, --popover, --raised, --shadow, --solid, --solidfg, --w12, --w14, --w4, --w7, --working.
 Draw these pieces: Failure on a line; Failure block; Empty; Pending; Toast; The pattern, everywhere.
-Reuse these kit classes: kst-acts, kst-block, kst-btn, kst-empty, kst-line, kst-onrow, kst-panel, kst-pdot, kst-pend, kst-toast, kst-what, kst-why.
+Reuse these kit classes: kanso-state-block__actions, kanso-state-block, kanso-button--tonal, kanso-state-empty, kanso-state-line, kanso-state-block--on-row, kanso-state-block__panel, kanso-state-line__pending-dot, kanso-state-line--pending, kanso-toast, kanso-state-block__what, kanso-state-block__why.
 Follow these rules:
 - Failure on a line: Mark 14, what, the one fix as a small tonal button at the right.
 - Failure block: Mark, what in name size, why dim, then the fixes: first solid, the rest tonal.
 - Empty: Icon, one sentence muted, the one action solid.
 - Pending: The row at 80% with one breathing dot. Writes are optimistic.
 - Toast: Mark, text one line, small tonal fix. Popover ground.
-- The pattern, everywhere: S21: failure, empty, pending and loading drawn one way in every place.
-Apply every guideline of S21 State pattern, designed.
+- The pattern, everywhere: failure, empty, pending and loading drawn one way in every place.
+Apply every guideline of State pattern, designed.
 Treat as a defect:
 - No block grows under a row, so nothing moves and nothing shouts.
 - No edges on these buttons.

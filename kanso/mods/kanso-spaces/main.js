@@ -27,7 +27,7 @@ import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW } from "./sidebar-rows.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, button, iconButton, field, TextField, Armed, segmented } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -1376,15 +1376,17 @@ export default class Spaces extends View {
   }
 
   // The row itself, at its place `at` in the keyboard's order; `go` runs on a click (none in a virtual list).
-  // `lead`: an element in the icon's place (a rail list's state marks).
-  menuRow(t, id, text, at, go, { icon = null, lead = null, hint = null, ink = t.foreground, badge = null } = {}) {
-    return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(ink)
-      .when(at === this.menuAt, (el) => el.bg(t.selected))
-      .hover((s) => s.bg(t.hover))
+  // `lead`: an element in the icon's place (a rail list's state marks). `verb`: it asks twice, `armed` after the first press.
+  menuRow(t, id, text, at, go, { icon = null, lead = null, hint = null, ink = t.foreground, badge = null, verb = null, armed = false } = {}) {
+    const look = armed ? armedLook(tokens(t)) : null;
+    return h_flex().id(`menu-${id}`).flex_none().h(MENU_ROW).px(8).gap(10).items_center().rounded(6).cursor_pointer().text_size(13).text_color(look?.ink ?? ink)
+      .when(at === this.menuAt && !look, (el) => el.bg(t.selected))
+      .when(Boolean(look), (el) => el.bg(look.fill).active((s) => s.bg(look.press)))
+      .hover((s) => s.bg(look?.hover ?? t.hover))
       // A row of a virtual list takes no handler of its own (registering one there throws): its list's on_item_click acts.
       .when(Boolean(go), (el) => el.on_click((_e, cx) => { go(cx); cx.notify(); }))
-      .child(h_flex().w(14).flex_none().justify_center().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(t.muted))).when(Boolean(lead), (el) => el.child(lead)))
-      .child(div().flex_1().truncate().child(text))
+      .child(h_flex().w(14).flex_none().justify_center().when(Boolean(icon), (el) => el.child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(14).text_color(look?.ink ?? t.muted))).when(Boolean(lead), (el) => el.child(lead)))
+      .child(verb ? armedLabel(text, verb, armed, (words) => div().truncate().child(words), { start: true }).flex_1().min_w(0) : div().flex_1().truncate().child(text))
       .when(Boolean(badge), (el) => el.child(div().flex_none().px(6).h(18).rounded_full().bg(t.accent + "26")
         .flex().items_center().text_size(11).font_semibold().text_color(t.accent).child(badge)))
       .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(11.5).text_color(t.dim).child(hint)));
@@ -1455,9 +1457,8 @@ export default class Spaces extends View {
           .finally(() => this.thenClose(null));
       }, { icon: "file", keep: true })))
       // Any project you see can go: one you added (its row too), or an open space you never kept.
-      .when(Boolean(project) || Boolean(w), (el) => el.child(item("remove-project", this.armed.is("remove")
-        ? (w ? `Press again: remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "Press again to remove it")
-        : "Remove project", (cx) => { this.armed.press("remove", cx, () => this.removeProject(project, w)); }, { icon: "close", ink: this.armed.is("remove") ? t.blocked : t.muted, keep: true })));
+      .when(Boolean(project) || Boolean(w), (el) => el.child(item("remove-project", "Remove project", (cx) => { this.armed.press("remove", cx, () => this.removeProject(project, w)); },
+        { icon: "close", ink: t.muted, keep: true, verb: w ? `remove it and close its ${tabs} tab${tabs === 1 ? "" : "s"}` : "remove it", armed: this.armed.is("remove") })));
   }
 
   // Every + ends here: which agent of the ones installed (or a shell), none chosen for you; the one used last
@@ -1877,14 +1878,10 @@ export default class Spaces extends View {
     return [headItem, ...(mine.length ? mine.flatMap(draw) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty, 28)]), ...closed(m)];
   }
 
-  confirmPull(place, cx) {
+  pull(place, cx) {
     if (!place?.cwd || this.pulling) return;
-    const key = pullKey(place.cwd, place.on);
-    this.armed.press(key, cx, () => {
-      if (this.pulling) return;
-      this.pulling = key;
-      cx.spawn((spawnCx) => runPull(exec, notify, { folder: place.cwd, on: place.on }).catch(() => null).then((result) => { this.pulling = false; if (result?.code === 0) this.refreshGit(new Set([place.key]), spawnCx); spawnCx.notify(); }));
-    });
+    this.pulling = pullKey(place.cwd, place.on); cx.notify();
+    cx.spawn((spawnCx) => runPull(exec, notify, { folder: place.cwd, on: place.on }).catch(() => null).then((result) => { this.pulling = false; if (result?.code === 0) this.refreshGit(new Set([place.key]), spawnCx); spawnCx.notify(); }));
   }
 
   // The last child's line stops at the bend.
@@ -2006,7 +2003,7 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
           .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
-          .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, this.armed, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.confirmPull(place, cx), open: () => openAhead(w) }) : div().flex_1())
+          .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.pull(place, cx), open: () => openAhead(w) }) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, group)))
           .when(controls.plus, (el) => el.child(this.plus(`space-plus-${w.id}`, t, spot)))
           .when(controls.dots, (el) => el.child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))
@@ -2379,9 +2376,9 @@ export default class Spaces extends View {
       .when(Boolean(p?.branch), (el) => el.child(item("copy-branch", "Copy branch", copy(p.branch), { icon: "branch" })))
       .when(Boolean(session), (el) => el.child(item("copy-id", "Copy conversation id", copy(session), { icon: "copy" })))
       .child(rule())
-      .child(item("close", this.armed.is("close") ? "Press again to close it" : (a ? "Close agent" : "Close terminal"), (cx) => {
+      .child(item("close", a ? "Close agent" : "Close terminal", (cx) => {
         this.armed.press("close", cx, () => run("terminal.kill", { terminal: m.address }));
-      }, { icon: "close", ink: t.blocked, keep: !this.armed.is("close") }));
+      }, { icon: "close", ink: t.blocked, keep: !this.armed.is("close"), verb: "close it", armed: this.armed.is("close") }));
   }
 
   zzMenuView(t, m) {

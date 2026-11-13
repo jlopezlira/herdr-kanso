@@ -9,8 +9,6 @@ import * as stories from './layouts-right-click-any-piece.stories.js';
 
 <Canvas of={stories.RightClickAnyPiece} />
 
-## 10 Right-click any piece
-
 ### Right-click guidelines
 
 - **Kansō** Every piece answers a right-click. Nothing is removed to keep the window quiet: a piece can be put away, and it comes back from the same place. Rest shows what you would miss. The rest stays one right-click away.
@@ -21,16 +19,16 @@ import * as stories from './layouts-right-click-any-piece.stories.js';
 - **Kokō** The menu is the kit's menu: the same rows, height, hover and rule as every other context menu. A terminal's own right-click stays the terminal's.
 - **Yūgen** Where to bring it back: right-click the region it lived in, or open Settings · Pieces, the one list of everything hidden.
 
-## B10 Menus of the bars and headers
+## Menus of the bars and headers
 
 ### Menus of the bars and headers guidelines
 
-- **Seijaku** One menu for every right-click and popup in the bars: kansō's own, 252 wide, rows 30, radius 8 (K), icons 14 in muted, keys 11.5 in dim, the header 11.5 dim naming what was clicked. It replaces Herdr's menu for tabs (31, radius 7) and its new-menu.
+- **Seijaku** One menu for every right-click and popup in the bars: kansō's own, 252 wide, rows 30, radius 8, icons 14 in muted, keys 11.5 in dim, the header 11.5 dim naming what was clicked. It replaces Herdr's menu for tabs (31, radius 7) and its new-menu.
 - **Yūgen** Order everywhere: the thing's own actions, then the act that ends it, then the piece lines (Only when needed when the piece has it, Hide this, Settings for this…).
 - **Kansō** An act that ends agents arms in place for 4 s and names what it ends: "Press again to close 2 agents".
 - **Kansō** Pane menu: grouped by kind, with a header. Split left stays in the menu, with ⌥⌘⇧D shown. "Send right-clicks to pane" and "Use Herdr right-click menu" become one checked row, "Right-clicks go to the program". Find in conversation and Sleep join. Rows that cannot act are not drawn.
 - **Seijaku** Separators come from groups, not from a row's index (menu/main.js:78).
-- **Seijaku** The PR segment and panel button menus are board 10's, unchanged.
+- **Seijaku** The PR segment and panel button menus are, unchanged.
 - **Seijaku** Keys: j k gg G Enter Esc, as in panels. Nothing is chosen until you move.
 - **Kokō** Remote: 0. Pin state and agents are read from the window.
 
@@ -38,9 +36,9 @@ import * as stories from './layouts-right-click-any-piece.stories.js';
 
 ```text
 Build Right-click any piece (Layouts) for kansō with the kit only: the tokens in kanso/tokens.json and the drawings in stories/proto.css.
-Use these tokens: --bg, --border, --canvas, --chrome, --dim, --done, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-h-icon, --k-ic-control, --k-ic-row, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --muted, --popover, --shadow, --w12, --w7.
+Use these tokens: --bg, --border, --canvas, --chrome, --dim, --done, --fg, --k-fs-body, --k-fs-meta, --k-h-control, --k-h-icon, --k-ic-control, --k-ic-row, --k-r-card, --k-r-control, --k-sp-1, --k-sp-2, --k-sp-3, --k-sp-4, --muted, --popover, --shadow, --w12, --w7.
 Draw these pieces: Right-click any piece.
 Follow these rules:
 - Right-click any piece: 10: one menu on every piece: its words, its fixes, Only when needed, Hide this, Settings for this.
-Apply every guideline of 10 Right-click any piece; B10 Menus of the bars and headers.
+Apply every guideline of Right-click any piece; Menus of the bars and headers.
 ```

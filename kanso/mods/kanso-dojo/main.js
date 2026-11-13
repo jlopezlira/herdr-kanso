@@ -10,7 +10,7 @@ import { dojoShare } from "./card.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { LEVELS, gridWorld, textWorld, move, shortest, newTarget, points, same } from "./dojo.js";
 
-const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, ARM_MS = 3000, SLEEP_MS = 20000;
+const TARGETS = 10, HINT_MS = 2000, LIT_MS = 600, SLEEP_MS = 20000;
 const CELL = 30;
 const FINGER = { h: ["←", "index, reach"], j: ["↓", "index"], k: ["↑", "middle"], l: ["→", "ring"] };
 
@@ -24,7 +24,6 @@ export default class Dojo extends View {
     this.snippet = 0;
     this.pending = ""; // a count, a first g, or f t F T waiting for its letter
     this.lit = null;
-    this.armed = 0; // leaving asked for, at
     this.setLevel(1, false);
     cx.spawn(async (cx) => {
       try {
@@ -34,7 +33,7 @@ export default class Dojo extends View {
       } catch (e) { this.say = String(e?.message ?? e); }
       cx.notify();
     });
-    cx.timer.every(500, (cx) => { if (this.round || this.lit || this.armed) cx.notify(); });
+    cx.timer.every(500, (cx) => { if (this.round || this.lit) cx.notify(); });
     this.pal = new Companion(cx.timer, this.store); this.choosing = false;
     this.pal.load(cx);
     // A pet moves on its own: a redraw only when its frame changes.
@@ -111,10 +110,8 @@ export default class Dojo extends View {
     if (this.choosing) { if (k === "escape") { this.choosing = false; cx.notify(); } return; }
     if (k === "escape") {
       if (this.pending) { this.pending = ""; cx.notify(); return; }
-      if (Date.now() - this.armed <= ARM_MS) { closeOverlay(props()?.overlay); return; }
-      this.armed = Date.now(); cx.notify(); return;
+      closeOverlay(props()?.overlay); return;
     }
-    this.armed = 0;
     const ch = e.key_char ?? (m.shift && k.length === 1 ? k.toUpperCase() : k);
     if (["left", "right", "up", "down"].includes(k)) { this.say = "The arrows don't count in the dōjō: h j k l."; this.missAt = Date.now(); cx.notify(); return; }
     if (this.over) {
@@ -177,7 +174,6 @@ export default class Dojo extends View {
 
   line() {
     const r = this.round, o = this.over, now = Date.now();
-    if (now - this.armed <= ARM_MS) return "Press Esc again to leave the dōjō.";
     if (this.say) return this.say;
     if (o) return o.kept ? (this.record ? "A new best! Enter to play again, n for the next level." : "Enter to play again, n for the next level.") : "Round stopped, not counted. Enter to start again.";
     if (/^[ftFT]$/.test(this.pending)) return `${this.pending}… now the letter to find.`;
@@ -264,13 +260,11 @@ export default class Dojo extends View {
         .child(div().flex_1().text_size(12.5).text_color(on ? c.text : c.muted).child(L.name))
         .child(div().text_size(11).text_color(c.dim).child(b != null ? String(b) : ""));
     };
-    const leaving = now - this.armed <= ARM_MS;
     // A press here never reaches the board behind it.
     const press = (id, text, act, o = { kind: "tonal" }) => button(id, text, (cx) => { act(); cx.notify(); }, c, o)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation());
     // A new element each place it shows: an element can have one parent, and the result shows it beside the header's.
-    const leave = (id) => press(id, leaving ? "Click again to leave" : "Leave the dōjō",
-      () => { if (Date.now() - this.armed <= ARM_MS) closeOverlay(props()?.overlay); else this.armed = Date.now(); }, { kind: "tonal", armed: leaving });
+    const leave = (id) => press(id, "Leave the dōjō", () => closeOverlay(props()?.overlay));
     const o = this.over;
     const result = o ? v_flex().gap(G.lg).p(24).rounded(12).bg(c.accent + "10").border_1().border_color(c.accent + "50")
       .child(div().text_size(13).text_color(c.muted).child(o.kept ? `Level ${lv.n}: ${lv.name}, done` : "Round stopped"))
@@ -317,7 +311,7 @@ export default class Dojo extends View {
           .child(h_flex().gap(6).items_center()
             .children(Array.from({ length: TARGETS }, (_, i) => div().h(6).flex_1().rounded_full().bg(i < done ? c.accent : c.text + "14")))
             .child(div().pl(G.sm).text_size(12).text_color(c.muted).child(`${done} / ${TARGETS}`)))
-          .child(h_flex().min_h(40).px(14).py(10).rounded(10).bg(leaving ? c.accent + "30" : c.accent + "14").items_center()
+          .child(h_flex().min_h(40).px(14).py(10).rounded(10).bg(c.accent + "14").items_center()
             .child(div().text_size(13).line_height(1.45).text_color(c.text).child(this.line())))
           .child(keysRow)));
   }
