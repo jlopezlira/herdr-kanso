@@ -1,5 +1,6 @@
-name: Bug report
-description: Something in kansō did not do what you expected.
+name: Bug
+description: Something does not work the way kansō says it does.
+labels: ["bug"]
 body:
   - type: input
     id: kanso-version
@@ -25,24 +26,6 @@ body:
         - Linux
     validations:
       required: true
-  - type: textarea
-    id: did
-    attributes:
-      label: What you did
-    validations:
-      required: true
-  - type: textarea
-    id: saw
-    attributes:
-      label: What you saw
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: What you expected
-    validations:
-      required: true
   - type: dropdown
     id: remote-space
     attributes:
@@ -52,3 +35,59 @@ body:
         - "No"
     validations:
       required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, starting from a fresh state.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: saw
+    attributes:
+      label: What you saw
+      description: One or two sentences. What you saw, not what you think the cause is.
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A screenshot or the last lines of an error. Remove anything private first.
+  - type: textarea
+    id: test-cases
+    attributes:
+      label: Test cases
+      description: "One line per case: given, when, then."
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      options:
+        - label: The steps above no longer reproduce the problem
+          required: true
+        - label: A regression test covers it and fails on the old code
+          required: true
+        - label: Nothing the module offered before stops working
+          required: true
+  - type: checkboxes
+    id: done
+    attributes:
+      label: Definition of Done
+      options:
+        - label: The pull request shows each acceptance criterion met
+        - label: CI is green on macOS, Windows and Linux
+        - label: CHANGELOG has a Fixed entry under Unreleased
+        - label: Verified in the running app on the beta
