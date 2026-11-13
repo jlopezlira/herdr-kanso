@@ -5,21 +5,21 @@ export function kitRecords(records) {
   const originals = records.filter((record) => record.html !== undefined && !['kit', 'tokens'].includes(record.source));
   const results = [];
   const add = (name, label, html, caption) => results.push({ id: `kit/${name}/${label}`, source: 'kit', page: `Primitives/${name}`, label, html: frame(html), caption });
-  const first = (className) => [...originals.filter((record) => record.id.includes('compositions-controls/')), ...originals].flatMap((record) => elements(record.html, className))[0];
+  const first = (className, prefer = 'compositions-controls/') => [...originals.filter((record) => record.id.includes(prefer)), ...originals].flatMap((record) => elements(record.html, className))[0];
   const definitions = [
     ['Button', 'kanso-button', ['Default', 'Hover', 'Focus', 'Active', 'Disabled', 'Dimmed']],
     ['Field', 'kanso-field', ['Default', 'Hover', 'Focus', 'Disabled', 'Failure']],
     ['Segmented', 'kanso-segmented', ['Default', 'Hover', 'Focus', 'Disabled']],
     ['Switch', 'kanso-switch', ['Default', 'On', 'Hover', 'Focus', 'Active', 'Disabled']],
     ['Mark', 'kanso-mark', ['Default']], ['Chip', 'kanso-badge', ['Default']], ['Avatar', 'kanso-avatar--round', ['Default']],
-    ['Row', 'kanso-row', ['Default', 'Hover', 'Focus', 'Active', 'Dimmed']],
+    ['Row', 'kanso-row', ['Default', 'Hover', 'Focus', 'Active', 'Dimmed'], 'compositions-panel-pieces/SectionAndRows/'],
     ['Tab', 'kanso-tab', ['Default', 'Hover', 'Focus', 'Active', 'Disabled']],
     ['Menu', 'kanso-menu', ['Default']], ['Dialog', 'kanso-dialog', ['Default']],
-    ['Skeleton', 'kanso-skeleton', ['Loading']], ['Drag handle', 'kanso-header__grip', ['Default']], ['Key hint', 'kanso-key', ['Default']],
+    ['Skeleton', 'kanso-skeleton__list', ['Loading'], 'panels/files/FilesFirstRead/'], ['Drag handle', 'kanso-header__grip', ['Default']], ['Key hint', 'kanso-key', ['Default']],
   ];
   const modifiers = { Hover: 'kanso-control--hover', Focus: 'kanso-control--focus', Active: 'kanso-control--active', Disabled: 'kanso-control--off', Dimmed: 'kanso-control--dim', Failure: 'kanso-field--invalid', On: 'kanso-control--on' };
-  for (const [name, className, states] of definitions) {
-    const source = first(className);
+  for (const [name, className, states, prefer] of definitions) {
+    const source = first(className, prefer);
     if (!source) continue;
     for (const label of states) {
       const modifier = modifiers[label];

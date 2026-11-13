@@ -470,6 +470,5 @@
   ".kanso-story__frame .kanso-tokens .kanso-story__layout-row",
   ".kanso-control--ring",
   ".kanso-header--rest .kanso-state-line",
-  ".kanso-control--dim :is(.kanso-row__name,.kanso-row__task,.kanso-row__meta)",
   ".kanso-tab-bar__button.kanso-control--on"
 ]
