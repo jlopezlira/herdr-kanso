@@ -26,6 +26,7 @@ the branch's rules.
 
 ### Changed
 
+- Every Storybook page shows one status, Ready, In review, Proposal or Old look, at its top and as a sidebar filter tag, and its names carry no internal codes.
 - Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.
 - Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
 - Give Dawn Mode its own Storybook page, and show the Dawn Mode pill on the sidebar.

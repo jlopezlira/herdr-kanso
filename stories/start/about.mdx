@@ -1,9 +1,12 @@
 import { Meta } from '@storybook/addon-docs/blocks';
+import { PageStatus } from '../kit/PageStatus.jsx';
 import { version } from '../../kanso/mods/kanso-chrome/version.json';
 
-<Meta title="Start/About" />
+<Meta title="Start/About" tags={["Ready"]} />
 
 # About
+
+<PageStatus page="Start/About" />
 
 The kansō kit, version {version}: the source of truth for how the app looks.
 

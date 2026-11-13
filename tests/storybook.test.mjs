@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { expand } from "../scripts/storybook-catalog.mjs";
-import { lint, storyFiles } from "../scripts/lint-storybook.mjs";
+import { lint, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
+import { statusOf } from "../stories/kit/status.js";
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const json = (file) => JSON.parse(read(file));
@@ -56,4 +57,35 @@ test("Drawings use only sprite symbols, and every icon is the exact Lucide shape
   const used = new Set(records.flatMap((record) => [...(record.html ?? "").matchAll(/href="#([^"]+)"/g)].map((match) => match[1])));
   assert.deepEqual([...used].filter((id) => !symbols.has(id)), []);
   assert.deepEqual([...used].filter((id) => !/^(?:lu|e|p)-/.test(id) && id !== "i-ptr"), []);
+});
+
+test("A page is the old look when any state it shows is the app's current markup, and otherwise ready, in review or a proposal", () => {
+  const drawn = (id, page, source) => ({ id, page, source, html: "<div></div>" });
+  const records = [
+    drawn("a/1", "Panels/Approved", "proto"), drawn("b/1", "Panels/Drawn", "panels"), drawn("c/1", "Panels/Current", "coverage"),
+    drawn("d/1", "Panels/Drawn", "panels"), drawn("e/1", "Panels/Current", "coverage"),
+    drawn("f/1", "Panels/Mixed", "proto"), drawn("f/2", "Panels/Mixed", "coverage"),
+  ];
+  const references = [
+    { page: "Panels/Named", status: "Approved reference", records: ["a/1"], approvedRecords: ["a/1"] },
+    { page: "Panels/New", status: "Proposed", records: ["d/1"] },
+    { page: "Panels/As it is", status: "Proposed", records: ["e/1"] },
+    { page: "Panels/Approved, partly old", status: "Approved reference", records: ["a/1", "f/2"], approvedRecords: ["a/1"] },
+    { page: "Panels/Mixed", existing: true, status: "Approved reference", records: ["f/1"], approvedRecords: ["f/1"] },
+  ];
+  assert.deepEqual(["Panels/Named", "Panels/Approved", "Panels/Drawn", "Panels/New", "Panels/As it is", "Panels/Current", "Panels/Approved, partly old", "Panels/Mixed", "Start/About"].map((page) => statusOf(page, records, references)),
+    ["Ready", "Ready", "In review", "Proposal", "Old look", "Old look", "Old look", "Old look", "Ready"]);
+});
+
+test("A page without its status tag, with two, with one its data contradicts, or with a code in its title, fails the lint", () => {
+  const catalog = json("stories/catalog.json"), template = read("stories/kit/ComponentPage.jsx");
+  const untagged = { ...files, "stories/components/primitives-button.stories.js": files["stories/components/primitives-button.stories.js"].replace(/, tags: \[[^\]]*\]/, "") };
+  assert.ok(structureErrors(untagged, catalog, template).includes("stories/components/primitives-button.stories.js: needs exactly one status tag"));
+  const button = files["stories/components/primitives-button.stories.js"];
+  const doubled = { ...files, "stories/components/primitives-button.stories.js": button.replace(/tags: \[("[^"]*")\]/, 'tags: [$1, "Proposal"]') };
+  assert.ok(structureErrors(doubled, catalog, template).includes("stories/components/primitives-button.stories.js: needs exactly one status tag"));
+  const mismatched = { ...files, "stories/components/primitives-button.stories.js": button.replace(/tags: \["[^"]*"\]/, 'tags: ["Proposal"]') };
+  assert.ok(structureErrors(mismatched, catalog, template).includes(`stories/components/primitives-button.stories.js: status Proposal differs from ${statusOf("Primitives/Button", records, references.pages)}`));
+  const coded = { ...files, "stories/start/extra.mdx": '<Meta title="Start/S12 notes" tags={["Ready"]} />\n\n## Prompt for agents\n\n```text\nRead.\n```\n' };
+  assert.ok(structureErrors(coded, catalog, template).includes("stories/start/extra.mdx: code in title Start/S12 notes"));
 });

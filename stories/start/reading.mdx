@@ -1,13 +1,17 @@
 import { Meta } from '@storybook/addon-docs/blocks';
+import { PageStatus } from '../kit/PageStatus.jsx';
 
-<Meta title="Start/How to read this Storybook" />
+<Meta title="Start/How to read this Storybook" tags={["Ready"]} />
 
 # How to read this Storybook
+
+<PageStatus page="Start/How to read this Storybook" />
 
 The sidebar follows how a screen is built: Start, Tokens, Primitives, Compositions, Panels, Layouts.
 
 - **Overview** shows a page's states and their specifications; **Variants** with the **State** control shows one state at a time. The theme toolbar switches dark and light.
 - Hover, focus, active, disabled, dimmed, loading, empty, failure and armed are states on their component's page, not pages of their own.
+- Each page has one status, at its top and as a tag in the sidebar filter: **Ready** (approved and drawn in the kit), **In review** (drawn in the kit, waiting for approval), **Proposal** (a new design made here, not approved) and **Old look** (the app's current markup, not redesigned yet).
 - **Proposed** marks a state with no approved drawing yet.
 - Features that exist in the app but await a design are listed as **Not designed yet** under the page's prompt, with their code location. The full list is `stories/GAPS.md`.
 
