@@ -108,3 +108,7 @@ export function showPanel(id, content) {
 // A panel's failure: the blocked mark, our words, the source's words in mono, then the fixes ({ label, onClick }).
 export const failure = (id, what, c, { why = null, fixes = [] } = {}) =>
   stateBlock(id, { mark: stateMark(theme(), "blocked", ICON_ROW), what, why, fixes, font: monoFont() }, c);
+
+// A note for `failure`: our words, and the tool's words when there are any.
+export const said = (what, why = null) => ({ what, why: why === null || why === undefined ? null : String(why) });
+export const failNote = (id, note, c, fixes = []) => failure(id, note.what, c, { why: note.why, fixes });

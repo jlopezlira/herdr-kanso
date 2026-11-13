@@ -5,7 +5,7 @@ import { openApi } from "./platform-open.js";
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
-import { location, key, diffRows, monoFont, tilde, failure } from "./lib.js";
+import { location, key, diffRows, monoFont, tilde, failure, said, failNote } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { G, H, R, T, breathe, Armed, tokens, button, quietLink, segmented, iconButton, field, TextField, section, ghost, toneColor } from "./ui.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
@@ -374,7 +374,7 @@ export class PullRequest {
     if (!this.inboxDb) {
       try { await this.db.open(); this.inboxDb = this.db; }
       catch (e) {
-        this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`;
+        this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]);
         this.inboxOn = false; this.inboxOpen = null;
         return;
       }
@@ -391,7 +391,7 @@ export class PullRequest {
     if (model instanceof Error) {
       const e = model;
       if (key() !== context) return;
-      this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`;
+      this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]);
       return;
     }
     if (key() !== context) return;
@@ -403,7 +403,7 @@ export class PullRequest {
     this.inbox = model;
     this.inboxOn = true;
     if (decide) this.inboxOpen = stayOnBranch(this.inboxOpen);
-    if (model.writeError) this.note = `Could not keep pull requests: ${model.writeError}`;
+    if (model.writeError) this.note = said("Could not keep pull requests", model.writeError);
   }
 
   async noteSeen(url) {
@@ -411,7 +411,7 @@ export class PullRequest {
     if (!url || this.inboxOpen !== false || !this.inboxDb) return;
     const now = Date.now();
     try { await this.inboxDb.run(seenSql(url, now)); }
-    catch (e) { this.note = `Could not keep pull requests: ${String(e?.message ?? e).split("\n")[0]}`; return; }
+    catch (e) { this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]); return; }
     const stamp = (item) => item.url === url ? { ...item, seenAt: now } : item;
     const needs = (this.inbox?.needs ?? []).map(stamp);
     if (this.inbox) this.inbox = { ...this.inbox, needs, yours: (this.inbox.yours ?? []).map(stamp), unseen: needs.filter(isNew).length };
@@ -574,7 +574,7 @@ export class PullRequest {
       try {
         const r = await run(args);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
-      } catch (e) { this.note = `${label} failed: ${String(e?.message ?? e)}`; }
+      } catch (e) { this.note = said(`${label} failed`, e?.message ?? e); }
       finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
     });
     cx.notify();
@@ -593,7 +593,7 @@ export class PullRequest {
         const r = await this.gh(["pr", "merge", pr.url, method]);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
         notify({ title: `Merged #${pr.number}`, body: pr.title, level: "success" });
-      } catch (e) { this.note = `Merge failed: ${String(e?.message ?? e)}`; }
+      } catch (e) { this.note = said("Merge failed", e?.message ?? e); }
       finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
     });
     cx.notify();
@@ -610,7 +610,7 @@ export class PullRequest {
         if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
         if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
-      } catch (e) { this.note = `Could not create it: ${String(e?.message ?? e)}`; }
+      } catch (e) { this.note = said("Could not create it", e?.message ?? e); }
       finally { this.busy = null; cx.notify(); }
     });
     cx.notify();
@@ -803,7 +803,7 @@ export class PullRequest {
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
       .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) }))))
-      .when(Boolean(this.note), (el) => el.child(failure("pr-note", this.note, c)));
+      .when(Boolean(this.note), (el) => el.child(failNote("pr-note", this.note, c)));
   }
 
   reviewCount() { return this.inbox?.needs?.length ?? 0; }
@@ -944,13 +944,13 @@ export class PullRequest {
     if (step.show) { this.sendShown = true; this.sendFor = text; cx.notify(); return; }
     if (!step.deliver) return;
     const address = this.frontAgent()?.address;
-    if (!address) { this.note = "Not sent: no agent in front"; cx.notify(); return; }
+    if (!address) { this.note = said("Not sent: no agent in front"); cx.notify(); return; }
     this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
     cx.spawn(async (cx) => {
       try {
         const sent = await deliver(address, text, "you");
-        if (sent?.code !== 0) this.note = `Not sent: ${String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]}`;
-      } catch (e) { this.note = `Not sent: ${String(e?.message ?? e)}`; }
+        if (sent?.code !== 0) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
+      } catch (e) { this.note = said("Not sent", e?.message ?? e); }
       finally { this.busy = null; cx.notify(); }
     });
     cx.notify();
@@ -1108,7 +1108,7 @@ export class PullRequest {
           const r = await this.gh(["pr", "diff", url, "--color", "never"]);
           if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim());
           if (this.context === context && this.pr?.url === url) this.diffs = splitDiff(r.stdout);
-        } catch (e) { this.note = `Could not read the diff: ${String(e?.message ?? e).split("\n")[0]}`; }
+        } catch (e) { this.note = said("Could not read the diff", String(e?.message ?? e).split("\n")[0]); }
         finally { this.diffLoading = false; cx.notify(); }
       });
     }
@@ -1178,7 +1178,7 @@ export class PullRequest {
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
       .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil))))
-      .when(Boolean(this.note), (el) => el.child(failure("pr-note", this.note, c)));
+      .when(Boolean(this.note), (el) => el.child(failNote("pr-note", this.note, c)));
   }
 
   body(c, narrow) {

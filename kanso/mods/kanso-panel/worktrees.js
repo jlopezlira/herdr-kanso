@@ -10,7 +10,7 @@ import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
 import { Share, postText } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { tilde, pool, failure } from "./lib.js";
+import { tilde, pool, said, failNote } from "./lib.js";
 import { G, PULSE, breathe, Armed, tokens, button, quietLink, iconButton, section, ghost, stateEmpty } from "./ui.js";
 import { aliasText, machineTitle, range, reduceSeries } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
@@ -301,7 +301,7 @@ export class Worktrees {
         if (!this.groups.length && !this.orphans.length) this.show(items);
         this.hist = await this.store.history();
         this.stored = true;
-      } catch (e) { this.storeNote = String(e?.message ?? e); }
+      } catch (e) { this.storeNote = said("Can't read the history", e?.message ?? e); }
       finally { this.refresh(cx); }
     });
   }
@@ -343,7 +343,7 @@ export class Worktrees {
     try {
       for (const [w, got] of pairs) await this.store.removed(w, got);
       this.hist = await this.store.history();
-    } catch (e) { this.note = `The history could not be saved: ${String(e?.message ?? e)}`; }
+    } catch (e) { this.note = said("The history could not be saved", e?.message ?? e); }
   }
 
   // A scan or a batch changes many rows a second: draw at most four times a second.
@@ -421,11 +421,11 @@ export class Worktrees {
         });
         if (id !== this.scan) return;
         this.phase = "Saving";
-        try { await this.keep(new Set(repos), search); } catch (e) { this.note = `The history could not be saved: ${String(e?.message ?? e)}`; }
+        try { await this.keep(new Set(repos), search); } catch (e) { this.note = said("The history could not be saved", e?.message ?? e); }
         if (id !== this.scan) return;
         this.phase = null; this.done = true; this.scannedAt = Date.now();
       } catch (e) {
-        if (id === this.scan) { this.phase = null; this.note = String(e?.message ?? e); }
+        if (id === this.scan) { this.phase = null; this.note = said("Can't scan for worktrees", e?.message ?? e); }
       } finally { if (id === this.scan) cx.notify(); }
     });
     cx.notify();
@@ -449,7 +449,7 @@ export class Worktrees {
         this.apply(w.path, p);
         if (p.broken) throw new Error("git still can't read it");
         notify({ title: `Repaired ${name(w.path)}`, body: "It is linked to its repository again.", level: "success" });
-      } catch (e) { this.note = `${name(w.path)}: ${String(e?.message ?? e)}`; }
+      } catch (e) { this.note = said(`Can't repair ${name(w.path)}`, e?.message ?? e); }
       finally { this.working = null; cx.notify(); }
     });
     cx.notify();
@@ -517,7 +517,7 @@ export class Worktrees {
         const got = await this.removeOne(now);
         this.drop(now); await this.credit([[now, got]]);
         if (got.kb) notify({ title: `Freed ${fmtSize(got.kb)}`, body: this.hist?.kb ? `${fmtSize(this.hist.kb)} freed so far` : undefined, level: "success" });
-      } catch (e) { this.note = `${name(w.path)}: ${String(e.message ?? e)}`; }
+      } catch (e) { this.note = said(`Can't remove ${name(w.path)}`, e.message ?? e); }
       finally { this.working = null; cx.notify(); }
     });
     cx.notify();
@@ -535,7 +535,7 @@ export class Worktrees {
         for (const w of missing) this.drop(w);
         await this.credit(missing.map((w) => [w, { records: 1 }]));
       }
-      catch (e) { this.note = `${name(missing[0].repo)}: ${String(e.message ?? e)}`; }
+      catch (e) { this.note = said(`Can't prune ${name(missing[0].repo)}`, e.message ?? e); }
       finally { this.working = null; cx.notify(); }
     });
     cx.notify();
@@ -575,7 +575,7 @@ export class Worktrees {
       }, { done: 0, kept: 0, failed: [], got: [], pruned: new Set() });
       await this.credit(got);
       this.phase = null; this.working = null; this.batch = null;
-      if (failed.length) this.note = `${failed.length} not removed. ${failed[0]}`;
+      if (failed.length) this.note = said(`${failed.length} not removed`, failed[0]);
       if (kept) this.notice = `${kept} ${kept === 1 ? "stays: it" : "stay: they"} changed since the scan (new work, in use, or git can no longer read ${kept === 1 ? "it" : "them"}). ${kept === 1 ? "Its row shows" : "Their rows show"} what changed.`;
       const kb = got.reduce((n, [, e]) => n + (e.kb ?? 0), 0), total = this.hist?.kb ?? 0;
       notify({ title: kb ? `Freed ${fmtSize(kb)}` : `Removed ${done} ${done === 1 ? "worktree" : "worktrees"}`,
@@ -677,7 +677,7 @@ export class Worktrees {
           .child(div().text_size(12).text_color(armed ? c.red : c.dim)
             .child(armed ? "Merged branches go too; the others stay." : "Nothing uncommitted, every commit on a branch, idle a day.")))
         .when(Boolean(this.notice), (el) => el.child(div().text_size(12).text_color(c.muted).child(this.notice)))
-        .when(Boolean(this.note), (el) => el.child(failure("wt-note", this.note, c))));
+        .when(Boolean(this.note), (el) => el.child(failNote("wt-note", this.note, c))));
   }
 
   row(w, c) {
@@ -813,7 +813,7 @@ export class Worktrees {
   freed(c, narrow) {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(section(c, "Freed"))
-      .child(this.storeNote ? failure("wt-store", this.storeNote, c) : this.freedBones(c, narrow));
+      .child(this.storeNote ? failNote("wt-store", this.storeNote, c) : this.freedBones(c, narrow));
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
     const stats = [
@@ -890,7 +890,7 @@ export class Worktrees {
     const shown = this.allRepos ? groups : groups.slice(0, REPOS);
     const body = !scanned && this.phase ? this.skeleton(c, narrow)
       : !scanned ? (this.note
-        ? failure("wt-failed", "Can't scan for worktrees", c, { why: this.note, fixes: [{ label: "Refresh", onClick: (cx) => { if (!this.working) this.refresh(cx); } }] })
+        ? failNote("wt-failed", this.note, c, [{ label: "Refresh", onClick: (cx) => { if (!this.working) this.refresh(cx); } }])
         : stateEmpty("wt-empty", "worktree", "No worktrees besides your checkouts", c))
         : this.page(c, narrow, groups, shown);
     return v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()

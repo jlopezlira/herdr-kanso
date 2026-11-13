@@ -70,13 +70,24 @@ test("A failure with neither slot is the words alone", async () => {
   assert.equal(buttons(block).length, 0);
 });
 
+test("A panel's failure note puts our words first and the tool's words below them", async () => {
+  const { said, failNote } = await load("kanso-panel/lib.js", ["said", "failNote"], { ...gpuiHost(), theme: () => night });
+  const note = said("Can't read the ports", new Error("lsof: permission denied").message);
+  assert.deepEqual({ ...note }, { what: "Can't read the ports", why: "lsof: permission denied" });
+  assert.deepEqual(texts(failNote("pt-note", note, (await kit()).tokens(night))).slice(-2), ["Can't read the ports", "lsof: permission denied"]);
+  assert.equal(said("Memory is not available on Linux.").why, null, "our words alone when the tool said nothing");
+});
+
 test("A failure on a line is the mark, our words and one small tonal fix", async () => {
-  const { stateLine, tokens, H } = await kit();
+  const { stateLine, tokens, H, T } = await kit();
   const c = tokens(night);
   let fixed = 0;
   const line = stateLine("status-computer", chain("mark"), "Can't reach dark", c, { label: "Refresh", onClick: () => { fixed += 1; } });
   assert.equal(line.kids[0].tag, "mark");
   assert.deepEqual(texts(line), ["Can't reach dark", "Refresh"]);
+  const words = find(line, (el) => calls(el, "child").some((call) => call[1] === "Can't reach dark"));
+  assert.equal(arg(words, "text_size"), T.value, "the words keep their size wherever the line sits");
+  assert.equal(calls(words, "font_medium").length, 1);
   const [fix] = buttons(line);
   assert.equal(arg(fix, "h"), H.compact);
   assert.equal(arg(fix, "bg"), c.subtle);

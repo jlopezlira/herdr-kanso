@@ -178,7 +178,7 @@ export function stateBlock(id, { mark, what, why = null, fixes = [], font = null
 /** Failure on a line (status bar, pane header, toast): the mark, our words, and the one fix as a small tonal button. `fix`: { label, onClick }. */
 export const stateLine = (id, mark, what, c, fix = null) => h_flex().id(id).min_w(0).items_center().gap(G.sm)
   .child(mark)
-  .child(div().min_w(0).truncate().text_color(c.text).child(what))
+  .child(div().min_w(0).truncate().text_size(T.value).font_medium().text_color(c.text).child(what))
   .when(Boolean(fix), (el) => el.child(button(`${id}-fix`, fix?.label, fix?.onClick, c, { kind: "tonal", small: true })));
 
 /** Pending: the new state drawn at once at this opacity, with `pendingDot` breathing beside it until the write is confirmed. */
