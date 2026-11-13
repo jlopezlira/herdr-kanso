@@ -1,0 +1,47 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './toast.stories.js';
+
+<Meta title="Coverage/Notices" />
+
+# Notices
+
+Choose **State** in Controls to inspect each drawing; the global theme toolbar owns the palette. These visual fixtures use sample data; they do not connect to live services.
+
+## Notice
+
+When a result happens away from its visible home, one line stands in until it is read; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.Notice} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Information | An informational result has no visible home. | `kanso/mods/kanso-toast/main.js:33` |
+| Success | An action completed away from view. | `kanso/mods/kanso-toast/main.js:33` |
+| Warning | An action needs attention. | `kanso/mods/kanso-toast/main.js:33` |
+| Failure | An action failed. | `kanso/mods/kanso-toast/main.js:33` |
+| With action | The result has one immediate action. | `kanso/mods/kanso-toast/main.js:33` |
+| Long source | The source words are longer than one line. | `kanso/mods/kanso-toast/main.js:33` |
+
+## Notice stack
+
+When several distinct results arrive, at most three share the notification corner; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.NoticeStack} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Three notices | Three independent results have arrived. | `kanso/mods/kanso-toast/main.js:35` |
+| Duplicate coalesced | The same title and action arrive again. | `kanso/mods/kanso-toast/main.js:35` |
+| Different actions | The same title has different actions. | `kanso/mods/kanso-toast/main.js:35` |
+| Expired | Older notices have expired. | `kanso/mods/kanso-toast/main.js:35` |
+
+## Prompt for agents
+
+```text
+Build the Notices surfaces for kansō from the kit in stories/proto.css and kanso/tokens.json.
+Keep one component with its states as variants. Use the existing button, field, segmented, switch, Armed, row, state line/block, skeleton and exact sprite symbols.
+At rest retain only what would be missed. Keep one fact in one home; colour only the thing asking for attention. Expose secondary actions on hover, selection or keyboard focus.
+Use the global theme. Preserve keyboard focus and reduced-motion behavior. Irreversible actions use the shared four-second Armed control; ordinary reversible actions take one press.
+Failures retain source words beside their recovery action. Keep the last successful read during a refresh failure. An unavailable capability has no toolbar destination.
+Do not copy the native renderer’s conflicting visual treatments. The states above are the reviewable kit composition; their source references identify the behavior they represent.
+```

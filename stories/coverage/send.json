@@ -1,0 +1,57 @@
+{
+  "SendDialog": {
+    "caption": "When sending work to another terminal, the draft stays beside eligible recipients; Seijaku keeps this component and its states in the shared kit.",
+    "variants": {
+      "Ready": {
+        "when": "An eligible recipient and a draft exist.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"prow2 sel\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">tests</span><span class=\"pbx-v\">acme</span></div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div><div class=\"acts\"><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"btn\">Send to tests</button></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "Project selected": {
+        "when": "The project word selects all eligible recipients.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"prow2 sel\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">tests</span><span class=\"pbx-v\">acme</span></div></div><div class=\"prow2 sel\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">api</span><span class=\"pbx-v\">acme</span></div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div><div class=\"acts\"><button type=\"button\" style=\"border:0;font-family:inherit;cursor:pointer\" class=\"btn\">Send to 2 in acme</button></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "Search": {
+        "when": "More than six eligible recipients exist.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"sbx-fl\">Find an agent or a project</div><div class=\"kit-field\"><div class=\"tx\" role=\"textbox\" aria-label=\"Find an agent or a project\" aria-multiline=\"false\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">tests</div></div><div class=\"prow2\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">tests</span><span class=\"pbx-v\">acme</span></div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "No agents": {
+        "when": "No eligible other agent exists.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"kst-empty\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-search\"/></svg><div class=\"t\">No other agent is running</div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "No matches": {
+        "when": "The search has no eligible result.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"sbx-fl\">Find an agent or a project</div><div class=\"kit-field\"><div class=\"tx\" role=\"textbox\" aria-label=\"Find an agent or a project\" aria-multiline=\"false\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">missing</div></div><div class=\"kst-empty\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-search\"/></svg><div class=\"t\">No agent or project by that name</div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "Empty message": {
+        "when": "The message is empty.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"prow2 sel\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">tests</span><span class=\"pbx-v\">acme</span></div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">&#8203;</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "Sending": {
+        "when": "Delivery is in progress.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"prow2 sel kst-pend\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">tests</span><span class=\"pbx-v\">acme</span><span class=\"kst-pdot\"></span></div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "Refused": {
+        "when": "Delivery failed and the draft is retained.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"prow2 sel\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">tests</span><span class=\"pbx-v\">acme</span></div></div><div class=\"kst-line\" style=\"color:var(--blocked)\"><svg class=\"m m-blk\" aria-hidden=\"true\"><use href=\"#e-blk\"/></svg><span>Not sent: terminal no longer exists</span></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "Unavailable target": {
+        "when": "A target computer cannot be reached.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"prow2\" tabindex=\"0\"><div class=\"a\"><span class=\"st-ell\">tests</span><span class=\"pbx-v\">devbox unreachable</span></div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      },
+      "Blocked targets": {
+        "when": "All other agents are waiting on a question.",
+        "html": "<div class=\"st-ex\"><div class=\"k st-s\" style=\"max-width:100%\"><div class=\"sbx-dlg\" style=\"max-width:100%\"><div class=\"sbx-dt\">Send to an agent</div><div class=\"kst-empty\"><svg class=\"i i14\" aria-hidden=\"true\"><use href=\"#lu-search\"/></svg><div class=\"t\">No agent can take a message</div></div><div class=\"kit-field tall\"><div class=\"tx\" role=\"textbox\" aria-label=\"Message\" aria-multiline=\"true\" contenteditable=\"true\" tabindex=\"0\" style=\"outline:none;white-space:pre-wrap;min-height:var(--k-h-compact)\">Review the latest changes.</div></div></div></div></div>",
+        "source": "kanso/mods/kanso-send/main.js:97"
+      }
+    }
+  }
+}

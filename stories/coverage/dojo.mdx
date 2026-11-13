@@ -1,0 +1,86 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './dojo.stories.js';
+
+<Meta title="Coverage/Dōjō" />
+
+# Dōjō
+
+Choose **State** in Controls to inspect each drawing; the global theme toolbar owns the palette. These visual fixtures use sample data; they do not connect to live services.
+
+## Practice level
+
+When hjkl dōjō changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.Practice} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| 1 · h l | Practice has reached level 1. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 2 · j k | Practice has reached level 2. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 3 · h j k l | Practice has reached level 3. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 4 · 0 $ gg G | Practice has reached level 4. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 5 · Counts | Practice has reached level 5. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 6 · w b e | Practice has reached level 6. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 7 · f t | Practice has reached level 7. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 8 · 0 ^ $ | Practice has reached level 8. | `kanso/mods/kanso-dojo/dojo.js:30` |
+| 9 · All of it | Practice has reached level 9. | `kanso/mods/kanso-dojo/dojo.js:30` |
+
+## Practice feedback
+
+When hjkl dōjō changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.PracticeFeedback} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| First move | A level has just started. | `kanso/mods/kanso-dojo/main.js:178` |
+| Find pending | f or t needs its target letter. | `kanso/mods/kanso-dojo/main.js:178` |
+| Go pending | The first g is waiting. | `kanso/mods/kanso-dojo/main.js:178` |
+| Count pending | A count needs a motion. | `kanso/mods/kanso-dojo/main.js:178` |
+| Arrow key | An arrow was used in practice. | `kanso/mods/kanso-dojo/main.js:178` |
+| Miss | A key cannot reach a target. | `kanso/mods/kanso-dojo/main.js:178` |
+| Streak | Several targets were reached. | `kanso/mods/kanso-dojo/main.js:178` |
+| Extra moves | The target was reached with extra moves. | `kanso/mods/kanso-dojo/main.js:178` |
+| Sleeping | Practice is idle. | `kanso/mods/kanso-dojo/main.js:178` |
+| Exit armed | Escape was pressed once. | `kanso/mods/kanso-dojo/main.js:178` |
+
+## Practice result
+
+When hjkl dōjō changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.PracticeResult} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Completed | The level has ended. | `kanso/mods/kanso-dojo/main.js:274` |
+| New best | The result beats the saved best. | `kanso/mods/kanso-dojo/main.js:274` |
+| Stopped | Practice was left before finishing. | `kanso/mods/kanso-dojo/main.js:274` |
+| Save failed | The local score file could not be written. | `kanso/mods/kanso-dojo/main.js:274` |
+
+## Practice companion
+
+When practice companion changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.PracticePet} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Calm | Hachi is waiting. | `kanso/mods/kanso-dojo/pets.js:195` |
+| Glad | A target is reached. | `kanso/mods/kanso-dojo/pets.js:195` |
+| Sweat | A motion needs another try. | `kanso/mods/kanso-dojo/pets.js:195` |
+| Sleep | Practice has been idle. | `kanso/mods/kanso-dojo/pets.js:195` |
+| Chooser | The companion chooser is opened. | `kanso/mods/kanso-dojo/pets.js:195` |
+| Loading | An optional sprite sheet is being downloaded. | `kanso/mods/kanso-dojo/pets.js:195` |
+| Failed | A companion download failed. | `kanso/mods/kanso-dojo/pets.js:195` |
+| Selected | A companion is selected. | `kanso/mods/kanso-dojo/pets.js:195` |
+
+## Prompt for agents
+
+```text
+Build the Dōjō surfaces for kansō from the kit in stories/proto.css and kanso/tokens.json.
+Keep one component with its states as variants. Use the existing button, field, segmented, switch, Armed, row, state line/block, skeleton and exact sprite symbols.
+At rest retain only what would be missed. Keep one fact in one home; colour only the thing asking for attention. Expose secondary actions on hover, selection or keyboard focus.
+Use the global theme. Preserve keyboard focus and reduced-motion behavior. Irreversible actions use the shared four-second Armed control; ordinary reversible actions take one press.
+Failures retain source words beside their recovery action. Keep the last successful read during a refresh failure. An unavailable capability has no toolbar destination.
+Do not copy the native renderer’s conflicting visual treatments. The states above are the reviewable kit composition; their source references identify the behavior they represent.
+```

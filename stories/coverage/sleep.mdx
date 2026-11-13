@@ -1,0 +1,40 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './sleep.stories.js';
+
+<Meta title="Coverage/Sleep" />
+
+# Sleep
+
+Choose **State** in Controls to inspect each drawing; the global theme toolbar owns the palette. These visual fixtures use sample data; they do not connect to live services.
+
+## Sleep dialog
+
+When sleeping a project, tab or agent, only work that will not return is called out; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.SleepDialog} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Project | The whole project is being put away. | `kanso/mods/kanso-sleep/main.js:181` |
+| Tab | A tab is being put away. | `kanso/mods/kanso-sleep/main.js:181` |
+| Agent | One agent is being put away. | `kanso/mods/kanso-sleep/main.js:181` |
+| Reading | Conversations are being checked. | `kanso/mods/kanso-sleep/main.js:181` |
+| Sleeping | The processes are exiting. | `kanso/mods/kanso-sleep/main.js:181` |
+| Blocked | A running agent needs the user. | `kanso/mods/kanso-sleep/main.js:181` |
+| Conversation absent | The current conversation cannot be found. | `kanso/mods/kanso-sleep/main.js:181` |
+| Not resumable | The selected process cannot resume. | `kanso/mods/kanso-sleep/main.js:181` |
+| Nothing resumable | No conversation can be restored. | `kanso/mods/kanso-sleep/main.js:181` |
+| Sleep failed | An exit or label step failed. | `kanso/mods/kanso-sleep/main.js:181` |
+| Waking | A sleeping row is being restored. | `kanso/mods/kanso-sleep/main.js:181` |
+| Already awake | The selected row is no longer asleep. | `kanso/mods/kanso-sleep/main.js:181` |
+
+## Prompt for agents
+
+```text
+Build the Sleep surfaces for kansō from the kit in stories/proto.css and kanso/tokens.json.
+Keep one component with its states as variants. Use the existing button, field, segmented, switch, Armed, row, state line/block, skeleton and exact sprite symbols.
+At rest retain only what would be missed. Keep one fact in one home; colour only the thing asking for attention. Expose secondary actions on hover, selection or keyboard focus.
+Use the global theme. Preserve keyboard focus and reduced-motion behavior. Irreversible actions use the shared four-second Armed control; ordinary reversible actions take one press.
+Failures retain source words beside their recovery action. Keep the last successful read during a refresh failure. An unavailable capability has no toolbar destination.
+Do not copy the native renderer’s conflicting visual treatments. The states above are the reviewable kit composition; their source references identify the behavior they represent.
+```

@@ -1,0 +1,30 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './prompt-editor.stories.js';
+
+<Meta title="Coverage/Prompt editor" />
+
+# Prompt editor
+
+Choose **State** in Controls to inspect each drawing; the global theme toolbar owns the palette. These visual fixtures use sample data; they do not connect to live services.
+
+## Multiline prompt
+
+When the legacy editor is opened directly, its multiline input uses the shared prompt skeleton; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.MultilinePrompt} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Editing | A direct mod invocation supplies multiline text. | `kanso/mods/kanso-prompt-editor/main.js:30` |
+| Hint | The invocation supplies a necessary scope. | `kanso/mods/kanso-prompt-editor/main.js:30` |
+
+## Prompt for agents
+
+```text
+Build the Prompt editor surfaces for kansō from the kit in stories/proto.css and kanso/tokens.json.
+Keep one component with its states as variants. Use the existing button, field, segmented, switch, Armed, row, state line/block, skeleton and exact sprite symbols.
+At rest retain only what would be missed. Keep one fact in one home; colour only the thing asking for attention. Expose secondary actions on hover, selection or keyboard focus.
+Use the global theme. Preserve keyboard focus and reduced-motion behavior. Irreversible actions use the shared four-second Armed control; ordinary reversible actions take one press.
+Failures retain source words beside their recovery action. Keep the last successful read during a refresh failure. An unavailable capability has no toolbar destination.
+Do not copy the native renderer’s conflicting visual treatments. The states above are the reviewable kit composition; their source references identify the behavior they represent.
+```

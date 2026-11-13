@@ -1,0 +1,84 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as stories from './containers.stories.js';
+
+<Meta title="Coverage/Containers" />
+
+# Containers
+
+Choose **State** in Controls to inspect each drawing; the global theme toolbar owns the palette. These visual fixtures use sample data; they do not connect to live services.
+
+## Container list
+
+When containers changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.ContainerList} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Running | Docker answered with running containers. | `kanso/mods/kanso-containers/main.js:395` |
+| Loading | Docker is being read for the first time. | `kanso/mods/kanso-containers/main.js:395` |
+| Empty | Docker has no containers. | `kanso/mods/kanso-containers/main.js:395` |
+| Daemon off | Docker is installed but stopped. | `kanso/mods/kanso-containers/main.js:395` |
+| Starting Docker | The host is starting Docker. | `kanso/mods/kanso-containers/main.js:395` |
+| Read failed | Docker refused the read. | `kanso/mods/kanso-containers/main.js:395` |
+| Remote | A project uses another computer. | `kanso/mods/kanso-containers/main.js:395` |
+| Action failed | Docker refused an action. | `kanso/mods/kanso-containers/main.js:395` |
+| Tool absent | The Docker probe found no tool. | `kanso/mods/kanso-containers/main.js:395` |
+
+## Container row
+
+When containers changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.ContainerRow} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Running selected | A running container is selected. | `kanso/mods/kanso-containers/main.js:262` |
+| Stopped | A stopped container is selected. | `kanso/mods/kanso-containers/main.js:262` |
+| Failed | A container exited with a failure. | `kanso/mods/kanso-containers/main.js:262` |
+| Pending | A container action is running. | `kanso/mods/kanso-containers/main.js:262` |
+| Remove armed | A stopped container will be removed. | `kanso/mods/kanso-containers/main.js:262` |
+| Details | Inspect details are expanded. | `kanso/mods/kanso-containers/main.js:262` |
+| Details absent | Inspect returned no details. | `kanso/mods/kanso-containers/main.js:262` |
+
+## Compose project
+
+When containers changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.ComposeProject} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Not started | A Compose file exists without containers. | `kanso/mods/kanso-containers/main.js:292` |
+| Running | A Compose project has running services. | `kanso/mods/kanso-containers/main.js:292` |
+| Down armed | A project is about to stop. | `kanso/mods/kanso-containers/main.js:292` |
+| Bulk controls | Several containers can start or stop together. | `kanso/mods/kanso-containers/main.js:292` |
+
+## Container disk
+
+When disk changes, the component shows the result in place; Seijaku keeps this component and its states in the shared kit.
+
+<Canvas of={stories.ContainerDisk} />
+
+| State | When shown | Source |
+| --- | --- | --- |
+| Images | The disk fold is open. | `kanso/mods/kanso-containers/main.js:325` |
+| Unused image | An image has no users. | `kanso/mods/kanso-containers/main.js:325` |
+| Run image | Run is pressed for an image. | `kanso/mods/kanso-containers/main.js:325` |
+| Invalid port | The port mapping is invalid. | `kanso/mods/kanso-containers/main.js:325` |
+| Invalid name | The container name is invalid. | `kanso/mods/kanso-containers/main.js:325` |
+| Volumes | The volumes fold is open. | `kanso/mods/kanso-containers/main.js:325` |
+| Prune armed | Unused images, volumes or cache will be removed. | `kanso/mods/kanso-containers/main.js:325` |
+| Cache | Build cache can be reclaimed. | `kanso/mods/kanso-containers/main.js:325` |
+| Quit armed | Quitting Docker will stop its containers. | `kanso/mods/kanso-containers/main.js:325` |
+
+## Prompt for agents
+
+```text
+Build the Containers surfaces for kansō from the kit in stories/proto.css and kanso/tokens.json.
+Keep one component with its states as variants. Use the existing button, field, segmented, switch, Armed, row, state line/block, skeleton and exact sprite symbols.
+At rest retain only what would be missed. Keep one fact in one home; colour only the thing asking for attention. Expose secondary actions on hover, selection or keyboard focus.
+Use the global theme. Preserve keyboard focus and reduced-motion behavior. Irreversible actions use the shared four-second Armed control; ordinary reversible actions take one press.
+Failures retain source words beside their recovery action. Keep the last successful read during a refresh failure. An unavailable capability has no toolbar destination.
+Do not copy the native renderer’s conflicting visual treatments. The states above are the reviewable kit composition; their source references identify the behavior they represent.
+```
