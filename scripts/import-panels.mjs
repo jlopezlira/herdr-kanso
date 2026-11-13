@@ -47,7 +47,24 @@ export function clean(s) {
 
 const mdx = (s) => clean(s).split(/(`[^`]*`)/).map((part, i) => i % 2 ? part : part.replace(/[{}<>]/g, (c) => `\\${c}`)).join("");
 const unthemed = (html) => html.replace(/class="([^"]*)"/g, (_, classes) => `class="${classes.split(/\s+/).filter((c) => c !== "k-dark" && c !== "k-light").join(" ")}"`);
-export const drawing = (html) => renameMarkup(unthemed(html));
+export function withoutRepeats(html) {
+  const open = /^<div\b[^>]*>/.exec(html);
+  if (!open) return html;
+  const end = html.lastIndexOf("</div>");
+  const seen = new Set();
+  let kept = "";
+  for (let i = open[0].length; i < end; ) {
+    const m = /<div\b[^>]*>/.exec(html.slice(i));
+    if (!m || html.slice(i, i + m.index).trim()) return html;
+    const from = i + m.index;
+    const to = closeOf(html, from);
+    const child = html.slice(from, to);
+    if (!seen.has(child)) { seen.add(child); kept += child; }
+    i = to;
+  }
+  return open[0] + kept + "</div>";
+}
+export const drawing = (html) => withoutRepeats(renameMarkup(unthemed(html)));
 
 export function entriesOf(html) {
   const entries = [];
