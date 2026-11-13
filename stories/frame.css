@@ -13,3 +13,4 @@
 .kanso-docs dt { font-weight: var(--k-fw-medium); }
 .kanso-docs dd { margin: 0 0 var(--k-sp-2); }
 .kanso-docs__note { margin-block: var(--k-sp-4); }
+.kanso-story--free > :is(.kanso-field, .kanso-row) { inline-size: 21rem; box-sizing: border-box; }
