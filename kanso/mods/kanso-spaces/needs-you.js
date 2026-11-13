@@ -3,7 +3,8 @@ import { RESUME_LABEL } from "./resume.js";
 export const NEEDS_YOU = "kanso.needs-you";
 export const EMPTY_NOTICE_MS = 1800;
 
-const order = (a, b) => a.at - b.at || a.seq - b.seq || a.address.localeCompare(b.address);
+const rank = (row) => row.status === "blocked" ? 0 : 1;
+const order = (a, b) => rank(a) - rank(b) || a.at - b.at || a.seq - b.seq || a.address.localeCompare(b.address);
 
 const field = (value) => { const text = String(value ?? ""); return `${text.length}:${text}`; };
 
@@ -32,11 +33,11 @@ export function sameQueue(a, b) {
   return a.rows.every((row, i) => Object.keys(row).every((key) => row[key] === b.rows[i][key]));
 }
 
-export function waitingQueue(list, terms, excluded = new Set(), previous = [], now = Date.now()) {
+export function waitingQueue(list, terms, excluded = new Set(), previous = [], now = Date.now(), statuses = ["blocked"]) {
   const byAddress = new Map(terms.map((term) => [term.address, term]));
   const before = new Map(previous.map((row) => [row.address, row]));
   return list.filter((a) => a.pane && !a.asleep && !a.dozing && !excluded.has(a.address)
-    && a.status === "blocked" && (!byAddress.has(a.address) || byAddress.get(a.address).state === "live"))
+    && statuses.includes(a.status) && (!byAddress.has(a.address) || byAddress.get(a.address).state === "live"))
     .map((a) => {
       const was = before.get(a.address), term = byAddress.get(a.address);
       const at = was?.status === a.status ? was.at : term?.status_ms ?? now;

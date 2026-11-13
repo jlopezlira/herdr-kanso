@@ -30,6 +30,8 @@ the branch's rules.
 
 ### Fixed
 
+- Cmd+J (Ctrl+Shift+J on Windows) jumps to finished agents again, after the ones waiting for you.
+
 - Storybook panel and layout stories draw at real size without a frame card, with the row actions, header marks, device rows, skeleton bars, checks list and code lines of the approved designs.
 - Storybook controls respond with sample data: selection, editing, toggles, Armed confirmation and Undo, menus, dialogs, navigation folds, filtering and copy feedback reset with the State control.
 - Storybook uses one tonal Explain button with the Lucide bot icon and a named destination everywhere; regeneration and structure checks enforce it.
