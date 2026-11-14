@@ -11,7 +11,7 @@ import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo, readWhole } from "./doc.js";
 import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs, tooLarge } from "./edit.js";
 import { skeleton, quietLink, iconButton, tokens, Armed } from "./ui.js";
-import { tryOrAsync, extOf } from "./pure.js";
+import { tryOrAsync, extOf, afterMount } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 import { walkLayout } from "./layout.js";
 import { bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
@@ -29,7 +29,12 @@ class PreviewKeys {
   bind(view, cx) {
     this.view = view;
     this.cx = cx;
-    if (this.live) return;
+    if (!this.live) afterMount(cx, (cx) => this.start(cx));
+  }
+
+  // Marked live only once the loop runs, so a view gone before its first turn leaves nothing behind.
+  start(cx) {
+    if (this.live || !this.view) return;
     this.live = true;
     cx.spawn((commandCx) => commandLoop(
       () => nextCommand(),

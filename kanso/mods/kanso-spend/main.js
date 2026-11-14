@@ -123,21 +123,24 @@ export default class TokenSpend extends View {
     // Herdr starts hidden copies too, so wake only when this one is on screen.
     if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
-    this.commandTask = cx.spawn(async (commandCx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => {
-          const command = await nextCommand();
-          commandCx.notify();
-          return { command };
-        });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        const { command } = next;
-        const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
-        if (name === "refresh") this.run("snapshot", commandCx);
-        else if (name === "open") this.wake(commandCx);
-        else if (name === "settings") this.openSettings(commandCx);
-        else if (name === "back") this.back(commandCx);
-      }
+    afterMount(cx, (cx) => {
+      if (this.closed) return;
+      this.commandTask = cx.spawn(async (commandCx) => {
+        for (;;) {
+          const next = await tryOrAsync(async () => {
+            const command = await nextCommand();
+            commandCx.notify();
+            return { command };
+          });
+          if (!next) break; // a replaced build (hot reload, update) stops here, before acting
+          const { command } = next;
+          const name = String(command).replace(new RegExp(`^${MOD}\\.`), "");
+          if (name === "refresh") this.run("snapshot", commandCx);
+          else if (name === "open") this.wake(commandCx);
+          else if (name === "settings") this.openSettings(commandCx);
+          else if (name === "back") this.back(commandCx);
+        }
+      });
     });
   }
 

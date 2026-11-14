@@ -10,7 +10,7 @@ import { h_flex, v_flex, HoverCard } from "gpui-base";
 import { spaces, panes, agents, focused, layout, run, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { stateMark, programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs } from "./pieces.js";
@@ -232,7 +232,7 @@ export default class Strip extends View {
     this.lastStatus = new Map();
     this.digesting = new Set();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
-    cx.spawn(async (cx) => {
+    afterMount(cx, (cx) => cx.spawn(async (cx) => {
       for (;;) {
         const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
         if (!next) break; // a replaced build (hot reload, update) stops here, before acting
@@ -240,7 +240,7 @@ export default class Strip extends View {
         this.seq += 1;
         cx.notify();
       }
-    });
+    }));
   }
 
   renderEdge() {

@@ -250,12 +250,12 @@ export default class Spaces extends View {
     // Another window's names and projects arrive.
     cx.timer.every(30000, () => this.loadNames(false).catch(() => {}));
     // keys.json: ⌃1-9 and ⌃⌥P/S/T arrive here as commands.
-    cx.spawn((cx) => commandLoop(
+    afterMount(cx, (cx) => cx.spawn((cx) => commandLoop(
       () => nextCommand(),
       () => cx.notify(),
       (command) => this.command(String(command).replace(/^kanso-spaces\./, ""), cx),
       cx.timer,
-    ));
+    )));
   }
 
   leftNavStore() {

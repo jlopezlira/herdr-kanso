@@ -67,25 +67,28 @@ export default class Memory extends View {
 
     if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
-    this.commandTask = cx.spawn(async (commandCx) => {
-      for (;;) {
-        // A replaced build (hot reload, update) stops here.
-        const next = await tryOrAsync(async () => {
-          const command = await nextCommand();
-          commandCx.notify();
-          return { command };
-        });
-        if (!next) break;
-        const name = String(next.command).replace(new RegExp(`^${MOD}\\.`), "");
-        if (name === "refresh") this.check(commandCx);
-        else if (name === "open") this.wake(commandCx);
-        else if (name === "back") {
-          const next = leaveShowAll(this.showAll);
-          if (next === null) return;
-          this.showAll = next;
-          commandCx.notify();
+    afterMount(cx, (cx) => {
+      if (this.closed) return;
+      this.commandTask = cx.spawn(async (commandCx) => {
+        for (;;) {
+          // A replaced build (hot reload, update) stops here.
+          const next = await tryOrAsync(async () => {
+            const command = await nextCommand();
+            commandCx.notify();
+            return { command };
+          });
+          if (!next) break;
+          const name = String(next.command).replace(new RegExp(`^${MOD}\\.`), "");
+          if (name === "refresh") this.check(commandCx);
+          else if (name === "open") this.wake(commandCx);
+          else if (name === "back") {
+            const next = leaveShowAll(this.showAll);
+            if (next === null) return;
+            this.showAll = next;
+            commandCx.notify();
+          }
         }
-      }
+      });
     });
   }
 
