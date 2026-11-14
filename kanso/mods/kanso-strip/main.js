@@ -831,7 +831,7 @@ export default class Strip extends View {
       ...(String(n.id).startsWith("strip-col-") ? (n.children ?? []).map((c) => [c.id, c.size ?? null]) : []),
     ]));
   }
-  isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge") && !id.startsWith("strip-ruler"); }
+  isCol(n) { const id = String(n.id); return id.startsWith("strip-") && !id.startsWith("strip-edge"); }
 
   pollAdopt(cx) {
     const now = Date.now(), held = shared("strip.drag");
@@ -865,7 +865,7 @@ export default class Strip extends View {
       const w = clamp(width(c) / span * sumW, MIN_W, 1);
       const wider = Math.abs(w - c.w) > EPS;
       const sized = wider ? { ...c, w } : c;
-      // Herdr's divider keeps a stack's weights as weights; a px height has no share without the column's height, so it is left as it was.
+      // A stack's weights are its shares; px heights are left as they were.
       if (!(c.panes.length > 1 && n.children) || n.children.some((k) => k.size?.px !== undefined)) return { col: sized, moved: wider };
       const weightOf = (id) => { const k = n.children.find((x) => x.id === `strip-${id}`); return k ? k.size?.weight ?? 1 : 0; };
       const tot = c.panes.reduce((s, id) => s + weightOf(id), 0) || 1;
@@ -1041,7 +1041,7 @@ export default class Strip extends View {
       ...(after < row.length ? [edge(row[after].ci, "right", row.slice(after))] : []),
     ];
     const pinned = (side) => st.cols.filter((c) => c.pin === side).map(whole);
-    // Nothing stands before the first pane: Herdr draws a divider between any two nodes, and one beside the sidebar's edge would move nothing.
+    // Nothing before the first pane: Herdr's divider there would move nothing.
     return [...pinned("left"), ...out, ...pinned("right")];
   }
 

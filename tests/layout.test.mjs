@@ -118,14 +118,14 @@ for (const file of helpers) {
   test(`${file} puts the strip's right edge rail after a shown panel`, async () => {
     const { edgeBesidePanel } = await load(file, ["edgeBesidePanel"], {});
     const tree = (hidden) => ({ id: "root", children: [{ id: "work-body", children: [
-      { id: "strip-ruler-h" }, { id: "strip-a" }, { id: "strip-edge-right" }, { id: "panel-body", hidden, children: [] }] }] });
+      { id: "strip-a" }, { id: "strip-edge-right" }, { id: "panel-body", hidden, children: [] }] }] });
     const order = (t) => t.children[0].children.map((n) => n.id);
     const given = tree(false), shown = edgeBesidePanel(given);
-    assert.deepEqual(order(shown), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"]);
-    assert.deepEqual(order(given), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "the tree it is given stays as it was");
-    assert.deepEqual(order(edgeBesidePanel(shown)), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"], "idempotent");
+    assert.deepEqual(order(shown), ["strip-a", "panel-body", "strip-edge-right"]);
+    assert.deepEqual(order(given), ["strip-a", "strip-edge-right", "panel-body"], "the tree it is given stays as it was");
+    assert.deepEqual(order(edgeBesidePanel(shown)), ["strip-a", "panel-body", "strip-edge-right"], "idempotent");
     const hidden = edgeBesidePanel(tree(true));
-    assert.deepEqual(order(hidden), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "a closed panel leaves it in place");
+    assert.deepEqual(order(hidden), ["strip-a", "strip-edge-right", "panel-body"], "a closed panel leaves it in place");
   });
 }
 
