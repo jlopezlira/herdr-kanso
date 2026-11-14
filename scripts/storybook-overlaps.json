@@ -213,7 +213,7 @@
       "Loading": "panels/ports/PortsFirstRead/Default",
       "Empty": "panels/ports/PortsEmpty/Default",
       "Read failed": "panels/ports/PortsAReadFailed/Default",
-      "Remote stale": "panels/ports/PortsAnotherComputerUnreachable/Default",
+      "Remote stale": "panels/ports/FeatureComputers/Unreachable",
       "Force stop": "panels/ports/PortsForcestop/Default",
       "Bulk stop": "panels/ports/PortsBulkstop/Default"
     }

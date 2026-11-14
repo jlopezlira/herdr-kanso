@@ -1,4 +1,4 @@
-import { localService } from "./platform-host.js";
+import { localService, serviceFor, REMOTE_TIMEOUT } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { portApi } from "./platform-ports.js";
@@ -6,7 +6,7 @@ import { killApi } from "./platform-kill.js";
 import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, panes, terminals, home, run, theme, appHome, readTextFile, shared } from "herdr";
+import { exec, hc, panes, terminals, machines, home, run, theme, appHome, readTextFile, shared } from "herdr";
 import { tilde, said, failNote } from "./lib.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
@@ -18,6 +18,7 @@ import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
 import { portsMemory } from "./panel-state.js";
 import { Front } from "./front.js";
+import { localAddress, REST_MS } from "./kdb.js";
 
 // The guard's files: change the name here if it is installed under another.
 const GUARD = "kanso-guard";
@@ -79,10 +80,31 @@ export const shortArgs = (args) => {
   return [paths.basename(cmd), ...rest].join(" ");
 };
 
+export const portKey = (s) => `${s.machine ?? ""}:${s.pid}`;
+const SAME_START_MS = 5000;
+const STOP_WAIT_MS = 45_000;
+export const sameServer = (a, b) => a.pid === b.pid && a.ports.join() === b.ports.join() && Math.abs((a.startedAt ?? 0) - (b.startedAt ?? 0)) <= SAME_START_MS;
+const LONGEST_MS = 10 * 60_000;
+export const backoffMs = (fails) => Math.min(2 ** Math.max(0, fails - 1) * 60_000, LONGEST_MS);
+export function unreadable(error) {
+  const text = String(error?.message ?? error ?? "");
+  const missing = /\b(lsof|ps)\b[^\n]*(?:not found|no such file|not installed)/i.exec(text) ?? /(?:not found|no such file|not installed)[^\n]*\b(lsof|ps)\b/i.exec(text);
+  if (missing) return `${missing[1]} is not installed`;
+  return !text || /unreachable|did not answer|timed out|timeout|refused|offline|no route|was lost|not connected/i.test(text) ? "unreachable" : "its ports can't be read";
+}
+const rowId = (s) => (s.machine ? `${s.machine}-${s.pid}` : String(s.pid));
+
+// Where this computer's browser reaches another one: the host `hc machine ls` connects to, else its name.
+export function browserHost(listed, name) {
+  const rows = tryOr(() => JSON.parse(String(listed ?? "")).machines) ?? [];
+  const target = String((Array.isArray(rows) ? rows : []).find((m) => m?.name === name)?.target ?? "").trim();
+  return target.replace(/^ssh:\/\//, "").replace(/^[^@/]*@/, "").replace(/:\d+$/, "") || name;
+}
+
 const age = (secs) => secs < 3600 ? `${Math.max(1, Math.round(secs / 60))} min` : secs < 86400 ? `${Math.round(secs / 3600)} h` : `${Math.round(secs / 86400)} d`;
 
 export class Ports {
-  constructor() { this.armed = new Armed(); this.share = new Share("kanso-panel"); } // Stop asks for a second press
+  constructor() { this.armed = new Armed(); this.share = new Share("kanso-panel"); this.remote = {}; this.homes = {}; this.pids = new Map(); } // Stop asks for a second press
 
   // What the share card holds: counts and sizes, never a port, folder, project or command.
   canShare() { return Boolean(this.hist?.data); }
@@ -111,34 +133,43 @@ export class Ports {
     cx.timer.every(EVERY_MS, (cx) => this.refresh(cx));
   }
 
-  async shells() {
-    const local = terminals().filter((t) => t?.address && !String(t.address).includes("/") && t.state !== "dead");
+  async shells(on = null) {
+    const local = terminals().filter((t) => t?.address && localAddress(t.address, on) !== null && t.state !== "dead");
+    for (const address of [...this.pids.keys()]) if (localAddress(address, on) !== null && !local.some((t) => t.address === address)) this.pids.delete(address);
     const asked = async (t) => {
-      const r = await hc(["get", t.address, "--json"]).catch(() => null);
+      const args = ["get", t.address, "--json"];
+      const r = await (on ? exec("hc", args, { timeout: REMOTE_TIMEOUT }) : hc(args)).catch(() => null);
       return tryOr(() => (r?.code === 0 ? JSON.parse(r.stdout).pid : null));
     };
     const found = await Promise.all(local.map(async (t) => {
-      const pid = t.pid || await asked(t);
+      const pid = t.pid || (this.pids.has(t.address) ? this.pids.get(t.address) : await asked(t));
+      if (!t.pid) this.pids.set(t.address, pid);
       return pid ? [[Number(pid), t.address]] : [];
     }));
     return new Map(found.flat());
   }
 
-  async read() {
-    const ports = localService(portApi);
-    const processes = localService(processApi);
+  async homeOf(on) {
+    if (!on) return home();
+    this.homes[on] ??= await (await serviceFor(systemApi, on)).userHome();
+    return this.homes[on];
+  }
+
+  async read(on = null) {
+    const ports = await serviceFor(portApi, on), processes = await serviceFor(processApi, on);
     const listen = await ports.listen();
-    const [cwd, table, shells] = await Promise.all([processes.cwd([...listen.keys()]), processes.list(), this.shells()]);
-    this.attribution = cwd.state === "unavailable" ? said("Some servers cannot be attributed", "Working directories require a Herdr API on Windows.") : null;
+    const [cwd, table, shells, homeDir] = await Promise.all([processes.cwd([...listen.keys()]), processes.list(), this.shells(on), this.homeOf(on)]);
+    if (!on) this.attribution = cwd.state === "unavailable" ? said("Some servers cannot be attributed", "Working directories require a Herdr API on Windows.") : null;
     const ps = new Map(table.rows.map((r) => [r.pid, { ppid: r.ppid, secs: etimeSecs(r.etime), args: r.command }]));
-    const list = servers(listen, cwd.values ?? new Map(), ps, shells, home());
+    const list = servers(listen, cwd.values ?? new Map(), ps, shells, homeDir);
     const now = Date.now();
     return list.map((s) => {
-      const h = historyOf(s, this.hist?.data, now);
+      const h = on ? null : historyOf(s, this.hist?.data, now);
       return {
         ...s, cwdReason: cwd.reason ?? null,
+        ...(on ? { machine: on, startedAt: now - s.secs * 1000 } : {}),
         // One asked to stop that is still here gets a force stop next.
-        ...(this.forced?.has(s.pid) ? { force: true } : {}),
+        ...(this.forced?.has(portKey({ machine: on, pid: s.pid })) ? { force: true } : {}),
         ...(h ? { mb: h.mb, startedAt: h.startedAt, project: h.project } : {}),
       };
     });
@@ -159,9 +190,10 @@ export class Ports {
     if (this.busy.install && (hist.state === "ok" || now - this.busy.install > BUSY_MS)) this.idle();
   }
 
-  refresh(cx, { history = false, then = null } = {}) {
+  refresh(cx, { history = false, then = null, now = false } = {}) {
     if (this.front.behind()) { this.front.rest(); return; }
     this.front.woke();
+    this.readRemotes(cx, now);
     if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
     cx.spawn(async (cx) => {
@@ -174,8 +206,30 @@ export class Ports {
     });
   }
 
+  readRemotes(cx, now = false) {
+    const listed = machines().filter((m) => m?.name), at = Date.now();
+    this.remote = Object.fromEntries(Object.entries(this.remote).filter(([name]) => listed.some((m) => m.name === name)));
+    for (const { name } of listed.filter((m) => m.layout === "ready")) {
+      const r = this.remote[name] ?? { list: null, why: null, fails: 0, next: 0 };
+      // A read lost by the host frees its computer after the longest wait.
+      if (r.reading && at - r.reading < LONGEST_MS) continue;
+      if (!now && at < r.next) continue;
+      this.remote = { ...this.remote, [name]: { ...r, reading: at } };
+      cx.spawn(async (cx) => {
+        const before = this.picture();
+        const was = this.remote[name], fails = now ? 0 : was.fails;
+        const next = await this.read(name).then(
+          (list) => ({ list, why: null, fails: 0, next: Date.now() + REST_MS }),
+          (e) => ({ list: null, why: unreadable(e), fails: fails + 1, next: Date.now() + backoffMs(fails + 1) }));
+        this.remote = { ...this.remote, [name]: { ...next, said: next.list ? null : this.remote[name]?.said ?? null, reading: 0 } };
+        if (this.picture() !== before) cx.notify();
+      });
+    }
+  }
+
   picture() {
-    return JSON.stringify([this.list, this.note, this.digest, [...(this.stopping ?? [])]]);
+    const remote = Object.entries(this.remote ?? {}).map(([name, r]) => [name, r.list, r.why, r.said]);
+    return JSON.stringify([this.list, this.note, this.digest, [...(this.stopping ?? [])], remote]);
   }
 
   async guardReady() {
@@ -195,7 +249,8 @@ export class Ports {
 
   // Through the guard when installed (it measures what stopping gives back); without it, the signal directly.
   stop(items, cx) {
-    this.stopping = new Set([...this.stopping, ...items.map((s) => s.pid)]);
+    if (items[0]?.machine) { this.stopOn(items[0].machine, items, cx); return; }
+    this.stopping = new Set([...this.stopping, ...items.map(portKey)]);
     cx.notify();
     cx.spawn(async (cx) => {
       const viaGuard = await this.guardReady();
@@ -206,10 +261,10 @@ export class Ports {
       } else {
         for (const s of items) await localService(killApi).stop(s.pid, { force: s.force }).catch(() => null);
       }
-      this.forced = new Set([...this.forced, ...items.map((s) => s.pid)]);
+      this.forced = new Set([...this.forced, ...items.map(portKey)]);
       await cx.sleep(1500);
       try { this.list = await this.read(); } catch { /* the timer reads again */ }
-      const settled = (gone) => { this.stopping = new Set([...this.stopping].filter((pid) => !gone.some((s) => s.pid === pid))); };
+      const settled = (gone) => { this.stopping = new Set([...this.stopping].filter((key) => !gone.some((s) => portKey(s) === key))); };
       const done = () => settled(items);
       if (!viaGuard) done();
       else {
@@ -219,6 +274,46 @@ export class Ports {
         cx.timer.after(10_000, (cx) => this.refresh(cx, { history: true }));
       }
       cx.notify();
+    });
+  }
+
+  stopOn(machine, items, cx, since = Date.now()) {
+    const settle = (line) => {
+      this.remote = { ...this.remote, [machine]: { ...this.remote[machine], said: line } };
+      this.stopping = new Set([...this.stopping].filter((key) => !items.some((s) => portKey(s) === key)));
+      cx.notify();
+    };
+    this.stopping = new Set([...this.stopping, ...items.map(portKey)]);
+    if (this.remote[machine]?.reading) {
+      if (Date.now() - since >= STOP_WAIT_MS) settle("not stopped, it is still being read");
+      else { cx.notify(); cx.timer.after(1000, (cx) => this.stopOn(machine, items, cx, since)); }
+      return;
+    }
+    this.remote = { ...this.remote, [machine]: { ...this.remote[machine], reading: Date.now(), said: null } };
+    cx.notify();
+    cx.spawn(async (cx) => {
+      const keep = (list) => { if (list) this.remote = { ...this.remote, [machine]: { ...this.remote[machine], list, why: null } }; };
+      const asked = await this.read(machine).then((list) => ({ list }), (e) => ({ list: null, failed: unreadable(e) }));
+      const fresh = asked.list, failed = asked.failed;
+      keep(fresh);
+      const still = items.filter((s) => fresh?.some((x) => sameServer(s, x)));
+      if (still.length) {
+        const kill = await serviceFor(killApi, machine).catch(() => null);
+        for (const s of still) await kill?.stop(s.pid, { force: s.force }).catch(() => null);
+        this.forced = new Set([...this.forced, ...still.map(portKey)]);
+        await cx.sleep(1500);
+        keep(await this.read(machine).catch(() => null));
+      }
+      this.remote = { ...this.remote, [machine]: { ...this.remote[machine], reading: 0 } };
+      settle(failed ? `not stopped, ${failed}` : still.length < items.length ? "not stopped, that server is gone" : null);
+    });
+  }
+
+  openPort(s, cx) {
+    if (!s.machine) { cx.open_url(`http://localhost:${s.ports[0]}`); return; }
+    cx.spawn(async (cx) => {
+      const r = await hc(["machine", "ls", "--json"]).catch(() => null);
+      cx.open_url(`http://${browserHost(r?.code === 0 ? r.stdout : null, s.machine)}:${s.ports[0]}`);
     });
   }
 
@@ -247,7 +342,7 @@ export class Ports {
   }
 
   row(s, c) {
-    const busy = this.stopping.has(s.pid);
+    const busy = this.stopping.has(portKey(s)), id = rowId(s);
     const owner = s.owner ? this.paneOf(s.owner) : null;
     const since = s.startedAt ?? Date.now() - s.secs * 1000;
     return v_flex().w_full().px(G.md).py(10).gap(4).rounded(6).hover((st) => st.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
@@ -261,10 +356,10 @@ export class Ports {
         .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : NO_PANE))
         .when(Boolean(s.cwd || s.project || s.cwdReason), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(s.cwd ? tilde(s.cwd) : s.project || s.cwdReason))))
       .child(h_flex().flex_wrap().gap_x(G.lg)
-        .child(quietLink(`pt-open-${s.pid}`, "Open in the browser", (cx) => cx.open_url(`http://localhost:${s.ports[0]}`), c, { color: c.text }))
-        .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${s.pid}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
-        .child(this.armed.link(`pt-stop-${s.pid}`, busy ? "Stopping…" : s.force ? "Force stop" : "Stop", s.force ? "force stop" : "stop",
-          `stop:${s.pid}`, (cx) => this.stop([s], cx), c, { disabled: busy })));
+        .child(quietLink(`pt-open-${id}`, "Open in the browser", (cx) => this.openPort(s, cx), c, { color: c.text }))
+        .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${id}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
+        .child(this.armed.link(`pt-stop-${id}`, busy ? "Stopping…" : s.force ? "Force stop" : "Stop", s.force ? "force stop" : "stop",
+          `stop:${id}`, (cx) => this.stop([s], cx), c, { disabled: busy })));
   }
 
   hero(c, list, narrow) {
@@ -292,6 +387,20 @@ export class Ports {
       .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
         .child(this.armed.button("pt-stop-all", `Stop ${loose.length} ${NO_PANE}`, `stop ${loose.length}`, "all", (cx) => this.stop(loose, cx), c))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
+  }
+
+  remoteSections(c) {
+    const alias = shared("kanso.alias");
+    return machines().filter((m) => m?.name).flatMap((m) => {
+      const r = this.remote?.[m.name], title = machineTitle(m.name, "", aliasText(alias, m.name));
+      const why = m.layout === "unavailable" ? "unreachable" : r?.why;
+      if (why) return [div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${why}`)];
+      if (!r?.list?.length) return r?.said ? [div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${r.said}`)] : [];
+      return [v_flex().w_full().gap(2)
+        .child(section(c, title, String(r.list.length)))
+        .when(Boolean(r.said), (el) => el.child(div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${r.said}`)))
+        .children(r.list.map((s) => this.row(s, c)))];
+    });
   }
 
   guardOff(c) {
@@ -392,8 +501,9 @@ export class Ports {
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Ports"))
       .child(h_flex().gap(G.xs).items_center()
         .when(this.canShare(), (el) => el.child(iconButton("pt-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx, { history: true }), c, { spin: this.reading })));
+        .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx, { history: true, now: true }), c, { spin: this.reading })));
     const history = this.history(c);
+    const others = this.list === null ? [] : this.remoteSections(c);
     const body = this.list === null
       ? this.skeleton(c, narrow)
       : v_flex().w_full().gap(narrow ? 32 : 44)
@@ -401,8 +511,9 @@ export class Ports {
         .when(state !== undefined && state !== "ok", (el) => el.child(this.guardOff(c)))
         .when(Boolean(this.digest), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(this.chart(c))))
         .when(list.length > 0, (el) => el.child(v_flex().w_full().gap(2)
-          .child(section(c, "Running", ""))
+          .child(section(c, others.length ? machineTitle("", "", aliasText(shared("kanso.alias"), "")) : "Running", ""))
           .children(list.map((s) => this.row(s, c)))))
+        .children(others)
         .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(history)));
     return v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
