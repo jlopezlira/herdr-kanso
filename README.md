@@ -122,6 +122,8 @@ alone. Help follows the bindings you have.
 | Cmd+Alt+S | Send the pane's work to another agent |
 | Cmd+Alt+T | Arrangements: save this tab, or open a saved one |
 | Cmd+J | Next agent that needs you |
+| Cmd+Shift+Up and Cmd+Shift+Down | Agent above and below in the sidebar |
+| Cmd+Shift+Left and Cmd+Shift+Right | Back and forward through the agents you visited |
 | Cmd+Alt+H/J/K/L | Between panes, as vim; Shift moves the pane |
 | Cmd+? | kansō help, and the dōjō |
 | Cmd+Shift+S | Simulator |

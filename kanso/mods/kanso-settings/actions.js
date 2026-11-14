@@ -14,6 +14,10 @@ export const GROUPS = [
   { name: "Panes", section: "layout:kanso", actions: [
     { action: "kanso-strip.new-left", label: "New pane to the left" },
     { action: "kanso-spaces.needs-you.next", label: "Next agent that needs you" },
+    { action: "kanso-spaces.agent-up", label: "Agent above" },
+    { action: "kanso-spaces.agent-down", label: "Agent below" },
+    { action: "kanso-spaces.agent-back", label: "Back through the agents visited" },
+    { action: "kanso-spaces.agent-forward", label: "Forward through the agents visited" },
     { action: "kanso-strip.send", label: "Send the pane's work to an agent" },
     { action: "kanso-strip.pin", label: "Pin the pane to its side" },
     { action: "kanso-strip.arrange", label: "Arrangements" },
