@@ -583,9 +583,16 @@ export default class Spaces extends View {
     const view = shown("sidebar.switch", true, pieces(shared)) !== false ? this.view : "spaces";
     const rows = view === "agents" ? this.statusSections(sp, ctx).flatMap((s) => s.entries.map((e) => e.a))
       : view === "threads" ? (this.threads ? threadSections(this.threadRows(ctx), { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} }).flatMap((s) => s.rows.map((r) => r.a)) : [])
-      : this.ordered(sp, ctx.places).flatMap((r) => nest(this.spaceRows(r.w.id, ctx), terms).map((e) => e.a));
+      : this.byComputer(this.ordered(sp, ctx.places)).flatMap((r) => nest(this.spaceRows(r.w.id, ctx), terms).map((e) => e.a));
     const live = new Set(agents().map((a) => a.address));
     return rows.filter((a) => !a.sub && live.has(a.address));
+  }
+
+  // As machineBlock draws them: this computer's projects, then each other computer's by name.
+  byComputer(rows) {
+    const remote = [...new Set(rows.map((r) => r.w.machine).filter(Boolean))].toSorted();
+    if (!remote.length || !shown("sidebar.computers", true, pieces(shared))) return rows;
+    return [null, ...remote].flatMap((m) => rows.filter((r) => (r.w.machine ?? null) === m));
   }
 
   besideAgent(by) {

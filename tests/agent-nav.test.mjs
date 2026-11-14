@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, clone } from "./helpers.mjs";
 
-const project = (id, tabs) => ({ id, name: id, folder: `/work/${id}`, machine: null, active: id === "one", tabs: tabs.map((tab) => ({ id: tab })) });
+const project = (id, tabs, machine = null) => ({ id, name: id, folder: `/work/${id}`, machine, active: id === "one", tabs: tabs.map((tab) => ({ id: tab })) });
 const agent = (address, space, tab, extra = {}) => ({ address, pane: `p-${address}`, tab, space, space_name: space, status: "idle", program: { agent: true, name: "Claude Code" }, title: address, seq: 1, ...extra });
 
-async function sidebar(agents, { collapsed = false, folded = [], view = "spaces" } = {}) {
+async function sidebar(agents, { collapsed = false, folded = [], view = "spaces", spaces = [project("one", ["t1", "t2"]), project("two", ["t3"])] } = {}) {
   const state = { agents, calls: [] };
   const node = () => {
     const proxy = new Proxy({}, {
@@ -19,14 +19,13 @@ async function sidebar(agents, { collapsed = false, folded = [], view = "spaces"
     });
     return proxy;
   };
-  const spaces = [project("one", ["t1", "t2"]), project("two", ["t3"])];
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, image: node, h_flex: node, v_flex: node, svg: node,
     Popover: { new: node }, Toggle: { new: node }, Button: { new: node }, Input: { new: node },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", input: "#333", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f" }),
     shared: (key) => (key === "sidebar.collapsed" ? collapsed : null), setShared: () => {},
     spaces: () => spaces, panes: () => [], agents: () => state.agents, terminals: () => [],
-    machines: () => [{ name: null, layout: "ready" }], run: (cmd, args) => state.calls.push([cmd, clone(args ?? null)]),
+    machines: () => [{ name: null, layout: "ready" }, { name: "m2", layout: "ready" }], run: (cmd, args) => state.calls.push([cmd, clone(args ?? null)]),
     home: () => "/Users/me", props: () => ({}), window: () => ({ platform: "macos", active: true }),
     focused: () => ({ terminal: state.agents.find((a) => a.focused)?.address ?? null }),
   });
@@ -155,6 +154,27 @@ test("A focus change counts as a visit without the sidebar drawing, and the visi
   assert.equal(s.here(), "a1");
   s.press("agent-forward");
   assert.equal(s.here(), "a8");
+});
+
+test("Up and Down keep the sidebar's computers: this one's projects first, then another computer's", async () => {
+  const spaces = [project("one", ["t1"]), project("far", ["t9"], "m2"), project("two", ["t3"])];
+  const s = await sidebar([agent("x", "one", "t1"), agent("m2/r", "far", "t9"), agent("z", "two", "t3")], { spaces });
+  s.focus("x");
+  s.press("agent-down");
+  assert.equal(s.here(), "z", "this computer's next project before the other computer");
+  s.press("agent-down");
+  assert.equal(s.here(), "m2/r");
+  assert.deepEqual(s.press("agent-down"), [], "the other computer's agent is the last");
+});
+
+test("Off the list, Down goes to the first agent and Up to the last", async () => {
+  const s = await sidebar([agent("x", "one", "t1"), agent("y", "one", "t2"), agent("z", "two", "t3")]);
+  s.focus(null);
+  s.press("agent-down");
+  assert.equal(s.here(), "x");
+  s.focus(null);
+  s.press("agent-up");
+  assert.equal(s.here(), "z");
 });
 
 test("The four keys are bound on macOS and Windows, and Help and the Keys page name them", async () => {
