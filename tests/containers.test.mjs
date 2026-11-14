@@ -181,12 +181,15 @@ test("the panel draws every part with each element in one place", async () => {
 async function openPanel() {
   const { fixture, loadMod } = await import("./perf-harness.mjs");
   const f = fixture();
-  const docker = { ps: [row("aa11aa11aa11", "web-1", "running", "Up 2 hours", "web", "", "", "", "", "")], images: row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false };
+  const docker = { ps: [row("aa11aa11aa11", "web-1", "running", "Up 2 hours", "web", "", "", "", "", "")], images: row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false,
+    failing: new Set(), config: JSON.stringify({ currentContext: "desktop-linux" }) };
+  f.host.readTextFile = async (file) => (String(file).endsWith(".docker/config.json") ? docker.config : "");
   const exec = f.host.exec;
   f.host.exec = async (command, args = [], options) => {
     if (command !== "docker") return exec(command, args, options);
     await exec(command, args, options);
     if (docker.down) return { code: 1, stdout: "", stderr: "Cannot connect to the Docker daemon. Is the docker daemon running?" };
+    if (docker.failing.has(args[0])) return { code: 1, stdout: "", stderr: "unexpected error" };
     const out = { ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: "desktop-linux\tunix:///var/run/docker.sock" }[args[0]] ?? "";
     return { code: 0, stdout: out, stderr: "" };
   };
@@ -196,7 +199,7 @@ async function openPanel() {
   view.init({}, f.cx);
   await f.settle();
   await f.advance(0);
-  const asked = (verb) => f.state.processes.filter((p) => p.command === "docker" && p.args.join(" ").startsWith(verb)).length;
+  const asked = (verb) => f.state.processes.filter((p) => (verb === "find" ? p.command === "find" : p.command === "docker" && p.args.join(" ").startsWith(verb))).length;
   const fresh = () => { f.state.processes.length = 0; };
   return { f, view, docker, asked, fresh };
 }
@@ -218,13 +221,60 @@ test("the Containers panel at rest asks Docker only what can change by itself in
 test("a container stopped or added outside kansō shows within 5 seconds, its details read only then", async () => {
   const { f, view, docker, asked, fresh } = await openPanel();
   fresh();
-  docker.ps = [row("aa11aa11aa11", "web-1", "exited", "Exited (0) 1 second ago", "web", "", "", "", "", ""), row("bb22bb22bb22", "db-1", "running", "Up 1 second", "postgres", "", "", "", "", "")];
+  docker.ps = [row("aa11aa11aa11", "web-1", "exited", "Exited (0) 1 second ago", "web", "", "", "", "", "")];
   await f.advance(5000);
-  assert.equal(asked("inspect"), 1, "a changed list asks for its details");
+  assert.equal(asked("inspect"), 1, "a stopped container asks for its details");
+  assert.deepEqual([asked("images"), asked("volume ls"), asked("system df")], [0, 0, 0], "a state change alone does not read images, volumes or disk use");
+  fresh();
+  docker.ps = [...docker.ps, row("bb22bb22bb22", "db-1", "running", "Up 1 second", "postgres", "", "", "", "", "")];
+  await f.advance(5000);
+  assert.equal(asked("inspect"), 1, "an added container asks for its details");
+  assert.deepEqual([asked("images"), asked("volume ls"), asked("system df")], [1, 1, 1], "a new container, as after Up, reads images, volumes and disk use once");
   assert.deepEqual(clone(view.groups.flatMap((g) => g.containers.map((c) => [c.name, c.state]))).toSorted(), [["db-1", "running"], ["web-1", "exited"]]);
   fresh();
   await f.advance(5000);
-  assert.equal(asked("inspect"), 0, "the same list again does not");
+  assert.deepEqual([asked("inspect"), asked("images")], [0, 0], "the same list again reads neither");
+});
+
+test("a memory limit or context Docker failed to give is asked again on the next read, and only until it answers", async () => {
+  const { f, view, docker, asked, fresh } = await openPanel();
+  docker.failing = new Set(["info", "context"]);
+  view.refresh(f.cx, true, true);
+  await f.settle();
+  assert.equal(view.limit, null);
+  fresh();
+  await f.advance(5000);
+  assert.deepEqual([asked("info"), asked("context inspect")], [1, 1], "asked again 5 seconds later");
+  docker.failing = new Set();
+  fresh();
+  await f.advance(5000);
+  assert.equal(view.limit, 8000);
+  assert.equal(view.context.name, "desktop-linux");
+  fresh();
+  await f.advance(10_000);
+  assert.deepEqual([asked("info"), asked("context inspect")], [0, 0], "and no more once it answered");
+});
+
+test("another Docker context chosen outside kansō is read within a minute, without a process at rest", async () => {
+  const { f, docker, asked, fresh } = await openPanel();
+  fresh();
+  await f.advance(60_000);
+  assert.equal(asked("context inspect"), 0, "the same context: not asked");
+  docker.config = JSON.stringify({ currentContext: "colima" });
+  fresh();
+  await f.advance(60_000);
+  assert.deepEqual([asked("context inspect"), asked("info")], [1, 1], "a new context: it and its memory limit are read");
+});
+
+test("coming forward after being behind reads everything at once", async () => {
+  const { f, view, asked, fresh } = await openPanel();
+  f.state.active = false;
+  await f.advance(10_000);
+  f.state.active = true;
+  fresh();
+  view.render(f.cx);
+  await f.advance(0);
+  for (const verb of ["ps", "images", "info", "context inspect", "inspect", "volume ls", "system df", "stats"]) assert.equal(asked(verb), 1, `coming forward asks docker ${verb}`);
 });
 
 test("an image made outside kansō shows within a minute; one from a panel action as soon as it ends", async () => {
@@ -257,6 +307,7 @@ test("Read again asks everything at once, and Docker coming back reads its memor
   view.refresh(f.cx, true, true);
   await f.settle();
   for (const verb of ["ps", "images", "info", "context inspect", "inspect", "volume ls", "system df", "stats"]) assert.equal(asked(verb), 1, `Read again asks docker ${verb}`);
+  assert.ok(asked("find") > 0, "Read again looks for compose files too");
   docker.down = true;
   await f.advance(5000);
   assert.equal(view.state, "down");

@@ -7,9 +7,9 @@ import { systemApi } from "./platform-system.js";
 // Docker, simply: what runs and for which project, and everything you'd open Docker Desktop for.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, run, spaces, panes, home, theme, shared, setShared } from "herdr";
+import { exec, run, spaces, panes, home, theme, shared, setShared, readTextFile } from "herdr";
 import { G, Armed, tokens, quietLink, iconButton, field, TextField, ghost, breathe } from "./ui.js";
-import { afterMount } from "./pure.js";
+import { afterMount, parseOr } from "./pure.js";
 import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
@@ -29,6 +29,9 @@ export function readPlan(reads) {
 }
 // Which containers there are and in what state: details change only when this does.
 export const containerKey = (list) => list.map((c) => `${c.id}:${c.state}`).toSorted().join(",");
+export const idKey = (list) => list.map((c) => c.id).toSorted().join(",");
+// `docker context use` writes it here: a changed name means another engine, read without a process.
+const currentContext = () => readTextFile(paths.join(home(), ".docker", "config.json")).then((t) => String(parseOr(t ?? "", null)?.currentContext ?? "")).catch(() => null);
 // Compose project names and files seen per folder, kept across panels and restarts.
 // Kept per Docker context: another engine's projects are not this one's.
 const namesKey = (context) => `kanso.containers.names.${context?.name ?? "default"}`;
@@ -92,15 +95,16 @@ export default class Containers extends View {
   }
 
   // `now`: after an action, a read that overtakes any still going; the timer's waits its turn.
-  // `all` (Read again): everything, the memory limit and context too.
-  refresh(cx, now = false, all = false) {
+  // `all` (Read again, coming forward): everything, the memory limit and context too.
+  refresh(cx, soon = false, again = false) {
     if (this.front.behind()) {
       this.front.rest();
       try { this.ticker?.cancel(); } catch { /* already gone */ }
       this.ticker = null;
       return;
     }
-    this.front.woke();
+    const back = this.front.woke();
+    const now = soon || back, all = again || back;
     this.armTicker(cx);
     if (this.reading && !now) return;
     this.reading = true;
@@ -117,21 +121,24 @@ export default class Containers extends View {
         const projects = kansoProjects();
         this.reads = this.reads + 1;
         const plan = readPlan(this.reads);
-        const lookFiles = plan.files;
-        // First read, Read again, or Docker back after being down: what Docker has and where it runs.
+        const lookFiles = plan.files || again;
+        // First read, Read again, coming forward, or Docker back after being down: everything.
         const whole = all || !this.known;
-        const set = containerKey(found);
+        const set = containerKey(found), ids = idKey(found);
         const changed = set !== this.known?.containers;
-        const stored = whole || now || changed || plan.stored || Boolean(this.pulling);
+        const config = whole || plan.stored ? await currentContext() : null;
+        if (seq !== this.seq) return;
+        const fixed = whole || !this.known.fixed || (config !== null && config !== this.known.config);
+        const stored = whole || now || ids !== this.known?.ids || plan.stored || Boolean(this.pulling);
         const usage = whole || plan.stats;
         const { deep, shallow } = lookIn(projects.flatMap((p) => p.folders).slice(0, 24), home());
         const named = (depth, list) => localService(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })).catch(fail);
         const [im, info, ps2, ins, ctx, vols, df, files] = await Promise.all([
           stored ? docker(["images", "--no-trunc", "--format", IMAGES_FORMAT]).catch(fail) : null,
-          whole ? docker(["info", "--format", "{{.MemTotal}}"]).catch(fail) : null,
+          fixed ? docker(["info", "--format", "{{.MemTotal}}"]).catch(fail) : null,
           usage ? localService(processApi).memory().catch(fail) : null,
           !found.length ? { code: 0, stdout: "" } : whole || changed ? docker(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]).catch(fail) : null,
-          whole ? docker(["context", "inspect", "--format", CONTEXT_FORMAT]).catch(fail) : null,
+          fixed ? docker(["context", "inspect", "--format", CONTEXT_FORMAT]).catch(fail) : null,
           stored ? docker(["volume", "ls", "--format", VOLUMES_FORMAT]).catch(fail) : null,
           stored ? docker(["system", "df", "--format", "{{json .}}"]).catch(fail) : null,
           lookFiles && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { stdout: "" }])
@@ -151,7 +158,9 @@ export default class Containers extends View {
         if (st?.code === 0) this.mem = parseStats(st.stdout);
         if (files) this.files = composeFiles(files.stdout);
         if (ins) this.details = ins.code === 0 ? parseInspect(ins.stdout) : new Map();
-        this.known = { containers: !ins || ins.code === 0 ? set : null };
+        // A failed limit or context is asked again on the next read.
+        this.known = { containers: !ins || ins.code === 0 ? set : null, ids, fixed: fixed ? info.code === 0 && ctx.code === 0 : this.known?.fixed ?? false,
+          config: config ?? this.known?.config ?? null };
         const withDetails = found.map((c) => { const d = this.details.get(c.id.slice(0, 12)); return { ...c, imageId: d?.imageId ?? null, mounts: d?.mounts ?? [] }; });
         const key = namesKey(this.context);
         if (key !== this.namesKey) { this.namesKey = key; this.names = savedNames(key); }
