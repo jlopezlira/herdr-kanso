@@ -30,6 +30,7 @@ the branch's rules.
 
 ### Changed
 
+- The Containers panel asks Docker only what can have changed: the container list every 5 seconds, their details when it changes, images, volumes and disk use once a minute and after an action, and Docker's memory limit and context when the panel opens, on Read again and when Docker comes back. About a quarter as many processes while it is open. (#263)
 - Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.
 - Draw the missing Share, Shipped, Containers, Ports, Find, Images and Files states in Storybook.
 - Give Dawn Mode its own Storybook page, and show the Dawn Mode pill on the sidebar.

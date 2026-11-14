@@ -19,12 +19,16 @@ import {
 
 // Read while the panel is open; a closed panel is unmounted, so nothing runs behind it.
 const EVERY_MS = 5000;
-// `docker stats` takes a second or two: every third read. Compose files are looked for once a minute.
+// `docker stats` takes a second or two: every third read. Compose files, images and volumes once a minute.
 const STATS_EVERY = 3, FILES_EVERY = 12;
+// A pull runs in a tab the panel cannot follow: images are read each time until they change, for 10 minutes at most.
+const PULL_READS = 120;
 export function readPlan(reads) {
   const stats = reads % STATS_EVERY === 1;
-  return { stats, files: reads === 1 || (reads % FILES_EVERY === 2 && !stats) };
+  return { stats, files: reads === 1 || (reads % FILES_EVERY === 2 && !stats), stored: reads % FILES_EVERY === 1 };
 }
+// Which containers there are and in what state: details change only when this does.
+export const containerKey = (list) => list.map((c) => `${c.id}:${c.state}`).toSorted().join(",");
 // Compose project names and files seen per folder, kept across panels and restarts.
 // Kept per Docker context: another engine's projects are not this one's.
 const namesKey = (context) => `kanso.containers.names.${context?.name ?? "default"}`;
@@ -61,7 +65,10 @@ export default class Containers extends View {
     this.armed = new Armed();
     this.width = 368;
     this.mem = new Map(); this.details = new Map();
-    this.held = null; this.limit = null; this.context = null;
+    this.held = null; this.limit = null; this.context = null; this.unattributed = false;
+    this.known = null;        // what the last read saw, null until Docker answered: read everything then
+    this.imagesText = ""; this.volumesText = "";
+    this.pulling = null;      // a pull in a tab: images read each time until they change
     this.reads = 0;
     this.front = new Front();
     this.names = new Map();   // compose folder -> [{ name, files }] seen there, so Up after Down uses them
@@ -85,7 +92,8 @@ export default class Containers extends View {
   }
 
   // `now`: after an action, a read that overtakes any still going; the timer's waits its turn.
-  refresh(cx, now = false) {
+  // `all` (Read again): everything, the memory limit and context too.
+  refresh(cx, now = false, all = false) {
     if (this.front.behind()) {
       this.front.rest();
       try { this.ticker?.cancel(); } catch { /* already gone */ }
@@ -98,7 +106,7 @@ export default class Containers extends View {
     this.reading = true;
     this.seq = this.seq + 1;
     const seq = this.seq;
-    const down = () => { this.state = "down"; this.groups = []; this.images = []; this.volumes = []; };
+    const down = () => { this.state = "down"; this.groups = []; this.images = []; this.volumes = []; this.known = null; };
     cx.spawn(async (cx) => {
       try {
         const ps = await docker(["ps", "-a", "--format", PS_FORMAT]);
@@ -110,32 +118,40 @@ export default class Containers extends View {
         this.reads = this.reads + 1;
         const plan = readPlan(this.reads);
         const lookFiles = plan.files;
+        // First read, Read again, or Docker back after being down: what Docker has and where it runs.
+        const whole = all || !this.known;
+        const set = containerKey(found);
+        const changed = set !== this.known?.containers;
+        const stored = whole || now || changed || plan.stored || Boolean(this.pulling);
+        const usage = whole || plan.stats;
         const { deep, shallow } = lookIn(projects.flatMap((p) => p.folders).slice(0, 24), home());
         const named = (depth, list) => localService(fileApi).walk(list, { depth: Number(depth), names: COMPOSE_FILES }).then((paths) => ({ code: 0, stdout: paths.join("\n") })).catch(fail);
         const [im, info, ps2, ins, ctx, vols, df, files] = await Promise.all([
-          docker(["images", "--no-trunc", "--format", IMAGES_FORMAT]).catch(fail),
-          docker(["info", "--format", "{{.MemTotal}}"]).catch(fail),
-          localService(processApi).memory().catch(fail),
-          found.length ? docker(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]).catch(fail) : { code: 0, stdout: "" },
-          docker(["context", "inspect", "--format", CONTEXT_FORMAT]).catch(fail),
-          docker(["volume", "ls", "--format", VOLUMES_FORMAT]).catch(fail),
-          lookFiles || now ? docker(["system", "df", "--format", "{{json .}}"]).catch(fail) : null,
+          stored ? docker(["images", "--no-trunc", "--format", IMAGES_FORMAT]).catch(fail) : null,
+          whole ? docker(["info", "--format", "{{.MemTotal}}"]).catch(fail) : null,
+          usage ? localService(processApi).memory().catch(fail) : null,
+          !found.length ? { code: 0, stdout: "" } : whole || changed ? docker(["inspect", "--format", INSPECT_FORMAT, ...found.map((c) => c.id)]).catch(fail) : null,
+          whole ? docker(["context", "inspect", "--format", CONTEXT_FORMAT]).catch(fail) : null,
+          stored ? docker(["volume", "ls", "--format", VOLUMES_FORMAT]).catch(fail) : null,
+          stored ? docker(["system", "df", "--format", "{{json .}}"]).catch(fail) : null,
           lookFiles && deep.length ? Promise.all([named("2", deep), shallow.length ? named("1", shallow) : { stdout: "" }])
             .then(([a, b]) => ({ code: 0, stdout: `${a.stdout ?? ""}\n${b.stdout ?? ""}` })) : null]);
-        const vms = vmPids(ps2.stdout);
-        const openFiles = await localService(processApi).openFiles(vms).catch(() => ({ state: "error", values: [] }));
-        const owned = dockerVms(openFiles.values ?? []);
-        const st = plan.stats ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
+        const vms = ps2 ? vmPids(ps2.stdout) : [];
+        const openFiles = ps2 ? await localService(processApi).openFiles(vms).catch(() => ({ state: "error", values: [] })) : null;
+        const owned = dockerVms(openFiles?.values ?? []);
+        const st = usage ? await docker(["stats", "--no-stream", "--format", STATS_FORMAT]).catch(() => null) : null;
         if (seq !== this.seq) return;
         // Docker quit while this read went on: say so rather than show what ran before.
         if ([im, info, st, vols].some(daemonDown)) { down(); return; }
-        this.context = ctx.code === 0 ? contextOf(ctx.stdout) : null;
+        if (ctx) this.context = ctx.code === 0 ? contextOf(ctx.stdout) : null;
+        if (info) this.limit = Number(info.stdout) > 0 ? Number(info.stdout) / 1e6 : null;
         // Docker on another machine: what this computer holds says nothing about it.
-        this.held = ps2.code === 0 && openFiles.state === "ok" && !this.context?.remote ? dockerHeld(ps2.stdout, owned) : null;
-        this.limit = Number(info.stdout) > 0 ? Number(info.stdout) / 1e6 : null;
+        if (ps2) this.held = ps2.code === 0 && openFiles.state === "ok" && !this.context?.remote ? dockerHeld(ps2.stdout, owned) : null;
+        if (openFiles) this.unattributed = openFiles.state === "unavailable";
         if (st?.code === 0) this.mem = parseStats(st.stdout);
         if (files) this.files = composeFiles(files.stdout);
-        this.details = ins.code === 0 ? parseInspect(ins.stdout) : new Map();
+        if (ins) this.details = ins.code === 0 ? parseInspect(ins.stdout) : new Map();
+        this.known = { containers: !ins || ins.code === 0 ? set : null };
         const withDetails = found.map((c) => { const d = this.details.get(c.id.slice(0, 12)); return { ...c, imageId: d?.imageId ?? null, mounts: d?.mounts ?? [] }; });
         const key = namesKey(this.context);
         if (key !== this.namesKey) { this.namesKey = key; this.names = savedNames(key); }
@@ -150,12 +166,17 @@ export default class Containers extends View {
         }
         const groups = byProject(withDetails, projects, this.context?.remote ? [] : knownStacks(this.files, withDetails, this.names), this.names);
         this.groups = groups;
-        this.images = imageRows(parseImages(im.stdout), groups);
-        this.volumes = vols.code === 0 ? volumeRows(vols.stdout, groups.flatMap((g) => g.containers)) : [];
+        if (im) {
+          if (this.pulling) this.pulling = im.stdout === this.pulling.seen && this.pulling.left > 1 ? { ...this.pulling, left: this.pulling.left - 1 } : null;
+          this.imagesText = im.stdout;
+        }
+        if (vols) this.volumesText = vols.code === 0 ? vols.stdout : "";
+        this.images = imageRows(parseImages(this.imagesText), groups);
+        this.volumes = volumeRows(this.volumesText, groups.flatMap((g) => g.containers));
         if (df?.code === 0) this.spare = reclaimable(df.stdout);
-        this.state = "ok"; this.note = openFiles.state === "unavailable" && !this.context?.remote ? "Docker VM memory attribution requires a Herdr API on Windows." : null;
+        this.state = "ok"; this.note = this.unattributed && !this.context?.remote ? "Docker VM memory attribution requires a Herdr API on Windows." : null;
       } catch {
-        if (seq === this.seq) { this.state = "missing"; this.groups = []; this.images = []; this.volumes = []; }
+        if (seq === this.seq) { this.state = "missing"; this.groups = []; this.images = []; this.volumes = []; this.known = null; }
       } finally { if (seq === this.seq) { this.reading = false; cx.notify(); } }
     });
   }
@@ -179,6 +200,7 @@ export default class Containers extends View {
     // A name, never an option: docker would take "-…" as one.
     if (!name || /\s/.test(name) || name.startsWith("-")) return;
     inTab(`pull ${name}`, ["docker", "pull", name]);
+    this.pulling = { seen: this.imagesText, left: PULL_READS };
     this.pull.set_value("");
   }
 
@@ -427,7 +449,7 @@ export default class Containers extends View {
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))
-      .child(iconButton("ct-refresh", "refresh", "Read again", (cx) => this.refresh(cx, true), c, { spin: this.reading }));
+      .child(iconButton("ct-refresh", "refresh", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading }));
     return v_flex().id("kanso-containers").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((s, sizeCx) => { if (Math.abs(this.width - s.width) >= 1) { this.width = s.width; sizeCx.notify(); } })
       .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)

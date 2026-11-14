@@ -176,3 +176,94 @@ test("the panel draws every part with each element in one place", async () => {
   Object.assign(view, { state: "down" });
   assert.doesNotThrow(() => view.render());
 });
+
+// The panel open and nothing changing: Docker answers as a fixed engine, every command counted.
+async function openPanel() {
+  const { fixture, loadMod } = await import("./perf-harness.mjs");
+  const f = fixture();
+  const docker = { ps: [row("aa11aa11aa11", "web-1", "running", "Up 2 hours", "web", "", "", "", "", "")], images: row("sha256:1111aaaa2222", "web", "latest", "100MB", "2 days ago"), down: false };
+  const exec = f.host.exec;
+  f.host.exec = async (command, args = [], options) => {
+    if (command !== "docker") return exec(command, args, options);
+    await exec(command, args, options);
+    if (docker.down) return { code: 1, stdout: "", stderr: "Cannot connect to the Docker daemon. Is the docker daemon running?" };
+    const out = { ps: docker.ps.join("\n"), images: docker.images, info: "8000000000", context: "desktop-linux\tunix:///var/run/docker.sock" }[args[0]] ?? "";
+    return { code: 0, stdout: out, stderr: "" };
+  };
+  f.host.run = () => null;
+  const { Containers } = await loadMod("kanso-containers/main.js", ["Containers"], f.host);
+  const view = new Containers();
+  view.init({}, f.cx);
+  await f.settle();
+  await f.advance(0);
+  const asked = (verb) => f.state.processes.filter((p) => p.command === "docker" && p.args.join(" ").startsWith(verb)).length;
+  const fresh = () => { f.state.processes.length = 0; };
+  return { f, view, docker, asked, fresh };
+}
+
+test("the Containers panel at rest asks Docker only what can change by itself in a minute", async () => {
+  const { f, asked, fresh } = await openPanel();
+  assert.equal(asked("info"), 1, "opening the panel reads Docker's memory limit");
+  assert.equal(asked("context inspect"), 1, "and its context");
+  assert.equal(asked("inspect"), 1, "and the containers' details");
+  fresh();
+  await f.advance(60_000);
+  const counts = Object.fromEntries(["ps", "stats", "images", "volume ls", "system df", "info", "context inspect", "inspect"].map((v) => [v, asked(v)]));
+  assert.ok(counts.ps <= 12, `docker ps ${counts.ps} times; budget 12`);
+  assert.ok(counts.stats <= 4, `docker stats ${counts.stats} times; budget 4`);
+  for (const verb of ["images", "volume ls", "system df"]) assert.ok(counts[verb] <= 1, `docker ${verb} ${counts[verb]} times; budget 1`);
+  assert.deepEqual([counts.info, counts["context inspect"], counts.inspect], [0, 0, 0], "no memory limit, context or details when nothing changed");
+});
+
+test("a container stopped or added outside kansō shows within 5 seconds, its details read only then", async () => {
+  const { f, view, docker, asked, fresh } = await openPanel();
+  fresh();
+  docker.ps = [row("aa11aa11aa11", "web-1", "exited", "Exited (0) 1 second ago", "web", "", "", "", "", ""), row("bb22bb22bb22", "db-1", "running", "Up 1 second", "postgres", "", "", "", "", "")];
+  await f.advance(5000);
+  assert.equal(asked("inspect"), 1, "a changed list asks for its details");
+  assert.deepEqual(clone(view.groups.flatMap((g) => g.containers.map((c) => [c.name, c.state]))).toSorted(), [["db-1", "running"], ["web-1", "exited"]]);
+  fresh();
+  await f.advance(5000);
+  assert.equal(asked("inspect"), 0, "the same list again does not");
+});
+
+test("an image made outside kansō shows within a minute; one from a panel action as soon as it ends", async () => {
+  const { f, view, docker, asked, fresh } = await openPanel();
+  docker.images = [docker.images, row("sha256:3333bbbb4444", "redis", "7", "40MB", "1 second ago")].join("\n");
+  await f.advance(60_000);
+  assert.ok(view.images.some((i) => i.name === "redis:7"), "outside kansō: within 60 seconds");
+  fresh();
+  view.act(["rmi", "redis:7"], f.cx);
+  await f.settle();
+  assert.equal(asked("images"), 1, "an action in the panel reads images when it ends");
+  assert.equal(asked("volume ls"), 1, "and volumes");
+  view.pull = { value: () => "nginx", set_value() {} };
+  view.pullImage();
+  fresh();
+  await f.advance(10_000);
+  assert.equal(asked("images"), 2, "while a pull runs in its tab, images are read each time");
+  docker.images = [docker.images, row("sha256:5555cccc6666", "nginx", "latest", "60MB", "1 second ago")].join("\n");
+  await f.advance(5000);
+  assert.ok(view.images.some((i) => i.name === "nginx:latest"), "the pulled image shows on the next read");
+  fresh();
+  await f.advance(10_000);
+  assert.equal(asked("images"), 0, "and the reads stop once it is there");
+});
+
+test("Read again asks everything at once, and Docker coming back reads its memory limit and context again", async () => {
+  const { f, view, docker, asked, fresh } = await openPanel();
+  await f.advance(5000);
+  fresh();
+  view.refresh(f.cx, true, true);
+  await f.settle();
+  for (const verb of ["ps", "images", "info", "context inspect", "inspect", "volume ls", "system df", "stats"]) assert.equal(asked(verb), 1, `Read again asks docker ${verb}`);
+  docker.down = true;
+  await f.advance(5000);
+  assert.equal(view.state, "down");
+  docker.down = false;
+  fresh();
+  await f.advance(5000);
+  assert.equal(view.state, "ok");
+  assert.deepEqual([asked("info"), asked("context inspect")], [1, 1], "back up: memory limit and context read again");
+  assert.equal(view.limit, 8000);
+});
