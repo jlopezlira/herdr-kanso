@@ -8,7 +8,7 @@ const local = (extra = {}) => ({ id: "sp1", name: "app", folder: "/work/app", ma
 const agent = (address, extra = {}) => ({ address, pane: `p-${address}`, tab: "tab1", space: "sp1", space_name: "app", status: null, program: { agent: true, name: "Claude Code" }, title: address, seq: 1, ...extra });
 
 async function sidebar(state) {
-  const ids = [], texts = [], tips = [], icons = [], calls = [], handlers = {};
+  const ids = [], texts = [], tips = [], icons = [], calls = [], handlers = {}, focused = [];
   const node = () => {
     let id = null;
     const proxy = new Proxy({}, {
@@ -18,13 +18,13 @@ async function sidebar(state) {
         if (prop === "child") return (value) => { if (typeof value === "string") texts.push(value); return proxy; };
         if (prop === "tooltip") return (value) => { if (typeof value === "string") tips.push(value); return proxy; };
         if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        if (prop === "on_click" || prop === "on_mouse_up" || prop === "on_mouse_down") return (...a) => { if (id) handlers[`${prop}:${id}`] = a.at(-1); return proxy; };
+        if (prop === "on_click" || prop === "on_mouse_up" || prop === "on_mouse_down") return (...a) => { if (id) handlers[`${prop}:${id}`] = handlers[`${prop}:${a.length > 1 ? `${a[0]}:` : ""}${id}`] = a.at(-1); return proxy; };
         return () => proxy;
       },
     });
     return proxy;
   };
-  const field = { on() {}, value: () => state.typed ?? "", set_value() {}, focus() {}, release() {} };
+  const field = { on() {}, value: () => state.typed ?? "", set_value() {}, focus() { focused.push(true); }, release() {} };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
     div: node, image: node, h_flex: node, v_flex: node,
     svg: (path) => { icons.push(path); return node(); },
@@ -50,7 +50,7 @@ async function sidebar(state) {
   });
   if (state.before) state.before(view);
   view.render();
-  return { view, ids, texts, tips, icons, calls, handlers };
+  return { view, ids, texts, tips, icons, calls, handlers, focused };
 }
 
 test("an open project draws no chevron, and folded it shows the most urgent mark and how many", async () => {
@@ -99,15 +99,22 @@ test("a kept project whose folder is gone says Not found and offers Locate", asy
   assert.equal(drawn.ids.includes("closed-plus-:/Users/me/search"), false);
 });
 
-test("a project's name edits in place: Enter keeps the new name, Esc leaves it", async () => {
-  const drawn = await sidebar({ typed: "kansō", before: (view) => view.startRename(local()) });
-  assert.equal(drawn.ids.includes("space-rename-field"), true);
-  drawn.view.endRename(true);
-  assert.deepEqual(drawn.calls.filter(([c]) => c === "space.rename"), [["space.rename", { id: "sp1", name: "kansō" }]]);
-  const left = await sidebar({ typed: "other", before: (view) => view.startRename(local()) });
-  left.view.endRename(false);
-  assert.deepEqual(left.calls.filter(([c]) => c === "space.rename"), []);
-  assert.equal(left.view.renaming, null);
+test("double-clicking a project's name opens the rename dialog, not a field in the row", async () => {
+  const drawn = await sidebar({});
+  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  assert.deepEqual(drawn.calls, [["space.rename", { id: "sp1" }]], "no name: Herdr asks for one in its dialog");
+  drawn.ids.length = 0;
+  drawn.view.render();
+  assert.equal(drawn.ids.includes("space-rename-field"), false);
+  assert.equal(drawn.ids.includes("space-sp1"), true);
+});
+
+test("Esc while renaming a project sends nothing to the focused agent: the sidebar takes no keys", async () => {
+  const drawn = await sidebar({});
+  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  drawn.view.render();
+  assert.deepEqual(drawn.focused, [], "no field in the sidebar holds the keyboard while the dialog asks");
+  assert.deepEqual(drawn.calls.filter(([c]) => c !== "space.rename"), [], "nothing reaches a terminal");
 });
 
 test("each session row has its own mark and words: a terminal's icon, the time after what it is on, a pin before the mark", async () => {
