@@ -29,9 +29,14 @@ class PreviewKeys {
   bind(view, cx) {
     this.view = view;
     this.cx = cx;
-    if (this.live) return;
+    if (!this.live) afterMount(cx, (cx) => this.start(cx));
+  }
+
+  // Marked live only once the loop runs, so a view gone before its first turn leaves nothing behind.
+  start(cx) {
+    if (this.live || !this.view) return;
     this.live = true;
-    afterMount(cx, (cx) => cx.spawn((commandCx) => commandLoop(
+    cx.spawn((commandCx) => commandLoop(
       () => nextCommand(),
       () => {
         if (!this.view) throw new Error("gone");
@@ -41,7 +46,7 @@ class PreviewKeys {
         if (this.view && String(command).replace(/^kanso-panel\./, "") === "save") this.view.save(this.cx);
       },
       commandCx.timer,
-    ).finally(() => { this.live = false; })));
+    ).finally(() => { this.live = false; }));
   }
 
   unbind(view) {

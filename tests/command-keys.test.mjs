@@ -21,7 +21,7 @@ function commands(f) {
   return keys;
 }
 
-async function mount(file, name, props, key) {
+async function mount(file, name, props, key, ready = () => {}) {
   const f = fixture();
   const keys = commands(f);
   const mod = await loadMod(file, [name], f.host);
@@ -31,6 +31,7 @@ async function mount(file, name, props, key) {
   await f.settle();
   keys.mounted = true;
   await f.advance(0);
+  ready(view);
   return { f, keys, view, pressed: await keys.press(key) };
 }
 
@@ -50,4 +51,52 @@ test("the strip, the tab bar and the sidebar footer take their keys right after 
     assert.ok(pressed, `${name} listens for its keys once it is on screen`);
     assert.equal(keys.reads, 2, `${name} acts on the key and waits for the next one`);
   }
+});
+
+test("Back leaves Memory's full list right after a reload", async () => {
+  const { view, pressed } = await mount("kanso-guard/main.js", "Memory", {}, "kanso-guard.back", (view) => { view.showAll = true; });
+  assert.ok(pressed, "Memory listens for its keys once it is on screen");
+  assert.equal(view.showAll, false);
+});
+
+test("Back leaves Spend's settings right after a reload", async () => {
+  const { view, pressed } = await mount("kanso-spend/main.js", "TokenSpend", {}, "kanso-spend.back", (view) => { view.page = "settings"; });
+  assert.ok(pressed, "Spend listens for its keys once it is on screen");
+  assert.equal(view.page, "home");
+});
+
+async function preview() {
+  const f = fixture();
+  const keys = commands(f);
+  const { Preview } = await loadMod("kanso-panel/preview.js", ["Preview"], f.host);
+  const open = async () => {
+    const view = new Preview();
+    view.init(f.cx, { panel: "preview" });
+    await f.settle();
+    view.saved = 0;
+    view.save = () => { view.saved += 1; };
+    return view;
+  };
+  return { f, keys, open };
+}
+
+test("Cmd+S saves in Preview right after a reload", async () => {
+  const { f, keys, open } = await preview();
+  const view = await open();
+  keys.mounted = true;
+  await f.advance(0);
+  assert.ok(await keys.press("kanso-panel.save"), "Preview listens for its keys once it is on screen");
+  assert.equal(view.saved, 1);
+});
+
+test("Cmd+S still saves in a new Preview when the last one closed before it was on screen", async () => {
+  const { f, keys, open } = await preview();
+  await open();
+  // That view is gone, and its timers with it.
+  f.state.timers.length = 0;
+  keys.mounted = true;
+  const view = await open();
+  await f.advance(0);
+  assert.ok(await keys.press("kanso-panel.save"), "the new Preview listens for its keys");
+  assert.equal(view.saved, 1);
 });
