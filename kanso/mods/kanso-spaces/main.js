@@ -290,7 +290,7 @@ export default class Spaces extends View {
   }
 
   close() {
-    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); this.renaming?.text.release(); } catch { /* already gone */ }
+    try { this.branch?.release(); this.projectName?.release(); this.convScroll?.release(); } catch { /* already gone */ }
   }
 
   menuPlace(m) {
@@ -1920,34 +1920,6 @@ export default class Spaces extends View {
     return agentFold(w.id, mine, open, (cx) => { this.setAgentsFolded(w.id, open, cx); cx.notify(); }, t) ?? div().flex_none();
   }
 
-  // Rename in place: the name becomes a field; Enter keeps it, Esc leaves it as it was.
-  startRename(w) {
-    this.endRename();
-    const text = new TextField({ placeholder: w.name });
-    text.set_value(w.name);
-    text.on("submit", (_e, cx) => this.endRename(true, cx));
-    this.renaming = { id: w.id, name: w.name, text };
-    text.focus();
-  }
-
-  endRename(keep = false, cx = null) {
-    const r = this.renaming;
-    if (!r) return;
-    this.renaming = null;
-    const name = r.text.value().trim();
-    if (keep && name !== r.name) run("space.rename", { id: r.id, name });
-    try { r.text.release(); } catch { /* already gone */ }
-    cx?.notify();
-  }
-
-  renameField(t) {
-    return div().id("space-rename").flex_1().min_w(0)
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_mouse_up("left", (_e, cx) => cx.stop_propagation())
-      .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { cx.stop_propagation(); this.endRename(false, cx); } })
-      .child(field("space-rename-field", this.renaming.text, tokens(t)));
-  }
-
   setAgentsFolded(id, folded, cx = null) {
     if (folded === this.agentsFolded.has(id)) return;
     folded ? this.agentsFolded.add(id) : this.agentsFolded.delete(id);
@@ -2026,7 +1998,7 @@ export default class Spaces extends View {
       .on_mouse_down("left", (e) => {
         this.pressed = tree || e.click_count === 2 ? null : w.id;
         this.over = null;
-        if (e.click_count === 2) this.startRename(w);
+        if (e.click_count === 2) run("space.rename", { id: w.id });
       })
       .on_mouse_move((_e, cx) => this.hold(this.takes(w, tree) ? w.id : null, cx))
       .on_mouse_up("left", (_e, cx) => {
@@ -2052,9 +2024,8 @@ export default class Spaces extends View {
           .gap(9)
           .items_center()
           .when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg("mods/kanso-chrome/icons/branch.svg").size(13).text_color(t.muted)))
-          .child(this.renaming?.id === w.id ? this.renameField(t)
-            : div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
-          .child(g && !asleep && this.renaming?.id !== w.id && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.pull(place, cx), open: () => openAhead(w) }) : div().flex_1())
+          .child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))
+          .child(g && !asleep && shown("sidebar.git", true, pieces(shared)) ? gitTail(g, tree, w.name, t, place, { id: w.id, active: on, pulling: this.pulling, pull: (cx) => this.pull(place, cx), open: () => openAhead(w) }) : div().flex_1())
           .when(asleep, (el) => el.children(this.asleepTail(t, group)))
           .when(controls.plus, (el) => el.child(this.plus(`space-plus-${w.id}`, t, spot, `New agent in ${w.name}`)))
           .when(controls.dots, (el) => el.child(this.dots(`space-dots-${w.id}`, t, () => this.menu(w))))

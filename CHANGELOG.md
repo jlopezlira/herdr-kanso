@@ -38,7 +38,7 @@ the branch's rules.
 - Storybook icons draw the exact Lucide shapes, and its checks run in under a second.
 - Storybook pages say what each piece is in one sentence and keep only the rules a drawing cannot show; its notes for contributors are one short guide.
 - Sidebar rows match their designs: an open project or computer shows no chevron, and folded it shows its most urgent mark and how many; a click on the current project folds it, and the count unfolds it. (#230)
-- A project shows + and the menu under the pointer, a detached checkout shows its commit, a kept project with a missing folder says Not found with Locate, and a project's name edits in place. (#230)
+- A project shows + and the menu under the pointer, a detached checkout shows its commit, and a kept project with a missing folder says Not found with Locate. (#230)
 - The behind and ahead counts say what a press does: pull from the upstream, or open the PR panel. (#230)
 - Session rows lead with the terminal icon when the program has none, put the time after what the session is on, keep a pin before the mark, and give a sub-session that needs you its own line. (#230)
 - In Status and Threads a session shows its project after its name, and its computer when it is not this one; only Needs you carries a mark, and a section shows its count once folded. (#230)
@@ -48,6 +48,7 @@ the branch's rules.
 
 ### Fixed
 
+- Double-clicking a project's name opens the rename dialog again, instead of a field in the row where Esc could reach the agent and stop it.
 - The border between the sidebar and the first pane has one drag, the sidebar's: the first pane no longer shows a resize handle there that moved nothing. The first pane grows to the right, and the panes after it keep both edges.
 - kansō's keys (Cmd+B, Cmd+D, Cmd+J and the rest, Ctrl on Windows and Linux) work again after kansō updates itself, without restarting Herdr.
 - Storybook gives approved designs and features such as Open with, Sleep and Arrangements their own pages, with shared reference drawings and additional states marked Proposed.

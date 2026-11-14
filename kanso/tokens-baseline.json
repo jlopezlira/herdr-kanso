@@ -525,7 +525,7 @@
   {"file":"kanso/mods/kanso-spaces/main.js","line":"div().absolute().left(GUIDE_X).top(mid).w(ELBOW_W).h(1).bg(t.input),","value":1},
   {"file":"kanso/mods/kanso-spaces/main.js","line":".gap(9)","value":9},
   {"file":"kanso/mods/kanso-spaces/main.js","line":".when(Boolean(tree), el => el.pl(CHILD_PAD).child(svg(\"mods/kanso-chrome/icons/branch.svg\").size(13).text_color(t.muted)))","value":13},
-  {"file":"kanso/mods/kanso-spaces/main.js","line":": div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))","value":150},
+  {"file":"kanso/mods/kanso-spaces/main.js","line":".child(div().flex_shrink(0).max_w(150).truncate().text_size(13.5).font_semibold().text_color(tree && !on ? t.muted : t.foreground).child(w.name))","value":150},
   {"file":"kanso/mods/kanso-spaces/main.js","line":"v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)","value":36},
   {"file":"kanso/mods/kanso-spaces/main.js","line":"v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)","value":3},
   {"file":"kanso/mods/kanso-spaces/main.js","line":".when(rows.length > 0, (el) => el.child(h_flex().h(12).gap(3).items_center().text_size(10.5).text_color(top === \"blocked\" ? t.blocked : ink)","value":3},
