@@ -1,6 +1,12 @@
-// Agents by keyboard: the sidebar's agent row above or below, and back and forward through the agents you visited.
+// Agents by keyboard: the sidebar's agent above or below, and back and forward through the agents you visited.
 export const KEPT = 50;
 export const NO_VISITS = Object.freeze({ list: [], at: -1, seen: null });
+
+// Held by the module, not the view, so a sidebar mounted again keeps its history.
+export class Visits {
+  static now = NO_VISITS;
+  static keep(visits) { this.now = visits; return visits; }
+}
 
 // A change of focus is a visit; landing where back or forward pointed adds nothing.
 export function visited(visits, address) {
@@ -17,8 +23,7 @@ export function stepped(visits, by, can = () => true) {
   return hit ? { visits: { ...visits, at: hit.at }, to: hit.address } : null;
 }
 
-export function besideRow(nav, by) {
-  const rows = nav.filter((n) => String(n.key).startsWith("agent:"));
-  const here = rows.findIndex((n) => n.here);
-  return rows[here < 0 ? (by > 0 ? 0 : rows.length - 1) : here + by] ?? null;
+export function beside(order, here, by) {
+  const at = order.indexOf(here);
+  return order[at < 0 ? (by > 0 ? 0 : order.length - 1) : at + by] ?? null;
 }

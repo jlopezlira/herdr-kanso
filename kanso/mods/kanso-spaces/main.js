@@ -36,7 +36,7 @@ import { readSync, saveSync } from "./sync-row.js";
 import { createAwake, keepAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
-import { NO_VISITS, visited, stepped, besideRow } from "./agent-nav.js";
+import { Visits, visited, stepped, beside } from "./agent-nav.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -98,6 +98,12 @@ const arrange = (props) => openOverlay({ mod: "kanso-sleep", kind: "dialog", wid
 const sleepTab = (spaceId, tab) => arrange({ sleep: { scope: "tab", space: spaceId, tab } });
 // A settled tab wakes whole; a terminal asleep in a tab still shown wakes alone.
 const wakeRow = (z) => arrange({ wake: z.settled ? { space: z.space, tab: z.tabId } : { space: z.space, terminal: z.terminal } });
+const openRow = (a) => {
+  const open = enterOpens(a);
+  if (open?.wake) wakeRow(open.wake);
+  else if (open?.focus) run("pane.focus", { pane: open.focus });
+  else if (open?.peek) run("terminal.peek", { terminal: open.peek });
+};
 const sleepAgent = (spaceId, tab, pane) => arrange({ sleep: { scope: "agent", space: spaceId, tab, pane } });
 const sleepProject = (spaceId) => arrange({ sleep: { scope: "project", space: spaceId } });
 // The Store holds live handles, so it stays the sidebar view's own state, never shared.
@@ -485,7 +491,7 @@ export default class Spaces extends View {
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
     else if (c === "needs-you.next") this.nextNeeds(cx);
-    else if (c === "agent-up" || c === "agent-down") besideRow(this.nav ?? [], c === "agent-up" ? -1 : 1)?.go(cx);
+    else if (c === "agent-up" || c === "agent-down") this.besideAgent(c === "agent-up" ? -1 : 1);
     else if (c === "agent-back" || c === "agent-forward") this.stepAgent(c === "agent-back" ? -1 : 1, cx);
     else if (c.startsWith("retry-machine:") && c.length > "retry-machine:".length) this.retryMachine(c.slice("retry-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
@@ -559,17 +565,36 @@ export default class Spaces extends View {
   }
 
   visit(list = agents()) {
-    this.visits = visited(this.visits ?? NO_VISITS, list.find((a) => a.focused)?.address);
-    return this.visits;
+    return Visits.keep(visited(Visits.now, list.find((a) => a.focused)?.address));
   }
 
-  stepAgent(by, cx) {
-    const list = agents(), rows = new Map((this.nav ?? []).map((n) => [n.key, n.go])), live = new Set(list.map((a) => a.address));
-    const step = stepped(this.visit(list), by, (address) => rows.has(`agent:${address}`) || live.has(address));
+  stepAgent(by) {
+    const list = agents(), live = new Set(list.map((a) => a.address));
+    const step = stepped(this.visit(list), by, (address) => live.has(address));
     if (!step) return;
-    this.visits = step.visits;
-    const go = rows.get(`agent:${step.to}`);
-    if (go) go(cx); else run("agent.focus", { terminal: step.to });
+    Visits.keep(step.visits);
+    openRow(list.find((a) => a.address === step.to));
+  }
+
+  agentOrder() {
+    const sp = visibleSpaces(spaces(), this.offNames()), ps = panes(), terms = terminals(), dozing = this.sleepingNow(sp, terms, ps).dozing;
+    const ctx = { terms, alive: this.alive, strip: shared("strip.state") ?? {}, places: placesOf(sp, ps), now: Date.now(), asleep: { rows: [] },
+      spaceIds: new Set(sp.map((w) => w.id)), all: this.listed(ps, sp, terms).filter((a) => !dozing.has(a.address)) };
+    const view = shown("sidebar.switch", true, pieces(shared)) !== false ? this.view : "spaces";
+    const rows = view === "agents" ? this.statusSections(sp, ctx).flatMap((s) => s.entries.map((e) => e.a))
+      : view === "threads" ? (this.threads ? threadSections(this.threadRows(ctx), { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} }).flatMap((s) => s.rows.map((r) => r.a)) : [])
+      : this.ordered(sp, ctx.places).flatMap((r) => nest(this.spaceRows(r.w.id, ctx), terms).map((e) => e.a));
+    const live = new Set(agents().map((a) => a.address));
+    return rows.filter((a) => !a.sub && live.has(a.address));
+  }
+
+  besideAgent(by) {
+    const order = this.agentOrder(), list = agents();
+    const to = order.find((a) => a.address === beside(order.map((x) => x.address), list.find((a) => a.focused)?.address, by));
+    if (!to) return;
+    this.visit(list);
+    Visits.keep(visited(Visits.now, to.address));
+    openRow(to);
   }
 
   toggleNeeds(cx) {
@@ -619,12 +644,7 @@ export default class Spaces extends View {
   }
 
   navRow(a, row) {
-    const open = enterOpens(a);
-    const go = () => {
-      if (open?.wake) wakeRow(open.wake);
-      else if (open?.focus) run("pane.focus", { pane: open.focus });
-      else if (open?.peek) run("terminal.peek", { terminal: open.peek });
-    };
+    const go = () => openRow(a);
     return this.navMark(`agent:${a.address}`, go, Boolean(a.focused)) ? { ...(row ?? {}), kbd: true } : row;
   }
 
@@ -954,6 +974,7 @@ export default class Spaces extends View {
     if ((address ?? null) === (this.held?.address ?? null)) return;
     const cur = (list ?? agents()).find((a) => a.address === address);
     this.held = cur ? { address, done: cur.status === "done" || this.lastSeen?.[address] === "done" } : null;
+    if (cur) Visits.keep(visited(Visits.now, address));
   }
 
   trackAgents(now, sp, cx) {
@@ -2094,14 +2115,25 @@ export default class Spaces extends View {
     return this.railMark(t, `space-${w.id}`, { lead: this.railInitial(w.name, this.avatarColor(w, t)), rows, tip: w.name, on: w.active, space: w.id, menu: () => this.menu(w) });
   }
 
-  agentsView(t, sp, ps, ctx) {
-    // Asleep is a status like the others: those agents are entries too.
+  // Asleep is a status like the others: those agents are entries too.
+  statusSections(sp, ctx) {
     const names = new Map(sp.map((w) => [w.id, w.name]));
     const zz = ctx.asleep.rows.map((a) => ({ a: { ...a, space_name: names.get(a.space) ?? a.asleep.spaceName ?? "" }, lines: [] }));
     const entries = [...nest(this.inStripOrder(ctx.all, ctx.strip), ctx.terms), ...zz];
     const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
-    const held = this.held?.done ? this.held.address : null;
-    const sections = bySection(entries, since, held, this.statusOrder);
+    return bySection(entries, since, this.held?.done ? this.held.address : null, this.statusOrder);
+  }
+
+  // Asleep, a conversation keeps its place among the others (by your last message in it).
+  threadRows(ctx) {
+    return ctx.all
+      .filter((a) => !a.address.includes("/") && (this.threads[a.address] || a.program?.agent || a.status))
+      .map((a) => ({ a, th: shownThread(this.threads[a.address], this.termBy?.get(a.address), this.alive) }))
+      .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
+  }
+
+  agentsView(t, sp, ps, ctx) {
+    const sections = this.statusSections(sp, ctx);
     if (!sections.length) return machines().some((m) => m.layout === "loading") ? [item(this.silhouette(t), 3 * 32 + 4)]
       : [item(stateEmpty("agents-empty", "activity", "No agents running", tokens(t)))];
     const project = this.projectOf(sp, t);
@@ -2249,11 +2281,7 @@ export default class Spaces extends View {
 
   // Status, collapsed: one mark per section.
   agentsRail(t, sp, ctx) {
-    const names = new Map(sp.map((w) => [w.id, w.name]));
-    const zz = ctx.asleep.rows.map((a) => ({ a: { ...a, space_name: names.get(a.space) ?? a.asleep.spaceName ?? "" }, lines: [] }));
-    const entries = [...nest(this.inStripOrder(ctx.all, ctx.strip), ctx.terms), ...zz];
-    const since = { ...(this.since ?? {}), ...Object.fromEntries(zz.map((e) => [e.a.address, { s: "asleep", at: e.a.asleep.saved }])) };
-    const sections = bySection(entries, since, this.held?.done ? this.held.address : null, this.statusOrder);
+    const sections = this.statusSections(sp, ctx);
     return sections.map((s) => {
       const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
       const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(16).items_center().child(statusMark(t, s.id));
@@ -2264,11 +2292,7 @@ export default class Spaces extends View {
   // Threads, collapsed: one mark per project (or per shelf: Pinned, Snoozed, Settled).
   threadsRail(t, sp, ctx) {
     if (!this.threads) return [];
-    const rows = ctx.all
-      .filter((a) => !a.address.includes("/") && (this.threads[a.address] || a.program?.agent || a.status))
-      .map((a) => ({ a, th: shownThread(this.threads[a.address], this.termBy?.get(a.address), this.alive) }))
-      .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
-    const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
+    const sections = threadSections(this.threadRows(ctx), { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     const icons = { pinned: "pin", snoozed: "clock", settled: "check" };
     return sections.map((s) => {
       const p = s.project ? ctx.project(s.project) : null;
@@ -2294,11 +2318,7 @@ export default class Spaces extends View {
   threadsView(t, sp, ps, ctx) {
     if (!this.threads) return [item(this.silhouette(t), 3 * 32 + 4)];
     const project = this.projectOf(sp, t);
-    const rows = ctx.all
-      .filter((a) => !a.address.includes("/") && (this.threads[a.address] || a.program?.agent || a.status))
-      .map((a) => ({ a, th: shownThread(this.threads[a.address], this.termBy?.get(a.address), this.alive) }))
-      // Asleep, a conversation keeps its place among the others (by your last message in it).
-      .concat(ctx.asleep.rows.filter((a) => a.asleep.resume).map((a) => ({ a, th: { title: a.title, said: a.asleep.said ?? a.asleep.saved, at: a.asleep.saved } })));
+    const rows = this.threadRows(ctx);
     if (!rows.length) return [item(stateEmpty("threads-empty", "message", "No conversations yet", tokens(t)))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
@@ -2481,7 +2501,6 @@ export default class Spaces extends View {
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
-    this.visit();
     const sp = visibleSpaces(spaces(), this.offNames());
     const ps = panes();
     this.assignColors(sp);
