@@ -36,6 +36,7 @@ import { readSync, saveSync } from "./sync-row.js";
 import { createAwake, keepAwake } from "./awake.js";
 import { NEEDS_YOU, EMPTY_NOTICE_MS, waitingSignature, sleepingSignature, sameQueue, waitingQueue, nextWaiting, queueState } from "./needs-you.js";
 import { queueControl, queueList } from "./needs-you-view.js";
+import { NO_VISITS, visited, stepped, besideRow } from "./agent-nav.js";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, closeOverlay, props, exec, hc, theme, shared, setShared, watchFolder, window, nextCommand, focused, home, appHome, pickFolder, knownAgents, notify } from "herdr";
 
 const PREFS = ["machines.folded", "spaces.agentsFolded", "spaces.order", "spaces.statusOrder", "spaces.threadOrder", "spaces.threadGroup",
@@ -484,6 +485,8 @@ export default class Spaces extends View {
     if (space) { const i = Number(space[1]); if (i >= 1 && i <= spaces().length) run("space.select", { index: i }); }
     else if (view) { this.setView(view[1], cx); cx.notify(); }
     else if (c === "needs-you.next") this.nextNeeds(cx);
+    else if (c === "agent-up" || c === "agent-down") besideRow(this.nav ?? [], c === "agent-up" ? -1 : 1)?.go(cx);
+    else if (c === "agent-back" || c === "agent-forward") this.stepAgent(c === "agent-back" ? -1 : 1, cx);
     else if (c.startsWith("retry-machine:") && c.length > "retry-machine:".length) this.retryMachine(c.slice("retry-machine:".length), cx);
     else if (c === "sidebar") this.toggleRail();
     else if (c === "needs-you.list") this.toggleNeeds(cx);
@@ -553,6 +556,20 @@ export default class Spaces extends View {
     this.needsEmptyAt = at;
     cx.timer.after(EMPTY_NOTICE_MS, (cx) => { if (this.needsEmptyAt === at) { this.needsEmpty = false; cx.notify(); } });
     cx.notify();
+  }
+
+  visit(list = agents()) {
+    this.visits = visited(this.visits ?? NO_VISITS, list.find((a) => a.focused)?.address);
+    return this.visits;
+  }
+
+  stepAgent(by, cx) {
+    const list = agents(), rows = new Map((this.nav ?? []).map((n) => [n.key, n.go])), live = new Set(list.map((a) => a.address));
+    const step = stepped(this.visit(list), by, (address) => rows.has(`agent:${address}`) || live.has(address));
+    if (!step) return;
+    this.visits = step.visits;
+    const go = rows.get(`agent:${step.to}`);
+    if (go) go(cx); else run("agent.focus", { terminal: step.to });
   }
 
   toggleNeeds(cx) {
@@ -2464,6 +2481,7 @@ export default class Spaces extends View {
     // The keyboard left (a click on a pane, say): the ring goes too.
     if (this.kbd && ((!this.needsOpen && collapsed) || !this.handle.is_focused())) { this.kbd = false; if (shared("kanso.list")) setShared("kanso.list", null); }
     this.navNext = [];
+    this.visit();
     const sp = visibleSpaces(spaces(), this.offNames());
     const ps = panes();
     this.assignColors(sp);

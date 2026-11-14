@@ -24,6 +24,10 @@ the branch's rules.
 
 ## [Unreleased]
 
+### Added
+
+- Cmd+Shift+Up and Cmd+Shift+Down go to the agent above or below in the sidebar, across tabs and projects; Cmd+Shift+Left and Cmd+Shift+Right go back and forward through the agents you visited, as in a browser. On Windows, Ctrl+Shift with the arrows.
+
 ### Changed
 
 - Draw the missing Worktrees, Preview, Markdown and Simulator feature states in Storybook.

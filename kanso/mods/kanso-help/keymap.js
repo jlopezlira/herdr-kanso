@@ -63,7 +63,7 @@ const WORDS = {
   "kanso-strip.close": "Close the pane", "kanso-strip.width": "Wider or narrower", "kanso-strip.pin": "Pin the pane",
   "kanso-strip.scroll-left": "Slide the view left", "kanso-strip.scroll-right": "Slide the view right", "kanso-strip.first": "First column", "kanso-strip.last": "Last column",
   "kanso-strip.center": "Bring the pane into view", "kanso-strip.fewer": "Fewer panes in view", "kanso-strip.more": "More panes in view", "kanso-strip.fit": "Even the columns out",
-  "kanso-spaces.needs-you.next": "Next agent that needs you", "kanso-strip.send": "Send the pane's work to an agent", "kanso-strip.arrange": "Arrangements",
+  "kanso-spaces.needs-you.next": "Next agent that needs you", "kanso-spaces.agent-up": "Agent above", "kanso-spaces.agent-down": "Agent below", "kanso-spaces.agent-back": "Back through the agents visited", "kanso-spaces.agent-forward": "Forward through the agents visited", "kanso-strip.send": "Send the pane's work to an agent", "kanso-strip.arrange": "Arrangements",
   "kanso-spaces.view-spaces": "Sidebar: Projects", "kanso-spaces.view-agents": "Sidebar: Status", "kanso-spaces.view-threads": "Sidebar: Threads", "kanso-spaces.sidebar": "Hide or show the sidebar",
   "kanso-tabs.settings": "kansō settings", "kanso-tabs.sim": "Simulator", "mod.open:kanso-help": "This help",
   "tab.new": "New tab", "tab.close": "Close the tab", "tab.next": "Next tab", "tab.prev": "Previous tab",
