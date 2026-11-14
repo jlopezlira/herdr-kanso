@@ -48,6 +48,7 @@ the branch's rules.
 
 ### Fixed
 
+- kansō's keys (Cmd+B, Cmd+D, Cmd+J and the rest, Ctrl on Windows and Linux) work again after kansō updates itself, without restarting Herdr.
 - Storybook gives approved designs and features such as Open with, Sleep and Arrangements their own pages, with shared reference drawings and additional states marked Proposed.
 - Storybook draws all missing Sidebar and Activity feature states with the shared kit, including queues, sleeping conversations, Git controls and activity overflow.
 - Storybook draws missing Settings and Memory feature states with the shared kit and source-linked coverage.

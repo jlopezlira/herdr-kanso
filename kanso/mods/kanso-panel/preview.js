@@ -11,7 +11,7 @@ import { kindOf } from "./kinds.js";
 import { MarkdownDoc, tildePath, readingLines, conflictBar, textIo, readWhole } from "./doc.js";
 import { drafts, draftKey, remember, restore, seenDisk, typed, opened, beginSave, commitText, applied, word, needsSave, didFail, EDIT_LIMIT, keepMine, takeTheirs, tooLarge } from "./edit.js";
 import { skeleton, quietLink, iconButton, tokens, Armed } from "./ui.js";
-import { tryOrAsync, extOf } from "./pure.js";
+import { tryOrAsync, extOf, afterMount } from "./pure.js";
 import { fileMemory } from "./panel-state.js";
 import { walkLayout } from "./layout.js";
 import { bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, pollStart, pollNext, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
@@ -31,7 +31,7 @@ class PreviewKeys {
     this.cx = cx;
     if (this.live) return;
     this.live = true;
-    cx.spawn((commandCx) => commandLoop(
+    afterMount(cx, (cx) => cx.spawn((commandCx) => commandLoop(
       () => nextCommand(),
       () => {
         if (!this.view) throw new Error("gone");
@@ -41,7 +41,7 @@ class PreviewKeys {
         if (this.view && String(command).replace(/^kanso-panel\./, "") === "save") this.view.save(this.cx);
       },
       commandCx.timer,
-    ).finally(() => { this.live = false; }));
+    ).finally(() => { this.live = false; })));
   }
 
   unbind(view) {

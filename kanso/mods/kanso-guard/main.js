@@ -67,7 +67,7 @@ export default class Memory extends View {
 
     if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
-    this.commandTask = cx.spawn(async (commandCx) => {
+    afterMount(cx, (cx) => { if (!this.closed) this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
         // A replaced build (hot reload, update) stops here.
         const next = await tryOrAsync(async () => {
@@ -86,7 +86,7 @@ export default class Memory extends View {
           commandCx.notify();
         }
       }
-    });
+    }); });
   }
 
   wake(cx) {

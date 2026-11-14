@@ -123,7 +123,7 @@ export default class TokenSpend extends View {
     // Herdr starts hidden copies too, so wake only when this one is on screen.
     if (!hiddenInLayout()) afterMount(cx, (cx) => this.wake(cx));
 
-    this.commandTask = cx.spawn(async (commandCx) => {
+    afterMount(cx, (cx) => { if (!this.closed) this.commandTask = cx.spawn(async (commandCx) => {
       for (;;) {
         const next = await tryOrAsync(async () => {
           const command = await nextCommand();
@@ -138,7 +138,7 @@ export default class TokenSpend extends View {
         else if (name === "settings") this.openSettings(commandCx);
         else if (name === "back") this.back(commandCx);
       }
-    });
+    }); });
   }
 
   wake(cx) {

@@ -12,7 +12,7 @@ import { spaces, panes, run, openOverlay, props, theme, window, shared, setShare
 import { stateMark, programIcon } from "./marks.js";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar } from "./layout.js";
 import { Updater } from "./update.js";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { iconButton, tokens } from "./ui.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
@@ -127,7 +127,7 @@ export default class Tabs extends View {
       this.updater.start(cx);
       cx.timer.after(0, (next) => this.probeSimulator(next));
       // keys.json: tab-N and panel-N arrive here as commands.
-      cx.spawn(async (cx) => {
+      afterMount(cx, (cx) => cx.spawn(async (cx) => {
         for (;;) {
           const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
           if (!next) break; // a replaced build (hot reload, update) stops here, before acting
@@ -141,7 +141,7 @@ export default class Tabs extends View {
           else this.command(name);
           cx.notify();
         }
-      });
+      }));
     }
   }
 

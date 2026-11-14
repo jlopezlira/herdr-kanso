@@ -9,7 +9,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, run, props, shared, setShared, updates, agents, home, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
-import { tryOrAsync } from "./pure.js";
+import { tryOrAsync, afterMount } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
 
 const basename = (path) => paths.basename(path);
@@ -30,7 +30,7 @@ export default class WorkspaceChrome extends View {
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
     // Command names stay kanso-tabs.* for keys bound to them before.
-    cx.spawn(async (cx) => {
+    afterMount(cx, (cx) => cx.spawn(async (cx) => {
       for (;;) {
         const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
         if (!next) break; // a replaced build (hot reload, update) stops here, before acting
@@ -42,7 +42,7 @@ export default class WorkspaceChrome extends View {
         else if (c === "settings-news") openSettings("news");
         else if (c === "restart") this.restart();
       }
-    });
+    }));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
     this.power(cx);
     cx.timer.every(SAMPLE_MS, (cx) => this.power(cx));
