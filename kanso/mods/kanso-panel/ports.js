@@ -1,4 +1,4 @@
-import { localService, serviceFor } from "./platform-host.js";
+import { localService, serviceFor, REMOTE_TIMEOUT } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
 import { portApi } from "./platform-ports.js";
@@ -6,7 +6,7 @@ import { killApi } from "./platform-kill.js";
 import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { hc, panes, terminals, machines, home, run, theme, appHome, readTextFile, shared } from "herdr";
+import { exec, hc, panes, terminals, machines, home, run, theme, appHome, readTextFile, shared } from "herdr";
 import { tilde, said, failNote } from "./lib.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
@@ -81,6 +81,16 @@ export const shortArgs = (args) => {
 };
 
 export const portKey = (s) => `${s.machine ?? ""}:${s.pid}`;
+const SAME_START_MS = 5000;
+export const sameServer = (a, b) => a.pid === b.pid && a.ports.join() === b.ports.join() && Math.abs((a.startedAt ?? 0) - (b.startedAt ?? 0)) <= SAME_START_MS;
+const LONGEST_MS = 10 * 60_000;
+export const backoffMs = (fails) => Math.min(2 ** Math.max(0, fails - 1) * 60_000, LONGEST_MS);
+export function unreadable(error) {
+  const text = String(error?.message ?? error ?? "");
+  const missing = /\b(lsof|ps)\b[^\n]*(?:not found|no such file|not installed)/i.exec(text) ?? /(?:not found|no such file|not installed)[^\n]*\b(lsof|ps)\b/i.exec(text);
+  if (missing) return `${missing[1]} is not installed`;
+  return !text || /unreachable|did not answer|timed out|timeout|refused|offline|no route|was lost|not connected/i.test(text) ? "unreachable" : "its ports can't be read";
+}
 const rowId = (s) => (s.machine ? `${s.machine}-${s.pid}` : String(s.pid));
 
 // Where this computer's browser reaches another one: the host `hc machine ls` connects to, else its name.
@@ -93,7 +103,7 @@ export function browserHost(listed, name) {
 const age = (secs) => secs < 3600 ? `${Math.max(1, Math.round(secs / 60))} min` : secs < 86400 ? `${Math.round(secs / 3600)} h` : `${Math.round(secs / 86400)} d`;
 
 export class Ports {
-  constructor() { this.armed = new Armed(); this.share = new Share("kanso-panel"); this.remote = {}; this.homes = {}; } // Stop asks for a second press
+  constructor() { this.armed = new Armed(); this.share = new Share("kanso-panel"); this.remote = {}; this.homes = {}; this.pids = new Map(); } // Stop asks for a second press
 
   // What the share card holds: counts and sizes, never a port, folder, project or command.
   canShare() { return Boolean(this.hist?.data); }
@@ -124,12 +134,15 @@ export class Ports {
 
   async shells(on = null) {
     const local = terminals().filter((t) => t?.address && localAddress(t.address, on) !== null && t.state !== "dead");
+    for (const address of [...this.pids.keys()]) if (localAddress(address, on) !== null && !local.some((t) => t.address === address)) this.pids.delete(address);
     const asked = async (t) => {
-      const r = await hc(["get", t.address, "--json"]).catch(() => null);
+      const args = ["get", t.address, "--json"];
+      const r = await (on ? exec("hc", args, { timeout: REMOTE_TIMEOUT }) : hc(args)).catch(() => null);
       return tryOr(() => (r?.code === 0 ? JSON.parse(r.stdout).pid : null));
     };
     const found = await Promise.all(local.map(async (t) => {
-      const pid = t.pid || await asked(t);
+      const pid = t.pid || this.pids.get(t.address) || await asked(t);
+      if (pid) this.pids.set(t.address, pid);
       return pid ? [[Number(pid), t.address]] : [];
     }));
     return new Map(found.flat());
@@ -142,7 +155,7 @@ export class Ports {
   }
 
   async read(on = null) {
-    const [ports, processes] = await Promise.all([serviceFor(portApi, on), serviceFor(processApi, on)]);
+    const ports = await serviceFor(portApi, on), processes = await serviceFor(processApi, on);
     const listen = await ports.listen();
     const [cwd, table, shells, homeDir] = await Promise.all([processes.cwd([...listen.keys()]), processes.list(), this.shells(on), this.homeOf(on)]);
     if (!on) this.attribution = cwd.state === "unavailable" ? said("Some servers cannot be attributed", "Working directories require a Herdr API on Windows.") : null;
@@ -153,7 +166,7 @@ export class Ports {
       const h = on ? null : historyOf(s, this.hist?.data, now);
       return {
         ...s, cwdReason: cwd.reason ?? null,
-        ...(on ? { machine: on } : {}),
+        ...(on ? { machine: on, startedAt: now - s.secs * 1000 } : {}),
         // One asked to stop that is still here gets a force stop next.
         ...(this.forced?.has(portKey({ machine: on, pid: s.pid })) ? { force: true } : {}),
         ...(h ? { mb: h.mb, startedAt: h.startedAt, project: h.project } : {}),
@@ -196,21 +209,25 @@ export class Ports {
     const listed = machines().filter((m) => m?.name), at = Date.now();
     this.remote = Object.fromEntries(Object.entries(this.remote).filter(([name]) => listed.some((m) => m.name === name)));
     for (const { name } of listed.filter((m) => m.layout === "ready")) {
-      const r = this.remote[name] ?? { list: null, failed: false, at: 0 };
-      const due = r.reading ? at - r.at >= REST_MS : now || at - r.at >= REST_MS;
-      if (!due) continue;
-      this.remote = { ...this.remote, [name]: { ...r, reading: true, at } };
+      const r = this.remote[name] ?? { list: null, why: null, fails: 0, next: 0 };
+      // A read lost by the host frees its computer after the longest wait.
+      if (r.reading && at - r.reading < LONGEST_MS) continue;
+      if (!now && at < r.next) continue;
+      this.remote = { ...this.remote, [name]: { ...r, reading: at } };
       cx.spawn(async (cx) => {
         const before = this.picture();
-        const next = await this.read(name).then((list) => ({ list, failed: false }), () => ({ list: null, failed: true }));
-        this.remote = { ...this.remote, [name]: { ...next, at, reading: false } };
+        const was = this.remote[name], fails = now ? 0 : was.fails;
+        const next = await this.read(name).then(
+          (list) => ({ list, why: null, fails: 0, next: Date.now() + REST_MS }),
+          (e) => ({ list: null, why: unreadable(e), fails: fails + 1, next: Date.now() + backoffMs(fails + 1) }));
+        this.remote = { ...this.remote, [name]: { ...next, reading: 0 } };
         if (this.picture() !== before) cx.notify();
       });
     }
   }
 
   picture() {
-    const remote = Object.entries(this.remote ?? {}).map(([name, r]) => [name, r.list, r.failed]);
+    const remote = Object.entries(this.remote ?? {}).map(([name, r]) => [name, r.list, r.why]);
     return JSON.stringify([this.list, this.note, this.digest, [...(this.stopping ?? [])], remote]);
   }
 
@@ -260,15 +277,23 @@ export class Ports {
   }
 
   stopOn(machine, items, cx) {
+    if (this.remote[machine]?.reading) return;
     this.stopping = new Set([...this.stopping, ...items.map(portKey)]);
+    this.remote = { ...this.remote, [machine]: { ...this.remote[machine], reading: Date.now() } };
     cx.notify();
     cx.spawn(async (cx) => {
-      const kill = await serviceFor(killApi, machine).catch(() => null);
-      for (const s of items) await kill?.stop(s.pid, { force: s.force }).catch(() => null);
-      this.forced = new Set([...this.forced, ...items.map(portKey)]);
-      await cx.sleep(1500);
-      const list = await this.read(machine).catch(() => null);
-      if (list) this.remote = { ...this.remote, [machine]: { ...this.remote[machine], list, failed: false } };
+      const keep = (list) => { if (list) this.remote = { ...this.remote, [machine]: { ...this.remote[machine], list, why: null } }; };
+      const fresh = await this.read(machine).catch(() => null);
+      keep(fresh);
+      const still = items.filter((s) => fresh?.some((x) => sameServer(s, x)));
+      if (still.length) {
+        const kill = await serviceFor(killApi, machine).catch(() => null);
+        for (const s of still) await kill?.stop(s.pid, { force: s.force }).catch(() => null);
+        this.forced = new Set([...this.forced, ...still.map(portKey)]);
+        await cx.sleep(1500);
+        keep(await this.read(machine).catch(() => null));
+      }
+      this.remote = { ...this.remote, [machine]: { ...this.remote[machine], reading: 0 } };
       this.stopping = new Set([...this.stopping].filter((key) => !items.some((s) => portKey(s) === key)));
       cx.notify();
     });
@@ -357,12 +382,13 @@ export class Ports {
   remoteSections(c) {
     const alias = shared("kanso.alias");
     return machines().filter((m) => m?.name).flatMap((m) => {
-      const r = this.remote?.[m.name];
-      const off = m.layout === "unavailable" || Boolean(r?.failed);
-      if (!off && !r?.list?.length) return [];
+      const r = this.remote?.[m.name], title = machineTitle(m.name, "", aliasText(alias, m.name));
+      const why = m.layout === "unavailable" ? "unreachable" : r?.why;
+      if (why) return [div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${why}`)];
+      if (!r?.list?.length) return [];
       return [v_flex().w_full().gap(2)
-        .child(section(c, machineTitle(m.name, "", aliasText(alias, m.name)), off ? "Unreachable" : String(r.list.length)))
-        .children(off ? [] : r.list.map((s) => this.row(s, c)))];
+        .child(section(c, title, String(r.list.length)))
+        .children(r.list.map((s) => this.row(s, c)))];
     });
   }
 

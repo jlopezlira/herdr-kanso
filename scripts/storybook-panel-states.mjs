@@ -107,5 +107,11 @@ export function panelStateRecords(records) {
   add('Simulator', 'Devices', 'Start timed out', sim(row('Pixel 8', 'Android · Off', true) + failure('Couldn’t start Pixel 8', 'Start timed out.', 'Start')), 'A start timeout returns the device to Off and offers Start again.');
   add('Simulator', 'Picture State', 'Key focus', android.replace('kanso-simulator kanso-panel--focus', 'kanso-simulator kanso-panel--focus kanso-control--focus').replace('<div class="kanso-panel__tools">', '<div class="kanso-panel__scope">Keyboard · type, paste, Enter, Backspace and arrow keys go to Pixel 8</div><div class="kanso-panel__tools">'), 'A focused Android picture receives keyboard input, paste and touch gestures.');
   add('Simulator', 'Picture State', 'No picture', sim(row('iPhone 16 Pro', 'iOS 18 · Booted') + empty('smartphone', 'No picture from the device') + iosControls()), 'A booted device with no frame still offers its commands and Refresh.');
+  const port = (number, command, ...labels) => `<div class="kanso-row--two-lines"><div class="kanso-content__primary kanso-panel__compact-row"><span class="kanso-row__port">${number}</span><span class="kanso-text--muted kanso-text--truncate">${command}</span></div><div class="kanso-content__actions kanso-panel__actions">${labels.map((label) => button(label)).join('')}</div></div>`;
+  const computer = (name, count) => `<div class="kanso-section">${name}<span class="kanso-row__meta">${count}</span></div>`;
+  const ports = (body) => frame('Ports', 'All computers', body, tool('share', 'Share'));
+  const here = section('dark') + port(':3000', 'next dev', 'Open in the browser', 'Go to its pane', 'Stop') + port(':6006', 'storybook', 'Open in the browser', 'Stop');
+  add('Ports', 'Computers', 'Another computer', ports(here + computer('light', 1) + port(':5173', 'vite', 'Open in the browser', 'Go to its pane', 'Stop')), 'Each connected computer’s servers sit under its name, this computer first; Open, Go to its pane and Stop act on the computer the server runs on.');
+  add('Ports', 'Computers', 'Unreachable', ports(here + note('<span class="kanso-text--blocked">light · unreachable</span>')), 'A computer out of reach is one line, “light · unreachable”, or what it lacks, such as “lsof is not installed”; this computer’s list never waits for it.');
   return drawings;
 }
