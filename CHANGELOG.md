@@ -48,6 +48,7 @@ the branch's rules.
 
 ### Fixed
 
+- The border between the sidebar and the first pane has one drag, the sidebar's: the first pane no longer shows a resize handle there that moved nothing. The first pane grows to the right, and the panes after it keep both edges.
 - kansō's keys (Cmd+B, Cmd+D, Cmd+J and the rest, Ctrl on Windows and Linux) work again after kansō updates itself, without restarting Herdr.
 - Storybook gives approved designs and features such as Open with, Sleep and Arrangements their own pages, with shared reference drawings and additional states marked Proposed.
 - Storybook draws all missing Sidebar and Activity feature states with the shared kit, including queues, sleeping conversations, Git controls and activity overflow.

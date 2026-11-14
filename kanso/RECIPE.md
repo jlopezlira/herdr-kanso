@@ -500,7 +500,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     tab lives in shared `strip.state` (`{cols: [{panes, w, pin, hs}], vx,
     n}`; `hs` is each stacked pane's share of the height); the last chosen
     `n` is in shared `strip.n` for new tabs. Copies with `{ruler}` are the
-    1px rulers; what they measure is in shared `strip.px`.
+    panes' feet; each pane's width they measure is in shared `strip.px`.
     Headers talk to it through shared `strip.req` (scroll, move, width, pin),
     `strip.intent` (where the next new pane goes), `strip.drag` (the held
     pane) and `strip.drop` (where it would land). Copies with `{drop}` are
