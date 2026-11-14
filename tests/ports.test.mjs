@@ -329,3 +329,27 @@ test("A terminal Herdr gives no pid for is not asked again until it goes", async
   await f.drain();
   assert.equal(f.calls.filter((c) => c[0] === "hc").length, 1);
 });
+
+test("A computer's not-stopped line shows even with no rows left and goes with its next good read", async () => {
+  let gone = false;
+  const f = computers({ answer: (command, args, on) => (on === "light" && gone && command === "lsof" && args.includes("-iTCP") ? ok("") : null) });
+  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
+  const view = new Ports();
+  view.init(f.cx);
+  await f.drain();
+  gone = true;
+  view.stop([view.remote.light.list[0]], f.cx);
+  await f.drain();
+  assert.deepEqual(clone(view.remote.light.list), []);
+  assert.ok(textsOf(view.render(f.cx)).includes("light · not stopped, that server is gone"), "said with no rows under it");
+  f.off.add("light");
+  f.clock.t += 60_000;
+  view.refresh(f.cx);
+  await f.drain();
+  assert.equal(view.remote.light.said, "not stopped, that server is gone", "a failed read leaves it");
+  f.off.delete("light");
+  view.refresh(f.cx, { now: true });
+  await f.drain();
+  assert.equal(view.remote.light.said, null, "a good read clears it");
+  assert.ok(!textsOf(view.render(f.cx)).some((t) => t.includes("not stopped")));
+});

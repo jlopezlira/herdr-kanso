@@ -221,7 +221,7 @@ export class Ports {
         const next = await this.read(name).then(
           (list) => ({ list, why: null, fails: 0, next: Date.now() + REST_MS }),
           (e) => ({ list: null, why: unreadable(e), fails: fails + 1, next: Date.now() + backoffMs(fails + 1) }));
-        this.remote = { ...this.remote, [name]: { ...next, reading: 0 } };
+        this.remote = { ...this.remote, [name]: { ...next, said: next.list ? null : this.remote[name]?.said ?? null, reading: 0 } };
         if (this.picture() !== before) cx.notify();
       });
     }
@@ -395,7 +395,7 @@ export class Ports {
       const r = this.remote?.[m.name], title = machineTitle(m.name, "", aliasText(alias, m.name));
       const why = m.layout === "unavailable" ? "unreachable" : r?.why;
       if (why) return [div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${why}`)];
-      if (!r?.list?.length) return [];
+      if (!r?.list?.length) return r?.said ? [div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${r.said}`)] : [];
       return [v_flex().w_full().gap(2)
         .child(section(c, title, String(r.list.length)))
         .when(Boolean(r.said), (el) => el.child(div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${r.said}`)))
