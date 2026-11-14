@@ -52,6 +52,7 @@ the branch's rules.
 
 ### Fixed
 
+- Ports lists the servers on every connected computer, each under its computer's name with this one first, and Open, Go to its pane and Stop act on the computer the server runs on. A computer out of reach is one quiet line, and this computer's list never waits for it.
 - Double-clicking a project's name opens the rename dialog again, instead of a field in the row where Esc could reach the agent and stop it.
 - The border between the sidebar and the first pane has one drag, the sidebar's: the first pane no longer shows a resize handle there that moved nothing. The first pane grows to the right, and the panes after it keep both edges.
 - kansō's keys (Cmd+B, Cmd+D, Cmd+J and the rest, Ctrl on Windows and Linux) work again after kansō updates itself, without restarting Herdr.
