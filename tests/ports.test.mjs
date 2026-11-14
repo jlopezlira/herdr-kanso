@@ -31,7 +31,7 @@ const ok = (stdout) => ({ code: 0, stdout, stderr: "" });
 
 // `answer(command, args, on)` may answer for a computer first; `clock.t` is the panel's time.
 function computers({ unreachable = null, held = null, answer = () => null, names = ["light"], terms = [] } = {}) {
-  const calls = [], ids = [], opened = [], pending = [], clock = { t: 1_800_000_000_000 };
+  const calls = [], ids = [], opened = [], pending = [], timers = [], clock = { t: 1_800_000_000_000 }, off = new Set([unreachable].filter(Boolean));
   const unix = (command, args, on) => {
     const m = COMPUTERS[on ?? ""];
     if (command === "pwsh" || command === "powershell") return { code: 127, stdout: "", stderr: "not found" };
@@ -49,7 +49,7 @@ function computers({ unreachable = null, held = null, answer = () => null, names
     hc: async (args) => (args[0] === "machine" ? ok(JSON.stringify({ machines: [{ name: "light", target: "jj@light.local", state: "connected" }] })) : { code: 1, stdout: "", stderr: "" }),
     exec: async (command, args, options = {}) => {
       calls.push([command, ...args, options.on ?? null]);
-      if (options.on && options.on === unreachable) throw new Error("light is unreachable");
+      if (options.on && off.has(options.on)) throw new Error("light is unreachable");
       if (options.on && held) await held;
       return answer(command, args, options.on, options) ?? unix(command, args, options.on);
     },
@@ -59,11 +59,13 @@ function computers({ unreachable = null, held = null, answer = () => null, names
   const cx = {
     notify() {}, sleep: async () => {}, open_url: (url) => opened.push(url),
     spawn(fn) { const p = fn(cx); pending.push(p); return { cancel() {} }; },
-    timer: { every: () => ({ cancel() {} }), after: () => ({ cancel() {} }) },
+    timer: { every: () => ({ cancel() {} }), after: (ms, fn) => { timers.push([ms, fn]); return { cancel() {} }; } },
   };
   const drain = async () => { while (pending.length) await pending.shift(); };
   const on = (name) => calls.filter((c) => c.at(-1) === name);
-  return { host, cx, calls, ids, opened, pending, drain, clock, on };
+  // Runs the one-second waits a press left, as the clock passes.
+  const wait = async () => { for (const [ms, fn] of timers.splice(0)) if (ms === 1000) { clock.t += ms; fn(cx); await drain(); } };
+  return { host, cx, calls, ids, opened, pending, drain, clock, on, off, wait, timers };
 }
 
 test("Ports lists this computer's servers and another computer's, each under its computer's name, this one first", async () => {
@@ -264,4 +266,66 @@ test("A Linux computer without lsof says so on its line instead of unreachable",
   const texts = textsOf(view.render(f.cx));
   assert.ok(texts.includes("light · lsof is not installed"));
   assert.ok(texts.includes(":3000"));
+});
+
+test("Stop pressed while another computer is being read waits for that read, then stops", async () => {
+  const f = computers();
+  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
+  const view = new Ports();
+  view.init(f.cx);
+  await f.drain();
+  const row = view.remote.light.list[0];
+  view.remote = { light: { ...view.remote.light, reading: f.clock.t } };
+  view.stop([row], f.cx);
+  await f.wait();
+  assert.equal(view.stopping.size, 1, "the row shows Stopping…");
+  assert.ok(!f.calls.some((c) => c[0] === "kill"));
+  view.remote = { light: { ...view.remote.light, reading: 0 } };
+  await f.wait();
+  assert.deepEqual(clone(f.calls.find((c) => c[0] === "kill")), ["kill", "-TERM", "200", "light"], "the press was kept");
+  assert.equal(view.stopping.size, 0);
+  assert.equal(view.remote.light.said, null);
+});
+
+test("Stop on a computer that does not answer says why in one line and keeps its rows", async () => {
+  const f = computers();
+  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
+  const view = new Ports();
+  view.init(f.cx);
+  await f.drain();
+  f.off.add("light");
+  view.stop([view.remote.light.list[0]], f.cx);
+  await f.drain();
+  assert.ok(!f.calls.some((c) => c[0] === "kill"));
+  assert.equal(view.stopping.size, 0, "Stopping… does not stay");
+  const texts = textsOf(view.render(f.cx));
+  assert.ok(texts.includes("light · not stopped, unreachable"));
+  assert.ok(texts.includes(":5173"), "its last rows stay");
+});
+
+test("Stop pressed while a read never ends gives up after a while and says so", async () => {
+  const f = computers();
+  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
+  const view = new Ports();
+  view.init(f.cx);
+  await f.drain();
+  const row = view.remote.light.list[0];
+  view.remote = { light: { ...view.remote.light, reading: f.clock.t } };
+  view.stop([row], f.cx);
+  for (let i = 0; i < 50 && f.timers.length; i++) await f.wait();
+  assert.ok(!f.calls.some((c) => c[0] === "kill"));
+  assert.equal(view.stopping.size, 0);
+  assert.equal(view.remote.light.said, "not stopped, it is still being read");
+});
+
+test("A terminal Herdr gives no pid for is not asked again until it goes", async () => {
+  const f = computers({ terms: [{ address: "light/t1", state: "live" }], answer: (command) => (command === "hc" ? ok("{}") : null) });
+  const { Ports } = await load("kanso-panel/ports.js", ["Ports"], f.host);
+  const view = new Ports();
+  view.init(f.cx);
+  await f.drain();
+  f.clock.t += 60_000;
+  view.refresh(f.cx);
+  await f.drain();
+  assert.equal(f.calls.filter((c) => c[0] === "hc").length, 1);
 });

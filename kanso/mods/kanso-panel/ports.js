@@ -82,6 +82,7 @@ export const shortArgs = (args) => {
 
 export const portKey = (s) => `${s.machine ?? ""}:${s.pid}`;
 const SAME_START_MS = 5000;
+const STOP_WAIT_MS = 45_000;
 export const sameServer = (a, b) => a.pid === b.pid && a.ports.join() === b.ports.join() && Math.abs((a.startedAt ?? 0) - (b.startedAt ?? 0)) <= SAME_START_MS;
 const LONGEST_MS = 10 * 60_000;
 export const backoffMs = (fails) => Math.min(2 ** Math.max(0, fails - 1) * 60_000, LONGEST_MS);
@@ -141,8 +142,8 @@ export class Ports {
       return tryOr(() => (r?.code === 0 ? JSON.parse(r.stdout).pid : null));
     };
     const found = await Promise.all(local.map(async (t) => {
-      const pid = t.pid || this.pids.get(t.address) || await asked(t);
-      if (pid) this.pids.set(t.address, pid);
+      const pid = t.pid || (this.pids.has(t.address) ? this.pids.get(t.address) : await asked(t));
+      if (!t.pid) this.pids.set(t.address, pid);
       return pid ? [[Number(pid), t.address]] : [];
     }));
     return new Map(found.flat());
@@ -227,7 +228,7 @@ export class Ports {
   }
 
   picture() {
-    const remote = Object.entries(this.remote ?? {}).map(([name, r]) => [name, r.list, r.why]);
+    const remote = Object.entries(this.remote ?? {}).map(([name, r]) => [name, r.list, r.why, r.said]);
     return JSON.stringify([this.list, this.note, this.digest, [...(this.stopping ?? [])], remote]);
   }
 
@@ -276,14 +277,24 @@ export class Ports {
     });
   }
 
-  stopOn(machine, items, cx) {
-    if (this.remote[machine]?.reading) return;
+  stopOn(machine, items, cx, since = Date.now()) {
+    const settle = (line) => {
+      this.remote = { ...this.remote, [machine]: { ...this.remote[machine], said: line } };
+      this.stopping = new Set([...this.stopping].filter((key) => !items.some((s) => portKey(s) === key)));
+      cx.notify();
+    };
     this.stopping = new Set([...this.stopping, ...items.map(portKey)]);
-    this.remote = { ...this.remote, [machine]: { ...this.remote[machine], reading: Date.now() } };
+    if (this.remote[machine]?.reading) {
+      if (Date.now() - since >= STOP_WAIT_MS) settle("not stopped, it is still being read");
+      else { cx.notify(); cx.timer.after(1000, (cx) => this.stopOn(machine, items, cx, since)); }
+      return;
+    }
+    this.remote = { ...this.remote, [machine]: { ...this.remote[machine], reading: Date.now(), said: null } };
     cx.notify();
     cx.spawn(async (cx) => {
       const keep = (list) => { if (list) this.remote = { ...this.remote, [machine]: { ...this.remote[machine], list, why: null } }; };
-      const fresh = await this.read(machine).catch(() => null);
+      const asked = await this.read(machine).then((list) => ({ list }), (e) => ({ list: null, failed: unreadable(e) }));
+      const fresh = asked.list, failed = asked.failed;
       keep(fresh);
       const still = items.filter((s) => fresh?.some((x) => sameServer(s, x)));
       if (still.length) {
@@ -294,8 +305,7 @@ export class Ports {
         keep(await this.read(machine).catch(() => null));
       }
       this.remote = { ...this.remote, [machine]: { ...this.remote[machine], reading: 0 } };
-      this.stopping = new Set([...this.stopping].filter((key) => !items.some((s) => portKey(s) === key)));
-      cx.notify();
+      settle(failed ? `not stopped, ${failed}` : still.length < items.length ? "not stopped, that server is gone" : null);
     });
   }
 
@@ -388,6 +398,7 @@ export class Ports {
       if (!r?.list?.length) return [];
       return [v_flex().w_full().gap(2)
         .child(section(c, title, String(r.list.length)))
+        .when(Boolean(r.said), (el) => el.child(div().w_full().truncate().text_size(11.5).text_color(c.blocked).child(`${title} · ${r.said}`)))
         .children(r.list.map((s) => this.row(s, c)))];
     });
   }
