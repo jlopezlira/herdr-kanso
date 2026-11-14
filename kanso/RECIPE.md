@@ -93,9 +93,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       Once the drag has rested 250 ms, the strip reads the sizes back from
       the layout and its ruler blocks (one under each terminal, 8 tall,
       for its width, which also draws the slab's rounded bottom since a
-      terminal paints square corners; one 1px wide at the start of work-body
-      for the height) and keeps them as
-      shares, so later trees keep what you dragged. The view always starts at a
+      terminal paints square corners) and keeps them as shares, so later trees keep what you dragged. The view always starts at a
       column's edge and shows only whole, live panes: as many as fit, which
       then share the width by their weights. It never slides past the first
       start from which the rest of the row fits. When columns lie beyond an
@@ -500,7 +498,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     tab lives in shared `strip.state` (`{cols: [{panes, w, pin, hs}], vx,
     n}`; `hs` is each stacked pane's share of the height); the last chosen
     `n` is in shared `strip.n` for new tabs. Copies with `{ruler}` are the
-    1px rulers; what they measure is in shared `strip.px`.
+    panes' feet; each pane's width they measure is in shared `strip.px`.
     Headers talk to it through shared `strip.req` (scroll, move, width, pin),
     `strip.intent` (where the next new pane goes), `strip.drag` (the held
     pane) and `strip.drop` (where it would land). Copies with `{drop}` are
@@ -633,11 +631,10 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 - A host argument nests at most 16 levels, and the layout tree counts each
   node and its `children` array: there is no room for a wrapper around the
   strip's columns in `work-body`, which is why the rulers sit inside the
-  columns and at the row's start instead.
+  columns instead.
 - Herdr's divider moves only the two nodes beside it and never a fixed one
   (`min` = `max`). The side panel's border must have a strip column on its
-  left: the 1px height ruler stands at the row's start, and while a panel
-  shows, every layout writer puts the strip's right edge rail
+  left: while a panel shows, every layout writer puts the strip's right edge rail
   (`strip-edge-right`) after the panel (`edgeBesidePanel`), so the panel
   can be dragged between 280 and 900 wide.
 - A terminal block takes the keyboard on click, so `focused().pane` is null

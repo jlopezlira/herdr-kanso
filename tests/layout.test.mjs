@@ -118,27 +118,41 @@ for (const file of helpers) {
   test(`${file} puts the strip's right edge rail after a shown panel`, async () => {
     const { edgeBesidePanel } = await load(file, ["edgeBesidePanel"], {});
     const tree = (hidden) => ({ id: "root", children: [{ id: "work-body", children: [
-      { id: "strip-ruler-h" }, { id: "strip-a" }, { id: "strip-edge-right" }, { id: "panel-body", hidden, children: [] }] }] });
+      { id: "strip-a" }, { id: "strip-edge-right" }, { id: "panel-body", hidden, children: [] }] }] });
     const order = (t) => t.children[0].children.map((n) => n.id);
     const given = tree(false), shown = edgeBesidePanel(given);
-    assert.deepEqual(order(shown), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"]);
-    assert.deepEqual(order(given), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "the tree it is given stays as it was");
-    assert.deepEqual(order(edgeBesidePanel(shown)), ["strip-ruler-h", "strip-a", "panel-body", "strip-edge-right"], "idempotent");
+    assert.deepEqual(order(shown), ["strip-a", "panel-body", "strip-edge-right"]);
+    assert.deepEqual(order(given), ["strip-a", "strip-edge-right", "panel-body"], "the tree it is given stays as it was");
+    assert.deepEqual(order(edgeBesidePanel(shown)), ["strip-a", "panel-body", "strip-edge-right"], "idempotent");
     const hidden = edgeBesidePanel(tree(true));
-    assert.deepEqual(order(hidden), ["strip-ruler-h", "strip-a", "strip-edge-right", "panel-body"], "a closed panel leaves it in place");
+    assert.deepEqual(order(hidden), ["strip-a", "strip-edge-right", "panel-body"], "a closed panel leaves it in place");
   });
 }
 
-test("The strip's fixed height ruler stands at the row's start, never beside the panel", async () => {
+// Herdr draws a resize handle between any two nodes of the row, so a pane has a left handle only when a node stands before it.
+test("The first pane has no left resize handle beside the sidebar's edge, and every pane after it keeps one", async () => {
   const f = await layoutFixture();
   const { Strip } = await load("kanso-strip/main.js", ["Strip"], f.host);
   const strip = new Strip();
   strip.row = (st) => st.cols.map((_c, ci) => ({ ci }));
   strip.shownCols = (st) => st.cols.map((_c, ci) => ci);
-  const st = { cols: [{ panes: ["a"], w: 0.5 }, { panes: ["b"], w: 0.5 }] };
-  const ids = strip.build(st, [{ pane: "a", terminal: "ta" }, { pane: "b", terminal: "tb" }]).map((n) => n.id);
-  assert.equal(ids[0], "strip-ruler-h");
-  assert.notEqual(ids.at(-1), "strip-ruler-h");
+  const st = { cols: [{ panes: ["a"], w: 0.4 }, { panes: ["b"], w: 0.3 }, { panes: ["c"], w: 0.3 }] };
+  const ids = strip.build(st, ["a", "b", "c"].map((pane) => ({ pane, terminal: `t${pane}` }))).map((n) => n.id);
+  assert.equal(ids.indexOf("strip-a"), 0, "nothing stands before the first pane");
+  assert.ok(ids.indexOf("strip-b") > 0 && ids.indexOf("strip-c") > 0, "the panes after it have a node to their left");
+});
+
+test("Dragging the divider between two stacked panes keeps the heights they were dragged to", async () => {
+  const f = await layoutFixture();
+  f.strip.tab = () => "tab";
+  f.strip.state = { tab: { cols: [{ panes: ["a", "b"], w: 1 }] } };
+  f.host.setShared("strip.px", { a: 800 });
+  const [top, bottom] = f.body().children[0].children;
+  top.size = { weight: 1.5 }; bottom.size = { weight: 0.5 };
+  assert.equal(f.strip.adopt(), false, "a drag is read back only once it rests");
+  f.strip.drift.at -= 1000;
+  assert.equal(f.strip.adopt(), true);
+  assert.deepEqual(clone(f.strip.state.tab.cols[0].hs), { a: 0.75, b: 0.25 });
 });
 
 test("kanso-tabs opens and closes a custom panel from kanso.panels through commitLayout", async () => {
