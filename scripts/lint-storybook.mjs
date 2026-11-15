@@ -96,14 +96,19 @@ export function structureErrors(files, catalog, template) {
   return errors;
 }
 
-// Compositions only call pieces: a tag, a class attribute or a kanso class string there is markup of its own.
+// Compositions only call pieces and never treat them as strings, so the app can share the file as it is.
 export function compositionErrors(source, path = 'stories/kit/compositions.js') {
   const code = source.replace(/^\s*\/\/.*$/gm, '');
-  const errors = [];
-  if (/<\/?[a-z!]/i.test(code)) errors.push(`${path}: markup tag in a composition`);
-  if (/\bclass(?:Name)?\s*=/.test(code)) errors.push(`${path}: class attribute in a composition`);
-  if (/\bkanso-[a-z]/.test(code)) errors.push(`${path}: class string in a composition`);
-  return errors;
+  const rules = [
+    [/<\/?[a-z!]/i, 'markup tag'],
+    [/\bclass(?:Name)?\s*=/, 'class attribute'],
+    [/\bkanso-[a-z]/, 'class string'],
+    [/`/, 'template literal'],
+    [/\.join\(/, 'join'],
+    [/''|""/, 'empty string as nothing'],
+    [/[)\]]\s*\+|\+\s*[\w.]*[([]/, 'pieces added as strings'],
+  ];
+  return rules.filter(([pattern]) => pattern.test(code)).map(([, rule]) => `${path}: ${rule} in a composition`);
 }
 
 export function lint(root = '.') {

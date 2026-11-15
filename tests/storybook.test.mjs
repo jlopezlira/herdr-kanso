@@ -20,14 +20,15 @@ test("Every page follows the structure lint", () => {
 
 test("A composition that draws its own markup fails the lint", () => {
   const source = read("stories/kit/compositions.js");
+  const added = (line) => compositionErrors(`${source}${line}\n`);
   assert.deepEqual(compositionErrors(source), []);
-  assert.deepEqual(compositionErrors(`${source}export const extra = () => '<div></div>';\n`), ["stories/kit/compositions.js: markup tag in a composition"]);
-  assert.deepEqual(compositionErrors(`${source}export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');\n`), ["stories/kit/compositions.js: class attribute in a composition"]);
-  assert.deepEqual(compositionErrors(`${source}export const extra = () => 'kanso-row';\n`), ["stories/kit/compositions.js: class string in a composition"]);
+  assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', '<div>');"), ["stories/kit/compositions.js: markup tag in a composition"]);
+  assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');"), ["stories/kit/compositions.js: class attribute in a composition"]);
+  assert.deepEqual(added("export const extra = () => 'kanso-row';"), ["stories/kit/compositions.js: class string in a composition"]);
   const root = mkdtempSync(join(tmpdir(), "kanso-lint-"));
   try {
     for (const dir of ["stories", ".storybook"]) cpSync(dir, join(root, dir), { recursive: true });
-    writeFileSync(join(root, "stories/kit/compositions.js"), `${source}export const extra = () => \`<span class="kanso-row">\${row({ name: 'x' })}</span>\`;\n`);
+    writeFileSync(join(root, "stories/kit/compositions.js"), `${source}export const extra = () => '<span class="kanso-row">';\n`);
     assert.deepEqual(lint(root).filter((error) => error.startsWith("stories/kit/compositions.js")), [
       "stories/kit/compositions.js: markup tag in a composition",
       "stories/kit/compositions.js: class attribute in a composition",
@@ -36,6 +37,16 @@ test("A composition that draws its own markup fails the lint", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("A composition that treats pieces as strings fails the lint", () => {
+  const source = read("stories/kit/compositions.js");
+  const added = (line) => compositionErrors(`${source}${line}\n`);
+  assert.deepEqual(added("export const extra = ({ name }) => row({ name: `Wake ${name}` });"), ["stories/kit/compositions.js: template literal in a composition"]);
+  assert.deepEqual(added("export const extra = ({ names }) => names.map((name) => row({ name })).join();"), ["stories/kit/compositions.js: join in a composition"]);
+  assert.deepEqual(added("export const extra = ({ open }) => list(row({ name: 'Asleep' }), open ? grow() : '');"), ["stories/kit/compositions.js: empty string as nothing in a composition"]);
+  assert.deepEqual(added("export const extra = () => row({ name: 'a' }) + row({ name: 'b' });"), ["stories/kit/compositions.js: pieces added as strings in a composition"]);
+  assert.deepEqual(added("export const extra = ({ more }) => more + grow();"), ["stories/kit/compositions.js: pieces added as strings in a composition"]);
 });
 
 test("Storybook styles use only token values beyond the reviewed literals", () => {

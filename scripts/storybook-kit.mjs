@@ -1,7 +1,8 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
-import { asleep, computerRow, header, projectRow, section, sessionRow, sidebar, sidebarFooter, tile, toolbar, viewSwitch } from '../stories/kit/compositions.js';
+import { asleep, computerRow, header, projectRow, section, sessionRow, sidebarFooter, tile, toolbar, viewSwitch } from '../stories/kit/compositions.js';
 import { dawn as dawnSky, windowControls } from '../stories/kit/pieces.js';
+import { sampleSidebar } from '../stories/kit/samples.js';
 export { elements } from './storybook-markup.mjs';
 
 export function kitRecords(records) {
@@ -79,13 +80,13 @@ export function kitRecords(records) {
     ['Tile', 'Status', inRail(tile({ status: 'working', count: 3 })), 'A state in the rail.'],
     ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings and Add computer.'],
     ['Footer', 'Update', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0' })), 'An update adds a row on top.'],
-    ['Sidebar', 'Open', sidebar(), 'Header, views, rows and footer.'],
-    ['Sidebar', 'Collapsed', sidebar({ collapsed: true }), 'The rail.'],
-    ['Sidebar', 'Dawn', sidebar({ dawn: true }), 'Open, in Dawn Mode.'],
-    ['Sidebar', 'Dawn collapsed', sidebar({ collapsed: true, dawn: true }), 'The rail, in Dawn Mode.', 'kit/Rail/Dawn'],
-    ['Sidebar', 'Status', sidebar({ view: 'agents' }), 'Open on Status.', 'kit/Rail/Open'],
-    ['Sidebar', 'Status collapsed', sidebar({ collapsed: true, view: 'agents' }), 'The rail on Status.', 'kit/Rail/Collapsed'],
-    ['Sidebar', 'Views menu', sidebar({ collapsed: true, menu: true }), 'The rail: its one view button opens Projects, Status and Threads.'],
+    ['Sidebar', 'Open', sampleSidebar(), 'Header, views, rows and footer.'],
+    ['Sidebar', 'Collapsed', sampleSidebar({ collapsed: true }), 'The rail.'],
+    ['Sidebar', 'Dawn', sampleSidebar({ dawn: true }), 'Open, in Dawn Mode.'],
+    ['Sidebar', 'Dawn collapsed', sampleSidebar({ collapsed: true, dawn: true }), 'The rail, in Dawn Mode.', 'kit/Rail/Dawn'],
+    ['Sidebar', 'Status', sampleSidebar({ view: 'agents' }), 'Open on Status.', 'kit/Rail/Open'],
+    ['Sidebar', 'Status collapsed', sampleSidebar({ collapsed: true, view: 'agents' }), 'The rail on Status.', 'kit/Rail/Collapsed'],
+    ['Sidebar', 'Views menu', sampleSidebar({ collapsed: true, menu: true }), 'The rail: its one view button opens Projects, Status and Threads.'],
   ]) results.push({ id: id ?? `kit/${page}/${label}`, source: 'kit', page: page === 'Sidebar' ? 'Compositions/Sidebar' : `Compositions/Sidebar/${page}`, label, html: frame(html), caption });
   const choices = elements(byId('proto/components-choosing-the-channel/ChoosingTheChannel/Default'), 'kanso-update');
   const sky = elements(byId('proto/tokens-dawn/TheBand/Default'), 'kanso-dawn--preview')[0];

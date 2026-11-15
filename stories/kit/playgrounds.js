@@ -1,7 +1,8 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { asleep, computerRow, computerStates, header, projectRow, section, sessionRow, sidebar, sidebarFooter, tile, toolbar, views, viewSwitch } from './compositions.js';
+import { asleep, computerRow, computerStates, header, projectRow, section, sessionRow, sidebarFooter, tile, toolbar, views, viewSwitch } from './compositions.js';
 import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, escape, input, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
+import { sampleSidebar } from './samples.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
@@ -239,7 +240,7 @@ export const playgrounds = {
       view: { name: 'view', control: { type: 'inline-radio' }, options: views.map((item) => item.key) },
       menu: { name: 'views menu', control: { type: 'boolean' }, if: { arg: 'collapsed' } },
     },
-    markup: sidebar,
+    markup: sampleSidebar,
   },
   'Primitives/Switch': {
     args: { checked: false, label: 'Toggle', disabled: false },

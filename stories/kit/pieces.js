@@ -2,6 +2,9 @@
 
 export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
+// Children are pieces, arrays of pieces, or null/false for nothing.
+export const list = (...children) => children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false).join('');
+
 export const grow = (inner = '') => `<span class="kanso-layout__grow">${inner}</span>`;
 
 // Atoms
@@ -194,5 +197,5 @@ export const stacks = {
 export const stack = ({ variant, on = false, ...flags }, ...children) => {
   const { block, tag = 'div', states = [], focusable = false } = stacks[variant];
   const classes = [block, ...states.filter((state) => flags[state]).map((state) => `${block}--${state}`), on ? 'kanso-control--on' : ''].filter(Boolean).join(' ');
-  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}>${children.join('')}</${tag}>`;
+  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}>${list(children)}</${tag}>`;
 };
