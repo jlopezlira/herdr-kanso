@@ -67,6 +67,10 @@
   --raised: #262624;
   --hover: color-mix(in srgb, var(--fg) 7%, var(--bg));
   --selected: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --w4: color-mix(in srgb, var(--fg) 4%, transparent);
+  --w7: color-mix(in srgb, var(--fg) 7%, transparent);
+  --w12: color-mix(in srgb, var(--fg) 12%, transparent);
+  --w14: color-mix(in srgb, var(--fg) 14%, transparent);
   --border: #272725;
   --input: #73726d;
   --fg: #d8d4cb;
@@ -102,6 +106,10 @@
     --raised: #f9f7f3;
     --hover: color-mix(in srgb, var(--fg) 7%, var(--bg));
     --selected: color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --w4: color-mix(in srgb, var(--fg) 5%, transparent);
+    --w7: color-mix(in srgb, var(--fg) 9.5%, transparent);
+    --w12: color-mix(in srgb, var(--fg) 18%, transparent);
+    --w14: color-mix(in srgb, var(--fg) 21%, transparent);
     --border: #d8d2c8;
     --input: #7e786f;
     --fg: #2a2723;
@@ -136,6 +144,10 @@
   --raised: #262624;
   --hover: color-mix(in srgb, var(--fg) 7%, var(--bg));
   --selected: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --w4: color-mix(in srgb, var(--fg) 4%, transparent);
+  --w7: color-mix(in srgb, var(--fg) 7%, transparent);
+  --w12: color-mix(in srgb, var(--fg) 12%, transparent);
+  --w14: color-mix(in srgb, var(--fg) 14%, transparent);
   --border: #272725;
   --input: #73726d;
   --fg: #d8d4cb;
@@ -170,6 +182,10 @@
   --raised: #f9f7f3;
   --hover: color-mix(in srgb, var(--fg) 7%, var(--bg));
   --selected: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  --w4: color-mix(in srgb, var(--fg) 5%, transparent);
+  --w7: color-mix(in srgb, var(--fg) 9.5%, transparent);
+  --w12: color-mix(in srgb, var(--fg) 18%, transparent);
+  --w14: color-mix(in srgb, var(--fg) 21%, transparent);
   --border: #d8d2c8;
   --input: #7e786f;
   --fg: #2a2723;

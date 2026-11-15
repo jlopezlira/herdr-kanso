@@ -8,6 +8,8 @@ import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { activityTone, foldTail, timePlace } from "./sidebar-rows.js";
+import { washes } from "./ui.js";
+import { guideBars, reachOf } from "./guides.js";
 
 export { NAME_LABEL };
 
@@ -208,12 +210,12 @@ export function nest(rows, all = []) {
   ];
   const children = new Map([...Map.groupBy(pairs, ([p]) => p)].map(([p, list]) => [p, list.map(([, k]) => k)]));
   // `path` cuts parent loops; should an address still show twice, only its first place stays.
-  const tree = (a, lines, lead, path) => {
+  const tree = (a, lines, lead, path, first = false) => {
     const kids = (children.get(a.address) ?? []).filter((k) => !path.has(k.address));
     const below = new Set([...path, a.address]);
-    return [{ a, lines }, ...kids.flatMap((k, i) => {
+    return [{ a, lines, first }, ...kids.flatMap((k, i) => {
       const last = i === kids.length - 1;
-      return tree(k, [...lead, last ? "└" : "├"], [...lead, last ? "" : "│"], below);
+      return tree(k, [...lead, last ? "└" : "├"], [...lead, last ? "" : "│"], below, i === 0);
     })];
   };
   const placed = rows.filter((a) => !(a.parent && listed.has(a.parent))).flatMap((a) => tree(a, [], [], new Set()));
@@ -324,7 +326,7 @@ export function agentFold(id, mine, open, onToggle, t) {
   if (!tail) return null;
   return h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
     .text_size(11.5).text_color(t.dim).cursor_pointer()
-    .hover((s) => s.bg(t.input).text_color(t.foreground))
+    .hover((s) => s.bg(t.hover).text_color(t.foreground))
     // The row selects on mouse up and drags on mouse down: keep both to the toggle.
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
@@ -333,13 +335,15 @@ export function agentFold(id, mine, open, onToggle, t) {
 }
 
 // One column per level, icon-wide, so a sub-agent's icon sits under its parent's name.
-const GUIDE_W = 15, GUIDE_X = 7;
-function guide(l, h, t) {
+const GUIDE_W = 15, GUIDE_X = 7, GUIDE_REACH = 4;
+const GUIDE_KIND = { "└": "end", "├": "tee", "│": "pass" };
+// `reach`: up to the row above's line, or into the parent's row, which has none in this column.
+function guide(l, h, t, reach) {
   const col = div().relative().w(GUIDE_W).h(h).flex_none();
   if (!l) return col;
-  const down = l === "└" ? h / 2 + 4 : h + 4;
-  return col.child(div().absolute().left(GUIDE_X).top(-4).w(1).h(down).bg(t.input))
-    .when(l !== "│", (el) => el.child(div().absolute().left(GUIDE_X).top(h / 2).w(GUIDE_W - GUIDE_X + 7).h(1).bg(t.input)));
+  const line = washes(t)?.w12 ?? t.border;
+  return col.children(guideBars(GUIDE_KIND[l], { x: GUIDE_X, elbow: GUIDE_W - GUIDE_X + 7, h, reach })
+    .map((b) => div().absolute().left(b.left).top(b.top).w(b.w).h(b.h).bg(line)));
 }
 
 // Each glint window slides one way while its copy of the text slides the other, so the lit letters stay in place.
@@ -386,7 +390,7 @@ export function agentRow(a, indent, t, row, more = {}) {
     .opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75);
   const iconTool = (id, icon, tip, act, size = 12) => div().id(id).size(20).flex_none().rounded(6)
     .flex().items_center().justify_center().text_color(t.muted).tooltip(tip)
-    .hover((s) => s.bg(t.input).text_color(t.foreground))
+    .hover((s) => s.bg(t.hover).text_color(t.foreground))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => { cx.stop_propagation(); act(cx); })
     .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(size));
@@ -426,7 +430,7 @@ export function agentRow(a, indent, t, row, more = {}) {
     .when(Boolean(row?.menu), (el) => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); }))
     .when(drag?.target === "before", (el) => el.border_t(2).border_color(t.accent))
     .when(drag?.target === "after", (el) => el.border_b(2).border_color(t.accent))
-    .children(lines.map((l) => guide(l, h, t)))
+    .children(lines.map((l, c) => guide(l, h, t, reachOf(lines, c, more, GUIDE_REACH))))
     .child(two ? v_flex().h(h).pt(Math.round((h - 45) / 2) + 3).flex_none().child(lead) : lead)
     .child(body);
 }

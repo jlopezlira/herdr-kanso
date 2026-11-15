@@ -14,7 +14,7 @@ import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs } from "./pieces.js";
-import { H, iconButton, tokens } from "./ui.js";
+import { H, iconButton, tokens, washes } from "./ui.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;
@@ -244,7 +244,7 @@ export default class Strip extends View {
   }
 
   renderEdge() {
-    const t = theme(), p = props();
+    const t = theme(), p = props(), w = washes(t);
     const byId = new Map(panes().map((q) => [q.pane, q]));
     const ids = (p.panes ?? [p.edge]).filter((id) => byId.has(id));
     const left = p.side === "left";
@@ -260,9 +260,9 @@ export default class Strip extends View {
     const MAX_TILES = 8;
     const tile = (id) => {
       const info = byId.get(id), d = dot(info?.status, 7);
-      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(t.input)
+      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(w?.w7 ?? t.hover)
         .flex().items_center().justify_center()
-        .hover((h) => h.bg(t.selected))
+        .hover((h) => h.bg(w?.w12 ?? t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
         .when(Boolean(d), (el) => el.child(d.absolute().top(-2).right(-2).border(1).border_color(t.chrome)));
@@ -1150,7 +1150,7 @@ export default class Strip extends View {
     const at = this.where(st, st.focus);
     const widths = pillWidths(st.cols);
     const pills = st.cols.map((c, i) => {
-      const tone = at?.ci === i ? t.foreground : c.pin || this.shown?.has(i) ? t.muted : t.input;
+      const tone = at?.ci === i ? t.foreground : c.pin || this.shown?.has(i) ? t.muted : t.dim;
       const w = widths[i], k = c.panes.length;
       return v_flex().id(`strip-mark-${i}`).h(14).px(1).gap(1).flex_none().justify_center().cursor_pointer()
         .on_click(() => { this.edit(tab, st, (now) => this.focusOn(now, c.panes[0], ps)); this.dirty = true; })
