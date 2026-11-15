@@ -244,7 +244,7 @@ export default class Strip extends View {
   }
 
   renderEdge() {
-    const t = theme(), p = props(), w = washes(t.foreground, t.background);
+    const t = theme(), p = props(), w = washes(t);
     const byId = new Map(panes().map((q) => [q.pane, q]));
     const ids = (p.panes ?? [p.edge]).filter((id) => byId.has(id));
     const left = p.side === "left";
@@ -260,9 +260,9 @@ export default class Strip extends View {
     const MAX_TILES = 8;
     const tile = (id) => {
       const info = byId.get(id), d = dot(info?.status, 7);
-      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(w.w7)
+      return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(w?.w7 ?? t.hover)
         .flex().items_center().justify_center()
-        .hover((h) => h.bg(w.w12))
+        .hover((h) => h.bg(w?.w12 ?? t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
         .when(Boolean(d), (el) => el.child(d.absolute().top(-2).right(-2).border(1).border_color(t.chrome)));
