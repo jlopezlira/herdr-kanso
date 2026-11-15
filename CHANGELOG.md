@@ -53,6 +53,7 @@ the branch's rules.
 
 ### Fixed
 
+- Secondary text, hints, field edges and idle marks are easier to read in both themes, and the light theme takes the design's final colours: every text meets 4.5:1 and every edge and mark 3:1 on each surface it sits on. (#265)
 - Ports lists the servers on every connected computer, each under its computer's name with this one first, and Open, Go to its pane and Stop act on the computer the server runs on. A computer out of reach is one line saying why, it is asked less often while it keeps failing, and this computer's list never waits for it.
 - Double-clicking a project's name opens the rename dialog again, instead of a field in the row where Esc could reach the agent and stop it.
 - The border between the sidebar and the first pane has one drag, the sidebar's: the first pane no longer shows a resize handle there that moved nothing. The first pane grows to the right, and the panes after it keep both edges.
