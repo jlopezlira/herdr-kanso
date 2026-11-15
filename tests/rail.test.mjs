@@ -1,7 +1,7 @@
 // The collapsed sidebar's rail: one mark per group, its popup, and Hide sidebar.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clone, load } from "./helpers.mjs";
+import { clone, load, elements, watchPopups } from "./helpers.mjs";
 
 // Elements that keep the handlers given to them, by the id they were built with.
 function recorder() {
@@ -26,9 +26,7 @@ function recorder() {
 async function spaces(host = {}) {
   const { node, handlers } = recorder();
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node },
-    v_virtual_list: (...args) => { host.listed?.(args); return node(); },
-    terminals: () => [], spaces: () => [], panes: () => [], agents: () => [], shared: () => null, setShared: () => {},
+    ...elements(node), terminals: () => [], spaces: () => [], panes: () => [], agents: () => [], shared: () => null, setShared: () => {},
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", accent: "#09f", border: "#333", popover: "#111", selected: "#222", hover: "#222" }),
     ...host,
   });
@@ -50,12 +48,12 @@ test("an unread or woken conversation keeps its call in the collapsed rail: on t
 
 test("the rail's list scrolls to the row the keyboard picks, past the ten that show", async () => {
   const rows = Array.from({ length: 12 }, (_, i) => ({ address: `t${i}`, pane: `p${i}`, name: `Agent ${i}`, status: "idle", hint: null, asleep: null, strong: false, badge: null }));
-  const lists = [];
-  const { view, handlers } = await spaces({ props: () => ({ railMenu: { title: "kanso", rows, space: null }, overlay: 1 }), listed: (args) => lists.push(args) });
+  const { view, handlers } = await spaces({ props: () => ({ railMenu: { title: "kanso", rows, space: null }, overlay: 1 }) });
   const scrolled = [];
   Object.assign(view, { menuAt: -1, handle: {}, convScroll: { scroll_to_item: (i) => scrolled.push(i) } });
+  const shown = watchPopups(view);
   view.railMenuView({ foreground: "#fff", muted: "#888", dim: "#666", accent: "#09f", border: "#333", popover: "#111", selected: "#222", hover: "#222" });
-  assert.equal(lists[0][1], 12, "every row is in the list, ten drawn at a time");
+  assert.deepEqual([shown[0][0].scroll.length, shown[0][0].rows], [12, 10], "every row is in the run, ten shown at a time");
   const key = handlers["spaces-menu:on_key_down"];
   const cx = { stop_propagation() {}, notify() {} };
   for (let i = 0; i < 12; i += 1) key({ key: "down", modifiers: {} }, cx);

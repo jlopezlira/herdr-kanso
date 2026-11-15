@@ -9,7 +9,8 @@ import { location, key, diffRows, monoFont, tilde, failure, said, failNote } fro
 import { walkLayout } from "./layout.js";
 import { G, H, R, T, breathe, tokens, toneColor } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
-import { field, TextField } from "./ui-field.js";
+import { TextField } from "./ui-field.js";
+import { menu } from "./ui-menu.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
@@ -64,6 +65,9 @@ export function ghMissing(r) {
 
 const ago = (iso) => ageOf(iso, Date.now());
 const labelColor = (hex) => { const h = String(hex ?? "").replace(/^#/, ""); return /^[0-9a-fA-F]{6}$/.test(h) ? `#${h}` : null; };
+// A picker shows this many people or labels, then scrolls; while it reads, four loading items.
+const PICKER_ROWS = 7;
+const PICKER_BONES = Object.freeze(Array.from({ length: 4 }, () => ({ loading: true })));
 const openUrl = (url) => localService(openApi).open(url).catch(() => { });
 
 // One check to show, as either kind GitHub reports: a check run or a commit status.
@@ -702,32 +706,22 @@ export class PullRequest {
     const shown = all.filter((x) => !q || [x.name, x.login, x.description].some((v) => String(v ?? "").toLowerCase().includes(q)));
     const empty = { labels: "This repository has no labels.", assignees: "Nobody has access to this repository.", reviewers: "Nobody else has access to this repository." }[kind];
     const noMatch = kind === "labels" ? "No label matches that." : "Nobody with access matches that.";
-    const { block, line } = ghost(c);
-    const list = v_flex().gap(1)
-      .when(!this.candidates && !this.pickerError, (el) => el.child(breathe(v_flex().id("kanso-skeleton"))
-        .children([90, 120, 70, 104].map((w, i) => h_flex().id(`${id}-ghost-${i}`).px(8).py(7).gap(G.sm).child(block(8, 8, 8)).child(line(w, 9))))))
-      .when(Boolean(this.pickerError), (el) => el.child(div().p(8).text_size(11.5).text_color(c.dim).child(`${kind === "labels" ? "The labels" : "The people with access"} could not be read. ${this.pickerError}`)))
-      .when(Boolean(this.candidates) && shown.length === 0, (el) => el.child(div().p(8).text_size(11.5).text_color(c.dim).child(q ? noMatch : empty)))
-      .children(shown.map((x, i) => {
-        const name = kind === "labels" ? x.name : x.login, on = applied.has(name), color = kind === "labels" ? labelColor(x.color) : null;
-        return Button.new(`${id}-${i}`).w_full().px(8).py(5).gap(G.sm).items_center().rounded(6).cursor_pointer()
-          .disabled(Boolean(this.pending))
-          .hover((s) => s.bg(c.subtle))
-          .accessibility_label(name)
-          .on_click((_e, cx) => this.toggle(kind, name, on, cx))
-          .when(kind === "labels", (el) => el.child(div().size(8).flex_none().rounded_full().bg(color ?? c.dim)))
-          .child(h_flex().flex_1().min_w(0).gap(4)
-            .child(div().flex_none().text_size(12).text_color(c.text).child(name))
-            .when(kind !== "labels" && Boolean(x.name) && x.name !== x.login, (e) => e.child(div().min_w(0).truncate().text_size(11).text_color(c.dim).child(x.name)))
-            .when(kind === "labels" && Boolean(x.description), (e) => e.child(div().min_w(0).truncate().text_size(11).text_color(c.dim).child(`· ${x.description}`))))
-          .child(div().w(14).flex_none().text_size(12).text_color(c.text).child(this.pending === name ? "…" : on ? "✓" : ""));
-      }))
-      .when(this.truncated, (el) => el.child(div().px(8).py(6).text_size(11).text_color(c.dim)
-        .child(kind === "labels" ? "This repository has more labels than are listed here. Apply the rest on GitHub." : "This repository has more people with access than are listed here. Ask for the rest on GitHub.")));
-    // The list sizes to its rows up to 290 px, then scrolls; a flex share would collapse it to nothing.
-    return popover.content(v_flex().w(288).p(G.xs).gap(G.xs).rounded(8).bg(c.popover).border_1().border_color(c.border)
-      .child(field(`${id}-search`, this.search, c))
-      .child(div().id(`${id}-list`).w_full().max_h(290).overflow_y_scrollbar().child(div().flex_none().w_full().child(list))));
+    const read = { labels: "The labels", assignees: "The people with access", reviewers: "The people with access" }[kind];
+    const more = kind === "labels" ? "This repository has more labels than are listed here. Apply the rest on GitHub." : "This repository has more people with access than are listed here. Ask for the rest on GitHub.";
+    const item = (x) => {
+      const name = kind === "labels" ? x.name : x.login, on = applied.has(name);
+      return {
+        dot: kind === "labels" ? labelColor(x.color) ?? "dim" : null, label: name,
+        second: kind === "labels" ? x.description || null : x.name && x.name !== x.login ? x.name : null,
+        checked: on, hint: this.pending === name ? "\u2026" : null, disabled: Boolean(this.pending), onClick: (cx) => this.toggle(kind, name, on, cx),
+      };
+    };
+    const state = !this.candidates && !this.pickerError ? PICKER_BONES
+      : this.pickerError ? [{ failure: { text: `${read} could not be read`, source: this.pickerError } }]
+      : this.candidates && !shown.length ? [{ heading: q ? noMatch : empty }]
+      : [];
+    return popover.content(menu(id, { items: [{ field: "Search", text: this.search }, ...state, { scroll: shown.map(item), rows: PICKER_ROWS },
+      ...(this.truncated ? [{ heading: more }] : [])] }, c));
   }
 
   openList() {

@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile, stat, realpath, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, until } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, until, elements, watchPopups, watchLines } from "./helpers.mjs";
 
 const NAMES = ["placeKey", "keyOfSpace", "keyOfProject", "closedProjects", "shownNames", "startingProjects", "parseWorktreeList", "addWorktree", "worktreesOf", "missingFolders", "folderName", "trimmed"];
 const projects = () => load("kanso-spaces/projects.js", NAMES, { exec });
@@ -239,22 +239,17 @@ test("New conversation: nothing lit until the keyboard moves; a project chosen a
     { id: "p-a", name: "api", folder: "/work/client-a/api", machine: "", agent: "codex", missing: false },
     { id: "p-b", name: "api", folder: "/work/client-b/api", machine: "", agent: "codex", missing: false },
   ];
-  const keys = [], scrolled = [], items = {};
-  let inRenderer = false, rendering = false;
-  const HANDLERS = ["on_click", "on_mouse_down", "on_mouse_up"];
+  const keys = [], scrolled = [];
+  let rendering = false;
   const node = () => { const p = new Proxy({}, { get: (_t, k) => {
     if (k === "when") return (c, f) => (c ? f(p) : p);
     if (k === "on_key_down") return (f) => { keys.push(f); return p; };
-    if (k === "on_item_click" || k === "on_item_secondary_click") return (f) => { items[k] = f; return p; };
-    // Herdr: a handler registered inside a virtual list's item renderer throws.
-    if (HANDLERS.includes(k) && inRenderer) return () => { throw new Error(`${k} inside an item renderer`); };
     return () => p;
   } }); return p; };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node },
-    v_virtual_list: (_id, n, _size, _key, render) => { inRenderer = true; try { render({ start: 0, end: n }); } finally { inRenderer = false; } return node(); },
+    ...elements(node),
     // Herdr: a scroll handle made during render throws; it belongs in init().
-    VirtualListScrollHandle: { new: () => { if (rendering) throw new Error("VirtualListScrollHandle.new() cannot run during render"); return { scroll_to_item: (i) => scrolled.push(i), release: () => true }; } },
+    ScrollHandle: { new: () => { if (rendering) throw new Error("ScrollHandle.new() cannot run during render"); return { scroll_to_item: (i) => scrolled.push(i), release: () => true }; } },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
     shared: (k) => (k === "kanso.registry" ? registry : null), setShared: () => {},
     spaces: () => [], home: () => "/Users/me", appHome: () => "/tmp/kanso-none", exec: async () => ({ code: 1, stdout: "", stderr: "" }), props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
@@ -262,15 +257,18 @@ test("New conversation: nothing lit until the keyboard moves; a project chosen a
   });
   const view = Object.assign(new Spaces(), { kdb: { projects: () => new Promise(() => {}) } });
   view.init({}, { focus_handle: () => ({ focus() {} }), spawn: () => {}, notify() {} });
+  const shown = watchPopups(view);
   rendering = true;
   view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
   rendering = false;
+  const projects = shown[0][0].scroll;
   assert.equal(view.menuAt, -1, "no row is chosen for you");
+  assert.ok(projects.every((item) => !item.selected), "nothing is lit");
   keys.at(-1)({ key: "down", modifiers: {} }, { stop_propagation() {}, notify() {} });
-  assert.deepEqual(scrolled, [0], "the first j lights the first row, and the list follows");
-  items.on_item_click("conv-p-a", { notify() {} });
+  assert.deepEqual(scrolled, [0], "the first j lights the first row, and the run follows");
+  projects[0].onClick({ notify() {} });
   assert.deepEqual(calls, [], "nothing starts on its own");
-  assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a row (the list's, by its key) asks which agent, under the project's own name, not the label that tells the two apart");
+  assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a project asks which agent, under the project's own name, not the label that tells the two apart");
 });
 
 // An element that takes any call and draws nothing; `when` runs its branch.
@@ -280,16 +278,14 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   const menuOf = async (stored, open = 0) => {
     const calls = [], made = [], heights = [];
     const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-      div: blank, svg: blank, image: blank, h_flex: blank, v_flex: blank, Popover: { new: blank }, Scrollbar: { vertical: blank }, v_virtual_list: blank,
-      theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
+      ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
       shared: (k) => (k === "kanso.pieces" ? stored : null), setShared: () => {},
       spaces: () => Array.from({ length: open }, (_, i) => ({ id: `sp-${i}`, name: `p${i}`, folder: `/work/p${i}`, machine: null, tabs: [] })),
       home: () => "/Users/me", props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
       run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => heights.push(o.height),
     });
     const view = Object.assign(new Spaces(), { menuAt: -1 });
-    const real = view.menuItem.bind(view);
-    view.menuItem = (t, id, text, act, opts) => { made.push(text); return real(t, id, text, act, opts); };
+    watchLines(view, made);
     view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
     view.newConversationMenu();
     return { view, calls, made, height: heights.at(-1) };
@@ -298,19 +294,19 @@ test("New conversation's menu ends with Add computer, last for the keyboard too,
   assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
   view.menuActs.at(-1)({});
   assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]], "the last row the keyboard reaches opens Add computer");
-  assert.equal(height, 10 + 26 + 0 + 9 + 3 * 30 + 5, "no project: 5 at each edge, the title, the line and three rows, 1 apart");
-  assert.equal((await menuOf(null, 12)).height, 10 + 26 + 330 + 9 + 3 * 30 + 5, "a long list stops at 330 and Add computer still fits under it");
+  assert.equal(height, 8 + 26 + 0 + 9 + 3 * 30, "no project: 4 at each edge, the title, the line and three items");
+  assert.equal((await menuOf(null, 12)).height, 8 + 26 + 11 * 30 + 9 + 3 * 30, "a long run stops at 11 items and Add computer still fits under it");
   const off = await menuOf({ "footer.machine": "hide" }, 12);
-  assert.deepEqual(off.made, ["New project with a conversation\u2026", "Open a folder, no project\u2026"], "switched off in kansō settings, it is left out");
-  assert.equal(off.height, 10 + 26 + 330 + 9 + 2 * 30 + 4, "and its room goes with it");
+  assert.deepEqual(off.made.slice(-2), ["New project with a conversation\u2026", "Open a folder, no project\u2026"], "switched off in kansō settings, it is left out");
+  assert.ok(!off.made.includes("Add computer\u2026"));
+  assert.equal(off.height, 8 + 26 + 11 * 30 + 9 + 2 * 30, "and its room goes with it");
 });
 
 test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {
   const calls = [], made = [];
   const place = { space: null, folder: "/work/api", machine: "", project: null, name: "api" };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: blank, svg: blank, image: blank, h_flex: blank, v_flex: blank, Popover: { new: blank },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
+    ...elements(blank), theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
     shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place }), closeOverlay: () => {},
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
   });
@@ -320,8 +316,7 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
     { key: "codex", name: "Codex", installed: true, run: ["codex"] },
     { key: "pi", name: "pi", installed: true, run: ["pi"] },
   ];
-  const real = view.menuItem.bind(view);
-  view.menuItem = (t, id, text, act, opts) => { made.push(text); return real(t, id, text, act, opts); };
+  watchLines(view, made);
   view.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
   assert.deepEqual(made.slice(0, 3), ["Codex", "pi", "Terminal"], "Claude Code is not installed here: not offered");
   view.menuActs[0]({});
@@ -331,8 +326,7 @@ test("which agent: only the ones installed, nothing chosen for you, and one pick
   calls.length = 0; made.length = 0;
   place.tree = { folder: "/kanso/worktrees/api/feat-x", branch: "feat-x" };
   const tree = Object.assign(new Spaces(), { kdb: view.kdb, menuAt: -1, known: view.known });
-  const treeItem = tree.menuItem.bind(tree);
-  tree.menuItem = (t, id, text, act, opts) => { made.push(text); return treeItem(t, id, text, act, opts); };
+  watchLines(tree, made);
   tree.newAgentView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" });
   assert.ok(!made.includes("In a new worktree\u2026"), "no worktree in a worktree");
   tree.menuActs[1]({});

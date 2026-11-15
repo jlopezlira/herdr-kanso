@@ -1,7 +1,7 @@
 // The Menu: a heading, items of a control's height with their icon, a separator, and an item that asks twice.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, numberArguments } from "./helpers.mjs";
+import { load, gpuiHost, numberArguments, texts } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "W"], gpuiHost()),
@@ -58,4 +58,62 @@ test("An armed item is filled with the accent and reads Press again", async () =
 test("The Menu draws every size from the tokens", () => {
   assert.deepEqual(numberArguments("kanso-panel/ui-menu.js"), []);
   assert.deepEqual(numberArguments("kanso-panel/ui-header.js"), []);
+});
+
+const menuOf = async (items, title = null) => {
+  const { menu, tokens } = await kit(), c = tokens(night);
+  return { c, el: menu("m", { title, items }, c) };
+};
+
+test("A scroll run shows its rows and scrolls the rest; the keyboard's handle follows it", async () => {
+  const { H } = await kit();
+  const handle = { scroll_to_item() {} };
+  const { el } = await menuOf([{ scroll: Array.from({ length: 9 }, (_, i) => ({ label: `p${i}` })), rows: 3, handle }]);
+  const [run] = el.kids;
+  assert.equal(arg(run, "max_h"), 3 * H.control);
+  assert.equal(calls(run, "overflow_y_scrollbar").length, 1);
+  assert.equal(arg(run, "track_scroll"), handle);
+  assert.equal(run.kids.length, 9, "every item is in the run");
+});
+
+test("A disabled item is dim, takes no click and says why in its hint", async () => {
+  const done = [];
+  const { c, el } = await menuOf([{ label: "Zed", hint: "local only", disabled: true, onClick: () => done.push("zed") }]);
+  const [zed] = el.kids;
+  assert.equal(calls(zed, "on_click").length, 0);
+  assert.deepEqual(arg(zed, "disabled"), true);
+  assert.equal(arg(zed.kids[1], "text_color"), c.dim);
+  assert.ok(texts(zed).includes("local only"));
+});
+
+test("An item leads with an app's picture or letter as a tile, a colour dot, or its icon; a second line sits under its label", async () => {
+  const { G, H } = await kit();
+  const { el } = await menuOf([{ letter: "Z", label: "Zed" }, { dot: "#d73a4a", label: "bug", second: "Something is broken", checked: true }]);
+  const [zed, bug] = el.kids;
+  assert.equal(calls(zed.kids[0], "rounded_full").length, 0, "a tile is not round");
+  assert.ok(texts(zed.kids[0]).includes("Z"));
+  assert.equal(arg(bug.kids[0].kids[0], "bg"), "#d73a4a");
+  assert.equal(arg(bug, "h"), H.control + G.md);
+  assert.ok(texts(bug).includes("Something is broken"));
+  assert.equal(calls(bug.kids.at(-1), "size").length, 1, "a checked item ends with its check");
+});
+
+test("A heading can carry a mark; armed hides the hint; loading and failure keep the menu's place", async () => {
+  const { el } = await menuOf([
+    { heading: "New in api", mark: "working" }, { label: "Close", hint: "⌘W", armed: true }, { loading: true },
+    { failure: { text: "Can't read editors", source: "permission denied" } }, { label: "Wake", badge: "Woke" },
+  ]);
+  const [head, close, bones, failed, wake] = el.kids;
+  assert.equal(head.kids.length, 1, "the heading's mark");
+  assert.ok(!texts(close).includes("⌘W"));
+  assert.equal(arg(bones, "id"), "kanso-skeleton", "loading is the shared skeleton");
+  assert.ok(texts(failed).includes("Can't read editors"));
+  assert.ok(texts(wake).includes("Woke"));
+});
+
+test("A popup opens at the height its Menu draws", async () => {
+  const { G, H } = await kit();
+  const { menuHeight } = await load("kanso-panel/ui-menu.js", ["menuHeight"], gpuiHost());
+  assert.equal(menuHeight({ title: "New conversation in", items: [{ scroll: [{ label: "a" }, { label: "b" }], rows: 11 }, { separator: true }, { label: "Add computer…" }] }),
+    2 * G.xs + H.icon + 2 * H.control + 2 * G.xs + 1 + H.control);
 });

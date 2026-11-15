@@ -209,6 +209,20 @@ export const press = (el, id) => {
   tool.calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, { stop_propagation: () => {} }));
 };
 
+// The elements a view draws with, each made by `node`.
+export const elements = (node) => ({ div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Button: { new: node } });
+// Every item list a sidebar popup draws, kept as it is drawn.
+export const watchPopups = (view) => {
+  const shown = [], popup = view.popup.bind(view);
+  view.popup = (t, title, items) => { shown.push(items); return popup(t, title, items); };
+  return shown;
+};
+// Each item's words, in the order a popup makes them.
+export const watchLines = (view, made) => {
+  const line = view.menuLine.bind(view);
+  view.menuLine = (text, act, opts) => { made.push(text); return line(text, act, opts); };
+};
+
 export const gpuiHost = () => ({
   div: () => chain("div"),
   h_flex: () => chain("h_flex"),

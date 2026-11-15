@@ -9,6 +9,7 @@ import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, l
 import { G, H, R, PULSE, breathe, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
+import { menu } from "./ui-menu.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
@@ -26,6 +27,8 @@ const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
 const PRESENTER_FILE = `mods/${MOD}/presenter.mjs`;
 const DATA_DIR = `data/${MOD}`;
 const icon = (name) => `mods/${MOD}/icons/${name}.svg`;
+// A project or model chooser shows this many, then scrolls.
+const CHOOSER_ROWS = 8;
 const PAYLOAD_KIND = "kanso-spend-costs";
 const PAYLOAD_VERSION = 1;
 const STEP_TIMEOUT_MS = 35_000;
@@ -619,28 +622,10 @@ export default class TokenSpend extends View {
         cx.notify();
       });
     if (this.openMenu === id && this.menuOptions) {
-      popover.content(v_flex().id(`${id}-options`).w(260).max_h(340).overflow_y_scrollbar().p(G.xs).gap(1).rounded(R.card)
-        .bg(c.popover).border_1().border_color(c.border)
-        .children(this.menuOptions.map((option, index) => {
-          const selected = option.value === value;
-          return Button.new(`${id}-option-${index}`).flex_none().w_full().px(8).py(5).gap(G.sm).items_center().rounded(R.control)
-            .cursor_pointer()
-            .selected(selected)
-            .set_position(index + 1, this.menuOptions.length)
-            .when(selected, (el) => el.bg(c.selected))
-            .when(!selected, (el) => el.hover((style) => style.bg(c.subtle)))
-            .focus((style) => style.bg(c.selected))
-            .accessibility_label(option.label)
-            .on_click((_event, cx) => {
-              this.openMenu = null;
-              this.menuOptions = null;
-              this.setCost({ [field]: option.value }, cx);
-            })
-            .child(v_flex().flex_1().min_w(0).gap(1)
-              .child(div().text_size(12).text_color(c.text).truncate().child(option.label))
-              .when(Boolean(option.detail), (el) => el.child(div().text_size(10).text_color(c.dim).truncate().child(option.detail))))
-            .child(div().text_size(11).text_color(c.dim).child(option.meta ?? ""));
-        })));
+      const choose = (option) => (cx) => { this.openMenu = null; this.menuOptions = null; this.setCost({ [field]: option.value }, cx); };
+      popover.content(menu(`${id}-options`, { items: [{ scroll: this.menuOptions.map((option) => ({
+        label: option.label, second: option.detail || null, hint: option.meta || null, selected: option.value === value, onClick: choose(option),
+      })), rows: CHOOSER_ROWS }] }, c));
     }
     return popover;
   }

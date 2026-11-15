@@ -5,6 +5,10 @@ import { v_flex, Button } from "gpui-base";
 import { G, H, R, T, ICON, ICON_ROW, ICON_INLINE, ICON_CHROME, SPIN, ARM_MS, WASH, CLEAR, glyphOf, mix, well } from "./ui.js";
 
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
+/** A look on a pressable element: its fill, then its hover and press washes; a look with no hover is not pressable. */
+export const withLook = (el, look) => el.when(Boolean(look.fill), (e) => e.bg(look.fill))
+  .when(Boolean(look.hover), (e) => e.cursor_pointer().hover((s) => s.bg(look.hover)).active((s) => s.bg(look.press)));
+
 /** The armed look: the accent fill, its hover and press washes, the accent foreground. */
 export const armedLook = (c) => filled(c.accent, c.accentText, c);
 const LOOKS = {
@@ -47,14 +51,13 @@ export function button(id, label, onClick, c, { kind = "solid", icon = null, sma
   const text = (words) => div().text_size(compact ? T.body : T.value).font_medium().text_color(ink).child(words);
   const glyph = icon ? svg(glyphOf(icon)).size(square ? box.glyph : ICON_ROW).flex_none().text_color(ink) : null;
   // The ring is a border kept clear at rest, so focusing never resizes the box.
-  return Button.new(id).h(side).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
+  const frame = Button.new(id).h(side).flex_none().items_center().justify_center().gap(G.sm).rounded(R.control)
     .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .disabled(disabled)
     .accessibility_label(on && verb ? pressAgain(verb) : spoken)
     .when(square, (el) => el.w(side).tooltip(spoken))
-    .when(!square, (el) => el.px((compact ? G.sm : G.md) - G.hair))
-    .when(Boolean(look.fill), (el) => el.bg(look.fill))
-    .when(!disabled, (el) => el.cursor_pointer().hover((s) => s.bg(look.hover)).active((s) => s.bg(look.press)))
+    .when(!square, (el) => el.px((compact ? G.sm : G.md) - G.hair));
+  return withLook(frame, look)
     .when(!disabled && Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))
     .when(Boolean(glyph), (el) => el.child(spin ? glyph.spin(SPIN) : glyph))
     .when(!square, (el) => el.child(verb ? armedLabel(label, verb, on, text, { start: kind === "quiet" }) : text(label)));

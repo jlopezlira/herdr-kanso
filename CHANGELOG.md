@@ -31,6 +31,7 @@ the branch's rules.
 
 ### Changed
 
+- Every menu shares one look: the sidebar's project, agent, New conversation, New agent and rail menus, the terminal's right-click menu, Open with, the pull request's label and people pickers and Spend's project and model choosers. Long lists scroll inside the menu, editors that cannot open a remote folder are dimmed, and a labels picker shows each label's colour and description on two lines.
 - The rename, New project, New worktree, Send, Sleep and Arrangements dialogs share one look: the title, an optional line under it, the content, notes, then Cancel before the one main action. A working main action spins instead of changing its words. Sleep and Arrangements no longer show Cancel or Close; Esc or a click beside the dialog still closes them. The small Esc hint beside each title is gone.
 - CI rejects new repeated code in the mods, the Storybook, the scripts, the site, the tests and the workflows. Today's repeats are listed, and a pull request can only shorten that list. Nothing on screen changes.
 - The sidebar's toolbar has larger buttons, 4 apart; Sort stays dim at its default order and its menu ticks the current order before each choice; in the collapsed sidebar, Sort and Search wait under a caret below + and Show sidebar. (#281)
