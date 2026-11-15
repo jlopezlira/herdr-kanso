@@ -30,6 +30,7 @@ import { guideBars, climb } from "./guides.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
 import { breathe, H, G, T, R, W, ICON, tokens, washes } from "./ui.js";
 import { button, iconButton, Armed, armedLabel, armedLook } from "./ui-button.js";
+import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { skeleton } from "./ui-skeleton.js";
 import { stateEmpty, pendingDot } from "./ui-state.js";
@@ -352,7 +353,7 @@ export default class Spaces extends View {
 
   // A project's name and folder, asked in a dialog; `start`: a conversation begins in it once made.
   addProject(start = false) {
-    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 460, height: 270, props: { newProject: { start } } });
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 460, props: { newProject: { start } } });
   }
 
   // The click's context ends with the click: the dialog redraws from its own spawned one.
@@ -392,18 +393,19 @@ export default class Spaces extends View {
     const shown = this.projectFolder ? this.projectFolder.replace(trimmed(home()), "~") : "No folder chosen";
     const c = tokens(t);
     const label = (text) => div().text_size(12).text_color(t.muted).child(text);
-    return v_flex().id("project-dialog").size_full().p(18).gap(8).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
-      .child(div().pb(4).text_size(15).font_semibold().child(start ? "New project with a conversation" : "New project"))
-      .child(label("Folder"))
-      .child(h_flex().gap(8).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
-        .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })))
-      .child(field("project-name", this.projectName, c, { label: "Name" }))
-      .child(div().min_h(16).text_size(12).text_color(this.projectError ? t.blocked : t.dim).child(this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open.")))
-      .child(h_flex().gap(8).justify_end()
-        .child(button("project-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))
-        .child(button("project-create", this.creating ? "Creating\u2026" : start ? "Create and start" : "Create project", (cx) => this.createProject(cx), c)));
+    return dialog("project-dialog", c, {
+      title: start ? "New project with a conversation" : "New project",
+      body: [
+        label("Folder"),
+        h_flex().gap(8).items_center()
+          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(this.projectFolder ? t.foreground : t.dim).child(shown))
+          .child(button("project-choose", this.projectFolder ? "Change\u2026" : "Choose\u2026", (cx) => this.chooseProjectFolder(cx), c, { kind: "tonal" })),
+        field("project-name", this.projectName, c, { label: "Name" }).pt(G.sm),
+      ],
+      notes: [{ text: this.projectError ?? (start ? "The agent you used there last starts in it." : "It stays in Projects even with nothing open."), tone: this.projectError ? "error" : "dim" }],
+      secondary: "Cancel", primary: start ? "Create and start" : "Create project", state: this.creating ? "loading" : "default",
+      onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.createProject(cx),
+    });
   }
 
 
@@ -1502,7 +1504,7 @@ export default class Spaces extends View {
   }
 
   worktreeDialog(place) {
-    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 440, height: 230, props: { worktree: place } });
+    openOverlay({ mod: "kanso-spaces", kind: "dialog", width: 440, props: { worktree: place } });
   }
 
 
@@ -1604,15 +1606,16 @@ export default class Spaces extends View {
     const base = kansoWorktrees(place.machine);
     const shownBase = base ? base.replace(trimmed(home()), "~") : "~/.kanso/worktrees";
     const c = tokens(t);
-    return v_flex().id("worktree-dialog").size_full().p(18).gap(10).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => { if (String(e.key).toLowerCase() === "escape") { closeOverlay(props().overlay); cx.stop_propagation(); } })
-      .child(div().text_size(15).font_semibold().child(`New agent in a worktree of ${place.name ?? "this project"}`))
-      .child(div().text_size(12).text_color(t.muted).child(`A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`))
-      .child(field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }))
-      .child(div().min_h(16).text_size(12).text_color(this.wtError ? t.blocked : t.dim).child(this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel.")))
-      .child(h_flex().gap(8).justify_end()
-        .child(button("wt-cancel", "Cancel", () => closeOverlay(props().overlay), c, { kind: "quiet" }))
-        .child(button("wt-make", this.making ? "Making\u2026" : "Make worktree", (cx) => this.makeWorktree(cx), c)));
+    return dialog("worktree-dialog", c, {
+      title: `New agent in a worktree of ${place.name ?? "this project"}`,
+      body: [
+        div().text_size(12).text_color(t.muted).child(`A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`),
+        field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }).pt(G.sm),
+      ],
+      notes: [{ text: this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel."), tone: this.wtError ? "error" : "dim" }],
+      secondary: "Cancel", primary: "Make worktree", state: this.making ? "loading" : "default",
+      onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.makeWorktree(cx),
+    });
   }
 
   // Each worktree space moves under its main checkout's.

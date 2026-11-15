@@ -2,10 +2,9 @@
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): the same dialog Herdr
 // uses to rename a space or a tab, for what Herdr has no command for: a terminal's name, kept as a
 // label on the terminal in herdr-core.
-import { View, div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { G, tokens } from "./ui.js";
-import { button } from "./ui-button.js";
+import { View } from "gpui-kit";
+import { tokens } from "./ui.js";
+import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { run, hc, props, closeOverlay, theme, shared, setShared } from "herdr";
 
@@ -43,22 +42,15 @@ export default class Prompt extends View {
     if (p.shared) this.answer(p, null);
   }
 
-  key(e, cx) {
-    if (e.key === "escape") { this.cancel(); cx.stop_propagation(); }
-  }
-
   render() {
-    const t = theme();
     const p = props() ?? {};
-    const c = tokens(t);
-    return v_flex().id("prompt").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-      .w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
-      .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child((p.title ?? "").replace(/^./, (c) => c.toUpperCase())))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(field("pm-input", this.input, c, { label: p.field ?? "Name" }).pt(G.lg))
-      .when(Boolean(p.hint), el => el.child(div().pt(6).text_size(11.5).text_color(t.dim).child(p.hint)))
-      .child(h_flex().pt(20).gap(8).justify_end()
-        .child(button("pm-cancel", "Cancel", () => this.cancel(), c, { kind: "quiet" }))
-        .child(button("pm-save", p.button ?? "Save", () => this.submit(), c)));
+    const c = tokens(theme());
+    return dialog("prompt", c, {
+      title: (p.title ?? "").replace(/^./, (c) => c.toUpperCase()),
+      body: field("pm-input", this.input, c, { label: p.field ?? "Name" }),
+      notes: p.hint ? [{ text: p.hint }] : [],
+      secondary: "Cancel", primary: p.button ?? "Save",
+      onCancel: () => this.cancel(), onPrimary: () => this.submit(), focusHandle: this.handle,
+    });
   }
 }

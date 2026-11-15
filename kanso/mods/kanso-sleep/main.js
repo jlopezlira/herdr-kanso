@@ -8,7 +8,7 @@ import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, 
 import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
 import { breathe, tokens } from "./ui.js";
-import { button } from "./ui-button.js";
+import { dialog, statusNotes } from "./ui-dialog.js";
 import { skeleton } from "./ui-skeleton.js";
 
 export const CLEAR_MS = 3000;
@@ -185,35 +185,28 @@ export default class Sleep extends View {
     const close = () => closeOverlay(props()?.overlay);
     const scope = this.order?.scope ?? null;
     const c = tokens(t);
-    const note = (text, tone) => div().pt(10).text_size(11.5).line_height(1.45).text_color(tone ?? t.dim).child(text);
-    const shell = v_flex().id("kanso-sleep").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => { if (e.key !== "escape" || this.busy) return; cx.stop_propagation(); close(); });
-    if (!scope) {
-      return shell.child(div().text_size(15).font_semibold().child("Wake"))
-        .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
-        .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)));
-    }
+    const shell = { focusHandle: this.handle, held: Boolean(this.busy), onCancel: close };
+    if (!scope) return dialog("kanso-sleep", c, { ...shell, title: "Wake", notes: statusNotes(this) });
     const project = this.space?.name ?? tilde(this.space?.folder);
     const list = (this.reads ?? []).filter((r) => r.resume || r.running);
     const others = [...new Set(list.filter((r) => !r.resume).map((r) => describe(r.argv)))];
     const line = (r, i) => h_flex().id(`sl-${i}`).w_full().gap(10).items_center()
       .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(r.resume ? t.foreground : t.muted).child(r.resume ? r.name : describe(r.argv)))
       .child(div().flex_none().max_w(180).truncate().text_size(11.5).text_color(t.dim).child(r.resume ? "keeps its conversation" : tilde(r.cwd)));
-    return shell
-      .child(v_flex().gap(4)
-        .child(h_flex().items_center()
-          .child(div().flex_1().text_size(15).font_semibold().child(scope === "project" ? `Sleep ${project}` : scope === "agent" ? "Sleep this agent" : "Sleep this tab"))
-          .child(div().text_size(11).text_color(t.dim).child("Esc")))
-        .child(div().text_size(11.5).line_height(1.45).text_color(t.dim).child(scope === "project" ? "Every tab's agents exit and the tabs are put away. Wake brings them back, each agent on its conversation."
+    return dialog("kanso-sleep", c, {
+      ...shell,
+      title: scope === "project" ? `Sleep ${project}` : scope === "agent" ? "Sleep this agent" : "Sleep this tab",
+      body: [
+        div().text_size(11.5).line_height(1.45).text_color(t.dim).child(scope === "project" ? "Every tab's agents exit and the tabs are put away. Wake brings them back, each agent on its conversation."
           : scope === "agent" ? "It exits and its pane stays as a shell. Wake starts it there again, on its conversation."
-          : "Its agents exit and the tab is put away. Wake brings it back, each agent on its conversation.")))
-      .when(this.reads === null && !this.error, (el) => el.child(this.sleepBones(t)))
-      .child(v_flex().pt(14).gap(4).children(list.map(line)))
-      .when(others.length > 0, (el) => el.child(note(`${others.join(", ")} will stop now.`)))
-      .when(Boolean(this.busy), (el) => el.child(note(this.busy, t.muted)))
-      .when(Boolean(this.error), (el) => el.child(note(this.error, t.blocked)))
-      .child(h_flex().pt(18).gap(8).justify_end()
-        .child(button("sl-back", "Cancel", () => close(), c, { kind: "quiet", disabled: Boolean(this.busy) }))
-        .when(scope === "project", (el) => el.child(button("sl-go", "Sleep", (cx) => cx.spawn(async (cx) => this.sleep(cx)), c, { disabled: !this.reads || Boolean(this.busy) || Boolean(this.error) }))));
+          : "Its agents exit and the tab is put away. Wake brings it back, each agent on its conversation."),
+        this.reads === null && !this.error ? this.sleepBones(t) : null,
+        v_flex().pt(14).gap(4).children(list.map(line)),
+      ],
+      notes: [...(others.length ? [{ text: `${others.join(", ")} will stop now.` }] : []), ...statusNotes(this)],
+      primary: scope === "project" ? "Sleep" : null,
+      state: this.busy ? "loading" : !this.reads || this.error ? "disabled" : "default",
+      onPrimary: (cx) => cx.spawn(async (cx) => this.sleep(cx)),
+    });
   }
 }

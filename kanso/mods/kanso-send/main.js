@@ -7,7 +7,7 @@ import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, 
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { G, tokens } from "./ui.js";
-import { button } from "./ui-button.js";
+import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 
 const LAST = "kanso.send.last";
@@ -127,27 +127,24 @@ export default class Send extends View {
           .child(div().size(6).rounded_full().bg(dot(q.status))));
     };
     const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${tilde(this.from.cwd)}` : ""}` : "";
-    const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim()) && !this.sending;
+    const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());
     const rows = groups.flatMap((g) => [head(g), ...g.agents.map(row)]);
-    return v_flex().id("kanso-send").track_focus(this.handle).w_full().min_h(0).p(18).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => {
-        if (e.key === "escape") { closeOverlay(p.overlay); cx.stop_propagation(); }
-        else if (sendKey(e)) { this.send(cx, groups); cx.stop_propagation(); }
-      })
-      .child(h_flex().items_center()
-        .child(div().flex_1().text_size(15).font_semibold().child("Send to an agent"))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .when(Boolean(from), (el) => el.child(div().pt(4).truncate().text_size(11.5).text_color(t.dim).child(from)))
-      .child(field("send-to", this.query, c, { label: "To" }).pt(G.lg).pb(G.sm))
-      .child(rows.length
-        // A set height, rows that never shrink: past it, the list scrolls.
-        ? v_flex().id("send-list").flex_none().h(Math.min(rows.length * 34, 6 * 34)).overflow_y_scrollbar().gap(1).children(rows)
-        : div().py(8).text_size(12).text_color(t.muted).child(this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send."))
-      .child(field("send-message", this.box, c, { label: "Message" }).pt(G.lg))
-      .child(div().pt(6).text_size(11.5).text_color(this.error ? t.blocked : t.dim)
-        .child(this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there."))
-      .child(h_flex().pt(18).gap(8).justify_end()
-        .child(button("send-cancel", "Cancel", () => closeOverlay(p.overlay), c, { kind: "quiet" }))
-        .child(button("send-go", this.sending ? "Sending…" : this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩", (cx) => this.send(cx, groups), c, { disabled: !ready })));
+    const close = () => closeOverlay(p.overlay);
+    return dialog("kanso-send", c, {
+      title: "Send to an agent", scope: from,
+      body: [
+        field("send-to", this.query, c, { label: "To" }).pb(G.sm),
+        rows.length
+          // A set height, rows that never shrink: past it, the list scrolls.
+          ? v_flex().id("send-list").flex_none().h(Math.min(rows.length * 34, 6 * 34)).overflow_y_scrollbar().gap(1).children(rows)
+          : div().py(8).text_size(12).text_color(t.muted).child(this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send."),
+        field("send-message", this.box, c, { label: "Message" }).pt(G.lg),
+      ],
+      notes: [{ text: this.error ?? "Pasted into its terminal and sent with Enter, as if you typed it there.", tone: this.error ? "error" : "dim" }],
+      secondary: "Cancel", primary: this.toProject ? `Send to ${this.toProject}  ⌘↩` : "Send  ⌘↩",
+      state: this.sending ? "loading" : ready ? "default" : "disabled",
+      onCancel: close, onPrimary: (cx) => this.send(cx, groups), focusHandle: this.handle,
+      onKey: (e, cx) => { if (sendKey(e)) { this.send(cx, groups); cx.stop_propagation(); } },
+    });
   }
 }

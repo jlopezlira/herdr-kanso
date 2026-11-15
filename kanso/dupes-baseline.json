@@ -136,20 +136,7 @@
  },
  "a590236471e8": {
   "kanso/mods/kanso-arrange/main.js": 1,
-  "kanso/mods/kanso-prompt-editor/main.js": 1,
-  "kanso/mods/kanso-prompt/main.js": 1
- },
- "75a7665ba77f": {
-  "kanso/mods/kanso-arrange/main.js": 1,
-  "kanso/mods/kanso-sleep/main.js": 1
- },
- "5ffbf7716197": {
-  "kanso/mods/kanso-arrange/main.js": 2,
-  "kanso/mods/kanso-sleep/main.js": 1
- },
- "adbb7bcb1931": {
-  "kanso/mods/kanso-arrange/main.js": 1,
-  "kanso/mods/kanso-sleep/main.js": 1
+  "kanso/mods/kanso-prompt-editor/main.js": 1
  },
  "15a1bfe03f44": {
   "kanso/mods/kanso-arrange/store.js": 1,
@@ -780,18 +767,6 @@
   "kanso/mods/kanso-prompt-editor/main.js": 1,
   "kanso/mods/kanso-settings/main.js": 1
  },
- "52ae9b36f879": {
-  "kanso/mods/kanso-prompt-editor/main.js": 1,
-  "kanso/mods/kanso-prompt/main.js": 1
- },
- "ee851e6e21d9": {
-  "kanso/mods/kanso-prompt-editor/main.js": 1,
-  "kanso/mods/kanso-prompt/main.js": 1
- },
- "4ef6c46fef8b": {
-  "kanso/mods/kanso-prompt-editor/main.js": 1,
-  "kanso/mods/kanso-prompt/main.js": 1
- },
  "b8b74868dc89": {
   "kanso/mods/kanso-send/main.js": 1,
   "kanso/mods/kanso-strip/main.js": 1
@@ -839,9 +814,6 @@
  },
  "80639a4f5598": {
   "kanso/mods/kanso-spaces/agents.js": 2
- },
- "c2804a6978ee": {
-  "kanso/mods/kanso-spaces/main.js": 2
  },
  "078e5cfe830d": {
   "kanso/mods/kanso-spaces/main.js": 2
