@@ -1,6 +1,7 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
-import { asleep, avatar, avatarSizes, chip, rowDepths, computerRow, computerStates, projectRow, section, sessionRow, sidebar, sidebarFooter, tile, viewSwitch, views, button, card, code, dawn, dialog, escape, header, input, kinds, levels, mark, markSizes, markdown, marks, menu, metric, row, sides, skeletonOf, skeletonShapes, tabs, thumbnail, toast, toggle, toolbar, tooltip, windowControls } from './components.js';
+import { asleep, computerRow, computerStates, header, projectRow, section, sessionRow, sidebar, sidebarFooter, tile, toolbar, views, viewSwitch } from './compositions.js';
+import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, escape, input, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;

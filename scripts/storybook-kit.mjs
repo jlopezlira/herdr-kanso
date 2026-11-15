@@ -1,6 +1,7 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
-import { asleep, computerRow, dawn as dawnSky, header, projectRow, section, sessionRow, sidebar, sidebarFooter, tile, toolbar, viewSwitch, windowControls } from '../stories/kit/components.js';
+import { asleep, computerRow, header, projectRow, section, sessionRow, sidebar, sidebarFooter, tile, toolbar, viewSwitch } from '../stories/kit/compositions.js';
+import { dawn as dawnSky, windowControls } from '../stories/kit/pieces.js';
 export { elements } from './storybook-markup.mjs';
 
 export function kitRecords(records) {

@@ -1,9 +1,11 @@
 // Check the Storybook's structure, tokens, public copy, names and icons.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { expand } from "../scripts/storybook-catalog.mjs";
-import { lint, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
+import { compositionErrors, lint, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
@@ -14,6 +16,26 @@ const files = storyFiles("stories");
 
 test("Every page follows the structure lint", () => {
   assert.deepEqual(lint(), []);
+});
+
+test("A composition that draws its own markup fails the lint", () => {
+  const source = read("stories/kit/compositions.js");
+  assert.deepEqual(compositionErrors(source), []);
+  assert.deepEqual(compositionErrors(`${source}export const extra = () => '<div></div>';\n`), ["stories/kit/compositions.js: markup tag in a composition"]);
+  assert.deepEqual(compositionErrors(`${source}export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');\n`), ["stories/kit/compositions.js: class attribute in a composition"]);
+  assert.deepEqual(compositionErrors(`${source}export const extra = () => 'kanso-row';\n`), ["stories/kit/compositions.js: class string in a composition"]);
+  const root = mkdtempSync(join(tmpdir(), "kanso-lint-"));
+  try {
+    for (const dir of ["stories", ".storybook"]) cpSync(dir, join(root, dir), { recursive: true });
+    writeFileSync(join(root, "stories/kit/compositions.js"), `${source}export const extra = () => \`<span class="kanso-row">\${row({ name: 'x' })}</span>\`;\n`);
+    assert.deepEqual(lint(root).filter((error) => error.startsWith("stories/kit/compositions.js")), [
+      "stories/kit/compositions.js: markup tag in a composition",
+      "stories/kit/compositions.js: class attribute in a composition",
+      "stories/kit/compositions.js: class string in a composition",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("Storybook styles use only token values beyond the reviewed literals", () => {

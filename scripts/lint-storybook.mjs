@@ -96,11 +96,22 @@ export function structureErrors(files, catalog, template) {
   return errors;
 }
 
+// Compositions only call pieces: a tag, a class attribute or a kanso class string there is markup of its own.
+export function compositionErrors(source, path = 'stories/kit/compositions.js') {
+  const code = source.replace(/^\s*\/\/.*$/gm, '');
+  const errors = [];
+  if (/<\/?[a-z!]/i.test(code)) errors.push(`${path}: markup tag in a composition`);
+  if (/\bclass(?:Name)?\s*=/.test(code)) errors.push(`${path}: class attribute in a composition`);
+  if (/\bkanso-[a-z]/.test(code)) errors.push(`${path}: class string in a composition`);
+  return errors;
+}
+
 export function lint(root = '.') {
   const catalog = JSON.parse(readFileSync(join(root, 'stories/catalog.json'), 'utf8'));
   const errors = structureErrors(storyFiles(join(root, 'stories')), catalog, readFileSync(join(root, 'stories/kit/ComponentPage.jsx'), 'utf8'));
   if (readFileSync(join(root, 'stories/GAPS.md'), 'utf8') !== gapDocument(expand(catalog))) errors.push('GAPS.md: feature inventory differs from component pages');
   const read = (file) => readFileSync(join(root, file), 'utf8');
+  errors.push(...compositionErrors(read('stories/kit/compositions.js')));
   const [, canvas, docs] = /frame\.className = [^?]+\? '([^']+)' : '([^']+)'/.exec(read('.storybook/preview.js')) ?? [];
   const classes = [
     ['.storybook/preview.js', `${canvas ?? ''} ${docs ?? ''}`.split(/\s+/).filter(Boolean)],
