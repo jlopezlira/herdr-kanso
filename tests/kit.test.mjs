@@ -11,8 +11,8 @@ const host = () => ({ ...gpuiHost(), svg: (path) => { const el = chain("svg"); e
 const kits = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens"], host()),
   ...await load("kanso-panel/ui-row.js", ["row"], host()),
-  ui: { ...await load("kanso-panel/ui-button.js", ["button"], host()), ...await load("kanso-panel/ui-menu.js", ["menu"], host()), ...await load("kanso-panel/ui-herdr-mark.js", ["herdrMark"], host()) },
-  app: await load("kanso-panel/kit.js", ["row", "button", "menu", "herdrMark"], host()),
+  ui: { ...await load("kanso-panel/ui-button.js", ["button"], host()), ...await load("kanso-panel/ui-menu.js", ["menu"], host()) },
+  app: await load("kanso-panel/kit.js", ["row", "button", "menu"], host()),
 });
 const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
 // A drawing as plain data: handlers compare by kind, since each draw makes new ones.
@@ -117,16 +117,6 @@ test("A menu from the shared kit draws what the app's menu draws, its items' Luc
   assert.deepEqual(drawn(shared), drawn(ui.menu("m", { title: "Sort", items: items("") }, c)));
   assert.ok(svgs(shared).every((path) => !path.includes("lu-")), svgs(shared).join(", "));
   assert.throws(() => app.menu({ items: [] })("m", c, { title: "Sort" }), /only handlers, not title/);
-});
-
-test("Herdr's mark from the shared kit is the app's mark, the host's own picture at a badge's size", async () => {
-  const { tokens, ui, app } = await kits();
-  const c = tokens(night);
-  const mark = app.herdrMark()("m", c);
-  assert.deepEqual(drawn(mark), drawn(ui.herdrMark()));
-  assert.ok(mark.calls.some((call) => call[0] === "image" && call[1] === "frame/welcome/herdr.png"));
-  assert.ok(mark.calls.some((call) => call[0] === "size" && call[1] === 20));
-  assert.throws(() => app.herdrMark()("m", c, { size: 28 }), /only handlers, not size/);
 });
 
 test("The Storybook's shared kit is its pieces, and the app's has only Storybook pieces", (t) => {
