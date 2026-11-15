@@ -35,6 +35,13 @@ test("site/tokens.css matches kanso/tokens.json", () => {
   assert.equal(read(OUT), render(loadTokens()), `${OUT} is out of date: run npm run build:site-tokens`);
 });
 
+test("No token name is declared twice: in the sizes, or in one theme's colours", () => {
+  const tokens = loadTokens();
+  const sizes = Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list);
+  const twice = (list) => list.map((t) => t.name).filter((name, i, names) => names.indexOf(name) !== i);
+  assert.deepEqual([sizes, ...THEMES.map((theme) => tokens.colour[theme])].flatMap(twice), []);
+});
+
 test("Storybook token classes match kanso/tokens.json", () => {
   assert.equal(read(UTILITIES), renderUtilities(loadTokens()), `${UTILITIES} is out of date: run npm run build:site-tokens`);
 });

@@ -1,5 +1,5 @@
 // A computer's name, kept as one row on that computer. The hc name is only how this one opens the file.
-import { openOverlay, props, shared, setShared } from "herdr";
+import { openOverlay, shared, setShared } from "herdr";
 import { restDue } from "./kdb.js";
 import { machineState } from "./machines.js";
 import { aliasText, machineTitle } from "./pure.js";
@@ -248,16 +248,5 @@ export class Names {
 
   rename(machine) {
     this.ask(machine ?? "", this.title(machine));
-  }
-
-  open(machine) {
-    openOverlay({ mod: "kanso-spaces", kind: "popup", width: 220, height: 72, at: "pointer", props: {
-      machineMenu: { route: machine ?? "", shown: this.title(machine) } } });
-  }
-
-  menu(t) {
-    const menu = props()?.machineMenu ?? {};
-    const item = this.view.items(t);
-    return this.view.menuFrame(t).child(item("rename", "Rename", () => this.ask(menu.route ?? "", menu.shown ?? "")));
   }
 }

@@ -62,7 +62,7 @@ export const statedPages = {
     args: { view: 'spaces', column: false, open: false, sorted: false, menu: false, add: false },
     markup: ({ menu: shown, add, ...args }) => {
       const bar = toolbar({ ...args, sortMenu: shown ? sampleSortMenus[args.view]() : null, addMenu: add ? sampleAddMenu() : null });
-      return shown || add ? `<div class="kanso-story__menu-room">${bar}</div>` : bar;
+      return shown || add ? `<div class="kanso-story__tools-room">${bar}</div>` : bar;
     },
     states: [
       { label: 'Projects', args: {}, caption: 'Sidebar open on Projects: + adds a project.' },

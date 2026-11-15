@@ -273,37 +273,43 @@ test("New conversation: nothing lit until the keyboard moves; a project chosen a
   assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a row (the list's, by its key) asks which agent, under the project's own name, not the label that tells the two apart");
 });
 
-test("New conversation's menu ends with Add computer, last for the keyboard too, unless it is switched off", async () => {
-  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
-  const menuOf = async (stored) => {
-    const calls = [], made = [];
+// An element that takes any call and draws nothing; `when` runs its branch.
+const blank = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
+
+test("New conversation's menu ends with Add computer, last for the keyboard too, unless it is switched off, and opens tall enough for every row", async () => {
+  const menuOf = async (stored, open = 0) => {
+    const calls = [], made = [], heights = [];
     const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-      div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node }, v_virtual_list: node,
+      div: blank, svg: blank, image: blank, h_flex: blank, v_flex: blank, Popover: { new: blank }, Scrollbar: { vertical: blank }, v_virtual_list: blank,
       theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
       shared: (k) => (k === "kanso.pieces" ? stored : null), setShared: () => {},
-      spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
-      run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+      spaces: () => Array.from({ length: open }, (_, i) => ({ id: `sp-${i}`, name: `p${i}`, folder: `/work/p${i}`, machine: null, tabs: [] })),
+      home: () => "/Users/me", props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
+      run: (cmd, args) => calls.push([cmd, clone(args ?? null)]), openOverlay: (o) => heights.push(o.height),
     });
     const view = Object.assign(new Spaces(), { menuAt: -1 });
     const real = view.menuItem.bind(view);
     view.menuItem = (t, id, text, act, opts) => { made.push(text); return real(t, id, text, act, opts); };
     view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
-    return { view, calls, made };
+    view.newConversationMenu();
+    return { view, calls, made, height: heights.at(-1) };
   };
-  const { view, calls, made } = await menuOf(null);
+  const { view, calls, made, height } = await menuOf(null);
   assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
   view.menuActs.at(-1)({});
   assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]], "the last row the keyboard reaches opens Add computer");
-  const off = await menuOf({ "footer.machine": "hide" });
+  assert.equal(height, 10 + 26 + 0 + 9 + 3 * 30 + 5, "no project: 5 at each edge, the title, the line and three rows, 1 apart");
+  assert.equal((await menuOf(null, 12)).height, 10 + 26 + 330 + 9 + 3 * 30 + 5, "a long list stops at 330 and Add computer still fits under it");
+  const off = await menuOf({ "footer.machine": "hide" }, 12);
   assert.deepEqual(off.made, ["New project with a conversation\u2026", "Open a folder, no project\u2026"], "switched off in kansō settings, it is left out");
+  assert.equal(off.height, 10 + 26 + 330 + 9 + 2 * 30 + 4, "and its room goes with it");
 });
 
 test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {
   const calls = [], made = [];
-  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
   const place = { space: null, folder: "/work/api", machine: "", project: null, name: "api" };
   const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node },
+    div: blank, svg: blank, image: blank, h_flex: blank, v_flex: blank, Popover: { new: blank },
     theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333", selected: "#444" }),
     shared: () => null, setShared: () => {}, spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newAgent: place }), closeOverlay: () => {},
     run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
