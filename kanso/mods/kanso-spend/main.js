@@ -6,7 +6,7 @@ import { fileApi } from "./platform-files.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, R, PULSE, breathe, tokens } from "./ui.js";
+import { G, H, PULSE, breathe, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";

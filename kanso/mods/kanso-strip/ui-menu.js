@@ -54,15 +54,19 @@ const lookOf = (c, { armed, selected, disabled }) => {
 
 /** One item: `selected` is the lit one (the keyboard's, or the current choice); `armed` asks twice, in the button's words;
  * `disabled` is dim and does nothing; `checked` ends it with a check; `second` is a line under the label.
- * Without `onClick` it takes no handler. */
+ * Without `onClick` it takes no handler; `onSecondaryClick` answers a right click. `position`: [n, of] for a screen reader. */
 export function menuItem(id, { icon = null, picture = null, letter = null, tone = null, dot = null, label, second = null, hint = null, badge: count = null,
-  mark: status = null, armed = false, verb = null, selected = false, checked = false, disabled = false, onClick = null }, c) {
+  mark: status = null, armed = false, verb = null, selected = false, checked = false, disabled = false, onClick = null, onSecondaryClick = null, position = null }, c) {
   const look = lookOf(c, { armed, selected, disabled });
   const words = armed ? pressAgain(verb ?? String(label).toLowerCase()) : label;
   return withLook(Button.new(id), look).w_full().h(second ? TWO_LINES_PX : ITEM_PX).flex_none().items_center().gap(G.sm).px(G.sm).rounded(R.control)
     .accessibility_label(words)
     .disabled(disabled)
+    .selected(selected)
+    .when(Boolean(position), (el) => el.set_position(...position))
+    .when(!disabled, (el) => el.focus((s) => s.bg(c.selected)))
     .when(Boolean(onClick) && !disabled, (el) => el.on_click((_e, cx) => onClick(cx)))
+    .when(Boolean(onSecondaryClick) && !disabled, (el) => el.on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); onSecondaryClick(cx); }))
     .child(lead(c, { picture, letter, tone, dot, icon }, armed ? look.ink : c.muted))
     .child(labelOf(words, second, look.ink, c))
     .when(Boolean(count), (el) => el.child(badge(count, c)))
@@ -71,12 +75,10 @@ export function menuItem(id, { icon = null, picture = null, letter = null, tone 
     .when(checked, (el) => el.child(svg(glyphOf("check")).size(ICON_ROW).flex_none().text_color(c.muted)));
 }
 
-const itemPx = (items) => (items.some((line) => line.second) ? TWO_LINES_PX : ITEM_PX);
-
 // A `scroll` run shows `rows` items, the rest scroll inside the menu; `handle`, a ScrollHandle, lets the keyboard bring one into view.
-const run = (id, { scroll, rows = RUN_ROWS, handle = null }, c) => v_flex().id(id).flex_none().max_h(Math.min(scroll.length, rows) * itemPx(scroll)).overflow_y_scrollbar()
-  .when(Boolean(handle), (el) => el.track_scroll(handle))
-  .children(grouped(scroll).map((line, i) => entry(`${id}-${i}`, line, c)));
+const run = (id, line, c) => v_flex().id(id).flex_none().max_h(linePx(line)).overflow_y_scrollbar()
+  .when(Boolean(line.handle), (el) => el.track_scroll(line.handle))
+  .children(drawn(id, line.scroll, c));
 
 // A `field` finds in the menu: `text` is its TextField.
 const finder = (id, { field: label, text }, c) => div().p(G.xs).child(field(id, text, c, { icon: "search", spoken: label }));
@@ -96,9 +98,18 @@ const linePx = (line) => {
   if (line.field) return 2 * G.xs + H.control;
   if (line.failure) return stateBlockPx({ why: line.failure.source, fixes: line.failure.fixes });
   if (line.heading) return H.icon;
-  if (line.scroll) return Math.min(line.scroll.length, line.rows ?? RUN_ROWS) * itemPx(line.scroll);
+  if (line.scroll) return line.scroll.slice(0, line.rows ?? RUN_ROWS).reduce((sum, item) => sum + linePx(item), 0);
   return line.second ? TWO_LINES_PX : ITEM_PX;
 };
+
+// Each item knows its place among the list's items, for a screen reader.
+const placed = (lines) => {
+  const items = lines.filter((line) => "label" in line);
+  return lines.map((line) => ("label" in line ? { ...line, position: [items.indexOf(line) + 1, items.length] } : line));
+};
+function drawn(id, lines, c) {
+  return grouped(placed(lines)).map((line, i) => entry(`${id}-${i}`, line, c));
+}
 
 /** How tall a Menu with these lines draws, for a popup that opens at its size. */
 export const menuHeight = ({ title = null, items = [] }) => 2 * G.xs + (title ? H.icon : 0) + items.reduce((sum, line) => sum + linePx(line), 0);
@@ -107,7 +118,7 @@ export const menuHeight = ({ title = null, items = [] }) => 2 * G.xs + (title ? 
  * { heading, mark }, { loading: true }, { failure: { text, source, fixes } }, { field, text }, { scroll: items, rows, handle } or { separator: true }. */
 export const menuList = (id, { title = null, items = [] }, c) => v_flex().id(id).w_full().p(G.xs).bg(c.popover)
   .when(Boolean(title), (el) => el.child(menuHeading(title, c)))
-  .children(grouped(items).map((line, i) => entry(`${id}-${i}`, line, c)));
+  .children(drawn(id, items, c));
 
 /** A Menu that draws its own frame, where it hangs from a control. */
 export const menu = (id, { title = null, items = [] }, c) => menuList(id, { title, items }, c).w(W.menu).rounded(R.card).border_1().border_color(c.border).shadow_md();

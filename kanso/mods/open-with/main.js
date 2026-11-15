@@ -52,6 +52,8 @@ const EDITORS = [
 const BY_ID = Object.fromEntries(EDITORS.map((e) => [e.id, e]));
 // The editors show this many, then scroll.
 const LIST_ROWS = 13;
+// A letter tile's hue, by the editor's place in the catalog.
+const TILE_TONES = ["blue", "teal", "violet", "yellow", "green", "red"];
 
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
 const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file-text.svg", builtin: true };
@@ -166,7 +168,7 @@ export default class OpenWith extends View {
     const ok = this.canOpen(e);
     const picture = this.icons[e.id] ?? null;
     return {
-      picture, icon: picture ? null : e.icon ?? null, letter: picture || e.icon ? null : e.name[0],
+      picture, icon: picture ? null : e.icon ?? null, letter: picture || e.icon ? null : e.name[0], tone: TILE_TONES[EDITORS.indexOf(e) % TILE_TONES.length],
       label: e.name, hint: !ok ? "local only" : i < 9 ? String(i + 1) : null,
       disabled: !ok, selected: i === sel && ok, onClick: () => this.open(e),
     };

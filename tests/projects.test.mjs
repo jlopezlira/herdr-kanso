@@ -266,6 +266,8 @@ test("New conversation: nothing lit until the keyboard moves; a project chosen a
   assert.ok(projects.every((item) => !item.selected), "nothing is lit");
   keys.at(-1)({ key: "down", modifiers: {} }, { stop_propagation() {}, notify() {} });
   assert.deepEqual(scrolled, [0], "the first j lights the first row, and the run follows");
+  projects[1].onSecondaryClick({ notify() {} });
+  assert.equal(overlays.at(-1).newAgent.folder, "/work/client-b/api", "a right click on a project asks too");
   projects[0].onClick({ notify() {} });
   assert.deepEqual(calls, [], "nothing starts on its own");
   assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a project asks which agent, under the project's own name, not the label that tells the two apart");

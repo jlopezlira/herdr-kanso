@@ -66,6 +66,8 @@ function placesOf(sp, ps) {
 }
 const TREE_ROW = 32;
 const CONV_ROWS = 11; // the conversation picker's projects show this many, then scroll
+// A right click on the item does what a left one does.
+const rightToo = (line) => ({ ...line, onSecondaryClick: line.onClick });
 // An item's look without its act: a popup measured before it opens.
 const sketch = (label, _act, { keep: _keep, ...look } = {}) => ({ ...look, label });
 const RAIL_MARK = 46; // one group in the collapsed rail
@@ -443,7 +445,7 @@ export default class Spaces extends View {
     return {
       title: "New conversation in",
       items: [
-        { scroll: entries.map((e) => item(e.label ?? e.place.name ?? "~", () => start(e.place), { hint: e.hint, keep: true })), rows: CONV_ROWS, handle: this.convScroll },
+        { scroll: entries.map((e) => rightToo(item(e.label ?? e.place.name ?? "~", () => start(e.place), { hint: e.hint, keep: true }))), rows: CONV_ROWS, handle: this.convScroll },
         { separator: true },
         ...this.conversationActions().map(({ label, act, icon }) => item(label, act, { icon })),
       ],
@@ -1433,7 +1435,6 @@ export default class Spaces extends View {
     return asleepRow(a, AGENT_PAD + indent, t, row, row.wake, agentLabel(a));
   }
 
-
   // A popup's keyboard: j and k or the arrows walk menuActs, Enter runs the lit one, Escape closes.
   menuKeys(el) {
     return el.track_focus(this.handle)
@@ -1468,7 +1469,6 @@ export default class Spaces extends View {
     this.menuActs = [...this.menuActs, go];
     return { ...look, label: text, selected: at === this.menuAt, onClick: (cx) => { go(cx); cx.notify(); } };
   }
-
 
   // Opens a worktree's folder: where something already runs there it is shown; else a shell starts there.
   openTree(place, x) {

@@ -713,7 +713,7 @@ export class PullRequest {
       return {
         dot: kind === "labels" ? labelColor(x.color) ?? "dim" : null, label: name,
         second: kind === "labels" ? x.description || null : x.name && x.name !== x.login ? x.name : null,
-        checked: on, hint: this.pending === name ? "\u2026" : null, disabled: Boolean(this.pending), onClick: (cx) => this.toggle(kind, name, on, cx),
+        checked: on, hint: this.pending === name ? "\u2026" : null, onClick: (cx) => this.toggle(kind, name, on, cx),
       };
     };
     const state = !this.candidates && !this.pickerError ? PICKER_BONES

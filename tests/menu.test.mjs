@@ -5,7 +5,7 @@ import { load, gpuiHost, numberArguments, texts } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "W"], gpuiHost()),
-  ...await load("kanso-panel/ui-menu.js", ["menu"], gpuiHost()),
+  ...await load("kanso-panel/ui-menu.js", ["menu", "menuHeight"], gpuiHost()),
 });
 const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const arg = (el, name) => calls(el, name).at(-1)?.[1];
@@ -111,9 +111,21 @@ test("A heading can carry a mark; armed hides the hint; loading and failure keep
   assert.ok(texts(wake).includes("Woke"));
 });
 
-test("A popup opens at the height its Menu draws", async () => {
-  const { G, H } = await kit();
-  const { menuHeight } = await load("kanso-panel/ui-menu.js", ["menuHeight"], gpuiHost());
+test("A popup opens at the height its Menu draws; a run with one-line and two-line items is as tall as the items it shows", async () => {
+  const { G, H, menuHeight } = await kit();
   assert.equal(menuHeight({ title: "New conversation in", items: [{ scroll: [{ label: "a" }, { label: "b" }], rows: 11 }, { separator: true }, { label: "Add computer…" }] }),
     2 * G.xs + H.icon + 2 * H.control + 2 * G.xs + 1 + H.control);
+  const scroll = [{ label: "bug", second: "Something is broken" }, { label: "chore" }, { label: "docs" }, { label: "feat" }];
+  assert.equal(menuHeight({ items: [{ scroll, rows: 3 }] }), 2 * G.xs + (H.control + G.md) + 2 * H.control);
+});
+
+test("A right click on an item runs its own answer, and each item says its place to a screen reader", async () => {
+  const done = [];
+  const { el } = await menuOf([{ heading: "Projects" }, { label: "api", onSecondaryClick: () => done.push("api") }, { label: "web" }]);
+  const [, api, web] = el.kids;
+  const [, button, press] = calls(api, "on_mouse_down")[0];
+  assert.equal(button, "right");
+  press({}, { stop_propagation() {} });
+  assert.deepEqual(done, ["api"]);
+  assert.deepEqual([calls(api, "set_position")[0].slice(1), calls(web, "set_position")[0].slice(1)], [[1, 2], [2, 2]]);
 });
