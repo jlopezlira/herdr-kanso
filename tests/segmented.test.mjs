@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost } from "./helpers.mjs";
 
-const kit = () => load("kanso-panel/ui.js", ["segmented", "tab", "tokens", "mix", "WASH", "G", "H", "R", "T"], gpuiHost());
+const kit = () => load("kanso-panel/ui.js", ["segmented", "tab", "tokens", "G", "H", "R", "T"], gpuiHost());
 
 const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const one = (el, name) => {
@@ -26,8 +26,8 @@ const plain = (a) => a === null || (typeof a !== "object" && typeof a !== "funct
 const sizing = (el) => el.calls.filter((call) => !TONE.has(call[0])).map((call) => call.filter(plain));
 const box = (el) => JSON.stringify([sizing(el), el.kids.map(sizing)]);
 
-test("The track is 30 high on the 4% wash, radius 8, 2 inside; each item radius 6 with 8 inside", async () => {
-  const { segmented, tokens, mix, WASH, G, H, R } = await kit();
+test("The track is 30 high on the w4 wash, radius 8, 2 inside; each item radius 6 with 8 inside", async () => {
+  const { segmented, tokens, G, H, R } = await kit();
   for (const theme of [night, day]) {
     const c = tokens(theme);
     const el = segmented("seg", ITEMS, "day", () => {}, c);
@@ -35,7 +35,7 @@ test("The track is 30 high on the 4% wash, radius 8, 2 inside; each item radius 
     assert.equal(one(el, "p"), G.hair);
     assert.equal(one(el, "gap"), G.hair);
     assert.equal(one(el, "rounded"), R.card);
-    assert.equal(one(el, "bg"), mix(c.text, c.background, WASH.off));
+    assert.equal(one(el, "bg"), c.w4);
     assert.equal(el.kids.length, ITEMS.length);
     for (const item of el.kids) {
       assert.equal(one(item, "rounded"), R.control);

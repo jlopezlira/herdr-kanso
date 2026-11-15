@@ -68,7 +68,7 @@ export function washes(t = {}) {
 
 export const WASH = { off: 0.04, hover: 0.88, press: 0.76 };
 const CLEAR = "#00000000";
-// The 4% wash: the segmented track and a disabled control's ground.
+// The 4% wash: a disabled control's ground.
 const well = (c) => mix(c.text, c.background, WASH.off);
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
 /** The armed look: the accent fill, its hover and press washes, the accent foreground. */
@@ -298,7 +298,7 @@ export function tab(id, items, value, onChange, c, { disabled = false, spoken = 
       .when(Boolean(item.dot) && !on, (el) => el.child(collapsed ? dot.absolute().top(G.hair).right(G.hair) : dot));
   };
   return (collapsed ? v_flex() : h_flex()).id(id).gap(G.hair).flex_none()
-    .when(track, (el) => el.p(G.hair).rounded(R.card).bg(well(c)))
+    .when(track, (el) => el.p(G.hair).rounded(R.card).bg(c.w4))
     .when(track && !collapsed, (el) => el.h(side))
     .when(Boolean(spoken), (el) => el.accessibility_label(spoken))
     .children(items.map(seg));
