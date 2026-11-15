@@ -25,7 +25,6 @@ export const descriptions = {
   Dawn: 'The sky of Dawn Mode, behind the header.',
   'Sidebar header': 'The header at work: the pointer on a tool, the sort and what + opens.',
   'Window controls': 'The window’s three lights, where the system draws them.',
-  'Herdr mark': 'Herdr’s tile, at the top of the collapsed sidebar.',
   'Pane header': 'The title, digest and tools above each pane.',
   Sidebar: 'The navigation surface for projects, status and threads, open or collapsed.',
   'Session row': 'A session: its program, its name, what it is on and its mark.',

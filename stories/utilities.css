@@ -17,15 +17,6 @@
 .kanso-text--dawn-star{color:var(--dawn-star)!important}
 .kanso-fill--dawn-star{background:var(--dawn-star)}
 .kanso-ring--dawn-star{box-shadow:inset 0 0 0 1px var(--dawn-star)}
-.kanso-text--herdr-tile{color:var(--herdr-tile)!important}
-.kanso-fill--herdr-tile{background:var(--herdr-tile)}
-.kanso-ring--herdr-tile{box-shadow:inset 0 0 0 1px var(--herdr-tile)}
-.kanso-text--herdr-edge{color:var(--herdr-edge)!important}
-.kanso-fill--herdr-edge{background:var(--herdr-edge)}
-.kanso-ring--herdr-edge{box-shadow:inset 0 0 0 1px var(--herdr-edge)}
-.kanso-text--herdr-ram{color:var(--herdr-ram)!important}
-.kanso-fill--herdr-ram{background:var(--herdr-ram)}
-.kanso-ring--herdr-ram{box-shadow:inset 0 0 0 1px var(--herdr-ram)}
 .kanso-text--canvas{color:var(--canvas)!important}
 .kanso-fill--canvas{background:var(--canvas)}
 .kanso-ring--canvas{box-shadow:inset 0 0 0 1px var(--canvas)}

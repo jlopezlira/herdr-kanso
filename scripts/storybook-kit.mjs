@@ -1,7 +1,7 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
 import { asleep, computerRow, header, projectRow, section, sessionRow, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
-import { dawn as dawnSky, herdrMark, stack, windowControls } from '../stories/kit/pieces.js';
+import { dawn as dawnSky, stack, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
@@ -52,7 +52,6 @@ export function kitRecords(records) {
   const pillHeader = headers.find((html) => html.includes('kanso-badge--count'));
   const byId = (id) => originals.find((record) => record.id === id)?.html ?? '';
   add('Window controls', 'Default', windowControls(), 'The three lights, where the system draws them.');
-  add('Herdr mark', 'Default', herdrMark(), 'Herdr’s tile, where the collapsed sidebar starts.');
   add('Dawn', 'Default', dawnSky(), 'The sky of Dawn Mode; the sun rises once on load.');
   for (const [id, label, html, caption] of [
     ['kit/Header/Open', 'Expanded', header(), 'The lights; + on the left; sort, search and hide on the right.'],

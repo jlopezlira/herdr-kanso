@@ -1,5 +1,5 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { avatar, button, herdrMark, chip, chord, dawn, diffText, facts, headerSegment, input, paneName, setting, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
+import { avatar, button, chip, chord, dawn, diffText, facts, headerSegment, input, paneName, setting, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
 
 const tool = (icon, label) => button({ label, kind: 'icon', size: 'lg', icon });
 // + names what it adds in the view on show.
@@ -7,13 +7,13 @@ export const addLabels = { spaces: 'Add project', agents: 'New conversation', th
 // Sort is quieter at its default; open, its menu hangs under it.
 const sortTool = ({ sorted, menu: open }) => stack({ variant: 'toolbar sort', sorted },
   button({ label: 'Sort', kind: 'icon', size: 'lg', icon: 'lu-arrow-up-down', active: Boolean(open) }), open ? stack({ variant: 'toolbar menu' }, open) : null);
-// Collapsed, the bar contracts: Herdr's mark heads it, + and Show sidebar stay, Sort and Search fold under a caret.
+// Collapsed, the bar contracts: + and Show sidebar stay, Sort and Search fold under a caret.
 const more = (open, sort) => stack({ variant: 'toolbar group', open }, tool(open ? 'lu-chevron-up' : 'lu-chevron-down', open ? 'Fewer tools' : 'More tools'), open ? [sortTool(sort), tool('lu-search', 'Search')] : null);
 export const toolbar = ({ view = 'spaces', column = false, open = false, sorted = false, sortMenu = null } = {}) => {
   const add = tool('lu-plus', addLabels[view]);
   const sort = { sorted, menu: sortMenu };
   return column
-    ? stack({ variant: 'toolbar', column }, herdrMark(), add, tool('lu-panel-left', 'Show sidebar'), more(open, sort))
+    ? stack({ variant: 'toolbar', column }, add, tool('lu-panel-left', 'Show sidebar'), more(open, sort))
     : stack({ variant: 'toolbar' }, add, grow(), sortTool(sort), tool('lu-search', 'Search'), tool('lu-panel-left', 'Hide sidebar'));
 };
 
