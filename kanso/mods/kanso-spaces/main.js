@@ -26,8 +26,9 @@ import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN } from "./layou
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
+import { guideBars, climb } from "./guides.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, stateEmpty, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook, pendingDot } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, washes, stateEmpty, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook, pendingDot } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -59,6 +60,7 @@ const PLAIN_ROW = 32;
 const GUIDE_X = 13; // under the parent's name, just in from its first letter: 8px row padding + 5
 const ELBOW_W = 11;
 const GUIDE_OVERLAP = 4; // the line reaches up into the row above, so it never breaks
+const ROW_GAP = 1; // between the list's rows, but in Threads
 const CHILD_PAD = GUIDE_X + ELBOW_W + 6 - 8; // icon starts 6px after the elbow, inside the 8px row padding
 const rowHeight = ({ tree }) => (tree ? TREE_ROW : PLAIN_ROW);
 // Every height is known before anything is drawn, so a scan (`laidOut`) finds where each pill goes.
@@ -438,7 +440,7 @@ export default class Spaces extends View {
   plus(id, t, place, tip = "New conversation") {
     return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted)
       .tooltip(tip)
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
+      .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
@@ -1604,12 +1606,14 @@ export default class Spaces extends View {
     const keys = entries.map(colOf);
     const starts = keys.flatMap((key, i) => (i === 0 || !keys[i - 1] || key !== keys[i - 1] ? [i] : []));
     const runs = starts.map((i, k) => {
-      const rows = entries.slice(i, starts[k + 1] ?? entries.length).map((e) => {
+      const span = entries.slice(i, starts[k + 1] ?? entries.length), slab = keys[i] && span.length > 1;
+      const rows = span.map((e, j) => {
         if (e.a.asleep) return { a: e.a, h: ASLEEP_ROW, el: this.asleepLine(e.a, indent, t) };
-        const m = this.more(e, ctx);
+        // A slab's rows touch: a guide climbs no gap there.
+        const m = { ...this.more(e, ctx), gap: slab && j > 0 ? 0 : ROW_GAP };
         return { a: e.a, h: agentRowH(e.a, m), el: agentRow(e.a, indent, t, this.navRow(e.a, e.a.pane && !e.lines.length ? this.rowOf(e.a, mine, space) : null), m) };
       });
-      return { key: keys[i], rows, slab: keys[i] && rows.length > 1 };
+      return { key: keys[i], rows, slab };
     });
     // Down the rows: where each starts, 1px apart, a slab's touching, with 1px after it.
     const { y, focus, focusH } = runs.reduce((acc, run) => {
@@ -1629,6 +1633,7 @@ export default class Spaces extends View {
     return {
       label: this.nameOf(a),
       lines: e.lines,
+      first: e.first,
       time: timed(a.sub ? null : elapsed(a, this.since ?? {}, ctx.now)),
       // A message sent to it from Send and not seen yet: who it is from.
       activity: show ? (fromOf(a) ? `Message from ${fromOf(a)}` : activityOf(a)) : null,
@@ -1796,7 +1801,7 @@ export default class Spaces extends View {
       // A breath of space between projects (a worktree stays close to its checkout).
       const gap = r.tree || r === rows[0] ? [] : [item(div().h(10).flex_none(), 10)];
       // The space's row before its agents': the keyboard's path (navMark) goes in screen order.
-      const head = item(this.row(r, t, whole ? [] : entries.map((e) => e.a), whole), rowHeight(r), r.w.active ? spaceMark(rowHeight(r)) : null);
+      const head = { ...item(this.row(r, t, whole ? [] : entries.map((e) => e.a), whole), rowHeight(r), r.w.active ? spaceMark(rowHeight(r)) : null), row: true, tree: Boolean(r.tree) };
       if (whole) {
         const agents = this.asleepAgents(whole, t, ctx, indent);
         const box = agents.els.map((el) => item(el, this.asleepOpenOf(whole.id) ? ((this.foldH ?? {})[`asleep-${whole.id}`] ?? agents.h) : 0));
@@ -1813,6 +1818,8 @@ export default class Spaces extends View {
         .map((el) => item(el, open ? ((this.foldH ?? {})[r.w.id] ?? st?.h ?? 0) : 0, open && st?.focus != null ? agentMark(st.focus, st.focusH) : null));
       return [...gap, head, ...box];
     };
+    // In order, so a worktree's line climbs just to the line above it.
+    const drawAll = (list) => list.reduce((out, r) => out.concat(draw(r.tree ? { ...r, tree: { ...r.tree, reach: climb(out, ROW_GAP, GUIDE_OVERLAP) } } : r)), []);
     const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...(this.machines ?? []).map((row) => row.name), ...(this.parked ?? []).map((row) => row.name)])].filter(Boolean).toSorted();
     const loading = m => {
       const state = live.find(k => k.name === m)?.layout;
@@ -1826,9 +1833,9 @@ export default class Spaces extends View {
     const heads = shown("sidebar.computers", true, pieces(shared));
     if (!remote.length || !heads) {
       const shut = [null, ...(heads ? [] : remote)].flatMap((m) => closed(m));
-      return loading(null) && !rows.length && !shut.length ? [loadingRow(null)] : [...rows.flatMap(draw), ...shut];
+      return loading(null) && !rows.length && !shut.length ? [loadingRow(null)] : [...drawAll(rows), ...shut];
     }
-    const block = { t, collapsed, rows, draw, closed, loading, loadingRow, ctx, layouts: live };
+    const block = { t, collapsed, rows, draw: drawAll, closed, loading, loadingRow, ctx, layouts: live };
     return [null, ...remote].flatMap((m) => this.machineBlock(m, block));
   }
 
@@ -1936,12 +1943,12 @@ export default class Spaces extends View {
     // Unreachable: its projects as last read, dim, with when.
     if (phase === "unavailable" && !collapsed && mine.length) {
       const when = readWord(this.seenOn?.[m ?? ""]);
-      return [headItem, ...mine.flatMap(draw).map((it) => ({ ...it, el: it.el.opacity(0.55).when(Boolean(when), (el) => el.tooltip(when)) }))];
+      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(0.55).when(Boolean(when), (el) => el.tooltip(when)) }))];
     }
     if (phase !== "connected" || folded) return [headItem];
     const empty = stateEmpty(`machine-new-${m ?? "local"}`, "folder", noProjectsOn(this.names.title(m)), tokens(t), { label: "New project", onClick: () => run("space.new", { machine: m ?? "" }) });
     const kept = this.closedOn(m, ctx).length > 0;
-    return [headItem, ...(mine.length ? mine.flatMap(draw) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty)]), ...closed(m)];
+    return [headItem, ...(mine.length ? draw(mine) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty)]), ...closed(m)];
   }
 
   pull(place, cx) {
@@ -1951,12 +1958,10 @@ export default class Spaces extends View {
   }
 
   // The last child's line stops at the bend.
-  connector({ last }, t) {
-    const mid = TREE_ROW / 2;
-    return [
-      div().absolute().left(GUIDE_X).top(-GUIDE_OVERLAP).w(1).h(last ? mid + GUIDE_OVERLAP : TREE_ROW + GUIDE_OVERLAP).bg(t.input),
-      div().absolute().left(GUIDE_X).top(mid).w(ELBOW_W).h(1).bg(t.input),
-    ];
+  connector({ last, reach = GUIDE_OVERLAP }, t) {
+    const line = washes(t)?.w12 ?? t.border;
+    return guideBars(last ? "end" : "tee", { x: GUIDE_X, elbow: ELBOW_W, h: TREE_ROW, reach })
+      .map((b) => div().absolute().left(b.left).top(b.top).w(b.w).h(b.h).bg(line));
   }
 
   // Folded: the most urgent mark and how many, and a click there unfolds. Open, the row itself folds.
@@ -2008,7 +2013,7 @@ export default class Spaces extends View {
 
   dots(id, t, open) {
     return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted).tooltip("More")
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
+      .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); open(); })
       .child(svg("mods/kanso-chrome/icons/ellipsis.svg").size(14));
@@ -2547,7 +2552,7 @@ export default class Spaces extends View {
 
   // A pill keeps its identity per view, so a change of view places it rather than sliding it across.
   list(t, collapsed, view, items) {
-    const gap = view === "threads" ? 6 : 1;
+    const gap = view === "threads" ? 6 : ROW_GAP;
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, t.foreground + "14")] : []),

@@ -11,6 +11,7 @@ export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, bo
 export const ICON = 15;
 export const ICON_ROW = 14;
 export const SWITCH = { w: 28, h: 16, knob: 12 };
+export const WASHES = { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21 } };
 // End of the generated sizes.
 export const EASE = { duration: 180, easing: "ease-out" };
 /** A second press within this long confirms what cannot be undone. */
@@ -22,17 +23,18 @@ export const breathe = (el, policy = BREATH) => el.loop("opacity", policy);
 const ICONS = "mods/kanso-chrome/icons/";
 
 export function tokens(t = {}) {
-  const canvas = t.canvas ?? t.background;
+  const canvas = t.canvas ?? t.background, selected = t.selected ?? t.hover ?? t.raised, subtle = t.hover ?? t.raised;
   return {
     canvas, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
-    border: t.border ?? t.input, input: t.input ?? t.border, subtle: t.hover ?? t.raised, raised: t.raised ?? canvas,
-    selected: t.selected ?? t.hover ?? t.raised, popover: t.popover ?? t.surface ?? canvas,
+    border: t.border ?? t.input, input: t.input ?? t.border, subtle, raised: t.raised ?? canvas,
+    selected, popover: t.popover ?? t.surface ?? canvas,
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
     accent: t.accent ?? t.foreground, accentText: t.accent_foreground ?? t.background,
     background: t.background ?? canvas,
     blocked: t.blocked ?? t.ansi1, working: t.working ?? t.ansi3, done: t.done ?? t.ansi2,
     highlight: t.selection ?? t.selected ?? t.hover,
     red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
+    ...(washes(t) ?? { w4: subtle, w7: subtle, w12: selected, w14: selected }),
   };
 }
 
@@ -50,6 +52,18 @@ export function mix(a, b, share) {
   if (!RGB.test(a ?? "") || !RGB.test(b ?? "")) return a;
   const at = (hex, i) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
   return `#${[0, 1, 2].map((i) => Math.round(at(a, i) * share + at(b, i) * (1 - share)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const HEX = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
+// `hex` at `share` opacity: it lets the ground below show through.
+const alpha = (hex, share) => `${hex.slice(0, 7)}${Math.round(share * 255).toString(16).padStart(2, "0")}`;
+const lightness = (hex) => [0, 1, 2].reduce((sum, i) => sum + parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16), 0);
+/** The foreground washes w4, w7, w12, w14 at the light or the dark theme's shares; null without a #rrggbb foreground, so a caller keeps its opaque token. */
+export function washes(t = {}) {
+  const fg = t.foreground, bg = t.background ?? t.canvas;
+  if (!HEX.test(fg ?? "")) return null;
+  const day = HEX.test(bg ?? "") && lightness(bg) > lightness(fg);
+  return Object.fromEntries(Object.entries(day ? WASHES.light : WASHES.dark).map(([name, share]) => [name, alpha(fg, share)]));
 }
 
 export const WASH = { off: 0.04, hover: 0.88, press: 0.76 };

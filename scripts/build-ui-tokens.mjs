@@ -25,12 +25,25 @@ export function px(tokens) {
   };
 }
 
+const WASH = /^color-mix\(in srgb, var\(--fg\) ([\d.]+)%, transparent\)$/;
+
+// The foreground washes' shares per theme: w4, w7, w12, w14.
+export function washes(tokens) {
+  const share = (theme, name) => {
+    const t = tokens.colour[theme].find((x) => x.name === name), m = WASH.exec(t?.value ?? "");
+    if (!m) throw new Error(`no wash ${name} in ${theme} in ${TOKENS}`);
+    return Number(m[1]) / 100;
+  };
+  const one = (theme) => `{ ${["w4", "w7", "w12", "w14"].map((name) => `${name}: ${share(theme, name)}`).join(", ")} }`;
+  return `export const WASHES = { dark: ${one("dark")}, light: ${one("light")} };`;
+}
+
 export function block(tokens) {
   const value = px(tokens);
   const lines = Object.entries(PICK).map(([name, pick]) => typeof pick === "string"
     ? `export const ${name} = ${value(pick)};`
     : `export const ${name} = { ${Object.entries(pick).map(([key, token]) => `${key}: ${value(token)}`).join(", ")} };`);
-  return [START, ...lines, END].join("\n");
+  return [START, ...lines, washes(tokens), END].join("\n");
 }
 
 export function withTokens(text, tokens) {

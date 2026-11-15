@@ -228,7 +228,7 @@ export default class Settings extends View {
     const step = (id, by, glyph) => {
       const i = panelIds.indexOf(id), j = i + by, can = i >= 0 && j >= 0 && j < panelIds.length;
       return div().id(`order-${id}-${by}`).size(22).flex_none().rounded(4).flex().items_center().justify_center().text_size(12)
-        .text_color(can ? c.muted : c.border).when(can, (el) => el.cursor_pointer().hover((s) => s.bg(c.input).text_color(c.text))
+        .text_color(can ? c.muted : c.border).when(can, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle).text_color(c.text))
           .on_click(() => setShared("kanso.panels.order", panelIds.with(i, panelIds[j]).with(j, panelIds[i]))))
         .child(glyph);
     };
