@@ -54,6 +54,7 @@ the branch's rules.
 ### Fixed
 
 - An agent's state mark in the tab bar, the header strip and beside the sidebar's sleeping conversations is 14px, the size of every other icon in a row, instead of one pixel smaller. (#267)
+- Tab groups match their design: the chosen tab is raised on a track of the lightest text wash with no tint, another tab under the pointer takes a light wash and brightens its label, and quiet buttons use the muted text colour. (#266)
 - Secondary text, hints, field edges and idle marks are easier to read in both themes, and the light theme takes the design's final colours: every text meets 4.5:1 and every edge and mark 3:1 on each surface it sits on. (#265)
 - Hover fills, tree guide lines and the minimap's columns no longer use the edge colour, so they stay light and readable when the edge colour gets darker: buttons in the sidebar and kansō settings hover in the hover colour, the strip's tiles for panes beyond its edge and the tree guides are see-through washes of the text colour that show on any ground, and the minimap's columns not on screen use the dim text colour. (#270)
 - Ports lists the servers on every connected computer, each under its computer's name with this one first, and Open, Go to its pane and Stop act on the computer the server runs on. A computer out of reach is one line saying why, it is asked less often while it keeps failing, and this computer's list never waits for it.

@@ -1,9 +1,9 @@
-// One segmented control: its box from the tokens, selection by tone, and nothing that moves.
+// One tab group (`segmented` is its old name): its box from the tokens, selection by tone, and nothing that moves.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost } from "./helpers.mjs";
 
-const kit = () => load("kanso-panel/ui.js", ["segmented", "tokens", "mix", "WASH", "G", "H", "R", "T"], gpuiHost());
+const kit = () => load("kanso-panel/ui.js", ["segmented", "tab", "tokens", "G", "H", "R", "T"], gpuiHost());
 
 const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const one = (el, name) => {
@@ -17,8 +17,8 @@ const styled = (el, name) => {
   return style.calls;
 };
 
-const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6860", muted: "#949086", blocked: "#e06c75" };
-const day = { background: "#f4f1eb", foreground: "#3c3934", hover: "#ebe6de", selected: "#e0dbd2", accent: "#b8405e", dim: "#a19c92", muted: "#7a756c", blocked: "#c0392b" };
+const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", raised: "#252523", accent: "#da627d", dim: "#6b6860", muted: "#949086", blocked: "#e06c75" };
+const day = { background: "#f4f1eb", foreground: "#3c3934", hover: "#ebe6de", selected: "#e0dbd2", raised: "#fbf9f5", accent: "#b8405e", dim: "#a19c92", muted: "#7a756c", blocked: "#c0392b" };
 const ITEMS = [{ key: "day", label: "Today" }, { key: "month", label: "Month" }, { key: "all", label: "All time" }];
 // What sizes an item: every call but its colours and its state.
 const TONE = new Set(["bg", "text_color", "selected", "hover", "on_click", "when"]);
@@ -26,8 +26,8 @@ const plain = (a) => a === null || (typeof a !== "object" && typeof a !== "funct
 const sizing = (el) => el.calls.filter((call) => !TONE.has(call[0])).map((call) => call.filter(plain));
 const box = (el) => JSON.stringify([sizing(el), el.kids.map(sizing)]);
 
-test("The track is 30 high on the 4% wash, radius 8, 2 inside; each item radius 6 with 8 inside", async () => {
-  const { segmented, tokens, mix, WASH, G, H, R } = await kit();
+test("The track is 30 high on the w4 wash, radius 8, 2 inside; each item radius 6 with 8 inside", async () => {
+  const { segmented, tokens, G, H, R } = await kit();
   for (const theme of [night, day]) {
     const c = tokens(theme);
     const el = segmented("seg", ITEMS, "day", () => {}, c);
@@ -35,7 +35,7 @@ test("The track is 30 high on the 4% wash, radius 8, 2 inside; each item radius 
     assert.equal(one(el, "p"), G.hair);
     assert.equal(one(el, "gap"), G.hair);
     assert.equal(one(el, "rounded"), R.card);
-    assert.equal(one(el, "bg"), mix(c.text, c.background, WASH.off));
+    assert.equal(one(el, "bg"), c.w4);
     assert.equal(el.kids.length, ITEMS.length);
     for (const item of el.kids) {
       assert.equal(one(item, "rounded"), R.control);
@@ -45,22 +45,46 @@ test("The track is 30 high on the 4% wash, radius 8, 2 inside; each item radius 
   }
 });
 
-test("Selection is a tone: the chosen item is the 12% wash in the text colour, the others muted with a hover wash", async () => {
+test("Selection is a tone: on its track the chosen tab is raised in the text colour, the others muted with the w4 wash and the text colour on hover", async () => {
   const { segmented, tokens } = await kit();
   for (const theme of [night, day]) {
     const c = tokens(theme);
     const [chosen, other] = segmented("seg", ITEMS, "day", () => {}, c).kids;
-    assert.equal(one(chosen, "bg"), c.selected);
+    assert.equal(one(chosen, "bg"), theme.raised);
     assert.equal(one(chosen, "selected"), true);
-    assert.equal(calls(chosen, "hover").length, 0, "the chosen item keeps its wash");
-    assert.equal(one(chosen.kids[0], "text_color"), c.text);
+    assert.equal(calls(chosen, "hover").length, 0, "the chosen tab keeps its fill");
+    assert.equal(one(chosen, "text_color"), c.text);
     assert.equal(calls(other, "bg").length, 0, "no edge, no fill until hovered");
-    assert.deepEqual(styled(other, "hover"), [["bg", c.subtle]]);
-    assert.equal(one(other.kids[0], "text_color"), c.muted);
+    assert.deepEqual(styled(other, "hover"), [["bg", c.w4], ["text_color", c.text]]);
+    assert.equal(one(other, "text_color"), c.muted);
     for (const item of [chosen, other]) {
+      assert.equal(calls(item.kids[0], "text_color").length, 0, "the label takes the tab's ink, so hover can brighten it");
       assert.equal(calls(item, "border_1").length, 0, "no edge");
       for (const weight of ["font_medium", "font_semibold", "font_bold"]) assert.equal(calls(item.kids[0], weight).length, 0, weight);
     }
+  }
+});
+
+test("Without a track the chosen tab is the w7 wash, the group has no ground, and each tab is the size high", async () => {
+  const { tab, tokens, H } = await kit();
+  const c = tokens(night);
+  const el = tab("t", ITEMS, "day", () => {}, c, { track: false, size: "sm" });
+  for (const name of ["bg", "p", "h", "rounded"]) assert.equal(calls(el, name).length, 0, name);
+  assert.equal(one(el.kids[0], "bg"), c.w7);
+  for (const item of el.kids) {
+    assert.equal(one(item, "h"), H.compact);
+    assert.equal(calls(item, "flex_1").length, 0, "tabs size to their label");
+  }
+});
+
+test("Sizes: sm 24, md 26 and lg 30, the default, are the track's thickness, and segmented is the same component", async () => {
+  const { tab, segmented, tokens, G, H } = await kit();
+  const c = tokens(day);
+  assert.equal(segmented, tab);
+  for (const [size, side] of [["sm", H.compact], ["md", H.icon], ["lg", H.control], [undefined, H.control]]) {
+    const el = tab("t", ITEMS, "day", () => {}, c, { size });
+    assert.equal(one(el, "h"), side);
+    for (const item of el.kids) assert.equal(one(item, "h"), side - 2 * G.hair);
   }
 });
 
@@ -104,7 +128,7 @@ test("Off: dim text, no hover, no pointer, no press", async () => {
   for (const item of segmented("seg", ITEMS, "day", () => assert.fail("pressed"), c, { disabled: true }).kids) {
     assert.equal(one(item, "disabled"), true);
     for (const name of ["hover", "on_click", "cursor_pointer"]) assert.equal(calls(item, name).length, 0, name);
-    assert.equal(one(item.kids[0], "text_color"), c.dim);
+    assert.equal(one(item, "text_color"), c.dim);
   }
 });
 

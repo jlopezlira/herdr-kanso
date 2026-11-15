@@ -68,7 +68,7 @@ export function washes(t = {}) {
 
 export const WASH = { off: 0.04, hover: 0.88, press: 0.76 };
 const CLEAR = "#00000000";
-// The 4% wash: the segmented track and a disabled control's ground.
+// The 4% wash: a disabled control's ground.
 const well = (c) => mix(c.text, c.background, WASH.off);
 const filled = (fill, ink, c) => ({ fill, ink, hover: mix(fill, c.background, WASH.hover), press: mix(fill, c.background, WASH.press) });
 /** The armed look: the accent fill, its hover and press washes, the accent foreground. */
@@ -76,7 +76,7 @@ export const armedLook = (c) => filled(c.accent, c.accentText, c);
 const LOOKS = {
   solid: (c) => filled(c.primary, c.primaryText, c),
   tonal: (c) => ({ fill: c.subtle, ink: c.text, hover: c.selected, press: c.selected }),
-  quiet: (c) => ({ fill: null, ink: c.text, hover: c.subtle, press: c.selected }),
+  quiet: (c) => ({ fill: null, ink: c.muted, hover: c.subtle, press: c.selected }),
   icon: (c) => ({ fill: null, ink: c.muted, hover: c.subtle, press: c.selected }),
 };
 
@@ -271,31 +271,38 @@ export function field(id, text, c, { label = null, icon = null, onIcon = null, i
     : ring;
 }
 
-/** One segmented control: selection is a tone, never a weight, so nothing moves. Items: { key, label, icon, dot, tip }; `dot` marks one
- * while unselected. Collapsed: a column of icons, each label its tip. */
-export function segmented(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false } = {}) {
+/** One tab group: the chosen tab is a quiet fill (raised on a track), never a weight, so nothing moves. Items: { key, label, icon, dot, tip };
+ * `dot` marks one while unselected. `size`: sm 24, md 26, lg 30, the track's thickness, or each tab's without one. Collapsed: a column of icons, each label its tip. */
+const TAB = { sm: H.compact, md: H.icon, lg: H.control };
+export function tab(id, items, value, onChange, c, { disabled = false, spoken = null, collapsed = false, track = true, size = "lg" } = {}) {
+  const side = TAB[size] ?? TAB.lg, inner = track ? side - 2 * G.hair : side;
   const seg = (item, index) => {
     const on = value === item.key;
     const ink = disabled ? c.dim : on ? c.text : c.muted;
     const dot = div().size(G.sm).flex_none().rounded_full().bg(c.blocked);
     return Button.new(`${id}-${item.key}`).items_center().justify_center().gap(G.xs).rounded(R.control)
       .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
-      .when(collapsed, (el) => el.relative().size(H.icon).flex_none().tooltip(item.label))
-      .when(!collapsed, (el) => el.flex_1().h_full().px(G.sm - G.hair).when(Boolean(item.tip), (b) => b.tooltip(item.tip)))
+      .text_color(ink)
+      .when(collapsed, (el) => el.relative().size(inner).flex_none().tooltip(item.label))
+      .when(!collapsed, (el) => el.h(inner).px(G.sm - G.hair).when(track, (b) => b.flex_1()).when(Boolean(item.tip), (b) => b.tooltip(item.tip)))
       .selected(on)
       .disabled(disabled)
       .set_position(index + 1, items.length)
       .accessibility_label(item.label)
-      .when(on, (el) => el.bg(c.selected))
-      .when(!disabled, (el) => el.cursor_pointer().when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
+      .when(on, (el) => el.bg(track ? c.raised : c.w7))
+      .when(!disabled, (el) => el.cursor_pointer().when(!on, (el) => el.hover((s) => s.bg(c.w4).text_color(c.text)))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { if (!on) onChange(item.key, cx); }))
       .when(Boolean(item.icon), (el) => el.child(svg(`${ICONS}${item.icon}.svg`).size(ICON_ROW).flex_none().text_color(ink)))
-      .when(!collapsed, (el) => el.child(div().whitespace_nowrap().text_size(T.value).text_color(ink).child(item.label)))
+      .when(!collapsed, (el) => el.child(div().whitespace_nowrap().text_size(T.value).child(item.label)))
       .when(Boolean(item.dot) && !on, (el) => el.child(collapsed ? dot.absolute().top(G.hair).right(G.hair) : dot));
   };
-  return (collapsed ? v_flex() : h_flex()).id(id).p(G.hair).gap(G.hair).flex_none().rounded(R.card).bg(well(c))
-    .when(!collapsed, (el) => el.h(H.control))
+  return (collapsed ? v_flex() : h_flex()).id(id).gap(G.hair).flex_none()
+    .when(track, (el) => el.p(G.hair).rounded(R.card).bg(c.w4))
+    .when(track && !collapsed, (el) => el.h(side))
     .when(Boolean(spoken), (el) => el.accessibility_label(spoken))
     .children(items.map(seg));
 }
+
+/** Today's name for `tab`. */
+export const segmented = tab;

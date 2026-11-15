@@ -50,7 +50,7 @@ test("Every kind is one box from the tokens: 30 high, 12 inside, radius 6, and t
   assert.equal(calls(icon, "px").length, 0);
 });
 
-test("Solid, tonal and quiet wash from the theme, and press with the selected wash", async () => {
+test("Solid, tonal and quiet wash from the theme, press with the selected wash, and a quiet label is muted", async () => {
   const { button, tokens, mix, WASH } = await kit();
   for (const theme of [night, day]) {
     const c = tokens(theme);
@@ -70,7 +70,7 @@ test("Solid, tonal and quiet wash from the theme, and press with the selected wa
     assert.equal(calls(quiet, "bg").length, 0, "quiet is text only");
     assert.deepEqual(styled(quiet, "hover"), [["bg", theme.hover]]);
     assert.deepEqual(styled(quiet, "active"), [["bg", theme.selected]]);
-    assert.equal(one(quiet.kids.at(-1), "text_color"), c.text);
+    assert.equal(one(quiet.kids.at(-1), "text_color"), c.muted);
   }
 });
 
