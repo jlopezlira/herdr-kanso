@@ -211,3 +211,6 @@ export const gpuiHost = () => ({
   Input: { new: () => chain() },
   Toggle: { new: (id) => { const el = chain(id); el.calls.push(["new", id]); return el; } },
 });
+
+// Every call in a kit file that takes a bare number other than 0, as the token lint counts them: a piece reads its sizes from the tokens instead.
+export const numberArguments = (file) => [...readFileSync(new URL(`../kanso/mods/${file}`, import.meta.url), "utf8").matchAll(/\.\w+\([^()]*?(?<![\w.])-?(?:0\.\d|[1-9])[\d.]*\s*[,)]/g)].map((m) => m[0]);

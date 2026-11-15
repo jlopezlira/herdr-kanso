@@ -9,11 +9,12 @@ import { fileApi } from "./platform-files.js";
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home } from "herdr";
-import { stateMark, programIcon } from "./marks.js";
+import { programIcon } from "./marks.js";
 import { walkLayout, commitLayout, sidebarBack, foldSidebar } from "./layout.js";
 import { Updater } from "./update.js";
 import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { tokens } from "./ui.js";
+import { mark } from "./ui-mark.js";
 import { iconButton } from "./ui-button.js";
 import { Kdb, projectKey } from "./kdb.js";
 import { projectOpen, OPEN } from "./panel-state.js";
@@ -352,7 +353,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }))
         .when(Boolean(program?.icon), el => el.child(programIcon(program, 15, t.muted).opacity(c.active ? 1 : 0.8)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(["working", "blocked", "done"].includes(c.status), el => el.child(stateMark(t, c.status)))
+        .when(["working", "blocked", "done"].includes(c.status), el => el.child(mark(tokens(t), { status: c.status })))
         .when(c.active && openTabs.length > 1, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).hover(s => s.text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/kanso-chrome/icons/close.svg").size(13))));
     };
     const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");

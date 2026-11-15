@@ -122,7 +122,7 @@ function bar() {
     shared: (key) => state.shared[key], run: (command) => { runs.push(command); },
     appHome: () => "/Users/person/Library/Application Support/herdr",
     readTextFile: async (path) => { state.reads.push(path); return state.file; },
-    stateMark: (t, status, size) => { marks.push([status, size, t.blocked]); return node().child(status === "blocked" ? "!" : ""); },
+    mark: (c, { status, size = "md" }) => { marks.push([status, size, c.blocked]); return node().child(status === "blocked" ? "!" : ""); },
   };
   return { texts, colors, handlers, tips, runs, marks, state, host };
 }
@@ -161,7 +161,7 @@ test("The right side names who waits, then low memory, then the working count an
   assert.ok(ui.colors.includes("muted"));
   assert.ok(ui.colors.includes("dim"));
   assert.ok(ui.colors.includes("blocked"));
-  assert.deepEqual(ui.marks[0], ["blocked", 12, "blocked"]);
+  assert.deepEqual(ui.marks[0], ["blocked", "sm", "blocked"]);
   assert.equal(ui.tips.get("needs-you"), "Fury · kanso · Which approach?\nRey · site · Ship the site");
   assert.equal(ui.tips.get("status-memory"), "Memory 8% free");
   assert.equal(ui.tips.get("palette"), "Command palette");
@@ -221,7 +221,7 @@ test("The left side names this computer, and an unreachable one is a failure lin
   assert.ok(ui.texts.includes("Can't reach devbox"));
   assert.ok(ui.texts.includes("Refresh"));
   assert.ok(ui.texts.includes("feat/status-attention"));
-  assert.deepEqual(ui.marks.at(-1), ["blocked", 14, "blocked"]);
+  assert.deepEqual(ui.marks.at(-1), ["blocked", "md", "blocked"]);
   assert.equal(ui.colors.includes("blocked"), false, "the blocked colour stays on the mark");
   assert.equal(ui.tips.get("status-computer"), "Can't reach devbox");
   ui.handlers.get("status-computer-fix")();

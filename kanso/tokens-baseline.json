@@ -656,7 +656,6 @@
   {"file":"kanso/mods/kanso-toast/main.js","line":".px(18)","value":18},
   {"file":"kanso/mods/kanso-toast/main.js","line":".child(p.icon ? image(p.icon).w(18).h(18).flex_none()","value":18},
   {"file":"kanso/mods/kanso-toast/main.js","line":".child(p.icon ? image(p.icon).w(18).h(18).flex_none()","value":18},
-  {"file":"kanso/mods/kanso-toast/main.js","line":": p.level === \"error\" ? stateMark(t, \"blocked\", 14) : div().size(8).rounded(4).flex_none().bg(t[DOT[p.level] ?? \"accent\"]))","value":8},
   {"file":"kanso/mods/kanso-toast/main.js","line":".child(div().truncate().font_semibold().text_size(13).text_color(t.foreground).child(p.title ?? \"\"))","value":13},
   {"file":"kanso/mods/kanso-toast/main.js","line":".when(Boolean(p.body), (el) => el.child(div().truncate().text_size(12).text_color(t.muted).child(p.body ?? \"\"))),","value":12},
   {"file":"kanso/mods/open-with/main.js","line":"if (e.builtin) return div().size(18).flex_none().rounded(6).bg(t.accent + \"33\").flex().items_center().justify_center().child(svg(e.icon).size(13).text_color(t.foreground));","value":18},

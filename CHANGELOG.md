@@ -54,6 +54,7 @@ the branch's rules.
 
 ### Fixed
 
+- In the collapsed sidebar, a group's state mark and the marks in its menu are drawn at the kit's small and row sizes, 12px and 14px, instead of one pixel smaller. (#277)
 - An agent's state mark in the tab bar, the header strip and beside the sidebar's sleeping conversations is 14px, the size of every other icon in a row, instead of one pixel smaller. (#267)
 - Tab groups match their design: the chosen tab is raised on a track of the lightest text wash with no tint, another tab under the pointer takes a light wash and brightens its label, and quiet buttons use the muted text colour. (#266)
 - Secondary text, hints, field edges and idle marks are easier to read in both themes, and the light theme takes the design's final colours: every text meets 4.5:1 and every edge and mark 3:1 on each surface it sits on. (#265)

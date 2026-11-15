@@ -277,7 +277,7 @@ test("The status bar reads the sidebar queue rather than counting a different se
   const { WorkspaceStatus } = await load("kanso-status/main.js", ["WorkspaceStatus"], { ...ui.host,
     theme: () => ({}), spaces: () => [], agents: () => [], terminals: () => [], props: () => ({ side: "right" }),
     window: () => ({ platform: "windows" }), shared: (key) => key === NEEDS_YOU ? { rows } : [],
-    stateMark: () => null,
+    mark: () => null,
   });
   new WorkspaceStatus().render();
   assert.ok(ui.texts.includes("a"));

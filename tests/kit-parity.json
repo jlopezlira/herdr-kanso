@@ -1,8 +1,6 @@
 {
   "missing": [
-    "avatar",
     "card",
-    "chip",
     "code",
     "dawn",
     "dialog",
@@ -19,14 +17,12 @@
   ],
   "renamed": {
     "input": "field",
-    "mark": "stateMark",
     "tabs": "tab",
     "toggle": "toggleSwitch"
   },
   "props": {
     "button": { "storybook": ["label", "size"], "app": ["color", "small", "spoken"] },
     "input": { "storybook": ["inline", "limit", "loading", "multiline", "selected", "text"], "app": ["iconTip", "onIcon", "spoken"] },
-    "mark": { "storybook": ["size", "status"], "app": ["idle"] },
     "tabs": { "storybook": ["icon", "items", "label", "value"], "app": ["collapsed", "spoken"] },
     "toggle": { "storybook": ["checked"] }
   }

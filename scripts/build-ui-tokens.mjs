@@ -8,22 +8,28 @@ export const END = "// End of the generated sizes.";
 
 const PICK = {
   G: { hair: "k-sp-hair", xs: "k-sp-1", sm: "k-sp-2", md: "k-sp-3", lg: "k-sp-4", xl: "k-sp-6" },
-  H: { control: "k-h-control", compact: "k-h-compact", icon: "k-h-icon", row: "k-h-header" },
+  H: { control: "k-h-control", compact: "k-h-compact", icon: "k-h-icon", row: "k-h-header", line: "k-h-row", badge: "k-h-badge" },
   R: { control: "k-r-control", card: "k-r-card" },
   T: { display: "k-fs-display", page: "k-fs-title", title: "k-fs-section", card: "k-fs-name", value: "k-fs-body", body: "k-fs-meta", mono: "k-fs-mono" },
   ICON: "k-ic-control",
   ICON_ROW: "k-ic-row",
+  ICON_INLINE: "k-ic-inline",
   SWITCH: { w: "k-sw-w", h: "k-sw-h", knob: "k-sw-knob" },
 };
+// Durations in milliseconds.
+const TIMING = { SPIN: "k-spin-ms" };
 
-export function px(tokens) {
+const reader = (unit) => (tokens) => {
   const all = Object.entries(tokens).filter(([group]) => group !== "colour").flatMap(([, list]) => list);
+  const shape = new RegExp(`^-?[\\d.]+${unit}$`);
   return (name) => {
     const t = all.find((x) => x.name === name);
-    if (!t || !/^-?[\d.]+px$/.test(t.value)) throw new Error(`no px token ${name} in ${TOKENS}`);
+    if (!t || !shape.test(t.value)) throw new Error(`no ${unit} token ${name} in ${TOKENS}`);
     return Number.parseFloat(t.value);
   };
-}
+};
+export const px = reader("px");
+const ms = reader("ms");
 
 const WASH = /^color-mix\(in srgb, var\(--fg\) ([\d.]+)%, transparent\)$/;
 
@@ -43,7 +49,9 @@ export function block(tokens) {
   const lines = Object.entries(PICK).map(([name, pick]) => typeof pick === "string"
     ? `export const ${name} = ${value(pick)};`
     : `export const ${name} = { ${Object.entries(pick).map(([key, token]) => `${key}: ${value(token)}`).join(", ")} };`);
-  return [START, ...lines, washes(tokens), END].join("\n");
+  const duration = ms(tokens);
+  const timings = Object.entries(TIMING).map(([name, token]) => `export const ${name} = ${duration(token)};`);
+  return [START, ...lines, ...timings, washes(tokens), END].join("\n");
 }
 
 export function withTokens(text, tokens) {

@@ -18,7 +18,7 @@ import { Kdb, restDue, machinesToAsk, kansoDir } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
-import { stateMark, glyphs } from "./marks.js";
+import { glyphs } from "./marks.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
@@ -34,6 +34,7 @@ import { field, TextField } from "./ui-field.js";
 import { skeleton } from "./ui-skeleton.js";
 import { stateEmpty, pendingDot } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
+import { mark } from "./ui-mark.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -1330,10 +1331,10 @@ export default class Spaces extends View {
     if (cx?.timer) this.toggleFold(`asleep-${id}`, !open, cx);
   }
 
-  asleepTail(t, group, { mark = true, count = true } = {}) {
+  asleepTail(t, group, { mark: marked = true, count = true } = {}) {
     if (!group) return [];
     return [
-      ...(mark ? [stateMark(t, "asleep")] : []),
+      ...(marked ? [mark(tokens(t), { status: "asleep" })] : []),
       ...(count ? [div().id(`asleep-n-${group.id}`).flex_none().text_size(11).text_color(t.dim).child(String(group.rows.length))] : []),
     ].filter(Boolean);
   }
@@ -1931,7 +1932,7 @@ export default class Spaces extends View {
         .when(pending, (row) => row.child(pendingDot(`machine-pending-${key}`, tokens(t))))
         .when(tools.length > 0, (row) => tools.reduce((el, tool) => el.child(tool), row))
         .when(connected && folded && Boolean(tail), (row) => row.child(h_flex().id(`machine-count-${key}`).flex_none().gap(4).items_center().text_size(T.body).text_color(t.dim)
-          .when(Boolean(tail?.mark), (el) => el.child(stateMark(t, tail.mark, 12)))
+          .when(Boolean(tail?.mark), (el) => el.child(mark(tokens(t), { status: tail.mark, size: "sm" })))
           .child(div().child(String(tail?.count ?? 0))))));
   }
 
@@ -2216,7 +2217,7 @@ export default class Spaces extends View {
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); (menu ?? list)(); })
         .child(lead)
         .when(rows.length > 0, (el) => el.child(h_flex().h(12).gap(3).items_center().text_size(10.5).text_color(top === "blocked" ? t.blocked : ink)
-          .when(Boolean(shown), (el2) => el2.child(stateMark(t, shown, 11)))
+          .when(Boolean(shown), (el2) => el2.child(mark(tokens(t), { status: shown, size: "sm" })))
           .child(div().child(String(rows.length))))));
   }
 
@@ -2254,7 +2255,7 @@ export default class Spaces extends View {
     this.menuScroll = this.convScroll ? { handle: this.convScroll, count: m.rows.length } : null;
     const key = (r) => `rail-${r.address}`;
     const byKey = (k) => m.rows.find((r) => key(r) === k) ?? null;
-    const row = (r, at) => this.menuRow(t, key(r), r.name, at, null, { lead: r.status ? stateMark(t, r.status, 13, { idle: true }) : null, hint: r.hint, badge: r.badge, ink: r.status === "asleep" ? t.muted : t.foreground });
+    const row = (r, at) => this.menuRow(t, key(r), r.name, at, null, { lead: mark(tokens(t), { status: r.status }), hint: r.hint, badge: r.badge, ink: r.status === "asleep" ? t.muted : t.foreground });
     return this.menuFrame(t)
       .child(this.menuTitle(t, m.title))
       .child(v_flex().relative().flex_none().h(Math.min(m.rows.length, RAIL_MENU_ROWS) * MENU_ROW)
@@ -2359,7 +2360,7 @@ export default class Spaces extends View {
       };
       const p = s.project ? project(s.project) : null;
       // A project's name alone heads its conversations: the structure tells the group.
-      const mark = whole ? stateMark(t, "asleep") : null;
+      const asleepMark = whole ? mark(tokens(t), { status: "asleep" }) : null;
       // Alone, the active list is the inbox itself: no header. Asleep rows park at the end, one project each.
       if (s.id === "active" && sections.length === 1) {
         const live = s.rows.filter((r) => !r.a.asleep);
@@ -2376,7 +2377,7 @@ export default class Spaces extends View {
       const onHover = w ? (h, cx) => { if (h ? this.hoverHead !== s.id : this.hoverHead === s.id) { this.hoverHead = h ? s.id : null; cx.notify(); } } : null;
       const lift = i ? G.lg : 0;
       const headName = p ? p.name : whole ? whole.rows[0].a.asleep.spaceName : (s.label ?? "Active");
-      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, mark, headName, sectionCount(open, s.rows.length), t.foreground, { extra, lift, onHover }), 32 + lift)];
+      const head = [item(this.sectionHead(t, `thread-${s.id}`, i, open, toggle, asleepMark, headName, sectionCount(open, s.rows.length), t.foreground, { extra, lift, onHover }), 32 + lift)];
       const body = whole ? s.rows : split.live;
       const show = this.unfolded(foldId, open, ctx.now);
       const laid = show ? body.map((r) => row(r, Boolean(s.project))) : [];

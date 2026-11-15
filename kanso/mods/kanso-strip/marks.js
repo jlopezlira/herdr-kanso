@@ -4,10 +4,6 @@
 export const onBattery = () => shared("kanso.battery") === true;
 import { div, svg, image } from "gpui-kit";
 import { terminals, window, shared } from "herdr";
-import { ICON_ROW } from "./ui.js";
-
-const ICONS = "mods/kanso-chrome/icons/";
-const TURN = 900;
 
 export function keycap(t, text, faint = false) {
   return div().flex_none().h(16).px(5).rounded(4).bg(t.foreground + (faint ? "0c" : "14")).flex().items_center().justify_center()
@@ -42,17 +38,6 @@ export function chordRun(chords, platform) {
     const continued = i > 0 && held === runs[i - 1].held;
     return `${continued ? " " : i ? ", " : ""}${shownChord(continued ? key : chord, platform)}`;
   }).join("");
-}
-
-export function stateMark(t, status, size = ICON_ROW, { idle = false } = {}) {
-  const enso = (name, color) => svg(`${ICONS}${name}.svg`).size(size).flex_none().text_color(color);
-  if (status === "working") return enso("working", t.working).spin(TURN);
-  if (status === "blocked") return div().size(size).flex_none().rounded_full().bg(t.blocked)
-    .text_size(Math.round(size * 0.68)).font_bold().text_color(t.chrome).flex().items_center().justify_center().child("!");
-  if (status === "done") return enso("enso", t.done);
-  if (status === "idle" && idle) return enso("enso-idle", t.idle ?? t.dim).opacity(0.7);
-  if (status === "asleep") return enso("moon", t.muted);
-  return null;
 }
 
 export function programIcon(prog, size, color) {

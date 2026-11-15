@@ -4,11 +4,12 @@ import { paths } from "./platform-paths.js";
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { run, openOverlay } from "herdr";
-import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
+import { programIcon, NAME_LABEL, onBattery } from "./marks.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { activityTone, foldTail, timePlace } from "./sidebar-rows.js";
-import { washes } from "./ui.js";
+import { tokens, washes } from "./ui.js";
+import { mark, MARK_SIZES } from "./ui-mark.js";
 import { guideBars, reachOf } from "./guides.js";
 
 export { NAME_LABEL };
@@ -304,9 +305,8 @@ export function snoozePresets(now) {
 }
 
 // With no status, a blank of the same width so the rows line up.
-const ENSO = 15;
 export function statusMark(t, status) {
-  return stateMark(t, status, ENSO, { idle: true }) ?? div().size(ENSO).flex_none();
+  return mark(tokens(t), { status, size: "lg" }) ?? div().size(MARK_SIZES.lg).flex_none();
 }
 
 // Herdr's agents() lists only programs that report a status; this adds every other terminal.
@@ -330,7 +330,7 @@ export function agentFold(id, mine, open, onToggle, t) {
     // The row selects on mouse up and drags on mouse down: keep both to the toggle.
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
-    .when(Boolean(tail.mark), (el) => el.child(stateMark(t, tail.mark, 12)))
+    .when(Boolean(tail.mark), (el) => el.child(mark(tokens(t), { status: tail.mark, size: "sm" })))
     .child(div().child(String(tail.count)));
 }
 

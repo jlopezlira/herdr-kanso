@@ -5,8 +5,8 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, terminals, machines, theme, run, window, props, shared, appHome, readTextFile } from "herdr";
-import { stateMark } from "./marks.js";
-import { tokens, ICON_ROW } from "./ui.js";
+import { tokens } from "./ui.js";
+import { mark } from "./ui-mark.js";
 import { stateLine } from "./ui-state.js";
 import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
@@ -39,7 +39,7 @@ export default class WorkspaceStatus extends View {
   }
 
   render() {
-    const t = theme();
+    const t = theme(), c = tokens(t);
     // Two copies share the row (the strip's minimap sits between): side says which half this one draws.
     const side = props()?.side;
     const left = side !== "right", right = side !== "left";
@@ -70,20 +70,20 @@ export default class WorkspaceStatus extends View {
     return h_flex().size_full().px(12).gap(18).items_center().text_size(11.5).text_color(t.muted)
       .when(right && !left, (el) => el.justify_end())
       .when(left && shown("status.computer", true, map), (el) => el.child(computer.fix
-        ? stateLine("status-computer", stateMark(t, "blocked", ICON_ROW), computer.words, tokens(t), { label: computer.fix, onClick: () => run(computer.command) })
+        ? stateLine("status-computer", mark(c, { status: "blocked" }), computer.words, c, { label: computer.fix, onClick: () => run(computer.command) })
           .text_color(t[computer.tone]).tooltip(computer.tooltip)
         : chip(computer.icon, computer.words))
         .when(Boolean(space?.branch), (row) => row.child(chip("branch", space.branch))))
       .when(left && right, (el) => el.child(div().flex_1()))
       .when(right && needs, (el) => el.child(act(h_flex().gap(6).items_center().min_w(0), "needs-you", needs.tooltip, needs.command)
-        .child(stateMark(t, needs.mark, 12))
+        .child(mark(c, { status: needs.mark, size: "sm" }))
         .child(div().flex_none().font_medium().text_color(t[needs.nameTone]).child(needs.name))
         .when(needs.question, (row) => row.child(div().max_w(needs.questionWidth).min_w(0).truncate().text_color(t[needs.questionTone]).child(needs.question)))
         .when(needs.more, (row) => row.child(div().flex_none().text_color(t[needs.moreTone]).child(needs.more)))))
       .when(right && low, (el) => el.child(act(h_flex().gap(6).items_center().text_color(t[low.tone]), "status-memory", low.tooltip, low.command)
         .child(low.words)))
       .when(right && shown("status.agents", true, map), (el) => el.child(h_flex().gap(6).items_center()
-        .child(stateMark(t, working > 0 ? "working" : "idle", 12, { idle: true }))
+        .child(mark(c, { status: working > 0 ? "working" : "idle", size: "sm" }))
         .child(agentsText)))
       .when(right && shown("status.palette", true, map), (el) => el.child(act(div().px(6).py(2).rounded(6), "palette", "Command palette", "app.palette")
         .child(mac ? "⌘⇧P" : "Ctrl+Shift+P")));

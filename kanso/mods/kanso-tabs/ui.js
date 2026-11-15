@@ -3,12 +3,14 @@
 
 // Sizes generated from kanso/tokens.json by npm run build:ui-tokens.
 export const G = { hair: 2, xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
-export const H = { control: 30, compact: 24, icon: 26, row: 40 };
+export const H = { control: 30, compact: 24, icon: 26, row: 40, line: 32, badge: 20 };
 export const R = { control: 6, card: 8 };
 export const T = { display: 48, page: 20, title: 15, card: 13.5, value: 12.5, body: 11.5, mono: 11.5 };
 export const ICON = 15;
 export const ICON_ROW = 14;
+export const ICON_INLINE = 12;
 export const SWITCH = { w: 28, h: 16, knob: 12 };
+export const SPIN = 900;
 export const WASHES = { dark: { w4: 0.04, w7: 0.07, w12: 0.12, w14: 0.14 }, light: { w4: 0.05, w7: 0.095, w12: 0.18, w14: 0.21 } };
 // End of the generated sizes.
 export const EASE = { duration: 180, easing: "ease-out" };
@@ -24,6 +26,7 @@ export const glyphOf = (icon) => (icon.includes("/") ? icon : `${ICONS}${icon}.s
 
 export function tokens(t = {}) {
   const canvas = t.canvas ?? t.background, selected = t.selected ?? t.hover ?? t.raised, subtle = t.hover ?? t.raised;
+  const blue = t.blue ?? t.ansi4, done = t.done ?? t.ansi2;
   return {
     canvas, text: t.foreground, muted: t.muted ?? t.dim, dim: t.dim,
     border: t.border ?? t.input, input: t.input ?? t.border, subtle, raised: t.raised ?? canvas,
@@ -31,9 +34,11 @@ export function tokens(t = {}) {
     primary: t.solid ?? t.foreground, primaryText: t.solid_foreground ?? t.background,
     accent: t.accent ?? t.foreground, accentText: t.accent_foreground ?? t.background,
     background: t.background ?? canvas,
-    blocked: t.blocked ?? t.ansi1, working: t.working ?? t.ansi3, done: t.done ?? t.ansi2,
+    blocked: t.blocked ?? t.ansi1, working: t.working ?? t.ansi3, done, idle: t.idle ?? t.dim, chrome: t.chrome,
     highlight: t.selection ?? t.selected ?? t.hover,
-    red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5,
+    red: t.ansi1, green: t.ansi2, yellow: t.ansi3, violet: t.ansi5, blue,
+    // A host's teal: blue and done, half each.
+    teal: mix(blue, done, 0.5),
     ...(washes(t) ?? { w4: subtle, w7: subtle, w12: selected, w14: selected }),
   };
 }
@@ -43,6 +48,7 @@ const TONE = {
   yellow: "working", working: "working",
   green: "done", done: "done",
   violet: "violet", dim: "dim", muted: "muted",
+  blue: "blue", teal: "teal",
 };
 export const toneColor = (c, tone) => c[TONE[tone] ?? "dim"];
 

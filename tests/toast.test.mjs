@@ -112,14 +112,14 @@ test("A failed toast leads with the blocked mark, and the others keep their dot"
   const { Toast } = await load("kanso-toast/main.js", ["Toast"], {
     div: node, image: node, h_flex: node, v_flex: node, run: () => {}, shared: () => undefined, setShared: () => {}, closeOverlay: () => {},
     theme: () => ({ blocked: "blocked", done: "done", popover: "popover", hover: "hover" }), props: () => current.props,
-    stateMark: (_t, status, size) => { marks.push([status, size]); return node(); },
+    mark: (_c, { status, size = "md" }) => { marks.push([status, size]); return node(); },
   });
   current.props = { overlay: "o1", level: "error", title: "Can't reach dark" };
   new Toast().render();
-  assert.deepEqual(marks, [["blocked", 14]]);
+  assert.deepEqual(marks, [["blocked", "md"]]);
   current.props = { overlay: "o2", level: "success", title: "Merged" };
   dots.length = 0;
   new Toast().render();
-  assert.deepEqual(marks, [["blocked", 14]]);
+  assert.deepEqual(marks, [["blocked", "md"]]);
   assert.ok(dots.includes("done"));
 });

@@ -3,7 +3,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { G, R, T, toneColor } from "./ui.js";
 import { monoFont } from "./lib.js";
-import { stateMark } from "./marks.js";
+import { mark } from "./ui-mark.js";
 
 export const VIEW = { title: 17, titleMax: 44, dot: 8, stale: 0.55, meta: 12 };
 
@@ -44,7 +44,7 @@ function commentCard(c, body) {
     .when(Boolean(body.text), (el) => el.child(div().w_full().text_size(T.card).line_height(1.45).text_color(c.text).child(body.text))));
 }
 
-const runningMark = (c) => stateMark(c, "working", VIEW.meta);
+const runningMark = (c) => mark(c, { status: "working", size: "sm" });
 
 function runningCard(c, body) {
   return shell(c, v_flex().w_full().gap(G.sm).children((body.rows ?? []).map((row) => h_flex().w_full().items_center().gap(G.sm)
