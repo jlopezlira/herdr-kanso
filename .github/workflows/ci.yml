@@ -41,6 +41,8 @@ jobs:
       - name: Shared files
         run: npm run sync:share -- --check
       - name: Repeated code
+        env:
+          KANSO_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
         run: npm run check:dupes
       - name: sqlite3 on Linux
         if: runner.os == 'Linux'

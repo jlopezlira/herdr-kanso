@@ -1,4 +1,144 @@
 {
+ "b0c797eab324": {
+  ".github/ISSUE_TEMPLATE/bug_report.yml": 1,
+  ".github/ISSUE_TEMPLATE/work_item.yml": 1
+ },
+ "511eb70172d8": {
+  ".github/ISSUE_TEMPLATE/bug_report.yml": 1,
+  ".github/ISSUE_TEMPLATE/work_item.yml": 1
+ },
+ "09d9462368ca": {
+  ".github/ISSUE_TEMPLATE/bug_report.yml": 1,
+  ".github/ISSUE_TEMPLATE/work_item.yml": 1
+ },
+ "eab25008c915": {
+  ".github/ISSUE_TEMPLATE/bug_report.yml": 1,
+  ".github/ISSUE_TEMPLATE/work_item.yml": 1
+ },
+ "b8a1a179d6f6": {
+  ".github/ISSUE_TEMPLATE/bug_report.yml": 1,
+  ".github/ISSUE_TEMPLATE/work_item.yml": 1
+ },
+ "09e0b2a5f43d": {
+  ".github/workflows/ci.yml": 3,
+  ".github/workflows/pages.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "c5800f57c185": {
+  ".github/workflows/ci.yml": 2
+ },
+ "6da3f06f16f0": {
+  ".github/workflows/ci.yml": 2
+ },
+ "1ce18ea0b14a": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "065af67ac3e3": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "45faa8d147c9": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "77860d0dbc01": {
+  ".github/workflows/ci.yml": 2
+ },
+ "35cf2a802275": {
+  ".github/workflows/ci.yml": 2
+ },
+ "479048d76c00": {
+  ".github/workflows/ci.yml": 2
+ },
+ "28e091ffe8e4": {
+  ".github/workflows/ci.yml": 2
+ },
+ "07ff17f1fc25": {
+  ".github/workflows/ci.yml": 2,
+  ".github/workflows/rc.yml": 1
+ },
+ "0ca61b732f08": {
+  ".github/workflows/ci.yml": 2,
+  ".github/workflows/rc.yml": 1
+ },
+ "01527de7a768": {
+  ".github/workflows/ci.yml": 2,
+  ".github/workflows/rc.yml": 1
+ },
+ "958062e280f2": {
+  ".github/workflows/ci.yml": 2,
+  ".github/workflows/rc.yml": 1
+ },
+ "eecad5220464": {
+  ".github/workflows/ci.yml": 2,
+  ".github/workflows/rc.yml": 1
+ },
+ "a0528b970f3e": {
+  ".github/workflows/ci.yml": 2,
+  ".github/workflows/rc.yml": 1
+ },
+ "eb1ff04e9062": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "459b1af5bd69": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "4b9141017e9b": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "0c27d84ed982": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "e4b7c6fc1843": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "ddb9f33ff33a": {
+  ".github/workflows/ci.yml": 2,
+  ".github/workflows/rc.yml": 1
+ },
+ "398e1814cb39": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "a549956b8ce8": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "dae7872c3aa5": {
+  ".github/workflows/ci.yml": 1,
+  ".github/workflows/rc.yml": 1
+ },
+ "f9d76dd111a4": {
+  "kanso/mods/kanso-arrange/main.js": 1,
+  "kanso/mods/kanso-dojo/main.js": 1,
+  "kanso/mods/kanso-help/main.js": 1,
+  "kanso/mods/kanso-settings/main.js": 1,
+  "kanso/mods/kanso-sleep/main.js": 1
+ },
+ "9cd11548dd2e": {
+  "kanso/mods/kanso-arrange/main.js": 1,
+  "kanso/mods/kanso-dojo/main.js": 1,
+  "kanso/mods/kanso-help/main.js": 1,
+  "kanso/mods/kanso-menu/main.js": 1,
+  "kanso/mods/kanso-settings/main.js": 1,
+  "kanso/mods/kanso-sleep/main.js": 1,
+  "kanso/mods/open-with/main.js": 1
+ },
+ "75e3c48fb017": {
+  "kanso/mods/kanso-arrange/main.js": 1,
+  "kanso/mods/kanso-menu/main.js": 1
+ },
+ "a590236471e8": {
+  "kanso/mods/kanso-arrange/main.js": 1,
+  "kanso/mods/kanso-prompt-editor/main.js": 1,
+  "kanso/mods/kanso-prompt/main.js": 1
+ },
  "75a7665ba77f": {
   "kanso/mods/kanso-arrange/main.js": 1,
   "kanso/mods/kanso-sleep/main.js": 1
@@ -11,14 +151,23 @@
   "kanso/mods/kanso-arrange/main.js": 1,
   "kanso/mods/kanso-sleep/main.js": 1
  },
- "d7bb8c615138": {
+ "15a1bfe03f44": {
+  "kanso/mods/kanso-arrange/store.js": 1,
+  "kanso/mods/kanso-dojo/store.js": 1,
+  "kanso/mods/kanso-panel/shipped-store.js": 1
+ },
+ "05852f709c90": {
+  "kanso/mods/kanso-arrange/store.js": 1,
+  "kanso/mods/kanso-panel/shipped-store.js": 1
+ },
+ "36b2f84f03e4": {
   "kanso/mods/kanso-arrange/store.js": 1,
   "kanso/mods/kanso-panel/shipped-store.js": 1
  },
  "747c037b6816": {
   "kanso/mods/kanso-arrange/tabkit.js": 2
  },
- "7a1a1f68df77": {
+ "32b6984b1b6a": {
   "kanso/mods/kanso-chrome/main.js": 1,
   "kanso/mods/kanso-strip/main.js": 1,
   "kanso/mods/kanso-tabs/main.js": 1
@@ -38,6 +187,14 @@
   "kanso/mods/kanso-spend/main.js": 1,
   "kanso/mods/kanso-strip/main.js": 1,
   "kanso/mods/kanso-tabs/main.js": 1
+ },
+ "c34f106649f6": {
+  "kanso/mods/kanso-chrome/update.js": 1,
+  "kanso/mods/kanso-tabs/layout.js": 1
+ },
+ "8c098f706ed6": {
+  "kanso/mods/kanso-containers/main.js": 1,
+  "kanso/mods/kanso-panel/ports.js": 1
  },
  "e6ce930af822": {
   "kanso/mods/kanso-containers/main.js": 1,
@@ -61,7 +218,7 @@
   "kanso/mods/kanso-dojo/card.js": 1,
   "kanso/mods/kanso-guard/memory-card.js": 1
  },
- "6bc4ed3539d6": {
+ "58e2c188a47c": {
   "kanso/mods/kanso-dojo/main.js": 1,
   "kanso/mods/kanso-help/main.js": 1
  },
@@ -80,14 +237,28 @@
  "2bc09251381a": {
   "kanso/mods/kanso-dojo/main.js": 2
  },
+ "d6923e8434d5": {
+  "kanso/mods/kanso-guard/guard.mjs": 2
+ },
  "f78ba9dd0ad7": {
+  "kanso/mods/kanso-guard/guard.mjs": 2
+ },
+ "65fe462b0945": {
   "kanso/mods/kanso-guard/guard.mjs": 2
  },
  "c2f4efee1326": {
   "kanso/mods/kanso-guard/guard.mjs": 1,
   "kanso/mods/kanso-panel/ports.js": 1
  },
- "0799095a28dc": {
+ "482aa22ee798": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
+ },
+ "9dea840f3d48": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
+ },
+ "b76ba42881b5": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
@@ -99,6 +270,9 @@
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
+ "6dc5bd0d142c": {
+  "kanso/mods/kanso-guard/main.js": 2
+ },
  "aa09e88cf602": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
@@ -107,31 +281,43 @@
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "364e52abafea": {
+ "ea56493923e7": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "4ee3ab071f70": {
+ "eb4b1f451ae2": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "b52b92253ed0": {
+ "166fdaf4b12e": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "e77735b6c7d3": {
+ "bdbb90ac15a5": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "48ed988358fd": {
+ "8ea4acc444ce": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "cc0227926502": {
+ "880d3e082d4e": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
+ },
+ "9976dddd9241": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
  "355f6f63cd8c": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
+ },
+ "1c38a1351359": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
+ },
+ "7f76f238bf5c": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
@@ -147,11 +333,15 @@
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "9e7f4742754b": {
+ "2d871ab608b7": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "304109b3c03c": {
+ "1740499062cd": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
+ },
+ "a94a1ed3150a": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
@@ -173,6 +363,11 @@
   "kanso/mods/kanso-panel/ports.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
+ "cd13019a2724": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-panel/pr.js": 1,
+  "kanso/mods/kanso-panel/worktrees.js": 1
+ },
  "2b505e6ab6ce": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-panel/shipped.js": 1
@@ -181,11 +376,29 @@
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
+ "2e5d5dbdf0c7": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-panel/ports.js": 1
+ },
+ "159c9a4e7bbd": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-panel/ports.js": 1,
+  "kanso/mods/kanso-panel/worktrees.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
+ },
+ "288bcb9f5760": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-panel/worktrees.js": 1
+ },
  "02b025f12687": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-panel/ports.js": 1
  },
  "cfd464f5f9b0": {
+  "kanso/mods/kanso-guard/main.js": 1,
+  "kanso/mods/kanso-panel/ports.js": 1
+ },
+ "9342b9c22a76": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-panel/ports.js": 1
  },
@@ -196,6 +409,13 @@
  "4af7a0635267": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-panel/ports.js": 1
+ },
+ "0259f5edd3d5": {
+  "kanso/mods/kanso-guard/memory-card.js": 2
+ },
+ "37932242b0f4": {
+  "kanso/mods/kanso-guard/model.js": 1,
+  "kanso/mods/kanso-panel/ports-model.js": 1
  },
  "5bbbbb021a64": {
   "kanso/mods/kanso-guard/model.js": 1,
@@ -209,11 +429,11 @@
   "kanso/mods/kanso-guard/model.js": 1,
   "kanso/mods/kanso-panel/ports-model.js": 1
  },
- "cc2ab4a2d0ed": {
+ "9b3543516a4e": {
   "kanso/mods/kanso-guard/model.js": 1,
   "kanso/mods/kanso-panel/ports-model.js": 1
  },
- "657c7f5574d6": {
+ "1d440d214861": {
   "kanso/mods/kanso-guard/model.js": 1,
   "kanso/mods/kanso-panel/ports-model.js": 1
  },
@@ -225,7 +445,7 @@
   "kanso/mods/kanso-guard/model.js": 1,
   "kanso/mods/kanso-panel/ports-model.js": 1
  },
- "1b373bf89515": {
+ "a900ce2c3b1d": {
   "kanso/mods/kanso-guard/model.js": 1,
   "kanso/mods/kanso-panel/ports-model.js": 1
  },
@@ -237,7 +457,7 @@
   "kanso/mods/kanso-guard/model.js": 1,
   "kanso/mods/kanso-panel/ports-model.js": 1
  },
- "2bc0d19f4311": {
+ "6b3ee6f1555a": {
   "kanso/mods/kanso-guard/model.js": 1,
   "kanso/mods/kanso-panel/ports-model.js": 1
  },
@@ -261,10 +481,17 @@
   "kanso/mods/kanso-menu/main.js": 1,
   "kanso/mods/kanso-strip/main.js": 1
  },
+ "42fb2f66d20a": {
+  "kanso/mods/kanso-panel/blocks.js": 1,
+  "kanso/mods/kanso-panel/lib.js": 1
+ },
  "69c78a9640b5": {
   "kanso/mods/kanso-panel/doc.js": 2
  },
  "b0422233b9fd": {
+  "kanso/mods/kanso-panel/doc.js": 2
+ },
+ "307a0bb279fd": {
   "kanso/mods/kanso-panel/doc.js": 2
  },
  "1c178ebbd9b4": {
@@ -279,6 +506,10 @@
   "kanso/mods/kanso-panel/preview.js": 1
  },
  "4aaed83b7da5": {
+  "kanso/mods/kanso-panel/files.js": 1,
+  "kanso/mods/kanso-panel/preview.js": 1
+ },
+ "9cbb9ca13838": {
   "kanso/mods/kanso-panel/files.js": 1,
   "kanso/mods/kanso-panel/preview.js": 1
  },
@@ -312,6 +543,10 @@
  "7c5e69db4e12": {
   "kanso/mods/kanso-panel/find.js": 2
  },
+ "b43c0e5cdc4e": {
+  "kanso/mods/kanso-panel/find.js": 2,
+  "kanso/mods/kanso-spaces/pure.js": 1
+ },
  "b5aa2a5439d4": {
   "kanso/mods/kanso-panel/find.js": 1,
   "kanso/mods/kanso-panel/transcript.js": 1
@@ -332,6 +567,9 @@
   "kanso/mods/kanso-panel/preview.js": 1
  },
  "df8d07475370": {
+  "kanso/mods/kanso-panel/look.js": 2
+ },
+ "2eac99c91138": {
   "kanso/mods/kanso-panel/look.js": 2
  },
  "f24b2c63437c": {
@@ -363,13 +601,17 @@
  "b8058a385577": {
   "kanso/mods/kanso-panel/platform-update.js": 2
  },
- "092cb6030df0": {
+ "bf97147aca2b": {
+  "kanso/mods/kanso-panel/ports.js": 2
+ },
+ "d3ee027c339f": {
   "kanso/mods/kanso-panel/ports.js": 1,
   "kanso/mods/kanso-panel/pr.js": 1,
   "kanso/mods/kanso-panel/worktrees.js": 1
  },
- "c04ef8fa83fe": {
+ "57aac0019037": {
   "kanso/mods/kanso-panel/ports.js": 1,
+  "kanso/mods/kanso-panel/pr.js": 1,
   "kanso/mods/kanso-panel/worktrees.js": 1
  },
  "b7c39a54f7cf": {
@@ -419,10 +661,16 @@
   "kanso/mods/kanso-panel/pr-view.js": 1,
   "kanso/mods/kanso-panel/pr.js": 1
  },
+ "483f5735faa1": {
+  "kanso/mods/kanso-panel/pr-view.js": 2
+ },
  "6c57bfc39823": {
   "kanso/mods/kanso-panel/pr-view.js": 2
  },
  "76a4b4c9ea22": {
+  "kanso/mods/kanso-panel/pr.js": 2
+ },
+ "b05efbbb1fea": {
   "kanso/mods/kanso-panel/pr.js": 2
  },
  "87315e61ed68": {
@@ -432,15 +680,14 @@
  "4c86ffd905b7": {
   "kanso/mods/kanso-panel/pr.js": 2
  },
+ "5e11eb3f97f7": {
+  "kanso/mods/kanso-panel/pr.js": 2
+ },
  "b141ca9e1738": {
   "kanso/mods/kanso-panel/pr.js": 1,
   "kanso/mods/kanso-panel/worktrees.js": 1
  },
- "0f8fd9a4d275": {
-  "kanso/mods/kanso-panel/pr.js": 1,
-  "kanso/mods/kanso-panel/worktrees.js": 1
- },
- "0e3e628aad9e": {
+ "77427d80e56d": {
   "kanso/mods/kanso-panel/pr.js": 1,
   "kanso/mods/kanso-panel/worktrees.js": 1
  },
@@ -458,6 +705,18 @@
  "380568a93be4": {
   "kanso/mods/kanso-panel/pr.js": 2
  },
+ "284c9361e61e": {
+  "kanso/mods/kanso-panel/preview.js": 2
+ },
+ "54920b1db65d": {
+  "kanso/mods/kanso-panel/preview.js": 2
+ },
+ "f153879cb0ba": {
+  "kanso/mods/kanso-panel/preview.js": 2
+ },
+ "2d48e49f857a": {
+  "kanso/mods/kanso-panel/remote-file.js": 2
+ },
  "cbe675483d30": {
   "kanso/mods/kanso-panel/remote-file.js": 2
  },
@@ -469,6 +728,10 @@
  },
  "08273f0b0c1b": {
   "kanso/mods/kanso-panel/shipped.js": 2
+ },
+ "b8609753fe3e": {
+  "kanso/mods/kanso-panel/shipped.js": 1,
+  "kanso/mods/kanso-spend/main.js": 1
  },
  "85469b05ad10": {
   "kanso/mods/kanso-panel/worktrees.js": 2
@@ -482,23 +745,26 @@
  "03392814e7fe": {
   "kanso/mods/kanso-panel/worktrees.js": 2
  },
+ "1b7cb24c22f5": {
+  "kanso/mods/kanso-panel/worktrees.js": 3
+ },
  "c3c795f8a5f8": {
   "kanso/mods/kanso-prompt-editor/main.js": 1,
   "kanso/mods/kanso-prompt/main.js": 1
  },
- "bf910e9cf11e": {
+ "58ecb3ebdad8": {
   "kanso/mods/kanso-prompt-editor/main.js": 1,
   "kanso/mods/kanso-prompt/main.js": 1
  },
- "8fbda51b0800": {
+ "0ad9d5e7d28c": {
   "kanso/mods/kanso-prompt-editor/main.js": 1,
   "kanso/mods/kanso-prompt/main.js": 1
  },
- "6c39c21afc34": {
+ "53b8c23e9ac5": {
   "kanso/mods/kanso-prompt-editor/main.js": 1,
   "kanso/mods/kanso-prompt/main.js": 1
  },
- "cecb9a7d4176": {
+ "26a686bd44e3": {
   "kanso/mods/kanso-prompt-editor/main.js": 1,
   "kanso/mods/kanso-prompt/main.js": 1
  },
@@ -526,29 +792,42 @@
   "kanso/mods/kanso-prompt-editor/main.js": 1,
   "kanso/mods/kanso-prompt/main.js": 1
  },
+ "b8b74868dc89": {
+  "kanso/mods/kanso-send/main.js": 1,
+  "kanso/mods/kanso-strip/main.js": 1
+ },
  "fe9b650536b6": {
   "kanso/mods/kanso-send/main.js": 2
  },
- "7fc951f5c454": {
+ "4193bb918377": {
   "kanso/mods/kanso-settings/defaults.js": 2
  },
- "2d63d2fd3b69": {
+ "b5d714504243": {
   "kanso/mods/kanso-settings/defaults.js": 2
  },
- "27de88ae19d7": {
+ "3702792cc145": {
   "kanso/mods/kanso-settings/defaults.js": 2
  },
- "6a577cfdf25b": {
+ "9e47b58c44a0": {
   "kanso/mods/kanso-settings/defaults.js": 2
  },
- "21d070dce459": {
+ "247c7f549efd": {
   "kanso/mods/kanso-settings/defaults.js": 2
  },
- "5d32b9413775": {
+ "99d64d84f5b4": {
   "kanso/mods/kanso-settings/defaults.js": 2
  },
- "a78e2183b971": {
+ "122ce857b2d7": {
   "kanso/mods/kanso-settings/defaults.js": 2
+ },
+ "51a578363c1e": {
+  "kanso/mods/kanso-settings/defaults.js": 2
+ },
+ "5b6002654fe7": {
+  "kanso/mods/kanso-settings/defaults.js": 2
+ },
+ "67b1f5621d16": {
+  "kanso/mods/kanso-sim/main.js": 2
  },
  "49f108eb82e1": {
   "kanso/mods/kanso-spaces/agents.js": 1,
@@ -567,7 +846,13 @@
  "078e5cfe830d": {
   "kanso/mods/kanso-spaces/main.js": 2
  },
+ "e95a84451851": {
+  "kanso/mods/kanso-spaces/main.js": 2
+ },
  "4df40f7b8034": {
+  "kanso/mods/kanso-spaces/main.js": 2
+ },
+ "900a68463589": {
   "kanso/mods/kanso-spaces/main.js": 2
  },
  "04539c040622": {
@@ -576,9 +861,19 @@
  "3a9eb3195a0d": {
   "kanso/mods/kanso-spaces/main.js": 2
  },
+ "d7336fc56924": {
+  "kanso/mods/kanso-spaces/main.js": 2
+ },
  "e4299f849c3e": {
   "kanso/mods/kanso-spaces/main.js": 1,
   "kanso/mods/kanso-tabs/main.js": 1
+ },
+ "31b4028cbaae": {
+  "kanso/mods/kanso-spaces/since-left.js": 2
+ },
+ "020543cfb838": {
+  "kanso/mods/kanso-spend/collector.mjs": 1,
+  "kanso/mods/kanso-spend/presenter.mjs": 1
  },
  "4a2fc4e04aa3": {
   "kanso/mods/kanso-spend/collector.mjs": 1,
@@ -608,11 +903,11 @@
   "kanso/mods/kanso-spend/collector.mjs": 1,
   "kanso/mods/kanso-spend/presenter.mjs": 1
  },
- "b7237b92d8ae": {
+ "d3a99eb06ab0": {
   "kanso/mods/kanso-spend/collector.mjs": 1,
   "kanso/mods/kanso-spend/presenter.mjs": 1
  },
- "b374aeed1dcf": {
+ "53821ca89540": {
   "kanso/mods/kanso-spend/collector.mjs": 1,
   "kanso/mods/kanso-spend/presenter.mjs": 1
  },
@@ -628,19 +923,47 @@
   "kanso/mods/kanso-spend/collector.mjs": 1,
   "kanso/mods/kanso-spend/presenter.mjs": 1
  },
- "760ec94cf124": {
+ "b70fc4569293": {
+  "kanso/mods/kanso-spend/collector.mjs": 1,
+  "kanso/mods/kanso-spend/presenter.mjs": 1
+ },
+ "5dcaba576d24": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
- "e6bdcf2b26e1": {
+ "084d1f363293": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
- "137d1ae0b1d5": {
+ "9f83f5d6b373": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "54d04320b82c": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "b4a3ed19703b": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
  "892cadb849a3": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
- "fe75d9346adc": {
+ "3e60b0fff232": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "712f897f13c9": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "3cfd1c985d59": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "fb9b2acc102c": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "79a723016bb9": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "72e80ce9f119": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "b1cb0b1e0947": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
  "b8604e81df1d": {
@@ -649,26 +972,56 @@
  "23ca322aae42": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
+ "411b06150c25": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "f0ddf1733639": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
  "9c022d2c3142": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
- "0c3218a6164b": {
+ "6a007fac9da7": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 1,
+  "kanso/mods/kanso-spend/core/store.mjs": 1
+ },
+ "ef5238009332": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 1,
+  "kanso/mods/kanso-spend/core/store.mjs": 1
+ },
+ "691ed6e7041b": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 1,
+  "kanso/mods/kanso-spend/core/store.mjs": 1
+ },
+ "98ff3f4b4400": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
- "a073094f3531": {
+ "fb137cfcebf5": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
- "458ddbe16d28": {
+ "fc7a41465ae4": {
   "kanso/mods/kanso-spend/core/adapters.mjs": 2
  },
- "a7a308b68fdc": {
+ "1ba077864a9c": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "5e53a6828873": {
+  "kanso/mods/kanso-spend/core/adapters.mjs": 2
+ },
+ "9b4099077ef4": {
   "kanso/mods/kanso-spend/core/costs.mjs": 2
  },
- "63b82f5aaadc": {
+ "e5dc763212a2": {
+  "kanso/mods/kanso-spend/core/costs.mjs": 2
+ },
+ "04ebe9a3fef2": {
   "kanso/mods/kanso-spend/core/costs.mjs": 2
  },
  "e5c9925da3af": {
   "kanso/mods/kanso-spend/core/costs.mjs": 3
+ },
+ "2644320b98ba": {
+  "kanso/mods/kanso-spend/core/pmap.mjs": 2
  },
  "96cbfb2750fc": {
   "kanso/mods/kanso-spend/core/scan.mjs": 2
@@ -676,10 +1029,16 @@
  "97dd6dfe6d93": {
   "kanso/mods/kanso-spend/core/scan.mjs": 2
  },
- "a7def3eca055": {
+ "374f1dfc3221": {
   "kanso/mods/kanso-spend/core/scan.mjs": 2
  },
- "2fd19ed9b537": {
+ "eb5c1e37faca": {
+  "kanso/mods/kanso-spend/core/scan.mjs": 2
+ },
+ "9bb913c24930": {
+  "kanso/mods/kanso-spend/core/scan.mjs": 2
+ },
+ "7f0ddfd0a4d7": {
   "kanso/mods/kanso-spend/core/scan.mjs": 2
  },
  "78da7fa8fa1f": {
@@ -688,25 +1047,40 @@
  "dda1becd07c3": {
   "kanso/mods/kanso-spend/core/scan.mjs": 2
  },
+ "c2fd5bfe08e9": {
+  "kanso/mods/kanso-spend/core/scan.mjs": 2
+ },
  "9de230e877d9": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
- "dc2a8304a4a7": {
+ "92a74adb6df7": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
- "59a481f3325c": {
+ "6f91b68f5410": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
- "100a233acff6": {
+ "2f284443f223": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
- "7fa55d1f3f35": {
+ "bad1b2247c98": {
+  "kanso/mods/kanso-spend/core/store.mjs": 2
+ },
+ "cdae3a278c9f": {
+  "kanso/mods/kanso-spend/core/store.mjs": 2
+ },
+ "4701e11860be": {
+  "kanso/mods/kanso-spend/core/store.mjs": 2
+ },
+ "90bddc9cd419": {
+  "kanso/mods/kanso-spend/core/store.mjs": 2
+ },
+ "83b8f6f0fc4a": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
  "86c39cea22e3": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
- "dc4dc84a4278": {
+ "4ee71f30d72f": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
  "163e62ad6b4d": {
@@ -715,10 +1089,19 @@
  "605af6bff892": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
- "fb39101d8be9": {
+ "a3e5432cfde3": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
- "9bbb28f164eb": {
+ "50336868c9e5": {
+  "kanso/mods/kanso-spend/core/store.mjs": 2
+ },
+ "424ec87d756b": {
+  "kanso/mods/kanso-spend/core/store.mjs": 2
+ },
+ "50e92f65e098": {
+  "kanso/mods/kanso-spend/core/store.mjs": 2
+ },
+ "40c666c1eddc": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
  "97e2b3d3c439": {
@@ -727,9 +1110,19 @@
  "50f24bc26e95": {
   "kanso/mods/kanso-spend/core/store.mjs": 2
  },
+ "2028482c78f6": {
+  "kanso/mods/kanso-spend/core/store.mjs": 1,
+  "kanso/mods/kanso-spend/core/util.mjs": 1
+ },
+ "00e85a8ac34d": {
+  "kanso/mods/kanso-spend/core/util.mjs": 2
+ },
  "f158e3198b12": {
   "kanso/mods/kanso-spend/main.js": 1,
   "kanso/mods/kanso-strip/main.js": 1
+ },
+ "7377770ec623": {
+  "kanso/mods/kanso-spend/main.js": 4
  },
  "3cde252fd28d": {
   "kanso/mods/kanso-spend/main.js": 2
@@ -741,17 +1134,31 @@
   "kanso/mods/kanso-strip/main.js": 1,
   "kanso/mods/kanso-tabs/main.js": 1
  },
+ "96c6f2eba98a": {
+  "kanso/mods/kanso-strip/main.js": 2
+ },
  "58cb74ffb650": {
   "kanso/mods/kanso-tabs/layout.js": 2
  },
+ "c6aeda047f31": {
+  "scripts/build-site-tokens.mjs": 1,
+  "tests/site.test.mjs": 1
+ },
+ "fa9ad361ec29": {
+  "scripts/check-imports.mjs": 2
+ },
  "39d57739d717": {
   "scripts/check-imports.mjs": 2
+ },
+ "b7e41ab280f4": {
+  "scripts/check-imports.mjs": 1,
+  "scripts/check-mods.mjs": 1
  },
  "3186910c8ff7": {
   "scripts/check-version.mjs": 1,
   "scripts/release-plan.mjs": 1
  },
- "9d7aa3dbbc0f": {
+ "2e23e05133dc": {
   "scripts/check-version.mjs": 1,
   "scripts/release-plan.mjs": 1
  },
@@ -771,13 +1178,16 @@
   "scripts/check-version.mjs": 1,
   "scripts/release-plan.mjs": 1
  },
- "8f4c4521887f": {
+ "f6035cc88b9d": {
+  "scripts/herdr-api.mjs": 2
+ },
+ "dd90fc9e9290": {
   "scripts/herdr-api.mjs": 2
  },
  "ee89f591e4d9": {
   "scripts/herdr-api.mjs": 2
  },
- "9ae1152eba13": {
+ "c68a4d33a285": {
   "scripts/herdr-api.mjs": 2
  },
  "c01c9612e86e": {
@@ -786,7 +1196,10 @@
  "de896cf8bd01": {
   "scripts/herdr-api.mjs": 2
  },
- "849149958d84": {
+ "13c424f6d900": {
+  "scripts/herdr-api.mjs": 2
+ },
+ "e127f6db3b1f": {
   "scripts/herdr-api.mjs": 2
  },
  "7431e345622c": {
@@ -798,6 +1211,11 @@
  },
  "c495a33b2228": {
   "scripts/release-plan.mjs": 2
+ },
+ "9174efa0557c": {
+  "scripts/release-plan.mjs": 1,
+  "tests/release-notes.test.mjs": 1,
+  "tests/release-workflow.test.mjs": 1
  },
  "3eb7fea93d1d": {
   "scripts/storybook-components.mjs": 1,
@@ -931,7 +1349,15 @@
   "scripts/sync-mods.mjs": 1,
   "scripts/sync-share.mjs": 1
  },
- "4e1b014c57aa": {
+ "2a5db0003f4d": {
+  "scripts/sync-mods.mjs": 1,
+  "scripts/sync-share.mjs": 1
+ },
+ "ad660b4788b9": {
+  "scripts/sync-share.mjs": 1,
+  "tests/sync-share.test.mjs": 1
+ },
+ "8b803bf32a37": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/index.html": 1,
@@ -1011,7 +1437,7 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "d52a3f296571": {
+ "8941c8cb30f9": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/index.html": 1,
@@ -1019,9 +1445,10 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "b9ccaa01aecd": {
+ "d93ce22aedf6": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
+  "site/index.html": 1,
   "site/privacy.html": 1,
   "site/terms.html": 1,
   "site/use.html": 1
@@ -1054,7 +1481,7 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "3d3b17a19748": {
+ "775610d13924": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/privacy.html": 1,
@@ -1076,7 +1503,14 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "0389150f4704": {
+ "4f06834e0063": {
+  "site/changelog.html": 1,
+  "site/credits.html": 1,
+  "site/privacy.html": 1,
+  "site/terms.html": 1,
+  "site/use.html": 1
+ },
+ "6c42f9c75c7d": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/privacy.html": 1,
@@ -1115,7 +1549,7 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "d60f71092485": {
+ "8e49e7528245": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/index.html": 1,
@@ -1139,7 +1573,7 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "537ea747554b": {
+ "f0b67d28221f": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/index.html": 1,
@@ -1147,7 +1581,7 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "2f4068323e53": {
+ "a35284a77eb4": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/index.html": 1,
@@ -1163,7 +1597,7 @@
   "site/terms.html": 1,
   "site/use.html": 1
  },
- "a29e5298b16c": {
+ "6f88cb127433": {
   "site/changelog.html": 1,
   "site/credits.html": 1,
   "site/index.html": 1,
@@ -1179,43 +1613,51 @@
   "site/gallery-card.html": 1,
   "site/og-card.html": 1
  },
+ "27ff261121c6": {
+  "site/gallery-card.html": 1,
+  "site/og-card.html": 1
+ },
+ "aaf452a58567": {
+  "site/gallery-card.html": 1,
+  "site/og-card.html": 1
+ },
  "3129099c5fef": {
   "site/index.html": 2
  },
  "8c0de462c4ff": {
   "site/index.html": 2
  },
- "c1b112825c14": {
+ "0e52ad307abe": {
   "site/tokens.css": 4
  },
- "4b9bd697dc20": {
+ "77dd3166dc3a": {
   "site/tokens.css": 4
  },
- "e54359ac6c41": {
+ "07da79313a29": {
   "site/tokens.css": 4
  },
- "28db566fb86b": {
+ "9d3c2f487832": {
+  "site/tokens.css": 4
+ },
+ "0c52f8d51ff0": {
   "site/tokens.css": 2
  },
- "79425ac12fec": {
+ "601b97922eea": {
   "site/tokens.css": 2
  },
- "96ef21219357": {
+ "d872ff3d2246": {
   "site/tokens.css": 2
  },
- "dde6db4246b9": {
+ "e8c2ac85882f": {
   "site/tokens.css": 2
  },
- "6628d6e57167": {
-  "site/tokens.css": 2
- },
- "7999a2e12d3b": {
+ "9db8897a7b83": {
   "site/tokens.css": 2
  },
  "cf332436d1a7": {
   "site/tokens.css": 2
  },
- "89a5ee0e3d2f": {
+ "1ab3d1ebccc7": {
   "site/tokens.css": 2
  },
  "4fbb9c75353b": {
@@ -1233,88 +1675,91 @@
  "38014635ece7": {
   "site/tokens.css": 2
  },
- "dea312cd2be1": {
+ "f8fbf56c5e35": {
   "site/tokens.css": 2
  },
- "3ecd811aeade": {
+ "4cd5a15c2252": {
   "site/tokens.css": 2
  },
- "e0a4ec4943ac": {
+ "8b268132af39": {
   "site/tokens.css": 2
  },
- "8e35569b1765": {
+ "590633047d96": {
   "site/tokens.css": 2
  },
- "7447ca4c580c": {
+ "b3213bd79864": {
   "site/tokens.css": 2
  },
- "b03ed6433172": {
+ "c34bc597c782": {
   "site/tokens.css": 2
  },
- "e82636e9a961": {
+ "d569f0f5fd46": {
   "site/tokens.css": 2
  },
- "4a309e99cccf": {
+ "eb0eb8b90c14": {
   "site/tokens.css": 2
  },
- "966c5b02f98c": {
+ "9450fd389b95": {
   "site/tokens.css": 2
  },
- "c09fdc804298": {
+ "d0361664f3dc": {
   "site/tokens.css": 2
  },
- "fccbae24bf18": {
+ "03098b68542b": {
   "site/tokens.css": 2
  },
- "b35f28dbac53": {
+ "5fa73911896c": {
   "site/tokens.css": 2
  },
- "e1ca5d3a7310": {
+ "75758cd64c48": {
   "site/tokens.css": 2
  },
- "28b0715e168f": {
+ "e9b5356db6e2": {
   "site/tokens.css": 2
  },
- "3e11f0c1673a": {
+ "3a93ab7f12ce": {
   "site/tokens.css": 2
  },
- "0fe09b224210": {
+ "69e4bc8ba0e8": {
   "site/tokens.css": 2
  },
- "096aab613726": {
+ "c573ba5f799e": {
   "site/tokens.css": 2
  },
- "0d64958fa5b7": {
+ "5bdf380dce1f": {
   "site/tokens.css": 2
  },
- "e6b613f059be": {
+ "588626081b6d": {
   "site/tokens.css": 2
  },
- "d67099e6d36d": {
+ "0de6064e53ae": {
   "site/tokens.css": 2
  },
- "1990a5126e4c": {
+ "5b4db9727655": {
   "site/tokens.css": 2
  },
- "78ae96a441c5": {
+ "ef5f57feb71a": {
   "site/tokens.css": 2
  },
- "c2fc32853ac1": {
+ "4ba435ed3fce": {
   "site/tokens.css": 2
  },
- "b80619e163f2": {
+ "2e81932acaaf": {
   "site/tokens.css": 2
  },
- "674a67d384bc": {
+ "e62582bdd18c": {
   "site/tokens.css": 2
  },
- "59551d8aefff": {
+ "5680d692e85b": {
+  "site/tokens.css": 2
+ },
+ "995f08436588": {
   "site/tokens.css": 2
  },
  "2e2468af1ce3": {
   "site/tokens.css": 2
  },
- "4163c65ee181": {
+ "13317ccfb7ab": {
   "site/tokens.css": 2
  },
  "91519fc8b352": {
@@ -1329,76 +1774,91 @@
  "d570e89101f4": {
   "site/tokens.css": 2
  },
- "6fc11dde5d74": {
+ "e5afdfb2d7ed": {
   "site/tokens.css": 2
  },
- "27137c3d5eb3": {
+ "5914c65004c2": {
   "site/tokens.css": 2
  },
- "f24d832a9238": {
+ "aa0462902cd7": {
   "site/tokens.css": 2
  },
- "3573653d4351": {
+ "9bcf31fa2770": {
   "site/tokens.css": 2
  },
- "e70fe6da5a78": {
+ "6cccb97d1304": {
   "site/tokens.css": 2
  },
- "e629dc526bd2": {
+ "7e483a124aec": {
   "site/tokens.css": 2
  },
- "26287bb26acf": {
+ "03aa2ac8d1c0": {
   "site/tokens.css": 2
  },
- "b4ea42581c23": {
+ "ffe08ca57d23": {
   "site/tokens.css": 2
  },
- "44e3afbf766c": {
+ "7abedab62a8c": {
   "site/tokens.css": 2
  },
- "8aecc9497102": {
+ "955db9c8ab78": {
   "site/tokens.css": 2
  },
- "9746d1f60983": {
+ "47f86c44ef89": {
   "site/tokens.css": 2
  },
- "21845c34fac5": {
+ "cd15da7ee67c": {
   "site/tokens.css": 2
  },
- "6ac3833ccc2d": {
+ "ea3f94a82c5e": {
   "site/tokens.css": 2
  },
- "bec2397b3621": {
+ "f312ff39d8ad": {
   "site/tokens.css": 2
  },
- "335fe5fb90df": {
+ "8d817affda78": {
   "site/tokens.css": 2
  },
- "0e31800173a7": {
+ "8b8f151b006a": {
   "site/tokens.css": 2
  },
- "9cd5431ff038": {
+ "3955629ae8a3": {
   "site/tokens.css": 2
  },
- "7d03aee8600f": {
+ "7f6c7defed95": {
   "site/tokens.css": 2
  },
- "67ebe62d09be": {
+ "dbb6a69facbc": {
   "site/tokens.css": 2
  },
- "71fb8a6cf2b4": {
+ "55d16f2fdc7b": {
   "site/tokens.css": 2
+ },
+ "9c4e26aa7beb": {
+  "site/tokens.css": 2
+ },
+ "b662ce415abf": {
+  "site/tokens.css": 2
+ },
+ "9660fbefa9ce": {
+  "stories/kit/ReferencePage.jsx": 2
  },
  "118224a42944": {
   "stories/kit/behaviours.js": 2
  },
+ "ded739646bb6": {
+  "stories/kit/playgrounds.js": 2
+ },
  "959082454a5c": {
   "stories/kit/playgrounds.js": 2
+ },
+ "b79e86916e06": {
+  "stories/kit/playgrounds.js": 3
  },
  "692e57a727c0": {
   "stories/kit/playgrounds.js": 2
  },
- "65e04a74d5e6": {
+ "58dbb5a9d508": {
   "stories/kit/playgrounds.js": 2
  },
  "d32e45992eef": {
@@ -1410,13 +1870,13 @@
  "65937c186ab6": {
   "stories/kit/playgrounds.js": 2
  },
+ "2bc390f530f6": {
+  "stories/kit/playgrounds.js": 4
+ },
  "84e62a9ef41d": {
   "stories/kit/playgrounds.js": 2
  },
  "f23cc91a4684": {
-  "stories/kit/playgrounds.js": 2
- },
- "76dd5f3d459d": {
   "stories/kit/playgrounds.js": 2
  },
  "109a3876ea0b": {
@@ -1430,5 +1890,1553 @@
  },
  "fabde12a70bf": {
   "stories/proto.css": 2
+ },
+ "679c30885262": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/machines.test.mjs": 1
+ },
+ "210243b7e8f4": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/machines.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "de42ce2c74ff": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/machines.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "e4dcf09fe842": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/layout.test.mjs": 1,
+  "tests/machines.test.mjs": 1,
+  "tests/projects.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "8e5984ca7a31": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/machines.test.mjs": 1
+ },
+ "d479c8478b74": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/machines.test.mjs": 1
+ },
+ "46aeafd67b61": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "321f884dc781": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "1def89e165c0": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "943bd4984321": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "d2ab9a648242": {
+  "tests/agent-nav.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "b71808bb557b": {
+  "tests/agent-nav.test.mjs": 2
+ },
+ "00218a6b0b3f": {
+  "tests/agent-nav.test.mjs": 2
+ },
+ "22b9f2c4d0b2": {
+  "tests/agent-nav.test.mjs": 3
+ },
+ "febffc436532": {
+  "tests/agent-nav.test.mjs": 2
+ },
+ "00144e4e9210": {
+  "tests/agent-nav.test.mjs": 4
+ },
+ "54e40d06c012": {
+  "tests/agent-nav.test.mjs": 3
+ },
+ "17467ff3133b": {
+  "tests/agent-nav.test.mjs": 2
+ },
+ "c9621885605d": {
+  "tests/alias.test.mjs": 1,
+  "tests/pr-inbox.test.mjs": 1,
+  "tests/since-left.test.mjs": 1
+ },
+ "6e00311162e4": {
+  "tests/alias.test.mjs": 1,
+  "tests/perf-kdb.test.mjs": 1
+ },
+ "deee90367630": {
+  "tests/alias.test.mjs": 1,
+  "tests/kdb-views.test.mjs": 1,
+  "tests/perf-budget.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1,
+  "tests/perf-kdb.test.mjs": 1,
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "ea555c8d4ffd": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "c000e8394767": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/projects.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "5b833dba85b0": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/projects.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "29055aec614f": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "4a1f6641da4a": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/rail.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "b285ff85212a": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "c4823f625be9": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "8bbe1bf3ee90": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "c774f2ebc88f": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "baad16fc9bd7": {
+  "tests/asleep-collapse.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "1fa89c2bc2e6": {
+  "tests/avatar.test.mjs": 1,
+  "tests/button.test.mjs": 1,
+  "tests/chip.test.mjs": 1,
+  "tests/field.test.mjs": 1,
+  "tests/key-hint.test.mjs": 1,
+  "tests/mark.test.mjs": 1,
+  "tests/row.test.mjs": 1,
+  "tests/segmented.test.mjs": 1
+ },
+ "75cb6ef658df": {
+  "tests/avatar.test.mjs": 1,
+  "tests/button.test.mjs": 1,
+  "tests/chip.test.mjs": 1,
+  "tests/field.test.mjs": 1,
+  "tests/key-hint.test.mjs": 1,
+  "tests/mark.test.mjs": 1,
+  "tests/row.test.mjs": 1,
+  "tests/segmented.test.mjs": 1
+ },
+ "2714e1c676ce": {
+  "tests/avatar.test.mjs": 1,
+  "tests/button.test.mjs": 1,
+  "tests/chip.test.mjs": 1,
+  "tests/field.test.mjs": 1,
+  "tests/key-hint.test.mjs": 1,
+  "tests/mark.test.mjs": 1,
+  "tests/row.test.mjs": 1,
+  "tests/segmented.test.mjs": 1
+ },
+ "0106a5ff5100": {
+  "tests/avatar.test.mjs": 1,
+  "tests/button.test.mjs": 1,
+  "tests/chip.test.mjs": 1,
+  "tests/field.test.mjs": 1,
+  "tests/key-hint.test.mjs": 1,
+  "tests/mark.test.mjs": 1,
+  "tests/row.test.mjs": 1,
+  "tests/segmented.test.mjs": 1,
+  "tests/toggle.test.mjs": 1
+ },
+ "8ca0a8cd6e27": {
+  "tests/avatar.test.mjs": 2
+ },
+ "dce51981fa6e": {
+  "tests/awake.test.mjs": 2
+ },
+ "ee2983ef38f5": {
+  "tests/button.test.mjs": 1,
+  "tests/field.test.mjs": 1,
+  "tests/row.test.mjs": 1,
+  "tests/segmented.test.mjs": 1
+ },
+ "94686f373873": {
+  "tests/button.test.mjs": 1,
+  "tests/field.test.mjs": 1,
+  "tests/row.test.mjs": 1,
+  "tests/segmented.test.mjs": 1
+ },
+ "6c24924b422c": {
+  "tests/button.test.mjs": 1,
+  "tests/field.test.mjs": 1,
+  "tests/row.test.mjs": 1,
+  "tests/segmented.test.mjs": 1
+ },
+ "ebcaef933b82": {
+  "tests/button.test.mjs": 1,
+  "tests/chip.test.mjs": 1,
+  "tests/segmented.test.mjs": 3
+ },
+ "eef6aa9fb1c7": {
+  "tests/button.test.mjs": 2
+ },
+ "18bc505d1e29": {
+  "tests/channel.test.mjs": 2
+ },
+ "fa4309e9403a": {
+  "tests/chip.test.mjs": 1,
+  "tests/key-hint.test.mjs": 1
+ },
+ "7fc3625f9eb5": {
+  "tests/containers.test.mjs": 1,
+  "tests/skeleton.test.mjs": 1
+ },
+ "dc140d97a986": {
+  "tests/containers.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1
+ },
+ "1e9c35459fb7": {
+  "tests/containers.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1
+ },
+ "87bf9fea7178": {
+  "tests/database-deadlines.test.mjs": 2
+ },
+ "704a1b8b88fa": {
+  "tests/doc.test.mjs": 2
+ },
+ "ea2a3274e13d": {
+  "tests/doc.test.mjs": 2
+ },
+ "de94b999249c": {
+  "tests/doc.test.mjs": 2
+ },
+ "032b5a5f86a2": {
+  "tests/doc.test.mjs": 2
+ },
+ "19895f8a114e": {
+  "tests/doc.test.mjs": 2
+ },
+ "1ffc36651cdb": {
+  "tests/doc.test.mjs": 3
+ },
+ "bea6f479e110": {
+  "tests/doc.test.mjs": 2
+ },
+ "189278f801ff": {
+  "tests/doc.test.mjs": 2
+ },
+ "a87f0d2858df": {
+  "tests/files.test.mjs": 2
+ },
+ "8004fb64884f": {
+  "tests/files.test.mjs": 2
+ },
+ "d471d84c9d59": {
+  "tests/files.test.mjs": 2
+ },
+ "d46f5fbbec1b": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "cb4a5dd80059": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "b155527727b4": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "1457704b82f9": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "7ea14110ce94": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "bbd364626377": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "07a477a628c8": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "a523bdacceff": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "cc2c9ac59bfb": {
+  "tests/files.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "d25ee81d8e7d": {
+  "tests/flow.test.mjs": 1,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "9de837ea4e77": {
+  "tests/flow.test.mjs": 1,
+  "tests/machines.test.mjs": 1,
+  "tests/panel-state.test.mjs": 1,
+  "tests/projects.test.mjs": 3
+ },
+ "b2498111284f": {
+  "tests/footer.test.mjs": 1,
+  "tests/state-pattern.test.mjs": 1
+ },
+ "0697d152ec9f": {
+  "tests/footer.test.mjs": 1,
+  "tests/state-pattern.test.mjs": 1
+ },
+ "0bb3a2f8c299": {
+  "tests/front.test.mjs": 2
+ },
+ "3336a571c527": {
+  "tests/front.test.mjs": 3
+ },
+ "e262ad7fba3f": {
+  "tests/gallery.test.mjs": 2
+ },
+ "f8097cd7ec7c": {
+  "tests/gallery.test.mjs": 2
+ },
+ "adfaa9cade5b": {
+  "tests/gallery.test.mjs": 2
+ },
+ "b5a4ee86c85f": {
+  "tests/ghchecks.test.mjs": 2
+ },
+ "e980ecc14096": {
+  "tests/ghchecks.test.mjs": 2
+ },
+ "47ad4abdd739": {
+  "tests/guard-native.test.mjs": 2
+ },
+ "bc489dde2e13": {
+  "tests/guard.test.mjs": 2
+ },
+ "018b7c8bcb65": {
+  "tests/guard.test.mjs": 2
+ },
+ "42f8051d95ca": {
+  "tests/guard.test.mjs": 1,
+  "tests/ports.test.mjs": 1
+ },
+ "d86980a61830": {
+  "tests/guard.test.mjs": 1,
+  "tests/ports.test.mjs": 1
+ },
+ "51bbd4a57f9e": {
+  "tests/guard.test.mjs": 2
+ },
+ "f2a949e57974": {
+  "tests/guard.test.mjs": 1,
+  "tests/ports.test.mjs": 1
+ },
+ "96058445b92c": {
+  "tests/guides.test.mjs": 2
+ },
+ "575a641f16f2": {
+  "tests/helpers.mjs": 1,
+  "tests/imports.test.mjs": 1
+ },
+ "24f72c047199": {
+  "tests/helpers.mjs": 1,
+  "tests/pieces.test.mjs": 1
+ },
+ "60da5b36fe52": {
+  "tests/helpers.mjs": 1,
+  "tests/pieces.test.mjs": 1
+ },
+ "c85fb7650136": {
+  "tests/helpers.mjs": 1,
+  "tests/remote-read.test.mjs": 1,
+  "tests/since-left.test.mjs": 1,
+  "tests/status.test.mjs": 1,
+  "tests/toast.test.mjs": 1
+ },
+ "e8e310fb8467": {
+  "tests/helpers.mjs": 1,
+  "tests/one-fact.test.mjs": 1,
+  "tests/status.test.mjs": 1
+ },
+ "696373545b3c": {
+  "tests/helpers.mjs": 1,
+  "tests/status.test.mjs": 1
+ },
+ "ec41b28bec18": {
+  "tests/helpers.mjs": 1,
+  "tests/status.test.mjs": 1
+ },
+ "6b334c3e407d": {
+  "tests/import-approved.test.mjs": 1,
+  "tests/storybook.test.mjs": 1
+ },
+ "fc4313927ca5": {
+  "tests/input-edges.test.mjs": 1,
+  "tests/scroll.test.mjs": 1
+ },
+ "ef73db03ccbe": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "c3aca0acb6e4": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "81ff06d4bd0e": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "690e1c7ae86a": {
+  "tests/kdb-views.test.mjs": 3
+ },
+ "8104d30cfe37": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "ddb42623ac17": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "060f3777145b": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "c7b82c8df3ee": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "e19e93032c99": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "4f7966184b9b": {
+  "tests/kdb-views.test.mjs": 2
+ },
+ "c10684244866": {
+  "tests/kdb.test.mjs": 2
+ },
+ "95629ba4123d": {
+  "tests/kdb.test.mjs": 2
+ },
+ "512a5ad8d3fb": {
+  "tests/kdb.test.mjs": 2
+ },
+ "c56473e83484": {
+  "tests/kdb.test.mjs": 2
+ },
+ "f328b1c47809": {
+  "tests/kit-parity.test.mjs": 2
+ },
+ "24e79d2b8765": {
+  "tests/kit.test.mjs": 1,
+  "tests/row.test.mjs": 1
+ },
+ "21e55644974c": {
+  "tests/kit.test.mjs": 4
+ },
+ "706c1bfd5b2b": {
+  "tests/kit.test.mjs": 3
+ },
+ "b877cb7c1d17": {
+  "tests/layout.test.mjs": 2
+ },
+ "a3e5043d60a6": {
+  "tests/layout.test.mjs": 2
+ },
+ "142c57b8a361": {
+  "tests/layout.test.mjs": 2
+ },
+ "b1d29899af74": {
+  "tests/layout.test.mjs": 3
+ },
+ "157a639511e4": {
+  "tests/layout.test.mjs": 3,
+  "tests/rail.test.mjs": 1
+ },
+ "b1aade6d832d": {
+  "tests/layout.test.mjs": 2
+ },
+ "6fe7107f1cb5": {
+  "tests/layout.test.mjs": 2
+ },
+ "db3e0e988f7f": {
+  "tests/layout.test.mjs": 4
+ },
+ "07a79604d9e7": {
+  "tests/layout.test.mjs": 3
+ },
+ "2eef71bc0708": {
+  "tests/layout.test.mjs": 2
+ },
+ "0c8ead16b7d0": {
+  "tests/layout.test.mjs": 2
+ },
+ "188506eaf0d5": {
+  "tests/layout.test.mjs": 2
+ },
+ "8d2061cb5a16": {
+  "tests/layout.test.mjs": 2
+ },
+ "42c09c99c635": {
+  "tests/layout.test.mjs": 2
+ },
+ "f43a2d67f9b3": {
+  "tests/layout.test.mjs": 2
+ },
+ "5088e52b1335": {
+  "tests/layout.test.mjs": 2
+ },
+ "b1875d2b2839": {
+  "tests/layout.test.mjs": 2
+ },
+ "26d21a43a208": {
+  "tests/layout.test.mjs": 1,
+  "tests/machines.test.mjs": 1
+ },
+ "c6681d714cb3": {
+  "tests/layout.test.mjs": 1,
+  "tests/projects.test.mjs": 1
+ },
+ "8cfb931bbd79": {
+  "tests/layout.test.mjs": 1,
+  "tests/projects.test.mjs": 1
+ },
+ "f4b2c4b1679b": {
+  "tests/layout.test.mjs": 1,
+  "tests/projects.test.mjs": 1
+ },
+ "1eb29d0db318": {
+  "tests/layout.test.mjs": 1,
+  "tests/projects.test.mjs": 1
+ },
+ "02fd4c7acf61": {
+  "tests/layout.test.mjs": 1,
+  "tests/projects.test.mjs": 1
+ },
+ "62dc1d797bd2": {
+  "tests/layout.test.mjs": 1,
+  "tests/projects.test.mjs": 1
+ },
+ "19472780792f": {
+  "tests/layout.test.mjs": 2
+ },
+ "be9753f10621": {
+  "tests/layout.test.mjs": 2
+ },
+ "4681a9034db4": {
+  "tests/layout.test.mjs": 2
+ },
+ "cadcd4bb8fd0": {
+  "tests/layout.test.mjs": 2
+ },
+ "8fee54297874": {
+  "tests/liveness.test.mjs": 2
+ },
+ "6503b44cc39d": {
+  "tests/liveness.test.mjs": 2
+ },
+ "d16561daa81a": {
+  "tests/liveness.test.mjs": 2
+ },
+ "af2705fcc288": {
+  "tests/liveness.test.mjs": 2
+ },
+ "83e66881f881": {
+  "tests/liveness.test.mjs": 2
+ },
+ "62e621c81eb4": {
+  "tests/look.test.mjs": 1,
+  "tests/remote-read.test.mjs": 1
+ },
+ "327f8cb285c9": {
+  "tests/look.test.mjs": 1,
+  "tests/remote-read.test.mjs": 2
+ },
+ "a2462dbfef8d": {
+  "tests/look.test.mjs": 8
+ },
+ "c0dfc8797b7a": {
+  "tests/look.test.mjs": 2
+ },
+ "bb2b516b7ca4": {
+  "tests/look.test.mjs": 2
+ },
+ "36f2f71fb12e": {
+  "tests/look.test.mjs": 2
+ },
+ "4b07ec4b5db2": {
+  "tests/look.test.mjs": 2
+ },
+ "7089433e9a64": {
+  "tests/look.test.mjs": 2
+ },
+ "083adfa917a5": {
+  "tests/look.test.mjs": 8
+ },
+ "4f2f5f1d7931": {
+  "tests/look.test.mjs": 6
+ },
+ "e0d1737b34c6": {
+  "tests/look.test.mjs": 2
+ },
+ "8389dee7aa13": {
+  "tests/look.test.mjs": 2
+ },
+ "26bc9becb02f": {
+  "tests/look.test.mjs": 2
+ },
+ "8143232c42c6": {
+  "tests/look.test.mjs": 2
+ },
+ "840f4561e470": {
+  "tests/look.test.mjs": 2
+ },
+ "2bc035586b2c": {
+  "tests/look.test.mjs": 2
+ },
+ "a919e8e59979": {
+  "tests/machines.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "374f09c981a5": {
+  "tests/machines.test.mjs": 1,
+  "tests/sidebar-views.test.mjs": 1
+ },
+ "48696ad917c0": {
+  "tests/machines.test.mjs": 2
+ },
+ "43091941e50a": {
+  "tests/machines.test.mjs": 3
+ },
+ "e87e0a5fb1ca": {
+  "tests/machines.test.mjs": 2
+ },
+ "9227c89feedd": {
+  "tests/machines.test.mjs": 2
+ },
+ "bc678f0b5a92": {
+  "tests/machines.test.mjs": 2
+ },
+ "a24654719c30": {
+  "tests/machines.test.mjs": 2
+ },
+ "4bd5679628aa": {
+  "tests/machines.test.mjs": 3
+ },
+ "766aaadb1ca1": {
+  "tests/machines.test.mjs": 2
+ },
+ "25f68cd181d0": {
+  "tests/machines.test.mjs": 2
+ },
+ "7de71faab2b0": {
+  "tests/machines.test.mjs": 1,
+  "tests/panel-state.test.mjs": 1,
+  "tests/projects.test.mjs": 1
+ },
+ "0e6f702a26e6": {
+  "tests/mark.test.mjs": 1,
+  "tests/row.test.mjs": 1
+ },
+ "e70be0d451d6": {
+  "tests/mark.test.mjs": 3
+ },
+ "33bb6cb79b7a": {
+  "tests/menu.test.mjs": 1,
+  "tests/pane-header.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1,
+  "tests/toolbar.test.mjs": 1
+ },
+ "a13c447f3238": {
+  "tests/menu.test.mjs": 1,
+  "tests/toolbar.test.mjs": 1
+ },
+ "9782dc9ad160": {
+  "tests/menu.test.mjs": 1,
+  "tests/toolbar.test.mjs": 1
+ },
+ "586d7b570e81": {
+  "tests/needs-you.test.mjs": 2
+ },
+ "1f4fece3b0c4": {
+  "tests/needs-you.test.mjs": 1,
+  "tests/since-left.test.mjs": 1
+ },
+ "ca434c9ac594": {
+  "tests/needs-you.test.mjs": 2
+ },
+ "7177f71f9e41": {
+  "tests/needs-you.test.mjs": 2
+ },
+ "081099607bef": {
+  "tests/needs-you.test.mjs": 2
+ },
+ "5c0d3c88115b": {
+  "tests/needs-you.test.mjs": 2
+ },
+ "f601d6c3b361": {
+  "tests/needs-you.test.mjs": 2
+ },
+ "196e2be169d7": {
+  "tests/needs-you.test.mjs": 2
+ },
+ "46ba9a0b9d05": {
+  "tests/needs-you.test.mjs": 1,
+  "tests/status.test.mjs": 1
+ },
+ "7467c3d414c6": {
+  "tests/open-with.test.mjs": 2
+ },
+ "15795beda238": {
+  "tests/open-with.test.mjs": 2
+ },
+ "95f4af48e892": {
+  "tests/open-with.test.mjs": 2
+ },
+ "fcb174faded6": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "ccddca434a94": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "6684595dc920": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "7aab19f52711": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "fe4fb7953767": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "e4397efbb674": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/state-pattern.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "be2364eeddd7": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "8fc4f619b1e8": {
+  "tests/pane-header.test.mjs": 1,
+  "tests/state-pattern.test.mjs": 1,
+  "tests/tab-bar.test.mjs": 1
+ },
+ "06e7aae2b9a5": {
+  "tests/pane-header.test.mjs": 2
+ },
+ "9160e59091f1": {
+  "tests/panel-state.test.mjs": 2
+ },
+ "d93ce4de99ac": {
+  "tests/perf-budget.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1
+ },
+ "8af81559da59": {
+  "tests/perf-budget.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1
+ },
+ "5544de1958e4": {
+  "tests/perf-budget.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1
+ },
+ "2f8987fdc60d": {
+  "tests/perf-budget.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1
+ },
+ "0d94c35d68b2": {
+  "tests/perf-budget.test.mjs": 1,
+  "tests/perf-idle.test.mjs": 1
+ },
+ "da336714ad59": {
+  "tests/perf-idle.test.mjs": 2
+ },
+ "2e2e5407e10c": {
+  "tests/perf-idle.test.mjs": 4
+ },
+ "5f2565988b91": {
+  "tests/perf-idle.test.mjs": 2
+ },
+ "a312a5457eea": {
+  "tests/perf-idle.test.mjs": 2
+ },
+ "2a7067bd219e": {
+  "tests/perf-idle.test.mjs": 2
+ },
+ "2df96211d483": {
+  "tests/perf-idle.test.mjs": 2
+ },
+ "5980ba9b909f": {
+  "tests/perf-idle.test.mjs": 2
+ },
+ "acaba18ed1fc": {
+  "tests/perf-process.test.mjs": 2
+ },
+ "a35cc8c37918": {
+  "tests/perf-process.test.mjs": 2
+ },
+ "1d83bf7dd50d": {
+  "tests/pets.test.mjs": 2
+ },
+ "47360c2d0d78": {
+  "tests/pets.test.mjs": 2
+ },
+ "7614a369cf91": {
+  "tests/pets.test.mjs": 2
+ },
+ "c6a7a4c44d30": {
+  "tests/pieces.test.mjs": 2
+ },
+ "69c9f965ba4c": {
+  "tests/pieces.test.mjs": 3
+ },
+ "6b1e8b24390b": {
+  "tests/pieces.test.mjs": 2
+ },
+ "6ceffef405c6": {
+  "tests/pieces.test.mjs": 2
+ },
+ "1b66aca4f10c": {
+  "tests/pieces.test.mjs": 2,
+  "tests/update-channel.test.mjs": 2
+ },
+ "c26b2680c263": {
+  "tests/pieces.test.mjs": 2
+ },
+ "cdc309dc4824": {
+  "tests/platform-native.test.mjs": 2
+ },
+ "b24e613948a6": {
+  "tests/platform-services.test.mjs": 2
+ },
+ "dcdcc18710ec": {
+  "tests/ports.test.mjs": 6
+ },
+ "78d301f49dfb": {
+  "tests/ports.test.mjs": 14
+ },
+ "ce7010e5d260": {
+  "tests/ports.test.mjs": 13
+ },
+ "bf0d9b4645ef": {
+  "tests/ports.test.mjs": 4
+ },
+ "2e9775d843df": {
+  "tests/ports.test.mjs": 4
+ },
+ "78922f29d3a6": {
+  "tests/ports.test.mjs": 2
+ },
+ "53944ea56de6": {
+  "tests/ports.test.mjs": 2
+ },
+ "bf464677398a": {
+  "tests/ports.test.mjs": 3
+ },
+ "2b083e6336a6": {
+  "tests/ports.test.mjs": 2
+ },
+ "24517ff37948": {
+  "tests/ports.test.mjs": 2
+ },
+ "a6d7a44a6190": {
+  "tests/ports.test.mjs": 2
+ },
+ "e5a58b5faf10": {
+  "tests/ports.test.mjs": 2
+ },
+ "41a585bce0d7": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "5ba139b1594b": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "3f197dabf9fc": {
+  "tests/pr-inbox.test.mjs": 1,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "fd6a737a3008": {
+  "tests/pr-inbox.test.mjs": 1,
+  "tests/pr-panel.test.mjs": 7,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "e2f161e06531": {
+  "tests/pr-inbox.test.mjs": 12,
+  "tests/pr-panel.test.mjs": 7
+ },
+ "eb05b38af303": {
+  "tests/pr-inbox.test.mjs": 3
+ },
+ "fac023ffac1a": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "b2dfefc2e90d": {
+  "tests/pr-inbox.test.mjs": 9
+ },
+ "ecaa4239fbd1": {
+  "tests/pr-inbox.test.mjs": 10
+ },
+ "5a0ea6b7b5b6": {
+  "tests/pr-inbox.test.mjs": 10
+ },
+ "2a39fdd0b0ce": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "f64c70cdb83f": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "019e706f4dbc": {
+  "tests/pr-inbox.test.mjs": 3
+ },
+ "b0dce50509ff": {
+  "tests/pr-inbox.test.mjs": 3
+ },
+ "cd27d51ea48a": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "436030730096": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "b2521903c5d4": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "7012b3f7fc17": {
+  "tests/pr-inbox.test.mjs": 3
+ },
+ "9254aa709fd2": {
+  "tests/pr-inbox.test.mjs": 3
+ },
+ "308345ed0c93": {
+  "tests/pr-inbox.test.mjs": 3
+ },
+ "3f7be6accc9f": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "55efdd9a14b2": {
+  "tests/pr-inbox.test.mjs": 4
+ },
+ "531564b4d721": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "f0614136b684": {
+  "tests/pr-inbox.test.mjs": 5
+ },
+ "39d67625fd29": {
+  "tests/pr-inbox.test.mjs": 5
+ },
+ "42a11c19f74d": {
+  "tests/pr-inbox.test.mjs": 5,
+  "tests/pr-panel.test.mjs": 2,
+  "tests/pr-poll.test.mjs": 8
+ },
+ "8da4ea378da9": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "22ee36f75faa": {
+  "tests/pr-inbox.test.mjs": 4
+ },
+ "c15f885de897": {
+  "tests/pr-inbox.test.mjs": 5
+ },
+ "a2a92bcfeefa": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "10417f74c5b9": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "489373630369": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "a11d5abaca28": {
+  "tests/pr-inbox.test.mjs": 2,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "113e0db5bc31": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "9758a2aab39b": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "4b577598549b": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "ba2ba84d8bfe": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "d4de91ae1bf1": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "30591e422b3a": {
+  "tests/pr-inbox.test.mjs": 2
+ },
+ "e2a571882136": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "9eb7c7fd8151": {
+  "tests/pr-panel.test.mjs": 2,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "4c5ec1eb7c7f": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "e2d46caec323": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "63f07e2b7ae5": {
+  "tests/pr-panel.test.mjs": 3
+ },
+ "254e51e850c3": {
+  "tests/pr-panel.test.mjs": 3
+ },
+ "6e9f7535d65b": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "db86fb42beab": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "c005a22af3ce": {
+  "tests/pr-panel.test.mjs": 6
+ },
+ "bafb5a8d193a": {
+  "tests/pr-panel.test.mjs": 6
+ },
+ "ca71186342bf": {
+  "tests/pr-panel.test.mjs": 4
+ },
+ "260e37293813": {
+  "tests/pr-panel.test.mjs": 5
+ },
+ "b1c0dfcb003d": {
+  "tests/pr-panel.test.mjs": 7,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "2a1347395667": {
+  "tests/pr-panel.test.mjs": 1,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "6e3f1b964a98": {
+  "tests/pr-panel.test.mjs": 4
+ },
+ "7bb7bb4aa013": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "5305cf484678": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "e0d228cba480": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "1f64a5dceec8": {
+  "tests/pr-panel.test.mjs": 3
+ },
+ "6806f342976c": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "f8fee8d54a9d": {
+  "tests/pr-panel.test.mjs": 1,
+  "tests/pr-poll.test.mjs": 1
+ },
+ "5a1d7644c9f0": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "f154bff7ea15": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "dc45bcb8c7f5": {
+  "tests/pr-panel.test.mjs": 2
+ },
+ "1b88b3704418": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "ac46816b6a47": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "bffba97b7abb": {
+  "tests/pr-poll.test.mjs": 5
+ },
+ "550665895d05": {
+  "tests/pr-poll.test.mjs": 7
+ },
+ "2ac56254d7b5": {
+  "tests/pr-poll.test.mjs": 5
+ },
+ "5bdf9dbc9032": {
+  "tests/pr-poll.test.mjs": 3
+ },
+ "06e495a4f2fd": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "583f9bbe4d62": {
+  "tests/pr-poll.test.mjs": 3
+ },
+ "007801618d09": {
+  "tests/pr-poll.test.mjs": 3
+ },
+ "b0d075bc9869": {
+  "tests/pr-poll.test.mjs": 5
+ },
+ "a5cfa42c19fd": {
+  "tests/pr-poll.test.mjs": 3
+ },
+ "8c87aa2e70b8": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "72f04e588b1f": {
+  "tests/pr-poll.test.mjs": 4
+ },
+ "41d0861a51f5": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "cd6bab9a57c2": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "105587f2a17b": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "b742fa27cf04": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "33b5485246db": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "c3e3dbd89941": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "2e39d123876f": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "edacf9ac338e": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "c4066177f0a2": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "e0dcd90eb435": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "e64b0cb52b3d": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "3a53f305817f": {
+  "tests/pr-poll.test.mjs": 2
+ },
+ "e1204cbb4740": {
+  "tests/projects.test.mjs": 1,
+  "tests/worktrees.test.mjs": 1
+ },
+ "473228323b1e": {
+  "tests/projects.test.mjs": 1,
+  "tests/worktrees.test.mjs": 1
+ },
+ "72b19f7f9f50": {
+  "tests/projects.test.mjs": 1,
+  "tests/rail.test.mjs": 1
+ },
+ "31e094155275": {
+  "tests/projects.test.mjs": 2
+ },
+ "62cf04678ba6": {
+  "tests/projects.test.mjs": 2
+ },
+ "ea8f6eb04c68": {
+  "tests/projects.test.mjs": 2
+ },
+ "006675e8ea23": {
+  "tests/projects.test.mjs": 2
+ },
+ "56b14533d421": {
+  "tests/projects.test.mjs": 2
+ },
+ "a64b52789b9a": {
+  "tests/projects.test.mjs": 1,
+  "tests/rail.test.mjs": 1
+ },
+ "291491854cad": {
+  "tests/projects.test.mjs": 1,
+  "tests/rail.test.mjs": 1
+ },
+ "2afeb48c1aa9": {
+  "tests/projects.test.mjs": 2
+ },
+ "0e1d9e513645": {
+  "tests/projects.test.mjs": 2
+ },
+ "fe8d7ced0a99": {
+  "tests/projects.test.mjs": 2
+ },
+ "a7981658d3aa": {
+  "tests/projects.test.mjs": 2
+ },
+ "d19b94fa18c0": {
+  "tests/rail.test.mjs": 1,
+  "tests/sidebar-drag.test.mjs": 1
+ },
+ "5cefa6d591c1": {
+  "tests/release-workflow.test.mjs": 2
+ },
+ "e33aef80a116": {
+  "tests/release-workflow.test.mjs": 2
+ },
+ "71b2b2a7c47e": {
+  "tests/release-workflow.test.mjs": 2
+ },
+ "bf88ccb067fe": {
+  "tests/remote-read.test.mjs": 3
+ },
+ "131ccda863d1": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "478e3c38249e": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "8f69545b7f86": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "96cf62c2b951": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "a2029cf6011c": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "11fe5e0cf11e": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "f1bf061b5972": {
+  "tests/remote-read.test.mjs": 3
+ },
+ "646e7d289d44": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "7519b6dfe3df": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "6a8d12994546": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "33ce13b3640a": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "8caa8488139b": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "7ae9ebced485": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "573d5211d4e9": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "259390af24a0": {
+  "tests/remote-read.test.mjs": 2
+ },
+ "fbb6438f15f7": {
+  "tests/roster.test.mjs": 3
+ },
+ "593e6817e56d": {
+  "tests/roster.test.mjs": 2
+ },
+ "e453d775432a": {
+  "tests/roster.test.mjs": 2
+ },
+ "0c4fc8ee95cd": {
+  "tests/row.test.mjs": 5
+ },
+ "111289f919b6": {
+  "tests/segmented.test.mjs": 2
+ },
+ "b4b52e1b7df9": {
+  "tests/segmented.test.mjs": 2
+ },
+ "1c4f7bfba644": {
+  "tests/settings.test.mjs": 2
+ },
+ "91912984f411": {
+  "tests/shipped-store.test.mjs": 1,
+  "tests/shipped.test.mjs": 1,
+  "tests/update-harness.mjs": 1
+ },
+ "e17d8a164a0e": {
+  "tests/shipped-store.test.mjs": 1,
+  "tests/shipped.test.mjs": 1
+ },
+ "4c78c0215ae1": {
+  "tests/shipped-store.test.mjs": 3
+ },
+ "d9b8d03b5e10": {
+  "tests/shipped-store.test.mjs": 4
+ },
+ "30959f3fff63": {
+  "tests/shipped.test.mjs": 2
+ },
+ "ea10741d9ca1": {
+  "tests/shipped.test.mjs": 2
+ },
+ "6193fecfb92e": {
+  "tests/sidebar-drag.test.mjs": 2
+ },
+ "363c04dc9b47": {
+  "tests/sidebar-drag.test.mjs": 2
+ },
+ "b5cae38c2740": {
+  "tests/sidebar-views.test.mjs": 2
+ },
+ "aec133027f62": {
+  "tests/sidebar-views.test.mjs": 2
+ },
+ "00864305558f": {
+  "tests/sidebar-views.test.mjs": 2
+ },
+ "3f347d0253d5": {
+  "tests/sim.test.mjs": 2
+ },
+ "c58cc4e42e66": {
+  "tests/sim.test.mjs": 2
+ },
+ "7f4af829663a": {
+  "tests/sim.test.mjs": 4
+ },
+ "ee60d13f09c2": {
+  "tests/sim.test.mjs": 2
+ },
+ "8885b55859e4": {
+  "tests/sim.test.mjs": 2
+ },
+ "a104ffcc7a62": {
+  "tests/since-left.test.mjs": 2
+ },
+ "6eefee8fff33": {
+  "tests/since-left.test.mjs": 2
+ },
+ "df47318482d4": {
+  "tests/since-left.test.mjs": 2
+ },
+ "df68af453d5e": {
+  "tests/since-left.test.mjs": 2
+ },
+ "bb5c1eb8a319": {
+  "tests/since-left.test.mjs": 2
+ },
+ "1edffe78350a": {
+  "tests/since-left.test.mjs": 2
+ },
+ "c33ee4811a23": {
+  "tests/since-left.test.mjs": 2
+ },
+ "f86bd6a9f185": {
+  "tests/since-left.test.mjs": 2
+ },
+ "50c2aacd3932": {
+  "tests/since-left.test.mjs": 2
+ },
+ "4f680511e524": {
+  "tests/site.test.mjs": 2
+ },
+ "2d9cd0622cfb": {
+  "tests/status.test.mjs": 9
+ },
+ "23c1529de499": {
+  "tests/status.test.mjs": 11
+ },
+ "3d0f373c2193": {
+  "tests/status.test.mjs": 3
+ },
+ "d9509ca50750": {
+  "tests/status.test.mjs": 3
+ },
+ "db4a606ef018": {
+  "tests/status.test.mjs": 2
+ },
+ "63d9d02dae93": {
+  "tests/status.test.mjs": 2
+ },
+ "a6c649c24f27": {
+  "tests/status.test.mjs": 2
+ },
+ "408660f3dc89": {
+  "tests/storybook.test.mjs": 2
+ },
+ "0e0398500e8d": {
+  "tests/sync.test.mjs": 2
+ },
+ "180a4e587052": {
+  "tests/sync.test.mjs": 2
+ },
+ "7e5b9b4081a6": {
+  "tests/tab-bar.test.mjs": 2
+ },
+ "a2bc9b1dff27": {
+  "tests/theme-contrast.test.mjs": 1,
+  "tests/washes.test.mjs": 1
+ },
+ "45aadcb678b6": {
+  "tests/toggle.test.mjs": 2
+ },
+ "52782fec4df5": {
+  "tests/update-channel.test.mjs": 2
+ },
+ "cd2b9f34c47a": {
+  "tests/update-channel.test.mjs": 2
+ },
+ "747171c1d5ca": {
+  "tests/update-channel.test.mjs": 2
+ },
+ "179db1ba4e3d": {
+  "tests/update-channel.test.mjs": 2
+ },
+ "67c547e2378e": {
+  "tests/update-channel.test.mjs": 1,
+  "tests/update.test.mjs": 2
+ },
+ "e0078175fa7f": {
+  "tests/update-died.test.mjs": 1,
+  "tests/update-install.test.mjs": 1
+ },
+ "19a2e138479a": {
+  "tests/update-died.test.mjs": 1,
+  "tests/update-lock.test.mjs": 1
+ },
+ "7a93bf2f2ffc": {
+  "tests/update-died.test.mjs": 1,
+  "tests/update-recover.test.mjs": 1
+ },
+ "686e6a1ffe84": {
+  "tests/update-died.test.mjs": 1,
+  "tests/update-follow.test.mjs": 2,
+  "tests/update-recover.test.mjs": 1
+ },
+ "6fa472a692fb": {
+  "tests/update-died.test.mjs": 1,
+  "tests/update-follow.test.mjs": 2,
+  "tests/update-recover.test.mjs": 1
+ },
+ "be28bc95e265": {
+  "tests/update-died.test.mjs": 1,
+  "tests/update-recovery-killed.test.mjs": 1
+ },
+ "e472b5db522f": {
+  "tests/update-follow.test.mjs": 2,
+  "tests/update-install.test.mjs": 4,
+  "tests/update-lock.test.mjs": 3,
+  "tests/update.test.mjs": 1
+ },
+ "8cc5d5fefadc": {
+  "tests/update-follow.test.mjs": 2,
+  "tests/update-harness.mjs": 1,
+  "tests/update-install.test.mjs": 5,
+  "tests/update-lock.test.mjs": 4,
+  "tests/update-recover.test.mjs": 1,
+  "tests/update.test.mjs": 2
+ },
+ "07445ee953f8": {
+  "tests/update-follow.test.mjs": 2,
+  "tests/update-harness.mjs": 1,
+  "tests/update-install.test.mjs": 5,
+  "tests/update-lock.test.mjs": 4,
+  "tests/update.test.mjs": 2
+ },
+ "eeade8f0b9cb": {
+  "tests/update-follow.test.mjs": 1,
+  "tests/update-lock.test.mjs": 1
+ },
+ "de1e47253c6e": {
+  "tests/update-follow.test.mjs": 1,
+  "tests/update-harness.mjs": 1
+ },
+ "f9ae5c33c1ce": {
+  "tests/update-harness.mjs": 2
+ },
+ "55cdcc56fc62": {
+  "tests/update-harness.mjs": 2
+ },
+ "deb550e580df": {
+  "tests/update-install.test.mjs": 3,
+  "tests/update-lock.test.mjs": 2
+ },
+ "87e58a692440": {
+  "tests/update-install.test.mjs": 2,
+  "tests/update-lock.test.mjs": 3
+ },
+ "b2411164cc43": {
+  "tests/update-install.test.mjs": 3
+ },
+ "09484a74388f": {
+  "tests/update-install.test.mjs": 1,
+  "tests/update-lock.test.mjs": 1
+ },
+ "3c8c992cd608": {
+  "tests/update-install.test.mjs": 1,
+  "tests/update-lock.test.mjs": 1
+ },
+ "db7fcb5126a0": {
+  "tests/update-install.test.mjs": 1,
+  "tests/update-lock.test.mjs": 1
+ },
+ "a893625b1086": {
+  "tests/update-install.test.mjs": 1,
+  "tests/update-lock.test.mjs": 1
+ },
+ "9ba49796d737": {
+  "tests/update-kill-swap.test.mjs": 2
+ },
+ "544dc175331b": {
+  "tests/update-lock.test.mjs": 2
+ },
+ "f0ffcde6b775": {
+  "tests/update-lock.test.mjs": 1,
+  "tests/update-recover.test.mjs": 1
+ },
+ "b03bfbbd02c3": {
+  "tests/update.test.mjs": 2
+ },
+ "e613f032e996": {
+  "tests/update.test.mjs": 4
+ },
+ "d566f3aebd50": {
+  "tests/update.test.mjs": 4
+ },
+ "c230c65ff203": {
+  "tests/update.test.mjs": 2
+ },
+ "a1b8480da150": {
+  "tests/update.test.mjs": 2
+ },
+ "de4983ceb9fb": {
+  "tests/update.test.mjs": 2
+ },
+ "48cea5ba8c16": {
+  "tests/update.test.mjs": 2
+ },
+ "2a6287fbebd9": {
+  "tests/update.test.mjs": 2
+ },
+ "02950e72a1e9": {
+  "tests/update.test.mjs": 2
+ },
+ "507fddf13b54": {
+  "tests/update.test.mjs": 2
+ },
+ "59ec7dc8c3cb": {
+  "tests/update.test.mjs": 2
+ },
+ "e4cc1776f182": {
+  "tests/update.test.mjs": 2
+ },
+ "77169ed636b3": {
+  "tests/ux-coherence.test.mjs": 2
  }
 }

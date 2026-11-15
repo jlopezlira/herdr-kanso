@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MIN_CHARS, compare, duplicateGroups, repeatedWindows, scan, scannedFiles, significantLines } from "../scripts/check-dupes.mjs";
+import { MIN_LINE, MIN_RUN, compare, duplicateGroups, grown, repeatedWindows, scan, scannedFiles, significantLines } from "../scripts/check-dupes.mjs";
 import { SHARED } from "../scripts/sync-share.mjs";
 
 const block = [
   "const rows = await db.read(\"SELECT id, name FROM projects WHERE removed IS NULL;\");",
   "const names = rows.map((row) => row.name).filter(Boolean).toSorted();",
 ].join("\n");
+const listedFor = (files) => repeatedWindows(scan(files).windows);
+const twoCopies = { "a.js": block, "b.js": block };
 const unique = (name) => `export const ${name} = () => "${name} has its own code";`;
 
 test("A block repeated in two files is reported with both places", () => {
@@ -19,27 +21,46 @@ test("Blank lines, comments, imports and lone brackets are not code", () => {
   assert.deepEqual(significantLines(text), [{ line: 6, text: "const kept = 1;" }]);
 });
 
-test("Repeated code shorter than the minimum is not reported", () => {
-  const short = "x".repeat(MIN_CHARS - 1);
-  assert.deepEqual(duplicateGroups(scan({ "a.js": short, "b.js": short })), []);
+test("One line counts from the line minimum, and lines in a row from the run minimum", () => {
+  const found = (text) => duplicateGroups(scan({ "a.js": text, "b.js": text })).length;
+  assert.equal(found(`x${"y".repeat(MIN_LINE - 2)}`), 0);
+  assert.equal(found(`x${"y".repeat(MIN_LINE - 1)}`), 1);
+  const half = (size) => `x${"y".repeat(size - 1)}`;
+  assert.equal(found(`${half(MIN_RUN / 2)}\n${half(MIN_RUN / 2 - 1)}`), 0);
+  assert.equal(found(`${half(MIN_RUN / 2)}\n${half(MIN_RUN / 2)}`), 1);
+});
+
+test("The same block twice in one file is reported", () => {
+  assert.equal(duplicateGroups(scan({ "a.js": `${block}\n${unique("a")}\n${block}` }))[0].places.length, 2);
+});
+
+test("A CSS rule for every element is code, a comment's star line is not", () => {
+  assert.deepEqual(significantLines("* { box-sizing: border-box; }\n * the note\n */").map(({ text }) => text), ["* { box-sizing: border-box; }"]);
 });
 
 test("Code the baseline lists passes, even after it moves down the file", () => {
-  const baseline = repeatedWindows(scan({ "a.js": block, "b.js": block }).windows);
+  const baseline = listedFor(twoCopies);
   assert.deepEqual(compare(scan({ "a.js": `${unique("a")}\n\n${block}`, "b.js": block }).windows, baseline), { added: [], gone: [] });
 });
 
 test("A new copy of listed code fails with the file it was added to", () => {
-  const baseline = repeatedWindows(scan({ "a.js": block, "b.js": block }).windows);
-  const { added } = compare(scan({ "a.js": block, "b.js": block, "c.js": block }).windows, baseline);
+  const baseline = listedFor(twoCopies);
+  const { added } = compare(scan({ ...twoCopies, "c.js": block }).windows, baseline);
   assert.deepEqual([...new Set(added.map(({ file }) => file))], ["c.js"]);
 });
 
 test("A listed copy that is gone fails until the baseline is written again", () => {
-  const baseline = repeatedWindows(scan({ "a.js": block, "b.js": block }).windows);
+  const baseline = listedFor(twoCopies);
   const { added, gone } = compare(scan({ "a.js": block, "b.js": unique("b") }).windows, baseline);
   assert.deepEqual(added, []);
   assert.deepEqual([...new Set(gone.map(({ file }) => file))].sort(), ["a.js", "b.js"]);
+});
+
+test("A baseline that lists more than the base branch's has grown", () => {
+  const base = listedFor(twoCopies);
+  assert.deepEqual(grown(base, base), []);
+  const more = listedFor({ ...twoCopies, "c.js": block });
+  assert.deepEqual([...new Set(grown(more, base).map(({ file }) => file))], ["c.js"]);
 });
 
 test("Copies made by the shared-file sync are skipped and their sources scanned", async () => {
@@ -47,4 +68,5 @@ test("Copies made by the shared-file sync are skipped and their sources scanned"
   const copies = SHARED.flatMap(({ copies }) => copies);
   assert.deepEqual(files.filter((file) => copies.includes(file)), []);
   assert.ok(files.includes("kanso/mods/kanso-spaces/marks.js"));
+  assert.ok(files.includes("tests/check-dupes.test.mjs") && files.includes(".github/workflows/ci.yml"));
 });
