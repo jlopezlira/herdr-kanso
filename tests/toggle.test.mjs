@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost as host } from "./helpers.mjs";
 
-const kit = () => load("kanso-panel/ui.js", ["toggleSwitch", "SWITCH", "H", "G", "R", "mix", "WASH"], host());
+const kit = async () => ({ ...await load("kanso-panel/ui.js", ["SWITCH", "H", "G", "R", "mix", "WASH"], host()), ...await load("kanso-panel/ui-toggle.js", ["toggleSwitch"], host()) });
 
 const arg = (el, name) => {
   const found = el.calls.filter((call) => call[0] === name);

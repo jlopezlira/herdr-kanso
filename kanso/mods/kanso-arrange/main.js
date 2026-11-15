@@ -6,7 +6,10 @@ import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { tryOr } from "./pure.js";
-import { skeleton, breathe, button, field, TextField, G, tokens, Armed } from "./ui.js";
+import { breathe, G, tokens } from "./ui.js";
+import { button, Armed } from "./ui-button.js";
+import { field, TextField } from "./ui-field.js";
+import { skeleton } from "./ui-skeleton.js";
 
 export function listFor(projects, key) {
   const tag = (k) => (projects?.[k] ?? []).map((a) => ({ ...a, from: k }));

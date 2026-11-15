@@ -39,7 +39,7 @@ test("Spend opens on today, and a chosen period is the one it accepts next time"
 });
 
 test("a second press within four seconds confirms, and after that it arms again", async () => {
-  const { Armed, ARM_MS } = await load("kanso-panel/ui.js", ["Armed", "ARM_MS"], { Date });
+  const { Armed, ARM_MS } = await load("kanso-panel/ui-button.js", ["Armed", "ARM_MS"], { Date });
   const armed = new Armed();
   const ran = [];
   const timers = [];
@@ -98,13 +98,13 @@ test("armed ink comes from the kit token", async () => {
     assert.equal(source.includes("#ffffff"), false, file);
     assert.match(source, /this\.armed\.button\("[\w-]+"/, file);
   }
-  assert.match(await text("kanso/mods/kanso-panel/ui.js"), /filled\(c\.accent, c\.accentText, c\)/);
+  assert.match(await text("kanso/mods/kanso-panel/ui-button.js"), /filled\(c\.accent, c\.accentText, c\)/);
 });
 
 test("one armed wording: only the kit says Press again, and only as Press again to <verb>", async () => {
   const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
   const all = async (dir) => (await readdir(dir, { recursive: true })).filter((name) => /\.m?js$/.test(name)).map((name) => join(dir, name));
-  const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !/[\\/]ui\.js$/.test(file));
+  const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !/[\\/]ui-button\.js$/.test(file));
   const found = [];
   for (const file of files) {
     for (const line of (await readFile(file, "utf8")).split("\n")) {
@@ -112,7 +112,7 @@ test("one armed wording: only the kit says Press again, and only as Press again 
     }
   }
   assert.deepEqual(found, []);
-  assert.match(await text("kanso/mods/kanso-panel/ui.js"), /export const pressAgain = \(verb\) => `Press again to \$\{verb\}`;/);
+  assert.match(await text("kanso/mods/kanso-panel/ui-button.js"), /export const pressAgain = \(verb\) => `Press again to \$\{verb\}`;/);
 });
 test("the teaching footers are gone and a scan time can still be said", async () => {
   assert.equal((await text("kanso/mods/kanso-panel/ports.js")).includes("Programs of yours listening"), false);

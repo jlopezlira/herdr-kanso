@@ -4,7 +4,8 @@
 // label on the terminal in herdr-core.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
-import { button, tokens } from "./ui.js";
+import { tokens } from "./ui.js";
+import { button } from "./ui-button.js";
 import { run, hc, props, closeOverlay, theme } from "herdr";
 
 export default class PromptEditor extends View {

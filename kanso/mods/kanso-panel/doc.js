@@ -5,7 +5,9 @@ import { div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home, appHome } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
-import { skeleton, breathe, quietLink, button, tokens } from "./ui.js";
+import { breathe, tokens } from "./ui.js";
+import { quietLink, button } from "./ui-button.js";
+import { skeleton } from "./ui-skeleton.js";
 import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
 import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs, tooLarge, wholeText, overRead } from "./edit.js";
 

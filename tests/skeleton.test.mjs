@@ -69,9 +69,8 @@ const c = {
 
 test("the shared skeleton is one vocabulary: a line, a block, the old list row and a header", async () => {
   const make = tape();
-  const { skeleton, ghost, breathe, BREATH } = await load("kanso-panel/ui.js", ["skeleton", "ghost", "breathe", "BREATH"], {
-    div: make, h_flex: make, svg: make,
-  });
+  const { skeleton, ghost } = await load("kanso-panel/ui-skeleton.js", ["skeleton", "ghost"], { div: make, h_flex: make, svg: make });
+  const { breathe, BREATH } = await load("kanso-panel/ui.js", ["breathe", "BREATH"], {});
   assert.equal(ghost, skeleton);
   const { line, row, header } = skeleton({ border: "#ccc" });
   const plain = row(0).__node.calls;

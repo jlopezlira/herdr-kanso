@@ -7,7 +7,9 @@ import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, home } from "herdr";
 import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
-import { skeleton, breathe, button, tokens } from "./ui.js";
+import { breathe, tokens } from "./ui.js";
+import { button } from "./ui-button.js";
+import { skeleton } from "./ui-skeleton.js";
 
 export const CLEAR_MS = 3000;
 export const RESEND_MS = 5000;

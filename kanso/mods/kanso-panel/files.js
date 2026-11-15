@@ -13,7 +13,10 @@ import { walkLayout } from "./layout.js";
 import { listFailure, remoteDue, parseTree, pollStart, pollNext, ArmPoll, takeStamp, staleView, asOf } from "./remote-file.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
-import { skeleton, breathe, quietLink, tokens, stateEmpty } from "./ui.js";
+import { breathe, tokens } from "./ui.js";
+import { quietLink } from "./ui-button.js";
+import { skeleton } from "./ui-skeleton.js";
+import { stateEmpty } from "./ui-state.js";
 import { failure } from "./lib.js";
 import { Front } from "./front.js";
 

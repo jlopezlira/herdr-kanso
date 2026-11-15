@@ -83,7 +83,7 @@ test("Imports survive a string, a comment and a template, and a rename keeps the
   assert.deepEqual(importsOf(clip).map((item) => item.from), ["./platform-command.js"]);
   const view = readFileSync(new URL("../kanso/mods/kanso-panel/find-view.js", import.meta.url), "utf8");
   const found = importsOf(view).find((item) => item.from === "./find.js");
-  assert.equal(found.specs.find((spec) => spec.imported === "locateConversation").line, 10);
+  assert.equal(found.specs.find((spec) => spec.imported === "locateConversation").line, 13);
 });
 
 test("A bare global the runtime does not provide is reported, and a binding or a comment is not", () => {

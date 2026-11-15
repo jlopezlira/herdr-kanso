@@ -3,7 +3,10 @@ import { processApi } from "./platform-processes.js";
 import { div, list, svg } from "gpui-kit";
 import { v_flex, h_flex, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
-import { tokens, skeleton, field, TextField, iconButton, G, H, R, T, ICON, EASE } from "./ui.js";
+import { tokens, G, H, R, T, ICON, EASE } from "./ui.js";
+import { iconButton } from "./ui-button.js";
+import { field, TextField } from "./ui-field.js";
+import { skeleton } from "./ui-skeleton.js";
 import { markdownView } from "./lib.js";
 import { tryOr } from "./pure.js";
 import {

@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost } from "./helpers.mjs";
 
-const kit = () => load("kanso-panel/ui.js", ["stateEmpty", "stateBlock", "stateLine", "pendingDot", "PENDING", "tokens", "G", "H", "R", "T", "ICON_ROW", "BREATH"], gpuiHost());
+const kit = async () => ({ ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "ICON_ROW", "BREATH"], gpuiHost()), ...await load("kanso-panel/ui-state.js", ["stateEmpty", "stateBlock", "stateLine", "pendingDot", "PENDING"], gpuiHost()) });
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", solid: "#d8d4cb", solid_foreground: "#161615", dim: "#6b6860", muted: "#949086", blocked: "#d5674f" };
 
 const calls = (el, name) => el.calls.filter((call) => call[0] === name);
@@ -102,7 +102,9 @@ test("Pending is drawn at 80% with a 4 px muted dot breathing beside it", async 
   assert.equal(PENDING, 0.8);
   assert.equal(arg(dot, "size"), G.xs);
   assert.equal(arg(dot, "bg"), c.muted);
-  assert.deepEqual(calls(dot, "loop")[0].slice(1), ["opacity", BREATH]);
+  const [, property, policy] = calls(dot, "loop")[0];
+  assert.equal(property, "opacity");
+  assert.deepEqual({ ...policy }, { ...BREATH });
 });
 
 test("The title bar draws the window's lights only: no Herdr mark and no name", async () => {

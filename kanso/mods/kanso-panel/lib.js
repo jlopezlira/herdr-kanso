@@ -3,7 +3,8 @@ import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
 import { spaces, panes, focused, layout, theme, settings, home } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
-import { stateBlock, ICON_ROW } from "./ui.js";
+import { ICON_ROW } from "./ui.js";
+import { stateBlock } from "./ui-state.js";
 import { stateMark } from "./marks.js";
 
 export function tilde(path) {

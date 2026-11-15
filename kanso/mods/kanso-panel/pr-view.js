@@ -2,7 +2,9 @@
 import { div, svg } from "gpui-kit";
 import { shared } from "herdr";
 import { v_flex, h_flex, Button } from "gpui-base";
-import { G, H, R, T, button, quietLink, section, toneColor } from "./ui.js";
+import { G, H, R, T, toneColor } from "./ui.js";
+import { button, quietLink } from "./ui-button.js";
+import { section } from "./ui-section.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
 import { verdictCard, VIEW } from "./pr-body.js";

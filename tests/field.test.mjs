@@ -10,7 +10,7 @@ const textState = (kind) => ({
   },
 });
 const host = () => ({ ...gpuiHost(), Input: { new: () => chain("input") }, Textarea: { new: () => chain("textarea") }, InputState: textState("input"), TextareaState: textState("textarea") });
-const kit = () => load("kanso-panel/ui.js", ["field", "TextField", "FIELD_LINES", "tokens", "mix", "WASH", "G", "H", "R", "T", "ICON"], host());
+const kit = async () => ({ ...await load("kanso-panel/ui.js", ["tokens", "mix", "WASH", "G", "H", "R", "T", "ICON"], host()), ...await load("kanso-panel/ui-field.js", ["field", "TextField", "FIELD_LINES"], host()) });
 
 const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const one = (el, name) => {

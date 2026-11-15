@@ -14,7 +14,8 @@ import { tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs } from "./pieces.js";
-import { H, iconButton, tokens, washes } from "./ui.js";
+import { H, tokens, washes } from "./ui.js";
+import { iconButton } from "./ui-button.js";
 
 // Panes the view holds at once (st.n, 1 to 8): a new column takes 1/n of the view.
 const N_MAX = 8;

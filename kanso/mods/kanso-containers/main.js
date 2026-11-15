@@ -8,7 +8,10 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared, readTextFile } from "herdr";
-import { G, Armed, tokens, quietLink, iconButton, field, TextField, ghost, breathe } from "./ui.js";
+import { G, tokens, breathe } from "./ui.js";
+import { Armed, quietLink, iconButton } from "./ui-button.js";
+import { field, TextField } from "./ui-field.js";
+import { ghost } from "./ui-skeleton.js";
 import { afterMount, parseOr } from "./pure.js";
 import { Front } from "./front.js";
 import {

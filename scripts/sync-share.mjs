@@ -8,8 +8,6 @@ const root = new URL("../", import.meta.url);
 // Each shared file (relative to the repo), and where it is copied.
 const COMMON = [
   { source: "kanso/mods/kanso-panel/share.js", copies: ["kanso/mods/kanso-spend/share.js", "kanso/mods/kanso-guard/share.js", "kanso/mods/kanso-dojo/share.js"] },
-  // The panels' kit: tokens, spacing, quiet links, icon buttons, silhouettes.
-  { source: "kanso/mods/kanso-panel/ui.js", copies: ["kanso/mods/kanso-spend/ui.js", "kanso/mods/kanso-settings/ui.js", "kanso/mods/kanso-guard/ui.js", "kanso/mods/kanso-help/ui.js", "kanso/mods/kanso-dojo/ui.js", "kanso/mods/kanso-containers/ui.js", "kanso/mods/kanso-spaces/ui.js", "kanso/mods/kanso-sleep/ui.js", "kanso/mods/kanso-arrange/ui.js", "kanso/mods/kanso-sim/ui.js", "kanso/mods/kanso-send/ui.js", "kanso/mods/kanso-prompt/ui.js", "kanso/mods/kanso-prompt-editor/ui.js", "kanso/mods/kanso-tabs/ui.js", "kanso/mods/kanso-strip/ui.js", "kanso/mods/kanso-status/ui.js", "kanso/mods/kanso-toast/ui.js", "markdown-panel/mods/markdown-panel/ui.js"] },
   // What can be shown, shown when it has something to say, or hidden. Hide stops the work.
   { source: "kanso/mods/kanso-settings/pieces.js", copies: ["kanso-spaces", "kanso-strip", "kanso-chrome", "kanso-tabs", "kanso-status", "kanso-panel", "kanso-sim"].map((m) => `kanso/mods/${m}/pieces.js`) },
   // An agent's state mark, program icon and name, the same in the tabs, headers, status bar, sidebar and Send.
@@ -70,15 +68,16 @@ const COMMON = [
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];
 
+// Platform modules and the panels' kit (ui.js and one ui-<piece>.js per piece): a mod gets only the ones it imports.
 const PLATFORM = "kanso/mods/kanso-panel/";
-const platformFile = (name) => /^platform(?:-[\w-]+)?\.js$/.test(name);
+const sharedFile = (name) => /^(?:platform|ui)(?:-[\w-]+)?\.js$/.test(name);
 const imports = (text) => [...text.matchAll(/^import\s+(?:(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)\s+from\s+)?["']\.\/([^"']+)["'];/gm)].map((match) => match[1]);
 
-export function platformDependencies(modules, canonical) {
+export function sharedDependencies(modules, canonical) {
   const needed = new Set();
   const visit = (name) => {
-    if (!platformFile(name) || needed.has(name)) return;
-    if (!canonical.has(name)) throw new Error(`Unknown platform module: ${name}`);
+    if (!sharedFile(name) || needed.has(name)) return;
+    if (!canonical.has(name)) throw new Error(`Unknown shared module: ${name}`);
     needed.add(name);
     imports(canonical.get(name)).forEach(visit);
   };
@@ -86,8 +85,8 @@ export function platformDependencies(modules, canonical) {
   return needed;
 }
 
-async function platformShares() {
-  const canonical = new Map(await Promise.all((await readdir(new URL(PLATFORM, root))).filter(platformFile)
+async function importedShares() {
+  const canonical = new Map(await Promise.all((await readdir(new URL(PLATFORM, root))).filter(sharedFile)
     .map(async (name) => [name, await readFile(new URL(PLATFORM + name, root), "utf8")])));
   const shared = new Map([...canonical.keys()].map((name) => [name, { source: PLATFORM + name, copies: [] }]));
   const overrides = new Map(COMMON.flatMap(({ source, copies }) => copies.map((copy) => [copy, source])));
@@ -98,21 +97,21 @@ async function platformShares() {
     if (folder === PLATFORM) continue;
     const names = await readdir(new URL(folder, root));
     const planned = [...new Set([...names, ...[...overrides.keys()].filter((copy) => copy.startsWith(folder)).map((copy) => copy.slice(folder.length))])];
-    const modules = await Promise.all(planned.filter((name) => /\.m?js$/.test(name) && !platformFile(name))
+    const modules = await Promise.all(planned.filter((name) => /\.m?js$/.test(name) && !sharedFile(name))
       .map((name) => readFile(new URL(overrides.get(folder + name) ?? folder + name, root), "utf8")));
-    const needed = platformDependencies(modules, canonical);
+    const needed = sharedDependencies(modules, canonical);
     for (const name of needed) shared.get(name).copies.push(folder + name);
-    obsolete.push(...names.filter((name) => platformFile(name) && !needed.has(name)).map((name) => folder + name));
+    obsolete.push(...names.filter((name) => sharedFile(name) && !needed.has(name)).map((name) => folder + name));
   }
   return { shared: [...shared.values()].filter(({ copies }) => copies.length), obsolete };
 }
-const platform = await platformShares();
-export const SHARED = [...COMMON, ...platform.shared];
+const imported = await importedShares();
+export const SHARED = [...COMMON, ...imported.shared];
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const check = process.argv.includes("--check");
   let stale = 0;
-  for (const copy of platform.obsolete) {
+  for (const copy of imported.obsolete) {
     if (check) { console.error(`${copy} is unused: run npm run sync:share`); stale += 1; }
     else { await rm(new URL(copy, root)); console.log(`removed unused ${copy}`); }
   }

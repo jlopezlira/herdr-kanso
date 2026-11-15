@@ -1,7 +1,9 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { run } from "herdr";
-import { G, R, T, tokens, quietLink, pendingDot, PENDING } from "./ui.js";
+import { G, R, T, tokens } from "./ui.js";
+import { quietLink } from "./ui-button.js";
+import { pendingDot, PENDING } from "./ui-state.js";
 import { commitLayout } from "./layout.js";
 import { ASLEEP_ROW, asleepControls, gitControls, gitTask, pullKey } from "./sidebar-rows.js";
 

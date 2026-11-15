@@ -14,7 +14,8 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme, home } from "herdr";
 import { MarkdownDoc, tildePath } from "./doc.js";
-import { button, iconButton, tokens } from "./ui.js";
+import { tokens } from "./ui.js";
+import { button, iconButton } from "./ui-button.js";
 import { afterMount } from "./pure.js";
 import { pollStart, pollNext, takeStamp, ArmPoll, asOf } from "./remote-file.js";
 

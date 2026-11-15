@@ -1,6 +1,8 @@
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { G, H, R, T, tokens, quietLink, skeleton } from "./ui.js";
+import { G, H, R, T, tokens } from "./ui.js";
+import { quietLink } from "./ui-button.js";
+import { skeleton } from "./ui-skeleton.js";
 import { waitingReason, queueMessage } from "./needs-you.js";
 
 export function queueLabel(queue, collapsed, empty) {

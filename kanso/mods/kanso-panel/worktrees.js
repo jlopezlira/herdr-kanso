@@ -11,7 +11,11 @@ import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } fr
 import { Share, postText } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
 import { tilde, pool, said, failNote } from "./lib.js";
-import { G, PULSE, breathe, Armed, tokens, button, quietLink, iconButton, section, ghost, stateEmpty } from "./ui.js";
+import { G, PULSE, breathe, tokens } from "./ui.js";
+import { Armed, button, quietLink, iconButton } from "./ui-button.js";
+import { section } from "./ui-section.js";
+import { ghost } from "./ui-skeleton.js";
+import { stateEmpty } from "./ui-state.js";
 import { aliasText, machineTitle, range, reduceSeries } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
 

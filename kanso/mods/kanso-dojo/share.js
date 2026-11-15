@@ -10,7 +10,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, home, writeTextFile, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
-import { button } from "./ui.js";
+import { button } from "./ui-button.js";
 
 export const NETWORKS = {
   x: { name: "X", wait: 4, url: (text) => `https://x.com/intent/post?text=${encodeURIComponent(text)}` },

@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load, chain, gpuiHost } from "./helpers.mjs";
 
-const kit = () => load("kanso-panel/ui.js", ["button", "quietLink", "iconButton", "mix", "WASH", "tokens", "G", "H", "R", "T", "ICON", "ICON_ROW"], gpuiHost());
+const kit = async () => ({ ...await load("kanso-panel/ui.js", ["mix", "WASH", "tokens", "G", "H", "R", "T", "ICON", "ICON_ROW"], gpuiHost()), ...await load("kanso-panel/ui-button.js", ["button", "quietLink", "iconButton"], gpuiHost()) });
 
 const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const one = (el, name) => {

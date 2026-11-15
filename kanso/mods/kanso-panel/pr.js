@@ -7,7 +7,12 @@ import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-ba
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { location, key, diffRows, monoFont, tilde, failure, said, failNote } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, H, R, T, breathe, Armed, tokens, button, quietLink, segmented, iconButton, field, TextField, section, ghost, toneColor } from "./ui.js";
+import { G, H, R, T, breathe, tokens, toneColor } from "./ui.js";
+import { Armed, button, quietLink, iconButton } from "./ui-button.js";
+import { field, TextField } from "./ui-field.js";
+import { section } from "./ui-section.js";
+import { ghost } from "./ui-skeleton.js";
+import { segmented } from "./ui-tab.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";

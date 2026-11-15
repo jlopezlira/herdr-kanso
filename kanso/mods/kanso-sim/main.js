@@ -4,7 +4,10 @@ import { exec, home, appHome, shared, setShared, window, theme, layout, spaces }
 import { mkdir, readFile, readdir, unlink } from "fs/promises";
 import { pathApi } from "./platform-paths.js";
 import { checked } from "./platform-command.js";
-import { G, H, R, T, tokens, quietLink, field, TextField, skeleton } from "./ui.js";
+import { G, H, R, T, tokens } from "./ui.js";
+import { quietLink } from "./ui-button.js";
+import { field, TextField } from "./ui-field.js";
+import { skeleton } from "./ui-skeleton.js";
 import { Front } from "./front.js";
 import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
 import { pieces, runs } from "./pieces.js";

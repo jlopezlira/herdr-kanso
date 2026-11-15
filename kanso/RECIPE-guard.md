@@ -149,8 +149,8 @@ Written by the guard to `${appHome()}/data/kanso-guard/` (read up to 1 MiB):
   `parseNow` (off, bad, stale or ok; agents heaviest first, events newest
   first), `size`, `span`, `clock`, `agentMeta`, `limitsNote`, `freeSeries`,
   `agentSparks`, `sparkFor`, `digestHistory`.
-- **`ui.js`**: the panel kit, a byte-for-byte copy of `kanso-panel/ui.js`
-  (`npm run sync:share`).
+- **`ui.js` and `ui-*.js`**: the pieces of the panel kit it uses, byte-for-byte
+  copies of the same files in `kanso-panel` (`npm run sync:share`).
 - **`guard-host.mjs`**: Node host primitives, with shared process and port services.
 - **`guard.mjs`**: the daemon (Node). Commands: `watch`, `check`, `install`, `uninstall`,
   `recycle <pid>`, `restart-window`, `reap`. It writes only under

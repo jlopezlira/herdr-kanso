@@ -1,6 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, R, T, ICON, iconButton, tokens } from "./ui.js";
+import { G, R, T, ICON, tokens } from "./ui.js";
+import { iconButton } from "./ui-button.js";
 import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
 import { statusMark, AGENT_PAD, agentRowH, duration } from "./agents.js";

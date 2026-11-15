@@ -6,7 +6,9 @@ import { v_flex, h_flex } from "gpui-base";
 import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
-import { button, field, TextField, G, tokens } from "./ui.js";
+import { G, tokens } from "./ui.js";
+import { button } from "./ui-button.js";
+import { field, TextField } from "./ui-field.js";
 
 const LAST = "kanso.send.last";
 
