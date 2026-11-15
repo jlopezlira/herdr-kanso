@@ -1608,11 +1608,9 @@ export default class Spaces extends View {
     const c = tokens(t);
     return dialog("worktree-dialog", c, {
       title: `New agent in a worktree of ${place.name ?? "this project"}`,
-      body: [
-        div().text_size(12).text_color(t.muted).child(`A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`),
-        field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }).pt(G.sm),
-      ],
-      notes: [{ text: this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel."), tone: this.wtError ? "error" : "dim" }],
+      body: field("wt-branch", this.branch, c, { error: Boolean(this.wtError) }),
+      notes: [{ text: `A new branch (or one you have), checked out in its own folder under ${shownBase}. The agent starts there.`, tone: "muted" },
+        { text: this.wtError ?? (this.making ? "Making the worktree\u2026" : "Enter to make it, Esc to cancel."), tone: this.wtError ? "error" : "dim" }],
       secondary: "Cancel", primary: "Make worktree", state: this.making ? "loading" : "default",
       onCancel: () => closeOverlay(props().overlay), onPrimary: (cx) => this.makeWorktree(cx),
     });

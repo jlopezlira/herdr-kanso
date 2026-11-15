@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, chain, gpuiHost, nodes, texts, press } from "./helpers.mjs";
 import { exportedNames } from "../scripts/mod-source.mjs";
 import * as storybookKit from "../stories/kit/kit.js";
 import * as storybookPieces from "../stories/kit/pieces.js";
@@ -17,14 +17,8 @@ const kits = async () => ({
 const night = { foreground: "#d8d4cb", background: "#1b1b19", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6862", muted: "#949086", blocked: "#ca938b", working: "#c4b07e", done: "#98ad8f" };
 // A drawing as plain data: handlers compare by kind, since each draw makes new ones.
 const drawn = (el) => ({ tag: el.tag, calls: el.calls.map((call) => call.map((arg) => (typeof arg === "function" ? "handler" : arg?.calls ? "element" : arg))), kids: el.kids.map(drawn) });
-const all = (el) => [el, ...el.kids.flatMap(all)];
-const svgs = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "svg").map((call) => call[1]));
-const ids = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "id").map((call) => call[1]));
-const texts = (el) => all(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "child" && typeof call[1] === "string").map((call) => call[1]));
-const press = (el, id) => {
-  const tool = all(el).find((kid) => kid.tag === id);
-  tool.calls.filter((call) => call[0] === "on_click").forEach(([, handler]) => handler({}, { stop_propagation: () => {} }));
-};
+const svgs = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "svg").map((call) => call[1]));
+const ids = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "id").map((call) => call[1]));
 const tools = [{ icon: "lu-pin", label: "Pin to the top" }, { icon: "lu-ellipsis", label: "More" }];
 
 test("A row from the shared kit draws what the app's row draws with the same props", async () => {
@@ -76,7 +70,7 @@ test("A piece inside a shared row is drawn by that row, with its own id and the 
   const c = tokens(night);
   const el = app.row({ name: "Atlas", start: [app.row({ name: "lead" })], tools: [app.row({ name: "tail" })] })("r", c);
   assert.ok(ids(el).includes("r-start-0") && ids(el).includes("r-tools-0"), ids(el).join(", "));
-  const inner = all(el).find((kid) => ids(kid)[0] === "r-tools-0");
+  const inner = nodes(el).find((kid) => ids(kid)[0] === "r-tools-0");
   assert.deepEqual(drawn(inner), drawn(row("r-tools-0", c, { name: "tail" })));
 });
 

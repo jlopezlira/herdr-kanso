@@ -174,7 +174,7 @@ export default class Arrange extends View {
         ],
         notes: [{ text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
           ...(replaces ? [{ text: `This replaces the arrangement named ${replaces.name}.`, tone: "muted" }] : []),
-          ...said],
+          ...statusNotes({ error: this.error })],
         secondary: "Back", primary: replaces ? "Overwrite" : "Save", state: cols.length ? "default" : "disabled",
         onCancel: back, onPrimary: (cx) => this.save(cx),
       });

@@ -15,6 +15,12 @@ export const CLEAR_MS = 3000;
 export const RESEND_MS = 5000;
 export const EXIT_MS = 45_000;
 const TICK_MS = 600;
+// What each scope stops, and how Wake brings it back.
+const WHAT_SLEEPS = Object.freeze({
+  project: "Every tab's agents exit and the tabs are put away. Wake brings them back, each agent on its conversation.",
+  agent: "It exits and its pane stays as a shell. Wake starts it there again, on its conversation.",
+  tab: "Its agents exit and the tab is put away. Wake brings it back, each agent on its conversation.",
+});
 
 export function sleepBlocker(recs) {
   const r = [...recs].map(([, x]) => x).find((x) => x?.status?.state === "working" || x?.status?.state === "blocked");
@@ -197,13 +203,10 @@ export default class Sleep extends View {
       ...shell,
       title: scope === "project" ? `Sleep ${project}` : scope === "agent" ? "Sleep this agent" : "Sleep this tab",
       body: [
-        div().text_size(11.5).line_height(1.45).text_color(t.dim).child(scope === "project" ? "Every tab's agents exit and the tabs are put away. Wake brings them back, each agent on its conversation."
-          : scope === "agent" ? "It exits and its pane stays as a shell. Wake starts it there again, on its conversation."
-          : "Its agents exit and the tab is put away. Wake brings it back, each agent on its conversation."),
         this.reads === null && !this.error ? this.sleepBones(t) : null,
-        v_flex().pt(14).gap(4).children(list.map(line)),
+        v_flex().gap(4).children(list.map(line)),
       ],
-      notes: [...(others.length ? [{ text: `${others.join(", ")} will stop now.` }] : []), ...statusNotes(this)],
+      notes: [{ text: WHAT_SLEEPS[scope] ?? WHAT_SLEEPS.tab }, ...(others.length ? [{ text: `${others.join(", ")} will stop now.` }] : []), ...statusNotes(this)],
       primary: scope === "project" ? "Sleep" : null,
       state: this.busy ? "loading" : !this.reads || this.error ? "disabled" : "default",
       onPrimary: (cx) => cx.spawn(async (cx) => this.sleep(cx)),
