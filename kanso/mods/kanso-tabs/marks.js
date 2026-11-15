@@ -4,6 +4,7 @@
 export const onBattery = () => shared("kanso.battery") === true;
 import { div, svg, image } from "gpui-kit";
 import { terminals, window, shared } from "herdr";
+import { ICON_ROW } from "./ui.js";
 
 const ICONS = "mods/kanso-chrome/icons/";
 const TURN = 900;
@@ -43,7 +44,7 @@ export function chordRun(chords, platform) {
   }).join("");
 }
 
-export function stateMark(t, status, size = 13, { idle = false } = {}) {
+export function stateMark(t, status, size = ICON_ROW, { idle = false } = {}) {
   const enso = (name, color) => svg(`${ICONS}${name}.svg`).size(size).flex_none().text_color(color);
   if (status === "working") return enso("working", t.working).spin(TURN);
   if (status === "blocked") return div().size(size).flex_none().rounded_full().bg(t.blocked)
