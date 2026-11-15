@@ -31,6 +31,7 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/find-key.js", copies: ["kanso/mods/kanso-strip/find-key.js"] },
   // Hachi, the dōjō's shiba, also on kansō help's way into the dōjō.
   { source: "kanso/mods/kanso-dojo/mascot.js", copies: ["kanso/mods/kanso-help/mascot.js"] },
+  { source: "kanso/mods/kanso-dojo/mascot-pixels.js", copies: ["kanso/mods/kanso-help/mascot-pixels.js"] },
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.
   { source: "kanso/mods/kanso-dojo/pets.js", copies: ["kanso/mods/kanso-help/pets.js"] },
   { source: "kanso/mods/kanso-dojo/store.js", copies: ["kanso/mods/kanso-help/store.js"] },

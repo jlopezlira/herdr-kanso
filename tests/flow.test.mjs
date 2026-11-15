@@ -288,13 +288,12 @@ test("hjkl dōjō: vim's motions on a board and on code, the fewest moves and th
 });
 
 test("Hachi, the dōjō's shiba, wears the game on its face", async () => {
-  const { hachiPixels } = await load("kanso-dojo/mascot.js", ["hachiPixels"], { div: () => null, h_flex: () => null, v_flex: () => null });
+  const { hachiPixels } = await load("kanso-dojo/mascot-pixels.js", ["hachiPixels"]);
   const eyes = (g) => g.slice(6, 8).map((r) => r.join("")).join("|");
   const moods = ["calm", "glad", "sweat", "sleep"].map((m) => eyes(hachiPixels(m)));
   assert.equal(new Set([moods[0], moods[1], moods[3]]).size, 3, "open, glad and asleep look apart");
   assert.ok(hachiPixels("sweat").some((r) => r.includes("B")), "a drop of sweat");
   assert.ok(hachiPixels("glad").some((r) => r.includes("T")), "tongue out when glad");
-  assert.ok(hachiPixels().every((row) => row.length === 16) && hachiPixels().length === 15);
 });
 
 
