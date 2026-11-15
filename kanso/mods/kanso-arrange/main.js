@@ -165,14 +165,12 @@ export default class Arrange extends View {
         title: tg ? `Overwrite ${tg.name}` : "Save this tab", scope: tg ? "With this tab as it is now" : `An arrangement for ${project}`,
         body: [
           field("ar-name", this.name, c, { label: "Name" }),
-          cols.length
-            ? div().pt(16).pb(7).text_size(11.5).text_color(t.dim).child(`${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right`)
-            : this.captureBones(t),
-          cols.length > 0 ? v_flex().gap(10).children(cols.map((c, ci) => h_flex().w_full().gap(10).items_stretch()
+          cols.length ? v_flex().pt(G.md).gap(G.md).children(cols.map((c, ci) => h_flex().w_full().gap(G.md).items_stretch()
             .child(div().w(2).flex_none().rounded_full().bg(t.border))
-            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : null,
+            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : this.captureBones(t),
         ],
-        notes: [{ text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
+        notes: [...(cols.length ? [{ text: `${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right` }] : []),
+          { text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
           ...(replaces ? [{ text: `This replaces the arrangement named ${replaces.name}.`, tone: "muted" }] : []),
           ...statusNotes({ error: this.error })],
         secondary: "Back", primary: replaces ? "Overwrite" : "Save", state: cols.length ? "default" : "disabled",
