@@ -1,7 +1,7 @@
 import { actionElements, elements, escapeMarkup, markupElements, explainActions, frame, sampleText, textOf, withoutRepeats } from './storybook-markup.mjs';
 
 export function explainButton(target = 'checkout', { modifiers = [], disabled = false, role } = {}) {
-  const classes = [role === 'menuitem' ? 'kanso-menu-item' : 'kanso-button--tonal', 'kanso-explain', ...modifiers];
+  const classes = [role === 'menuitem' ? 'kanso-menu__item' : 'kanso-button kanso-button--tonal', 'kanso-explain', ...modifiers];
   return `<button type="button" class="${classes.join(' ')}"${disabled ? ' disabled aria-disabled="true"' : ''}${role ? ` role="${role}"` : ''}><svg class="kanso-icon kanso-icon--row" aria-hidden="true"><use href="#lu-bot"/></svg>Explain to ${escapeMarkup(target)}</button>`;
 }
 
@@ -26,7 +26,7 @@ export function explainErrors(html) {
     const markup = html.slice(node.start, node.end);
     const label = textOf(html.slice(node.open, node.close));
     const bot = elements(markup, 'kanso-icon').some((icon) => /<(?:use)\b[^>]*(?:href|xlink:href)=["']#lu-bot["']/.test(icon));
-    return node.tag === 'button' && node.attrs.type === 'button' && node.classes.includes('kanso-explain') && (node.classes.includes('kanso-button--tonal') || (node.attrs.role === 'menuitem' && node.classes.includes('kanso-menu-item'))) && bot && /^Explain to\s+\S/.test(label) && !node.classes.includes('kanso-button--quiet') ? [] : [`Explain action must be tonal with the bot icon and a named target: ${label}`];
+    return node.tag === 'button' && node.attrs.type === 'button' && node.classes.includes('kanso-explain') && (node.classes.includes('kanso-button--tonal') || (node.attrs.role === 'menuitem' && node.classes.includes('kanso-menu__item'))) && bot && /^Explain to\s+\S/.test(label) && !node.classes.includes('kanso-button--quiet') ? [] : [`Explain action must be tonal with the bot icon and a named target: ${label}`];
   });
 }
 
@@ -38,7 +38,7 @@ export function normalizeFailureActions(html) {
     if (!block || !html.slice(block.open, block.close).includes('kanso-mark--blocked')) continue;
     const first = actions.find((node) => node.start >= group.open && node.end <= group.close);
     if (!first || first.classes.includes('kanso-explain')) continue;
-    const classes = [...new Set(['kanso-button', ...first.classes.filter((name) => !/^kanso-button(?:--(?:quiet|tonal))?$/.test(name))])];
+    const classes = [...new Set(['kanso-button', 'kanso-button--solid', ...first.classes.filter((name) => !/^kanso-button(?:--(?:quiet|tonal|solid))?$/.test(name))])];
     const open = html.slice(first.start, first.open).replace(/class=("[^"]*"|'[^']*')/, `class="${classes.join(' ')}"`);
     html = html.slice(0, first.start) + open + html.slice(first.open);
   }
@@ -51,10 +51,10 @@ export function normalizeFactHomes(html) {
     for (let parent = node.parent; parent; parent = parent.parent) if (predicate(parent)) return true;
     return false;
   };
-  const header = (node) => node.classes.some((name) => /^kanso-header(?:--rest)?$/.test(name));
+  const header = (node) => node.classes.some((name) => /^kanso-pane-header$/.test(name));
   const drops = nodes.filter((node) => {
-    if (node.classes.includes('kanso-header__branch') && inside(node, header)) return true;
-    if (node.classes.includes('kanso-mark') && inside(node, header) && !inside(node, (parent) => parent.classes.includes('kanso-header__segment'))) return true;
+    if (node.classes.includes('kanso-pane-header__branch') && inside(node, header)) return true;
+    if (node.classes.includes('kanso-mark') && inside(node, header) && !inside(node, (parent) => parent.classes.includes('kanso-pane-header__segment'))) return true;
     if (node.classes.includes('kanso-status-bar__item') && /^(?:\d+ of \d+ working|[⌘⌥⇧⌃]+[A-Z↵]+)$/.test(textOf(html.slice(node.open, node.close)))) return true;
     if (node.classes.includes('kanso-status-bar__item') && /href=["']#lu-(?:git-branch|monitor)["']/.test(html.slice(node.open, node.close))) return true;
     return node.classes.includes('kanso-row__directory') && /^(?:Off|Unreachable)$/.test(textOf(html.slice(node.open, node.close))) && inside(node, (parent) => parent.classes.includes('kanso-row--machine'));
@@ -69,7 +69,7 @@ export function normalizeFactHomes(html) {
 }
 
 export function worktreeRowOpen({ name, size, summary, age, reason, path, target = 'checkout' }) {
-  return frame(`<div class="kanso-worktree kanso-worktree--open"><div class="kanso-worktree__heading"><span class="kanso-worktree__name">${escapeMarkup(name)}</span><span class="kanso-worktree__size">${escapeMarkup(size)}</span></div><div class="kanso-worktree__body"><div class="kanso-worktree__summary"><span class="kanso-text--blocked">${escapeMarkup(summary)}</span><span class="kanso-worktree__meta"> · ${escapeMarkup(age)}</span></div><div class="kanso-worktree__reason kanso-text--blocked">${escapeMarkup(reason)}</div><div class="kanso-worktree__path">${escapeMarkup(path)}</div></div><div class="kanso-actions kanso-worktree__actions"><button type="button" class="kanso-button--quiet">Open in a new tab</button>${explainButton(target)}<button type="button" class="kanso-button--quiet kanso-action kanso-action--armed"><span>Remove</span><span>Press again to remove</span></button></div></div>`);
+  return frame(`<div class="kanso-worktree kanso-worktree--open"><div class="kanso-worktree__heading"><span class="kanso-worktree__name">${escapeMarkup(name)}</span><span class="kanso-worktree__size">${escapeMarkup(size)}</span></div><div class="kanso-worktree__body"><div class="kanso-worktree__summary"><span class="kanso-text--blocked">${escapeMarkup(summary)}</span><span class="kanso-worktree__meta"> · ${escapeMarkup(age)}</span></div><div class="kanso-worktree__reason kanso-text--blocked">${escapeMarkup(reason)}</div><div class="kanso-worktree__path">${escapeMarkup(path)}</div></div><div class="kanso-actions kanso-worktree__actions"><button type="button" class="kanso-button kanso-button--quiet">Open in a new tab</button>${explainButton(target)}<button type="button" class="kanso-button kanso-button--quiet kanso-action kanso-action--armed"><span>Remove</span><span>Press again to remove</span></button></div></div>`);
 }
 
 const FIT_PAGES = ['Panels/Files', 'Panels/Preview', 'Panels/PR', 'Panels/Shipped', 'Panels/Worktrees'];
@@ -97,11 +97,11 @@ export function normalizeComponent(record) {
   const typeRoles = { "48": "display", "20": "title", "15": "section", "13.5": "name", "12.5": "body", "11.5": "meta" };
   html = html.replace(/font-size:(48|20|15|13\.5|12\.5|11\.5)px/g, (_, size) => `font-size:var(--k-fs-${typeRoles[size]})`);
   html = realSize(html).replace(/(class="kanso-skeleton[^"]*" style="[^"]*?);?height:var\(--k-sp-2\)/g, '$1')
-    .replace(/font-size:var\(--k-fs-heading\)/g, 'font-size:var(--k-fs-section)').replace(/(class="kanso-button" style="[^"]*?);?height:26px/g, '$1').replace(/ style=""/g, '')
-    .replace(/(kanso-header__segment[^>]*>)<i class="kanso-dot kanso-dot--(done|working|blocked)"><\/i>/g, (_, open, state) => `${open}<svg class="kanso-mark kanso-mark--${state} kanso-mark--small"><use href="#e-${({ done: 'done', working: 'work', blocked: 'blk' })[state]}"/></svg>`)
+    .replace(/font-size:var\(--k-fs-heading\)/g, 'font-size:var(--k-fs-section)').replace(/(class="kanso-button kanso-button--solid" style="[^"]*?);?height:26px/g, '$1').replace(/ style=""/g, '')
+    .replace(/(kanso-pane-header__segment[^>]*>)<i class="kanso-dot kanso-fill--(done|working|blocked)"><\/i>/g, (_, open, state) => `${open}<svg class="kanso-mark kanso-mark--${state} kanso-icon--inline"><use href="#e-${({ done: 'done', working: 'work', blocked: 'blk' })[state]}"/></svg>`)
     .replace(/kanso-review__line kanso-review__line--checked/g, 'kanso-review__line')
     .replace(/(<div class="kanso-review__line"><span class=")kanso-story__theme"/g, '$1kanso-review__key"')
-    .replace(/(<div class="kanso-diff__line[^"]*"><span class="kanso-row__name">[^<]*<\/span><span class="kanso-row__detail">[^<]*<\/span>)(?!<span class="kanso-diff__code">)((?:(?!<\/div>).)*<span class="kanso-code__token(?:(?!<\/div>).)*)<\/div>/g, '$1<span class="kanso-diff__code">$2</span></div>');
+    .replace(/(<div class="kanso-code__line[^"]*"><span class="kanso-code__number">[^<]*<\/span><span class="kanso-code__sign">[^<]*<\/span>)(?!<span class="kanso-code__text">)((?:(?!<\/div>).)*<span class="kanso-code__token(?:(?!<\/div>).)*)<\/div>/g, '$1<span class="kanso-code__text">$2</span></div>');
   if (record.source === 'panels' && FIT_PAGES.includes(record.page)) html = html.replace('kanso-story__frame kanso-panel"', 'kanso-story__frame kanso-panel kanso-panel--fit"');
   return { ...record, html: normalizeFactHomes(normalizeFailureActions(normalizeExplain(html))), ...(record.notes ? { notes: record.notes.map((note) => note.replace('Explain is beside it, quiet.', 'Explain is beside it, tonal with the Lucide bot icon.')) } : {}) };
 }
@@ -110,7 +110,7 @@ export const COMPONENT_CSS = `
 :is(.kanso-explain,.kanso-worktree__actions>button){border:0;font-family:inherit}
 .kanso-tab__tip{left:0;top:calc(100% + var(--k-sp-1))}
 .kanso-story__bar:has(.kanso-tab__tip){padding-bottom:var(--k-sp-8)}
-.kanso-menu-item.kanso-explain{width:100%;background:transparent;color:inherit;font-size:inherit;text-align:left}
+.kanso-menu__item.kanso-explain{width:100%;background:transparent;color:inherit;font-size:inherit;text-align:left}
 .kanso-actions>.kanso-action.kanso-button--quiet{display:inline-grid}
 .kanso-worktree--open{padding:var(--k-sp-3);background:var(--selected);border-radius:var(--k-r-control);max-width:72ch;box-sizing:border-box}
 .kanso-worktree__heading{display:flex;align-items:baseline;gap:var(--k-sp-2)}

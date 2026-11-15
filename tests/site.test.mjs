@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MIN_CONTRAST, SURFACES, THEMES, colour, contrast, loadTokens, pairs, read } from "../scripts/tokens.mjs";
-import { OUT, render } from "../scripts/build-site-tokens.mjs";
+import { OUT, UTILITIES, render, renderUtilities } from "../scripts/build-site-tokens.mjs";
 
 const CSS = ["site/style.css"];
 const PAGES = ["index", "changelog", "credits", "privacy", "terms", "use"].map((p) => `site/${p}.html`);
@@ -33,6 +33,10 @@ const UNIT = /(?<![\w-])-?\d*\.?\d+(?:px|ms|s)\b/;
 
 test("site/tokens.css matches kanso/tokens.json", () => {
   assert.equal(read(OUT), render(loadTokens()), `${OUT} is out of date: run npm run build:site-tokens`);
+});
+
+test("Storybook token classes match kanso/tokens.json", () => {
+  assert.equal(read(UTILITIES), renderUtilities(loadTokens()), `${UTILITIES} is out of date: run npm run build:site-tokens`);
 });
 
 test("field edges (input) keep 3:1 on every surface in both themes", () => {

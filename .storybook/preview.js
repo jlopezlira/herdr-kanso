@@ -1,10 +1,14 @@
 import { addons, useArgs, useEffect } from 'storybook/preview-api';
 import { mountBehaviours } from '../stories/kit/behaviours.js';
+import { playgrounds } from '../stories/kit/playgrounds.js';
 import { GLOBALS_UPDATED, SET_GLOBALS } from 'storybook/internal/core-events';
 import sprite from '../stories/proto-sprite.svg?raw';
 import '../site/tokens.css';
 import '../stories/proto.css';
+import '../stories/primitives.css';
+import '../stories/compositions.css';
 import '../stories/frame.css';
+import '../stories/utilities.css';
 
 document.body.insertAdjacentHTML('afterbegin', sprite);
 
@@ -33,17 +37,18 @@ const preview = {
     const content = story();
     if (typeof content === 'string') frame.innerHTML = content;
     else frame.append(content);
-    useEffect(() => mountBehaviours(frame, { page: context.title, state: context.args.state, updateArgs }), [frame]);
+    useEffect(() => playgrounds[context.title] ? undefined : mountBehaviours(frame, { page: context.title, state: context.args.state, updateArgs }), [frame]);
     return frame;
   }],
   parameters: {
     options: {
       storySort: {
         order: [
-          'Start', ['Philosophy', 'About', 'How to read this Storybook', 'How to use the prompt for agents'],
-          'Tokens', ['Colour', 'Type', 'Spacing', 'Radius', 'Motion', 'Icons'],
+          'Start', ['Philosophy', 'About', 'One fact, one home', 'How to read this Storybook', 'How to use the prompt for agents'],
+          'Tokens', ['Colour', 'Contrast, light and dark', 'Type', 'Spacing', 'Radius', 'Motion', 'Icons'],
           'Primitives',
           'Compositions', ['Header', 'Sidebar', 'Rail', 'Status bar', 'Bars', 'Edge and Minimap', 'State patterns'],
+          'Features',
           'Panels',
           'Layouts',
         ],

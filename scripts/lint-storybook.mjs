@@ -7,10 +7,12 @@ import { explainErrors } from './storybook-components.mjs';
 import { gapDocument, overlapFor } from './storybook-coverage.mjs';
 import { STORYBOOK_CLASSES, cssSelectors, markupClasses, selectorClasses } from './import-proto.mjs';
 import { descriptions } from '../stories/kit/descriptions.js';
+import { STATUSES, statusTags } from '../stories/kit/status.js';
 import references from "../stories/references.json" with { type: "json" };
 
 const STORY_FILE = /\.stories\.(?:js|jsx|mjs|ts|tsx)$/;
 const BEM = /^kanso-[a-z0-9]+(?:-[a-z0-9]+)*(__[a-z0-9-]+)?(--[a-z0-9-]+)?$/;
+const CODE = /\b(?:[SBPQDI]\d{1,2}[a-e]?)\b|proto\/|approved-/;
 
 export function storyFiles(root = 'stories') {
   return Object.fromEntries(readdirSync(root, { recursive: true, withFileTypes: true }).filter((file) => file.isFile() && (STORY_FILE.test(file.name) || /\.(mdx|json)$/.test(file.name))).map((file) => {
@@ -21,10 +23,18 @@ export function storyFiles(root = 'stories') {
 
 export function structureErrors(files, catalog, template) {
   const errors = [], titles = new Map(), docs = new Set();
+  const records = expand(catalog);
+  const statusErrors = (path, title, tags) => {
+    const found = (tags ?? '').match(/"[^"]*"/g)?.map((tag) => JSON.parse(tag)).filter((tag) => STATUSES.includes(tag)) ?? [];
+    const wanted = statusTags(title);
+    if (wanted.length && found.length !== 1) errors.push(`${path}: needs exactly one status tag`);
+    else if (found.join() !== wanted.join()) errors.push(`${path}: status ${found.join() || "none"} differs from ${wanted.join() || "none"}`);
+  };
   const statePage = /(?:^|[ ,])(?:hover|focus|active|disabled|dimmed|loading|empty|failure|armed|pending|working|at rest|tab states)(?:$|[ ,])/i;
   const titleOf = (path, title) => {
-    if (!SECTIONS.includes(title.split('/')[0]) || title.split('/').length !== 2) errors.push(`${path}: story outside the six sections`);
-    if (statePage.test(title.split('/')[1] ?? '') && !references.pages.some((reference) => reference.page === title && reference.boards.length)) errors.push(`${path}: state page instead of component`);
+    if (!SECTIONS.includes(title.split('/')[0]) || ![2, 3].includes(title.split('/').length)) errors.push(`${path}: story outside the sections`);
+    if (CODE.test(title)) errors.push(`${path}: code in title ${title}`);
+    if (statePage.test(title.split('/').at(-1) ?? '') && !references.pages.some((reference) => reference.page === title && reference.boards.length)) errors.push(`${path}: state page instead of component`);
     if (titles.has(title)) errors.push(`${path}: duplicate title ${title}`);
     titles.set(title, path);
   };
@@ -32,21 +42,23 @@ export function structureErrors(files, catalog, template) {
     const title = /export default\s*\{\s*title:\s*"([^"]+)"/.exec(text)?.[1];
     if (!title) { errors.push(`${path}: missing component title`); continue; }
     titleOf(path, title);
-    if (!descriptions[title.split('/')[1]]) errors.push(`${path}: missing component usage`);
+    statusErrors(path, title, /export default\s*\{[^}]*\btags:\s*\[([^\]]*)\]/.exec(text)?.[1]);
+    if (!descriptions[title.split('/').at(-1)]) errors.push(`${path}: missing component usage`);
     if (!/export const Variants = componentStory\("[^"]+"\);/.test(text) || /(?:html|render)\s*[:=][\s\S]*["'`]</.test(text)) errors.push(`${path}: repeated story markup outside the shared catalog`);
     if (!text.includes(`componentStory(${JSON.stringify(title)})`)) errors.push(`${path}: preview references another page`);
     const firstName = /name:\s*["']([^"']+)/.exec(text)?.[1] ?? (/export const (\w+)/.exec(text)?.[1]);
-    if (firstName === title.split('/')[1]) errors.push(`${path}: docs and first story repeat a title`);
+    if (firstName === title.split('/').at(-1)) errors.push(`${path}: docs and first story repeat a title`);
   }
   for (const [path, text] of Object.entries(files).filter(([path]) => path.endsWith('.mdx'))) {
     const explicit = /<Meta title="([^"]+)"/.exec(text)?.[1];
     if (explicit) {
       titleOf(path, explicit);
+      statusErrors(path, explicit, /<Meta [^>]*\btags=\{\[([^\]]*)\]\}/.exec(text)?.[1]);
       const named = /<ReferencePage page="([^"]+)" \/>/.exec(text)?.[1];
       if (named) {
         if (named !== explicit || !references.pages.some((reference) => reference.page === named && (!reference.existing || named.startsWith("Start/")))) errors.push(`${path}: unregistered named reference`);
         docs.add(explicit);
-      } else if (!/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
+      } else if (!explicit.startsWith('Start/') && !/## Prompt for agents\s+```text\s+\S/.test(text)) errors.push(`${path}: missing prompt block`);
     } else {
       const target = /import \* as stories from '\.\/([^']+)'/.exec(text)?.[1];
       const title = /page="([^"]+)"/.exec(text)?.[1];
@@ -56,6 +68,7 @@ export function structureErrors(files, catalog, template) {
       docs.add(title);
     }
   }
+  for (const reference of references.pages) if (CODE.test([reference.page, ...reference.guidelines].join(' '))) errors.push(`references.json: code in visible text of ${reference.page}`);
   for (const [title, path] of titles) if (!title.startsWith('Start/') && !docs.has(title)) errors.push(`${path}: missing component page and prompt block`);
   const parts = new Set();
   for (const part of catalog.parts) {
@@ -67,7 +80,7 @@ export function structureErrors(files, catalog, template) {
     if (/<[a-z]/i.test(text)) errors.push(`${path}: repeated story markup outside the shared catalog`);
   }
   const ids = new Set();
-  const records = expand(catalog), byId = new Map(records.map((record) => [record.id, record]));
+  const byId = new Map(records.map((record) => [record.id, record]));
   if (records.some((record) => record.gap) && (!template.includes('<h3>{FEATURE_LABEL}</h3>') || template.indexOf('<h3>{FEATURE_LABEL}</h3>') < template.indexOf('<Source code={prompt}'))) errors.push('component page: missing plain feature list under Prompt for agents');
   for (const record of records) {
     if (ids.has(record.id)) errors.push(`catalog: duplicate state ${record.id}`);
@@ -77,9 +90,28 @@ export function structureErrors(files, catalog, template) {
     if (record.design && (!byId.get(record.design)?.html || byId.get(record.design).page !== record.page || byId.get(record.design).source === 'coverage')) errors.push(`${record.id}: missing designed drawing`);
     if ((record.design || record.gap) && (record.html !== undefined || !/^[\w./-]+:\d+(?:-\d+)?$/.test(record.location ?? ''))) errors.push(`${record.id}: feature must have a source location and no independent drawing`);
     if (!docs.has(record.page)) errors.push(`catalog: unreachable state ${record.id}`);
+    if (CODE.test([record.caption, record.context ?? '', record.label, ...(record.notes ?? []), ...(record.spec ?? []).flat()].join(' '))) errors.push(`catalog: code in visible text of ${record.id}`);
     if (/\b(?:prototypes?|boards?|designers?|agents?|subtracted|removed)\b/i.test([record.caption, record.context ?? '', record.label, ...(record.notes ?? []), ...(record.spec ?? []).flat()].join(' '))) errors.push(`catalog: source reference or outdated feature wording in ${record.id}`);
   }
   return errors;
+}
+
+// Compositions only call pieces and never treat them as strings, so the app can share the file as it is.
+export function compositionErrors(source, path = 'stories/kit/compositions.js') {
+  const code = source.replace(/^\s*\/\/.*$/gm, '');
+  const bare = code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, 'text');
+  const imports = [...code.matchAll(/\bfrom\s*(['"])([^'"]*)\1/g)].map((match) => match[2]);
+  const rules = [
+    [/<\/?[a-z!]/i.test(code), 'markup tag'],
+    [/\bclass(?:Name)?\s*=/.test(code), 'class attribute'],
+    [/\bkanso-[a-z]/.test(code), 'class string'],
+    [/`/.test(code), 'template literal'],
+    [/\.join\(/.test(bare), 'join'],
+    [/''|""/.test(code), 'empty string as nothing'],
+    [/\+|\.concat\(|\bString\(|\.toString\(/.test(bare), 'pieces added as strings'],
+    [imports.some((from) => from !== './pieces.js') || /\bimport\s*(?:\(|['"])|\brequire\s*\(/.test(code), 'import from outside the pieces'],
+  ];
+  return rules.filter(([found]) => found).map(([, rule]) => `${path}: ${rule} in a composition`);
 }
 
 export function lint(root = '.') {
@@ -87,10 +119,11 @@ export function lint(root = '.') {
   const errors = structureErrors(storyFiles(join(root, 'stories')), catalog, readFileSync(join(root, 'stories/kit/ComponentPage.jsx'), 'utf8'));
   if (readFileSync(join(root, 'stories/GAPS.md'), 'utf8') !== gapDocument(expand(catalog))) errors.push('GAPS.md: feature inventory differs from component pages');
   const read = (file) => readFileSync(join(root, file), 'utf8');
+  errors.push(...compositionErrors(read('stories/kit/compositions.js')));
   const [, canvas, docs] = /frame\.className = [^?]+\? '([^']+)' : '([^']+)'/.exec(read('.storybook/preview.js')) ?? [];
   const classes = [
     ['.storybook/preview.js', `${canvas ?? ''} ${docs ?? ''}`.split(/\s+/).filter(Boolean)],
-    ...['stories/proto.css', 'stories/frame.css', '.storybook/preview-head.html'].map((file) => [file, cssSelectors(read(file)).flatMap(selectorClasses)]),
+    ...['stories/primitives.css', 'stories/compositions.css', 'stories/proto.css', 'stories/frame.css', 'stories/utilities.css', '.storybook/preview-head.html'].map((file) => [file, cssSelectors(read(file)).flatMap(selectorClasses)]),
     ...expand(catalog).filter((record) => record.html !== undefined).map((record) => [record.id, markupClasses(record.html)]),
     ...['stories/start', 'stories/components', 'stories/kit'].flatMap((dir) => readdirSync(join(root, dir)).filter((name) => /\.(mdx|jsx)$/.test(name)).map((name) => [`${dir}/${name}`, markupClasses(read(`${dir}/${name}`))])),
   ];

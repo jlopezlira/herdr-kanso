@@ -12,7 +12,6 @@ export const behaviours = {
   'kanso-tab': 'select',
   'kanso-tab--panel': 'select',
   'kanso-tab--rest': 'select',
-  'kanso-tab-bar__button': 'action',
   'kanso-switch': 'toggle',
   'kanso-panel__switch-row': 'toggle',
   'kanso-field': 'field',
@@ -23,14 +22,10 @@ export const behaviours = {
   'kanso-button--tonal': 'action',
   'kanso-button--icon': 'action',
   'kanso-button--inline-icon': 'action',
-  'kanso-button--square': 'action',
   'kanso-button--count': 'action',
-  'kanso-button--disclosure': 'action',
-  'kanso-sidebar__icon-button': 'action',
   'kanso-action': 'armed',
-  'kanso-button--armed': 'armed',
   'kanso-menu': 'surface',
-  'kanso-menu-item': 'action',
+  'kanso-menu__item': 'action',
   'kanso-dialog': 'surface',
   'kanso-dialog--settings': 'surface',
   'kanso-dialog--worktree': 'surface',
@@ -56,7 +51,7 @@ export const behaviours = {
   'kanso-sidebar__section': 'fold',
   'kanso-sidebar__group': 'fold',
   'kanso-activity__header': 'fold',
-  'kanso-header__grip': 'drag',
+  'kanso-grip': 'drag',
   'kanso-dawn__replay': 'replay',
   'kanso-simulator__screen--annotating': 'annotate',
   'kanso-skeleton': 'animate',
@@ -65,7 +60,7 @@ export const behaviours = {
 const groups = '.kanso-segmented,.kanso-segmented--options,.kanso-segmented--sidebar,.kanso-segmented--tabs,.kanso-rail__views,.kanso-tab-bar';
 const surfaces = '.kanso-menu,.kanso-dialog,.kanso-dialog--settings,.kanso-dialog--worktree,.kanso-sidebar__dialog';
 const selector = Object.keys(behaviours).map((name) => `.${name}`).join(',');
-const disabled = (node) => !!node.closest('[disabled],[aria-disabled="true"],[aria-busy="true"],.kanso-control--off,.kanso-button--off,.kanso-button--pending,.kanso-menu-item--busy');
+const disabled = (node) => !!node.closest('[disabled],[aria-disabled="true"],[aria-busy="true"],.kanso-control--off,.kanso-button--off,.kanso-button--pending,.kanso-menu__item--busy');
 const normal = (label) => label.trim().toLowerCase();
 const labelOf = (node) => node.getAttribute('aria-label') || node.title || node.textContent.trim() || node.querySelector('use')?.getAttribute('href')?.replace('#lu-', '') || 'Action';
 const editorValue = (node) => (node.value ?? node.textContent).replaceAll('\u200b', '').trim();
@@ -93,7 +88,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     const original = originals.get(armed);
     armed.innerHTML = original.html;
     armed.classList.toggle('kanso-action', original.action);
-    armed.classList.remove('kanso-action--armed', 'kanso-button--armed');
+    armed.classList.remove('kanso-action--armed');
     if (original.label) armed.setAttribute('aria-label', original.label);
     else armed.removeAttribute('aria-label');
     armed = null;
@@ -115,7 +110,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     line.append(message);
     if (undo) {
       const button = doc.createElement('button');
-      button.className = 'kanso-button--tonal';
+      button.className = 'kanso-button kanso-button--tonal';
       button.textContent = 'Undo';
       button.type = 'button';
       line.append(button);
@@ -171,10 +166,10 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
       const kind = Object.entries(behaviours).find(([name]) => node.classList.contains(name))?.[1];
       if (['animate', 'surface', 'field', 'select'].includes(kind) || node.closest('.kanso-skeleton__list')) continue;
       if (!node.hasAttribute('tabindex')) node.tabIndex = disabled(node) ? -1 : 0;
-      if (!node.hasAttribute('role') && !node.matches('button,a,input,textarea')) node.setAttribute('role', node.matches('.kanso-menu-item') ? 'menuitem' : kind === 'toggle' ? 'switch' : 'button');
+      if (!node.hasAttribute('role') && !node.matches('button,a,input,textarea')) node.setAttribute('role', node.matches('.kanso-menu__item') ? 'menuitem' : kind === 'toggle' ? 'switch' : 'button');
       if (kind === 'toggle') node.setAttribute('aria-checked', String(node.classList.contains('kanso-control--on')));
       if (kind === 'fold') node.setAttribute('aria-expanded', 'true');
-      if (node.matches('.kanso-action,.kanso-button--armed')) remember(node);
+      if (node.matches('.kanso-action')) remember(node);
     }
     for (const ghost of scope.querySelectorAll('.kanso-skeleton:not(.kanso-skeleton--sweep)')) ghost.classList.add('kanso-skeleton--breathing');
   };
@@ -269,7 +264,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
         return;
       }
     }
-    if (/^(remove|delete|reset|restart|stop|kill|merge|overwrite|forget|clear|close tab)\b/i.test(label) || node.matches('.kanso-action,.kanso-button--armed')) { arm(node); return; }
+    if (/^(remove|delete|reset|restart|stop|kill|merge|overwrite|forget|clear|close tab)\b/i.test(label) || node.matches('.kanso-action')) { arm(node); return; }
     if (chooseState(label)) return;
     if (/settings|#lu-settings/.test(label.toLowerCase() + icon) && chooseState('Settings: sources and plans, detected')) return;
     const kind = /menu|picker|sort|more|#lu-(ellipsis|settings|arrow-up-down)/i.test(label + icon) ? 'menu'
@@ -332,7 +327,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     surface.setAttribute('role', surface.matches('.kanso-menu') ? 'menu' : 'dialog');
     if (inlineSurfaces) continue;
     const trigger = doc.createElement('button');
-    trigger.className = 'kanso-button--tonal';
+    trigger.className = 'kanso-button kanso-button--tonal';
     trigger.type = 'button';
     trigger.textContent = surface.matches('.kanso-menu') ? 'Open menu' : 'Open dialog';
     trigger.setAttribute('aria-haspopup', surface.matches('.kanso-menu') ? 'menu' : 'dialog');
@@ -390,7 +385,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     const group = node.closest(groups);
     if ((menu || group) && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) && !event.target.matches('[role="textbox"],input,textarea')) {
       event.preventDefault();
-      const items = [...(menu ? menu.querySelectorAll('.kanso-menu-item') : group.children)].filter((item) => !disabled(item) && !item.hidden && item.matches('[tabindex]'));
+      const items = [...(menu ? menu.querySelectorAll('.kanso-menu__item') : group.children)].filter((item) => !disabled(item) && !item.hidden && item.matches('[tabindex]'));
       const index = items.findIndex((item) => item === node || item.contains(node));
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (/Up|Left/.test(event.key) ? -1 : 1) + items.length) % items.length;
       items[next]?.focus();

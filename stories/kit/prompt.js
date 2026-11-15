@@ -12,7 +12,7 @@ export function promptFor(page, states) {
     ...(tokens.length ? [`Use these token references: ${tokens.join(', ')}.`] : []),
     ...(html.includes('kanso-explain') ? ['Build Explain actions with explainButton(target) from scripts/storybook-components.mjs: tonal, Lucide bot icon, and a named destination.'] : []),
     ...(featuresFor(page).some((feature) => feature.gap) ? ['The Not designed yet list describes existing features awaiting a simplified experience. Preserve their behavior and design those states from this kit before adding drawings.'] : []),
-    `Keep one ${page.split('/')[1]} component. Expose the documented states as modifiers or data; compose shared primitives instead of duplicating their markup or CSS.`,
+    `Keep one ${page.split('/').at(-1)} component. Expose the documented states as modifiers or data; compose shared primitives instead of duplicating their markup or CSS.`,
     'Preserve geometry, keyboard focus and reduced-motion behavior. A hover or focus change must not move the box. Keep the last successful content during a refresh failure, with the recovery action beside the original failure words.',
     'Use the shared four-second Armed control for irreversible actions. Apply the specifications and guidelines on this page.',
   ].join('\n');
