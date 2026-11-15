@@ -200,9 +200,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
   Sleep and Send stay on the focused finished pane; no Send while it waits on you.
 
 - **Agent status**, one mark everywhere: the tabs, the pane headers, the
-  status bar, the sidebar and Send draw it from one file, kanso-spaces/marks.js
-  `stateMark` (with `programIcon` and `nameOf`; copied by `npm run
-  sync:share`). An ensō, the brush circle
+  status bar, the sidebar and Send draw it from one kit piece, `mark` in
+  kanso-panel/ui-mark.js (copied by `npm run sync:share`; `programIcon` and
+  `nameOf` stay in kanso-spaces/marks.js). An ensō, the brush circle
   (`kanso-chrome/icons/enso*.svg`, tinted), 13px (12 in the status bar, 15
   in the sidebar):
   - Working: the idle ring as a faint track (r 5.6 in 16, 1.5 stroke at

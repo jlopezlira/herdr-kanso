@@ -9,9 +9,9 @@ import { statusMark, AGENT_PAD, agentRowH, duration } from "./agents.js";
 const ROW_GAP = 1; // the sidebar list's gap; the kit has no token for it
 
 // An error has no glyph; the sidebar draws the blocked disc for a failed agent.
-const lead = (t, mark) => (mark === "pr"
-  ? svg("mods/kanso-chrome/icons/pull-request.svg").size(ICON).flex_none().text_color(t.muted)
-  : statusMark(t, mark === "error" ? "blocked" : mark));
+const lead = (c, mark) => (mark === "pr"
+  ? svg("mods/kanso-chrome/icons/pull-request.svg").size(ICON).flex_none().text_color(c.muted)
+  : statusMark(c, mark === "error" ? "blocked" : mark));
 
 export class SinceLeft {
   constructor(db) {
@@ -87,11 +87,11 @@ export class SinceLeft {
     return items.reduce((sum, h) => sum + h, 0) + (items.length - 1) * ROW_GAP;
   }
 
-  dismissControl(t) {
-    return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, tokens(t));
+  dismissControl(c) {
+    return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
   }
 
-  line(t, row, nav, reach) {
+  line(t, c, row, nav, reach) {
     const id = `since-${row.id ?? "more"}`;
     const to = row.more ? null : reach(row);
     const go = row.more ? (cx) => { this.expanded = true; cx.notify(); } : to && ((cx) => { to(); this.dismiss(cx).catch(() => {}); });
@@ -105,7 +105,7 @@ export class SinceLeft {
     return h_flex().id(id).h(agentRowH({}, { activity: row.did })).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
       .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(t.foreground + "0c")).on_click((_e, cx) => go(cx)))
       .when(selected, (el) => el.border_1().border_color(t.accent))
-      .when(!row.more, (el) => el.child(lead(t, row.mark)))
+      .when(!row.more, (el) => el.child(lead(c, row.mark)))
       .child(v_flex().flex_1().min_w(0).justify_center().child(top)
         .when(Boolean(row.did), (el) => el.child(div().min_w(0).truncate().text_size(T.body).text_color(t.dim).child(row.did))));
   }
@@ -116,7 +116,8 @@ export class SinceLeft {
     this.heights = this.showing ? shown.rows.map((row) => agentRowH({}, { activity: row.did })) : [];
     this.headed = Boolean(head) && this.showing;
     if (!this.showing) return div();
-    const body = shown.rows.map((row) => this.line(t, row, nav, reach));
-    return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(t)), ...body] : body);
+    const c = tokens(t);
+    const body = shown.rows.map((row) => this.line(t, c, row, nav, reach));
+    return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(c)), ...body] : body);
   }
 }

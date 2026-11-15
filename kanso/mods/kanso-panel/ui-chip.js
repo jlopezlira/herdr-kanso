@@ -4,11 +4,13 @@ import { div } from "gpui-kit";
 import { G, H, R, T, toneColor } from "./ui.js";
 
 const filled = (el, c) => el.h(H.compact).px(G.sm).rounded(R.control).bg(c.w7);
+const inkOf = (c, quiet, tone) => {
+  if (tone) return toneColor(c, tone);
+  return quiet ? c.dim : c.text;
+};
 
 /** `label`: a count or a few words; `quiet`: no wash, dim text; `tone`: a tone name that colours the text. */
-export const chip = (c, { label, quiet = false, tone = null } = {}) => {
-  const ink = tone ? toneColor(c, tone) : quiet ? c.dim : c.text;
-  return div().flex().flex_none().items_center().whitespace_nowrap().text_size(T.body).text_color(ink)
-    .when(!quiet, (el) => filled(el, c))
-    .child(String(label));
-};
+export const chip = (c, { label, quiet = false, tone = null } = {}) => div().flex().flex_none().items_center().whitespace_nowrap()
+  .text_size(T.body).text_color(inkOf(c, quiet, tone))
+  .when(!quiet, (el) => filled(el, c))
+  .child(String(label));

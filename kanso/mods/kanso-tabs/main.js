@@ -325,6 +325,7 @@ export default class Tabs extends View {
     const c = tokens(t);
     // A press on a tool never starts a window drag.
     const tool = (id, icon, tip, action) => iconButton(id, icon, tip, action, c).on_mouse_down("left", stop);
+    const tabMark = (status) => mark(c, { status });
     // The pill under the chosen tab glides to it; tab widths are measured as they draw.
     this.tabW ??= {};
     for (const id of Object.keys(this.tabW)) if (!openTabs.some((c) => c.id === id)) delete this.tabW[id];
@@ -353,7 +354,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", () => openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }))
         .when(Boolean(program?.icon), el => el.child(programIcon(program, 15, t.muted).opacity(c.active ? 1 : 0.8)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(["working", "blocked", "done"].includes(c.status), el => el.child(mark(tokens(t), { status: c.status })))
+        .when(["working", "blocked", "done"].includes(c.status), el => el.child(tabMark(c.status)))
         .when(c.active && openTabs.length > 1, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).hover(s => s.text_color(t.foreground)).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/kanso-chrome/icons/close.svg").size(13))));
     };
     const panel = walkLayout(tree, "panel"), body = walkLayout(tree, "panel-body");

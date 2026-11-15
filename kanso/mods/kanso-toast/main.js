@@ -32,7 +32,7 @@ export default class Toast extends View {
   }
 
   render(_cx) {
-    const t = theme();
+    const t = theme(), c = tokens(t);
     const p = props() ?? {};
     return h_flex()
       .id("toast")
@@ -49,7 +49,7 @@ export default class Toast extends View {
       })
       // A failure carries the blocked mark, the same as on every line that failed.
       .child(p.icon ? image(p.icon).w(18).h(18).flex_none()
-        : p.level === "error" ? mark(tokens(t), { status: "blocked" }) : div().size(G.sm).rounded_full().flex_none().bg(t[DOT[p.level] ?? "accent"]))
+        : p.level === "error" ? mark(c, { status: "blocked" }) : div().size(G.sm).rounded_full().flex_none().bg(t[DOT[p.level] ?? "accent"]))
       .child(
         v_flex()
           .flex_1()

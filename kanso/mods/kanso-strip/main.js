@@ -466,7 +466,7 @@ export default class Strip extends View {
   }
 
   renderHead() {
-    const t = theme();
+    const t = theme(), c = tokens(t);
     const all = panes(); // read once: each read copies every pane
     const p = this.me(all);
     if (!p) return div();
@@ -483,7 +483,7 @@ export default class Strip extends View {
     const side = drop?.to === pane ? drop.side : null;
     const ink = on || st === "blocked";
     const cols = strip ? shared(KEY)?.[p.tab]?.cols ?? [] : [];
-    const col = cols.findIndex((c) => c.panes?.includes(pane));
+    const col = cols.findIndex((k) => k.panes?.includes(pane));
     const pinned = Boolean(cols[col]?.pin);
     const pin = () => setShared("strip.req", { op: "pin", pane, n: nonce() });
     const map = pieces(shared);
@@ -531,10 +531,10 @@ export default class Strip extends View {
       .when(pinned && !this.hovered, (el) => el.child(svg("mods/kanso-chrome/icons/pin.svg").size(12).flex_none().text_color(t.dim)))
       .child(div().flex_1())
       .child(this.tools(t, p, { strip, pinned, canSend, pin, shown: this.hovered && !drag, status: st, focused: on }))
-      .when(st === "working", (el) => el.child(mark(tokens(t), { status: "working" })))
+      .when(st === "working", (el) => el.child(mark(c, { status: "working" })))
       .when(st === "blocked", (el) => el.child(h_flex().flex_none().gap(6).items_center().text_size(11.5).font_medium().text_color(t.foreground)
-        .child(mark(tokens(t), { status: "blocked" })).child("Needs you")))
-      .when(st === "done", (el) => el.child(mark(tokens(t), { status: "done" })))
+        .child(mark(c, { status: "blocked" })).child("Needs you")))
+      .when(st === "done", (el) => el.child(mark(c, { status: "done" })))
       .when(strip && !pinned, (el) => el.child(this.grip(t, pane)));
   }
 
