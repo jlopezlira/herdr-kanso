@@ -2277,7 +2277,7 @@ export default class Spaces extends View {
     const sections = this.statusSections(sp, ctx);
     return sections.map((s) => {
       const rows = s.entries.filter((e) => !e.lines.length).map((e) => this.railRow(e.a, e.a.space_name || null, ctx.now));
-      const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(16).items_center().child(statusMark(c, s.id));
+      const lead = s.id === "other" ? this.railIcon(t, "layers") : h_flex().h(G.lg).items_center().child(statusMark(c, s.id));
       return item(this.railMark(t, c, `rail-section-${s.id}`, { lead, rows, tip: s.label, ink: s.id === "blocked" ? t.blocked : t.dim, urgent: false }), RAIL_MARK);
     });
   }
@@ -2350,7 +2350,7 @@ export default class Spaces extends View {
       const h = drawn.reduce((n, r, k) => n + r.rh + (k ? 6 : 0), 0);
       const a = g.rows[0].a;
       const name = g.name || project(a.space)?.name || a.asleep.spaceName;
-      return [item(this.asleepHead(t, c, g, { name, pad: AGENT_PAD + (nested ? NESTED : FLUSH) }), 32), ...box.map((el) => item(el, zOpen ? ((this.foldH ?? {})[`asleep-${g.id}`] ?? h) : 0))];
+      return [item(this.asleepHead(t, c, g, { name, pad: AGENT_PAD + (nested ? NESTED : FLUSH) }), H.line), ...box.map((el) => item(el, zOpen ? ((this.foldH ?? {})[`asleep-${g.id}`] ?? h) : 0))];
     };
     return sections.flatMap((s, i) => {
       const split = s.id.startsWith("project-") ? asleepGroups(s.rows, { asleepOf: (r) => r.a.asleep ?? null, key: s.project ?? s.id }) : { live: s.rows, groups: [] };
@@ -2378,7 +2378,7 @@ export default class Spaces extends View {
       // A project's conversations: under the pointer its + starts a new one there.
       const w = s.project ? sp.find((x) => x.id === s.project) : null;
       const plus = w && this.hoverHead === s.id ? [this.plus(`thread-plus-${w.id}`, t, placeOfSpace(w), `New conversation in ${w.name}`)] : [];
-      const extra = plus.length ? h_flex().flex_none().gap(8).items_center().children(plus) : null;
+      const extra = plus.length ? h_flex().flex_none().gap(G.sm).items_center().children(plus) : null;
       const onHover = w ? (h, cx) => { if (h ? this.hoverHead !== s.id : this.hoverHead === s.id) { this.hoverHead = h ? s.id : null; cx.notify(); } } : null;
       const lift = i ? G.lg : 0;
       const headName = p ? p.name : whole ? whole.rows[0].a.asleep.spaceName : (s.label ?? "Active");
