@@ -7,9 +7,12 @@ From a clone, with Node 22.15 or newer, Git, Bash and sqlite3:
 - `npm test`
 - `npm run sync:share -- --check`
 - `npm run check:version`
+- `npm run check:dupes`
 - `herdr-app check <mod folder>`
 
 `herdr-app check kanso/mods/kanso-guard` is one. `herdr-app check` passes for the `kanso-*` mods and `open-with`.
+
+`npm run check:dupes` fails on code repeated in `kanso/mods`, `stories`, `scripts` or `site` that `kanso/dupes-baseline.json` does not list. Make it one component, state or primitive instead. The baseline lists today's repeats and can only shrink: after removing one, run `npm run check:dupes -- --write`. `-- --report <file>` writes every repeat with its places.
 
 ## Version
 

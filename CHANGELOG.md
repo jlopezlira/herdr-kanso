@@ -31,6 +31,7 @@ the branch's rules.
 
 ### Changed
 
+- CI rejects new repeated code in the mods, the Storybook, the scripts and the site. Today's repeats are listed so they can only be removed, never added. Nothing on screen changes.
 - The sidebar's toolbar has larger buttons, 4 apart; Sort stays dim at its default order and its menu ticks the current order before each choice; in the collapsed sidebar, Sort and Search wait under a caret below + and Show sidebar. (#281)
 - The collapsed sidebar no longer shows Herdr's mark above + and Show sidebar.
 - The tabs follow the Storybook: a tab carries a mark only while an agent in it waits for you and you are on another tab, with no program icon, no working or done mark and no Z after a zoomed tab, whose Unzoom stays in the pane header's menu. Close asks twice on a tab holding an agent, a double-click renames the tab in place, a dragged tab shows where it lands, tabs that do not fit fold behind +N, and a project on another computer shows its tabs loading or out of reach. (#233)

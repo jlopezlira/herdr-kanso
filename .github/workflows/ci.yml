@@ -40,6 +40,8 @@ jobs:
         run: npm run check:version
       - name: Shared files
         run: npm run sync:share -- --check
+      - name: Repeated code
+        run: npm run check:dupes
       - name: sqlite3 on Linux
         if: runner.os == 'Linux'
         run: command -v sqlite3 || (sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3)
