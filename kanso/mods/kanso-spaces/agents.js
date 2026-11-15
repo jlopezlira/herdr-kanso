@@ -8,6 +8,7 @@ import { stateMark, programIcon, NAME_LABEL, onBattery } from "./marks.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { activityTone, foldTail, timePlace } from "./sidebar-rows.js";
+import { washes } from "./ui.js";
 
 export { NAME_LABEL };
 
@@ -337,9 +338,9 @@ const GUIDE_W = 15, GUIDE_X = 7;
 function guide(l, h, t) {
   const col = div().relative().w(GUIDE_W).h(h).flex_none();
   if (!l) return col;
-  const down = l === "└" ? h / 2 + 4 : h + 4;
-  return col.child(div().absolute().left(GUIDE_X).top(-4).w(1).h(down).bg(t.border))
-    .when(l !== "│", (el) => el.child(div().absolute().left(GUIDE_X).top(h / 2).w(GUIDE_W - GUIDE_X + 7).h(1).bg(t.border)));
+  const down = l === "└" ? h / 2 + 4 : h + 4, line = washes(t.foreground, t.background).w12;
+  return col.child(div().absolute().left(GUIDE_X).top(-4).w(1).h(down).bg(line))
+    .when(l !== "│", (el) => el.child(div().absolute().left(GUIDE_X).top(h / 2).w(GUIDE_W - GUIDE_X + 7).h(1).bg(line)));
 }
 
 // Each glint window slides one way while its copy of the text slides the other, so the lit letters stay in place.

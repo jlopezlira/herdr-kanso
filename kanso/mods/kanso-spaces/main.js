@@ -27,7 +27,7 @@ import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
-import { skeleton, breathe, H, G, T, R, ICON, tokens, stateEmpty, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook, pendingDot } from "./ui.js";
+import { skeleton, breathe, H, G, T, R, ICON, tokens, washes, stateEmpty, button, iconButton, field, TextField, Armed, segmented, armedLabel, armedLook, pendingDot } from "./ui.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, powerId, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineTip, machineVisible, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -1952,10 +1952,10 @@ export default class Spaces extends View {
 
   // The last child's line stops at the bend.
   connector({ last }, t) {
-    const mid = TREE_ROW / 2;
+    const mid = TREE_ROW / 2, line = washes(t.foreground, t.background).w12;
     return [
-      div().absolute().left(GUIDE_X).top(-GUIDE_OVERLAP).w(1).h(last ? mid + GUIDE_OVERLAP : TREE_ROW + GUIDE_OVERLAP).bg(t.border),
-      div().absolute().left(GUIDE_X).top(mid).w(ELBOW_W).h(1).bg(t.border),
+      div().absolute().left(GUIDE_X).top(-GUIDE_OVERLAP).w(1).h(last ? mid + GUIDE_OVERLAP : TREE_ROW + GUIDE_OVERLAP).bg(line),
+      div().absolute().left(GUIDE_X).top(mid).w(ELBOW_W).h(1).bg(line),
     ];
   }
 
