@@ -13,8 +13,8 @@
     "surface": "#1b1b19",
     "popover": "#222220",
     "raised": "#262624",
-    "hover": "#232321",
-    "selected": "#2b2b28",
+    "hover": "#282825",
+    "selected": "#32312e",
     "border": "#272725",
     "input": "#73726d",
     "foreground": "#d8d4cb",
@@ -28,6 +28,6 @@
     "blocked": "#ca938b",
     "done": "#98ad8f",
     "idle": "#a3a09a",
-    "unknown": "#6b6862"
+    "unknown": "#a3a09a"
   }
 }
