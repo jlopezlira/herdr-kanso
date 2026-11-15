@@ -32,6 +32,7 @@ the branch's rules.
 ### Changed
 
 - The sidebar's toolbar has larger buttons, 4 apart; Sort stays dim at its default order and its menu ticks the current order before each choice; in the collapsed sidebar, Sort and Search wait under a caret below + and Show sidebar. (#281)
+- The collapsed sidebar no longer shows Herdr's mark above + and Show sidebar.
 - The tabs follow the Storybook: a tab carries a mark only while an agent in it waits for you and you are on another tab, with no program icon, no working or done mark and no Z after a zoomed tab, whose Unzoom stays in the pane header's menu. Close asks twice on a tab holding an agent, a double-click renames the tab in place, a dragged tab shows where it lands, tabs that do not fit fold behind +N, and a project on another computer shows its tabs loading or out of reach. (#233)
 - Add computer leaves the sidebar footer and becomes the last row of the + menu on Status and Threads, reached by the keyboard like the rows above it. Hiding Add a computer in kansō settings still leaves it out. The footer is Settings, with kansō's update above it while one is ready.
 - The sidebar footer follows the new design: kansō's update row while one is ready (a beta is named by its build) and Settings, and in the collapsed sidebar the same as squares. A pressed update turns quiet at once; a refused one keeps its row and shows the tool's words under it, with Update to try again. The account chip is gone; Herdr settings are in the Settings menu. (#241)

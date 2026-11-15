@@ -2,7 +2,6 @@
 import { row as drawRow } from "./ui-row.js";
 import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
-import { herdrMark as drawHerdrMark } from "./ui-herdr-mark.js";
 
 const HANDLERS = ["on", "onClick", "onHover", "onKey", "focusHandle"];
 const appIcon = (icon) => icon?.replace(/^lu-/, "");
@@ -47,10 +46,4 @@ export const button = ({ label, icon = "none", ...props }) => (id, c, more = {})
 export const menu = ({ title = null, items = [] }) => (id, c, more = {}) => {
   given(more);
   return drawMenu(id, { title, items: items.map(withIcon) }, c);
-};
-
-// The Storybook's `id` names its drawing's clip; the app's mark is a picture and needs none.
-export const herdrMark = () => (_id, _c, more = {}) => {
-  given(more);
-  return drawHerdrMark();
 };

@@ -34,7 +34,6 @@
   "props": {
     "button": { "storybook": ["label"], "app": ["color", "small", "spoken"] },
     "chip": { "storybook": ["pill"] },
-    "herdrMark": { "storybook": ["id"] },
     "input": { "storybook": ["limit", "loading", "multiline", "selected", "text"], "app": ["iconTip", "onIcon", "spoken"] },
     "keyHint": { "app": ["font"] },
     "needsItem": { "app": ["onClick", "tip"] },

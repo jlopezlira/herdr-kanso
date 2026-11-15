@@ -16,8 +16,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     at its right end (14 in), Herdr's mark: its icon
     (`frame/welcome/herdr.png`, 20, radius 4) and "Herdr" (13, semibold,
     `foreground`). It drags the window.
-    Collapsed, the strip is empty and the kit's Herdr mark (20, radius 4)
-    heads the rail's toolbar.
+    Collapsed, the strip is empty.
   - **Spaces** (`kanso-spaces`), filling the middle.
     - Open (256 wide): the Toolbar, a 40-tall row with + at the left (Add
       project on Projects, New conversation on Status and Threads), and Sort,
@@ -31,9 +30,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
       panel. Active `foreground`+`14`, hover `foreground`+`0c`.
     - Worktree spaces nest under their repo on 1px `input` guide lines.
     - Agents under a space: icon 15, title 12.5, status mark.
-    - Collapsed (76 wide): Herdr's mark, then + and Show sidebar, stacked 8
-      apart, and a caret whose Sort and Search open below it on a `w4` wash
-      (Sort's menu opens beside it); then the view switch and one mark
+    - Collapsed (76 wide): + and Show sidebar, stacked 8 apart, and a caret
+      whose Sort and Search open below it on a `w4` wash (Sort's menu opens
+      beside it); then the view switch and one mark
       per group (project, status, shelf): a project's initial in its color,
       no square (else an icon), under it the most urgent state and count.
       A click lists the group in a popup (click goes; asleep: wake menu).

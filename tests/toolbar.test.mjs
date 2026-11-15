@@ -72,12 +72,11 @@ test("Sort's menu hangs under it in a row and beside it in a column, and only wh
   assert.deepEqual(changes, [true]);
 });
 
-test("Collapsed, Herdr's mark heads the column, + and Show sidebar stay 8 apart and Sort and Search fold under a caret that opens on a quiet wash", async () => {
+test("Collapsed, + and Show sidebar head the column and stay 8 apart and Sort and Search fold under a caret that opens on a quiet wash", async () => {
   const { toolbar, tokens, G, R } = await kit();
   const c = tokens(night);
   const shut = toolbar("t", c, { column: true });
-  assert.deepEqual(tags(shut), ["image", "t-add", "t-sidebar", "t-group"]);
-  assert.equal(arg(shut.kids[0], "image"), "frame/welcome/herdr.png");
+  assert.deepEqual(tags(shut), ["t-add", "t-sidebar", "t-group"]);
   assert.equal(arg(shut, "gap"), G.sm);
   assert.equal(arg(byTag(shut, "t-sidebar"), "tooltip"), "Show sidebar");
   const group = byTag(shut, "t-group");
@@ -125,8 +124,7 @@ test("A Menu heading item is drawn like its title, so the Sort menu can name its
   assert.deepEqual(arg(menu("t", { title: "Show", items: [] }, c).kids[0], "child"), "Show");
 });
 
-test("The Toolbar, the Header and Herdr's mark draw no literal size", () => {
-  assert.deepEqual(numberArguments("kanso-panel/ui-herdr-mark.js"), []);
+test("The Toolbar and the Header draw no literal size", () => {
   assert.deepEqual(numberArguments("kanso-panel/ui-toolbar.js"), []);
   assert.deepEqual(numberArguments("kanso-panel/ui-sidebar-header.js"), []);
 });
