@@ -1,0 +1,25 @@
+import { Meta, Source } from '@storybook/addon-docs/blocks';
+import { examples, exception, grounds, ledgerPrompt, why } from '../kit/ledger.js';
+
+<Meta title="Start/One fact, one home" />
+
+# One fact, one home
+
+<p>{why}</p>
+
+<p>{exception}</p>
+
+## Why
+
+<ul>{grounds.map(([name, text]) => <li key={name}><b>{name}:</b> {text}</li>)}</ul>
+
+## Examples
+
+<table>
+  <thead><tr><th>Shown twice</th><th>Keep</th></tr></thead>
+  <tbody>{examples.map(([twice, keep]) => <tr key={twice}><td>{twice}</td><td>{keep}</td></tr>)}</tbody>
+</table>
+
+## Prompt for agents
+
+<Source code={ledgerPrompt} language="text" />

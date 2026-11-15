@@ -15,10 +15,10 @@ export const featuresFor = (page) => records.filter((record) => record.page === 
 export const statesFor = (page) => {
   const used = new Map();
   const rank = (record) => record.source === 'tokens' || (record.source === 'kit' && record.label === 'Default') ? 0
-    : record.source === 'kit' && record.label === 'Open' ? 1
+    : record.source === 'kit' && (record.label === 'Open' || record.page.startsWith('Compositions/')) ? 1
     : /(?:^|, )At rest, Now$|^(Rest|Default)$/.test(record.label) ? 2 : 10;
   return records.filter((record) => record.page === page && record.markup !== undefined && !record.fragment).sort((a, b) => rank(a) - rank(b)).map((record) => {
-    const label = record.label.replace(new RegExp(`^${page.split('/')[1]}[, ·]+`, 'i'), '');
+    const label = record.label.replace(new RegExp(`^${page.split('/').at(-1)}[, ·]+`, 'i'), '');
     const n = (used.get(label) ?? 0) + 1;
     used.set(label, n);
     return { ...record, value: stateKey(record.id), label: n === 1 ? label : `${label} (alternate ${n})`, coverage: featuresFor(page).filter((feature) => feature.design === record.id) };

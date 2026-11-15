@@ -587,7 +587,7 @@
     }
   },
   "spaces/Sidebar": {
-    "page": "Compositions/Sidebar",
+    "page": "Layouts/Sidebar",
     "states": {
       "Closed project": "proto/compositions-sidebar-features/Sidebar/Closed project",
       "Incoming message": "proto/compositions-sidebar-features/Sidebar/Incoming message",
@@ -605,7 +605,7 @@
     }
   },
   "spaces/SidebarStatus": {
-    "page": "Compositions/Sidebar",
+    "page": "Layouts/Sidebar",
     "states": {
       "Groups": "proto/compositions-sidebar-features/SidebarStatus/Groups",
       "Empty": "proto/compositions-sidebar-features/SidebarStatus/Empty",
@@ -613,7 +613,7 @@
     }
   },
   "spaces/SidebarThreads": {
-    "page": "Compositions/Sidebar",
+    "page": "Layouts/Sidebar",
     "states": {
       "Active": "proto/compositions-sidebar-features/SidebarThreads/Active",
       "Asleep": "proto/compositions-sidebar-features/SidebarThreads/Asleep",
@@ -625,7 +625,7 @@
     }
   },
   "spaces/SidebarSort": {
-    "page": "Compositions/Sidebar",
+    "page": "Layouts/Sidebar",
     "states": {
       "Projects": "proto/compositions-sidebar-rows/ProjectsStatusThreads/Default",
       "Status": "proto/compositions-sidebar-rows/StatusViewTile/Default",
@@ -633,7 +633,7 @@
     }
   },
   "spaces/ProjectGit": {
-    "page": "Compositions/Sidebar",
+    "page": "Layouts/Sidebar",
     "states": {
       "Ahead": "proto/compositions-sidebar-features/ProjectGit/Ahead",
       "Behind": "proto/compositions-sidebar-features/ProjectGit/Behind",
@@ -642,7 +642,7 @@
     }
   },
   "spaces/Asleep": {
-    "page": "Compositions/Sidebar",
+    "page": "Layouts/Sidebar",
     "states": {
       "Asleep menu": "proto/compositions-sidebar-features/Asleep/Asleep menu",
       "Forget armed": "proto/compositions-sidebar-features/Asleep/Forget armed",
@@ -653,7 +653,7 @@
     }
   },
   "spaces/NeedsQueue": {
-    "page": "Compositions/Sidebar",
+    "page": "Layouts/Sidebar",
     "states": {
       "Empty": "proto/compositions-sidebar-features/NeedsQueue/Empty",
       "Loading": "proto/compositions-sidebar-features/NeedsQueue/Loading",

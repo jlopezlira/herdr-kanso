@@ -1,6 +1,8 @@
 import { content, statesFor } from './catalog.js';
+import { playgroundStory, playgrounds } from './playgrounds.js';
 
 export function componentStory(page) {
+  if (playgrounds[page]) return playgroundStory(playgrounds[page]);
   const states = statesFor(page);
   const labels = { all: 'All states', ...Object.fromEntries(states.map((state) => [state.value, state.label])) };
   const pick = (state) => states.find((item) => item.value === state) ?? states[0];

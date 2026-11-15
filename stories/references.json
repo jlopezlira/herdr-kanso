@@ -35,7 +35,7 @@
       "code": "L",
       "title": "One fact, one home",
       "anchor": "ledger",
-      "page": "Compositions/One fact, one home"
+      "page": "Start/One fact, one home"
     },
     {
       "code": "10",
@@ -594,7 +594,7 @@
     },
     {
       "page": "Tokens/Kit: every value and every element, once",
-      "existing": false,
+      "existing": true,
       "boards": [
         "K"
       ],
@@ -610,100 +610,10 @@
         "Icons: exact Lucide, one name per meaning, at 12, 14, 15 or 17.",
         "Light and dark share geometry; only tokens change. Text 4.5:1, edges 3:1 in both. Light is never pure white."
       ],
-      "records": [
-        "proto/approved-kit/Reference/1",
-        "proto/approved-kit/Reference/2",
-        "proto/approved-kit/Reference/3",
-        "proto/approved-kit/Reference/4",
-        "proto/approved-kit/Reference/5",
-        "coverage/prompt-editor/MultilinePrompt/Editing",
-        "coverage/prompt-editor/MultilinePrompt/Hint",
-        "proto/components-worktree-row-open/WorktreeRowOpen/Default",
-        "proto/compositions-controls/ActionRows/Default",
-        "proto/compositions-controls/Armed/Default",
-        "proto/compositions-controls/ButtonsFourKinds/Default",
-        "proto/compositions-controls/ButtonsOnALine/Default",
-        "proto/compositions-controls/ButtonWithAMark/Default",
-        "proto/compositions-controls/ChromeAndBarButtons/Default",
-        "proto/compositions-controls/Field/Default",
-        "proto/compositions-controls/FocusRing/Default",
-        "proto/compositions-controls/HoverSelectedPressed/Default",
-        "proto/compositions-controls/Segmented/Default",
-        "proto/compositions-controls/Switch/Default",
-        "proto/compositions-files-and-pr/FileRow/Default",
-        "proto/compositions-menu-and-dialog/FindRow/Default",
-        "proto/compositions-panel-pieces/PortRow/Default",
-        "proto/compositions-panel-pieces/RowActions/Default",
-        "proto/compositions-panel-pieces/SettingRow/Default",
-        "proto/compositions-panel-pieces/SettingRowWithAValue/Default",
-        "proto/compositions-sidebar-rows/AgentOneLine/Default",
-        "proto/compositions-sidebar-rows/AgentTwoLines/Default",
-        "proto/compositions-sidebar-rows/Asleep/Default",
-        "proto/compositions-sidebar-rows/Computer/Default",
-        "proto/compositions-sidebar-rows/DropTarget/Default",
-        "proto/compositions-sidebar-rows/Project/Default",
-        "proto/compositions-sidebar-rows/SubAgent/Default",
-        "proto/compositions-sidebar-rows/WorktreeRow/Default",
-        "proto/tokens-colour-and-wash/Edges/Default",
-        "proto/tokens-colour-and-wash/StateColours/Default",
-        "proto/tokens-colour-and-wash/Washes/Default",
-        "proto/tokens-type/OneLineNeverWraps/Default",
-        "proto/tokens-type/SixSizes/Default",
-        "proto/tokens-type/TextRoles/Default",
-        "kit/Button/Default",
-        "kit/Button/Hover",
-        "kit/Button/Focus",
-        "kit/Button/Active",
-        "kit/Button/Disabled",
-        "kit/Button/Dimmed",
-        "kit/Field/Default",
-        "kit/Field/Hover",
-        "kit/Field/Focus",
-        "kit/Field/Disabled",
-        "kit/Field/Failure",
-        "kit/Segmented/Default",
-        "kit/Segmented/Hover",
-        "kit/Segmented/Focus",
-        "kit/Segmented/Disabled",
-        "kit/Switch/Default",
-        "kit/Switch/On",
-        "kit/Switch/Hover",
-        "kit/Switch/Focus",
-        "kit/Switch/Active",
-        "kit/Switch/Disabled",
-        "kit/Row/Default",
-        "kit/Row/Hover",
-        "kit/Row/Focus",
-        "kit/Row/Active",
-        "kit/Row/Dimmed",
-        "kit/Button/Armed",
-        "kit/Button/Loading",
-        "tokens/Colour",
-        "tokens/Type",
-        "tokens/Spacing",
-        "tokens/Radius",
-        "tokens/Motion"
-      ],
-      "components": [
-        "Primitives/Field",
-        "Primitives/Row",
-        "Primitives/Button",
-        "Primitives/Segmented",
-        "Primitives/Switch",
-        "Tokens/Colour",
-        "Tokens/Type",
-        "Tokens/Spacing",
-        "Tokens/Radius",
-        "Tokens/Motion"
-      ],
+      "records": [],
+      "components": [],
       "features": [],
-      "approvedRecords": [
-        "proto/approved-kit/Reference/1",
-        "proto/approved-kit/Reference/2",
-        "proto/approved-kit/Reference/3",
-        "proto/approved-kit/Reference/4",
-        "proto/approved-kit/Reference/5"
-      ],
+      "approvedRecords": [],
       "sourceHash": "7d50fa28d99945bdf2617d7b395379273ec0996a1098a0084f7b03ce271decf3",
       "proposedPredicates": []
     },
@@ -804,7 +714,7 @@
     },
     {
       "page": "Tokens/Icons, one set",
-      "existing": false,
+      "existing": true,
       "boards": [
         "I1"
       ],
@@ -816,29 +726,16 @@
         "Marks, not icons: the ensō marks and spinner, the blocked mark, the Claude Code and Codex marks, Hachi's pixel art, the Dawn artwork, the kansō wordmark, the macOS window lights, the pointer.",
         "Android has no Lucide icon (open: the word \"Android\" on the button). iOS uses lu-apple."
       ],
-      "records": [
-        "proto/approved-icons/Reference/1",
-        "proto/tokens-icons/EnsoMarks/Default",
-        "proto/tokens-icons/LucideFourSizes/Default",
-        "proto/tokens-icons/PendingDotAndGlint/Default",
-        "proto/tokens-icons/ProgramMarks/Default",
-        "proto/tokens-icons/TheSet/Default",
-        "proto/tokens-icons/TheWholeSet/Default",
-        "tokens/Icons"
-      ],
-      "components": [
-        "Tokens/Icons"
-      ],
+      "records": [],
+      "components": [],
       "features": [],
-      "approvedRecords": [
-        "proto/approved-icons/Reference/1"
-      ],
+      "approvedRecords": [],
       "sourceHash": "6dc326142426ac8861196e10022a777fdda0fedda55ec83cd735c157967b3c78",
       "proposedPredicates": []
     },
     {
       "page": "Tokens/Contrast, light and dark",
-      "existing": false,
+      "existing": true,
       "boards": [
         "A"
       ],
@@ -852,37 +749,24 @@
         "Light and dark share geometry and token names; only values differ. A token change is checked against every surface, hover and selected included."
       ],
       "records": [
-        "proto/approved-contrast/Reference/1",
-        "proto/approved-contrast/Reference/2",
-        "proto/tokens-colour-and-wash/Edges/Default",
-        "proto/tokens-colour-and-wash/StateColours/Default",
-        "proto/tokens-colour-and-wash/Washes/Default",
-        "tokens/Colour"
+        "tokens/Contrast"
       ],
       "components": [
-        "Tokens/Colour"
+        "Tokens/Contrast, light and dark"
       ],
       "features": [],
-      "approvedRecords": [
-        "proto/approved-contrast/Reference/1",
-        "proto/approved-contrast/Reference/2"
-      ],
+      "approvedRecords": [],
       "sourceHash": "996188ad92fd5dc648dcebed0049c46d1dcc3b62663ee2478a7fdc0ac1f1453a",
       "proposedPredicates": []
     },
     {
-      "page": "Compositions/One fact, one home",
-      "existing": false,
+      "page": "Start/One fact, one home",
+      "existing": true,
       "boards": [
         "L"
       ],
       "status": "Approved reference",
-      "guidelines": [
-        "| Fact | Its one home | Also shown, and why | Never shown in |\n| --- | --- | --- | --- |\n| An agent needs you | Its sidebar row: blocked wash, mark and the question. | Status bar, only while the row is out of view. | Pane header and tab. A dot on the view switch or the rail. A \"Needs you\" card. |\n| What it asks | Its sidebar row's tooltip and its pane. | Status bar, only while the row is off screen, same words and cut. | A second, longer copy. |\n| An agent finished, and its last words | Its pane. The row shows the done mark until you look. | Nowhere else. | A digest on the done row. |\n| What the turn changed: files, diff | Pane header segments. | Nowhere else. A file's own stat in Files is a different fact. | A total in Files. The same numbers on the sidebar row. |\n| This agent is working | Its sidebar row: spinning ensō and name shimmer. | Nowhere else. | Pane header and tabs. Edge dots. |\n| How many agents are working | The spinning rows; the Status view lists them. | Nowhere else. | A count on the status bar or footer. |\n| A command still running after the turn | The agent's row, by name (\"pnpm dev\"). | Nowhere else while Ports is closed. | A bare number. |\n| The project's branch | Project row. A worktree's name is its branch. | Nowhere else. | Pane header. Status bar. |\n| Commits not pushed | Project row ↑N; a click opens Push. | Nowhere else. | Pane header \"N commits\". Arrows that do nothing. |\n| Behind upstream | Project row ↓N; a press pulls. | Nowhere else. \"Behind main\" on a PR is its base, in the header verdict. | Arrows that do nothing. |\n| Pull request state | Pane header: #N and its verdict in words. | The PR panel holds the detail when open. | A dot without words. |\n| A check failed | The same pane header segment. | Away card or toast, only when no header in view shows that PR. | The done row. |\n| Reviews asked of me | PR list, first group, \"Asked of you\". | Status bar \"2 reviews\"; a click opens that group. | A count pill in the list. |\n| A kansō update exists | The Settings menu in the footer, in words. | Toast, only while the footer is out of view. | A dot on the gear or footer. A banner in Settings. |\n| Herdr has an update | The Settings menu, \"Update Herdr\". | Nowhere else. | \"Settings · update ready\". |\n| Which channel I am on | The sidebar header band, the pill, or nothing. | Nowhere else. | Toasts, the footer. |\n| A computer's name | Its row at the head of its projects. | Nowhere else. | The status bar. A row for the only computer. |\n| A computer stopped answering | Said once: the away card, or a toast while you are here. | Its actions stay under + → Computers. | A standing \"Unreachable\" or \"Off\" on the list or status bar. |\n| Memory is low | Status bar, \"Memory 8% free\". | A system notice in the same words, only while no kansō window is on screen. | The status bar while the Memory panel is open. |\n| A tab is asleep | The Asleep group; folded, its count. | Nowhere else. | A second list in the Sleep dialog. A count beside open rows. |\n| Could not sleep | The asleep row: reason, Retry, Undo. | Toast in the same words, only while the group is off screen. | The toast while the group is in view. |\n| What happened while you were away | The away card: only facts no row in view shows. | Nowhere else. | Needs you or Finished for a row in view. A count. |\n| A server with no pane | Status bar \":6006 no pane\"; a click opens Ports on that row. | Nowhere else. | The status bar while Ports is open. A second line in Ports. |\n| A container failed | Its row in Containers: \"exited 1 · 3 min\". | Status bar \"api-db exited 1\", only while the panel is closed. | Hero counts. \"Docker is not installed\". |\n| Spend | The Spend panel, one number. | Nowhere else. | A dollar amount on the status bar. |\n| A file the agent named | Files, \"Named by checkout\". | Nowhere else. | A second listing under Also changed. |\n| The command palette key | Settings · Keys, the one list of every key. | Nowhere else. | The status bar. A second keyboard in Help. |",
-        "The status bar or a toast may carry a fact only while its home is off screen or closed, and drops it when the home returns.",
-        "Before adding anything visible, find its fact here. A new fact gets a row with its home before it is drawn.",
-        "Facts you already know and cannot act on are said once, when they happen."
-      ],
+      "guidelines": [],
       "records": [
         "proto/approved-ledger/Reference/1"
       ],
@@ -1040,7 +924,7 @@
         "kit/Sidebar/Dawn"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -1128,7 +1012,7 @@
         "kit/Sidebar/Dawn"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -1265,7 +1149,7 @@
         "kit/Sidebar/Dawn"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -1324,7 +1208,7 @@
         "proto/compositions-sidebar-rows/WorktreeRow/Default"
       ],
       "components": [
-        "Compositions/Sidebar",
+        "Layouts/Sidebar",
         "Primitives/Row"
       ],
       "features": [],
@@ -1390,7 +1274,7 @@
         "proto/compositions-sidebar-rows/SubAgent/Default"
       ],
       "components": [
-        "Compositions/Sidebar",
+        "Layouts/Sidebar",
         "Primitives/Row"
       ],
       "features": [],
@@ -1451,7 +1335,7 @@
         "proto/compositions-sidebar-rows/Computer/Default"
       ],
       "components": [
-        "Compositions/Sidebar",
+        "Layouts/Sidebar",
         "Primitives/Row"
       ],
       "features": [],
@@ -1510,7 +1394,7 @@
         "proto/compositions-sidebar-features/Asleep/Wake selected"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -1604,7 +1488,7 @@
         "proto/compositions-sidebar-features/NeedsQueue/Unavailable"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -1646,7 +1530,7 @@
         "proto/compositions-sidebar-rows/StatusViewTile/Default"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [
         "coverage/spaces/SidebarStatus"
@@ -1696,7 +1580,7 @@
         "proto/compositions-sidebar-features/SidebarThreads/Snoozed"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [
         "coverage/spaces/SidebarThreads"
@@ -1738,7 +1622,7 @@
         "proto/compositions-sidebar-rows/Find/Default"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -1842,7 +1726,7 @@
         "proto/compositions-sidebar-rows/AddComputer/Default"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -1925,7 +1809,7 @@
         "kit/Sidebar/Dawn"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -2008,7 +1892,7 @@
         "kit/Sidebar/Dawn"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -2086,6 +1970,7 @@
         "kit/Menu/Default"
       ],
       "components": [
+        "Compositions/Right-click menus",
         "Primitives/Menu"
       ],
       "features": [],
@@ -2138,7 +2023,7 @@
         "proto/compositions-sidebar-rows/Footer/Default"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -2226,7 +2111,7 @@
         "kit/Sidebar/Dawn"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -2268,7 +2153,7 @@
         "kit/Rail/Dawn"
       ],
       "components": [
-        "Compositions/Rail"
+        "Layouts/Sidebar"
       ],
       "features": [],
       "approvedRecords": [
@@ -2444,6 +2329,7 @@
         "kit/Menu/Default"
       ],
       "components": [
+        "Compositions/The + menu",
         "Primitives/Menu"
       ],
       "features": [],
@@ -2674,6 +2560,7 @@
         "kit/Menu/Default"
       ],
       "components": [
+        "Compositions/Menus of the bars and headers",
         "Primitives/Menu",
         "Layouts/Context menus"
       ],
@@ -7189,7 +7076,7 @@
       "proposedPredicates": []
     },
     {
-      "page": "Primitives/Save arrangement",
+      "page": "Features/Save arrangement",
       "existing": false,
       "boards": [
         "D7"
@@ -7202,7 +7089,9 @@
         "coverage/arrange/SaveArrangement/Capture loading",
         "coverage/arrange/SaveArrangement/Overwrite",
         "coverage/arrange/SaveArrangement/Save",
-        "coverage/arrange/SaveArrangement/Save failed"
+        "coverage/arrange/SaveArrangement/Save failed",
+        "panels/dialog/FeatureSaveArrangement/Save header",
+        "panels/dialog/FeatureSaveArrangement/Overwrite header"
       ],
       "components": [
         "Panels/Arrangements",
@@ -7235,7 +7124,7 @@
       "proposedPredicates": []
     },
     {
-      "page": "Primitives/Settings menu",
+      "page": "Compositions/Settings menu",
       "existing": false,
       "boards": [
         "S19"
@@ -7260,7 +7149,7 @@
         "coverage/chrome/SettingsMenu/Restart armed"
       ],
       "components": [
-        "Compositions/Sidebar",
+        "Layouts/Sidebar",
         "Primitives/Menu"
       ],
       "features": [
@@ -7323,7 +7212,13 @@
         "coverage/chrome/UpdateNotice/Check failed",
         "coverage/chrome/UpdateNotice/Current",
         "coverage/chrome/UpdateNotice/Install failed",
-        "coverage/chrome/UpdateNotice/Installed"
+        "coverage/chrome/UpdateNotice/Installed",
+        "panels/notifications/FeatureUpdateNotice/Installed, keys updated",
+        "panels/notifications/FeatureUpdateNotice/Installed, kept your keys",
+        "panels/notifications/FeatureUpdateNotice/Installed, keys.json unreadable",
+        "panels/notifications/FeatureUpdateNotice/Installed, new layout",
+        "panels/notifications/FeatureUpdateNotice/Install failed, Windows tool missing",
+        "panels/notifications/FeatureUpdateNotice/Install failed, Windows folder not moved"
       ],
       "components": [
         "Panels/Settings",
@@ -7553,7 +7448,8 @@
         "coverage/dojo/PracticeFeedback/Go pending",
         "coverage/dojo/PracticeFeedback/Miss",
         "coverage/dojo/PracticeFeedback/Sleeping",
-        "coverage/dojo/PracticeFeedback/Streak"
+        "coverage/dojo/PracticeFeedback/Streak",
+        "panels/dojo/FeaturePracticeFeedback/sqlite3 missing"
       ],
       "components": [
         "Panels/Dojo"
@@ -7934,7 +7830,7 @@
       ]
     },
     {
-      "page": "Primitives/Pane menu",
+      "page": "Compositions/Pane menu",
       "existing": false,
       "boards": [
         "B10"
@@ -7961,7 +7857,7 @@
       ]
     },
     {
-      "page": "Primitives/Action notice",
+      "page": "Features/Action notice",
       "existing": false,
       "boards": [
         "B9"
@@ -8573,7 +8469,8 @@
         "panels/pr/PullRequestDetailsNodescription/Default",
         "panels/pr/PullRequestDetailsNopeople/Default",
         "panels/pr/PRConversationTheConversationInViewUnderTheVerdict/Default",
-        "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default"
+        "panels/pr/PRLongDiffALongDiffScrolledToLine400/Default",
+        "panels/pr/FeaturePullRequestDetails/Files cut off"
       ],
       "components": [
         "Panels/PR"
@@ -8914,7 +8811,7 @@
       ]
     },
     {
-      "page": "Primitives/Multiline prompt",
+      "page": "Features/Multiline prompt",
       "existing": false,
       "boards": [],
       "status": "Proposed",
@@ -8932,7 +8829,7 @@
       "proposedPredicates": []
     },
     {
-      "page": "Primitives/Prompt",
+      "page": "Features/Prompt",
       "existing": false,
       "boards": [],
       "status": "Proposed",
@@ -9369,7 +9266,7 @@
       ]
     },
     {
-      "page": "Primitives/Agent menu",
+      "page": "Compositions/Agent menu",
       "existing": false,
       "boards": [
         "S18"
@@ -9447,7 +9344,7 @@
         "proto/compositions-sidebar-features/Asleep/Wake selected"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [
         "coverage/spaces/Asleep"
@@ -9468,7 +9365,7 @@
       ]
     },
     {
-      "page": "Primitives/Computer menu",
+      "page": "Compositions/Computer menu",
       "existing": false,
       "boards": [
         "S18"
@@ -9559,7 +9456,7 @@
       ]
     },
     {
-      "page": "Primitives/New worktree",
+      "page": "Features/New worktree",
       "existing": false,
       "boards": [
         "S14"
@@ -9629,7 +9526,7 @@
         "proto/compositions-sidebar-features/NeedsQueue/Unavailable"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [
         "coverage/spaces/NeedsQueue"
@@ -9644,7 +9541,7 @@
       ]
     },
     {
-      "page": "Primitives/New conversation",
+      "page": "Features/New conversation",
       "existing": false,
       "boards": [
         "S14"
@@ -9695,7 +9592,7 @@
       ]
     },
     {
-      "page": "Primitives/New project",
+      "page": "Features/New project",
       "existing": false,
       "boards": [
         "S14"
@@ -9777,7 +9674,7 @@
         "proto/compositions-sidebar-features/ProjectGit/Pulling"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [
         "coverage/spaces/ProjectGit"
@@ -9826,7 +9723,7 @@
       ]
     },
     {
-      "page": "Primitives/Project menu",
+      "page": "Compositions/Project menu",
       "existing": false,
       "boards": [
         "S18"
@@ -9874,7 +9771,7 @@
       ]
     },
     {
-      "page": "Compositions/Sidebar",
+      "page": "Layouts/Sidebar",
       "existing": true,
       "boards": [
         "S01"
@@ -9899,7 +9796,7 @@
         "proto/compositions-sidebar-features/Sidebar/Unread"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [
         "coverage/spaces/Sidebar"
@@ -9929,7 +9826,7 @@
         "proto/compositions-sidebar-rows/StatusViewTile/Default"
       ],
       "components": [
-        "Compositions/Sidebar"
+        "Layouts/Sidebar"
       ],
       "features": [
         "coverage/spaces/SidebarSort"
@@ -10140,7 +10037,7 @@
       ]
     },
     {
-      "page": "Primitives/Tabs",
+      "page": "Features/Tabs",
       "existing": false,
       "boards": [
         "B1"
@@ -10170,7 +10067,7 @@
       ]
     },
     {
-      "page": "Primitives/Notice",
+      "page": "Features/Notice",
       "existing": false,
       "boards": [
         "B9"
@@ -10199,7 +10096,7 @@
       ]
     },
     {
-      "page": "Primitives/Notice stack",
+      "page": "Features/Notice stack",
       "existing": false,
       "boards": [
         "B9"
@@ -10223,48 +10120,6 @@
       "proposedPredicates": [],
       "approvedRecords": [
         "proto/approved-bars-toasts/Reference/1"
-      ]
-    },
-    {
-      "page": "Tokens/Every value",
-      "existing": false,
-      "boards": [
-        "K"
-      ],
-      "status": "Approved reference",
-      "guidelines": [
-        "Every value and role comes from the shared token tables. Themes change colour values only."
-      ],
-      "records": [
-        "proto/approved-kit/Reference/1",
-        "proto/approved-kit/Reference/2",
-        "proto/approved-kit/Reference/3",
-        "proto/approved-kit/Reference/4",
-        "proto/approved-kit/Reference/5",
-        "tokens/Colour",
-        "tokens/Type",
-        "tokens/Spacing",
-        "tokens/Radius",
-        "tokens/Motion",
-        "tokens/Icons"
-      ],
-      "components": [
-        "Primitives/Field",
-        "Tokens/Colour",
-        "Tokens/Type",
-        "Tokens/Spacing",
-        "Tokens/Radius",
-        "Tokens/Motion",
-        "Tokens/Icons"
-      ],
-      "features": [],
-      "proposedPredicates": [],
-      "approvedRecords": [
-        "proto/approved-kit/Reference/1",
-        "proto/approved-kit/Reference/2",
-        "proto/approved-kit/Reference/3",
-        "proto/approved-kit/Reference/4",
-        "proto/approved-kit/Reference/5"
       ]
     },
     {
@@ -10341,7 +10196,6 @@
       "components": [
         "Primitives/Field",
         "Primitives/Button",
-        "Primitives/Segmented",
         "Primitives/Switch",
         "Primitives/Row",
         "Primitives/Tab",
@@ -10350,8 +10204,8 @@
         "Primitives/Avatar",
         "Primitives/Mark",
         "Compositions/Header",
-        "Compositions/Sidebar",
-        "Compositions/Rail"
+        "Layouts/Sidebar",
+        "Layouts/Sidebar"
       ],
       "features": [],
       "proposedPredicates": [],
@@ -10361,33 +10215,6 @@
         "proto/approved-kit/Reference/3",
         "proto/approved-kit/Reference/4",
         "proto/approved-kit/Reference/5"
-      ]
-    },
-    {
-      "page": "Start/Philosophy reference",
-      "existing": false,
-      "boards": [
-        "Z",
-        "L"
-      ],
-      "status": "Approved reference",
-      "guidelines": [
-        "The rules on Start/Philosophy and the fact table on Compositions/One fact, one home apply to every page."
-      ],
-      "records": [
-        "proto/approved-philosophy/Reference/1",
-        "proto/approved-ledger/Reference/1"
-      ],
-      "components": [
-        "Compositions/State patterns",
-        "Start/Philosophy",
-        "Compositions/One fact, one home"
-      ],
-      "features": [],
-      "proposedPredicates": [],
-      "approvedRecords": [
-        "proto/approved-philosophy/Reference/1",
-        "proto/approved-ledger/Reference/1"
       ]
     }
   ],

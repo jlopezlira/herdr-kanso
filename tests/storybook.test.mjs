@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { expand } from "../scripts/storybook-catalog.mjs";
-import { lint, storyFiles } from "../scripts/lint-storybook.mjs";
+import { lint, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
+import { statusOf, statusTags } from "../stories/kit/status.js";
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const json = (file) => JSON.parse(read(file));
@@ -18,7 +19,7 @@ test("Every page follows the structure lint", () => {
 test("Storybook styles use only token values beyond the reviewed literals", () => {
   const tokens = new Set(Object.values(json("kanso/tokens.json")).flat().filter((token) => token?.value).map((token) => String(token.value).toLowerCase()));
   const allowed = new Set(json("tests/fixtures/storybook-literals.json"));
-  for (const file of ["stories/proto.css", "stories/frame.css"]) {
+  for (const file of ["stories/primitives.css", "stories/compositions.css", "stories/proto.css", "stories/frame.css", "stories/utilities.css"]) {
     const literals = [...read(file).replace(/\/\*[^]*?\*\//g, "").matchAll(/#[0-9a-f]{3,8}\b|(?:rgba?|hsla?)\([^)]*\)|-?\d*\.?\d+(?:px|rem|em)\b/gi)].map((match) => match[0].toLowerCase());
     assert.deepEqual([...new Set(literals.filter((literal) => !tokens.has(literal) && !allowed.has(literal)))], [], file);
   }
@@ -56,4 +57,16 @@ test("Drawings use only sprite symbols, and every icon is the exact Lucide shape
   const used = new Set(records.flatMap((record) => [...(record.html ?? "").matchAll(/href="#([^"]+)"/g)].map((match) => match[1])));
   assert.deepEqual([...used].filter((id) => !symbols.has(id)), []);
   assert.deepEqual([...used].filter((id) => !/^(?:lu|e|p)-/.test(id) && id !== "i-ptr"), []);
+});
+
+test("An approved page is ready with no tag, and every other page is in review", () => {
+  assert.deepEqual(["Start/Philosophy", "Panels/Current"].map((page) => [statusOf(page), statusTags(page)]), [["Ready", []], ["In review", ["In review"]]]);
+});
+
+test("A page without its status tag, or with a code in its title, fails the lint", () => {
+  const catalog = json("stories/catalog.json"), template = read("stories/kit/ComponentPage.jsx");
+  const untagged = { ...files, "stories/components/compositions-pane-header.stories.js": files["stories/components/compositions-pane-header.stories.js"].replace(/, tags: \[[^\]]*\]/, "") };
+  assert.ok(structureErrors(untagged, catalog, template).includes("stories/components/compositions-pane-header.stories.js: needs exactly one status tag"));
+  const coded = { ...files, "stories/start/extra.mdx": '<Meta title="Start/S12 notes" tags={["Ready"]} />\n\n## Prompt for agents\n\n```text\nRead.\n```\n' };
+  assert.ok(structureErrors(coded, catalog, template).includes("stories/start/extra.mdx: code in title Start/S12 notes"));
 });

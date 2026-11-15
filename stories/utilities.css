@@ -1,0 +1,155 @@
+/* Generated from kanso/tokens.json by npm run build:site-tokens: one class per token. */
+.kanso-text--dawn-top{color:var(--dawn-top)!important}
+.kanso-fill--dawn-top{background:var(--dawn-top)}
+.kanso-ring--dawn-top{box-shadow:inset 0 0 0 1px var(--dawn-top)}
+.kanso-text--dawn-mid{color:var(--dawn-mid)!important}
+.kanso-fill--dawn-mid{background:var(--dawn-mid)}
+.kanso-ring--dawn-mid{box-shadow:inset 0 0 0 1px var(--dawn-mid)}
+.kanso-text--dawn-low{color:var(--dawn-low)!important}
+.kanso-fill--dawn-low{background:var(--dawn-low)}
+.kanso-ring--dawn-low{box-shadow:inset 0 0 0 1px var(--dawn-low)}
+.kanso-text--dawn-edge{color:var(--dawn-edge)!important}
+.kanso-fill--dawn-edge{background:var(--dawn-edge)}
+.kanso-ring--dawn-edge{box-shadow:inset 0 0 0 1px var(--dawn-edge)}
+.kanso-text--dawn-sun{color:var(--dawn-sun)!important}
+.kanso-fill--dawn-sun{background:var(--dawn-sun)}
+.kanso-ring--dawn-sun{box-shadow:inset 0 0 0 1px var(--dawn-sun)}
+.kanso-text--dawn-star{color:var(--dawn-star)!important}
+.kanso-fill--dawn-star{background:var(--dawn-star)}
+.kanso-ring--dawn-star{box-shadow:inset 0 0 0 1px var(--dawn-star)}
+.kanso-text--canvas{color:var(--canvas)!important}
+.kanso-fill--canvas{background:var(--canvas)}
+.kanso-ring--canvas{box-shadow:inset 0 0 0 1px var(--canvas)}
+.kanso-text--chrome{color:var(--chrome)!important}
+.kanso-fill--chrome{background:var(--chrome)}
+.kanso-ring--chrome{box-shadow:inset 0 0 0 1px var(--chrome)}
+.kanso-text--bg{color:var(--bg)!important}
+.kanso-fill--bg{background:var(--bg)}
+.kanso-ring--bg{box-shadow:inset 0 0 0 1px var(--bg)}
+.kanso-text--popover{color:var(--popover)!important}
+.kanso-fill--popover{background:var(--popover)}
+.kanso-ring--popover{box-shadow:inset 0 0 0 1px var(--popover)}
+.kanso-text--raised{color:var(--raised)!important}
+.kanso-fill--raised{background:var(--raised)}
+.kanso-ring--raised{box-shadow:inset 0 0 0 1px var(--raised)}
+.kanso-text--hover{color:var(--hover)!important}
+.kanso-fill--hover{background:var(--hover)}
+.kanso-ring--hover{box-shadow:inset 0 0 0 1px var(--hover)}
+.kanso-text--selected{color:var(--selected)!important}
+.kanso-fill--selected{background:var(--selected)}
+.kanso-ring--selected{box-shadow:inset 0 0 0 1px var(--selected)}
+.kanso-text--w4{color:var(--w4)!important}
+.kanso-fill--w4{background:var(--w4)}
+.kanso-ring--w4{box-shadow:inset 0 0 0 1px var(--w4)}
+.kanso-text--w7{color:var(--w7)!important}
+.kanso-fill--w7{background:var(--w7)}
+.kanso-ring--w7{box-shadow:inset 0 0 0 1px var(--w7)}
+.kanso-text--w12{color:var(--w12)!important}
+.kanso-fill--w12{background:var(--w12)}
+.kanso-ring--w12{box-shadow:inset 0 0 0 1px var(--w12)}
+.kanso-text--w14{color:var(--w14)!important}
+.kanso-fill--w14{background:var(--w14)}
+.kanso-ring--w14{box-shadow:inset 0 0 0 1px var(--w14)}
+.kanso-text--blkwash{color:var(--blkwash)!important}
+.kanso-fill--blkwash{background:var(--blkwash)}
+.kanso-ring--blkwash{box-shadow:inset 0 0 0 1px var(--blkwash)}
+.kanso-text--syn-kw{color:var(--syn-kw)!important}
+.kanso-fill--syn-kw{background:var(--syn-kw)}
+.kanso-ring--syn-kw{box-shadow:inset 0 0 0 1px var(--syn-kw)}
+.kanso-text--syn-ty{color:var(--syn-ty)!important}
+.kanso-fill--syn-ty{background:var(--syn-ty)}
+.kanso-ring--syn-ty{box-shadow:inset 0 0 0 1px var(--syn-ty)}
+.kanso-text--syn-pn{color:var(--syn-pn)!important}
+.kanso-fill--syn-pn{background:var(--syn-pn)}
+.kanso-ring--syn-pn{box-shadow:inset 0 0 0 1px var(--syn-pn)}
+.kanso-text--border{color:var(--border)!important}
+.kanso-fill--border{background:var(--border)}
+.kanso-ring--border{box-shadow:inset 0 0 0 1px var(--border)}
+.kanso-text--input{color:var(--input)!important}
+.kanso-fill--input{background:var(--input)}
+.kanso-ring--input{box-shadow:inset 0 0 0 1px var(--input)}
+.kanso-text--fg{color:var(--fg)!important}
+.kanso-fill--fg{background:var(--fg)}
+.kanso-ring--fg{box-shadow:inset 0 0 0 1px var(--fg)}
+.kanso-text--muted{color:var(--muted)!important}
+.kanso-fill--muted{background:var(--muted)}
+.kanso-ring--muted{box-shadow:inset 0 0 0 1px var(--muted)}
+.kanso-text--dim{color:var(--dim)!important}
+.kanso-fill--dim{background:var(--dim)}
+.kanso-ring--dim{box-shadow:inset 0 0 0 1px var(--dim)}
+.kanso-text--accent{color:var(--accent)!important}
+.kanso-fill--accent{background:var(--accent)}
+.kanso-ring--accent{box-shadow:inset 0 0 0 1px var(--accent)}
+.kanso-text--accentfg{color:var(--accentfg)!important}
+.kanso-fill--accentfg{background:var(--accentfg)}
+.kanso-ring--accentfg{box-shadow:inset 0 0 0 1px var(--accentfg)}
+.kanso-text--solid{color:var(--solid)!important}
+.kanso-fill--solid{background:var(--solid)}
+.kanso-ring--solid{box-shadow:inset 0 0 0 1px var(--solid)}
+.kanso-text--solidfg{color:var(--solidfg)!important}
+.kanso-fill--solidfg{background:var(--solidfg)}
+.kanso-ring--solidfg{box-shadow:inset 0 0 0 1px var(--solidfg)}
+.kanso-text--working{color:var(--working)!important}
+.kanso-fill--working{background:var(--working)}
+.kanso-ring--working{box-shadow:inset 0 0 0 1px var(--working)}
+.kanso-text--blocked{color:var(--blocked)!important}
+.kanso-fill--blocked{background:var(--blocked)}
+.kanso-ring--blocked{box-shadow:inset 0 0 0 1px var(--blocked)}
+.kanso-text--done{color:var(--done)!important}
+.kanso-fill--done{background:var(--done)}
+.kanso-ring--done{box-shadow:inset 0 0 0 1px var(--done)}
+.kanso-text--idle{color:var(--idle)!important}
+.kanso-fill--idle{background:var(--idle)}
+.kanso-ring--idle{box-shadow:inset 0 0 0 1px var(--idle)}
+.kanso-text--violet{color:var(--violet)!important}
+.kanso-fill--violet{background:var(--violet)}
+.kanso-ring--violet{box-shadow:inset 0 0 0 1px var(--violet)}
+.kanso-text--blue{color:var(--blue)!important}
+.kanso-fill--blue{background:var(--blue)}
+.kanso-ring--blue{box-shadow:inset 0 0 0 1px var(--blue)}
+.kanso-text--claude{color:var(--claude)!important}
+.kanso-fill--claude{background:var(--claude)}
+.kanso-ring--claude{box-shadow:inset 0 0 0 1px var(--claude)}
+.kanso-text--focus{color:var(--focus)!important}
+.kanso-fill--focus{background:var(--focus)}
+.kanso-ring--focus{box-shadow:inset 0 0 0 1px var(--focus)}
+.kanso-shadow{box-shadow:var(--shadow)}
+.kanso-type--display{font-size:var(--k-fs-display)}
+.kanso-type--title{font-size:var(--k-fs-title)}
+.kanso-type--section{font-size:var(--k-fs-section)}
+.kanso-type--name{font-size:var(--k-fs-name)}
+.kanso-type--body{font-size:var(--k-fs-body)}
+.kanso-type--meta{font-size:var(--k-fs-meta)}
+.kanso-type--mono{font-size:var(--k-fs-mono);font-family:var(--mono)}
+.kanso-leading--tight{line-height:var(--k-lh-tight)}
+.kanso-leading--body{line-height:var(--k-lh-body)}
+.kanso-leading--code{line-height:var(--k-lh-code)}
+.kanso-leading--line{line-height:var(--k-lh-line)}
+.kanso-weight--regular{font-weight:var(--k-fw-regular)}
+.kanso-weight--medium{font-weight:var(--k-fw-medium)}
+.kanso-weight--strong{font-weight:var(--k-fw-strong)}
+.kanso-gap--hair{gap:var(--k-sp-hair)}
+.kanso-gap--1{gap:var(--k-sp-1)}
+.kanso-gap--2{gap:var(--k-sp-2)}
+.kanso-gap--3{gap:var(--k-sp-3)}
+.kanso-gap--4{gap:var(--k-sp-4)}
+.kanso-gap--6{gap:var(--k-sp-6)}
+.kanso-gap--8{gap:var(--k-sp-8)}
+.kanso-radius--sm{border-radius:var(--k-r-sm)}
+.kanso-radius--control{border-radius:var(--k-r-control)}
+.kanso-radius--card{border-radius:var(--k-r-card)}
+.kanso-radius--window{border-radius:var(--k-r-window)}
+.kanso-radius--full{border-radius:var(--k-r-full)}
+.kanso-height--compact{block-size:var(--k-h-compact)}
+.kanso-height--icon{block-size:var(--k-h-icon)}
+.kanso-height--control{block-size:var(--k-h-control)}
+.kanso-height--row{block-size:var(--k-h-row)}
+.kanso-height--row2{block-size:var(--k-h-row2)}
+.kanso-height--bar{block-size:var(--k-h-bar)}
+.kanso-height--pane{block-size:var(--k-h-pane)}
+.kanso-height--header{block-size:var(--k-h-header)}
+.kanso-height--badge{block-size:var(--k-h-badge)}
+.kanso-icon--inline{inline-size:var(--k-ic-inline);block-size:var(--k-ic-inline)}
+.kanso-icon--row{inline-size:var(--k-ic-row);block-size:var(--k-ic-row)}
+.kanso-icon--control{inline-size:var(--k-ic-control);block-size:var(--k-ic-control)}
+.kanso-icon--chrome{inline-size:var(--k-ic-chrome);block-size:var(--k-ic-chrome)}

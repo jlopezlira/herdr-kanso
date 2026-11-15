@@ -1,0 +1,33 @@
+/* One rule set per composition, smallest first: each one is built from primitives and the compositions above it. */
+
+/* Toolbar: icon buttons in a row; stacked in the rail, where a caret opens the tools that do not fit. */
+.kanso-toolbar{display:flex;flex:none;align-items:center;gap:var(--k-sp-2);color:var(--muted)}
+.kanso-toolbar.kanso-toolbar--column{flex-direction:column;gap:var(--k-sp-3)}
+.kanso-toolbar__group{display:flex;flex-direction:column;align-items:center;gap:var(--k-sp-1);border-radius:var(--k-r-card)}
+.kanso-toolbar__group.kanso-toolbar__group--open{background:var(--w4)}
+
+/* Header: the window's lights and the sidebar's tools; Dawn Mode draws its sky behind them. */
+.kanso-header{position:relative;display:flex;flex-direction:column;flex:none;overflow:hidden;padding:0 var(--k-sp-2) var(--k-sp-1);background:var(--chrome)}
+.kanso-header>:not(.kanso-dawn){position:relative;z-index:1}
+.kanso-header__title{display:flex;align-items:center;height:48px;padding-left:var(--k-sp-1)}
+.kanso-header>.kanso-toolbar{height:var(--k-h-header)}
+.kanso-header.kanso-header--collapsed>.kanso-toolbar{height:auto;padding-top:var(--k-sp-hair)}
+
+/* Sidebar: the header, the view switch, the rows of the chosen view and the footer; collapsed, the rail with tiles. */
+.kanso-sidebar>.kanso-header{margin:0 calc(-1 * var(--k-sp-2))}
+.kanso-rail>.kanso-sidebar__view-switch{align-self:center}
+.kanso-rail{anchor-name:--kanso-rail}
+.kanso-rail:has(.kanso-sidebar__view-menu){overflow:visible}
+.kanso-rail .kanso-sidebar__view-switch{position:relative}
+.kanso-sidebar__view-menu{position:absolute;top:0;left:calc(anchor(--kanso-rail right) + var(--k-sp-1));z-index:1}
+
+/* Pane header: program, name, digest, toolbar, grip. */
+.kanso-pane-header{display:flex;flex:none;align-items:center;gap:var(--k-sp-2);height:var(--k-h-pane);padding:0 var(--k-sp-2) 0 var(--k-sp-3);box-sizing:border-box;border-radius:var(--k-r-card) var(--k-r-card) 0 0;font-size:var(--k-fs-body);white-space:nowrap}
+.kanso-pane-header__name{display:flex;flex:none;align-items:center;font-weight:var(--k-fw-medium);color:var(--fg)}
+.kanso-pane-header:not(.kanso-row--selected) .kanso-pane-header__name{color:var(--muted)}
+.kanso-pane-header__digest{display:flex;flex:0 1 auto;align-items:center;gap:var(--k-sp-2);min-width:0;overflow:hidden;font-size:var(--k-fs-meta);color:var(--muted)}
+.kanso-pane-header__segment{display:flex;flex:none;align-items:center;gap:var(--k-sp-2);padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm);white-space:nowrap}
+.kanso-pane-header__segment:is(:hover,.kanso-control--hover){background:var(--w12)}
+.kanso-pane-header .kanso-state-line{flex:none}
+.kanso-pane-header .kanso-state-line>.kanso-button--tonal{margin-left:var(--k-sp-1)}
+.kanso-pane-header>.kanso-grip{margin:0 var(--k-sp-hair)}
