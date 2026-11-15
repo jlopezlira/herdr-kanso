@@ -200,25 +200,24 @@ test("Automatic update checks can be disabled while manual checks still work", a
   assert.equal(asked, 1, "an explicit check still works");
 });
 
-test("The footer is as tall as the rows it shows: one switched off in Kanso's settings gives its place back", async (t) => {
-  const f = await fixture(t);
-  f.store["kanso.pieces"] = { "footer.machine": "hide" };
-  f.footer.size = { px: 228 }; // as 3.9.1 sized it
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
-  assert.deepEqual(f.resizes, [88], "3.9.1's taller footer comes back to Update and Settings");
+test("The footer is as tall as the rows it shows, and a size an older kansō set comes back to it", async (t) => {
+  for (const [px, why] of [[228, "3.9.1's taller footer"], [120, "the footer with Add computer under Settings"]]) {
+    const f = await fixture(t);
+    f.footer.size = { px };
+    const { cx, drain } = context();
+    cx.timer = { every() {} };
+    f.updater.start(cx); await drain();
+    assert.deepEqual(f.resizes, [88], `${why} comes back to Update and Settings`);
+  }
   const { footerPx } = await updater({ shared: () => null });
   const { stateBlockPx } = await load("kanso-chrome/ui-state.js", ["stateBlockPx"], gpuiHost());
-  assert.equal(footerPx(new Set(["footer.machine"]), null), 56, "one row: 8 above, 32, 16 below");
-  assert.equal(footerPx(new Set(["footer.machine"]), "3.31.0"), 88, "an update is a row on top");
-  assert.equal(footerPx(new Set(), null), 88, "Settings and Add computer");
-  assert.equal(footerPx(new Set(), "3.31.0"), 120);
-  assert.equal(footerPx(new Set(), null, "words"), 88, "a refusal shows only under an update row");
+  assert.equal(footerPx(null), 56, "Settings alone: 8 above, 32, 16 below");
+  assert.equal(footerPx("3.31.0"), 88, "an update is a row on top");
+  assert.equal(footerPx(null, "words"), 56, "a refusal shows only under an update row");
   const block = Math.ceil(stateBlockPx({ why: "words", fixes: [{ label: "Update" }] }, 2));
-  assert.equal(footerPx(new Set(), "3.31.0", "words"), 120 + 2 + block + 8, "the kit's block with our words on two lines, a hair under its row and 8 above the next");
-  assert.equal(footerPx(new Set(), "3.31.0", "words", false), 126, "in the rail three squares of 34 a hair apart, 8 above and 12 below, and no block");
-  assert.equal(footerPx(new Set(["footer.machine"]), null, null, false), 54, "one square");
+  assert.equal(footerPx("3.31.0", "words"), 88 + 2 + block + 8, "the kit's block with our words on two lines, a hair under its row and 8 above the next");
+  assert.equal(footerPx("3.31.0", "words", false), 90, "in the rail two squares of 34 a hair apart, 8 above and 12 below, and no block");
+  assert.equal(footerPx(null, null, false), 54, "one square");
 });
 
 test("A refused update makes room for its block in the open footer, and gives it back in the rail", async (t) => {
@@ -226,13 +225,13 @@ test("A refused update makes room for its block in the open footer, and gives it
   const { cx, drain } = context();
   cx.timer = { every() {} };
   f.updater.start(cx); await drain();
-  assert.deepEqual(f.resizes, [120], "Update, Settings and Add computer");
+  assert.deepEqual(f.resizes, [88], "Update and Settings");
   f.updater.refuse("the download failed");
   f.updater.fit();
-  assert.ok(f.resizes.at(-1) > 120, "the block fits under the update row");
+  assert.ok(f.resizes.at(-1) > 88, "the block fits under the update row");
   f.store["sidebar.collapsed"] = true;
   f.updater.fit();
-  assert.equal(f.resizes.at(-1), 126, "the rail fits its squares and draws no block");
+  assert.equal(f.resizes.at(-1), 90, "the rail fits its squares and draws no block");
 });
 
 test("A refused update keeps the tool's words for the footer, and an update that lands clears them", async (t) => {

@@ -90,8 +90,8 @@ export default class WorkspaceChrome extends View {
 
   rows() {
     const update = this.updater?.available() ?? null;
-    const acts = { [ROW.update]: (cx) => this.updater.install(cx), [ROW.machine]: () => run("mod.open", { name: "machine-add" }) };
-    return footerRows({ update, busy: Boolean(this.updater?.busy), machine: shown("footer.machine", true, pieces(shared)) })
+    const acts = { [ROW.update]: (cx) => this.updater.install(cx) };
+    return footerRows({ update, busy: Boolean(this.updater?.busy) })
       .map((entry) => ({ ...entry, onClick: acts[entry.key] ?? null }));
   }
 

@@ -438,7 +438,8 @@ export default class Spaces extends View {
         .child(Scrollbar.vertical("conv-list").absolute().inset_0()))
       .child(div().mx(8).my(4).h(1).bg(t.border))
       .child(item("conv-add-project", "New project with a conversation\u2026", () => this.addProject(true), { icon: "folder-plus" }))
-      .child(item("conv-folder", "Open a folder, no project\u2026", () => run("kanso-spaces.open-folder"), { icon: "file" }));
+      .child(item("conv-folder", "Open a folder, no project\u2026", () => run("kanso-spaces.open-folder"), { icon: "file" }))
+      .when(shown("footer.machine", true, pieces(shared)), (el) => el.child(item("conv-machine", "Add computer\u2026", () => run("mod.open", { name: "machine-add" }), { icon: "server" })));
   }
 
   newAgentMenu(place) {

@@ -273,6 +273,31 @@ test("New conversation: nothing lit until the keyboard moves; a project chosen a
   assert.deepEqual([overlays.at(-1).newAgent.folder, overlays.at(-1).newAgent.name], ["/work/client-a/api", "api"], "a click on a row (the list's, by its key) asks which agent, under the project's own name, not the label that tells the two apart");
 });
 
+test("New conversation's menu ends with Add computer, last for the keyboard too, unless it is switched off", async () => {
+  const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
+  const menuOf = async (stored) => {
+    const calls = [], made = [];
+    const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+      div: node, svg: node, image: node, h_flex: node, v_flex: node, Popover: { new: node }, Scrollbar: { vertical: node }, v_virtual_list: node,
+      theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" }),
+      shared: (k) => (k === "kanso.pieces" ? stored : null), setShared: () => {},
+      spaces: () => [], home: () => "/Users/me", props: () => ({ overlay: "ov1", newConversation: true }), closeOverlay: () => {},
+      run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
+    });
+    const view = Object.assign(new Spaces(), { menuAt: -1 });
+    const real = view.menuItem.bind(view);
+    view.menuItem = (t, id, text, act, opts) => { made.push(text); return real(t, id, text, act, opts); };
+    view.newConversationView({ foreground: "#fff", muted: "#888", dim: "#666", border: "#333" });
+    return { view, calls, made };
+  };
+  const { view, calls, made } = await menuOf(null);
+  assert.deepEqual(made, ["New project with a conversation\u2026", "Open a folder, no project\u2026", "Add computer\u2026"]);
+  view.menuActs.at(-1)({});
+  assert.deepEqual(calls, [["mod.open", { name: "machine-add" }]], "the last row the keyboard reaches opens Add computer");
+  const off = await menuOf({ "footer.machine": "hide" });
+  assert.deepEqual(off.made, ["New project with a conversation\u2026", "Open a folder, no project\u2026"], "switched off in kansō settings, it is left out");
+});
+
 test("which agent: only the ones installed, nothing chosen for you, and one picked starts there", async () => {
   const calls = [], made = [];
   const node = () => { const p = new Proxy({}, { get: (_t, k) => (k === "when" ? (c, f) => (c ? f(p) : p) : () => p) }); return p; };
