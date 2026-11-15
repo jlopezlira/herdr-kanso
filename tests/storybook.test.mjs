@@ -45,8 +45,31 @@ test("A composition that treats pieces as strings fails the lint", () => {
   assert.deepEqual(added("export const extra = ({ name }) => row({ name: `Wake ${name}` });"), ["stories/kit/compositions.js: template literal in a composition"]);
   assert.deepEqual(added("export const extra = ({ names }) => names.map((name) => row({ name })).join();"), ["stories/kit/compositions.js: join in a composition"]);
   assert.deepEqual(added("export const extra = ({ open }) => list(row({ name: 'Asleep' }), open ? grow() : '');"), ["stories/kit/compositions.js: empty string as nothing in a composition"]);
-  assert.deepEqual(added("export const extra = () => row({ name: 'a' }) + row({ name: 'b' });"), ["stories/kit/compositions.js: pieces added as strings in a composition"]);
-  assert.deepEqual(added("export const extra = ({ more }) => more + grow();"), ["stories/kit/compositions.js: pieces added as strings in a composition"]);
+  for (const line of [
+    "export const extra = () => row({ name: 'a' }) + row({ name: 'b' });",
+    "const a = row({ name: 'a' }), b = row({ name: 'b' });\nexport const extra = () => a + b;",
+    "export const extra = () => { let rows = grow(); rows += row({ name: 'a' }); return rows; };",
+    "export const extra = () => row({ name: 'a' }).concat(row({ name: 'b' }));",
+    "export const extra = () => String(row({ name: 'a' }));",
+    "export const extra = () => row({ name: 'a' }).toString();",
+    "export const extra = (rows) => rows.reduce((all, one) => all + one);",
+    "export const extra = ({ name }) => row({ name: 'Wake ' + name });",
+  ]) assert.deepEqual(added(line), ["stories/kit/compositions.js: pieces added as strings in a composition"], line);
+  assert.deepEqual(added("export const extra = () => row({ name: 'C++ build' });"), []);
+});
+
+test("A composition that imports anything but the pieces fails the lint", () => {
+  const source = read("stories/kit/compositions.js");
+  for (const line of ["import { badge } from './helpers.js';", "import './helpers.js';", "export const extra = () => import('./helpers.js');", "export { badge } from './helpers.js';"]) {
+    assert.deepEqual(compositionErrors(`${source}${line}\n`), ["stories/kit/compositions.js: import from outside the pieces in a composition"], line);
+  }
+});
+
+test("A stack with an unknown variant or state says which one", async () => {
+  const { stack } = await import("../stories/kit/pieces.js");
+  assert.equal(stack({ variant: "toolbar", column: true }, "x"), '<div class="kanso-toolbar kanso-toolbar--column">x</div>');
+  assert.throws(() => stack({ variant: "row grop" }), { message: 'stack: unknown variant "row grop"' });
+  assert.throws(() => stack({ variant: "rows", open: true }), { message: 'stack: variant "rows" has no state "open"' });
 });
 
 test("Storybook styles use only token values beyond the reviewed literals", () => {

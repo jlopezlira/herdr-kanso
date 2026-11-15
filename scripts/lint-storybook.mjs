@@ -99,16 +99,19 @@ export function structureErrors(files, catalog, template) {
 // Compositions only call pieces and never treat them as strings, so the app can share the file as it is.
 export function compositionErrors(source, path = 'stories/kit/compositions.js') {
   const code = source.replace(/^\s*\/\/.*$/gm, '');
+  const bare = code.replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, 'text');
+  const imports = [...code.matchAll(/\bfrom\s*(['"])([^'"]*)\1/g)].map((match) => match[2]);
   const rules = [
-    [/<\/?[a-z!]/i, 'markup tag'],
-    [/\bclass(?:Name)?\s*=/, 'class attribute'],
-    [/\bkanso-[a-z]/, 'class string'],
-    [/`/, 'template literal'],
-    [/\.join\(/, 'join'],
-    [/''|""/, 'empty string as nothing'],
-    [/[)\]]\s*\+|\+\s*[\w.]*[([]/, 'pieces added as strings'],
+    [/<\/?[a-z!]/i.test(code), 'markup tag'],
+    [/\bclass(?:Name)?\s*=/.test(code), 'class attribute'],
+    [/\bkanso-[a-z]/.test(code), 'class string'],
+    [/`/.test(code), 'template literal'],
+    [/\.join\(/.test(bare), 'join'],
+    [/''|""/.test(code), 'empty string as nothing'],
+    [/\+|\.concat\(|\bString\(|\.toString\(/.test(bare), 'pieces added as strings'],
+    [imports.some((from) => from !== './pieces.js') || /\bimport\s*(?:\(|['"])|\brequire\s*\(/.test(code), 'import from outside the pieces'],
   ];
-  return rules.filter(([pattern]) => pattern.test(code)).map(([, rule]) => `${path}: ${rule} in a composition`);
+  return rules.filter(([found]) => found).map(([, rule]) => `${path}: ${rule} in a composition`);
 }
 
 export function lint(root = '.') {

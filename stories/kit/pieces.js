@@ -5,6 +5,9 @@ export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${c
 // Children are pieces, arrays of pieces, or null/false for nothing.
 export const list = (...children) => children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false).join('');
 
+// A label made of words and values, such as a name inside an action's title.
+export const phrase = (...parts) => parts.join(' ');
+
 export const grow = (inner = '') => `<span class="kanso-layout__grow">${inner}</span>`;
 
 // Atoms
@@ -193,9 +196,14 @@ export const stacks = {
   'rail list': { block: 'kanso-rail__list' },
   'rail tile': { block: 'kanso-rail__tile', focusable: true },
   'rail footer': { block: 'kanso-rail__footer' },
+  'sidebar frame': { block: 'kanso-sidebar' },
+  'rail frame': { block: 'kanso-rail' },
 };
 export const stack = ({ variant, on = false, ...flags }, ...children) => {
+  if (!Object.hasOwn(stacks, variant)) throw new Error(`stack: unknown variant "${variant}"`);
   const { block, tag = 'div', states = [], focusable = false } = stacks[variant];
+  const unknown = Object.keys(flags).find((flag) => !states.includes(flag));
+  if (unknown) throw new Error(`stack: variant "${variant}" has no state "${unknown}"`);
   const classes = [block, ...states.filter((state) => flags[state]).map((state) => `${block}--${state}`), on ? 'kanso-control--on' : ''].filter(Boolean).join(' ');
   return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}>${list(children)}</${tag}>`;
 };

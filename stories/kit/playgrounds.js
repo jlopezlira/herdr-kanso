@@ -1,12 +1,13 @@
 // Pages whose story is built from Storybook controls instead of drawn states.
 import sprite from '../proto-sprite.svg?raw';
 import { asleep, computerRow, computerStates, header, projectRow, section, sessionRow, sidebarFooter, tile, toolbar, views, viewSwitch } from './compositions.js';
-import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, escape, input, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
+import { avatar, avatarSizes, button, card, chip, code, dawn, dialog, escape, input, kinds, levels, mark, markdown, marks, markSizes, menu, metric, row, rowDepths, sides, skeletonOf, skeletonShapes, stack, tabs, thumbnail, toast, toggle, tooltip, windowControls } from './pieces.js';
 import { sampleSidebar } from './samples.js';
 
 const icons = ['none', ...[...sprite.matchAll(/id="(lu-[^"]+)"/g)].map(([, id]) => id).sort()];
 const frame = (markup) => `<div class="kanso-story"><div class="kanso-story__theme kanso-story__frame kanso-story--free">${markup}</div></div>`;
 
+const inSidebar = (markup) => stack({ variant: 'sidebar frame' }, markup), inRail = (markup) => stack({ variant: 'rail frame' }, markup);
 const select = (name, options) => ({ name, control: { type: 'select' }, options });
 
 
@@ -170,7 +171,7 @@ export const playgrounds = {
       focus: { name: 'focus', control: { type: 'boolean' } },
       dimmed: { name: 'dimmed', control: { type: 'boolean' } },
     },
-    markup: (args) => `<div class="kanso-sidebar">${sessionRow(args)}</div>`,
+    markup: (args) => inSidebar(sessionRow(args)),
   },
   'Compositions/Sidebar/Project row': {
     args: { name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', open: false, status: 'blocked', count: 0, hover: false, focus: false },
@@ -185,7 +186,7 @@ export const playgrounds = {
       hover: { name: 'hover', control: { type: 'boolean' } },
       focus: { name: 'focus', control: { type: 'boolean' } },
     },
-    markup: (args) => `<div class="kanso-sidebar">${projectRow(args)}</div>`,
+    markup: (args) => inSidebar(projectRow(args)),
   },
   'Compositions/Sidebar/Computer row': {
     args: { name: 'dark', remote: true, state: 'on', status: 'blocked', count: 0, hover: false, focus: false },
@@ -198,22 +199,22 @@ export const playgrounds = {
       hover: { name: 'hover', control: { type: 'boolean' } },
       focus: { name: 'focus', control: { type: 'boolean' } },
     },
-    markup: (args) => `<div class="kanso-sidebar">${computerRow(args)}</div>`,
+    markup: (args) => inSidebar(computerRow(args)),
   },
   'Compositions/Sidebar/Asleep': {
     args: { names: ['site', 'dojo'], open: false },
     argTypes: { names: { name: 'names', control: { type: 'object' } }, open: { name: 'open', control: { type: 'boolean' } } },
-    markup: (args) => `<div class="kanso-sidebar">${asleep(args)}</div>`,
+    markup: (args) => inSidebar(asleep(args)),
   },
   'Compositions/Sidebar/Section': {
     args: { title: 'Needs you', status: 'blocked', count: 0 },
     argTypes: { title: { name: 'title', control: { type: 'text' } }, status: select('mark', ['none', 'blocked']), count: { name: 'count', control: { type: 'number', min: 0 } } },
-    markup: (args) => `<div class="kanso-sidebar">${section(args)}</div>`,
+    markup: (args) => inSidebar(section(args)),
   },
   'Compositions/Sidebar/View switch': {
     args: { view: 'spaces', column: false },
     argTypes: { view: { name: 'view', control: { type: 'inline-radio' }, options: views.map((item) => item.key) }, column: { name: 'column', control: { type: 'boolean' } } },
-    markup: (args) => `<div class="${args.column ? 'kanso-rail' : 'kanso-sidebar'}">${viewSwitch(args)}</div>`,
+    markup: (args) => (args.column ? inRail : inSidebar)(viewSwitch(args)),
   },
   'Compositions/Sidebar/Tile': {
     args: { initial: 'A', tone: 'teal', status: 'blocked', count: 4, open: false },
@@ -224,12 +225,12 @@ export const playgrounds = {
       count: { name: 'count', control: { type: 'number', min: 0 } },
       open: { name: 'open', control: { type: 'boolean' } },
     },
-    markup: (args) => `<div class="kanso-rail">${tile(args)}</div>`,
+    markup: (args) => inRail(tile(args)),
   },
   'Compositions/Sidebar/Footer': {
     args: { update: '' },
     argTypes: { update: { name: 'update', control: { type: 'text' } } },
-    markup: (args) => `<div class="kanso-sidebar">${sidebarFooter(args)}</div>`,
+    markup: (args) => inSidebar(sidebarFooter(args)),
   },
   'Compositions/Sidebar': {
     args: { collapsed: false, dawn: false, view: 'spaces', switcher: true, menu: false },
