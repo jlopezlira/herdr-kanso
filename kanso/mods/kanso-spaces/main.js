@@ -438,7 +438,7 @@ export default class Spaces extends View {
   plus(id, t, place, tip = "New conversation") {
     return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted)
       .tooltip(tip)
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
+      .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
@@ -1954,8 +1954,8 @@ export default class Spaces extends View {
   connector({ last }, t) {
     const mid = TREE_ROW / 2;
     return [
-      div().absolute().left(GUIDE_X).top(-GUIDE_OVERLAP).w(1).h(last ? mid + GUIDE_OVERLAP : TREE_ROW + GUIDE_OVERLAP).bg(t.input),
-      div().absolute().left(GUIDE_X).top(mid).w(ELBOW_W).h(1).bg(t.input),
+      div().absolute().left(GUIDE_X).top(-GUIDE_OVERLAP).w(1).h(last ? mid + GUIDE_OVERLAP : TREE_ROW + GUIDE_OVERLAP).bg(t.border),
+      div().absolute().left(GUIDE_X).top(mid).w(ELBOW_W).h(1).bg(t.border),
     ];
   }
 
@@ -2008,7 +2008,7 @@ export default class Spaces extends View {
 
   dots(id, t, open) {
     return div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted).tooltip("More")
-      .hover((s) => s.bg(t.input).text_color(t.foreground))
+      .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); open(); })
       .child(svg("mods/kanso-chrome/icons/ellipsis.svg").size(14));

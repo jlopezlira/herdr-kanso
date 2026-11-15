@@ -324,7 +324,7 @@ export function agentFold(id, mine, open, onToggle, t) {
   if (!tail) return null;
   return h_flex().id(`agents-fold-${id}`).flex_none().h(20).px(3).gap(4).items_center().rounded(6)
     .text_size(11.5).text_color(t.dim).cursor_pointer()
-    .hover((s) => s.bg(t.input).text_color(t.foreground))
+    .hover((s) => s.bg(t.hover).text_color(t.foreground))
     // The row selects on mouse up and drags on mouse down: keep both to the toggle.
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); onToggle(cx); })
@@ -338,8 +338,8 @@ function guide(l, h, t) {
   const col = div().relative().w(GUIDE_W).h(h).flex_none();
   if (!l) return col;
   const down = l === "└" ? h / 2 + 4 : h + 4;
-  return col.child(div().absolute().left(GUIDE_X).top(-4).w(1).h(down).bg(t.input))
-    .when(l !== "│", (el) => el.child(div().absolute().left(GUIDE_X).top(h / 2).w(GUIDE_W - GUIDE_X + 7).h(1).bg(t.input)));
+  return col.child(div().absolute().left(GUIDE_X).top(-4).w(1).h(down).bg(t.border))
+    .when(l !== "│", (el) => el.child(div().absolute().left(GUIDE_X).top(h / 2).w(GUIDE_W - GUIDE_X + 7).h(1).bg(t.border)));
 }
 
 // Each glint window slides one way while its copy of the text slides the other, so the lit letters stay in place.
@@ -386,7 +386,7 @@ export function agentRow(a, indent, t, row, more = {}) {
     .opacity(zz ? 0.45 : a.focused || live ? 1 : 0.75);
   const iconTool = (id, icon, tip, act, size = 12) => div().id(id).size(20).flex_none().rounded(6)
     .flex().items_center().justify_center().text_color(t.muted).tooltip(tip)
-    .hover((s) => s.bg(t.input).text_color(t.foreground))
+    .hover((s) => s.bg(t.hover).text_color(t.foreground))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => { cx.stop_propagation(); act(cx); })
     .child(svg(`mods/kanso-chrome/icons/${icon}.svg`).size(size));

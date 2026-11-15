@@ -53,6 +53,7 @@ the branch's rules.
 
 ### Fixed
 
+- Hover fills, tree guide lines and the minimap's columns no longer use the edge colour, so they stay light and readable when the edge colour gets darker: buttons in the sidebar and kansō settings hover in the hover colour, the strip's tiles for panes beyond its edge rest in it and take the selected colour on hover, tree guides use the border colour, and the minimap's columns not on screen use the dim text colour. (#270)
 - Ports lists the servers on every connected computer, each under its computer's name with this one first, and Open, Go to its pane and Stop act on the computer the server runs on. A computer out of reach is one line saying why, it is asked less often while it keeps failing, and this computer's list never waits for it.
 - Double-clicking a project's name opens the rename dialog again, instead of a field in the row where Esc could reach the agent and stop it.
 - The border between the sidebar and the first pane has one drag, the sidebar's: the first pane no longer shows a resize handle there that moved nothing. The first pane grows to the right, and the panes after it keep both edges.
