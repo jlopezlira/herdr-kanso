@@ -1,7 +1,7 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
 import { asleep, computerRow, header, projectRow, section, sessionRow, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
-import { dawn as dawnSky, herdrMark, stack, windowControls } from '../stories/kit/pieces.js';
+import { dawn as dawnSky, stack, windowControls } from '../stories/kit/pieces.js';
 import { sampleSidebar } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
@@ -52,7 +52,6 @@ export function kitRecords(records) {
   const pillHeader = headers.find((html) => html.includes('kanso-badge--count'));
   const byId = (id) => originals.find((record) => record.id === id)?.html ?? '';
   add('Window controls', 'Default', windowControls(), 'The three lights, where the system draws them.');
-  add('Herdr mark', 'Default', herdrMark(), 'Herdr’s tile, where the collapsed sidebar starts.');
   add('Dawn', 'Default', dawnSky(), 'The sky of Dawn Mode; the sun rises once on load.');
   for (const [id, label, html, caption] of [
     ['kit/Header/Open', 'Expanded', header(), 'The lights; + on the left; sort, search and hide on the right.'],
@@ -78,7 +77,7 @@ export function kitRecords(records) {
     ['View switch', 'Column', inRail(viewSwitch({ column: true })), 'Sidebar collapsed: the three views as icons.'],
     ['Tile', 'Project', inRail(tile({ initial: 'A', status: 'blocked', count: 4, open: true })), 'A project in the rail.'],
     ['Tile', 'Status', inRail(tile({ status: 'working', count: 3 })), 'A state in the rail.'],
-    ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings and Add computer.'],
+    ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings.'],
     ['Footer', 'Update', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0' })), 'An update adds a row on top.'],
     ['Sidebar', 'Open', sampleSidebar(), 'Header, views, rows and footer.'],
     ['Sidebar', 'Collapsed', sampleSidebar({ collapsed: true }), 'The rail.'],

@@ -1,19 +1,21 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { avatar, button, herdrMark, chip, chord, dawn, diffText, facts, headerSegment, input, paneName, setting, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
+import { avatar, button, chip, chord, dawn, diffText, facts, headerSegment, input, paneName, setting, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
 
 const tool = (icon, label) => button({ label, kind: 'icon', size: 'lg', icon });
 // + names what it adds in the view on show.
 export const addLabels = { spaces: 'Add project', agents: 'New conversation', threads: 'New conversation' };
-// Sort is quieter at its default; open, its menu hangs under it.
-const sortTool = ({ sorted, menu: open }) => stack({ variant: 'toolbar sort', sorted },
-  button({ label: 'Sort', kind: 'icon', size: 'lg', icon: 'lu-arrow-up-down', active: Boolean(open) }), open ? stack({ variant: 'toolbar menu' }, open) : null);
-// Collapsed, the bar contracts: Herdr's mark heads it, + and Show sidebar stay, Sort and Search fold under a caret.
+// A tool whose menu, open, hangs under it.
+const menuTool = ({ variant, flags = {}, label, icon, open }) => stack({ variant, ...flags },
+  button({ label, kind: 'icon', size: 'lg', icon, active: Boolean(open) }), open ? stack({ variant: 'toolbar menu' }, open) : null);
+// Sort is quieter at its default.
+const sortTool = ({ sorted, menu: open }) => menuTool({ variant: 'toolbar sort', flags: { sorted }, label: 'Sort', icon: 'lu-arrow-up-down', open });
+// Collapsed, the bar contracts: + and Show sidebar stay, Sort and Search fold under a caret.
 const more = (open, sort) => stack({ variant: 'toolbar group', open }, tool(open ? 'lu-chevron-up' : 'lu-chevron-down', open ? 'Fewer tools' : 'More tools'), open ? [sortTool(sort), tool('lu-search', 'Search')] : null);
-export const toolbar = ({ view = 'spaces', column = false, open = false, sorted = false, sortMenu = null } = {}) => {
-  const add = tool('lu-plus', addLabels[view]);
+export const toolbar = ({ view = 'spaces', column = false, open = false, sorted = false, sortMenu = null, addMenu = null } = {}) => {
+  const add = menuTool({ variant: 'toolbar add', label: addLabels[view], icon: 'lu-plus', open: addMenu });
   const sort = { sorted, menu: sortMenu };
   return column
-    ? stack({ variant: 'toolbar', column }, herdrMark(), add, tool('lu-panel-left', 'Show sidebar'), more(open, sort))
+    ? stack({ variant: 'toolbar', column }, add, tool('lu-panel-left', 'Show sidebar'), more(open, sort))
     : stack({ variant: 'toolbar' }, add, grow(), sortTool(sort), tool('lu-search', 'Search'), tool('lu-panel-left', 'Hide sidebar'));
 };
 
@@ -58,7 +60,7 @@ export const viewSwitch = ({ view = 'spaces', column = false, open = false } = {
 
 // The update's one icon: the footer row that runs it and every notice about it.
 export const updateIcon = 'lu-refresh-cw';
-export const sidebarFooter = ({ update = null } = {}) => stack({ variant: 'footer' }, update ? row({ icon: updateIcon, name: update }) : null, row({ icon: 'lu-settings', name: 'Settings' }), row({ icon: 'lu-server', name: 'Add computer' }));
+export const sidebarFooter = ({ update = null } = {}) => stack({ variant: 'footer' }, update ? row({ icon: updateIcon, name: update }) : null, row({ icon: 'lu-settings', name: 'Settings' }));
 
 export const tile = ({ initial = null, tone = 'teal', status = 'none', count = 0, open = false }) => stack({ variant: 'rail tile', on: open },
   initial ? avatar({ initial, tone, size: 'md' }) : mark({ status, size: 'lg' }), count ? chip({ label: count, quiet: true, tone: status === 'blocked' ? 'blocked' : null }) : null);
