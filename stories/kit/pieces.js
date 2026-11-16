@@ -210,7 +210,7 @@ export const keyHint = ({ text, faint = false, recording = false }) => `<span cl
 // One key of the keyboard map; `units` is its width in keys. A lit key is pressed, a hinted one is the next to press; the corner glyph and the finger sit on the key.
 const keycapClass = { free: '', herdr: ' kanso-keyboard__key--available', kanso: ' kanso-keyboard__key--bound', held: ' kanso-control--held', picked: ' kanso-control--on', lit: ' kanso-keyboard__key--lit' };
 export const keycapStates = Object.keys(keycapClass);
-export const keycap = ({ label, units = 1, state = 'free', hover = false, hint = false, corner = '', finger = '', inert = false }) => `<span class="kanso-keyboard__key${keycapClass[state]}${hint ? ' kanso-keyboard__key--hint' : ''}${hover ? ' kanso-control--hover' : ''}"${inert ? '' : ' role="button" tabindex="0"'}${units === 1 ? '' : ` style="--k-units:${Number(units)}"`}>${escape(label ?? '')}`
+export const keycap = ({ label, units = 1, state = 'free', hover = false, hint = false, corner = '', finger = '', inert = false }) => `<span class="kanso-keyboard__key${keycapClass[state]}${hint ? ' kanso-keyboard__key--hint' : ''}${hover ? ' kanso-control--hover' : ''}${units === 1 ? '' : ` kanso-keyboard__key--units-${String(units).replace('.', '-')}`}"${inert ? '' : ' role="button" tabindex="0"'}>${escape(label ?? '')}`
   + `${corner ? `<span class="kanso-keyboard__corner">${escape(corner)}</span>` : ''}${finger ? `<span class="kanso-keyboard__finger">${escape(finger)}</span>` : ''}</span>`;
 
 // The picked key: its chord, what it does or Nothing, its layer, then the acts on it.
