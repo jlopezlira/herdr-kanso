@@ -132,3 +132,7 @@ section[data-reference-board^="panels-a-"] .kanso-panel>*,[data-reference-board=
 .kanso-log{font:var(--k-fs-mono)/var(--k-lh-code) var(--mono);color:var(--muted);white-space:pre;overflow:hidden;margin-top:var(--k-sp-3)}
 .kanso-actions>.kanso-action.kanso-button--quiet{display:inline-grid}
 .kanso-story__frame:not(.kanso-panel){padding:0;background:none;box-shadow:none}
+.kanso-story__stage.kanso-story__stage--roomy{padding:var(--k-sp-6)}
+.kanso-story__stage.kanso-story__stage--snug{padding:var(--k-sp-4)}
+.kanso-story__layout-row.kanso-story__layout-row--wide{gap:var(--k-sp-6)}
+.kanso-story__layout-column.kanso-story__layout-column--wide{gap:var(--k-sp-6);align-items:flex-start}
