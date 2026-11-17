@@ -319,7 +319,9 @@ export const stacks = {
   footer: { block: 'kanso-sidebar__footer' },
   rail: { block: 'kanso-rail', tag: 'aside' },
   'rail list': { block: 'kanso-rail__list' },
-  'rail tile': { block: 'kanso-rail__tile', focusable: true },
+  // Proposed: `strong`, something in the group is unread or woke; `rail count`, a tile's state mark beside its count.
+  'rail tile': { block: 'kanso-rail__tile', focusable: true, states: ['strong'] },
+  'rail count': { block: 'kanso-rail__count', tag: 'span' },
   'rail footer': { block: 'kanso-rail__footer' },
   'sidebar frame': { block: 'kanso-sidebar' },
   'rail frame': { block: 'kanso-rail' },
@@ -362,11 +364,12 @@ export const stacks = {
   'dojo result keys': { block: 'kanso-dojo__result-keys' },
   'dojo menu': { block: 'kanso-dojo__menu' },
 };
-export const stack = ({ variant, on = false, ...flags }, ...children) => {
+// `label`: what a focusable stack is called, its tooltip and its spoken name.
+export const stack = ({ variant, on = false, label = '', ...flags }, ...children) => {
   if (!Object.hasOwn(stacks, variant)) throw new Error(`stack: unknown variant "${variant}"`);
   const { block, tag = 'div', states = [], focusable = false } = stacks[variant];
   const unknown = Object.keys(flags).find((flag) => !states.includes(flag));
   if (unknown) throw new Error(`stack: variant "${variant}" has no state "${unknown}"`);
   const classes = [block, ...states.filter((state) => flags[state]).map((state) => `${block}--${state}`), on ? 'kanso-control--on' : ''].filter(Boolean).join(' ');
-  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}>${list(children)}</${tag}>`;
+  return `<${tag} class="${classes}"${focusable ? ' tabindex="0"' : ''}${label ? ` title="${escape(label)}" aria-label="${escape(label)}"` : ''}>${list(children)}</${tag}>`;
 };
