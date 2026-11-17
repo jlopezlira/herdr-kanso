@@ -157,6 +157,8 @@ const motionSample = (name) => {
   if (name === 'k-arm-ms') return button({ label: 'Close', kind: 'tonal', armed: true });
   if (name === 'k-spin-ms') return mark({ status: 'working' });
   if (name === 'k-skel-ms') return '<span class="kanso-skeleton kanso-tokens__skeleton"></span>';
+  if (/^k-(fade|glide)-/.test(name)) return '<span class="kanso-tokens__glide"><i></i></span>';
+  if (/^k-beat-/.test(name)) return '<span class="kanso-tokens__beat"></span>';
   const glint = '<span class="kanso-text--glint">checkout</span>';
   return name === 'k-glint-ms' ? glint : `<span class="kanso-tokens__glint">${glint}${measure(name)}</span>`;
 };
@@ -168,7 +170,7 @@ export function tokenRecords(tokens) {
   const sample = ({ group, name: n }) => {
     const [, kind, step] = /^k-(\w+)-(.+)$/.exec(n) ?? [];
     if (group === 'colour') return `<span class="kanso-tokens__${n === 'shadow' ? 'shadow kanso-shadow' : `swatch kanso-fill--${escape(n)}`}"></span>`;
-    if (group === 'opacity') return `<span class="kanso-tokens__swatch kanso-tokens__${n === 'k-wash-blocked' ? 'blocked' : 'opacity'}" data-token="${n}"></span>`;
+    if (group === 'opacity') return `<span class="kanso-tokens__swatch kanso-tokens__${n === 'k-wash-blocked' ? 'blocked' : kind === 'tint' ? 'tint' : 'opacity'}" data-token="${n}"></span>`;
     if (group === 'type') return kind === 'lh' ? `<span class="kanso-tokens__lines kanso-leading--${step}">Two lines<br>of text</span>` : `<span class="kanso-${SAMPLE_CLASS[kind] ?? 'type'}--${step}">Aa Quiet sessions</span>`;
     if (group === 'space') return `<span class="kanso-tokens__space kanso-gap--${step}"><i></i><i></i></span>`;
     if (group === 'radius' || n.endsWith('radius')) return `<span class="kanso-tokens__radius" data-radius="var(--${n})"></span>`;

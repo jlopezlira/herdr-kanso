@@ -125,6 +125,9 @@
 .kanso-text--faint{color:var(--faint)!important}
 .kanso-fill--faint{background:var(--faint)}
 .kanso-ring--faint{box-shadow:inset 0 0 0 1px var(--faint)}
+.kanso-text--fallback{color:var(--fallback)!important}
+.kanso-fill--fallback{background:var(--fallback)}
+.kanso-ring--fallback{box-shadow:inset 0 0 0 1px var(--fallback)}
 .kanso-shadow{box-shadow:var(--shadow)}
 .kanso-type--display{font-size:var(--k-fs-display)}
 .kanso-type--title{font-size:var(--k-fs-title)}

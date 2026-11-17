@@ -1,7 +1,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { run } from "herdr";
-import { G, R, T, tokens } from "./ui.js";
+import { G, R, T, TINT, alpha, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { pendingDot, PENDING } from "./ui-state.js";
 import { commitLayout } from "./layout.js";
@@ -30,7 +30,7 @@ export function gitTail(g, tree, name, t, place, act) {
     // A pull is drawn done at once; the dot breathes until git answers.
     if (control.pulling) return base.child(pendingDot(`git-pending-${act.id}`, tokens(t)));
     const go = control.kind === "ahead" ? act.open : act.pull;
-    return stop(base.px(4).py(2).rounded(4).text_size(T.body).text_color(t.muted).hover((s) => s.bg(t.foreground + "1f").text_color(t.foreground)), go).child(control.label);
+    return stop(base.px(4).py(2).rounded(4).text_size(T.body).text_color(t.muted).hover((s) => s.bg(alpha(t.foreground, TINT.control)).text_color(t.foreground)), go).child(control.label);
   };
   const pending = controls.some((control) => control.pulling);
   return h_flex().flex_1().min_w(0).gap(4).items_center().text_size(T.body).text_color(t.dim)
@@ -50,7 +50,7 @@ export function asleepRow(a, pad, t, row, wake, label) {
   const kbd = Boolean(row.kbd);
   return flush(h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none().gap(G.md).items_center().cursor_pointer(), pad, G.md)
     .when(kbd, (el) => el.border_1().border_color(t.accent))
-    .hover((s) => s.bg(t.foreground + "0c"))
+    .hover((s) => s.bg(alpha(t.foreground, TINT.row)))
     .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })
     .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); row.menu(cx); })
     .when(Boolean(row.hover), (el) => el.on_hover((h, cx) => row.hover(h, cx)))

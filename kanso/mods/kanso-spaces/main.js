@@ -10,7 +10,7 @@ import { systemApi } from "./platform-system.js";
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { agentSession, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD, FOLD_MS, pill, sessionHeight, mostUrgent, rowTool } from "./agents.js";
+import { agentSession, agentFold, agentLabel, AGENT_PAD, FLUSH, NESTED, renameTerminal, statusMark, SETTLED_LABEL, SNOOZE_LABEL, UNREAD_LABEL, THREAD_LABEL, settledOf, snoozedUntil, isUnread, woke, backFromSettled, threadSections, snoozePresets, THREAD_ORDERS, STATUS_ORDERS, withTerminals, NAME_LABEL, PIN_LABEL, ORDERS, DEFAULT_ORDER, orderSessions, moved, nest, track, elapsed, activityOf, bySection, duration, trackSteps, stepOf, tasksOf, said, FOLD_MS, pill, sessionHeight, mostUrgent, rowTool } from "./agents.js";
 import { ThreadLocator, findThreads, pidsOf, aliveIn, aliveDue, ALIVE_MS, ALIVE_BEHIND_MS } from "./threads.js";
 import { Panel, sameSeen } from "./panel.js";
 import { Store } from "./store.js";
@@ -28,7 +28,7 @@ import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead, flush } from "./sidebar-draw.js";
 import { guideBars, climb } from "./guides.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
-import { breathe, H, G, T, R, W, ICON, tokens, washes } from "./ui.js";
+import { breathe, H, G, T, R, W, ICON, GLIDE, OPACITY, TINT, alpha, tokens, washes } from "./ui.js";
 import { button, iconButton, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
@@ -101,9 +101,6 @@ const MACHINE_READ_MS = 20_000;
 const SIDEBAR_W = 256;
 // Dragged narrower, rows keep one line under ONE_LINE_W.
 const ONE_LINE_W = 240;
-
-// The same avatar colors in every mod that draws them: one strong color per hue.
-const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 
 const VIEWS = {
   spaces: { label: "Projects", icon: "folder" },
@@ -1323,7 +1320,7 @@ export default class Spaces extends View {
     const missing = Boolean(project.missing);
     const controls = closedControls({ hovered: this.hoverSpace === key, missing });
     const row = flush(h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().gap(G.sm).items_center().cursor_pointer(), G.sm, G.sm)
-      .hover((s) => s.bg(t.foreground + "0c"))
+      .hover((s) => s.bg(alpha(t.foreground, TINT.row)))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
       .when(this.navMark(`closed-project:${key}`, open), (el) => el.border_1().border_color(t.accent))
       .on_click((_e, cx) => { open(); cx.notify(); })
@@ -1371,7 +1368,7 @@ export default class Spaces extends View {
     const open = this.asleepOpenOf(group.id);
     const label = name || group.name || "Asleep";
     const row = flush(h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().gap(G.sm).items_center().cursor_pointer(), pad, G.md)
-      .hover((s) => s.bg(t.foreground + "0c"))
+      .hover((s) => s.bg(alpha(t.foreground, TINT.row)))
       .when(this.navMark(`asleep:${group.id}`, (cx) => this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx)), (el) => el.border_1().border_color(t.accent))
       .on_click((_e, cx) => { this.toggleAsleep(group.id, open, cx); cx.notify(); })
       .child(div().flex_1().min_w(0).truncate().text_size(13.5).font_medium().text_color(t.muted).child(label))
@@ -1634,7 +1631,7 @@ export default class Spaces extends View {
       return run.slab ? { ...end, y: end.y + 1 } : end;
     }, { y: 0, focus: null, focusH: 0 });
     const out = runs.flatMap((run) => (run.slab
-      ? [v_flex().id(`stack-${run.key}`).flex_none().mx(-G.sm).px(G.sm).rounded(R.control).bg(t.foreground + "08").children(run.rows.map((r) => r.el))]
+      ? [v_flex().id(`stack-${run.key}`).flex_none().mx(-G.sm).px(G.sm).rounded(R.control).bg(alpha(t.foreground, TINT.cell)).children(run.rows.map((r) => r.el))]
       : run.rows.map((r) => r.el)));
     return { out, h: Math.max(0, y - 1), focus, focusH };
   }
@@ -1964,7 +1961,7 @@ export default class Spaces extends View {
     const tools = collapsed ? [] : this.machineActions(m, phase, hot, t);
     const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(phase === "connected" ? t.muted : ink);
     const pending = phase === "loading" && Boolean(m) && this.waking?.has(m);
-    const wash = t.foreground + "0c";
+    const wash = alpha(t.foreground, TINT.row);
     return (collapsed ? h_flex().rounded(R.card).justify_center() : flush(h_flex(), G.sm, G.sm))
       .id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none().gap(G.sm).items_center().text_color(ink)
       .when(ring, (el) => el.border_1().border_color(t.accent))
@@ -1998,7 +1995,7 @@ export default class Spaces extends View {
     // Unreachable: its projects as last read, dim, with when.
     if (phase === "unavailable" && !collapsed && mine.length) {
       const when = readWord(this.seenOn?.[m ?? ""]);
-      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(0.55).when(Boolean(when), (el) => el.tooltip(when)) }))];
+      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(when)) }))];
     }
     if (phase !== "connected" || folded) return [headItem];
     const empty = stateEmpty(`machine-new-${m ?? "local"}`, "folder", noProjectsOn(this.names.title(m)), c, { label: "New project", onClick: () => run("space.new", { machine: m ?? "" }) });
@@ -2058,13 +2055,13 @@ export default class Spaces extends View {
     // Out to the list's edges, so the rows' ground is not cut short.
     return [v_flex().id(`fold-${id}`).mx(-G.sm).flex_none().overflow_hidden()
       .h(closing || start ? 0 : h ?? "auto").opacity(closing || start ? 0 : 1)
-      .transition("height", FOLD).transition("opacity", FOLD)
+      .transition("height", GLIDE).transition("opacity", GLIDE)
       .child(inner)];
   }
 
   avatarColor(w, t) {
     const color = this.colors?.[w.id] ?? "ansi6";
-    return color.startsWith("#") ? color : (t[color] ?? MARK[color]);
+    return color.startsWith("#") ? color : (t[color] ?? t.dim);
   }
 
   dots(id, t, open) {
@@ -2085,7 +2082,7 @@ export default class Spaces extends View {
     const spot = placeOfSpace(w);
     const controls = projectControls({ active: on, hovered: this.hoverSpace === w.id, place: spot });
     // A wash of the text color, never a theme accent; under the space you are in it is the list's pill.
-    const washHover = t.foreground + "0c";
+    const washHover = alpha(t.foreground, TINT.row);
     const asleep = Boolean(group);
     // Shown, a settled tab comes back without its agents: a project whose every tab sleeps wakes from its menu.
     const away = asleep && (w.tabs ?? []).every((tb) => tb.settled);
@@ -2253,9 +2250,9 @@ export default class Spaces extends View {
     const strong = rows.some((r) => r.strong);
     return h_flex().w_full().h(RAIL_MARK).flex_none().justify_center().items_center().child(
       v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)
-        .when(on, (el) => el.bg(t.foreground + "14"))
-        .when(!on, (el) => el.hover((s) => s.bg(t.foreground + "0c")))
-        .when(strong, (el) => el.border_1().border_color(t.accent + "80"))
+        .when(on, (el) => el.bg(alpha(t.foreground, TINT.pill)))
+        .when(!on, (el) => el.hover((s) => s.bg(alpha(t.foreground, TINT.row))))
+        .when(strong, (el) => el.border_1().border_color(alpha(t.accent, TINT.ring)))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click(list)
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); (menu ?? list)(); })
@@ -2582,8 +2579,8 @@ export default class Spaces extends View {
     const gap = view === "threads" ? 6 : ROW_GAP;
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
-      ...(space ? [pill("pill-space", space.y, space.h, t.foreground + "14")] : []),
-      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, t.foreground + "12")] : []),
+      ...(space ? [pill("pill-space", space.y, space.h, alpha(t.foreground, TINT.pill))] : []),
+      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, alpha(t.foreground, TINT.tab))] : []),
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : gap).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")

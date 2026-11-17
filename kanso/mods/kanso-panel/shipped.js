@@ -9,7 +9,7 @@ import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
 import { Share, shareRows } from "./share.js";
-import { G, tokens } from "./ui.js";
+import { G, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
@@ -504,7 +504,7 @@ export class Shipped {
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(h_flex().gap(G.sm).items_center()
               .child(div().truncate().text_size(13).text_color(c.text).child(RECORD_NAMES[k]))
-              .when(fresh, (el) => el.child(div().flex_none().px(6).py(1).rounded(6).bg(c.accent + "26").text_size(11).text_color(c.accent).child("New record"))))
+              .when(fresh, (el) => el.child(div().flex_none().px(6).py(1).rounded(6).bg(alpha(c.accent, TINT.soft)).text_size(11).text_color(c.accent).child("New record"))))
             .child(div().truncate().text_size(11.5).text_color(c.dim).child(t.detail)))
           .child(h_flex().flex_none().items_end().gap(6)
             .child(div().text_size(20).line_height(1).font_light().text_color(fresh ? c.accent : c.text).child(t.value))

@@ -12,6 +12,7 @@ import { div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { appHome, home } from "herdr";
 import { parseOr } from "./pure.js";
+import { CLEAR, TINT, alpha } from "./ui.js";
 import { hachi, hachiInk } from "./mascot.js";
 import { hachiPixels } from "./mascot-pixels.js";
 import { Store } from "./store.js";
@@ -198,8 +199,8 @@ export class Companion {
     const tile = (p) => {
       const on = p.id === this.id;
       return v_flex().id(`pet-${p.id}`).w(104).gap(4).p(8).items_center().rounded(10).cursor_pointer()
-        .border_1().border_color(on ? c.accent : c.text + "00").bg(on ? c.accent + "1c" : c.text + "00")
-        .hover((s) => s.bg(c.text + "0a"))
+        .border_1().border_color(on ? c.accent : CLEAR).bg(on ? alpha(c.accent, TINT.key) : CLEAR)
+        .hover((s) => s.bg(alpha(c.text, TINT.hover)))
         .on_click((_e, cx) => { this.choose(p.id); onChoose(p, cx); cx.notify(); })
         .child(h_flex().h(84).items_end().justify_center()
           .child(p.sheet ? petFrame(p, "idle", { scale: 0.4, still: true, small: true }) : hachi(t, { mood: "calm", px: 5 })))

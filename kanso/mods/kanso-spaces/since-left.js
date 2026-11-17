@@ -1,6 +1,6 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, H, R, T, ICON, tokens } from "./ui.js";
+import { G, H, R, T, ICON, TINT, alpha, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
@@ -109,7 +109,7 @@ export class SinceLeft {
       .child(div().flex_1())
       .when(Boolean(row.age), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
     return h_flex().id(id).h(heightOf(row)).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
-      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(t.foreground + "0c")).on_click((_e, cx) => go(cx)))
+      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))).on_click((_e, cx) => go(cx)))
       .when(selected, (el) => el.border_1().border_color(t.accent))
       .when(!row.more, (el) => el.child(lead(c, row.mark)))
       .child(v_flex().flex_1().min_w(0).justify_center().child(top)

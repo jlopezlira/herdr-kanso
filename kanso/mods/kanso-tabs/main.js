@@ -13,7 +13,7 @@ import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } fro
 import { Updater } from "./update.js";
 import { tryOr, readCommands } from "./pure.js";
 import { openArrange } from "./open.js";
-import { G, H, W, tokens } from "./ui.js";
+import { G, H, W, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
 import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
@@ -101,8 +101,6 @@ function panelContent(id) {
 }
 
 const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
-const CLEAR = "#00000000";
-const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chosen tab, as the sidebar's
 // A size reported after layout: the sizes with it, or the same ones when it moved less than half a pixel.
 const withSize = (sizes, key, width) => (Math.abs((sizes[key] ?? 0) - width) < 0.5 ? sizes : { ...sizes, [key]: width });
 const closeKey = (tab) => `close-${tab.id}`;
@@ -507,13 +505,13 @@ export default class Tabs extends View {
       const wide = Math.ceil(String(p.label).length * 6.8) + 10;
       const name = div().id(`panel-name-${p.id}`).h_full().flex().items_center().overflow_hidden().flex_none()
         .w(named ? wide : 0).opacity(named ? 1 : 0)
-        .transition("width", { duration: 180, easing: "ease-out" })
-        .transition("opacity", { duration: 180, easing: "ease-out" })
+        .transition("width", EASE)
+        .transition("opacity", EASE)
         .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
       return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
-        .text_size(12).bg(on ? t.foreground + "12" : CLEAR)
+        .text_size(12).bg(on ? alpha(t.foreground, TINT.tab) : CLEAR)
         .text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(target ? t.foreground + "1a" : on ? t.foreground + "12" : t.foreground + "0a").text_color(t.foreground))
+        .hover(s => s.bg(alpha(t.foreground, target ? TINT.faint : on ? TINT.tab : TINT.hover)).text_color(t.foreground))
         .on_hover((hovered, cx) => {
           if (hovered) this.hoverPanel = p.id; else if (this.hoverPanel === p.id) this.hoverPanel = null;
           cx.notify();
