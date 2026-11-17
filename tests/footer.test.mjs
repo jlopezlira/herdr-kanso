@@ -1,11 +1,11 @@
 // The sidebar footer: kansō's update row in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
+import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, chain, gpuiHost, calls } from "./helpers.mjs";
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const arg = (el, name) => calls(el, name)[0]?.[1];
 // Kids, and what a popover holds as its trigger and content.
 const inside = (el) => [...el.kids, ...el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1])];
@@ -27,7 +27,7 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
     run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
-  const { WorkspaceChrome } = await load("kanso-chrome/main.js", ["WorkspaceChrome"], host);
+  const { WorkspaceChrome } = await loadWorkspaceChrome(host);
   const kit = await load("kanso-chrome/ui.js", ["CHROME_SQUARE", "ICON_CHROME", "T", "G"], host);
   const view = new WorkspaceChrome();
   view.init({}, { spawn() {}, timer: { after() {}, every() {} } });

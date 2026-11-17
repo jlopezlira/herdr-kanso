@@ -1,19 +1,6 @@
 import { PMap } from "./pmap.mjs";
-import {
-  MAX_TURN_MS,
-  asString,
-  hashKey,
-  isPlainObject,
-  localDay,
-  normalizeTokens,
-  parseTimestamp,
-  toNonNegInt,
-} from "./util.mjs";
-import {
-  taskKeyFor as makeTaskKey,
-  dedupKeyFor as makeDedupKey,
-  taskKeyFor,
-} from "./store.mjs";
+import { MAX_TURN_MS, asString, hashKey, isPlainObject, localDay, normalizeTokens, parseTimestamp, toNonNegInt, tokenVector } from "./util.mjs";
+import { taskKeyFor as makeTaskKey, dedupKeyFor as makeDedupKey, taskKeyFor } from "./store.mjs";
 
 // Parser contract: (record, ctx, acc) -> next acc, nothing changed in place; acc.state is the file's own state.
 // ctx.addUsage and ctx.removeLatestFallback answer { acc, ... }; ctx.addTask and ctx.warn answer the next acc.
@@ -132,20 +119,11 @@ function piUsageCarrier(record, ctx, acc) {
   const usage = isPlainObject(record.usage) ? record.usage : null;
   if (!usage) return acc;
   const state = acc.state;
-  const session = piMainSession(state, ctx);
-  const timestamp = parseTimestamp(
-    record.timestamp ?? state.header?.timestamp,
-  );
+  const { session, timestamp } = piRecord(state, ctx, record.timestamp);
   if (timestamp === null) {
     return ctx.warn(acc, `Pi ${record.type} record has no usable timestamp; skipped`);
   }
-  const tokens = normalizeTokens({
-    input: usage.input,
-    output: usage.output,
-    cacheRead: usage.cacheRead,
-    cacheWrite: usage.cacheWrite,
-    reasoning: usage.reasoning,
-  });
+  const tokens = normalizeTokens(usage);
   if (!tokens.nonzero) return acc;
   const identity = record.id ?? `line:${ctx.lineHash}`;
   return ctx.addUsage(
@@ -166,7 +144,7 @@ function piUsageCarrier(record, ctx, acc) {
 function piTiming(record, ctx, acc, session, timestamp, isFinal, finalIdentity) {
   const { acc: opened, history } = historyFor(acc, session);
   if (record.role === "user") {
-    return setHistory(opened, session, { ...history, turnStart: timestamp, turnFirst: null, lastRow: null });
+    return startTurn(opened, session, history, timestamp);
   }
   if (record.role !== "assistant") return opened;
   const first = history.turnFirst ? history : { ...history, turnFirst: timestamp };
@@ -185,23 +163,12 @@ function piTiming(record, ctx, acc, session, timestamp, isFinal, finalIdentity) 
 }
 
 function piAssistant(ctx, acc, { session, timestamp, project, provider, model, usage, identity, final }) {
-  const tokens = usage ? normalizeTokens({
-    input: usage.input,
-    output: usage.output,
-    cacheRead: usage.cacheRead,
-    cacheWrite: usage.cacheWrite,
-    reasoning: usage.reasoning,
-  }) : null;
+  const tokens = usage ? normalizeTokens(usage) : null;
   return assistantTurn(
     acc,
     session,
     timestamp,
-    tokens?.nonzero ? (current) => ctx.addUsage(
-      current,
-      metaFor("pi", session, timestamp, project, provider, model),
-      tokens,
-      makeDedupKey("pi", identity, timestamp, provider, model),
-    ) : null,
+    assistantUsage(ctx, tokens, () => ({ meta: metaFor("pi", session, timestamp, project, provider, model), key: makeDedupKey("pi", identity, timestamp, provider, model) })),
     final ? (current) => piTiming(
       { role: "assistant" },
       ctx,
@@ -216,8 +183,6 @@ function piAssistant(ctx, acc, { session, timestamp, project, provider, model, u
 
 function parsePi(record, ctx, acc) {
   if (!isPlainObject(record)) return acc;
-  const state = acc.state;
-
   if (record.type === "session") {
     return put(acc, {
       header: {
@@ -239,86 +204,34 @@ function parsePi(record, ctx, acc) {
     return piUsageCarrier(record, ctx, acc);
   }
 
-  if (record.type === "message" && isPlainObject(record.message)) {
-    const message = record.message;
-    const role = asString(message.role, "");
-    const session = piMainSession(state, ctx);
-    const timestamp = parseTimestamp(
-      record.timestamp ?? message.timestamp ?? state.header?.timestamp,
-    );
-    const project = asString(state.header?.cwd, "unknown");
-    const provider = asString(message.provider);
-    const model = asString(message.model);
-    const stopReason = asString(message.stopReason, "");
-    const failedReply =
-      stopReason === "error" ||
-      stopReason === "aborted" ||
-      Boolean(message.errorMessage);
-    const final = stopReason === "stop" && !failedReply;
-    const identity =
-      record.id ??
-      message.responseId ??
-      `line:${session}:${ctx.lineHash}`;
-
-    if (role === "user") {
-      return timestamp !== null ? piTiming({ role }, ctx, acc, session, timestamp, false, "") : acc;
-    }
-    if (role === "toolResult") {
-      // Tool extensions may report nested-model usage; count it without touching the surrounding turn.
-      return piUsageCarrier({
-        type: "toolResult", usage: message.usage,
-        id: record.id ?? message.toolCallId ?? message.responseId,
-        timestamp: record.timestamp ?? message.timestamp,
-        provider: message.provider, model: message.model,
-      }, ctx, acc);
-    }
-    if (role !== "assistant") return acc;
-    if (timestamp === null) {
-      return ctx.warn(acc, "Pi assistant record has no usable timestamp; skipped");
-    }
-    return piAssistant(ctx, acc, {
-      session, timestamp, project, provider, model,
-      usage: isPlainObject(message.usage) ? message.usage : null,
-      identity, final,
-    });
+  const message = piEnvelope(record, ctx, acc.state);
+  if (!message) return acc;
+  if (message.main && message.role === "toolResult") {
+    return piUsageCarrier({
+      type: "toolResult", usage: record.message.usage,
+      id: record.id ?? record.message.toolCallId ?? record.message.responseId,
+      timestamp: record.timestamp ?? record.message.timestamp,
+      provider: record.message.provider, model: record.message.model,
+    }, ctx, acc);
   }
+  return piMessage(ctx, acc, message);
+}
 
-  // Pi sub-agent transcripts: same JSONL root, but usage and role at top level and no session header.
-  if (record.recordType === "message" && record.role !== undefined) {
-    const role = asString(record.role, "");
-    const session = piSubagentSession(record, ctx);
-    const timestamp = parseTimestamp(record.timestamp ?? record.ts);
-    const project = asString(record.cwd, "unknown");
-    const provider = asString(
-      record.provider ?? record.message?.provider,
-      "unknown",
-    );
-    const model = asString(record.model ?? record.message?.model, "unknown");
-    const stopReason = asString(record.stopReason, "");
-    const failedReply =
-      stopReason === "error" ||
-      stopReason === "aborted" ||
-      Boolean(record.errorMessage);
-    const final = stopReason === "stop" && !failedReply;
-    const identity =
-      record.message?.responseId ??
-      record.responseId ??
-      `line:${session}:${ctx.lineHash}`;
-
-    if (role === "user") {
-      return timestamp !== null ? piTiming({ role }, ctx, acc, session, timestamp, false, "") : acc;
-    }
-    if (role !== "assistant") return acc;
-    if (timestamp === null) {
-      return ctx.warn(acc, "Pi sub-agent assistant record has no usable timestamp; skipped");
-    }
-    return piAssistant(ctx, acc, {
-      session, timestamp, project, provider, model,
-      usage: isPlainObject(record.usage) ? record.usage : null,
-      identity, final,
-    });
-  }
-  return acc;
+function piEnvelope(record, ctx, state) {
+  const main = record.type === "message" && isPlainObject(record.message);
+  if (!main && !(record.recordType === "message" && record.role !== undefined)) return null;
+  const message = main ? record.message : record;
+  const session = main ? piMainSession(state, ctx) : piSubagentSession(record, ctx);
+  return {
+    main, session, role: asString(message.role, ""),
+    timestamp: parseTimestamp(main ? record.timestamp ?? message.timestamp ?? state.header?.timestamp : record.timestamp ?? record.ts),
+    project: asString(main ? state.header?.cwd : record.cwd, "unknown"),
+    provider: asString(main ? message.provider : record.provider ?? record.message?.provider, "unknown"),
+    model: asString(main ? message.model : record.model ?? record.message?.model, "unknown"),
+    usage: isPlainObject(message.usage) ? message.usage : null,
+    identity: (main ? record.id ?? message.responseId : record.message?.responseId ?? record.responseId) ?? `line:${session}:${ctx.lineHash}`,
+    final: piFinal(asString(message.stopReason, ""), message.errorMessage),
+  };
 }
 
 function claudeSession(record, ctx) {
@@ -367,7 +280,7 @@ function parseClaude(record, ctx, acc) {
 
   if (claudePrompt(record)) {
     if (timestamp === null) return opened;
-    return setHistory(opened, session, { ...history, turnStart: timestamp, turnFirst: null, lastRow: null });
+    return startTurn(opened, session, history, timestamp);
   }
 
   if (record.type === "system" && record.subtype === "turn_duration") {
@@ -420,12 +333,7 @@ function parseClaude(record, ctx, acc) {
     opened,
     session,
     timestamp,
-    tokens?.nonzero ? (current) => ctx.addUsage(
-      current,
-      metaFor("claude", session, timestamp, project, provider, model),
-      tokens,
-      makeDedupKey("claude", identity),
-    ) : null,
+    assistantUsage(ctx, tokens, () => ({ meta: metaFor("claude", session, timestamp, project, provider, model), key: makeDedupKey("claude", identity) })),
     final ? (current) => {
       const { acc: timed, history: now } = historyFor(current, session);
       return emitTask(
@@ -459,8 +367,7 @@ function codexRecordSession(state, ctx, payload) {
 }
 
 function codexContext(acc, turnId) {
-  const turns = mapOf(acc.state, "turns");
-  const made = turns === acc.state.turns ? acc : put(acc, { turns });
+  const { turns, made } = withTurns(acc);
   const known = turnId ? turns.get(turnId) : undefined;
   if (turnId && isPlainObject(known)) return { acc: made, context: known };
   const state = made.state;
@@ -702,8 +609,7 @@ function codexSessionMeta(record, acc, payload) {
 
 function codexTurnContext(acc, payload) {
   const turnId = asString(payload.turn_id ?? payload.root_turn_id, "");
-  const turns = mapOf(acc.state, "turns");
-  const made = turns === acc.state.turns ? acc : put(acc, { turns });
+  const { turns, made } = withTurns(acc);
   const state = made.state;
   const previous = turnId ? turns.get(turnId) : null;
   const context = {
@@ -740,11 +646,7 @@ function codexUsageRecord(record, ctx, acc, payload, timestamp) {
         session,
         turnId,
         record.timestamp ?? ctx.lineHash,
-        tokens.input,
-        tokens.output,
-        tokens.cacheRead,
-        tokens.cacheWrite,
-        tokens.reasoning,
+        ...tokenVector(tokens),
       ];
   const twinKey = codexPendingTwinKey(
     state.pendingTwin,
@@ -768,19 +670,7 @@ function codexUsageRecord(record, ctx, acc, payload, timestamp) {
   const keyed = !knownResponse && twinKey && responseId
     ? put(opened, { responseKeys: mapOf(state, "responseKeys").with(responseId, dedupKey) })
     : opened;
-  const counted = ctx.addUsage(
-    keyed,
-    metaFor(
-      "codex",
-      session,
-      timestamp,
-      context.project,
-      context.provider,
-      context.model,
-    ),
-    tokens,
-    dedupKey,
-  );
+  const counted = codexUsage(ctx, keyed, session, timestamp, context, tokens, dedupKey);
   const observed = codexObserveModern(counted.acc, dedupKey, tokens);
   const pending = twinKey ? observed.acc : codexAddPending(observed.acc, observed.added);
   const remembered = codexRememberModern(put(pending, { pendingTwin: null }), dedupKey, tokens, timestamp, {
@@ -826,19 +716,7 @@ function codexTokenCount(record, ctx, acc, payload, timestamp) {
   );
   const usedModernTwin = Boolean(twin.key);
   const dedupKey = usedModernTwin ? twin.key : makeDedupKey("codex", session, ...identityTail);
-  const counted = ctx.addUsage(
-    twin.acc,
-    metaFor(
-      "codex",
-      session,
-      timestamp,
-      context.project,
-      context.provider,
-      context.model,
-    ),
-    tokens,
-    dedupKey,
-  );
+  const counted = codexUsage(ctx, twin.acc, session, timestamp, context, tokens, dedupKey);
   const lastRow = rowOf(counted.result);
   // Keep this contribution available for a token_usage_record that arrives right after.
   const placed = put(put(counted.acc, { lastRow }), {
@@ -1012,3 +890,29 @@ export function parseAdapterRecord(adapter, record, ctx, acc) {
 // Keep lint honest about the public helpers that tests may import.
 export { metaFor, piMainSession, claudeSession, codexSession, resolveField };
 export { hashKey };
+
+function withTurns(acc) {
+  const turns = mapOf(acc.state, "turns");
+  return { turns, made: turns === acc.state.turns ? acc : put(acc, { turns }) };
+}
+const startTurn = (opened, session, history, timestamp) => setHistory(opened, session, {
+  ...history, turnStart: timestamp, turnFirst: null, lastRow: null,
+});
+const codexMeta = (session, timestamp, context) => metaFor("codex", session, timestamp, context.project, context.provider, context.model);
+
+function piMessage(ctx, acc, message) {
+  const { role, session, timestamp, main } = message;
+  if (role === "user") return timestamp !== null ? piTiming({ role }, ctx, acc, session, timestamp, false, "") : acc;
+  if (role !== "assistant") return acc;
+  if (timestamp !== null) return piAssistant(ctx, acc, message);
+  return ctx.warn(acc, main ? "Pi assistant record has no usable timestamp; skipped" : "Pi sub-agent assistant record has no usable timestamp; skipped");
+}
+const piFinal = (stopReason, error) => stopReason === "stop" && !error;
+
+const assistantUsage = (ctx, tokens, describe) => tokens?.nonzero ? (current) => {
+  const { meta, key } = describe();
+  return ctx.addUsage(current, meta, tokens, key);
+} : null;
+const codexUsage = (ctx, acc, session, timestamp, context, tokens, key) => ctx.addUsage(acc, codexMeta(session, timestamp, context), tokens, key);
+
+const piRecord = (state, ctx, timestamp) => ({ session: piMainSession(state, ctx), timestamp: parseTimestamp(timestamp ?? state.header?.timestamp) });

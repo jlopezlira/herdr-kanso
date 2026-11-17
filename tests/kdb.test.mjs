@@ -1,3 +1,4 @@
+import { loadStore, loadKdb } from "./mod-fixtures.mjs";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
 // The left nav's one database: identity by conversation, holds that say whether they held,
 // a migration that happens once or not at all.
@@ -5,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, failure } from "./helpers.mjs";
 
 const seen = (conversation, given, space, pos, status = "idle", terminal = "t1") => ({ conversation, given, space, pos, status, terminal, tab: `tb-${space}`, title: null });
 
@@ -14,6 +15,18 @@ async function database(t, dir = null) {
   const mod = await load("kanso-spaces/kdb.js", ["Kdb", "conversationOf", "GONE_MS"], { exec, appHome: () => dir });
   return { ...mod, db: new mod.Kdb(databaseTimer, join(dir, "kanso")), dir };
 }
+// A database whose folder is made, its file not yet.
+const madeDatabase = async (t) => {
+  const { db } = await database(t);
+  await mkdir(db.dir, { recursive: true });
+  return db;
+};
+const THREADS_VIEW = [{ key: "spaces.view", value: "threads" }];
+// How many preferences there are once the store opens.
+const prefsAfterOpen = async ({ store, db }) => {
+  await store.open();
+  return (await db.prefs()).length;
+};
 const sh = (file, sql) => exec("sqlite3", ["-bail", file, sql]);
 
 test("conversation ids come from Claude's and Codex's files", async (t) => {
@@ -54,8 +67,8 @@ test("a conversation moved to a project stays after it leaves", async (t) => {
 test("a database that failed to open is tried again", async (t) => {
   const dir = await temporary(t);
   let fail = true;
-  const flaky = async (c, a, o) => (fail && c === "sqlite3" && a[0] === "-version" ? { code: 1, stdout: "", stderr: "no" } : exec(c, a, o));
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: flaky, appHome: () => dir });
+  const flaky = async (c, a, o) => (fail && c === "sqlite3" && a[0] === "-version" ? failure("no") : exec(c, a, o));
+  const { Kdb } = await loadKdb({ exec: flaky, appHome: () => dir });
   const db = new Kdb(databaseTimer, join(dir, "kanso"));
   await assert.rejects(db.open(), /Install sqlite3/);
   fail = false;
@@ -74,8 +87,8 @@ async function legacy(dir) {
   return { panel };
 }
 async function storeIn(t, dir, run = exec, host = {}) {
-  const { Store } = await load("kanso-spaces/store.js", ["Store"], { exec: run, appHome: () => dir, ...host });
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec: run, appHome: () => dir, ...host });
+  const { Store } = await loadStore({ exec: run, appHome: () => dir, ...host });
+  const { Kdb } = await loadKdb({ exec: run, appHome: () => dir, ...host });
   const db = new Kdb(databaseTimer, join(dir, "kanso"));
   return { store: new Store(db, dir), db };
 }
@@ -85,7 +98,7 @@ test("what panel.db held is taken in once, and nothing kept by terminal address"
   const { panel } = await legacy(dir);
   const { store, db } = await storeIn(t, dir);
   await store.open();
-  assert.deepEqual(clone(await db.prefs()), [{ key: "spaces.view", value: "threads" }]);
+  assert.deepEqual(clone(await db.prefs()), THREADS_VIEW);
   assert.deepEqual(clone(await db.read("SELECT id FROM agents")), [], "t3q may be another agent by now");
   await sh(panel, "UPDATE prefs SET value='spaces' WHERE key='spaces.view';");
   const again = (await storeIn(t, dir)).store;
@@ -102,7 +115,7 @@ test("the migration is all or nothing, and two windows never both do it", async 
   assert.equal(await db.migrated(), false, "nothing of a failed one stays, so it is tried again");
   const [one, two] = [await storeIn(t, dir), await storeIn(t, dir)];
   await Promise.all([one.store.open(), two.store.open()]);
-  assert.deepEqual(clone(await db.prefs()), [{ key: "spaces.view", value: "threads" }]);
+  assert.deepEqual(clone(await db.prefs()), THREADS_VIEW);
   assert.equal(await db.migrated(), true);
 });
 
@@ -110,22 +123,19 @@ test("an old file that can't be read now stops the migration until it can, never
   const dir = await temporary(t);
   await legacy(dir);
   let locked = true;
-  const run = async (c, a, o) => (locked && c === "sqlite3" && a.includes("-readonly") ? { code: 5, stdout: "", stderr: "database is locked" } : exec(c, a, o));
+  const run = async (c, a, o) => (locked && c === "sqlite3" && a.includes("-readonly") ? failure("database is locked", 5) : exec(c, a, o));
   const { store, db } = await storeIn(t, dir, run);
   await assert.rejects(store.open(), /could not be read: database is locked/);
   assert.equal(await db.migrated(), false);
   locked = false;
-  await store.open();
-  assert.equal((await db.prefs()).length, 1, "read once it can be: nothing lost");
+  assert.equal(await prefsAfterOpen({ store, db }), 1, "read once it can be: nothing lost");
 });
 
 test("a path with a quote in it is read as it is", async (t) => {
   const dir = join(await temporary(t), "O'Brien");
   await mkdir(dir, { recursive: true });
   await legacy(dir);
-  const { store, db } = await storeIn(t, dir);
-  await store.open();
-  assert.equal((await db.prefs()).length, 1);
+  assert.equal(await prefsAfterOpen(await storeIn(t, dir)), 1);
 });
 
 for (const [name, folder, reason] of [
@@ -145,8 +155,7 @@ for (const [name, folder, reason] of [
     await assert.rejects(store.open(), /could not be (looked at|read)/);
     assert.equal(await db.migrated(), false, "nothing marked: it is taken in once it can be read");
     denied = false;
-    await store.open();
-    assert.equal((await db.prefs()).length, 1);
+    assert.equal(await prefsAfterOpen({ store, db }), 1);
   });
 }
 
@@ -164,16 +173,14 @@ test("an agent's project is a person's choice, kept with the agent whatever spac
 });
 
 test("a database made before agents had a project gets the column, and keeps its rows", async (t) => {
-  const { db } = await database(t);
-  await mkdir(db.dir, { recursive: true });
+  const db = await madeDatabase(t);
   await sh(db.file, "CREATE TABLE agents(id TEXT PRIMARY KEY, name TEXT, title TEXT, said INTEGER, program TEXT, cwd TEXT, space_id TEXT, tab_id TEXT, pos INTEGER, terminal TEXT, status TEXT NOT NULL DEFAULT 'unknown', since INTEGER, seen INTEGER NOT NULL, sleep_id TEXT, restore TEXT); INSERT INTO agents(id,name,status,seen) VALUES('c1','Alice','idle',1);");
   await db.setProject("c1", "sp-kanso");
   assert.deepEqual(clone((await db.agents()).map((r) => [r.id, r.name, r.project])), [["c1", "Alice", "sp-kanso"]]);
 });
 
 test("what the old Sleep kept is dropped once: its table, trigger, columns and events; agents and other events stay", async (t) => {
-  const { db } = await database(t);
-  await mkdir(db.dir, { recursive: true });
+  const db = await madeDatabase(t);
   await sh(db.file, `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE spaces(id TEXT PRIMARY KEY, name TEXT NOT NULL, folder TEXT, machine TEXT, seen INTEGER NOT NULL, gone INTEGER);
     CREATE TABLE sleeps(id TEXT PRIMARY KEY, name TEXT NOT NULL, project TEXT NOT NULL, layout TEXT NOT NULL, saved INTEGER NOT NULL);

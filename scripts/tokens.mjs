@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 export const ROOT = fileURLToPath(new URL("../", import.meta.url));
 export const TOKENS = "kanso/tokens.json";
 export const THEMES = ["dark", "light"];
+export const THEME_FILES = { dark: "kanso/themes/kanso.json", light: "kanso/themes/kanso-day.json" };
 
 export const read = (path) => readFileSync(ROOT + path, "utf8");
 export const loadTokens = () => JSON.parse(read(TOKENS));

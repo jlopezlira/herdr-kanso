@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load, context, exec, nativePlatform, temporary, clone, gpuiHost } from "./helpers.mjs";
-import { test, dropChild, trackedSpawn, quote, windowsOnly, updater, fixture, version, small, tree, stages, hostFor } from "./update-harness.mjs";
+import { load, context, exec, nativePlatform, temporary, clone, gpuiHost, success, failure, storeShared, tickingContext } from "./helpers.mjs";
+import { test, dropChild, trackedSpawn, quote, windowsOnly, updater, fixture, version, small, tree, stages, hostFor, startUpdater, versionFile } from "./update-harness.mjs";
 
 test("Kanso's newest release comes from the vX.Y.Z tags, not from Herdr", async () => {
   const { newestTag, compareVersions } = await updater();
@@ -86,20 +86,34 @@ test("An update points Cmd+F at the conversation when it still searches the term
   assert.equal(added.keys.terminal["cmd-f"], "kanso-strip.find", "a keys file from before Find gains the conversation");
 });
 
+// A host on version 1.3.1 whose commands `exec` answers.
+const releaseHost = (store, exec, notify = () => {}) => ({
+  appHome: () => "/nowhere", ...storeShared(store), notify,
+  readTextFile: async () => '{ "version": "1.3.1" }', layout: () => null, run: () => null, exec,
+});
+const toasting = (toasts) => (n) => { toasts.push(n); return "1"; };
+const oneCopy = async (host) => {
+  const { Updater } = await updater(host);
+  return { u: new Updater(), ...context() };
+};
+// The tab bar's copy and the footer's, started.
+const twoCopies = async (host, timers) => {
+  const { Updater } = await updater(host);
+  const tabs = new Updater(), footer = new Updater();
+  const { cx, drain } = tickingContext(timers);
+  tabs.start(cx); footer.start(cx, { polls: false }); await drain();
+  return { tabs, footer, cx, drain };
+};
+const minutesLater = async (timers, cx, drain) => {
+  for (const { ms, fn } of timers.filter((x) => x.ms > 60000)) fn(cx);
+  await drain();
+};
+
 test("The tab bar looks for releases; the footer reads what it found", async () => {
   const store = {}, toasts = [], timers = [];
   let asked = 0;
-  const host = {
-    appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
-    notify: (n) => { toasts.push(n); return "1"; }, readTextFile: async () => '{ "version": "1.3.1" }',
-    layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return command === "git" ? { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" } : { code: 1, stdout: "", stderr: "" }; },
-  };
-  const { Updater } = await updater(host);
-  const tabs = new Updater(), footer = new Updater();
-  const { cx, drain } = context();
-  cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
-  tabs.start(cx); footer.start(cx, { polls: false }); await drain();
+  const host = releaseHost(store, async (command) => { if (command === "git") asked++; return command === "git" ? success("x\trefs/tags/v1.4.0\n") : failure(""); }, toasting(toasts));
+  const { tabs, footer, cx, drain } = await twoCopies(host, timers);
   assert.equal(timers.filter((timer) => timer.ms === 1500).length, 1, "one footer fit timer");
   assert.equal(asked, 1, "one forced look on start, not one per copy");
   assert.equal(footer.available(), "1.4.0", "the footer offers what the tab bar found");
@@ -107,8 +121,7 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
 
   // Minutes later both ticks fire: only the tab bar's looks.
   store["kanso.update"] = { ...store["kanso.update"], checked: null };
-  for (const { ms, fn } of timers.filter((x) => x.ms > 60000)) fn(cx);
-  await drain();
+  await minutesLater(timers, cx, drain);
   assert.equal(asked, 2);
 
   // Both asked at once (the footer's Check and the tab bar's command): GitHub is asked once.
@@ -119,19 +132,9 @@ test("The tab bar looks for releases; the footer reads what it found", async () 
 test("With automatic checks off neither copy polls, and a Check from settings still looks once", async () => {
   const store = { "kanso.pieces": { "update.check": "hide" }, "kanso.update": { autoCheck: false } }, timers = [];
   let asked = 0;
-  const host = {
-    appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
-    notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
-    layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return { code: 0, stdout: "x\trefs/tags/v1.4.0\n", stderr: "" }; },
-  };
-  const { Updater } = await updater(host);
-  const tabs = new Updater(), footer = new Updater();
-  const { cx, drain } = context();
-  cx.timer = { every(ms, fn) { timers.push({ ms, fn }); } };
-  tabs.start(cx); footer.start(cx, { polls: false }); await drain();
-  for (const { ms, fn } of timers.filter((x) => x.ms > 60000)) fn(cx);
-  await drain();
+  const host = releaseHost(store, async (command) => { if (command === "git") asked++; return success("x\trefs/tags/v1.4.0\n"); });
+  const { tabs, footer, cx, drain } = await twoCopies(host, timers);
+  await minutesLater(timers, cx, drain);
   assert.equal(asked, 0, "no look on start or on the tick");
 
   // Settings runs kanso-tabs.check while the footer's Check is pressed: one look, both see it.
@@ -144,15 +147,8 @@ test("With automatic checks off neither copy polls, and a Check from settings st
 test("Kanso looks for releases on every start, every few minutes, and when asked", async () => {
   const store = { "kanso.update": { latest: "1.0.0", checked: Date.now(), notified: "1.0.0" } }, toasts = [];
   let tags = "x\trefs/tags/v1.3.1\n", asked = 0, every = null, offline = false;
-  const host = {
-    appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
-    notify: (n) => { toasts.push(n); return "1"; }, readTextFile: async () => '{ "version": "1.3.1" }',
-    layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return command === "git" && !offline ? { code: 0, stdout: tags, stderr: "" } : { code: 128, stdout: "", stderr: "offline" }; },
-  };
-  const { Updater } = await updater(host);
-  const u = new Updater();
-  const { cx, drain } = context();
+  const host = releaseHost(store, async (command) => { if (command === "git") asked++; return command === "git" && !offline ? success(tags) : failure("offline", 128); }, toasting(toasts));
+  const { u, cx, drain } = await oneCopy(host);
   cx.timer = { every(ms, fn) { every = ms; } };
   u.start(cx); await drain();
   assert.equal(asked, 1, "a start looks even right after another look");
@@ -178,15 +174,8 @@ test("Kanso looks for releases on every start, every few minutes, and when asked
 test("Automatic update checks can be disabled while manual checks still work", async () => {
   const store = { "kanso.pieces": { "update.check": "hide" }, "kanso.update": { autoCheck: false } };
   let asked = 0, tick = null;
-  const host = {
-    appHome: () => "/nowhere", shared: (k) => store[k], setShared: (k, v) => { store[k] = v; },
-    notify() {}, readTextFile: async () => '{ "version": "1.3.1" }',
-    layout: () => null, run: () => null,
-    exec: async (command) => { if (command === "git") asked++; return { code: 0, stdout: "x\trefs/tags/v1.3.1\n", stderr: "" }; },
-  };
-  const { Updater } = await updater(host);
-  const u = new Updater();
-  const { cx, drain } = context();
+  const host = releaseHost(store, async (command) => { if (command === "git") asked++; return success("x\trefs/tags/v1.3.1\n"); });
+  const { u, cx, drain } = await oneCopy(host);
   cx.timer = { every(_ms, fn) { if (!tick) tick = fn; } };
   u.start(cx);
   await drain();
@@ -204,9 +193,7 @@ test("The footer is as tall as the rows it shows, and a size an older kansō set
   for (const [px, why] of [[228, "3.9.1's taller footer"], [120, "the footer with Add computer under Settings"]]) {
     const f = await fixture(t);
     f.footer.size = { px };
-    const { cx, drain } = context();
-    cx.timer = { every() {} };
-    f.updater.start(cx); await drain();
+    const { cx, drain } = await startUpdater(f);
     assert.deepEqual(f.resizes, [88], `${why} comes back to Update and Settings`);
   }
   const { footerPx } = await updater({ shared: () => null });
@@ -222,9 +209,7 @@ test("The footer is as tall as the rows it shows, and a size an older kansō set
 
 test("A refused update makes room for its block in the open footer, and gives it back in the rail", async (t) => {
   const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   assert.deepEqual(f.resizes, [88], "Update and Settings");
   f.updater.refuse("the download failed");
   f.updater.fit();
@@ -374,7 +359,7 @@ test("A home path with a space and an apostrophe installs", async (t) => {
   const s = await small(t);
   const home = await s.fresh("O'Brien home");
   assert.equal(await s.run(home, 0), "ok", `step install, file ${home}`);
-  assert.equal((await tree(home))["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
+  assert.equal(await versionFile(home), '{ "version": "1.1.0" }\n');
 });
 
 windowsOnly("A file in use is retried, then the update is undone and the file is named", async (t) => {
@@ -418,7 +403,7 @@ windowsOnly("A read-only file is still updated", async (t) => {
   const marked = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `$i = Get-Item -LiteralPath ${quote(file)}; $i.IsReadOnly = $true; if (-not $i.IsReadOnly) { exit 2 }`]);
   assert.equal(marked.code, 0, `step readonly, file ${file}: ${marked.stderr}`);
   assert.equal(await s.run(home, 0), "ok", `step install, file ${file}`);
-  assert.equal((await tree(home))["mods/kanso-chrome/version.json"], '{ "version": "1.1.0" }\n');
+  assert.equal(await versionFile(home), '{ "version": "1.1.0" }\n');
 });
 
 windowsOnly("A missing curl.exe stops before a download and names the tool", async (t) => {

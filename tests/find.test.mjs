@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { processApi } from "../kanso/mods/kanso-panel/platform-processes.js";
-import { exec, temporary, nativePlatform } from "./helpers.mjs";
+import { exec, temporary, nativePlatform, success } from "./helpers.mjs";
 import {
   fold, foldSpan, searchTurns, matchSpan, partsOf, placeOf, countLabel, enterMatch, retarget, extendIndex,
   readTurns, freshRead, applySlice, parseSlice, readSlice, whoOf, whenLabel,
@@ -375,7 +375,7 @@ for (const kind of ["claude", "codex"]) {
       calls.push(program);
       assert.equal(program, "pwsh");
       assert.match(args.at(-1), /Get-CimInstance Win32_Process/);
-      return { code: 0, stdout: JSON.stringify([{ pid: 42, name: "claude.exe", created }]), stderr: "" };
+      return success(JSON.stringify([{ pid: 42, name: "claude.exe", created }]));
     };
     const found = await locateConversation({
       home: () => home, platform: { processes: processApi("windows", run) },

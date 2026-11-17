@@ -13,6 +13,7 @@ import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { ghost } from "./ui-skeleton.js";
 import { afterMount, parseOr } from "./pure.js";
+import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
@@ -457,18 +458,17 @@ export default class Containers extends View {
   }
 
   render(cx) {
-    this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
+    this.front?.wake(cx, (frontCx) => this.refresh(frontCx));
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))
       .child(iconButton("ct-refresh", "refresh", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading }));
     return v_flex().id("kanso-containers").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((s, sizeCx) => { if (Math.abs(this.width - s.width) >= 1) { this.width = s.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 28 : 40)
-          .child(header)
-          .child(this.body(c))
-          .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(c.red).child(this.error ?? "")))
-          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
+      .child(pageFrame(narrow, narrow ? 28 : 40, (column) => column
+        .child(header)
+        .child(this.body(c))
+        .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(c.red).child(this.error ?? "")))
+        .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
   }
 }

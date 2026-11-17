@@ -206,6 +206,10 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
       return { ...st, ids };
     });
   }, started);
+  // The tab you were on is closed once it is sure nothing opened landed on it.
+  const closeStarter = async () => {
+    if (starter && (await untouched(starter))) run("tab.close", { id: starter, confirmed: true });
+  };
   if (end.failed) {
     // Only what is provably ours is closed; a late pane can't be told from one you opened, so it stays, counted as pending.
     await cx.sleep(3000);
@@ -220,7 +224,7 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
     const settle = async () => {
       if (made && !end.ids.length && (await onlyStarter())) { run("space.close", { id: made, confirmed: true }); return 0; }
       const cleared = end.tab ? false : await closeLate();
-      if (starter && (await untouched(starter))) run("tab.close", { id: starter, confirmed: true });
+      await closeStarter();
       return cleared ? 0 : left;
     };
     const pending = await settle();
@@ -230,6 +234,6 @@ export async function openTab(a, cx, { space: given = null, create = null, progr
   await cx.sleep(150);
   setShared("strip.req", { op: "widths", per: a.per, cols: ids.map((col, ci) => ({ pane: col[0], w: a.cols[ci].w })), n: Date.now() + Math.random() });
   run("pane.focus", { pane: ids[0][0] });
-  if (starter && (await untouched(starter))) run("tab.close", { id: starter, confirmed: true });
+  await closeStarter();
   return ids;
 }

@@ -1,13 +1,14 @@
 // Return-digest maintenance touches the active project and prunes in one database call.
+import { loadKdb, loadSinceLeft } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { databaseTimer, load, temporary, exec, clone } from "./helpers.mjs";
+import { databaseTimer, temporary, exec, clone } from "./helpers.mjs";
 
 test("since-left touches and prunes in one process at the two-minute maintenance boundary", async (t) => {
   const dir = await temporary(t), calls = [];
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { appHome: () => dir, exec: (cmd, args) => { calls.push(cmd); return exec(cmd, args); } });
+  const { Kdb } = await loadKdb({ appHome: () => dir, exec: (cmd, args) => { calls.push(cmd); return exec(cmd, args); } });
   const db = new Kdb(databaseTimer);
-  const { SinceLeft } = await load("kanso-spaces/since-left.js", ["SinceLeft"]);
+  const { SinceLeft } = await loadSinceLeft();
   const view = new SinceLeft(db);
   await view.update({ project: "A", target: null, snapshots: [], now: 1 }, { notify() {} });
   calls.length = 0;

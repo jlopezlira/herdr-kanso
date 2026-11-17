@@ -139,6 +139,8 @@ const contrastRecord = (tokens) => {
 
 // The utility family that shows a type token: weights and tracking have their own, sizes use type.
 const SAMPLE_CLASS = { fw: 'weight', ls: 'tracking' };
+// One token group's reference page.
+const reference = (name, html) => ({ id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) });
 
 export function tokenRecords(tokens) {
   const scale = { Colour: ['colour'], Type: ['type'], Spacing: ['space', 'height', 'switch', 'layout'], Radius: ['radius'], Motion: ['motion', 'opacity'], Icons: ['icon'] };
@@ -150,7 +152,7 @@ export function tokenRecords(tokens) {
       const names = [...new Set(Object.values(tokens.colour).flatMap((values) => values.map((row) => row.name)))];
       const value = (theme, n) => tokens.colour[theme].find((row) => row.name === n);
       const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${names.map((n) => `<tr><td><span class="kanso-tokens__swatch ${n === 'shadow' ? 'kanso-shadow' : `kanso-fill--${escape(n)}`}"></span></td><td class="kanso-tokens__name">--${escape(n)}</td><td class="kanso-tokens__name">${Object.keys(tokens.colour).map((theme) => `<span class="kanso-tokens__value kanso-tokens__value--${theme}">${escape(value(theme, n)?.value ?? '')}</span>`).join('')}</td><td>${escape((value('dark', n) ?? value('light', n)).role)}</td></tr>`).join('')}</tbody></table>`;
-      return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
+      return reference(name, html);
     }
     const rows = keys.flatMap((key) => tokens[key].map((row) => ({ ...row, group: key, role: name === 'Components' ? `${key[0].toUpperCase()}${key.slice(1)}: ${row.role}` : row.role })));
     const sample = ({ group, name: n }) => {
@@ -166,6 +168,6 @@ export function tokenRecords(tokens) {
     };
     const role = (text) => text.replace(/:? ?ui\.js [\w.]+/g, '').replace(/ ?\(\d+ merged here\)/g, '').replace(/^4-based$/, 'base step').trim();
     const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${rows.map((row) => `<tr><td class="kanso-tokens__example">${sample(row)}</td><td class="kanso-tokens__name">--${escape(row.name)}</td><td class="kanso-tokens__name">${escape(row.value)}</td><td>${escape(role(row.role))}</td></tr>`).join('')}</tbody></table>`;
-    return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
+    return reference(name, html);
   }).concat(contrastRecord(tokens));
 }

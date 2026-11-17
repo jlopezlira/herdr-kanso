@@ -3,6 +3,7 @@ import { processApi } from "./platform-processes.js";
 import { paths } from "./platform-paths.js";
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
 import { FIND } from "./find-key.js";
+import { MONTHS, parseOr as parsed } from "./pure.js";
 export { FIND };
 
 export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
@@ -152,12 +153,10 @@ function placeFocus(acc, row) {
   return { at: acc.at + row.focus, found: true };
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function dayKey(ms) {
-  if (typeof ms !== "number" || !Number.isFinite(ms)) return "";
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "";
+  const d = dateOf(ms);
+  if (!d) return "";
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
@@ -190,9 +189,8 @@ export function layOut(hits, at, cap = DRAW, whenOf = () => null, now = Date.now
 export const whoOf = (turn) => turn?.role === "user" ? "You" : turn?.role === "tool" ? String(turn.name || "tool").slice(0, 24) : "Agent";
 
 export function whenLabel(ms) {
-  if (typeof ms !== "number" || !Number.isFinite(ms)) return "";
-  const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "";
+  const d = dateOf(ms);
+  if (!d) return "";
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
@@ -444,7 +442,6 @@ export function kindOf(program, hint = "") {
   return null;
 }
 
-const parsed = (text) => { try { return JSON.parse(text); } catch { return null; } };
 
 export function resolveFind(where) {
   return where?.file ? { action: "find", file: where.file, kind: where.kind ?? null } : { action: "terminal.search" };
@@ -477,3 +474,9 @@ export async function locateConversation(host, address, hint = "") {
   }
   return { kind: null, file: null };
 }
+
+const dateOf = (ms) => {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return null;
+  const date = new Date(ms);
+  return Number.isNaN(date.getTime()) ? null : date;
+};

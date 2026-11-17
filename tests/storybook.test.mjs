@@ -1,9 +1,9 @@
 // Check the Storybook's structure, tokens, public copy, names and icons.
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { inTemporaryDir } from "./helpers.mjs";
 import { expand } from "../scripts/storybook-catalog.mjs";
 import { compositionErrors, lint, markupTags, primitiveErrors, rawValueErrors, rawValues, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
@@ -32,16 +32,11 @@ test("An element is counted once per node, so the same miss on two nodes counts 
 });
 
 // The lint's errors for one file after that file changes, in a copy of the Storybook.
-const lintChanged = (file, text) => {
-  const root = mkdtempSync(join(tmpdir(), "kanso-lint-"));
-  try {
-    for (const dir of ["stories", ".storybook", "scripts/storybook-raw-values.json"]) cpSync(dir, join(root, dir), { recursive: true });
-    writeFileSync(join(root, file), text);
-    return lint(root).filter((error) => error.startsWith(file));
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-};
+const lintChanged = (file, text) => inTemporaryDir("kanso-lint-", (root) => {
+  for (const dir of ["stories", ".storybook", "scripts/storybook-raw-values.json"]) cpSync(dir, join(root, dir), { recursive: true });
+  writeFileSync(join(root, file), text);
+  return lint(root).filter((error) => error.startsWith(file));
+});
 
 test("A primitive given an inline style or a raw px or colour fails the lint", () => {
   const css = "stories/primitives.css";
@@ -57,10 +52,15 @@ test("A pull request number a story shows is not a raw colour, while a colour in
   assert.deepEqual(rawValues("Panels/PR", markupTags(html)), [{ source: "Panels/PR", value: "raw #fa0" }]);
 });
 
+// The kit's compositions, and the lint's errors with one more line added.
+const compositions = () => {
+  const source = read("stories/kit/compositions.js");
+  return { source, added: (line) => compositionErrors(`${source}${line}\n`) };
+};
+
 test("A composition that draws its own markup fails the lint", () => {
   const file = "stories/kit/compositions.js";
-  const source = read(file);
-  const added = (line) => compositionErrors(`${source}${line}\n`);
+  const { source, added } = compositions();
   assert.deepEqual(compositionErrors(source), []);
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', '<div>');"), [`${file}: markup tag in a composition`]);
   assert.deepEqual(added("export const extra = () => stack({ variant: 'rows' }).replace('div', 'div class=x');"), [`${file}: class attribute in a composition`]);
@@ -73,8 +73,7 @@ test("A composition that draws its own markup fails the lint", () => {
 });
 
 test("A composition that treats pieces as strings fails the lint", () => {
-  const source = read("stories/kit/compositions.js");
-  const added = (line) => compositionErrors(`${source}${line}\n`);
+  const { source, added } = compositions();
   assert.deepEqual(added("export const extra = ({ name }) => row({ name: `Wake ${name}` });"), ["stories/kit/compositions.js: template literal in a composition"]);
   assert.deepEqual(added("export const extra = ({ names }) => names.map((name) => row({ name })).join();"), ["stories/kit/compositions.js: join in a composition"]);
   assert.deepEqual(added("export const extra = ({ open }) => list(row({ name: 'Asleep' }), open ? grow() : '');"), ["stories/kit/compositions.js: empty string as nothing in a composition"]);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, exec, temporary, clone, nativeWindow } from "./helpers.mjs";
+import { load, exec, temporary, clone, nativeWindow, success, openedKdb, textFiles } from "./helpers.mjs";
 
 const names = ["Store", "repoName", "parseLog", "insertCommits", "machineFile", "readMachineFile", "weekOf", "weeklyStats", "WEEK0"];
 const store = (host = {}) => load("kanso-panel/shipped-store.js", names, host);
@@ -57,25 +57,28 @@ async function setup(t, { otherMachine = null } = {}) {
   const host = {
     window: nativeWindow,
     appHome: () => app, home: () => home, spaces: () => [], panes: () => [],
-    readTextFile: async (p) => { try { return await readFile(p, "utf8"); } catch { return null; } },
-    writeTextFile: async (p, text) => { await mkdir(join(p, ".."), { recursive: true }); await writeFile(p, text); return null; },
+    ...textFiles,
     exec: async (command, args, options) => {
       if (command !== "gh") return exec(command, args, options);
-      if (args[1].startsWith("gists?")) return { code: 0, stdout: gist ? `${gist.id}\n` : "", stderr: "" };
+      if (args[1].startsWith("gists?")) return success(gist ? `${gist.id}\n` : "");
       const body = JSON.parse(await readFile(args[args.indexOf("--input") + 1], "utf8"));
       sent.push({ method: args[args.indexOf("-X") + 1], body });
       gist = { id: gist?.id ?? "new", files: { ...(gist?.files ?? {}), ...Object.fromEntries(Object.entries(body.files).map(([k, v]) => [k, { content: v.content }])) } };
-      return { code: 0, stdout: JSON.stringify(gist), stderr: "" };
+      return success(JSON.stringify(gist));
     },
   };
   const mod = await store(host);
   return { ...mod, app, repo, sent, gist: () => gist };
 }
 
+// The fixture with its store open.
+const opened = async (t, options) => {
+  const s = await setup(t, options);
+  return { s, db: await openedKdb(s.Store) };
+};
+
 test("Shipped's store reads every branch of your repositories, by every identity of yours", async (t) => {
-  const s = await setup(t);
-  const db = new s.Store(databaseTimer);
-  await db.open();
+  const { s, db } = await opened(t);
   const scanned = await db.scanLocal(["me@example.invalid"], null);
   assert.equal(scanned, 1, "found under ~/Apps");
   let rows = await db.sql("SELECT repo, adds FROM commits ORDER BY adds;", true);
@@ -96,9 +99,7 @@ test("Shipped's store reads every branch of your repositories, by every identity
 });
 
 test("Shipped's store keeps the larger of a repository's week, from git or from GitHub", async (t) => {
-  const s = await setup(t);
-  const db = new s.Store(databaseTimer);
-  await db.open();
+  const { s, db } = await opened(t);
   await db.scanLocal(["me@example.invalid"], null); // 15 lines this week in org/tool
   const week = s.weekOf(Math.floor(Date.now() / 1000)) * 1000;
   await db.saveGithub([
@@ -115,9 +116,7 @@ test("Shipped's store keeps the larger of a repository's week, from git or from 
 test("Shipped's store shares your commits between machines through a private gist", async (t) => {
   const other = { v: 1, machine: "other", updated: 1, identities: ["mequexample.invalid"], repos: ["org/tool", "org/elsewhere"],
     commits: [[1, "eeeeeeeeeeee", 1793000000, 300, 3], [0, "ffffffffffff", 1793000000, 1, 0]] };
-  const s = await setup(t, { otherMachine: other });
-  const db = new s.Store(databaseTimer);
-  await db.open();
+  const { s, db } = await opened(t, { otherMachine: other });
   await db.scanLocal(["me@example.invalid"], null);
   const synced = clone(await db.syncMachines(["me@example.invalid"]));
   assert.deepEqual(synced.machines, ["other"]);
@@ -136,9 +135,7 @@ test("Shipped's store shares your commits between machines through a private gis
 });
 
 test("Shipped's store creates the private gist the first time", async (t) => {
-  const s = await setup(t);
-  const db = new s.Store(databaseTimer);
-  await db.open();
+  const { s, db } = await opened(t);
   await db.syncMachines(["me@example.invalid"]);
   assert.equal(s.sent[0].method, "POST");
   assert.equal(s.sent[0].body.public, false);

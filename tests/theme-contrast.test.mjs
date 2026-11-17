@@ -2,9 +2,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ROOT, contrast } from "../scripts/tokens.mjs";
+import { ROOT, contrast, THEME_FILES as THEMES } from "../scripts/tokens.mjs";
 
-const THEMES = { dark: "kanso/themes/kanso.json", light: "kanso/themes/kanso-day.json" };
 const SURFACES = ["canvas", "chrome", "surface", "raised", "popover", "hover", "selected"];
 // The focus ring is drawn in the accent colour.
 const PAIRS = [

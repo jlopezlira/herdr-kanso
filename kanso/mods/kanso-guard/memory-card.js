@@ -2,9 +2,8 @@
 // Only counts and sizes are shared: never an agent's name, folder or session.
 import { postText } from "./share.js";
 import { size, span } from "./model.js";
+import { num, dayWord } from "./pure.js";
 
-const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const longSpan = (min) => {
   const n = num(min) ?? 0;
   if (n >= 2 * 1440) { const d = Math.floor(n / 1440); return { big: String(d), small: "days" }; }
@@ -31,9 +30,14 @@ export function memoryWins(data, digest) {
   };
 }
 
-export function memorySpec(data, digest) {
+// The card's two reads of the same numbers: the windows, and the longest one in a person's words.
+const winsLong = (data, digest) => {
   const w = memoryWins(data, digest);
-  const long = longSpan(w.longestMin);
+  return { w, long: longSpan(w.longestMin) };
+};
+
+export function memorySpec(data, digest) {
+  const { w, long } = winsLong(data, digest);
   const on = w.totalMB ? ` on ${size(w.totalMB)}` : "";
   const stats = [
     { value: String(w.agents), unit: w.agents === 1 ? "agent open" : "agents open" },
@@ -44,10 +48,10 @@ export function memorySpec(data, digest) {
     { value: String(w.restarts), unit: w.restarts === 1 ? "window restart" : "window restarts" },
   ].filter(Boolean).slice(0, 6);
   const week = digest?.series?.week;
-  const since = w.since ? new Date(w.since) : null;
+  const sinceWord = w.since ? `since ${dayWord(new Date(w.since))}` : "";
   return {
     title: "Memory",
-    right: since ? `since ${MONTHS[since.getMonth()]} ${since.getDate()}` : "",
+    right: sinceWord,
     hero: {
       big: long.big, small: long.small,
       label: `my longest agent session, still open, with ${w.agents} ${w.agents === 1 ? "agent" : "agents"}${on}`,
@@ -64,8 +68,7 @@ export function memorySpec(data, digest) {
 }
 
 export function memoryText(data, digest) {
-  const w = memoryWins(data, digest);
-  const long = longSpan(w.longestMin);
+  const { w, long } = winsLong(data, digest);
   const parts = [
     `${w.agents} coding ${w.agents === 1 ? "agent" : "agents"} open${w.totalMB ? ` on a ${size(w.totalMB)} computer` : ""}, the oldest for ${long.big} ${long.small}`,
     ...(w.recycles ? [`${w.recycles} ${w.recycles === 1 ? "recycle" : "recycles"} gave back ${size(w.recycledMB)} without losing a conversation`] : []),

@@ -80,8 +80,7 @@ export default class Simulator extends View {
       this.note = "Devices did not answer."; this.devices ??= []; this.reading = false; this.readAt = Date.now();
       next.notify(); this.schedule(next, 0);
     });
-    this.schedule(cx, 1000);
-    cx.spawn(async (next) => {
+    this.soon(cx, async (next) => {
       try {
         const tools = this.tools ?? await probeTools(this.platform, home(), exec);
         if (!this.inFront() || token !== this.readToken) return;
@@ -103,6 +102,12 @@ export default class Simulator extends View {
     });
   }
 
+  // Both slow tasks: the next tick is scheduled first, then the work runs in the background.
+  soon(cx, work) {
+    this.schedule(cx, 1000);
+    cx.spawn(work);
+  }
+
   pick(device, cx) {
     this.selected = device.id; this.press = null; this.error = null;
     this.loop.ready(Date.now(), this.inFront(), device.state === "Booted" ? device.id : null);
@@ -117,8 +122,7 @@ export default class Simulator extends View {
     const file = this.paths.join(this.directory, filename);
     this.deadline?.cancel();
     this.deadline = cx.timer.after(FRAME_MS, (next) => next.notify());
-    this.schedule(cx, 1000);
-    cx.spawn(async (next) => {
+    this.soon(cx, async (next) => {
       try {
         await mkdir(this.directory, { recursive: true });
         if (!this.inFront()) { this.loop.land(key, null, Date.now()); return; }

@@ -1,7 +1,7 @@
 // A connected remote machine is held awake: the command, the renew, and when nothing is called.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone } from "./helpers.mjs";
+import { load, clone, success, failure } from "./helpers.mjs";
 
 const names = ["holdCommand", "shouldHold", "osOf", "createAwake", "keepAwake", "LEASE_S", "RENEW_MS", "EXEC_TIMEOUT_MS"];
 let api;
@@ -21,7 +21,7 @@ function world(reply) {
       if (reply.hang && call.command === "uname") return new Promise(() => {});
       if (call.command === "uname") {
         if (reply.uname instanceof Error) return Promise.reject(reply.uname);
-        return Promise.resolve(reply.uname ?? { code: 0, stdout: "Darwin\n", stderr: "" });
+        return Promise.resolve(reply.uname ?? success("Darwin\n"));
       }
       if (reply.hold) return reply.hold(call, { at: now, pending });
       return new Promise((resolve) => pending.push(resolve));
@@ -30,6 +30,12 @@ function world(reply) {
   return { calls, pending, awake, at(n) { now = n; } };
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+// The clock at `at`, and the dark computer connected.
+const syncAt = async (box, at) => {
+  box.at(at);
+  await box.awake.sync([row("dark", "connected")]);
+};
 
 test("each system gets an argv array", async () => {
   const { holdCommand, LEASE_S, RENEW_MS, EXEC_TIMEOUT_MS } = await loadApi();
@@ -83,11 +89,9 @@ test("a lease renews at 270s and overlaps the one still running", async () => {
   assert.equal(box.awake.nextWait(0), 270_000);
   assert.equal(box.awake.nextWait(269_000), 1_000);
   assert.equal(box.awake.nextWait(270_000), 0);
-  box.at(269_000);
-  await box.awake.sync([row("dark", "connected")]);
+  await syncAt(box, 269_000);
   assert.equal(holds(box.calls).length, 1);
-  box.at(270_000);
-  await box.awake.sync([row("dark", "connected")]);
+  await syncAt(box, 270_000);
   assert.deepEqual(clone(holds(box.calls).map((call) => call.args)), [["-i", "-t", "300"], ["-i", "-t", "300"]]);
   assert.equal(box.pending.length, 2);
   assert.equal(box.calls.filter((call) => call.command === "uname").length, 1);
@@ -112,7 +116,7 @@ test("off, unreachable, loading, login, and no machines never call", async () =>
 
 test("a failed lease waits until the renew time, and a missing command waits for a new connection", async () => {
   await loadApi();
-  const failed = world({ hold: () => Promise.resolve({ code: 1, stdout: "", stderr: "no" }) });
+  const failed = world({ hold: () => Promise.resolve(failure("no")) });
   await failed.awake.sync([row("dark", "connected")]);
   await tick();
   failed.at(269_000);
@@ -122,7 +126,7 @@ test("a failed lease waits until the renew time, and a missing command waits for
   await failed.awake.sync([row("dark", "connected")]);
   assert.equal(holds(failed.calls).length, 2);
 
-  const said = world({ hold: () => Promise.resolve({ code: 1, stdout: "", stderr: "idle inhibitor not found" }) });
+  const said = world({ hold: () => Promise.resolve(failure("idle inhibitor not found")) });
   await said.awake.sync([row("dark", "connected")]);
   await tick();
   assert.equal(said.awake.nextWait(0), 270_000);
@@ -157,15 +161,14 @@ test("a failure from the previous connection does not stop the next one", async 
   await box.awake.sync([row("dark", "connected")]);
   releases[0].reject(Object.assign(new Error("not found"), { code: "ENOENT" }));
   await new Promise((resolve) => setImmediate(resolve));
-  box.at(270_000);
-  await box.awake.sync([row("dark", "connected")]);
+  await syncAt(box, 270_000);
   assert.equal(box.calls.filter((call) => call.command === "uname").length, 2);
   assert.equal(holds(box.calls).length, 3);
 });
 
 test("the system is probed once per connection, and a probe that cannot start is Windows", async () => {
   await loadApi();
-  const linux = world({ uname: { code: 0, stdout: "Linux\n", stderr: "" }, hold: () => Promise.resolve({ code: 0, stdout: "", stderr: "" }) });
+  const linux = world({ uname: success("Linux\n"), hold: () => Promise.resolve(success("")) });
   await linux.awake.sync([row("a", "connected"), row("b", "connected")]);
   await linux.awake.sync([row("a", "connected"), row("b", "connected")]);
   assert.equal(linux.calls.filter((call) => call.command === "uname").length, 2);
@@ -177,7 +180,7 @@ test("the system is probed once per connection, and a probe that cannot start is
 
   const windows = world({
     uname: Object.assign(new Error("not found"), { code: "ENOENT" }),
-    hold: () => Promise.resolve({ code: 0, stdout: "", stderr: "" }),
+    hold: () => Promise.resolve(success("")),
   });
   await windows.awake.sync([row("win", "connected")]);
   await windows.awake.sync([row("win", "connected")]);
@@ -187,11 +190,11 @@ test("the system is probed once per connection, and a probe that cannot start is
   assert.match(holds(windows.calls)[0].args[3], /SetThreadExecutionState\(\[uint32\]0x80000001\)/);
   assert.equal(holds(windows.calls)[0].args[3].includes("GetSystemPowerStatus"), false);
 
-  const shell = world({ uname: { code: 127, stdout: "", stderr: "uname: not found" }, hold: () => Promise.resolve({ code: 0, stdout: "", stderr: "" }) });
+  const shell = world({ uname: failure("uname: not found", 127), hold: () => Promise.resolve(success("")) });
   await shell.awake.sync([row("win", "connected")]);
   assert.equal(holds(shell.calls)[0].command, "powershell");
 
-  const odd = world({ uname: { code: 0, stdout: "FreeBSD\n", stderr: "" } });
+  const odd = world({ uname: success("FreeBSD\n") });
   await odd.awake.sync([row("bsd", "connected")]);
   assert.equal(holds(odd.calls).length, 0);
   odd.at(269_000);

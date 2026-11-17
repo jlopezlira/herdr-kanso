@@ -1,12 +1,9 @@
 // The pane header as the Storybook draws it: how it folds, its tools and ⋯, each state, the failure line and the refresh pending.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, chain, gpuiHost } from "./helpers.mjs";
+import { load, clone, chain, gpuiHost, failure, success, calls, arg, find, all, CHROME_NIGHT, fieldWith, texts } from "./helpers.mjs";
 
-const night = {
-  background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086",
-  blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
-};
+const night = CHROME_NIGHT;
 const model = () => load("kanso-strip/header-model.js", ["FOLDS", "shownAt", "foldFor", "headerWidths", "hoverTools", "menuEntries", "placeOf", "paneLabel", "headerMark", "prTitle"]);
 const strip = () => load("kanso-strip/main.js", ["digestSegments", "readDigest", "settleDigest"]);
 const pr = { number: 142, state: "OPEN", mergeStateStatus: "UNSTABLE", fail: 1, failed: "test / unit", pending: 0 };
@@ -80,10 +77,10 @@ test("The pull request has no dot, and its tooltip keeps what the header folded 
 test("GitHub not answering keeps the pull request it last named with gh's words, and no pull request is an answer", async () => {
   const { readDigest, settleDigest, digestSegments } = await strip();
   const answer = (stderr) => async (cmd, args) => {
-    if (cmd === "gh") return { code: 1, stdout: "", stderr };
+    if (cmd === "gh") return failure(stderr);
     const line = args.join(" ");
     const out = line.includes("is-inside-work-tree") ? "true\n" : line.includes("rev-list") ? "0\n" : line.includes("symbolic-ref") ? "feat\n" : "";
-    return { code: 0, stdout: out, stderr: "" };
+    return success(out);
   };
   const failed = await readDigest("/repo", answer("HTTP 502: Bad Gateway (https://api.github.com/graphql)\nmore"));
   assert.equal(failed.failure, "HTTP 502: Bad Gateway (https://api.github.com/graphql)");
@@ -104,7 +101,7 @@ async function header({ pane: over = {}, space: room = {}, store: kept = {}, com
     program: { agent: true, shell: false, name: "Claude Code", icon: null }, ...over };
   const { Strip, tokens, mix, OPACITY } = await load("kanso-strip/main.js", ["Strip", "tokens", "mix", "OPACITY"], {
     ...gpuiHost(), Popover: { new: (id) => chain(id) }, HoverCard: { new: (id) => chain(id) },
-    InputState: { new: ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} }) },
+    InputState: { new: fieldWith },
     theme: () => night, props: () => ({ pane: "p1", strip: true }), panes: () => [pane], agents: () => [], focused: () => null,
     spaces: () => [{ id: "s1", folder: "/repo", branch: "main", machine: null, tabs: [{ id: "t1" }], ...room }], machines: () => computers,
     home: () => "/home/me", terminals: () => [], shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
@@ -116,10 +113,10 @@ async function header({ pane: over = {}, space: room = {}, store: kept = {}, com
   return { view, cx, ran, labels, store, c: tokens(night), mix, OPACITY };
 }
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const arg = (el, name) => calls(el, name).at(-1)?.[1];
-const find = (el, test) => (test(el) ? el : el.kids.map((kid) => find(kid, test)).find(Boolean) ?? null);
-const all = (el, test) => [...(test(el) ? [el] : []), ...el.kids.flatMap((kid) => all(kid, test))];
+const drawnHeader = async () => {
+  const head = await header();
+  return { head, root: head.view.render() };
+};
 const byTag = (root, tag) => find(root, (el) => el.tag === tag);
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
 // ⋯'s Menu is the Popover's content, not a child.
@@ -127,7 +124,6 @@ const menuItems = (root) => {
   const pop = find(root, (el) => calls(el, "content").length > 0);
   return pop ? all(arg(pop, "content"), (el) => /^ph-menu-list-p1-\d+$/.test(el.tag)) : [];
 };
-const texts = (el) => [...calls(el, "child").map((call) => call[1]).filter((x) => typeof x === "string"), ...el.kids.flatMap(texts)];
 
 test("Each look is a state: focus is the ground, waiting the wash and mark, keyboard focus the accent ring, out of reach 55% with no mark", async () => {
   const focus = await header();
@@ -164,8 +160,7 @@ test("Pinned is a pin after the name, and the header itself is the handle: no gr
 });
 
 test("A press released outside the header never picks the pane up when the pointer comes back", async () => {
-  const head = await header();
-  const root = head.view.render();
+  const { head, root } = await drawnHeader();
   const move = (x) => handler(root, "on_mouse_move")({ position: { x, y: 10 }, local_position: { x, y: 10 }, bounds: { width: 400 } });
   handler(root, "on_hover")(true, head.cx);
   handler(root, "on_mouse_down")({ click_count: 1, position: { x: 10, y: 10 }, modifiers: {} }, head.cx);
@@ -226,8 +221,7 @@ test("GitHub not answering is the failure line with Refresh, and the refresh in 
 });
 
 test("Double-click renames in place, and Enter keeps the new name as the terminal's label", async () => {
-  const head = await header();
-  const root = head.view.render();
+  const { head, root } = await drawnHeader();
   handler(root, "on_mouse_down")({ click_count: 2, position: { x: 0, y: 0 }, modifiers: {} }, head.cx);
   assert.ok(head.view.renaming, "the name is a field in the header");
   head.view.endRename({ terminal: "t1" }, "Claude Code", head.cx, true);

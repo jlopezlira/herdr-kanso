@@ -9,9 +9,10 @@ import { fileApi } from "./platform-files.js";
 import { View, div, svg } from "gpui-kit";
 import { h_flex, Popover } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
-import { walkLayout, commitLayout, sidebarBack, foldSidebar } from "./layout.js";
+import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
+import { tryOr, readCommands } from "./pure.js";
+import { openArrange } from "./open.js";
 import { G, H, W, tokens } from "./ui.js";
 import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
@@ -91,8 +92,6 @@ function setPanelOn(id, on) {
   setShared(STORE, setPiece(pieces(shared), `panel.${id}`, on ? "show" : "hide"));
 }
 
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
-
 function panelContent(id) {
   if (id === "preview") return { mod: "kanso-panel", props: { panel: "preview" } };
   if (PANELS[id]) return { ...PANELS[id] };
@@ -142,23 +141,21 @@ export default class Tabs extends View {
       this.updater = new Updater();
       this.updater.start(cx);
       cx.timer.after(0, (next) => this.probeSimulator(next));
-      // keys.json: tab-N and panel-N arrive here as commands.
-      afterMount(cx, (cx) => cx.spawn(async (cx) => {
-        for (;;) {
-          const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-          if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-          const name = String(next.c).replace(/^kanso-tabs\./, "");
-          if (name === "update") this.updater.install(cx);
-          else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
-          else if (name === "settings" || name.startsWith("settings-")) {
-            const asked = name.slice(9);
-            openSettings(!asked || asked === "mods" ? "pieces" : asked);
-          }
-          else this.command(name);
-          cx.notify();
-        }
-      }));
+      readCommands(cx, () => nextCommand(), (c, cx) => this.barCommand(c, cx));
     }
+  }
+
+  // keys.json: tab-N and panel-N arrive here as commands.
+  async barCommand(c, cx) {
+    const name = String(c).replace(/^kanso-tabs\./, "");
+    if (name === "update") this.updater.install(cx);
+    else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
+    else if (name === "settings" || name.startsWith("settings-")) {
+      const asked = name.slice(9);
+      openSettings(!asked || asked === "mods" ? "pieces" : asked);
+    }
+    else this.command(name);
+    cx.notify();
   }
 
   probeSimulator(cx) {
@@ -536,7 +533,7 @@ export default class Tabs extends View {
     return h_flex().id("tab-bar").size_full().min_w(0).px(12).gap(2).items_center()
       .on_size_change(() => this.keepRail(layout()))
       // A pane held in the strip and let go here goes back where it was.
-      .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
+      .on_mouse_up("left", dropStripDrag)
       .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.dropAt = null; this.dragPanel = null; cx.notify(); })
       // A held tab let go outside the bar lands nowhere.
       .on_hover((hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } })

@@ -1,7 +1,8 @@
 // A computer's name: one function, one row per route, the writer's clock.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
+import { load, clone } from "./helpers.mjs";
+import { temporaryKdb } from "./mod-fixtures.mjs";
 
 const names = ["aliasOf", "renameTo", "placeAlias", "bookOf", "selfOf", "publishNames", "deliversNow", "catchUp", "mergeBooks", "takeAsks", "askedAlias", "Names"];
 const alias = await load("kanso-spaces/alias.js", names);
@@ -71,14 +72,8 @@ test("the newer name wins, and clearing the name is a change", () => {
 });
 
 async function database(t) {
-  const dir = await temporary(t);
   const calls = [];
-  const { Kdb, machinesToAsk, restDue } = await load("kanso-spaces/kdb.js", ["Kdb", "machinesToAsk", "restDue"], {
-    appHome: () => dir,
-    exec: (command, args) => { calls.push([command, args]); return exec(command, args); },
-  });
-  const db = new Kdb(databaseTimer);
-  await db.open();
+  const { db, machinesToAsk, restDue } = await temporaryKdb(t, ["machinesToAsk", "restDue"], (run) => (command, args) => { calls.push([command, args]); return run(command, args); });
   calls.length = 0;
   return { db, calls, machinesToAsk, restDue };
 }

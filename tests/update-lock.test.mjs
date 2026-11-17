@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { context, until } from "./helpers.mjs";
-import { windows, test, fixture, updates, staged, pending, holder, took, version, updated } from "./update-harness.mjs";
+import { windows, test, updates, staged, pending, holder, took, version, updated, startUpdater, started, landed, installing, secondCopy, offered, chromeMain, installedNew, twoWindows } from "./update-harness.mjs";
+
+// A started window, and a holder elsewhere that took the lock.
+const heldElsewhere = async (t) => {
+  const s = await started(t);
+  return { ...s, a: await holder(t, s.f) };
+};
 
 test("An install whose owner is alive is left alone, staging and all; once it is gone the lock is free at once", async (t) => {
-  const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
-
-  const a = await holder(t, f);
+  const { f, cx, a } = await heldElsewhere(t);
   took(a, "the holder takes a free lock");
   await mkdir(join(updates(f.home), "a/src"), { recursive: true }); // its staging
   assert.equal(await f.updater.install(cx), "busy");
@@ -21,18 +21,12 @@ test("An install whose owner is alive is left alone, staging and all; once it is
 
   // Killed, as a crash would: no timeout to wait out, nothing to take back.
   await a.kill();
-  await f.updater.install(cx);
-  assert.equal(f.updater.error, null, f.updater.error);
-  assert.equal(await version(f.home), "1.1.0");
+  await installedNew(f, cx);
   assert.deepEqual(await staged(f.home), [], "the dead install's staging, swept under the lock (no live one can have any)");
 });
 
 test("An owner that lets go while another waits: the next to take the lock keeps it, and its staging", async (t) => {
-  const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
-  const a = await holder(t, f);
+  const { f, cx, a } = await heldElsewhere(t);
   assert.equal(await f.updater.install(cx), "busy");
   // A finishes; C takes the lock straight away. Nothing judged A gone, so nothing can undo C.
   await a.kill();
@@ -43,57 +37,44 @@ test("An owner that lets go while another waits: the next to take the lock keeps
   assert.deepEqual(await staged(f.home), [".kanso-updates/c"]);
   assert.equal((await holder(t, f)).got, false, "C still holds it");
   await c.kill();
-  await f.updater.install(cx);
-  assert.equal(f.updater.error, null, f.updater.error);
-  assert.equal(await version(f.home), "1.1.0");
+  await installedNew(f, cx);
 });
 
 test("An install longer than exec's limit runs to the end, and keeps the lock all along", async (t) => {
-  const f = await fixture(t);
-  const other = await f.window();
+  const { f, other } = await twoWindows(t);
   // Herdr kills an exec at 30 s; here sooner, yet above what starting PowerShell alone takes.
   const limit = windows ? 10000 : 1000;
   f.ctl.limit = limit; other.ctl.limit = limit;
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { cx, drain } = await startUpdater(f);
   await f.flag("slow");
   const began = Date.now();
-  const first = f.updater.install(cx);
-  await until(async () => f.updater.error || (await f.checks()).includes("open-with"));
-  assert.equal(f.updater.error, null, f.updater.error);
+  const { run: first } = await installing(f, cx);
   await new Promise((r) => setTimeout(r, Math.max(0, began + limit + 500 - Date.now())));
   assert.deepEqual(pending(f).map((id) => f.store["kanso.update"].installs[id].phase), ["started"], "launched and let go: no exec waits on the install");
   // As far as this window's buttons can tell, the install was started an hour ago.
   f.store["kanso.update"] = { ...f.store["kanso.update"],
     installs: Object.fromEntries(pending(f).map((id) => [id, { ...f.store["kanso.update"].installs[id], at: Date.now() - 3600 * 1000 }])) };
-  const tabs = new f.Updater(f.source);
-  await tabs.readInstalled();
+  const tabs = await secondCopy(f);
   assert.equal(await tabs.install(cx), "busy", "the lock still says no");
-  other.store["kanso.update"] = { latest: "1.1.0" };
-  await other.updater.readInstalled();
+  await offered(other);
   assert.equal(await other.updater.install(cx), "busy", "and so it does to another window");
   assert.equal(await version(f.home), "1.0.0");
   await f.flag("go");
   assert.equal(await first, undefined);
-  assert.equal(f.updater.error, null, f.updater.error);
-  assert.equal(await version(f.home), "1.1.0");
+  await landed(f, f.home);
   assert.equal(updated(f.toasts).length, 1);
   assert.deepEqual(await staged(f.home), []);
 });
 
 test("A swap that fails on its last mod puts back every one before it: the old version stays", async (t) => {
-  const f = await fixture(t);
-  const { cx, drain } = context();
-  cx.timer = { every() {} };
-  f.updater.start(cx); await drain();
+  const { f, cx, drain } = await started(t);
   const keysBefore = await readFile(join(f.home, "keys.json"), "utf8");
   await f.flag("sabotage"); // kanso-chrome, the last mod moved in, cannot be
   await f.updater.install(cx);
   assert.match(f.updater.error, /could not put kanso-chrome in place/);
   assert.equal(f.toasts.at(-1).level, "error");
   assert.equal(await version(f.home), "1.0.0", "kanso-chrome was moved aside, then put back");
-  assert.equal(await readFile(join(f.home, "mods/kanso-chrome/main.js"), "utf8"), "// 1.0.0\n");
+  assert.equal(await chromeMain(f.home), "// 1.0.0\n");
   assert.deepEqual((await readdir(join(f.home, "mods"))).toSorted(), ["kanso-chrome", "token-spend"], "the mods it brought are gone again");
   assert.equal(await readFile(join(f.home, "keys.json"), "utf8"), keysBefore, "your keys as they were");
   assert.equal(await readFile(join(f.home, "layouts/kanso.json"), "utf8"), '{"root":{"id":"live"}}', "your layout as it was");
