@@ -9,7 +9,7 @@ import { tellsSomething } from "./pure.js";
 import { parseProcesses, etimeMs } from "./procs.js";
 import { oneLine } from "./since-left-model.js";
 import { foldTail } from "./sidebar-rows.js";
-import { H } from "./ui.js";
+import { H, R } from "./ui.js";
 import { mark, MARK_SIZES } from "./ui-mark.js";
 import { sessionRow } from "./session-row.js";
 import { machineOf } from "./machines.js";
@@ -22,9 +22,9 @@ export const AGENT_PAD = 34; // under the space name: 8px row padding, a 22px av
 export const FOLD = { duration: 220, easing: "ease-out" };
 export const FOLD_MS = FOLD.duration + 40; // rows stay drawn this long after a fold, so the close is seen
 
-// Drawn before the rows so they sit on top; `inset` is the list's side padding.
-export function pill(id, y, h, color, inset = 8) {
-  return div().id(id).absolute().left(inset).right(inset).top(y).h(h).rounded(8).bg(color)
+// Drawn before the rows so they sit on top, out to the list's edges as the kit's row is.
+export function pill(id, y, h, color) {
+  return div().id(id).absolute().left_0().right_0().top(y).h(h).rounded(R.control).bg(color)
     .transition("top", FOLD).transition("height", FOLD);
 }
 

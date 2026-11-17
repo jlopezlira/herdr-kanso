@@ -79,6 +79,7 @@ the branch's rules.
 
 ### Fixed
 
+- In the sidebar, every row now lights up on hover across the full width, with the same rounded corners: projects, computers, sessions, asleep rows and the footer, where the session rows were cut square and the others stopped short of the edge.
 - A long computer name on the status bar trims with an ellipsis instead of keeping its full width.
 - In the collapsed sidebar, a group's state mark and the marks in its menu are drawn at the kit's small and row sizes, 12px and 14px, instead of one pixel smaller. (#277)
 - An agent's state mark in the tab bar, the header strip and beside the sidebar's sleeping conversations is 14px, the size of every other icon in a row, instead of one pixel smaller. (#267)

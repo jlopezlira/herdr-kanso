@@ -11,6 +11,9 @@ const stop = (el, go) => el.cursor_pointer()
   .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
   .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); go(cx); });
 
+// A row's ground reaches the list's edges, as the kit's row does; its content stays `left` and `right` in from the list's padding.
+export const flush = (el, left, right) => el.mx(-G.sm).pl(left + G.sm).pr(right + G.sm).rounded(R.control);
+
 export function openAhead(space) {
   if (!space?.id) return;
   if (!space.active) run("space.select", { id: space.id });
@@ -45,8 +48,7 @@ export function asleepRow(a, pad, t, row, wake, label) {
   const c = tokens(t);
   const controls = asleepControls(a);
   const kbd = Boolean(row.kbd);
-  return h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none()
-    .pl(pad).pr(G.md).gap(G.md).items_center().rounded(R.card).cursor_pointer()
+  return flush(h_flex().id(`space-agent-${a.address}`).h(ASLEEP_ROW).flex_none().gap(G.md).items_center().cursor_pointer(), pad, G.md)
     .when(kbd, (el) => el.border_1().border_color(t.accent))
     .hover((s) => s.bg(t.foreground + "0c"))
     .on_click((_e, cx) => { cx.stop_propagation(); row.menu(cx); })

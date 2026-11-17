@@ -25,7 +25,7 @@ import { listKey, moveTo } from "./listkeys.js";
 import { commitLayout, setRail, foldSidebar, railWidth, OPEN_MIN, dropStripDrag } from "./layout.js";
 import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
-import { gitTail, asleepRow, openAhead } from "./sidebar-draw.js";
+import { gitTail, asleepRow, openAhead, flush } from "./sidebar-draw.js";
 import { guideBars, climb } from "./guides.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, ASLEEP_ROW, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
 import { breathe, H, G, T, R, W, ICON, tokens, washes } from "./ui.js";
@@ -1322,7 +1322,7 @@ export default class Spaces extends View {
     const open = () => openOverlay({ mod: "kanso-spaces", kind: "popup", width: 252, height: 420, at: "pointer", props: { spaceMenu: { key } } });
     const missing = Boolean(project.missing);
     const controls = closedControls({ hovered: this.hoverSpace === key, missing });
-    const row = h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().px(8).gap(9).items_center().rounded(8).cursor_pointer()
+    const row = flush(h_flex().id(`closed-project-${key}`).h(rowHeight({ tree: null })).flex_none().gap(G.sm).items_center().cursor_pointer(), G.sm, G.sm)
       .hover((s) => s.bg(t.foreground + "0c"))
       .on_hover((h, cx) => { if (h ? this.hoverSpace !== key : this.hoverSpace === key) { this.hoverSpace = h ? key : null; cx.notify(); } })
       .when(this.navMark(`closed-project:${key}`, open), (el) => el.border_1().border_color(t.accent))
@@ -1370,7 +1370,7 @@ export default class Spaces extends View {
   asleepHead(t, c, group, { name = null, pad = AGENT_PAD } = {}) {
     const open = this.asleepOpenOf(group.id);
     const label = name || group.name || "Asleep";
-    const row = h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().pl(pad).pr(12).gap(9).items_center().rounded(8).cursor_pointer()
+    const row = flush(h_flex().id(`asleep-group-${group.id}`).h(32).flex_none().gap(G.sm).items_center().cursor_pointer(), pad, G.md)
       .hover((s) => s.bg(t.foreground + "0c"))
       .when(this.navMark(`asleep:${group.id}`, (cx) => this.toggleAsleep(group.id, this.asleepOpenOf(group.id), cx)), (el) => el.border_1().border_color(t.accent))
       .on_click((_e, cx) => { this.toggleAsleep(group.id, open, cx); cx.notify(); })
@@ -1965,9 +1965,8 @@ export default class Spaces extends View {
     const icon = svg(`mods/kanso-chrome/icons/${m ? "server" : "monitor"}.svg`).size(ICON).flex_none().text_color(phase === "connected" ? t.muted : ink);
     const pending = phase === "loading" && Boolean(m) && this.waking?.has(m);
     const wash = t.foreground + "0c";
-    return h_flex().id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none()
-      .px(collapsed ? 0 : G.sm).gap(G.sm).items_center().rounded(R.card).text_color(ink)
-      .when(collapsed, (el) => el.justify_center())
+    return (collapsed ? h_flex().rounded(R.card).justify_center() : flush(h_flex(), G.sm, G.sm))
+      .id(`machine-${key}`).h(collapsed ? RAIL_MARK : PLAIN_ROW).flex_none().gap(G.sm).items_center().text_color(ink)
       .when(ring, (el) => el.border_1().border_color(t.accent))
       .when(phase !== "loading", (el) => el.cursor_pointer().hover((s) => s.bg(wash)))
       .on_click((e, cx) => { if (e.click_count === 2) return; go(cx); })
@@ -2017,7 +2016,7 @@ export default class Spaces extends View {
   connector({ last, reach = GUIDE_OVERLAP }, t) {
     const line = washes(t)?.w12 ?? t.border;
     return guideBars(last ? "end" : "tee", { x: GUIDE_X, elbow: ELBOW_W, h: TREE_ROW, reach })
-      .map((b) => div().absolute().left(b.left).top(b.top).w(b.w).h(b.h).bg(line));
+      .map((b) => div().absolute().left(b.left + G.sm).top(b.top).w(b.w).h(b.h).bg(line));
   }
 
   // Folded: the most urgent mark and how many, and a click there unfolds. Open, the row itself folds.
@@ -2054,9 +2053,10 @@ export default class Spaces extends View {
     const closing = !open && mine;
     const start = open && mine && this.folding.open && this.folding.phase === 0;
     const h = this.foldH?.[id];
-    const inner = v_flex().w_full().flex_none().gap(gap).children(rows)
+    const inner = v_flex().w_full().flex_none().px(G.sm).gap(gap).children(rows)
       .on_size_change((s, cx) => { if (this.foldH[id] !== s.height) { this.foldH[id] = s.height; cx.notify(); } });
-    return [v_flex().id(`fold-${id}`).w_full().flex_none().overflow_hidden()
+    // Out to the list's edges, so the rows' ground is not cut short.
+    return [v_flex().id(`fold-${id}`).mx(-G.sm).flex_none().overflow_hidden()
       .h(closing || start ? 0 : h ?? "auto").opacity(closing || start ? 0 : 1)
       .transition("height", FOLD).transition("opacity", FOLD)
       .child(inner)];
@@ -2091,15 +2091,11 @@ export default class Spaces extends View {
     const away = asleep && (w.tabs ?? []).every((tb) => tb.settled);
     const ring = this.navMark(`space:${w.id}`, (cx) => this.openSpace(w, group, on, away, mine, cx),
       on && !mine.some((a) => a.focused));
-    const row = v_flex()
-      .relative()
-      .id(`space-${w.id}`)
+    const row = flush(v_flex().relative().id(`space-${w.id}`), G.sm, G.sm)
       .when(ring, (el) => el.border_1().border_color(t.accent))
-      .px(8)
       .h(rowHeight({ tree }))
       .flex_none()
       .justify_center()
-      .rounded(8)
       .cursor_pointer()
       .hover((s) => s.bg(washHover))
       .when(this.over === w.id && this.takes(w, tree), (el) => (spaceAt(this.pressed) < spaceAt(w.id) ? el.border_b(2) : el.border_t(2)).border_color(t.accent))
@@ -2587,8 +2583,7 @@ export default class Spaces extends View {
     const { els, space, agent } = laidOut(items, gap);
     const pills = collapsed ? [] : [
       ...(space ? [pill("pill-space", space.y, space.h, t.foreground + "14")] : []),
-      // A session row reaches the list's edges, as the kit's row does.
-      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, t.foreground + "12", 0)] : []),
+      ...(agent ? [pill(`pill-agent-${view}`, agent.y, agent.h, t.foreground + "12")] : []),
     ];
     // Named, so its scroll position survives every redraw (an unnamed one is placed anew and starts at the top).
     return v_flex().id(`spaces-list-${collapsed ? "rail" : view}`).relative().flex_1().min_h(0).px(collapsed ? 0 : 8).gap(collapsed ? 0 : gap).pt(collapsed ? 6 : 0).pb(14).overflow_y_scrollbar().mode(collapsed ? "hover" : "always")
