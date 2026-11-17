@@ -146,8 +146,8 @@ export function rawValues(source, text, css = false) {
   return [...inline, ...raw.map((found) => `raw ${found}`)].map((value) => ({ source, value }));
 }
 
-// Text a story shows is not a style: a pull request number such as #142 is not a colour.
-export const markupTags = (html) => html.match(/<[^>]*>/g)?.join('') ?? '';
+// Text a story shows, in its content or its accessible names, is not a style: a pull request number such as #142 is not a colour.
+export const markupTags = (html) => (html.match(/<[^>]*>/g)?.join('') ?? '').replace(/\s(?:title|aria-label|alt)="[^"]*"/g, '');
 
 export function rawValueReport(root = '.') {
   const read = (file) => readFileSync(join(root, file), 'utf8');
