@@ -1,7 +1,7 @@
 // Real mod code with a fake clock, inert native elements and counted host boundaries.
 import { performance } from "node:perf_hooks";
 import { pathToFileURL } from "node:url";
-import { load, exec as runFile, clone, until, success, failure } from "./helpers.mjs";
+import { load, exec as runFile, clone, until, success, failure, openedKdb } from "./helpers.mjs";
 
 export const PANEL_IDS = ["files", "pr", "preview", "shipped", "worktrees", "ports", "look", "find"];
 const source = process.env.PERF_SOURCE_ROOT ? pathToFileURL(`${process.env.PERF_SOURCE_ROOT}/kanso/mods/`) : undefined;
@@ -135,6 +135,32 @@ export function fixture({ dir = "/fixture", blocked = false, quiet = null, worki
   };
   return { state, host, cx, shared, projects, list, terms, transcripts, ps, settle, advance };
 }
+
+// The processes started over the next `ms`, counted from none.
+export const freshAdvance = async (f, ms) => {
+  f.state.processes.length = 0;
+  await f.advance(ms);
+};
+// A view behind brought in front, and what it starts at once.
+export const broughtForward = async (f, view) => {
+  f.state.active = true;
+  view.render(f.cx);
+  await freshAdvance(f, 0);
+};
+export const initialised = async (f, view, ...args) => {
+  view.init(...args);
+  await f.settle();
+  return view;
+};
+// The sidebar on a migrated database, its Kdb on the host.
+export const sidebarOn = async (f) => {
+  const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
+  f.host.Kdb = Kdb;
+  const db = await openedKdb(Kdb);
+  await db.migrate();
+  const { Spaces } = await loadMod("kanso-spaces/main.js", ["Spaces"], f.host);
+  return new Spaces();
+};
 
 export async function firstDraw(id) {
   const f = fixture({ blocked: true });

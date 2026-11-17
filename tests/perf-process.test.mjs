@@ -29,6 +29,8 @@ test("transcripts check size on status or turn changes and after five minutes", 
   const calls = [];
   let size = 123, now = 0;
   const file = "/session folder/rollout-01234567-1234-1234-1234-0123456789ab.jsonl";
+  // The commands asked since the last look, and none kept after.
+  const asked = () => calls.splice(0).map(([command]) => command);
   const { findThreads } = await loadFindThreads({
     Date: { now: () => now },
     home: () => "/home/me",
@@ -49,23 +51,20 @@ test("transcripts check size on status or turn changes and after five minutes", 
   const working = [{ ...terms[0], status: "working" }];
   now = 1000;
   const checked = await findThreads(list, found, working);
-  assert.deepEqual(calls.map(([command]) => command), ["wc"]);
-  calls.length = 0;
+  assert.deepEqual(asked(), ["wc"]);
   await findThreads(list, checked, working);
   assert.deepEqual(calls, [], "an unchanged size still records the latest status");
   size = 124;
   const nextTurn = [{ ...working[0], turn: 2 }];
   const grown = await findThreads(list, checked, nextTurn);
   assert.equal(grown.t1.size, 124);
-  assert.deepEqual(calls.map(([command]) => command), ["wc", "sh"]);
-  calls.length = 0;
+  assert.deepEqual(asked(), ["wc", "sh"]);
   now = 300999;
   await findThreads(list, grown, nextTurn);
   assert.deepEqual(calls, []);
   now = 301000;
   const fallback = await findThreads(list, grown, nextTurn);
-  assert.deepEqual(calls.map(([command]) => command), ["wc"]);
-  calls.length = 0;
+  assert.deepEqual(asked(), ["wc"]);
   now += 1;
   await findThreads(list, fallback, nextTurn);
   assert.deepEqual(calls, [], "the fallback waits five minutes from the last size check");

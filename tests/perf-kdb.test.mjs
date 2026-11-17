@@ -2,7 +2,7 @@
 import { loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { databaseTimer, clone, temporary, exec } from "./helpers.mjs";
+import { databaseTimer, clone, temporary, exec, openedKdb } from "./helpers.mjs";
 
 async function database(t) {
   const dir = await temporary(t), calls = [];
@@ -12,8 +12,7 @@ async function database(t) {
     appHome: () => dir, Date: Clock,
     exec: (command, args) => { calls.push([command, args]); return exec(command, args); },
   });
-  const db = new Kdb(databaseTimer);
-  await db.open();
+  const db = await openedKdb(Kdb);
   calls.length = 0;
   return { db, calls, clock };
 }

@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { databaseTimer, temporary, until, success } from "./helpers.mjs";
-import { fixture, loadMod } from "./perf-harness.mjs";
+import { fixture, loadMod, freshAdvance, broughtForward, initialised, sidebarOn } from "./perf-harness.mjs";
 
 const gitOf = (f) => f.state.processes.filter((p) => p.command === "git");
 const hcReads = (f) => f.state.processes.filter((p) => p.command === "hc" && p.args[0] === "read");
@@ -18,18 +18,16 @@ function countRedraws(f) {
 async function sidebar(t) {
   const dir = await temporary(t), f = fixture({ dir, working: 0 });
   const redraws = countRedraws(f);
-  const { Kdb } = await loadMod("kanso-spaces/kdb.js", ["Kdb"], f.host);
-  f.host.Kdb = Kdb;
-  const db = new Kdb(databaseTimer);
-  await db.open();
-  await db.migrate();
-  const { Spaces } = await loadMod("kanso-spaces/main.js", ["Spaces"], f.host);
-  const view = new Spaces();
-  view.init({}, f.cx);
-  await f.settle();
+  const view = await initialised(f, await sidebarOn(f), {}, f.cx);
   await f.advance(1000);
   return { f, view, redraws };
 }
+// The sidebar once git has answered for its projects.
+const gitKnown = async (t) => {
+  const { f, view } = await sidebar(t);
+  askGit(view, f);
+  return { f, view };
+};
 
 function askGit(view, f) {
   const keys = [...new Set(Object.values(view.at ?? {}))];
@@ -56,28 +54,22 @@ test("an idle sidebar redraws 0 times from the names tick and from an unchanged 
 });
 
 test("a collapsed rail asks git 0 times a minute, and opening it reads at once", async (t) => {
-  const { f, view } = await sidebar(t);
-  askGit(view, f);
+  const { f } = await gitKnown(t);
   f.shared.set("sidebar.collapsed", true);
-  f.state.processes.length = 0;
-  await f.advance(60_000);
+  await freshAdvance(f, 60_000);
   assert.equal(gitOf(f).length, 0, `collapsed rail started ${gitOf(f).length} git processes per minute; budget 0`);
   f.shared.set("sidebar.collapsed", false);
-  f.state.processes.length = 0;
-  await f.advance(2500);
+  await freshAdvance(f, 2500);
   assert.ok(gitOf(f).length > 0, "opening the rail reads git on the next look, not a minute later");
 });
 
 test("a window behind others asks git 0 times a minute, and coming forward reads at once", async (t) => {
-  const { f, view } = await sidebar(t);
-  askGit(view, f);
+  const { f } = await gitKnown(t);
   f.state.active = false;
-  f.state.processes.length = 0;
-  await f.advance(60_000);
+  await freshAdvance(f, 60_000);
   assert.equal(gitOf(f).length, 0, `a window behind started ${gitOf(f).length} git processes per minute; budget 0`);
   f.state.active = true;
-  f.state.processes.length = 0;
-  await f.advance(2500);
+  await freshAdvance(f, 2500);
   assert.ok(gitOf(f).length > 0, "coming forward reads git on the next look");
 });
 
@@ -95,10 +87,15 @@ function armLook(f) {
     : readTextFile(file);
 }
 
-async function look(t, { active = true, shown = true } = {}) {
+// A fixture in its own folder, in front or behind, its panel shown or hidden.
+const placed = async (t, { active = true, shown = true } = {}) => {
   const dir = await temporary(t), f = fixture({ dir });
-  f.state.active = active;
-  f.state.panelHidden = !shown;
+  Object.assign(f.state, { active, panelHidden: !shown });
+  return f;
+};
+
+async function look(t, options) {
+  const f = await placed(t, options);
   armLook(f);
   const { Look } = await loadMod("kanso-panel/look.js", ["Look"], f.host);
   const { Kdb } = await loadMod("kanso-panel/kdb.js", ["Kdb"], f.host);
@@ -112,10 +109,7 @@ test("Images on this computer reads 0 times while behind or hidden, and reads as
   const behind = await look(t, { active: false, shown: true });
   await behind.f.advance(60_000);
   assert.equal(hcReads(behind.f).length, 0, `Images behind started ${hcReads(behind.f).length} hc reads per minute; budget 0`);
-  behind.f.state.active = true;
-  behind.view.render(behind.f.cx);
-  behind.f.state.processes.length = 0;
-  await behind.f.advance(0);
+  await broughtForward(behind.f, behind.view);
   assert.ok(hcReads(behind.f).length > 0, "coming forward reads at once");
 
   const hidden = await look(t, { active: true, shown: false });
@@ -123,16 +117,14 @@ test("Images on this computer reads 0 times while behind or hidden, and reads as
   assert.equal(hcReads(hidden.f).length, 0, `Images hidden started ${hcReads(hidden.f).length} hc reads per minute; budget 0`);
   hidden.f.state.panelHidden = false;
   hidden.view.render(hidden.f.cx);
-  hidden.f.state.processes.length = 0;
-  await hidden.f.advance(0);
+  await freshAdvance(hidden.f, 0);
   assert.ok(hcReads(hidden.f).length > 0, "showing the panel reads at once");
 });
 
 test("Images skips a conversation whose size has not changed, and reads when it grows", async (t) => {
   const { f, view } = await look(t, { active: true, shown: true });
   await until(() => view.transcript?.file);
-  f.state.processes.length = 0;
-  await f.advance(60_000);
+  await freshAdvance(f, 60_000);
   assert.equal(hcReads(f).length, 0, `an unchanged conversation started ${hcReads(f).length} hc reads per minute; budget 0`);
   f.state.bytes += 8;
   f.state.processes.length = 0;
@@ -146,42 +138,31 @@ test("Images skips a conversation whose size has not changed, and reads when it 
 });
 
 async function files(t, { active = true, watch = true } = {}) {
-  const dir = await temporary(t), f = fixture({ dir });
-  f.state.active = active;
-  f.state.panelHidden = false;
+  const f = await placed(t, { active });
   if (!watch) f.host.watchFolder = async () => { throw new Error("no watch"); };
   const { Files } = await loadMod("kanso-panel/files.js", ["Files"], f.host);
-  const view = new Files();
-  view.init(f.cx);
-  await f.settle();
-  return { f, view };
+  return { f, view: await initialised(f, new Files(), f.cx) };
 }
 
 test("Files with a folder watch asks git once a minute, and not at all while behind", async (t) => {
   const open = await files(t);
   assert.ok(open.view.watched, "the folder watch is attached");
-  open.f.state.processes.length = 0;
-  await open.f.advance(50_000);
+  await freshAdvance(open.f, 50_000);
   assert.equal(gitOf(open.f).length, 0, `a watched folder asked git ${gitOf(open.f).length} times before the minute; budget 0`);
   await open.f.advance(10_000);
   assert.equal(gitOf(open.f).length, 1, "the minute fallback asks git once");
 
   const behind = await files(t, { active: false });
-  behind.f.state.processes.length = 0;
-  await behind.f.advance(60_000);
+  await freshAdvance(behind.f, 60_000);
   assert.equal(gitOf(behind.f).length, 0, `Files behind started ${gitOf(behind.f).length} git processes per minute; budget 0`);
-  behind.f.state.active = true;
-  behind.view.render(behind.f.cx);
-  behind.f.state.processes.length = 0;
-  await behind.f.advance(0);
+  await broughtForward(behind.f, behind.view);
   assert.ok(gitOf(behind.f).length > 0, "coming forward lists the folder at once");
 });
 
 test("Files without a folder watch still asks git every 10 seconds", async (t) => {
   const { f, view } = await files(t, { watch: false });
   assert.equal(view.watched, null);
-  f.state.processes.length = 0;
-  await f.advance(10_000);
+  await freshAdvance(f, 10_000);
   assert.ok(gitOf(f).length > 0, "no watch: the 10 second tick still asks git");
 });
 
@@ -198,16 +179,11 @@ test("Containers does nothing while behind, reads at once in front, and splits u
   const dir = await temporary(t), f = fixture({ dir });
   f.state.active = false;
   const { Containers } = await loadMod("kanso-containers/main.js", ["Containers", "readPlan"], f.host);
-  const view = new Containers();
-  view.init({}, f.cx);
-  await f.settle();
+  const view = await initialised(f, new Containers(), {}, f.cx);
   await f.advance(60_000);
   const docker = () => f.state.processes.filter((p) => p.command === "docker");
   assert.equal(docker().length, 0, `Containers behind started ${docker().length} docker processes per minute; budget 0`);
-  f.state.active = true;
-  view.render(f.cx);
-  f.state.processes.length = 0;
-  await f.advance(0);
+  await broughtForward(f, view);
   assert.ok(docker().length > 0, "coming forward reads docker at once");
 });
 
@@ -224,10 +200,7 @@ test("Ports reads 0 times while behind, reads at once in front, and skips a redr
   const lsof = (f) => f.state.processes.filter((p) => p.command === "lsof");
   assert.equal(lsof(behind).length, 0, `Ports behind started ${lsof(behind).length} process-table reads per minute; budget 0`);
   assert.equal(redraws.n, 0, "Ports behind does not redraw");
-  behind.state.active = true;
-  hidden.render(behind.cx);
-  behind.state.processes.length = 0;
-  await behind.advance(0);
+  await broughtForward(behind, hidden);
   assert.ok(lsof(behind).length > 0, "coming forward reads the ports at once");
 
   const dir = await temporary(t), front = fixture({ dir });
@@ -245,9 +218,7 @@ test("Memory redraws 0 times a minute when the reading has not changed", async (
   const dir = await temporary(t), f = fixture({ dir });
   const redraws = countRedraws(f);
   const { Memory } = await loadMod("kanso-guard/main.js", ["Memory"], f.host);
-  const view = new Memory();
-  view.init({}, f.cx);
-  await f.settle();
+  await initialised(f, new Memory(), {}, f.cx);
   await f.advance(0);
   redraws.n = 0;
   await f.advance(60_000);
@@ -266,8 +237,7 @@ test("the footer fits from one timer, and battery and the memory warning are rea
   assert.equal(f.state.timers.filter((timer) => timer.ms === 120_000).length, 2);
   const pmset = () => f.state.processes.filter((p) => p.command === "pmset");
   const status = () => f.state.processes.filter((p) => p.command === "sh" && String(p.args[1]).includes("herdr-app status"));
-  f.state.processes.length = 0;
-  await f.advance(60_000);
+  await freshAdvance(f, 60_000);
   assert.equal(pmset().length, 0, "battery is not read in the first minute");
   assert.equal(status().length, 0, "the memory warning is not read in the first minute");
   await f.advance(60_000);
