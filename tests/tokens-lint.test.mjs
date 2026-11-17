@@ -49,6 +49,7 @@ test("A module-level size split over lines, sharing a line with another statemen
   assert.deepEqual(sizes("const A = 6; const B = 7;\ndiv().gap(A).gap(B);"), [[2, "A"], [2, "B"]]);
   assert.deepEqual(sizes("const EDGE = H.line,\n  PAD = 4;\ndiv().p(PAD).h(EDGE);"), [[3, "PAD"]]);
   assert.deepEqual(sizes("const PAD = GUIDE.x + ELBOW.w + 6 - 8;\nconst LIST = 8 * H.line;\ndiv().pl(PAD).max_h(LIST);"), [[3, "PAD"]]);
+  for (const label of [")", "(", "["]) assert.deepEqual(sizes(`const VIEW = { title: 17, label: "${label}" };\ndiv().text_size(VIEW.title);`), [[2, "VIEW.title"]]);
 });
 
 test("A hex-alpha wash, an opacity share or a duration fails outside ui.js; whole opacities and named ones pass", () => {

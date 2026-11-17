@@ -75,12 +75,14 @@ const nesting = (ch) => "([{".includes(ch) - ")]}".includes(ch);
 const topLevel = (text) => [...text].reduce(({ depth, parts }, ch) => (ch === "," && !depth
   ? { depth, parts: [...parts, ""] }
   : { depth: depth + nesting(ch), parts: [...parts.slice(0, -1), parts.at(-1) + ch] }), { depth: 0, parts: [""] }).parts;
-// A statement ends at its first semicolon outside brackets, so another may share its line.
+const LITERAL = /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\[\s\S]|[^`\\])*`|\/\/.*|\/\*[\s\S]*?\*\//g;
+// A statement ends at its first semicolon outside brackets, strings and comments, so another may share its line.
 const bodyAt = (text, from) => {
+  const code = text.slice(from).replace(LITERAL, (literal) => " ".repeat(literal.length));
   let depth = 0;
-  for (let i = from; i < text.length; i += 1) {
-    if (text[i] === ";" && !depth) return text.slice(from, i);
-    depth += nesting(text[i]);
+  for (let i = 0; i < code.length; i += 1) {
+    if (code[i] === ";" && !depth) return text.slice(from, from + i);
+    depth += nesting(code[i]);
   }
   return text.slice(from);
 };
