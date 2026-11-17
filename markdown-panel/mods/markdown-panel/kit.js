@@ -12,6 +12,13 @@ import { code as drawCode } from "./ui-code.js";
 import { thumbnail as drawThumbnail } from "./ui-thumbnail.js";
 import { markdown as drawMarkdown, markdownBlock as drawMarkdownBlock } from "./ui-markdown.js";
 import { tipText } from "./ui-tooltip.js";
+import { avatar as drawAvatar } from "./ui-avatar.js";
+import { chip as drawChip } from "./ui-chip.js";
+import { mark as drawMark } from "./ui-mark.js";
+import { tab as drawTabs } from "./ui-tab.js";
+import { stackOf } from "./ui-stack.js";
+import { svg } from "gpui-kit";
+import { ICON_ROW, glyphOf, toneColor } from "./ui.js";
 
 // Facts as words, as the Storybook writes them.
 export { diffText, facts, plus };
@@ -29,7 +36,9 @@ const EVENTS = {
   onMenu: (el, fn) => el.on_mouse_down("right", fn),
   onMove: (el, fn) => el.on_mouse_move(fn),
 };
-const HANDLERS = ["on", "onClick", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
+// `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts; `onLink(url, cx)`: a link's press in markdown.
+const HANDLERS = ["on", "onClick", "onChange", "onOpen", "onHover", "onKey", "onLink", "focusHandle", ...Object.keys(EVENTS)];
+const withEvents = (el, events) => Object.entries(events).filter(([, fn]) => fn).reduce((drawnEl, [name, fn]) => EVENTS[name](drawnEl, fn), el);
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
 const iconOf = (icon) => (icon === "none" ? null : appIcon(icon));
 const withIcon = (part) => (part?.icon ? { ...part, icon: appIcon(part.icon) } : part);
@@ -64,7 +73,7 @@ export const row = ({ icon, flag, detail, action, actions, start, tools, ...prop
     ...props, ...handlers, ...withHandlers(id, on, actions, action, detail), icon: iconOf(icon), flag: appIcon(flag),
     start: drawn(id, c, "start", start), tools: drawn(id, c, "tools", tools),
   });
-  return Object.entries({ onPress, onRelease, onMenu, onMove }).filter(([, fn]) => fn).reduce((el, [name, fn]) => EVENTS[name](el, fn), drawnRow);
+  return withEvents(drawnRow, { onPress, onRelease, onMenu, onMove });
 };
 
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
@@ -77,10 +86,36 @@ export const button = ({ label, icon = "none", content = [], ...props }) => (id,
 // Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.
 export const explainButton = ({ agent, size = "md" }) => button({ label: `Explain to ${agent}`, kind: "tonal", size, icon: "lu-bot" });
 
-// Each item carries its own `onClick`: a menu's items are data, not tools.
+// Each item carries its own `onClick`, or, with a `key`, calls `onChange` with it: a menu's items are data, not tools.
 export const menu = ({ title = null, items = [] }) => (id, c, more = {}) => {
+  const { onChange = null } = given(more);
+  const chosen = (item) => (onChange && item.key && !item.onClick ? { ...item, onClick: (cx) => onChange(item.key, cx) } : item);
+  return drawMenu(id, { title, items: items.map(withIcon).map(chosen) }, c);
+};
+
+// A drawing that takes no handler: the app's piece with these props.
+const still = (draw) => (props) => (id, c, more = {}) => {
   given(more);
-  return drawMenu(id, { title, items: items.map(withIcon) }, c);
+  return draw(c, props);
+};
+export const avatar = ({ initial, image = null, size = "md", tone = null }) => still(drawAvatar)({ initial, image, size, tone: tone || null });
+export const chip = ({ label, quiet = false, tone = null }) => still(drawChip)({ label, quiet, tone: tone || null });
+export const mark = ({ status, size = "md" }) => still(drawMark)({ status, size });
+// An icon on its own, at a row's size, in the muted ink or its `tone`.
+export const glyph = (icon, tone = "") => still((c) => svg(glyphOf(appIcon(icon))).size(ICON_ROW).flex_none().text_color(tone ? toneColor(c, tone) : c.muted))();
+
+// `icon` draws each item's icon and `label` its name; icons without names are a column of squares, each name its tip. `onChange(key, cx)` picks one.
+export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}) => {
+  const { onChange = null } = given(more);
+  const shown = items.map((item) => ({ ...item, icon: icon ? appIcon(item.icon) : null }));
+  return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label });
+};
+
+// A wrapper that only places other pieces, as the Storybook's: `label` is a focusable one's tooltip and spoken name.
+// A pressable one takes `onClick` itself; any other gives its handlers to its children.
+export const stack = ({ variant, on = false, label = "", ...flags }, ...children) => (id, c, more = {}) => {
+  const { onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
+  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove }));
 };
 
 // The state patterns and the toast: the one action or fix takes `onClick`.

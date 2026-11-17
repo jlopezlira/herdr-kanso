@@ -1,5 +1,7 @@
 // Sample sidebar content for the stories: the rows and tiles of each view, drawn with the compositions.
-import { panelBack, panelClose, panelRefresh, sidebar, tile } from './compositions.js';
+import { panelBack, panelClose, panelRefresh, sidebar } from './compositions.js';
+import { tile } from './tile.js';
+import { viewSwitch } from './view-switch.js';
 import { projectRow } from './project-row.js';
 import { computerRow } from './computer-row.js';
 import { section } from './section.js';
@@ -45,7 +47,9 @@ export const sampleTiles = {
   agents: () => [tile({ status: 'blocked', count: 1 }), tile({ status: 'working', count: 3 }), tile({ status: 'done', count: 2 }), tile({ status: 'idle', count: 3 })],
   threads: () => [tile({ status: 'blocked', count: 1 }), tile({ status: 'working', count: 1 }), tile({ status: 'done', count: 1 })],
 };
-export const sampleSidebar = ({ view = 'spaces', ...args } = {}) => sidebar({ ...args, view, rows: sampleRows[view](), tiles: sampleTiles[view]() });
+// `switcher: false` hides the view switch; `menu`, collapsed, opens its menu.
+export const sampleSidebar = ({ view = 'spaces', switcher = true, menu: open = false, ...args } = {}) => sidebar({ ...args, view, rows: sampleRows[view](), tiles: sampleTiles[view](),
+  switcher: switcher ? viewSwitch({ view, column: Boolean(args.collapsed), open }) : null });
 
 // Sample status bar content: what each panel item holds when its Menu opens.
 const hide = [{ separator: true }, { icon: 'lu-eye-off', label: 'Hide this' }];

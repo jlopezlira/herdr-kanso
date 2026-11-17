@@ -1,5 +1,5 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { avatar, button, chip, chord, dawn, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
+import { button, chip, chord, dawn, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
 
 const tool = (icon, label) => button({ label, kind: 'icon', size: 'lg', icon });
 // + names what it adds in the view on show.
@@ -20,26 +20,10 @@ export const toolbar = ({ view = 'spaces', column = false, open = false, sorted 
 };
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
-// The rows the app draws (session, project, computer, section, asleep) live each in its own file, shared with the app.
-export const views = [
-  { key: 'spaces', label: 'Projects', icon: 'lu-folder' },
-  { key: 'agents', label: 'Status', icon: 'lu-activity' },
-  { key: 'threads', label: 'Threads', icon: 'lu-message-square' },
-];
-// Collapsed, one button for the current view opens the menu of all three.
-export const viewSwitch = ({ view = 'spaces', column = false, open = false } = {}) => {
-  if (!column) return stack({ variant: 'view switch' }, tabs({ items: views, value: view, size: 'sm', track: true, label: true }));
-  const current = views.find((item) => item.key === view) ?? views[0];
-  const list = open ? stack({ variant: 'view menu' }, menu({ items: views.map((item) => ({ ...item, selected: item.key === current.key })) })) : null;
-  return stack({ variant: 'view switch' }, button({ label: current.label, kind: 'icon', size: 'lg', icon: current.icon, active: open }), list);
-};
-
+// The rows the app draws (session, project, computer, section, asleep), the tile and the view switch live each in its own file, shared with the app.
 // The update's one icon: the footer row that runs it and every notice about it.
 export const updateIcon = 'lu-refresh-cw';
 export const sidebarFooter = ({ update = null } = {}) => stack({ variant: 'footer' }, update ? row({ icon: updateIcon, name: update }) : null, row({ icon: 'lu-settings', name: 'Settings' }));
-
-export const tile = ({ initial = null, tone = 'teal', status = 'none', count = 0, open = false }) => stack({ variant: 'rail tile', on: open },
-  initial ? avatar({ initial, tone, size: 'md' }) : mark({ status, size: 'lg' }), count ? chip({ label: count, quiet: true, tone: status === 'blocked' ? 'blocked' : null }) : null);
 
 // Status bar compositions: a computer stands in for its sidebar row; the rest are the bar's Menus and Buttons.
 export const computerItemStates = ['on', 'unreachable', 'pending'];
@@ -128,9 +112,10 @@ export const channelSettings = ({ channel = 'stable', art = true } = {}) => list
   channel === 'dawn' ? setting({ label: 'Dawn sky', control: toggle({ checked: art, label: 'Dawn sky' }) }) : null);
 
 // The rows and tiles of the current view come in drawn; the sidebar only places them.
-export const sidebar = ({ collapsed = false, dawn: early = false, art = true, view = 'spaces', switcher = true, menu: open = false, rows = [], tiles = [], away = null } = {}) => collapsed
-  ? stack({ variant: 'rail' }, header({ collapsed, dawn: early, art, view }), switcher ? viewSwitch({ view, column: true, open }) : null, stack({ variant: 'rail list' }, tiles), stack({ variant: 'rail footer' }, tool('lu-settings', 'Settings')))
-  : stack({ variant: 'sidebar' }, header({ dawn: early, art, view }), switcher ? viewSwitch({ view }) : null, stack({ variant: 'rows' }, rows), away, sidebarFooter());
+// `switcher`: the view switch, drawn for the form, or none.
+export const sidebar = ({ collapsed = false, dawn: early = false, art = true, view = 'spaces', switcher = null, rows = [], tiles = [], away = null } = {}) => collapsed
+  ? stack({ variant: 'rail' }, header({ collapsed, dawn: early, art, view }), switcher, stack({ variant: 'rail list' }, tiles), stack({ variant: 'rail footer' }, tool('lu-settings', 'Settings')))
+  : stack({ variant: 'sidebar' }, header({ dawn: early, art, view }), switcher, stack({ variant: 'rows' }, rows), away, sidebarFooter());
 
 // Two halves around the fixed slot of panes per view; each half folds its own items.
 export const statusBar = ({ left = [], middle = null, right = [], popup = null } = {}) => stack({ variant: 'status bar', grid: true },
