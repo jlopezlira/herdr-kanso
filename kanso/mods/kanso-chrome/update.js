@@ -4,7 +4,7 @@ import { paths } from "./platform-paths.js";
 import { sameVolume, updateHost, windowsInstallScript, windowsLaunchScript, windowsRecoverScript } from "./platform-update.js";
 // Kanso's own updates, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 import { exec, readTextFile, appHome, shared, setShared, notify, layout, run, writeTextFile } from "herdr";
-import { tryOr, tryOrAsync } from "./pure.js";
+import { tryOr, tryOrAsync, nodeById } from "./pure.js";
 import { stateBlockPx } from "./ui-state.js";
 import { COLLAPSED, REFUSAL_LINES, footerHeight, footerRows, railHeight, refusalBlock } from "./footer-model.js";
 import { pieces, runs, shown } from "./pieces.js";
@@ -51,15 +51,6 @@ const LEGACY_BASE_PX = 84, LEGACY_ROW_PX = 36;
 const legacy = (px) => px >= LEGACY_BASE_PX + LEGACY_ROW_PX && px <= LEGACY_BASE_PX + LEGACY_ROW_PX * 5 && (px - LEGACY_BASE_PX) % LEGACY_ROW_PX === 0;
 const SIZES = new Set([1, 2, 3].flatMap((rows) => [footerHeight(rows), footerHeight(rows, REFUSED_PX), railHeight(rows)]));
 const OURS = (px) => legacy(px) || SIZES.has(px);
-
-function findNode(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
-    const found = findNode(child, id);
-    if (found) return found;
-  }
-  return null;
-}
 
 export function compareVersions(a, b) {
   return compareReleases(a, b);
@@ -344,7 +335,7 @@ export class Updater {
 
   // Resized only when at a size we set, so a footer you sized yourself is left alone.
   fit() {
-    const found = tryOr(() => ({ size: findNode(layout()?.root ?? layout(), FOOTER)?.size?.px }));
+    const found = tryOr(() => ({ size: nodeById(layout()?.root ?? layout(), FOOTER)?.size?.px }));
     if (!found) return;
     const { size } = found;
     const want = footerPx(this.available(), this.refused(), shared(COLLAPSED) !== true);

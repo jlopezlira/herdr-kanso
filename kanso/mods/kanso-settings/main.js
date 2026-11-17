@@ -21,7 +21,8 @@ import { DEFAULT_KEYS } from "./defaults.js";
 import { shippedKeymap } from "./platform-keymap.js";
 import { parseChangelog, plain } from "./changelog.js";
 import { channelOf, compareReleases, installedRelease, offerRelease, stableStay } from "./release.js";
-import { tryOrAsync } from "./pure.js";
+import { tryOrAsync, focusOn } from "./pure.js";
+import { pagedDialog } from "./pages.js";
 
 const REPO = "https://github.com/jlopezlira/herdr-kanso";
 const UPDATE_CHOICES = [{ key: "stable", label: "Stable" }, { key: "beta", label: "Early" }];
@@ -45,8 +46,7 @@ const MODIFIERS = new Set(["shift", "control", "ctrl", "alt", "option", "cmd", "
 
 export default class Settings extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     const asked = props()?.page === "mods" ? "pieces" : props()?.page;
     this.page = PAGES.some((p) => p.key === asked) ? asked : "pieces";
     this.capture = null; // { key, section, row, old }: the row waiting for a press
@@ -366,15 +366,17 @@ export default class Settings extends View {
     const t = theme(), c = tokens(t), p = props() ?? {};
     const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.piecesPage(t, c);
     // The same window as kansō help, in its place: each leads to the other, so you can always go back.
-    return v_flex().id("kanso-settings").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().w_full().items_center().gap(G.md)
+    return pagedDialog({
+      name: "settings", handle: this.handle, t, c, page,
+      tabs: PAGES, tab: this.page,
+      onTab: (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); },
+      onKey: (e, cx) => this.key(e, cx),
+      head: h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/settings.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō settings"))
         .when(Boolean(this.shown()), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.shown())))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(segmented("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))
-      .child(v_flex().id(`settings-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
+        .child(div().text_size(11).text_color(t.dim).child("Esc")),
+    });
   }
 }

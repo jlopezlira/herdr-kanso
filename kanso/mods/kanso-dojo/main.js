@@ -3,6 +3,8 @@ import { paths } from "./platform-paths.js";
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, appHome, settings } from "herdr";
+import { focusOn } from "./pure.js";
+import { Lit } from "./lit.js";
 import { G, tokens } from "./ui.js";
 import { button, iconButton } from "./ui-button.js";
 import { Store } from "./store.js";
@@ -17,14 +19,13 @@ const FINGER = { h: ["←", "index, reach"], j: ["↓", "index"], k: ["↑", "mi
 
 export default class Dojo extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.store = new Store(cx.timer);
     this.share = new Share("kanso-dojo", paths.join(appHome(), "data", "kanso-dojo", "share"));
     this.totals = { bests: {}, rounds: 0, rings: 0, fewest: 0, longest: 0, days: [], first: null };
     this.snippet = 0;
     this.pending = ""; // a count, a first g, or f t F T waiting for its letter
-    this.lit = null;
+    this.capLight = new Lit(LIT_MS);
     this.setLevel(1, false);
     cx.spawn(async (cx) => {
       try {
@@ -34,7 +35,7 @@ export default class Dojo extends View {
       } catch (e) { this.say = String(e?.message ?? e); }
       cx.notify();
     });
-    cx.timer.every(500, (cx) => { if (this.round || this.lit) cx.notify(); });
+    cx.timer.every(500, (cx) => { if (this.round || this.capLight.lit) cx.notify(); });
     this.pal = new Companion(cx.timer, this.store); this.choosing = false;
     this.pal.load(cx);
     // A pet moves on its own: a redraw only when its frame changes.
@@ -98,12 +99,6 @@ export default class Dojo extends View {
     });
   }
 
-  light(key, cx) {
-    const at = Date.now();
-    this.lit = { key, at };
-    cx.timer.after(LIT_MS, (cx) => { if (this.lit?.at === at) { this.lit = null; cx.notify(); } });
-  }
-
   key(e, cx) {
     const k = String(e.key ?? "").toLowerCase(), m = e.modifiers ?? {};
     if (m.platform || m.control || m.alt) return;
@@ -121,7 +116,7 @@ export default class Dojo extends View {
       cx.notify(); return;
     }
     if (!ch || ch.length !== 1) return;
-    this.light(ch.toLowerCase(), cx);
+    this.capLight.light(ch.toLowerCase(), cx);
     const lv = this.level, p = this.pending;
     const step = /^[ftFT]$/.test(p) ? { motion: p + ch }
       : p === "g" ? { motion: ch === "g" ? "gg" : null }
@@ -187,10 +182,15 @@ export default class Dojo extends View {
     return `This one takes ${this.need} at best.`;
   }
 
+  // Where the cursor stands and where the target sits, in cell words.
+  cellMark(x, y) {
+    return { here: x === this.at.x && y === this.at.y, goal: x === this.target.x && y === this.target.y };
+  }
+
   grid(c, ink) {
     const { w, h } = this.world;
     return v_flex().gap(3).children(Array.from({ length: h }, (_, y) => h_flex().gap(3).children(Array.from({ length: w }, (_, x) => {
-      const here = x === this.at.x && y === this.at.y, goal = x === this.target.x && y === this.target.y;
+      const { here, goal } = this.cellMark(x, y);
       return div().size(CELL).rounded(5).bg(here ? c.accent : c.text + "08").when(goal && !here, (el) => el.border_2().border_color(c.accent));
     }))));
   }
@@ -198,7 +198,7 @@ export default class Dojo extends View {
   text(c, ink) {
     const mono = settings()?.font_family ?? "JetBrains Mono";
     return v_flex().gap(4).children(this.world.lines.map((line, y) => h_flex().h(26).items_center().children([...(line.length ? line : " ")].map((ch, x) => {
-      const here = x === this.at.x && y === this.at.y, goal = x === this.target.x && y === this.target.y;
+      const { goal, here } = this.cellMark(x, y);
       return div().w(12).h(24).flex().items_center().justify_center().rounded(3).font_family(mono).text_size(15)
         .bg(here ? c.accent : c.text + "00").text_color(here ? ink : goal ? c.text : c.muted)
         .when(goal && !here, (el) => el.border_2().border_color(c.accent).bg(c.accent + "22"))
@@ -207,7 +207,7 @@ export default class Dojo extends View {
   }
 
   cap(c, ink, key, word, hinted, sub = null) {
-    const lit = this.lit?.key === key.toLowerCase();
+    const lit = this.capLight.on(key.toLowerCase());
     return v_flex().gap(3).items_center()
       .child(div().h(38).min_w(38).px(8).rounded(7).border_1()
         .border_color(lit || hinted ? c.accent : c.accent + "70").bg(lit ? c.accent : hinted ? c.accent + "40" : c.accent + "1c")
