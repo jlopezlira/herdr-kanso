@@ -6,6 +6,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { SHARED } from "./sync-share.mjs";
 import { BUILT } from "./build-site.mjs";
+import { BUILT_FORMS } from "./build-issue-forms.mjs";
 import { OUT as SITE_TOKENS } from "./build-site-tokens.mjs";
 
 const ROOT = new URL("../", import.meta.url);
@@ -139,7 +140,7 @@ export const report = (groups) => [
 const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 
 export const scannedFiles = async () => {
-  const made = new Set([...SHARED.flatMap(({ copies }) => copies), ...BUILT, SITE_TOKENS]);
+  const made = new Set([...SHARED.flatMap(({ copies }) => copies), ...BUILT, ...BUILT_FORMS, SITE_TOKENS]);
   const paths = git("ls-files", "-z", "--", ...FOLDERS).split("\0").filter((path) => CODE.test(path) && !made.has(path));
   return Object.fromEntries(await Promise.all(paths.map(async (path) => [path, await readFile(new URL(path, ROOT), "utf8")])));
 };

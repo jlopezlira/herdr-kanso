@@ -38,8 +38,8 @@ jobs:
         run: npm run check:version
       - name: Shared files
         run: npm run sync:share -- --check
-      - name: Site pages
-        run: npm run build:site -- --check
+      - name: Built files
+        run: npm run build:site -- --check && npm run build:issue-forms -- --check
       - name: Repeated code
         env:
           KANSO_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
