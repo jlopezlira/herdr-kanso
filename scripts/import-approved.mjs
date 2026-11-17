@@ -11,14 +11,15 @@ import { normalizeComponent, COMPONENT_CSS } from "./storybook-components.mjs";
 import { selectorCoverage, selectorList } from "./storybook-selectors.mjs";
 import { cssBlocks, normalizeCss } from "./storybook-css.mjs";
 
-// Each rule of css through `keep(rule, selector, body)`, inside @media, @supports and @layer too; a group left empty goes.
-const eachRule = (css, keep) => cssBlocks(css).flatMap((rule) => {
+// Each rule of css through `keep(rule, selector, body, context)`, inside @media, @supports and @layer too, whose
+// selectors make up the context; a group left empty goes.
+const eachRule = (css, keep, context = "") => cssBlocks(css).flatMap((rule) => {
   const brace = rule.indexOf("{"), selector = rule.slice(0, brace), body = rule.slice(brace + 1, -1);
   if (/^@(media|supports|layer)\b/.test(selector)) {
-    const nested = eachRule(body, keep);
+    const nested = eachRule(body, keep, `${context}|${selector}`);
     return nested ? `${selector}{${nested}}` : [];
   }
-  return keep(rule, selector, body);
+  return keep(rule, selector, body, context);
 }).join("\n");
 
 const withoutNavigation = (css) => eachRule(css, (rule, selector) => (selector.includes("kanso-prototype__sidebar") ? [] : [rule]));
@@ -34,20 +35,15 @@ export const sharedThemeCss = (css) => eachRule(css, (rule, selector, declared) 
 });
 export function additionalCss(existing, incoming) {
   const known = new Set();
-  const visit = (css, context = "", collect = false) => cssBlocks(css).flatMap((rule) => {
-    const brace = rule.indexOf("{"), selector = rule.slice(0, brace), body = rule.slice(brace + 1, -1);
-    if (/^@(media|supports|layer)\b/.test(selector)) {
-      const nested = visit(body, `${context}|${selector}`, collect);
-      return nested ? `${selector}{${nested}}` : [];
-    }
+  const visit = (css, collect = false) => eachRule(css, (_rule, selector, body, context) => {
     const selectors = selector.startsWith("@") ? [selector] : selectorList(selector);
     if (!collect) { selectors.forEach((selector) => known.add(`${context}|${selector}`)); return []; }
     const missing = selectors.filter((selector) => !known.has(`${context}|${selector}`));
     missing.forEach((selector) => known.add(`${context}|${selector}`));
     return missing.length ? `${missing.join(",")}{${body}}` : [];
-  }).join("\n");
+  });
   visit(existing);
-  return visit(incoming, "", true);
+  return visit(incoming, true);
 }
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const themed = (node) => node.classes.some((name) => ["k-dark", "k-light"].includes(name));
