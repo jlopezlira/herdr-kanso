@@ -1,4 +1,4 @@
-import { startRemotePoll, advanceRemotePoll, bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, pollStart, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
+import { startRemotePoll, advanceRemotePoll, bring, appRelative, svgPixels, copyFailure, quietError, remoteDue, fileId, ArmPoll, takeStamp, staleView, asOf, bytesLabel } from "./remote-file.js";
 import { restorePath, codeState, isMarkdown, showPanel } from "./lib.js";
 import { documentBones } from "./ui-page.js";
 import { div, image } from "gpui-kit";
@@ -102,7 +102,7 @@ export class Preview {
     this.path = path;
     this.doc?.release(); this.doc = null;
     this.code?.release(); this.code = null; this.edit = null; this.error = null; this.picture = null; this.pixels = null;
-    this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null; this.ask?.clear();
+    startRemotePoll.call(this); this.ask?.clear();
     if (!path) { cx.notify(); return; }
     if (previewKind(path) === "markdown") this.doc = new MarkdownDoc(path, this.on, (to) => this.follow(to, cx));
     else if (previewKind(path) === "picture") this.picture = { busy: true };

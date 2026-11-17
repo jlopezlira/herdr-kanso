@@ -1,4 +1,4 @@
-import { sizedPage, pageBones, heroStack, heroHeading, metricStats } from "./ui-page.js";
+import { sizedPage, pageBones, heroStack, heroHeading, metricStats, skeletonBars } from "./ui-page.js";
 import { localService, serviceFor, REMOTE_TIMEOUT } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
@@ -479,7 +479,7 @@ export class Ports {
         .child(h_flex().items_end().gap(G.md).child(block(narrow ? 72 : 96, narrow ? 48 : 64, 6)).child(line(70, 13))))
       .child(h_flex().gap(narrow ? G.xl : 48).children([52, 46, 64].map((w) => block(w, narrow ? 22 : 28, 4))))
       .child(h_flex().w_full().h(72).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, Math.min(h, 72), 1)))))
+        .children(skeletonBars(block, heights.map((h) => Math.min(h, 72)))))
       .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(70, 12))).children([0, 1, 2, 3].map(two)));
   }
 

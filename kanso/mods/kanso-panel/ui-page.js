@@ -1,4 +1,5 @@
-// Shared page frames, sizing and metric compositions for panels.
+// Kanso's panel kit: a panel page's frame, size, skeleton and metrics. Apache-2.0.
+// Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-page.js.
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { G, breathe } from "./ui.js";

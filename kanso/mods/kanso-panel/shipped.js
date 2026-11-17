@@ -16,7 +16,7 @@ import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
 import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
-import { failure, said, failNote } from "./lib.js";
+import { spawnAndNotify, failure, said, failNote } from "./lib.js";
 
 const DAY = 86400000;
 const RECORDS = "kanso.shipped.bests";
@@ -254,8 +254,7 @@ export class Shipped {
   pick(kind, offset, cx) {
     this.kind = kind; this.offset = Math.min(0, offset);
     this.refresh(cx);
-    cx.spawn(async (cx) => { await this.readRhythm(); cx.notify(); });
-    cx.notify();
+    spawnAndNotify(cx, async (cx) => { await this.readRhythm(); cx.notify(); });
   }
 
   refresh(cx, again = false) {
@@ -292,7 +291,7 @@ export class Shipped {
   startSync(cx) {
     if (this.syncing || !this.login) return;
     this.syncing = true; this.syncError = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try { await this.sync(cx); }
       catch (e) { this.syncError = String(e?.message ?? e); }
       finally {
@@ -302,7 +301,6 @@ export class Shipped {
         this.checkRecords(); cx.notify();
       }
     });
-    cx.notify();
   }
 
   async readRhythm() {

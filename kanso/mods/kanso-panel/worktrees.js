@@ -1,5 +1,5 @@
 import { spawnAndNotify, commandOk, tilde, pool, said, failNote } from "./lib.js";
-import { sizedPage, responsiveSkeleton, pageBones, skeletonStack, skeletonMetrics, heroStack, heroHeading, metricValue, metricStats } from "./ui-page.js";
+import { sizedPage, responsiveSkeleton, pageBones, skeletonStack, skeletonMetrics, heroStack, heroHeading, metricValue, metricStats, skeletonBars } from "./ui-page.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -617,7 +617,7 @@ export class Worktrees {
       .child(h_flex().items_end().gap(G.md).child(block(narrow ? 90 : 120, narrow ? 36 : 48, 6)).child(line(80, 13)))
       .child(line(200, 12))
       .child(h_flex().w_full().h(96).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))));
+        .children(skeletonBars(block, heights)));
   }
 
   async probeWorktree(w) {

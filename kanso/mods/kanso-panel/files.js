@@ -122,7 +122,7 @@ export class Files {
       this.folders = new Set(mem?.folders ?? []);
       this.pendingFile = mem?.file ?? null;
       this.pending = new Set(); this.marks = {}; this.watched = null; this.error = null; this.limited = false;
-      this.stamp = null; this.fresh = null; this.held = null; this.poll = pollStart(); this.arm = null;
+      startRemotePoll.call(this);
       this.rev = this.rev + 1;
     }
     if (!cwd) return;

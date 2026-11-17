@@ -3,6 +3,7 @@ import { processApi } from "./platform-processes.js";
 import { paths } from "./platform-paths.js";
 // Find in an agent's conversation on disk: each turn's text, matched without case or accents.
 import { FIND } from "./find-key.js";
+import { MONTHS, parseOr as parsed } from "./pure.js";
 export { FIND };
 
 export const START_SLACK = 120000; // ps counts whole seconds from a start a little before the record was written
@@ -152,7 +153,6 @@ function placeFocus(acc, row) {
   return { at: acc.at + row.focus, found: true };
 }
 
-import { MONTHS } from "./pure.js";
 
 export function dayKey(ms) {
   const d = dateOf(ms);
@@ -442,7 +442,6 @@ export function kindOf(program, hint = "") {
   return null;
 }
 
-import { parseOr as parsed } from "./pure.js";
 
 export function resolveFind(where) {
   return where?.file ? { action: "find", file: where.file, kind: where.kind ?? null } : { action: "terminal.search" };

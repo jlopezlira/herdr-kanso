@@ -110,6 +110,7 @@ export const failure = (id, what, c, { why = null, fixes = [] } = {}) =>
 export const said = (what, why = null) => ({ what, why: why === null || why === undefined ? null : String(why) });
 export const failNote = (id, note, c, fixes = []) => failure(id, note.what, c, { why: note.why, fixes });
 
+// platform-database.js keeps its own sqliteOk: it is copied into mods without lib.js.
 export const commandOk = (result, fallback = null) => {
   if (result.code !== 0) throw new Error((result.stderr || fallback || result.stdout).trim().split("\n")[0]);
   return result;

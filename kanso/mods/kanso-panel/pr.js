@@ -688,8 +688,7 @@ export class PullRequest {
     this.pending = name;
     spawnAndNotify(cx, async (cx) => {
       try {
-        const res = await this.gh(["api", ...call, "--silent"]);
-        if (res.code !== 0) throw new Error((res.stderr || res.stdout).trim().split("\n")[0]);
+        commandOk(await this.gh(["api", ...call, "--silent"]));
         // Reflect it at once; the reread below confirms it.
         const pr = this.pr;
         if (kind === "labels") this.pr = { ...pr, labels: on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }] };
