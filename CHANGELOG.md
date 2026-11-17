@@ -91,6 +91,7 @@ the branch's rules.
 - Notices in the corner share the kit's toast: the lead, one sentence at body size instead of bold, and at most one small fix, with the detail in the tooltip. Tab reaches a notice, and Enter or Space opens it as a click does. (#321)
 
 - Images shows a strip of thumbnails in place of the circles: the picture on screen in its thumbnail, ringed in the accent and breathing while it loads, and each other picture as a square in its own colour. Markdown in Preview, the Markdown panel and Find's reading view is drawn by the kit as the Storybook draws it: blocks in the body's size, the block under the pointer on a wash, and the block being edited as a raised field with the accent ring. (#324)
+- Send, Sleep and the prompt of many lines are drawn by the kit as the Storybook draws them. Send lists its agents and projects as the kit's rows, six at most before the list scrolls, an agent with no icon of its own shows the terminal's, and no agent or no match reads as the kit's empty state. Sleep lists what keeps its conversation and what will only stop as rows, the folder beside what stops. The prompt of many lines is the kit's dialog with one text field that has the keyboard as it opens, Cancel beside Save; Enter still writes a new line and Escape still closes it. (#325)
 
 ### Fixed
 

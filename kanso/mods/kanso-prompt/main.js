@@ -4,21 +4,19 @@
 // label on the terminal in herdr-core.
 import { View } from "gpui-kit";
 import { tokens } from "./ui.js";
-import { dialog } from "./ui-dialog.js";
-import { field, TextField } from "./ui-field.js";
-import { applyRename, trackText } from "./rename.js";
+import { TextField } from "./ui-field.js";
+import { applyRename, holdField, renameDialog } from "./rename.js";
 import { props, closeOverlay, theme, shared, setShared } from "herdr";
 
 export default class Prompt extends View {
   init(_props, cx) {
-    this.text = props()?.value ?? "";
-    this.input = new TextField({ value: this.text });
-    if (this.text) this.input.set_selected_range({ start: 0, end: this.text.length });
-    trackText(this.input, (text) => { this.text = text; });
-    this.input.on("submit", () => this.submit());
-    this.input.focus();
-    cx.timer.after(600, () => this.input.focus());
-    this.handle = cx.focus_handle();
+    // The name is chosen whole before the field takes the keyboard, so typing replaces it.
+    holdField(this, cx, (value) => {
+      const input = new TextField({ value });
+      if (value) input.set_selected_range({ start: 0, end: value.length });
+      input.on("submit", () => this.submit());
+      return input;
+    });
   }
 
   submit() {
@@ -43,13 +41,6 @@ export default class Prompt extends View {
 
   render() {
     const p = props() ?? {};
-    const c = tokens(theme());
-    return dialog("prompt", c, {
-      title: (p.title ?? "").replace(/^./, (c) => c.toUpperCase()),
-      body: field("pm-input", this.input, c, { label: p.field ?? "Name" }),
-      notes: p.hint ? [{ text: p.hint }] : [],
-      secondary: "Cancel", primary: p.button ?? "Save",
-      onCancel: () => this.cancel(), onPrimary: () => this.submit(), focusHandle: this.handle,
-    });
+    return renameDialog(this, tokens(theme()), p, { label: p.field ?? "Name", primary: p.button ?? "Save" });
   }
 }

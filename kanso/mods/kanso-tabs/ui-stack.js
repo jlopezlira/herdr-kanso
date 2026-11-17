@@ -1,8 +1,8 @@
 // Kanso's panel kit: the stacks, the wrappers that only place other pieces, each laid out as its Storybook class lays it out. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-stack.js.
-import { h_flex, Button, Popover } from "gpui-base";
+import { h_flex, v_flex, Button, Popover } from "gpui-base";
 import { div } from "gpui-kit";
-import { G, H, R, SIDEBAR, TINT, CLEAR, alpha } from "./ui.js";
+import { G, H, R, SIDEBAR, DIALOG, TINT, CLEAR, alpha } from "./ui.js";
 
 // Each child piece drawn with its own id; a piece that draws nothing leaves no gap.
 const drawn = (id, c, kids, more = {}) => kids.map((kid, i) => (typeof kid === "function" ? kid(`${id}-${i}`, c, more) : kid)).filter(Boolean);
@@ -28,11 +28,20 @@ const viewSwitch = (id, c, _flags, [first, menu = null], { onChange = null, onOp
   return h_flex().flex_none().justify_center().mt(G.xs).mb(G.sm).child(menu ? pop.content(menu(`${id}-menu`, c, { onChange })) : pop);
 };
 
+// A dialog's rows, one line each, a hairline apart. Proposed: `scroll`, a set height of at most six rows, past it the list scrolls;
+// it keeps the rows' side room, so a ring is not cut.
+const dialogList = (id, c, { scroll = false }, kids) => {
+  const rows = drawn(id, c, kids).map((kid) => kid.flex_none());
+  return v_flex().id(id).flex_none().mt(G.sm).gap(G.hair).children(rows)
+    .when(scroll, (el) => el.h(Math.min(rows.length * (H.line + G.hair) - G.hair, DIALOG.list)).mx(-G.sm).px(G.sm).overflow_y_scrollbar());
+};
+
 const STACKS = {
   "rail tile": { states: ["strong"], draw: railTile, pressable: true },
   "rail count": { draw: (id, c, _flags, kids) => h_flex().flex_none().items_center().gap(G.hair).children(drawn(id, c, kids)) },
   "view switch": { draw: viewSwitch },
   "view menu": { draw: (id, c, _flags, kids, more) => div().pl(G.xs).children(drawn(id, c, kids, more)) },
+  "dialog list": { states: ["scroll"], draw: dialogList },
 };
 
 /** A stack the app draws: `variant` names its layout, `flags` its states, `kids` its child pieces, `more` its handlers;
