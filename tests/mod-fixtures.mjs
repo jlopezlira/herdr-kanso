@@ -1,5 +1,6 @@
 // Named loaders for production modules used by multiple tests.
-import { exec, load, openedKdb, temporary } from "./helpers.mjs";
+import { join } from "node:path";
+import { databaseTimer, exec, load, openedKdb, temporary } from "./helpers.mjs";
 
 export const loadSpaces = (host) => load("kanso-spaces/main.js", ["Spaces"], host);
 export const loadDescribe = (host) => load("kanso-help/keymap.js", ["describe"], host);
@@ -54,9 +55,15 @@ export const loadDuration = (host) => load("kanso-spaces/agents.js", ["duration"
 export const loadTokenSpend = (host) => load("kanso-spend/main.js", ["TokenSpend"], host);
 export const loadToast = (host) => load("kanso-toast/main.js", ["Toast"], host);
 
-// A real kanso.db in its own temporary folder, opened: `names` are more of kdb.js's exports, `wrap` watches its commands.
-export const temporaryKdb = async (t, names = [], wrap = (run) => run) => {
+// kdb.js in its own temporary folder: `names` are more of its exports, `wrap` watches its commands, and `fresh()` is a new view of a database file there, as after a restart.
+export const temporaryKdbFile = async (t, names = [], wrap = (run) => run) => {
   const dir = await temporary(t);
   const loaded = await load("kanso-spaces/kdb.js", ["Kdb", ...names], { exec: wrap(exec), appHome: () => dir });
-  return { ...loaded, dir, db: await openedKdb(loaded.Kdb) };
+  return { ...loaded, dir, fresh: () => new loaded.Kdb(databaseTimer, join(dir, "kanso")) };
+};
+
+// A real kanso.db in its own temporary folder, opened.
+export const temporaryKdb = async (...args) => {
+  const loaded = await temporaryKdbFile(...args);
+  return { ...loaded, db: await openedKdb(loaded.Kdb) };
 };

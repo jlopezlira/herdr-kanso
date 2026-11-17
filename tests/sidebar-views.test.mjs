@@ -1,5 +1,6 @@
 // The sidebar's rows and its Projects, Status and Threads views draw what the Storybook drawings show.
-import { loadSpaces, loadAgentRowH } from "./mod-fixtures.mjs";
+import { loadAgentRowH } from "./mod-fixtures.mjs";
+import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -9,48 +10,26 @@ const local = (extra = {}) => ({ id: "sp1", name: "app", folder: "/work/app", ma
 const agent = (address, extra = {}) => ({ address, pane: `p-${address}`, tab: "tab1", space: "sp1", space_name: "app", status: null, program: { agent: true, name: "Claude Code" }, title: address, seq: 1, ...extra });
 
 async function sidebar(state) {
-  const ids = [], texts = [], tips = [], icons = [], calls = [], handlers = {}, focused = [];
-  const node = () => {
-    let id = null;
-    const proxy = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "then") return undefined;
-        if (prop === "id") return (x) => { id = x; ids.push(x); return proxy; };
-        if (prop === "child") return (value) => { if (typeof value === "string") texts.push(value); return proxy; };
-        if (prop === "tooltip") return (value) => { if (typeof value === "string") tips.push(value); return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        if (prop === "on_click" || prop === "on_mouse_up" || prop === "on_mouse_down" || prop === "on_open_change") return (...a) => { if (id) handlers[`${prop}:${id}`] = handlers[`${prop}:${a.length > 1 ? `${a[0]}:` : ""}${id}`] = a.at(-1); return proxy; };
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
+  const calls = [], focused = [];
+  const drawn = recorder();
   const field = { on() {}, value: () => state.typed ?? "", set_value() {}, focus() { focused.push(true); }, release() {} };
-  const { Spaces } = await loadSpaces({
-    div: node, image: node, h_flex: node, v_flex: node,
-    svg: (path) => { icons.push(path); return node(); },
-    Popover: { new: (x) => node().id(x) }, Toggle: { new: node }, Button: { new: (x) => node().id(x) },
-    InputState: { new: () => field }, Input: { new: node },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", input: "#333", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f" }),
-    shared: (key) => (key === "kanso.registry" ? state.registry ?? [] : state.shared?.(key) ?? null), setShared: () => {},
-    spaces: () => state.spaces ?? [local()], panes: () => [], agents: () => state.agents ?? [], terminals: () => state.terminals ?? [],
+  const spaces = state.spaces ?? [local()];
+  const { Spaces } = await loadSidebar(drawn.host, {
+    InputState: { new: () => field },
+    shared: (key) => (key === "kanso.registry" ? state.registry ?? [] : state.shared?.(key) ?? null),
+    spaces: () => spaces, agents: () => state.agents ?? [], terminals: () => state.terminals ?? [],
     machines: () => state.layouts ?? [{ name: null, layout: "ready" }], run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-    home: () => "/Users/me", props: () => ({}), window: () => ({ platform: "macos", active: true }),
+    window: () => ({ platform: "macos", active: true }),
   });
-  const view = Object.assign(new Spaces(), {
-    git: state.git ?? {}, shown: new Set((state.spaces ?? [local()]).map((s) => s.id)), born: {}, custom: {},
-    order: "updated", statusOrder: "latest", threadOrder: "said", threadGroup: false,
-    machines: [], parked: [], folded: new Set(), agentsFolded: state.agentsFolded ?? new Set(),
-    sectionsFolded: state.sectionsFolded ?? new Set(), shelvesOpen: state.shelvesOpen ?? new Set(),
-    waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(), hints: {},
-    hoverSpace: state.hoverSpace ?? null, hoverRow: state.hoverRow ?? null,
-    handle: { is_focused: () => false, focus() {} }, hostName: "macbook", sync: { config: {}, status: {} },
-    panel: { set() {}, agents: new Map() }, threads: state.threads ?? null, view: state.view ?? "spaces",
-    tasks: {}, steps: {},
+  const view = Object.assign(new Spaces(), mountedState({
+    git: state.git ?? {}, shown: new Set(spaces.map((s) => s.id)),
+    agentsFolded: state.agentsFolded ?? new Set(), sectionsFolded: state.sectionsFolded ?? new Set(), shelvesOpen: state.shelvesOpen ?? new Set(),
+    hoverSpace: state.hoverSpace ?? null, hoverRow: state.hoverRow ?? null, threads: state.threads ?? null, view: state.view ?? "spaces",
     ...state.own,
-  });
+  }));
   if (state.before) state.before(view);
   view.render();
+  const { ids, texts, tips, icons, handlers } = drawn;
   return { view, ids, texts, tips, icons, calls, handlers, focused };
 }
 
