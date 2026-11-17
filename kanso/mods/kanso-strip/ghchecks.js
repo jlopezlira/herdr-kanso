@@ -159,7 +159,7 @@ const jobFacts = (view) => {
 
 export function prFacts(view) {
   if (view?.number == null) return null;
-  const jobs = jobFacts(view) ?? { fail: view.fail ?? 0, pending: view.pending ?? 0, failed: view.failed ?? null };
+  const jobs = knownJobs(view);
   return {
     number: view.number, state: view.state ?? null, isDraft: Boolean(view.isDraft),
     mergeable: view.mergeable ?? null, mergeStateStatus: view.mergeStateStatus ?? null,
@@ -188,7 +188,7 @@ export function prLine(d) {
   if (view.mergeable === "CONFLICTING" || status === "DIRTY") return said(`conflicts with ${base}`, "blocked", "conflicts");
   if (!status || status === "UNKNOWN") return null;
   if (status === "BEHIND") return said(`behind ${base}`, "working", "behind");
-  const jobs = jobFacts(view) ?? { fail: view.fail ?? 0, pending: view.pending ?? 0, failed: view.failed ?? null };
+  const jobs = knownJobs(view);
   if (status === "BLOCKED" || !CAN_MERGE.has(status)) {
     if (jobs.fail > 1) return said(`${jobs.fail} checks failing`, "blocked", "checks");
     if (jobs.fail === 1) return jobs.failed
@@ -201,3 +201,5 @@ export function prLine(d) {
   // The header does not know merge permission, so a clean pull request says nothing.
   return null;
 }
+
+const knownJobs = (view) => jobFacts(view) ?? { fail: view.fail ?? 0, pending: view.pending ?? 0, failed: view.failed ?? null };

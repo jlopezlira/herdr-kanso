@@ -171,8 +171,8 @@ function pricer(catalog, overrides, rows) {
 
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTHS = MONTHS_LONG.map((name) => name.slice(0, 3));
 
 function parseDay(day) {
   const [y, m, d] = String(day).split("-").map(Number);
@@ -296,11 +296,8 @@ function liveCosts(rows, live, price, labels) {
   if (!live?.size) return [];
   const items = rows.flatMap((row) => {
     if (!live.has(row.session)) return [];
-    const tokens = row.tokens ?? {};
-    const count = sumTokens(tokens);
-    if (!count) return [];
-    const rate = price(row.provider, row.model, row.harness);
-    return [{ row, tokens, count, usd: rate ? estimate(tokens, rate).usd : 0 }];
+    const item = pricedRow(row, price);
+    return item ? [item] : [];
   });
   const sessions = groupInto(items, (item) => item.row.session, (group) => ({
     session: group[0].row.session,
@@ -399,14 +396,11 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
   const model = options.model && options.model !== "all" ? options.model : null;
 
   const priced = rows.flatMap((row) => {
-    const tokens = row.tokens ?? {};
-    const count = sumTokens(tokens);
-    if (!count) return [];
-    const rate = price(row.provider, row.model, row.harness);
-    const { usd, unpriced } = rate ? estimate(tokens, rate) : { usd: 0, unpriced: count };
+    const item = pricedRow(row, price);
+    if (!item) return [];
     const inPrevious = previous && row.day >= previous.start && row.day <= previous.end;
     const inRange = row.day >= range.start && row.day <= range.end;
-    return inRange || inPrevious ? [{ row, tokens, count, rate, usd, unpriced, inRange }] : [];
+    return inRange || inPrevious ? [{ ...item, inRange }] : [];
   });
 
   // Facets ignore their own filter so the menu always lists every choice.
@@ -437,7 +431,7 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
 
   const projects = groupInto(current, (item) => item.row.project, (group) => ({
     sessions: new Set(group.map((item) => item.row.session)),
-    usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf),
+    ...costTotals(group),
   }));
 
   const models = groupInto(current, (item) => item.row.model, (group) => ({
@@ -448,7 +442,7 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     output: sumOf(group, (item) => item.tokens.output || 0),
     cacheRead: sumOf(group, (item) => item.tokens.cacheRead || 0),
     cacheWrite: sumOf(group, (item) => item.tokens.cacheWrite || 0),
-    usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf),
+    ...costTotals(group),
   }));
 
   const taskKey = (item) => {
@@ -471,7 +465,7 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
       first: earliest(days),
       last: latest(days),
       breakdown: breakdownOf(group),
-      usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf),
+      ...costTotals(group),
     };
   });
 
@@ -581,3 +575,13 @@ export function deriveCosts(rows, { catalog, overrides, labels, options = {}, to
     ],
   };
 }
+
+function pricedRow(row, price) {
+  const tokens = row.tokens ?? {};
+  const count = sumTokens(tokens);
+  if (!count) return null;
+  const rate = price(row.provider, row.model, row.harness);
+  const cost = rate ? estimate(tokens, rate) : { usd: 0, unpriced: count };
+  return { row, tokens, count, rate, ...cost };
+}
+const costTotals = (group) => ({ usd: sumOf(group, usdOf), tokens: sumOf(group, countOf), unpriced: sumOf(group, unpricedOf) });

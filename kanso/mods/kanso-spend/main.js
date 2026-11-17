@@ -1,3 +1,4 @@
+import { detailColumn, metricStats, pageBody, pageSize, skeletonStack, skeletonBars, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -15,7 +16,7 @@ import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
@@ -82,9 +83,8 @@ function hiddenInLayout() {
 }
 
 function formatTime(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const at = new Date(iso).getTime();
+  return Number.isNaN(at) ? "" : clock(at, at);
 }
 
 function metricLine(c, name, tokensText, value, { color = c.text, tip = "", medium = false } = {}) {
@@ -462,16 +462,10 @@ export default class TokenSpend extends View {
       : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
     return v_flex().id("spend-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => {
-        const changed = Math.abs((this.width || 0) - size.width) >= 1;
-        this.width = size.width;
-        if (changed) sizeCx.notify();
-      })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+      .on_size_change(pageSize.call(this, { always: true }))
+      .child(pageBody(narrow, (column) => column
           .child(this.header(c, narrow))
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only the totals and the days: no project, task or session names. The post opens with the image in it.", G.sm)))
+          .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
           .child(body)));
   }
 
@@ -514,23 +508,7 @@ export default class TokenSpend extends View {
       .children([0, 1, 2].map((i) => v_flex().w_full().py(G.sm).gap(2).child(line([100, 80, 120][i], 13)).child(line([180, 160, 140][i], 11))));
   }
 
-  skeleton(c, narrow) {
-    const { block, line, row } = ghost(c);
-    const heights = [18, 26, 22, 40, 64, 92, 48, 52, 36, 44, 20, 38, 70, 50, 42, 46, 28, 34, 58, 30, 44, 24, 14, 10, 8, 8, 6, 6, 6, 6, 8];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(h_flex().w_full().gap(G.lg).items_center()
-        .children([44, 52, 34, 52].map((w) => block(w, 10))))
-      .child(v_flex().gap(G.md)
-        .child(line(110, 12))
-        .child(block(narrow ? 170 : 250, narrow ? 40 : 58, 6))
-        .child(line(170, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([46, 64, 58].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(h_flex().w_full().h(150).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))))
-      .child(v_flex().w_full()
-        .child(h_flex().pb(G.sm).child(line(70, 12)))
-        .children([0, 1, 2, 3, 4].map(row)));
-  }
+  skeleton(c, narrow) { return spendSkeleton(c, narrow); }
 
   waitingView(c, narrow) {
     const failed = this.runtimeError || (this.error && !this.running);
@@ -599,10 +577,8 @@ export default class TokenSpend extends View {
     const allLabel = field === "project" ? "All projects" : "All models";
     const shown = value === "all" ? allLabel : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
     const id = `ins-menu-${field}`;
-    const trigger = Button.new(`${id}-trigger`).h(H.compact).gap(6).items_center().cursor_pointer()
+    const trigger = fadedButton(Button.new(`${id}-trigger`).h(H.compact).gap(6).items_center().cursor_pointer())
       .accessibility_label(`${field === "project" ? "Project" : "Model"}: ${shown}`)
-      .hover((style) => style.opacity(0.75))
-      .focus((style) => style.opacity(0.75))
       .child(div().max_w(170).truncate().text_size(12).text_color(value === "all" ? c.muted : c.text).child(shown))
       .child(div().text_size(10).text_color(c.dim).child("⌄"));
     const popover = Popover.new(id).trigger(trigger)
@@ -633,8 +609,7 @@ export default class TokenSpend extends View {
   hero(c, hero, narrow) {
     const offset = this.cost.offset || 0;
     const stepper = this.cost.period !== "all";
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
+    return heroStack(heroHeading()
         .child(h_flex().gap(G.md).items_center()
           .child(div().text_size(15).text_color(c.muted).child(hero.title))
           .when(stepper, (el) => el
@@ -651,10 +626,7 @@ export default class TokenSpend extends View {
         .when(Boolean(hero.plan), (el) => el.child(div().text_size(13).text_color(c.muted).child(hero.plan)))
         .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(12).text_color(c.dim)
           .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))))
-      .when(!hero.empty, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(hero.stats.map((stat) => h_flex().items_end().gap(6).tooltip(stat.tip)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(stat.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(stat.unit))))));
+      .when(!hero.empty, (el) => el.child(metricStats(hero.stats, c, narrow)));
   }
 
   chart(c, chart) {
@@ -690,9 +662,7 @@ export default class TokenSpend extends View {
       .when(items.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Nothing here in this period.")))
       .children(shown.map((item, index) => {
         const active = selected === item.value;
-        return Button.new(`ins-${field}-${index}`).w_full().py(7).cursor_pointer()
-          .hover((style) => style.opacity(0.75))
-          .focus((style) => style.opacity(0.75))
+        return fadedButton(Button.new(`ins-${field}-${index}`).w_full().py(7).cursor_pointer())
           .accessibility_label(`${item.name}, ${item.usdText}`)
           .on_click((_event, cx) => this.openDetail(field, item, cx))
           .child(metricLine(c, item.name, item.tokensText, item.usdText, {
@@ -707,9 +677,8 @@ export default class TokenSpend extends View {
   }
 
   taskView(c, d, narrow) {
-    const row = (name, sub, usd, tokens, index) => h_flex().w_full().items_end().gap(G.md).py(7)
-      .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-      .child(v_flex().flex_1().min_w(0).gap(2)
+    const row = (name, sub, usd, tokens, index) => separatedRow(h_flex().w_full().items_end().gap(G.md).py(7), c, index)
+      .child(detailColumn()
         .child(div().truncate().text_size(13).text_color(c.text).child(name))
         .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub))))
       .child(div().text_size(11).text_color(c.dim).child(tokens))
@@ -748,9 +717,8 @@ export default class TokenSpend extends View {
       .child(v_flex().w_full()
         .child(heading("Sources", "Where Spend reads your sessions. Turning one off removes it from every number."))
         .when(!s, (el) => el.child(this.sourcesBones(c)))
-        .children((s?.sources ?? []).map((source, index) => h_flex().w_full().items_center().gap(G.md).py(G.sm)
-          .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-          .child(v_flex().flex_1().min_w(0).gap(2)
+        .children((s?.sources ?? []).map((source, index) => separatedRow(h_flex().w_full().items_center().gap(G.md).py(G.sm), c, index)
+          .child(detailColumn()
             .child(div().text_size(13).text_color(source.enabled ? c.text : c.muted).child(source.label))
             .child(div().truncate().text_size(11).text_color(c.dim).tooltip(source.roots).child(source.roots)))
           .child(toggleSwitch(`ins-source-${source.id}`, source.enabled, (next, cx) => this.toggleSource(source.id, next, cx), c, {
@@ -785,9 +753,7 @@ export default class TokenSpend extends View {
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)
         .child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE))
         .child(div().text_size(15).text_color(c.text).child("Active now")))
-      .children(sessions.map((s, index) => Button.new(`ins-live-${index}`).w_full().cursor_pointer()
-        .hover((style) => style.opacity(0.75))
-        .focus((style) => style.opacity(0.75))
+      .children(sessions.map((s, index) => fadedButton(Button.new(`ins-live-${index}`).w_full().cursor_pointer())
         .accessibility_label(`${s.title}, ${s.usdText}`)
         .on_click((_event, cx) => this.openDetail("task", s.detail, cx))
         .child(h_flex().w_full().items_center().gap(G.lg).py(G.sm)
@@ -809,10 +775,8 @@ export default class TokenSpend extends View {
       .child(h_flex().w_full().items_end().justify_between().pb(G.md)
         .child(div().text_size(15).text_color(c.text).child("Tasks"))
         .child(div().text_size(12).text_color(c.dim).child(data.tasksNote)))
-      .children(shown.map((task, index) => Button.new(`ins-task-${index}`).w_full().py(G.md).cursor_pointer()
-        .border_t(1).border_color(c.border)
-        .hover((style) => style.opacity(0.75))
-        .focus((style) => style.opacity(0.75))
+      .children(shown.map((task, index) => fadedButton(Button.new(`ins-task-${index}`).w_full().py(G.md).cursor_pointer()
+        .border_t(1).border_color(c.border))
         .accessibility_label(`${task.title}, ${task.usdText}`)
         .on_click((_event, cx) => this.openDetail("task", task.detail, cx))
         .child(h_flex().w_full().items_center().gap(G.lg)
@@ -831,3 +795,24 @@ export default class TokenSpend extends View {
         }, c))));
   }
 }
+
+const spendSkeleton = (c, narrow) => {
+  const { block, line, row } = ghost(c);
+  const heights = [18, 26, 22, 40, 64, 92, 48, 52, 36, 44, 20, 38, 70, 50, 42, 46, 28, 34, 58, 30, 44, 24, 14, 10, 8, 8, 6, 6, 6, 6, 8];
+  return skeletonStack(narrow)
+  .child(h_flex().w_full().gap(G.lg).items_center()
+    .children([44, 52, 34, 52].map((w) => block(w, 10))))
+  .child(v_flex().gap(G.md)
+    .child(line(110, 12))
+    .child(block(narrow ? 170 : 250, narrow ? 40 : 58, 6))
+    .child(line(170, 11))
+    .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([46, 64, 58].map((w) => block(w, narrow ? 18 : 22, 4)))))
+  .child(h_flex().w_full().h(150).items_end()
+    .children(skeletonBars(block, heights)))
+  .child(v_flex().w_full()
+    .child(h_flex().pb(G.sm).child(line(70, 12)))
+    .children([0, 1, 2, 3, 4].map(row)));
+};
+
+const fadedButton = (button) => button.hover((style) => style.opacity(0.75)).focus((style) => style.opacity(0.75));
+const separatedRow = (row, c, index) => row.when(index > 0, (el) => el.border_t(1).border_color(c.border));

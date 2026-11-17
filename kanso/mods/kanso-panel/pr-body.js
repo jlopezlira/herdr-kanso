@@ -25,8 +25,8 @@ function rows(c, lines) {
 
 function logCard(c, body) {
   const took = body.elapsed ? div().flex_none().text_size(T.body).text_color(c.dim).child(body.elapsed) : null;
-  return shell(c, v_flex().w_full().gap(G.sm)
-    .child(h_flex().w_full().items_center().gap(G.sm)
+  return shell(c, cardBody()
+    .child(cardHeading()
       .child(div().flex_none().text_size(T.value).font_medium().text_color(c.text).child(body.job || "Check"))
       .when(Boolean(body.step), (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child("›")).child(div().min_w(0).truncate().text_size(T.value).text_color(c.muted).child(body.step)))
       .child(div().flex_1())
@@ -36,8 +36,8 @@ function logCard(c, body) {
 
 function commentCard(c, body) {
   const where = `${body.path || ""}${body.line ? `:${body.line}` : ""}`;
-  return shell(c, v_flex().w_full().gap(G.sm)
-    .child(h_flex().w_full().items_center().gap(G.sm)
+  return shell(c, cardBody()
+    .child(cardHeading()
       .child(div().size(G.lg).flex_none().rounded_full().bg(c.subtle).flex().items_center().justify_center().text_size(T.body).font_medium().text_color(c.text).child(body.letter || "?"))
       .child(div().flex_none().text_size(T.value).font_medium().text_color(c.text).child(body.author || ""))
       .when(Boolean(where), (el) => el.child(faced(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(where)))))
@@ -49,7 +49,7 @@ const runningMark = (c) => mark(c, { status: "working", size: "sm" });
 function runningCard(c, body) {
   return shell(c, v_flex().w_full().gap(G.sm).children((body.rows ?? []).map((row) => h_flex().w_full().items_center().gap(G.sm)
     .child(runningMark(c))
-    .child(div().min_w(0).truncate().text_size(T.value).text_color(c.text).child(row.name || "Check"))
+    .child(checkName(c, row))
     .when(Boolean(row.workflow), (el) => el.child(div().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(row.workflow)))
     .child(div().flex_1())
     .when(Boolean(row.elapsed), (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(row.elapsed))))));
@@ -57,7 +57,7 @@ function runningCard(c, body) {
 
 function checkCard(c, body) {
   return v_flex().w_full().gap(G.xs).children((body.rows ?? []).map((row) => h_flex().w_full().items_center().gap(G.sm)
-    .child(div().min_w(0).truncate().text_size(T.value).text_color(c.text).child(row.name || "Check"))
+    .child(checkName(c, row))
     .child(div().flex_none().text_size(T.body).text_color(c.dim).child(WORD[row.state] || ""))));
 }
 
@@ -71,3 +71,7 @@ export function verdictCard(c, body) {
   if (body.kind === "running") return runningCard(c, body);
   return null;
 }
+
+const checkName = (c, row) => div().min_w(0).truncate().text_size(T.value).text_color(c.text).child(row.name || "Check");
+const cardBody = () => v_flex().w_full().gap(G.sm);
+const cardHeading = () => h_flex().w_full().items_center().gap(G.sm);

@@ -107,8 +107,7 @@ const streakBlock = (b, c) => (from) => {
   // Always a year's 53 columns, the latest at the right, so the squares keep their size.
   const weeks = (b.weeks ?? []).slice(-53), gap = 4, cell = Math.floor((INNER - 52 * gap) / 53), first = 53 - weeks.length;
   return drawn(top + 7 * cell + 6 * gap, [
-    text(PAD, titleY, 30, c.text, b.title),
-    ...(b.right ? [text(W - PAD, titleY, 22, c.dim, b.right, 'text-anchor="end"')] : []),
+    ...blockTitle(b, c, titleY),
     `<text x="${PAD}" y="${bigY}" font-size="96" font-weight="300" ${paint(c.text)}>${esc(b.n)}<tspan font-size="24" dx="16" ${paint(c.dim)}>${esc(b.unit)}</tspan></text>`,
     ...weeks.flatMap((w, wi) => w.contributionDays.map((d) => {
       const a = LEVEL[d.contributionLevel];
@@ -139,8 +138,7 @@ const barsBlock = (b, c) => (from) => {
   const gap = n > 40 ? 3 : 6, bw = (INNER - (n - 1) * gap) / n, bh = 140, y = top + bh + 30;
   const ticks = b.ticks ?? [], last = ticks.length - 1;
   return drawn(y, [
-    text(PAD, titleY, 30, c.text, b.title),
-    ...(b.right ? [text(W - PAD, titleY, 22, c.dim, b.right, 'text-anchor="end"')] : []),
+    ...blockTitle(b, c, titleY),
     ...values.map((v, i) => {
       const height = Math.max(4, Math.round((v / highest) * bh));
       return `<rect x="${PAD + i * (bw + gap)}" y="${top + bh - height}" width="${bw}" height="${height}" rx="3" ${v ? paint(c.accent, i === peak ? 1 : 0.55) : paint(c.subtle)}/>`;
@@ -265,6 +263,9 @@ export async function shareImage(network, make, workDir) {
   if (!copied) await openPath(png.replace(/\/[^/]+$/, ""));
 }
 
+// Under a panel's header: the share row while open, when the panel has something to share.
+export const shareRows = (view, c, note) => view.share.open && (view.canShare?.() ?? true) ? [view.share.row(c, () => view.shareCard(), note)] : [];
+
 export class Share {
   constructor(id, workDir) { this.id = id; this.workDir = workDir ?? paths.join(appHome(), "data", id); this.open = false; this.busy = null; }
 
@@ -293,3 +294,6 @@ export class Share {
       .child(div().w_full().text_size(11).text_color(c.dim).child(note));
   }
 }
+
+const blockTitle = (block, c, y) => [text(PAD, y, 30, c.text, block.title),
+  ...(block.right ? [text(W - PAD, y, 22, c.dim, block.right, 'text-anchor="end"')] : [])];
