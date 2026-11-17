@@ -45,14 +45,15 @@ const share = (tokens) => {
 
 const WASH = /^color-mix\(in srgb, var\(--fg\) ([\d.]+)%, transparent\)$/;
 
-// The foreground washes' shares per theme: w4, w7, w12, w14.
+// The foreground washes' shares per theme, keyed by the kit's names and read from their tokens.
+export const WASH_TOKENS = { w4: "wash-4", w7: "wash-7", w12: "wash-12", w14: "wash-14" };
 export function washes(tokens) {
   const share = (theme, name) => {
     const t = tokens.colour[theme].find((x) => x.name === name), m = WASH.exec(t?.value ?? "");
     if (!m) throw new Error(`no wash ${name} in ${theme} in ${TOKENS}`);
     return Number(m[1]) / 100;
   };
-  const one = (theme) => `{ ${["w4", "w7", "w12", "w14"].map((name) => `${name}: ${share(theme, name)}`).join(", ")} }`;
+  const one = (theme) => `{ ${Object.entries(WASH_TOKENS).map(([name, token]) => `${name}: ${share(theme, token)}`).join(", ")} }`;
   return `export const WASHES = { dark: ${one("dark")}, light: ${one("light")} };`;
 }
 

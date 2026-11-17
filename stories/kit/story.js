@@ -9,7 +9,7 @@ export function componentStory(page) {
   const all = () => `<div class="kanso-story__gallery">${states.map((item) => `<section class="kanso-story__variant"><h3 class="kanso-story__variant-label">${item.label}</h3>${content(item.markup)}</section>`).join('')}</div>`;
   return {
     name: 'Variants',
-    args: { state: 'all' },
+    args: { state: page === 'Tokens/Icons' ? 'all' : states[0]?.value ?? 'all' },
     argTypes: { state: { name: 'State', control: { type: 'select', labels }, options: ['all', ...states.map((state) => state.value)], description: 'Choose a variant of this component.' } },
     render: ({ state }) => state === 'all' ? all() : content(pick(state).markup),
     parameters: { docs: { source: { type: 'dynamic', transform: (_code, context) => content(pick(context.args.state).markup) } } },

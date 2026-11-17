@@ -5,7 +5,11 @@ import { button, glyph, menu, stack, statusItem } from './pieces.js';
 import keyFile from '../../kanso/keys.json' with { type: 'json' };
 import windowsKeyFile from '../../kanso/keys.windows.json' with { type: 'json' };
 import { LIST_LAYER, describe, layer } from '../../kanso/mods/kanso-help/keymap.js';
+import { GRID, LEVELS, SNIPPETS, gridWorld, move } from '../../kanso/mods/kanso-dojo/dojo.js';
+import { hachiPixels } from '../../kanso/mods/kanso-dojo/mascot-pixels.js';
 
+// A pull request's number as the app shows it.
+export const pullRequest = (number) => `#${number}`;
 const group = (...rows) => stack({ variant: 'row group' }, ...rows);
 // A conversation's own tools under the pointer, and what a session's commands tooltip says.
 export const sessionTools = [{ icon: 'lu-check', label: 'Settle' }];
@@ -46,7 +50,7 @@ export const statusMenus = {
     { separator: true }, { icon: 'lu-square', label: 'Stop' }, { separator: true }, { icon: 'lu-plug', label: 'Open Ports' }, ...hide.slice(1)] }),
   containers: () => menu({ title: 'cart-db · exited 1', items: [{ icon: 'lu-power', label: 'Start' }, { icon: 'lu-terminal', label: 'Logs' },
     { separator: true }, { icon: 'lu-x', label: 'Remove' }, { separator: true }, { icon: 'lu-container', label: 'Open Containers' }, ...hide.slice(1)] }),
-  reviews: () => menu({ title: '2 reviews requested', items: [{ icon: 'lu-git-pull-request', label: '#142 Checkout auth flow', hint: 'acme-shop' },
+  reviews: () => menu({ title: '2 reviews requested', items: [{ icon: 'lu-git-pull-request', label: `${pullRequest(142)} Checkout auth flow`, hint: 'acme-shop' },
     { icon: 'lu-git-pull-request', label: '#87 Locale files', hint: 'docs-site' }, ...hide] }),
 };
 export const statusPanels = ({ open = '' } = {}) => [
@@ -93,7 +97,7 @@ export const appNotices = {
 // Two notices already on screen when the story adds one.
 export const sampleNotices = [
   { state: 'done', home: 'agent', text: 'docs finished: Added docs/limits.md and the table' },
-  { state: 'waits', home: 'pr', text: '#142 · test / unit failed' },
+  { state: 'waits', home: 'pr', text: `${pullRequest(142)} · test / unit failed` },
 ];
 
 // A sample panel's content, composed outside the shell: its tool, its section and rows, and the words of its empty, failed and stale reads.
@@ -139,4 +143,38 @@ export const sampleSortMenus = {
   spaces: () => sortMenu('Agents, pinned first, then by', ['Last update', 'Needs you first', 'By kind', 'As on screen', 'Your order (drag)'], 'Last update'),
   agents: () => sortMenu('In each section, by', ['Latest change first', 'Longest in its state', 'Project'], 'Latest change first'),
   threads: () => sortMenu('Threads, pinned first, then by', ['Your last message', 'When it started'], 'Your last message', [ticked('Grouped by project', false)]),
+};
+
+// The dōjō: its levels, worlds and Hachi come from the mod; the keyboard shows the level's keys.
+const fingers = { h: 'index', j: 'index', k: 'middle', l: 'ring' };
+const arrows = { h: '←', j: '↓', k: '↑', l: '→' };
+const shifted = { 4: '$', 6: '^', g: 'G', f: 'F', t: 'T' };
+const practiceKeys = [...'1234567890qwertyuiopasdfghjkl;zxcvbnm,./'];
+const markOf = (motions, key, lit, hint) => {
+  const own = motions.some((motion) => motion[0] === key);
+  const other = motions.includes(shifted[key]) ? shifted[key] : '';
+  return { state: key === lit ? 'lit' : own || other ? 'kanso' : 'free', hint: key === hint, ...(own ? { corner: arrows[key] ?? other, finger: fingers[key] ?? '' } : other ? { label: other } : {}) };
+};
+const trailOf = (at, path) => path.reduce((cells, motion) => [...cells, move(gridWorld(), cells.at(-1) ?? at, motion)], []).slice(0, -1);
+export const sampleDojo = {
+  title: 'hjkl dōjō',
+  moods: ['calm', 'glad', 'sweat', 'sleep'],
+  tones: ['none', 'success', 'missed', 'armed'],
+  phases: ['start', 'round', 'result'],
+  grid: GRID,
+  targets: 10,
+  sleep: 'z z',
+  levels: LEVELS,
+  lines: SNIPPETS[1],
+  tip: (level) => LEVELS[level - 1].tip,
+  pixels: hachiPixels,
+  keys: practiceKeys,
+  marks: (level, lit, hint) => Object.fromEntries(practiceKeys.map((key) => [key, markOf(LEVELS[level - 1].motions, key, lit, hint)])),
+  trail: (at, path) => trailOf(at, path.split(' ').filter(Boolean)),
+  bests: (text) => text.split(',').map((best) => best.trim()).filter(Boolean),
+  pathKeys: [{ keys: ['[', ']'], label: 'level' }, { keys: ['p'], label: 'pet' }],
+  resultKeys: (level, last) => [{ keys: ['↩'], label: 'play again' }, ...(last ? [] : [{ keys: ['n'], label: `next level: ${LEVELS[level].name}` }])],
+  share: { title: 'Scores and practice days only', items: [{ label: 'Post to X', hover: true }, { label: 'Post to LinkedIn' }, { label: 'Post to Bluesky' }, { separator: true }, { label: 'Save image' }] },
+  leave: { label: 'Leave', kind: 'quiet', key: 'esc' },
+  end: { label: 'End round', kind: 'quiet' },
 };

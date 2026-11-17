@@ -1,5 +1,5 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { avatar, button, chip, chord, dawn, diffText, facts, headerSegment, input, paneName, setting, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
+import { avatar, button, chip, chord, dawn, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
 
 const tool = (icon, label) => button({ label, kind: 'icon', size: 'lg', icon });
 // + names what it adds in the view on show.
@@ -162,9 +162,9 @@ const macRows = [
   [['tab', 1.6], ['q'], ['w'], ['e'], ['r'], ['t'], ['y'], ['u'], ['i'], ['o'], ['p'], ['['], [']'], ['\\']],
   [['capslock', 1.9], ['a'], ['s'], ['d'], ['f'], ['g'], ['h'], ['j'], ['k'], ['l'], [';'], ["'"], ['enter', 1.7]],
   [['shift', 2.4], ['z'], ['x'], ['c'], ['v'], ['b'], ['n'], ['m'], [','], ['.'], ['/'], ['shift', 2.2]],
-  [['ctrl', 1.3], ['alt', 1.3], ['cmd', 1.6], ['space', 5.3], ['cmd', 1.6], ['alt', 1.3], ['left'], ['up'], ['down'], ['right']],
+  [['ctrl', 1.3], ['alt', 1.3], ['cmd', 1.6], ['space', 3.5], ['cmd', 1.6], ['alt', 1.3], ['left'], ['up'], ['down'], ['right']],
 ];
-const pcRows = [...macRows.slice(0, 4), [['ctrl', 1.3], ['cmd', 1.3], ['alt', 1.6], ['space', 5.3], ['alt', 1.6], ['ctrl', 1.3], ['left'], ['up'], ['down'], ['right']]];
+const pcRows = [...macRows.slice(0, 4), [['ctrl', 1.3], ['cmd', 1.3], ['alt', 1.6], ['space', 3.5], ['alt', 1.6], ['ctrl', 1.3], ['left'], ['up'], ['down'], ['right']]];
 const arrows = { space: null, left: '←', right: '→', up: '↑', down: '↓' };
 const pcCaps = { ...arrows, backspace: 'Back', tab: 'Tab', capslock: 'Caps', enter: 'Enter', escape: 'Esc', shift: 'Shift', ctrl: 'Ctrl', alt: 'Alt' };
 export const keyboards = {
@@ -180,11 +180,13 @@ export const keyNames = (os = 'mac') => [...new Set(keyboards[os].rows.flat().ma
 export const heldChord = ({ os = 'mac', held = [], key = null }) => chord(keyboards[os].join, ...modifierKeys.filter((mod) => held.includes(mod)).map((mod) => capOf(os, mod)), ...(key ? [capOf(os, key)] : []));
 
 // Keyboard: the map of one layer. Holding or clicking a modifier picks the layer; a kansō key has ink, a Herdr key is quieter.
+// marks sets a key by name over its layer look: state, next-key hint, corner glyph, finger or label (the dōjō); inert keys take no focus.
 const keyState = { kanso: 'kanso', list: 'kanso', herdr: 'herdr', free: 'free' };
 const keyAct = { kanso: 'Change', herdr: 'Herdr settings', free: 'Give it an action' };
-export const keyboard = ({ os = 'mac', layer, picked = null, hover = null }) => stack({ variant: 'keyboard' },
-  keyboards[os].rows.map((line) => stack({ variant: 'keyboard row' }, line.map(([key, units = 1]) => keycap({ label: capOf(os, key), units, hover: key === hover,
-    state: layer.held.includes(key) ? 'held' : key === picked ? 'picked' : keyState[layer.keys[key]?.kind] ?? 'free' })))));
+const noLayer = { held: [], keys: {} };
+export const keyboard = ({ os = 'mac', layer = noLayer, picked = null, hover = null, marks = {}, inert = false }) => stack({ variant: 'keyboard' },
+  keyboards[os].rows.map((line) => stack({ variant: 'keyboard row' }, line.map(([key, units = 1]) => keycap({ label: capOf(os, key), units, hover: key === hover, inert,
+    state: layer.held.includes(key) ? 'held' : key === picked ? 'picked' : keyState[layer.keys[key]?.kind] ?? 'free', ...marks[key] })))));
 // The picked key: what it does here, or Nothing, with its one act; Lists opens the layer of every list and menu.
 const pickedChord = ({ os, layer, picked }) => layer.keys[picked]?.chord
   ? phrase(...layer.keys[picked].chord.map((part) => named(os, part) ? keyboards[os].caps[part] : part))
@@ -272,3 +274,20 @@ export const paneMenu = ({ name, state = 'none', focused = false, pinned = false
   ...(shown(fold, 'tools into ⋯') ? [] : [{ icon: 'lu-columns-2', label: 'Split right' }, { icon: 'lu-move-horizontal', label: 'Wider or narrower' }]),
   ...(shown(fold, 'close into ⋯') ? [] : [{ icon: 'lu-x', label: 'Close' }]),
   ...pieceLines] });
+
+// The dōjō: the path of levels, the board or the result, Hachi and his line, then the Keyboard with the level's keys marked.
+const dojoHeader = ({ title, level, name, share, shared, end, leave }) => stack({ variant: 'dojo header' }, dojoTitle({ title, level, name }), grow(),
+  share ? button({ label: 'Share', kind: 'icon', icon: 'lu-share', active: shared }) : null, end ? button(end) : null, button(leave));
+const dojoPath = ({ levels, keys }) => stack({ variant: 'dojo path' }, levels.map(dojoLevel), stack({ variant: 'dojo path keys' }, keyLegend({ items: keys })));
+const dojoWorld = ({ cells, lines }) => cells
+  ? stack({ variant: 'dojo grid' }, cells.map(dojoCell))
+  : stack({ variant: 'dojo text' }, lines.map((line) => stack({ variant: 'dojo line' }, line.map(dojoCharacter))));
+const dojoPlay = ({ statistics, progress, world }) => stack({ variant: 'dojo board' }, dojoStatistics(statistics), dojoProgress(progress), dojoWorld(world));
+const dojoResult = ({ record, summary, keys }) => stack({ variant: 'dojo board', result: true }, dojoRecord(record), dojoSummary({ text: summary }), stack({ variant: 'dojo result keys' }, keyLegend({ items: keys })));
+export const dojo = ({ header, path, play, result, pixels, sleep, feedback, marks, share }) => stack({ variant: 'dojo' },
+  dojoHeader(header),
+  stack({ variant: 'dojo body' }, dojoPath(path), stack({ variant: 'dojo main' },
+    result ? dojoResult(result) : dojoPlay(play),
+    stack({ variant: 'dojo conversation' }, mascot({ pixels }), sleep ? sleepLabel({ text: sleep }) : null, dojoFeedback(feedback)),
+    keyboard({ marks, inert: true }))),
+  share ? stack({ variant: 'dojo menu' }, menu(share)) : null);

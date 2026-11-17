@@ -37,6 +37,7 @@ the branch's rules.
 - The mods outside the panel lost their repeated code: what several mods kept copies of (the command reader, the page shell, the rename dialogs' answer, the lit cap, the Open with popup and their like) now lives in one shared piece each. Nothing on screen changes. (#309)
 - The tests, the scripts, the site and the workflows lost their repeated code: the tests share their fixtures, the site pages are built from one layout, the issue forms from one source, and betas, release candidates and stable releases run through one release workflow. Nothing on screen changes.
 - Hachi's pixel map lives in its own file, so the Storybook draws the same Hachi as the app. Nothing on screen changes.
+- The keyboard in Help and the dōjō has rows of one width: the space bar is shorter, so the bottom row ends where the others do.
 - The panels and Spend lost their repeated code: the pages' column, stats and header, Spend's command reader, parsers, store and cost totals each live in one place. Nothing on screen changes.
 - The sidebar's toolbar has larger buttons, 4 apart; Sort stays dim at its default order and its menu ticks the current order before each choice; in the collapsed sidebar, Sort and Search wait under a caret below + and Show sidebar. (#281)
 - The collapsed sidebar no longer shows Herdr's mark above + and Show sidebar.

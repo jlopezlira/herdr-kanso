@@ -1,11 +1,5 @@
 // Each page's one status: approved pages are Ready, every other page is In review.
-export const STATUSES = ["Ready", "In review", "Proposal", "Old look"];
-export const STATUS_PROMPT = {
-  Ready: "Follow the approved reference drawings and guidelines below. Additional states are Proposed.",
-  "In review": "This design is In review and needs approval.",
-  Proposal: "This design is a Proposal and needs approval.",
-  "Old look": "This page shows the app's current look; it is not redesigned yet.",
-};
+export const STATUSES = ["Ready", "In review"];
 
 const READY = ["Start/Philosophy", "Start/About", "Start/One fact, one home", "Start/How to read this Storybook", "Start/How to use the prompt for agents", "Tokens/Colour", "Tokens/Contrast, light and dark", "Tokens/Type", "Tokens/Spacing", "Tokens/Radius", "Tokens/Motion", "Tokens/Icons", "Primitives/Avatar", "Primitives/Button", "Primitives/Card", "Primitives/Chip", "Primitives/Code", "Primitives/Dawn", "Primitives/Dialog", "Primitives/Drag handle", "Primitives/Field", "Primitives/Key hint", "Primitives/Mark", "Primitives/Markdown", "Primitives/Menu", "Primitives/Metric", "Primitives/Skeleton", "Primitives/Switch", "Primitives/Tab", "Primitives/Thumbnail", "Primitives/Toast", "Primitives/Tooltip", "Primitives/Window controls", "Compositions/Header", "Compositions/Sidebar", "Compositions/Sidebar/Asleep", "Compositions/Sidebar/Computer row", "Compositions/Sidebar/Footer", "Compositions/Sidebar/Project row", "Compositions/Sidebar/Section", "Compositions/Sidebar/Tile", "Compositions/Sidebar/View switch", "Compositions/Status bar", "Compositions/Status bar/Item", "Compositions/Status bar/Computer item", "Compositions/Status bar/Needs you item", "Compositions/Edges", "Compositions/State patterns", "Compositions/Activity", "Compositions/Dawn Mode", "Compositions/Keyboard", "Compositions/Keyboard/Key", "Compositions/Keyboard/Picked key", "Compositions/Keyboard/Shortcut row", "Compositions/Notifications", "Compositions/Pane header", "Compositions/Toolbar", "Compositions/Panel", "Compositions/Tab bar"];
 

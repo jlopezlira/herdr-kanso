@@ -7,12 +7,13 @@ export function overlapFor(record) {
   return plans[[file, component, ...state].join('/')] ?? plans[`${file}/${component}`];
 }
 
+// A page draws only its boards: a code state points at the board that draws it, or awaits design.
 export function mergeCoverage(records) {
   const byId = new Map(records.map((record) => [record.id, record]));
   return records.map((record) => {
-    const plan = overlapFor(record);
-    if (!plan) return record;
+    if (record.source !== 'coverage') return record;
     const { html, design, gap, ...feature } = record;
+    const plan = overlapFor(record) ?? { page: record.page, states: {} };
     const target = plan.states[record.id.split('/').slice(3).join('/')];
     const drawing = byId.get(target);
     return { ...feature, page: plan.page, ...(drawing?.html && drawing.page === plan.page ? { design: target } : { gap: true }) };
