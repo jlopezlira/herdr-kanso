@@ -18,7 +18,6 @@ import { Kdb, restDue, machinesToAsk, kansoDir } from "./kdb.js";
 import { agentSnapshot, agentTargets, observedAgents, targetOf, parseTarget, returnSignature, RETURN_LABEL, AWAY_PIECE, destinationOf, livePlaces } from "./since-left-model.js";
 import { SinceLeft } from "./since-left.js";
 import { REGISTRY, WORKTREES, keyOfSpace, keyOfProject, closedProjects, shownNames, startingProjects, folderName, addWorktree, worktreesOf, missingFolders, trimmed, sameProjects } from "./projects.js";
-import { glyphs } from "./marks.js";
 import { sleepingNow, asleepGroups, nameOf, seenNow, conversationOfThread, shownThread, terminalNames, agentKey, SHOWN_LABEL, PROJECT_LABEL, ID_LABEL } from "./roster.js";
 import { pollable, activePlaces } from "./background.js";
 import { listKey, moveTo } from "./listkeys.js";
@@ -27,7 +26,7 @@ import { afterMount } from "./pure.js";
 import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead, flush } from "./sidebar-draw.js";
 import { guideBars, climb } from "./guides.js";
-import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
+import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord } from "./sidebar-rows.js";
 import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens, washes } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, iconButton, Armed } from "./ui-button.js";
@@ -36,7 +35,8 @@ import { field, TextField } from "./ui-field.js";
 import { pendingDot } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { mark } from "./ui-mark.js";
-import { menu, emptyState, skeletonOf } from "./kit.js";
+import { menu, emptyState, skeletonOf, tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
 import { menuList, menuHeight } from "./ui-menu.js";
 import { toolbar } from "./ui-toolbar.js";
 import { header } from "./ui-sidebar-header.js";
@@ -453,7 +453,7 @@ export default class Spaces extends View {
   // A project's + : asks which agent, of the ones installed.
   plus(id, t, place, tip = "New conversation") {
     return rowTool(div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted)
-      .tooltip(tip), t)
+      .tooltip(tooltip({ label: tip })), t)
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.newAgentMenu(place); })
       .child(svg("mods/kanso-chrome/icons/plus.svg").size(13));
@@ -1959,11 +1959,11 @@ export default class Spaces extends View {
       .on_mouse_down("left", (e, cx) => { if (e.click_count !== 2) return; cx.stop_propagation(); this.names.rename(m); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.computerMenu(m, phase); })
       .on_hover((h, cx) => { if (h ? this.hoverMachine !== key : this.hoverMachine === key) { this.hoverMachine = h ? key : null; cx.notify(); } })
-      .when(collapsed, (el) => el.tooltip(machineTip(title, phase, hint)).child(icon))
+      .when(collapsed, (el) => el.tooltip(tooltip({ label: machineTip(title, phase, hint) })).child(icon))
       .when(!collapsed, (el) => el.child(icon)
         .child(div().flex_1().min_w(0).truncate().text_size(T.card).font_medium().text_color(ink).child(title))
         .when(Boolean(word), (row) => row.child(div().flex_none().text_size(T.body).text_color(t[machineWordTone(phase)])
-          .when(Boolean(hint) || syncWord, (el) => el.tooltip(syncWord && !hint ? syncIcon({ name: m, ...this.sync, now: Date.now() }).tip : hint)).child(word)))
+          .when(Boolean(hint) || syncWord, (el) => el.tooltip(tooltip({ label: syncWord && !hint ? syncIcon({ name: m, ...this.sync, now: Date.now() }).tip : hint }))).child(word)))
         .when(pending, (row) => row.child(pendingDot(`machine-pending-${key}`, c)))
         .when(tools.length > 0, (row) => tools.reduce((el, tool) => el.child(tool), row))
         .when(connected && folded && Boolean(tail), (row) => row.child(h_flex().id(`machine-count-${key}`).flex_none().gap(4).items_center().text_size(T.body).text_color(t.dim)
@@ -1984,7 +1984,7 @@ export default class Spaces extends View {
     // Unreachable: its projects as last read, dim, with when.
     if (phase === "unavailable" && !collapsed && mine.length) {
       const when = readWord(this.seenOn?.[m ?? ""]);
-      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(when)) }))];
+      return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(tooltip({ label: when }))) }))];
     }
     if (phase !== "connected" || folded) return [headItem];
     const empty = emptyState({ icon: "folder", text: noProjectsOn(this.names.title(m)), action: "New project" })(`machine-new-${m ?? "local"}`, c, { onClick: () => run("space.new", { machine: m ?? "" }) });
@@ -2054,7 +2054,7 @@ export default class Spaces extends View {
   }
 
   dots(id, t, open) {
-    return rowTool(div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted).tooltip("More"), t)
+    return rowTool(div().id(id).size(20).flex_none().rounded(6).flex().items_center().justify_center().text_color(t.muted).tooltip(tooltip({ label: "More" })), t)
       .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); open(); })
       .child(svg("mods/kanso-chrome/icons/ellipsis.svg").size(14));
   }
@@ -2228,7 +2228,7 @@ export default class Spaces extends View {
     const list = () => (rows.length ? this.railMenu(tip, rows, space) : space ? run("space.select", { id: space }) : null);
     const strong = rows.some((r) => r.strong);
     return h_flex().w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center().child(
-      v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tip)
+      v_flex().id(id).w(36).h(40).flex_none().gap(3).items_center().justify_center().rounded(6).cursor_pointer().tooltip(tooltip({ label: tip }))
         .when(on, (el) => el.bg(alpha(t.foreground, TINT.pill)))
         .when(!on, (el) => el.hover((s) => s.bg(alpha(t.foreground, TINT.row))))
         .when(strong, (el) => el.border_1().border_color(alpha(t.accent, TINT.ring)))
@@ -2319,8 +2319,7 @@ export default class Spaces extends View {
   // The three views; collapsed, the rail's column of icons.
   viewSwitch(t, sp, collapsed = false) {
     const asks = sp.some((s) => s.status === "blocked");
-    const platform = window()?.platform;
-    const tipOf = (key) => { const chord = viewChord(key, platform); return chord ? `${VIEWS[key].label} ${glyphs(chord, platform)}` : VIEWS[key].label; };
+    const tipOf = (key) => tooltip({ label: VIEWS[key].label, chord: boundChord(`kanso-spaces.view-${key}`) });
     const items = Object.keys(VIEWS).map((key) => ({ key, label: VIEWS[key].label, icon: collapsed ? VIEWS[key].icon : null, dot: asks && key === "agents", tip: tipOf(key) }));
     const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
     return collapsed

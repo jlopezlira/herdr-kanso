@@ -9,7 +9,7 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, hc, panes, terminals, machines, home, run, theme, appHome, readTextFile, shared } from "herdr";
 import { tilde, said } from "./lib.js";
-import { failureBlock, metric } from "./kit.js";
+import { failureBlock, metric, tooltip } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
@@ -425,7 +425,7 @@ export class Ports {
         .children((series?.bars ?? []).map((bar) => {
           const total = bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height));
           const looseH = bar.loose ? Math.min(total, Math.max(2, Math.round(bar.looseRatio * height))) : 0;
-          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4).tooltip(bar.tip)
+          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4).tooltip(tooltip({ label: bar.tip }))
             .when(Boolean(bar.mark), (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
             .child(v_flex().w(bar.mark ? 3 : 2).flex_none()
               .when(total - looseH > 0, (el) => el.child(div().w_full().h(total - looseH).rounded_t(1)
@@ -463,7 +463,7 @@ export class Ports {
           .child(h_flex().w_full().flex_wrap().gap_x(G.md)
             .children([r.ports, r.opened, r.ran].filter(Boolean).map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))
             .when(Boolean(r.how), (el) => el.child(div().text_size(11).text_color(r.loose ? c.yellow : c.dim).whitespace_nowrap().child(r.how)))))
-        .child(div().flex_none().text_size(15).font_light().text_color(c.text).whitespace_nowrap().tooltip("Its largest").child(r.peak))))
+        .child(div().flex_none().text_size(15).font_light().text_color(c.text).whitespace_nowrap().tooltip(tooltip({ label: "Its largest" })).child(r.peak))))
       .when(tab.rows.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
         .child(quietLink("pt-more", this.showAll ? "Show fewer" : `Show ${tab.rows.length - LIST_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
   }

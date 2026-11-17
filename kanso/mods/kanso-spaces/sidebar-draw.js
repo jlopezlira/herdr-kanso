@@ -4,6 +4,7 @@ import { run } from "herdr";
 import { G, H, R, T, TINT, alpha, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { pendingDot, PENDING } from "./ui-state.js";
+import { tooltip } from "./kit.js";
 import { commitLayout } from "./layout.js";
 import { asleepControls, gitControls, gitTask, pullKey } from "./sidebar-rows.js";
 
@@ -26,7 +27,7 @@ export function gitTail(g, tree, name, t, place, act) {
   const controls = gitControls(g, { folder, on, id: act.id, active: act.active, pulling: act.pulling === pullKey(folder, on) });
   const { repo, branch, commit } = gitTask(g, name, tree);
   const count = (control) => {
-    const base = div().id(`git-${control.kind}-${act.id}`).flex_none().tooltip(control.tip);
+    const base = div().id(`git-${control.kind}-${act.id}`).flex_none().tooltip(tooltip({ label: control.tip }));
     // A pull is drawn done at once; the dot breathes until git answers.
     if (control.pulling) return base.child(pendingDot(`git-pending-${act.id}`, tokens(t)));
     const go = control.kind === "ahead" ? act.open : act.pull;

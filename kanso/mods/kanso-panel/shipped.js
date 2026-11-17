@@ -12,7 +12,7 @@ import { Share, shareRows } from "./share.js";
 import { G, T, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { metric, skeletonOf, failureBlock } from "./kit.js";
+import { metric, skeletonOf, failureBlock, tooltip } from "./kit.js";
 import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
@@ -472,7 +472,7 @@ export class Shipped {
       if (!d) return div().id(key).size(cell).flex_none(); // before the calendar, or still to come
       const a = level[d.contributionLevel];
       return div().id(key).size(cell).flex_none().rounded(radius).bg(a ? c.accent + a : c.subtle)
-        .tooltip(`${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}`);
+        .tooltip(tooltip({ label: `${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}` }));
     };
     return v_flex().w_full().gap(G.md)
       .child(section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
@@ -542,7 +542,7 @@ export class Shipped {
       .child(section(c, "When you ship", note))
       .child(h_flex().w_full().h(56).items_end().gap(2).children(r.hours.map((n, h) => div().id(`hour-${h}`).flex_1().min_w(2)
         .h(Math.max(2, Math.round((n / top) * 56))).rounded(2).bg(n ? c.accent + (h === peak ? "ff" : "90") : c.subtle)
-        .tooltip(`${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}`))))
+        .tooltip(tooltip({ label: `${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}` })))))
       .child(h_flex().w_full().justify_between().text_size(10.5).text_color(c.dim)
         .children(["00", "06", "12", "18", "23"].map((t) => div().child(t))))
       .when(r.machines.length > 0, (el) => el.child(v_flex().w_full().pt(G.sm)

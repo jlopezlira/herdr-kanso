@@ -13,7 +13,7 @@ import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { skeletonOf } from "./kit.js";
+import { skeletonOf, tooltip } from "./kit.js";
 import { undoLine } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
@@ -160,7 +160,7 @@ export default class Settings extends View {
     const pattern = this.chordsOf(panelRow, group.section, list)[0] ?? null;
     const capturing = this.capture?.row === panelRow || this.capture?.row === gearRow;
     const tile = (id, icon, label, row, chord, old) => v_flex().id(`bar-${id}`).w(78).flex_none().py(G.sm).gap(6).items_center().rounded(8)
-      .cursor_pointer().hover((s) => s.bg(c.subtle)).tooltip(`${label}: click, then press the new key`)
+      .cursor_pointer().hover((s) => s.bg(c.subtle)).tooltip(tooltip({ label, detail: "click, then press the new key" }))
       .when(this.capture?.row === row, (el) => el.bg(c.subtle))
       .on_click((_e, cx) => this.startCapture(row, group.section, old, cx))
       .child(icon ? svg(icon).size(16).text_color(c.muted) : div().size(16).rounded(4).bg(c.subtle))

@@ -17,7 +17,7 @@ import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { factList } from "./ui-facts.js";
 import { section } from "./ui-section.js";
-import { emptyState, failureBlock, metric, skeletonOf } from "./kit.js";
+import { emptyState, failureBlock, metric, skeletonOf, tooltip } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
@@ -729,7 +729,7 @@ export class Worktrees {
         .children(days.map((d) => {
           const peak = top > 0 && d.kb === top;
           return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
-            .tooltip(`${shortDate(d.at)} · ${d.kb ? fmtSize(d.kb) : "nothing"}`)
+            .tooltip(tooltip({ label: shortDate(d.at), detail: d.kb ? fmtSize(d.kb) : "nothing" }))
             .when(peak, (e) => e.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(fmtSize(d.kb))))
             .child(div().w(peak ? 3 : 2).flex_none().rounded_t(1)
               .h(d.kb ? Math.max(3, Math.round((d.kb / top) * height)) : 1)
@@ -755,7 +755,7 @@ export class Worktrees {
       .child(section(c, "Where the space is", fmtSize(total)))
       .child(h_flex().w_full().h(10).rounded(5).overflow_hidden().gap(2)
         .children(parts.filter((p) => p.kb > 0).map((p) => div().h_full().w(pct(p.kb)).flex_shrink_0().bg(color[p.key]).opacity(p.key === "checking" ? 1 : OPACITY.part)
-          .tooltip(`${p.label}: ${fmtSize(p.kb)}`))))
+          .tooltip(tooltip({ label: p.label, detail: fmtSize(p.kb) })))))
       .child(v_flex().w_full().gap(6)
         .children(parts.map((p) => h_flex().w_full().items_center().gap(G.sm)
           .child(dot(c, color[p.key]))
