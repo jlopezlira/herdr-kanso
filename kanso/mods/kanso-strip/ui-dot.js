@@ -3,5 +3,8 @@
 import { div } from "gpui-kit";
 import { G, toneColor } from "./ui.js";
 
-/** `tone`: a kit tone (blocked, working, done...) or a #rrggbb colour. */
-export const dot = (c, tone) => div().size(G.sm).flex_none().rounded_full().bg(tone.startsWith("#") ? tone : toneColor(c, tone));
+export const DOT_SIZES = Object.freeze({ sm: G.xs, md: G.sm });
+
+/** `tone`: a kit tone (blocked, working, done, accent...) or a #rrggbb colour; `size`: sm (pending, a list's bullet) or md. */
+export const dot = (c, tone, size = "md") => div().size(DOT_SIZES[size] ?? DOT_SIZES.md).flex_none().rounded_full()
+  .bg(tone.startsWith("#") ? tone : toneColor(c, tone));

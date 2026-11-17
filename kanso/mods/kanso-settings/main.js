@@ -8,6 +8,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
 import { G, T, TINT, alpha, tokens, breathe } from "./ui.js";
 import { avatar, tile } from "./ui-avatar.js";
+import { dot } from "./ui-dot.js";
 import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
@@ -307,7 +308,7 @@ export default class Settings extends View {
         .children(e.sections.map((s) => v_flex().w_full().pt(G.xs).gap(G.xs)
           .child(div().text_size(12).text_color(c.dim).child(s.name))
           .children(s.items.map((item, i) => h_flex().w_full().gap(G.sm).items_start()
-            .child(div().flex_none().w(6).pt(7).child(div().size(4).rounded_full().bg(c.dim)))
+            .child(dot(c, "dim", "sm").mt(G.sm))
             .child(div().flex_1().min_w(0).text_size(12.5).line_height(1.5).text_color(c.muted).child(plain(item)))))));
     };
     const waiting = offerRelease(updateState.latest, have, channel);

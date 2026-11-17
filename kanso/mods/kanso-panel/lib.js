@@ -2,10 +2,9 @@ import { collect } from "./blocks.js";
 import { paths } from "./platform-paths.js";
 import { div } from "gpui-kit";
 import { EditorState, TextView } from "gpui-base";
-import { spaces, panes, focused, layout, theme, settings, home } from "herdr";
+import { spaces, panes, focused, layout, theme, home } from "herdr";
 import { walkLayout, commitLayout } from "./layout.js";
-import { stateBlock } from "./ui-state.js";
-import { mark } from "./ui-mark.js";
+import { monoFont } from "./ui.js";
 
 export function tilde(path) {
   if (!path) return "";
@@ -39,8 +38,6 @@ export function mapWith(list, step, init) {
     return { state: next, emit: value };
   }, init, () => true);
 }
-
-export const monoFont = () => settings().font_family ?? "JetBrains Mono";
 
 export function insideRoot(path) {
   if (!path || typeof path !== "string" || path.includes("\0")) return false;
@@ -102,13 +99,8 @@ export function showPanel(id, content) {
   return commitLayout({ panel: id ? { id, type: "block", content } : null });
 }
 
-// A panel's failure: the blocked mark, our words, the source's words in mono, then the fixes ({ label, onClick }).
-export const failure = (id, what, c, { why = null, fixes = [] } = {}) =>
-  stateBlock(id, { mark: mark(c, { status: "blocked" }), what, why, fixes, font: monoFont() }, c);
-
-// A note for `failure`: our words, and the tool's words when there are any.
-export const said = (what, why = null) => ({ what, why: why === null || why === undefined ? null : String(why) });
-export const failNote = (id, note, c, fixes = []) => failure(id, note.what, c, { why: note.why, fixes });
+// A failure's props for the kit's failureBlock: our words, and the tool's words when there are any.
+export const said = (text, source = null) => ({ text, source: source === null || source === undefined ? "" : String(source) });
 
 // platform-database.js keeps its own sqliteOk: it is copied into mods without lib.js.
 export const commandOk = (result, fallback = null) => {

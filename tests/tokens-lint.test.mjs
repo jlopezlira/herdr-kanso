@@ -29,8 +29,8 @@ test("A hex-alpha wash, an opacity share or a duration fails outside ui.js; whol
   const errors = compare(looks([{ file: "kanso/mods/x/main.js", text }, { file: "kanso/mods/x/ui.js", text }]), []);
   assert.deepEqual(errors, [
     "kanso/mods/x/main.js:2: \"40\" is a literal hex-alpha wash: use c.w4, c.w7, c.w12, c.w14, CLEAR or alpha() with TINT from ui.js",
-    "kanso/mods/x/main.js:2: 0.45 is a literal opacity: use OPACITY, BEAT, BREATH or PULSE from ui.js",
-    "kanso/mods/x/main.js:2: 0.75 is a literal opacity: use OPACITY, BEAT, BREATH or PULSE from ui.js",
+    "kanso/mods/x/main.js:2: 0.45 is a literal opacity: use OPACITY, BEAT or BREATH from ui.js",
+    "kanso/mods/x/main.js:2: 0.75 is a literal opacity: use OPACITY, BEAT or BREATH from ui.js",
     "kanso/mods/x/main.js:3: 220 is a literal duration: use EASE or GLIDE from ui.js",
   ]);
 });

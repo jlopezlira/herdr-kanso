@@ -7,7 +7,7 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
 import { spaces, panes, agents, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
-import { programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
+import { programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
 import { tryOr, readCommands, pad2 } from "./pure.js";
 import { shortFolder } from "./folder.js";
@@ -16,12 +16,13 @@ import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { G, R, T, W, ICON, OPACITY, TINT, BEAT, CLEAR, DRAG_START, alpha, breathe, glyphOf, mix, tokens, washes } from "./ui.js";
+import { G, R, T, W, ICON, OPACITY, TINT, CLEAR, DRAG_START, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
 import { field, TextField } from "./ui-field.js";
-import { stateLine, pendingDot, PENDING } from "./ui-state.js";
+import { pendingDot, PENDING } from "./ui-state.js";
+import { failureLine } from "./kit.js";
 import { headerSegment } from "./ui-header.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
@@ -272,18 +273,17 @@ export default class Strip extends View {
     const given = givenNames();
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
-    const calm = onBattery(); // on battery the dots hold still (marks.js)
-    const dot = (st, size) => (["working", "blocked", "done"].includes(st)
-      ? div().size(size).rounded_full().bg(t[st]).when(!calm && st !== "done", (d) => breathe(d, BEAT[st])) : null);
+    const c = tokens(t);
+    const corner = (st) => (["working", "blocked", "done"].includes(st) ? mark(c, { status: st, size: "sm" }) : null);
     const MAX_TILES = 8;
     const tile = (id) => {
-      const info = byId.get(id), d = dot(info?.status, 7);
+      const info = byId.get(id), d = corner(info?.status);
       return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(w?.w7 ?? t.hover)
         .flex().items_center().justify_center()
         .hover((h) => h.bg(w?.w12 ?? t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
-        .when(Boolean(d), (el) => el.child(d.absolute().top(-2).right(-2).border(1).border_color(t.chrome)));
+        .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair)));
     };
     const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
       .child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))
@@ -296,7 +296,7 @@ export default class Strip extends View {
         mark: EDGE_MARKS.includes(info?.status) ? info.status : null, onClick: (cx) => { cx.stop_propagation(); show(id); },
       };
     };
-    const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, tokens(t));
+    const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, c);
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
       .when(takes, (el) => el.bg(alpha(t.accent, TINT.bound)).cursor_grabbing())
@@ -497,7 +497,7 @@ export default class Strip extends View {
     };
     const tone = working ? "dim" : null;
     const piece = (seg) => {
-      if (seg.kind === "failure") return stateLine(`digest-failure-${pane}`, mark(c, { status: "blocked" }), seg.text, c, { label: "Refresh", onClick: does.refresh }).tooltip(seg.tip);
+      if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
       if (seg.kind === "pr") return shownAt(fold, "PR") ? headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
         parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c) : null;
       const step = seg.kind === "files" ? "files" : "commits";

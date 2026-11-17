@@ -1,4 +1,4 @@
-import { spawnAndNotify, commandOk, location, key, diffRows, monoFont, tilde, failure, said, failNote } from "./lib.js";
+import { spawnAndNotify, commandOk, location, key, diffRows, tilde, said } from "./lib.js";
 import { detailRow, detailColumn, pageSize, pageBones, skeletonStack, skeletonMetrics } from "./ui-page.js";
 import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
@@ -9,10 +9,12 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
 import { walkLayout } from "./layout.js";
-import { G, T, OPACITY, TINT, alpha, breathe, tokens } from "./ui.js";
+import { G, T, OPACITY, TINT, alpha, breathe, monoFont, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
+import { failureBlock } from "./kit.js";
+import { dot } from "./ui-dot.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
@@ -811,7 +813,7 @@ export class PullRequest {
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
       .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) }))))
-      .when(Boolean(this.note), (el) => el.child(failNote("pr-note", this.note, c)));
+      .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pr-note", c)));
   }
 
   reviewCount() { return this.inbox?.needs?.length ?? 0; }
@@ -1018,7 +1020,7 @@ export class PullRequest {
         .when(Boolean(extra), (el) => el.child(extra)))
       .when(Boolean(picker), (el) => el.child(picker));
     const person = (login, sub, color) => h_flex().gap(4).items_center()
-      .when(Boolean(color), (el) => el.child(div().size(6).rounded_full().bg(color)))
+      .when(Boolean(color), (el) => el.child(dot(c, color)))
       .child(div().text_size(13).text_color(c.text).child(login))
       .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub)));
     const assignees = (pr.assignees ?? []).map((a) => person(a.login));
@@ -1029,7 +1031,7 @@ export class PullRequest {
     const labels = (pr.labels ?? []).map((l) => {
       const color = labelColor(l.color) ?? c.dim;
       return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(alpha(color, TINT.soft))
-        .child(div().size(6).rounded_full().bg(color))
+        .child(dot(c, color))
         .child(div().max_w(160).truncate().text_size(11.5).text_color(c.text).child(l.name));
     });
     const decision = { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[pr.reviewDecision] ?? "";
@@ -1153,7 +1155,7 @@ export class PullRequest {
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
       .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil))))
-      .when(Boolean(this.note), (el) => el.child(failNote("pr-note", this.note, c)));
+      .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pr-note", c)));
   }
 
   body(c, narrow) {
@@ -1163,7 +1165,7 @@ export class PullRequest {
     if (kind === "pr") return this.hero(c);
     if (kind === "loading") return this.skeleton(c, narrow);
     if (kind === "wait") return this.waiting(c, this.wait);
-    if (kind === "error") return failure("pr-failed", this.error.title, c, { why: this.error.detail, fixes: [{ label: "Refresh", onClick: (cx) => this.again(cx) }] });
+    if (kind === "error") return failureBlock({ text: this.error.title, source: this.error.detail, fix: "Refresh" })("pr-failed", c, { onClick: (cx) => this.again(cx) });
     return drawEmpty(this, c);
   }
 

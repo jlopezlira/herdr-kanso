@@ -10,7 +10,7 @@ import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex, v_virtual_list, Scrollbar } from "gpui-base";
 import { exec, watchFolder, theme, openOverlay, shared, setShared, window, layout } from "herdr";
-import { location, key, insideRoot, showPanel, failure } from "./lib.js";
+import { location, key, insideRoot, showPanel } from "./lib.js";
 import { walkLayout } from "./layout.js";
 import { mapSeries } from "./pure.js";
 import { filesMemory } from "./panel-state.js";
@@ -18,7 +18,7 @@ import { G, H, breathe, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { skeleton } from "./ui-skeleton.js";
-import { stateEmpty } from "./ui-state.js";
+import { emptyState, failureBlock } from "./kit.js";
 import { Front } from "./front.js";
 
 const PER_FOLDER = 500, TOTAL = 5000, WATCHED_MS = 60_000;
@@ -314,10 +314,10 @@ export class Files {
         .when(Boolean(this.held), (el) => el.child(h_flex().id("files-stale").px(8).py(4).gap(8).items_center()
           .child(div().text_size(12).text_color(t.dim).child(asOf(this.held.at, Date.now())))
           .child(quietLink("files-retry", "Retry", (cx) => this.retry(cx), c))))
-        .when(Boolean(this.error), (el) => el.child(div().p(8).child(failure("files-error", "Can't list the files", c,
-          { why: this.error, fixes: this.on ? [{ label: "Refresh", onClick: (cx) => this.retry(cx) }] : [] }))))
+        .when(Boolean(this.error), (el) => el.child(div().p(8).child(failureBlock({ text: "Can't list the files", source: this.error, fix: this.on ? "Refresh" : "" })("files-error", c,
+          { onClick: (cx) => this.retry(cx) }))))
         .when(!this.error && this.loading && !this.entries.get("")?.length, el => el.child(this.listBones({ border: t.border })))
-        .when(!this.error && !this.loading && items.length === 0, el => el.child(stateEmpty("files-empty", "file", this.changed ? "Nothing changed" : this.root ? "No files" : "No folder", c)))
+        .when(!this.error && !this.loading && items.length === 0, el => el.child(emptyState({ icon: "file", text: this.changed ? "Nothing changed" : this.root ? "No files" : "No folder" })("files-empty", c)))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }
 }

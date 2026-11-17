@@ -2,6 +2,7 @@
 import { row as drawRow } from "./ui-row.js";
 import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
+import { stateEmpty, stateLine, stateBlock } from "./ui-state.js";
 
 const EVENTS = {
   onPress: (el, fn) => el.on_mouse_down("left", fn),
@@ -53,3 +54,9 @@ export const menu = ({ title = null, items = [] }) => (id, c, more = {}) => {
   given(more);
   return drawMenu(id, { title, items: items.map(withIcon) }, c);
 };
+
+// The state patterns: the one action or fix takes `onClick`.
+const pattern = (draw) => (props) => (id, c, more = {}) => draw(id, c, { ...props, onClick: given(more).onClick ?? null });
+export const emptyState = ({ icon = "", text, action = "" }) => pattern(stateEmpty)({ icon: appIcon(icon), text, action });
+export const failureLine = ({ text, fix = "", detail = "" }) => pattern(stateLine)({ text, fix, detail });
+export const failureBlock = ({ text, source = "", fix = "" }) => pattern(stateBlock)({ text, source, fix });

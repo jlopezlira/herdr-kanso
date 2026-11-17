@@ -6,9 +6,8 @@ import { View, div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, agents, terminals, machines, theme, run, window, props, shared, appHome, readTextFile } from "herdr";
 import { G, T, tokens } from "./ui.js";
-import { mark } from "./ui-mark.js";
 import { iconButton } from "./ui-button.js";
-import { stateLine } from "./ui-state.js";
+import { failureLine } from "./kit.js";
 import { statusItem, needsItem } from "./ui-status.js";
 import { afterMount, aliasText, tryOrAsync } from "./pure.js";
 import { paths } from "./platform-paths.js";
@@ -20,7 +19,7 @@ const SIDEBAR_COLLAPSED = "sidebar.collapsed";
 const go = (command) => () => run(command);
 
 const computerItem = (computer, c) => (computer.fix
-  ? stateLine("status-computer", mark(c, { status: "blocked" }), computer.words, c, { label: computer.fix, onClick: go(computer.command) }).tooltip(computer.tooltip)
+  ? failureLine({ text: computer.words, fix: computer.fix, detail: computer.tooltip })("status-computer", c, { onClick: go(computer.command) })
   : statusItem("status-computer", c, { icon: computer.icon, text: computer.words, pending: computer.pending }));
 
 export default class WorkspaceStatus extends View {

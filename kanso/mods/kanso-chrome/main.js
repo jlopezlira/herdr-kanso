@@ -5,7 +5,7 @@ import { systemApi } from "./platform-system.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights only; an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (footer.js).
 import { View, div } from "gpui-kit";
-import { theme, run, props, shared, setShared, updates, keys, settings, nextCommand, openOverlay, appHome, notify } from "herdr";
+import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
 import { tryOrAsync, readCommands } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
@@ -108,7 +108,7 @@ export default class WorkspaceChrome extends View {
 
   refusal() {
     const why = this.updater?.available() && !this.updater.busy ? this.updater.refused() : null;
-    return why && { why, retry: (cx) => this.updater.install(cx), font: settings().font_family ?? null };
+    return why && { why, retry: (cx) => this.updater.install(cx) };
   }
 
   render() {

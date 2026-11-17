@@ -5,7 +5,8 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { appHome, theme, nextCommand, readTextFile } from "herdr";
-import { G, T, OPACITY, PULSE, breathe, tokens } from "./ui.js";
+import { G, T, OPACITY, breathe, tokens } from "./ui.js";
+import { mark } from "./ui-mark.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
@@ -418,7 +419,7 @@ export default class Memory extends View {
       : `${closing ? "Closing" : "Recycling"} ${Math.min(b.done.length + 1, b.total)} of ${b.total}${b.current ? ` · ${b.current}` : ""}`;
     return v_flex().w_full().gap(G.xs).py(G.sm)
       .child(h_flex().w_full().items_center().gap(G.sm)
-        .when(!b.finished, (el) => el.child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE)))
+        .when(!b.finished, (el) => el.child(mark(c, { status: "working", size: "sm" })))
         .child(div().flex_1().min_w(0).text_size(13).text_color(c.text).child(head))
         .when(b.finished, (el) => el.child(quietLink("guard-batch-dismiss", "Dismiss", (cx) => { this.batchSeen = b.at; this.batch = null; delete this.busy.batch; cx.notify(); }, c))))
       .children(b.done.map((d, i) => h_flex().w_full().items_center().gap(G.md).py(2).id(`guard-batch-${i}`)
@@ -449,7 +450,7 @@ export default class Memory extends View {
     return h_flex().w_full().items_center().gap(G.md).py(G.sm).border_t(1).border_color(c.border)
       .child(v_flex().flex_1().min_w(0).gap(3)
         .child(h_flex().w_full().items_center().gap(G.sm)
-          .when(a.status === "working", (el) => el.child(breathe(div().size(5).flex_none().rounded_full().bg(c.accent), PULSE)))
+          .when(a.status === "working", (el) => el.child(mark(c, { status: "working", size: "sm" })))
           .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(reason ? c.muted : c.text).child(a.name || a.kind || String(a.pid))))
         .child(h_flex().w_full().flex_wrap().gap_x(G.md)
           .children([...agentMeta(a), ...(a.terminal && a.terminal === this.now?.data?.focused ? ["you are on it"] : [])]

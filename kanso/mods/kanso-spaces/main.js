@@ -33,10 +33,10 @@ import { button, iconButton, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
 import { skeleton } from "./ui-skeleton.js";
-import { stateEmpty, pendingDot } from "./ui-state.js";
+import { pendingDot } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { mark } from "./ui-mark.js";
-import { menu } from "./kit.js";
+import { menu, emptyState } from "./kit.js";
 import { menuList, menuHeight } from "./ui-menu.js";
 import { toolbar } from "./ui-toolbar.js";
 import { header } from "./ui-sidebar-header.js";
@@ -1998,7 +1998,7 @@ export default class Spaces extends View {
       return [headItem, ...draw(mine).map((it) => ({ ...it, el: it.el.opacity(OPACITY.away).when(Boolean(when), (el) => el.tooltip(when)) }))];
     }
     if (phase !== "connected" || folded) return [headItem];
-    const empty = stateEmpty(`machine-new-${m ?? "local"}`, "folder", noProjectsOn(this.names.title(m)), c, { label: "New project", onClick: () => run("space.new", { machine: m ?? "" }) });
+    const empty = emptyState({ icon: "folder", text: noProjectsOn(this.names.title(m)), action: "New project" })(`machine-new-${m ?? "local"}`, c, { onClick: () => run("space.new", { machine: m ?? "" }) });
     const kept = this.closedOn(m, ctx).length > 0;
     return [headItem, ...(mine.length ? draw(mine) : kept ? [] : [loading(m) ? loadingRow(m) : item(empty)]), ...closed(m)];
   }
@@ -2165,7 +2165,7 @@ export default class Spaces extends View {
   agentsView(t, sp, ps, ctx) {
     const { c, sections } = this.agentsCtx(t, sp, ctx);
     if (!sections.length) return machines().some((m) => m.layout === "loading") ? [item(this.silhouette(t), 3 * 32 + 4)]
-      : [item(stateEmpty("agents-empty", "activity", "No agents running", c))];
+      : [item(emptyState({ icon: "activity", text: "No agents running" })("agents-empty", c))];
     const project = this.projectOf(sp, t);
     return sections.flatMap((s, i) => {
       const id = `section-${s.id}`;
@@ -2354,7 +2354,7 @@ export default class Spaces extends View {
     const c = tokens(t);
     const project = this.projectOf(sp, t);
     const rows = this.threadRows(ctx);
-    if (!rows.length) return [item(stateEmpty("threads-empty", "message-square", "No conversations yet", c))];
+    if (!rows.length) return [item(emptyState({ icon: "message-square", text: "No conversations yet" })("threads-empty", c))];
     const sections = threadSections(rows, { order: this.threadOrder, group: this.threadGroup, now: ctx.now, since: this.since ?? {} });
     // Under its project's header a conversation is nested: indented, the agent's icon as its mark, and no project line.
     const row = ({ a, th }, nested = false) => {

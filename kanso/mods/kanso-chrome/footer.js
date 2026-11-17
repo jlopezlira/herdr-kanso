@@ -4,8 +4,7 @@ import { h_flex, v_flex, Popover } from "gpui-base";
 import { G, R, T, ICON_CHROME, CHROME_SQUARE, glyphOf } from "./ui.js";
 import { row } from "./ui-row.js";
 import { menu } from "./ui-menu.js";
-import { mark } from "./ui-mark.js";
-import { stateBlock } from "./ui-state.js";
+import { failureBlock } from "./kit.js";
 import { ROW, PAD, REFUSAL, refusalBlock } from "./footer-model.js";
 
 const inkOf = (c, quiet) => (quiet ? c.muted : c.text);
@@ -24,7 +23,7 @@ const square = (c, { key, icon, name, quiet, onClick }) => h_flex().id(`footer-$
   .when(Boolean(onClick), (el) => el.on_click((_e, cx) => onClick(cx)))
   .child(chromeGlyph(icon, inkOf(c, quiet)));
 
-const refusal = (c, { why, retry, font }) => stateBlock("footer-refused", { mark: mark(c, { status: "blocked" }), ...refusalBlock(why, retry), font }, c).mt(REFUSAL.above).mb(REFUSAL.below);
+const refusal = (c, { why, retry }) => failureBlock(refusalBlock(why))("footer-refused", c, { onClick: retry }).mt(REFUSAL.above).mb(REFUSAL.below);
 
 const withMenu = (trigger, c, { open, onOpenChange, items }) => {
   const pop = Popover.new("footer-settings-menu").trigger(trigger).anchor("bottom_left").open(open)
@@ -32,7 +31,7 @@ const withMenu = (trigger, c, { open, onOpenChange, items }) => {
   return open ? pop.content(menu("footer-settings-list", { title: "Settings", items }, c)) : pop;
 };
 
-/** `rows`: footerRows, each with its onClick; `settings`: { open, onOpenChange, items } for its menu; `refused`: { why, retry, font } or null. */
+/** `rows`: footerRows, each with its onClick; `settings`: { open, onOpenChange, items } for its menu; `refused`: { why, retry } or null. */
 export function sidebarFooter(c, { collapsed, rows, settings, refused = null }) {
   const draw = collapsed ? square : line;
   const drawn = rows.flatMap((entry) => {
