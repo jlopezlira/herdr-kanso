@@ -95,9 +95,9 @@ These features exist in the app and stay available; they await a design.
 | Primitives/Tab | Tabs · Reorder | kanso/mods/kanso-tabs/main.js:390 |
 | Primitives/Tab | Tabs · Unmeasured | kanso/mods/kanso-tabs/tab-bar-model.js:17 |
 | Primitives/Tab | Tabs · Zoomed | kanso/mods/kanso-strip/header-model.js:75 |
-| Primitives/Toast | Notice · Information | kanso/mods/kanso-toast/toast-model.js:5 |
-| Primitives/Toast | Notice · Long source | kanso/mods/kanso-toast/main.js:67 |
-| Primitives/Toast | Notice · Warning | kanso/mods/kanso-toast/toast-model.js:4 |
+| Primitives/Toast | Notice · Information | kanso/mods/kanso-panel/ui-toast.js:10 |
+| Primitives/Toast | Notice · Long source | kanso/mods/kanso-panel/ui-toast.js:37 |
+| Primitives/Toast | Notice · Warning | kanso/mods/kanso-panel/ui-toast.js:10 |
 | Primitives/Toast | Notice Stack · Different actions | kanso/mods/kanso-toast/stack.js:12 |
 | Primitives/Toast | Notice Stack · Duplicate coalesced | kanso/mods/kanso-toast/stack.js:35 |
 | Primitives/Toast | Notice Stack · Expired | kanso/mods/kanso-toast/stack.js:8 |

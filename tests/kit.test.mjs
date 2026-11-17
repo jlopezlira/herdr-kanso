@@ -12,8 +12,8 @@ const host = drawingHost;
 const kits = async () => themed({
   ...await loadTokens(host()),
   ...await loadRow(host()),
-  ui: { ...await load("kanso-panel/ui-button.js", ["button"], host()), ...await loadMenu(host()) },
-  app: await load("kanso-panel/kit.js", ["row", "button", "menu"], host()),
+  ui: { ...await load("kanso-panel/ui-button.js", ["button"], host()), ...await loadMenu(host()), ...await load("kanso-panel/ui-toast.js", ["toast"], host()) },
+  app: await load("kanso-panel/kit.js", ["row", "button", "menu", "toast"], host()),
 }, night);
 const night = KIT_NIGHT;
 // A drawing as plain data: handlers compare by kind, since each draw makes new ones.
@@ -118,6 +118,30 @@ test("A menu from the shared kit draws what the app's menu draws, its items' Luc
   assert.deepEqual(drawn(shared), drawn(ui.menu("m", { title: "Sort", items: items("") }, c)));
   assert.ok(svgs(shared).every((path) => !path.includes("lu-")), svgs(shared).join(", "));
   assert.throws(() => app.menu({ items: [] })("m", c, { title: "Sort" }), /only handlers, not title/);
+});
+
+test("A toast from the shared kit draws what the app's toast draws, its Lucide icon the app's and its press the handler given", async () => {
+  const { ui, app, c } = await kits();
+  const props = { level: "success", title: "kansō updated", action: "Restart", detail: "3.31.0", tone: "muted" };
+  const hits = [];
+  const onClick = () => hits.push("home");
+  const shared = app.toast({ ...props, icon: "lu-refresh-cw" })("t", c, { onClick });
+  assert.deepEqual(drawn(shared), drawn(ui.toast("t", c, { ...props, icon: "refresh-cw", onClick })));
+  press(shared, "t-fix");
+  assert.deepEqual(hits, ["home"]);
+  assert.deepEqual(svgs(app.toast({ title: "Saved" })("t", c)), [], "no icon is the Storybook's none: the level's dot");
+  assert.throws(() => app.toast({ title: "Saved" })("t", c, { title: "Gone" }), /only handlers, not title/);
+});
+
+test("A toast draws the Storybook's sentence at body size, its second line and its Explain button", async () => {
+  const { app, c } = await kits();
+  const { T } = await load("kanso-panel/ui.js", ["T"], host());
+  const props = { title: "Failed", body: "Details", explain: "Claude", action: "Retry" };
+  const el = app.toast(props)("t", c);
+  assert.ok(storybookPieces.toast(props).includes("Explain to Claude"));
+  assert.deepEqual(texts(el), ["Failed", "Details", "Retry", "Explain to Claude"]);
+  assert.deepEqual(nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "text_size").map((call) => call[1])).slice(0, 2), [T.value, T.body]);
+  assert.ok(svgs(el).some((path) => path.endsWith("bot.svg")));
 });
 
 test("The Storybook's shared kit is its pieces, and the app's has only Storybook pieces", (t) => {

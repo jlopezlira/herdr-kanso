@@ -3,6 +3,7 @@ import { row as drawRow } from "./ui-row.js";
 import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
 import { stateEmpty, stateLine, stateBlock } from "./ui-state.js";
+import { toast as drawToast } from "./ui-toast.js";
 
 const EVENTS = {
   onPress: (el, fn) => el.on_mouse_down("left", fn),
@@ -11,6 +12,7 @@ const EVENTS = {
 };
 const HANDLERS = ["on", "onClick", "onHover", "onKey", "focusHandle", ...Object.keys(EVENTS)];
 const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
+const iconOf = (icon) => (icon === "none" ? null : appIcon(icon));
 const withIcon = (part) => (part?.icon ? { ...part, icon: appIcon(part.icon) } : part);
 const keyOf = ({ icon, label }) => (icon ? appIcon(icon) : label);
 const parts = (slot) => [slot].flat(Infinity).filter((part) => part !== null && part !== undefined && part !== false);
@@ -46,7 +48,7 @@ export const row = ({ icon, flag, detail, action, actions, start, tools, ...prop
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
 export const button = ({ label, icon = "none", ...props }) => (id, c, more = {}) => {
   const { onClick = null } = given(more);
-  return drawButton(id, label, onClick, c, { ...props, icon: icon === "none" ? null : appIcon(icon) });
+  return drawButton(id, label, onClick, c, { ...props, icon: iconOf(icon) });
 };
 
 // Each item carries its own `onClick`: a menu's items are data, not tools.
@@ -55,8 +57,10 @@ export const menu = ({ title = null, items = [] }) => (id, c, more = {}) => {
   return drawMenu(id, { title, items: items.map(withIcon) }, c);
 };
 
-// The state patterns: the one action or fix takes `onClick`.
+// The state patterns and the toast: the one action or fix takes `onClick`.
 const pattern = (draw) => (props) => (id, c, more = {}) => draw(id, c, { ...props, onClick: given(more).onClick ?? null });
 export const emptyState = ({ icon = "", text, action = "" }) => pattern(stateEmpty)({ icon: appIcon(icon), text, action });
 export const failureLine = ({ text, fix = "", detail = "" }) => pattern(stateLine)({ text, fix, detail });
 export const failureBlock = ({ text, source = "", fix = "" }) => pattern(stateBlock)({ text, source, fix });
+// A press on the toast or its fix goes home.
+export const toast = ({ icon = "none", ...props }) => pattern(drawToast)({ ...props, icon: iconOf(icon) });
