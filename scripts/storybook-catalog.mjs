@@ -120,6 +120,7 @@ const coveragePage = {
 
 export function pageFor(source, file, key) {
   const base = file.replace(/\.(json|stories\.js)$/, '');
+  if (source === 'panels' && key === 'SystemNotice') return coveragePage.SystemNotice;
   if (source === 'panels') return ({ skeleton: 'Compositions/Panel', availability: 'Compositions/State patterns' })[base] ?? `Panels/${base === 'pr' ? 'PR' : base[0].toUpperCase() + base.slice(1)}`;
   if (source === 'coverage') {
     if (!coveragePage[key]) throw new Error(`Missing component route: ${file}:${key}`);

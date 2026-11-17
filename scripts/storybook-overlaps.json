@@ -109,7 +109,7 @@
     }
   },
   "guard/SystemNotice": {
-    "page": "Panels/Memory",
+    "page": "Compositions/Notifications",
     "states": {
       "Batch": "panels/memory/SystemNotice/Batch",
       "Did not resume": "panels/memory/SystemNotice/Did not resume",

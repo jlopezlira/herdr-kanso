@@ -26,7 +26,7 @@ export const guidelines = {
     ["Shizen", "Content keeps its own corner.", "A device's frame follows the device, so its radius is not from the scale."],
   ],
   "Tokens/Motion": [
-    ["Shizen", "Motion.", "Only three things move. The ensō spins. A working name shimmers with three glints, with no dots. A blocked pane's bar breathes. Nothing changes size or place. Reduced motion holds everything still."],
+    ["Shizen", "Motion.", "Only these move: the ensō spins, a working name shimmers with three glints with no dots, a blocked pane's bar breathes, a skeleton breathes while it loads, the Dawn sun rises once. Nothing changes size or place. Reduced motion holds everything still."],
     ["Shizen", "Live states.", "Hover moves only tone. Hover never reaches a disabled control and never replaces a state."],
     ["Kansō", "Armed.", "Only an action that cannot be undone asks twice. It fills with accent and reads \"Press again to <verb>\". Both labels share one cell, so nothing moves."],
   ],
@@ -301,7 +301,7 @@ export const sections = {
   "Tokens/Type": [adding("a type size", "A new size or weight takes one of the type roles; size and weight tell the level.")],
   "Tokens/Spacing": [adding("a space", "A new space stays on the scale, and the same relation always gets the same gap.")],
   "Tokens/Radius": [adding("a radius", "A new radius belongs to one kind of piece, and the same piece always gets the same radius.")],
-  "Tokens/Motion": [adding("a motion", "Only three things move; a new motion replaces one of them or is not added. It changes tone, never size or place, and holds still with reduced motion.")],
+  "Tokens/Motion": [adding("a motion", "Only the motions listed above move; a new motion replaces one of them or is not added. It changes tone, never size or place, and holds still with reduced motion.")],
   "Tokens/Icons": [
     ["Adding an icon", "This list is the only set. If you need another icon, take it from Lucide ([lucide.dev/icons](https://lucide.dev/icons), version 1.72.0, ISC license). Copy its markup unchanged, add it here with an **lu-** id and the meaning it carries, and only then use it. One name per meaning, never a custom icon."],
   ],
