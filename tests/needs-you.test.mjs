@@ -10,6 +10,9 @@ const agent = (address, status = "blocked", extra = {}) => ({ address, status, p
 const terminal = (address, status_ms = 1, extra = {}) => ({ address, status_ms, state: "live", ...extra });
 const addresses = (rows) => rows.map((row) => row.address);
 
+const MODES = ["spaces", "agents", "threads"];
+const waitingNotFinished = (texts) => assert.deepEqual(["Waiting for you", "Finished"].map((word) => texts.includes(word)), [true, false]);
+
 test("Only an agent waiting on you is listed, oldest first across projects", () => {
   const rows = waitingQueue([agent("new"), agent("finished", "done"), agent("old", "blocked", { space_name: "Other" })],
     [terminal("new", 30), terminal("finished", 1), terminal("old", 10)]);
@@ -186,8 +189,7 @@ test("The sidebar list supports click and Enter, with project, name, reason and 
   view.nav = view.navNext;
   assert.ok(ui.texts.includes("Project"));
   assert.ok(ui.texts.includes("a"));
-  assert.ok(ui.texts.includes("Waiting for you"));
-  assert.equal(ui.texts.includes("Finished"), false);
+  waitingNotFinished(ui.texts);
   assert.ok(ui.texts.includes("1m"));
   view.listKeyDown({ key: "down" }, cx);
   assert.deepEqual(scrolled, [1]);
@@ -207,37 +209,33 @@ test("Projects, Status and Threads keep the return digest when Needs you is hidd
     listed: () => [], seen: () => new Map(), tools: ui.host.div, viewSwitch: ui.host.div,
     agentsView: () => [], threadsView: () => [], grouped: () => [],
   });
-  for (const mode of ["spaces", "agents", "threads"]) {
-    view.view = mode;
-    view.needsOpen = false;
+  const drawAs = (mode, open) => {
+    Object.assign(view, { view: mode, needsOpen: open });
     ui.texts.length = 0;
     view.render();
+  };
+  const digestShown = () => {
+    assert.ok(ui.texts.includes(returned.rows[0].text));
+    assert.equal(returned.showing, true);
+  };
+  for (const mode of MODES) {
+    drawAs(mode, false);
     assert.equal(ui.texts.includes("Needs you · 2"), false);
     assert.ok(ui.texts.includes("While you were away"));
-    assert.ok(ui.texts.includes(returned.rows[0].text));
-    assert.equal(returned.showing, true);
-    view.needsOpen = true;
-    ui.texts.length = 0;
-    view.render();
+    digestShown();
+    drawAs(mode, true);
     assert.equal(ui.texts.includes("Waiting for you"), false);
-    assert.ok(ui.texts.includes(returned.rows[0].text));
-    assert.equal(returned.showing, true);
+    digestShown();
   }
   for (const choice of ["show", "needed"]) {
     sharedState.set("kanso.pieces", { "sidebar.needs": choice });
-    for (const mode of ["spaces", "agents", "threads"]) {
-      view.view = mode;
-      view.needsOpen = false;
-      ui.texts.length = 0;
-      view.render();
+    for (const mode of MODES) {
+      drawAs(mode, false);
       assert.ok(ui.texts.includes("Needs you · 2"), choice);
       assert.ok(ui.texts.includes("While you were away"));
       assert.equal(returned.showing, true);
-      view.needsOpen = true;
-      ui.texts.length = 0;
-      view.render();
-      assert.ok(ui.texts.includes("Waiting for you"));
-      assert.equal(ui.texts.includes("Finished"), false);
+      drawAs(mode, true);
+      waitingNotFinished(ui.texts);
       assert.equal(returned.showing, false, "a hidden digest is not acknowledged");
       assert.ok(!view.nav.some((row) => row.key === "since-7"));
       view.needsOpen = false;
