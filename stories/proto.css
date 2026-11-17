@@ -154,7 +154,6 @@ section[data-reference-board^="panels-a-"] .kanso-panel>*,[data-reference-board=
 .kanso-story__theme.kanso-story__theme--framed{box-shadow:0 0 0 var(--k-w-line) var(--border)}
 .kanso-story--room-below{margin-bottom:var(--k-sp-8)}
 .kanso-story__stage.kanso-story__stage--corner{display:flex;align-items:flex-end;justify-content:flex-end}
-.kanso-story--anchored{position:relative}
 .kanso-story__bars-row.kanso-story__bars-row--close{margin-top:var(--k-sp-2)}
 .kanso-story__bars-row.kanso-story__bars-row--tight{gap:var(--k-sp-3)}
 .kanso-story__layout-column.kanso-story__layout-column--close{gap:var(--k-sp-2)}

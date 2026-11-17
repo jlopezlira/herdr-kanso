@@ -53,7 +53,7 @@ test("A primitive given an inline style or a raw px or colour fails the lint", (
 });
 
 test("A pull request number a story shows is not a raw colour, while a colour in its markup still is", () => {
-  const html = '<div class="kanso-panel__scope" data-tone="#fa0">#142 · src/api</div>';
+  const html = '<div class="kanso-panel__scope" data-tone="#fa0" aria-label="Open PR #142">#142 · src/api</div>';
   assert.deepEqual(rawValues("Panels/PR", markupTags(html)), [{ source: "Panels/PR", value: "raw #fa0" }]);
 });
 

@@ -75,3 +75,4 @@
 .kanso-story__frame > .kanso-pane.kanso-story__pane { flex: none; inline-size: var(--k-w-pane); max-inline-size: 100%; }
 .kanso-story__frame > .kanso-pane.kanso-story__pane { overflow: visible; }
 .kanso-story__frame > .kanso-pane.kanso-story__pane:has(.kanso-pane-header__menu) { margin-block-end: var(--k-room-pane-menu); }
+.kanso-story__anchor { position: relative; }
