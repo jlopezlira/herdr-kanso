@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { exec } from "./helpers.mjs";
-import { windows, test, updates, small, tree, stages, recovered } from "./update-harness.mjs";
+import { windows, test, small, tree, stages, recovered, stageDir } from "./update-harness.mjs";
 
 test("An undoing killed as its stage was being removed never takes back what it put back", async (t) => {
   const s = await small(t);
@@ -11,8 +11,7 @@ test("An undoing killed as its stage was being removed never takes back what it 
   // cut short could leave it: the release's keys.json, your backups.
   const home = await s.fresh("undone");
   assert.equal(await s.run(home, 31, { sabotage: true }), "killed");
-  const [stage] = await stages(home);
-  const st = join(updates(home), stage);
+  const st = await stageDir(home);
   assert.equal(await readFile(join(st, "slots"), "utf8"), "", "every slot is out of the journal");
   if (windows) await exec("icacls", [st, "/reset", "/T", "/C", "/Q"]);
   else await exec("chmod", ["-R", "u+w", st]); // the sabotaged kanso-chrome
@@ -27,8 +26,7 @@ test("A finished install killed as its stage was being removed is not done again
   // picture, its other files, your backups, the stamp.
   const home = await s.fresh("committed");
   assert.equal(await s.run(home, 15), "killed");
-  const [stage] = await stages(home);
-  const st = join(updates(home), stage);
+  const st = await stageDir(home);
   await Promise.all(["src", "old", "stamp", "slots.part"].map((x) => rm(join(st, x), { recursive: true, force: true })));
   assert.deepEqual((await readdir(st)).toSorted(), ["committed", "slots"]);
   assert.equal(await recovered(s, home, "a removal cut short"), "new");

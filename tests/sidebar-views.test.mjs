@@ -1,4 +1,6 @@
 // The sidebar's rows and its Projects, Status and Threads views draw what the Storybook drawings show.
+import { loadSessionHeight } from "./mod-fixtures.mjs";
+import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -7,49 +9,35 @@ const NOW = Date.now();
 const local = (extra = {}) => ({ id: "sp1", name: "app", folder: "/work/app", machine: null, active: true, tabs: [{ id: "tab1" }], ...extra });
 const agent = (address, extra = {}) => ({ address, pane: `p-${address}`, tab: "tab1", space: "sp1", space_name: "app", status: null, program: { agent: true, name: "Claude Code" }, title: address, seq: 1, ...extra });
 
+const ops = { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] };
+// The sidebar after a double click on the project's name.
+const nameDoubleClicked = async () => {
+  const drawn = await sidebar({});
+  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  return drawn;
+};
+
 async function sidebar(state) {
-  const ids = [], texts = [], tips = [], icons = [], calls = [], handlers = {}, focused = [];
-  const node = () => {
-    let id = null;
-    const proxy = new Proxy({}, {
-      get(_target, prop) {
-        if (prop === "then") return undefined;
-        if (prop === "id") return (x) => { id = x; ids.push(x); return proxy; };
-        if (prop === "child") return (value) => { if (typeof value === "string") texts.push(value); return proxy; };
-        if (prop === "tooltip") return (value) => { if (typeof value === "string") tips.push(value); return proxy; };
-        if (prop === "when") return (cond, fn) => (cond ? fn(proxy) : proxy);
-        if (prop === "on_click" || prop === "on_mouse_up" || prop === "on_mouse_down" || prop === "on_open_change") return (...a) => { if (id) handlers[`${prop}:${id}`] = handlers[`${prop}:${a.length > 1 ? `${a[0]}:` : ""}${id}`] = a.at(-1); return proxy; };
-        return () => proxy;
-      },
-    });
-    return proxy;
-  };
+  const calls = [], focused = [];
+  const drawn = recorder();
   const field = { on() {}, value: () => state.typed ?? "", set_value() {}, focus() { focused.push(true); }, release() {} };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
-    div: node, image: node, h_flex: node, v_flex: node,
-    svg: (path) => { icons.push(path); return node(); },
-    Popover: { new: (x) => node().id(x) }, Toggle: { new: node }, Button: { new: (x) => node().id(x) },
-    InputState: { new: () => field }, Input: { new: node },
-    theme: () => ({ foreground: "#fff", muted: "#888", dim: "#666", chrome: "#111", hover: "#222", input: "#333", ansi2: "#0f0", blocked: "#c44", border: "#333", raised: "#222", accent: "#09f" }),
-    shared: (key) => (key === "kanso.registry" ? state.registry ?? [] : state.shared?.(key) ?? null), setShared: () => {},
-    spaces: () => state.spaces ?? [local()], panes: () => [], agents: () => state.agents ?? [], terminals: () => state.terminals ?? [],
+  const spaces = state.spaces ?? [local()];
+  const { Spaces } = await loadSidebar(drawn.host, {
+    InputState: { new: () => field },
+    shared: (key) => (key === "kanso.registry" ? state.registry ?? [] : state.shared?.(key) ?? null),
+    spaces: () => spaces, agents: () => state.agents ?? [], terminals: () => state.terminals ?? [],
     machines: () => state.layouts ?? [{ name: null, layout: "ready" }], run: (cmd, args) => calls.push([cmd, clone(args ?? null)]),
-    home: () => "/Users/me", props: () => ({}), window: () => ({ platform: "macos", active: true }),
+    window: () => ({ platform: "macos", active: true }),
   });
-  const view = Object.assign(new Spaces(), {
-    git: state.git ?? {}, shown: new Set((state.spaces ?? [local()]).map((s) => s.id)), born: {}, custom: {},
-    order: "updated", statusOrder: "latest", threadOrder: "said", threadGroup: false,
-    machines: [], parked: [], folded: new Set(), agentsFolded: state.agentsFolded ?? new Set(),
-    sectionsFolded: state.sectionsFolded ?? new Set(), shelvesOpen: state.shelvesOpen ?? new Set(),
-    waking: new Set(), login: new Set(), failed: new Set(), powerBusy: new Set(), hints: {},
-    hoverSpace: state.hoverSpace ?? null, hoverRow: state.hoverRow ?? null,
-    handle: { is_focused: () => false, focus() {} }, hostName: "macbook", sync: { config: {}, status: {} },
-    panel: { set() {}, agents: new Map() }, threads: state.threads ?? null, view: state.view ?? "spaces",
-    tasks: {}, steps: {},
+  const view = Object.assign(new Spaces(), mountedState({
+    git: state.git ?? {}, shown: new Set(spaces.map((s) => s.id)),
+    agentsFolded: state.agentsFolded ?? new Set(), sectionsFolded: state.sectionsFolded ?? new Set(), shelvesOpen: state.shelvesOpen ?? new Set(),
+    hoverSpace: state.hoverSpace ?? null, hoverRow: state.hoverRow ?? null, threads: state.threads ?? null, view: state.view ?? "spaces",
     ...state.own,
-  });
+  }));
   if (state.before) state.before(view);
   view.render();
+  const { ids, texts, tips, icons, handlers } = drawn;
   return { view, ids, texts, tips, icons, calls, handlers, focused };
 }
 
@@ -57,9 +45,9 @@ test("an open project draws no chevron, and folded it shows the most urgent mark
   const agents = [agent("t1", { status: "blocked" }), agent("t2", { status: "working" })];
   const open = await sidebar({ agents });
   assert.equal(open.icons.some((p) => p.includes("chevron")), false);
-  assert.equal(open.ids.includes("agents-fold-sp1"), false);
+  assert.equal(open.texts.includes("2"), false, "open, the row draws no count");
   const folded = await sidebar({ agents, agentsFolded: new Set(["sp1"]) });
-  assert.equal(folded.ids.includes("agents-fold-sp1"), true);
+  assert.equal(folded.texts.includes("!"), true, "folded, the most urgent mark: blocked");
   assert.equal(folded.texts.includes("2"), true);
   assert.equal(folded.icons.some((p) => p.includes("chevron")), false);
   assert.equal(folded.ids.includes("space-agent-t1"), false, "its sessions are folded away");
@@ -68,17 +56,17 @@ test("an open project draws no chevron, and folded it shows the most urgent mark
 test("a project under the pointer shows + and the menu, and its counts say what a press does", async () => {
   const git = { [JSON.stringify([null, "/work/app"])]: { name: "herdr-kanso", branch: "main", ahead: 0, behind: 12, upstream: "origin/main", repo: "[null,\"/r\"]", linked: false } };
   const drawn = await sidebar({ git, hoverSpace: "sp1", spaces: [local({ active: false })] });
-  assert.equal(drawn.ids.includes("space-plus-sp1"), true);
+  assert.equal(drawn.ids.includes("space-sp1-tool-0"), true);
   assert.equal(drawn.tips.includes("New agent in app"), true);
-  assert.equal(drawn.ids.includes("space-dots-sp1"), true);
-  assert.equal(drawn.icons.includes("mods/kanso-chrome/icons/ellipsis.svg"), true);
+  assert.equal(drawn.ids.includes("space-sp1-tool-1"), true);
+  assert.equal(drawn.tips.includes("More"), true);
   assert.equal(drawn.texts.includes("herdr-kanso"), true);
   assert.equal(drawn.texts.includes("main"), true);
   assert.equal(drawn.texts.includes("↓12"), true);
   assert.equal(drawn.tips.includes("Pull 12 from origin/main"), true);
   const rest = await sidebar({ git, spaces: [local({ active: false })] });
-  assert.equal(rest.ids.includes("space-plus-sp1"), false);
-  assert.equal(rest.ids.includes("space-dots-sp1"), false);
+  assert.equal(rest.ids.includes("space-sp1-tool-0"), false);
+  assert.equal(rest.ids.includes("space-sp1-tool-1"), false);
 });
 
 test("a detached project shows its commit's short id, and one with no repository its name alone", async () => {
@@ -94,14 +82,13 @@ test("a kept project whose folder is gone says Not found and offers Locate", asy
   const registry = [{ id: "p-gone", name: "search", folder: "/Users/me/search", machine: "", missing: true }];
   const drawn = await sidebar({ registry });
   assert.equal(drawn.texts.includes("Not found"), true);
-  assert.equal(drawn.ids.includes("closed-locate-:/Users/me/search"), true);
+  assert.equal(drawn.ids.includes("closed-project-:/Users/me/search-action"), true);
   assert.equal(drawn.tips.includes("Locate"), true);
-  assert.equal(drawn.ids.includes("closed-plus-:/Users/me/search"), false);
+  assert.equal(drawn.tips.includes("New agent in search"), false);
 });
 
 test("double-clicking a project's name opens the rename dialog, not a field in the row", async () => {
-  const drawn = await sidebar({});
-  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  const drawn = await nameDoubleClicked();
   assert.deepEqual(drawn.calls, [["space.rename", { id: "sp1" }]], "no name: Herdr asks for one in its dialog");
   drawn.ids.length = 0;
   drawn.view.render();
@@ -110,8 +97,7 @@ test("double-clicking a project's name opens the rename dialog, not a field in t
 });
 
 test("Esc while renaming a project sends nothing to the focused agent: the sidebar takes no keys", async () => {
-  const drawn = await sidebar({});
-  drawn.handlers["on_mouse_down:left:space-sp1"]({ click_count: 2 }, { notify() {}, stop_propagation() {} });
+  const drawn = await nameDoubleClicked();
   drawn.view.render();
   assert.deepEqual(drawn.focused, [], "no field in the sidebar holds the keyboard while the dialog asks");
   assert.deepEqual(drawn.calls.filter(([c]) => c !== "space.rename"), [], "nothing reaches a terminal");
@@ -133,10 +119,10 @@ test("each session row has its own mark and words: a terminal's icon, the time a
 });
 
 test("a sub-session that needs you gets its own line; the others stay on one", async () => {
-  const { agentRowH } = await load("kanso-spaces/agents.js", ["agentRowH"], { div: () => ({}), svg: () => ({}) });
-  assert.equal(agentRowH({ sub: true }, {}), 28);
-  assert.equal(agentRowH({}, { activity: "Allow network access?" }), 50);
-  assert.equal(agentRowH({}, { activity: null }), 32, "finished with nothing to say: one line");
+  const { sessionHeight } = await loadSessionHeight({ div: () => ({}), svg: () => ({}) });
+  assert.equal(sessionHeight({}), 32, "a sub-session is the row's one line, as in its Storybook story");
+  assert.equal(sessionHeight({ activity: "Allow network access?" }), 50);
+  assert.equal(sessionHeight({ activity: null }), 32, "finished with nothing to say: one line");
 });
 
 test("Status draws its sections with only Needs you marked, a count once folded, and its empty state", async () => {
@@ -155,7 +141,7 @@ test("Status draws its sections with only Needs you marked, a count once folded,
 
 test("Status puts the project after a session's name, and the computer when it is not this one", async () => {
   const agents = [agent("t1", { status: "working" }), agent("dark/t2", { status: "working", space: "sp2", space_name: "ops" })];
-  const spaces = [local(), { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] }];
+  const spaces = [local(), ops];
   const drawn = await sidebar({ view: "agents", agents, spaces, layouts: [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }] });
   assert.equal(drawn.texts.includes("app"), true);
   assert.equal(drawn.texts.includes("ops · dark"), true);
@@ -183,7 +169,7 @@ test("Threads lists active, finished, snoozed and settled conversations, and one
   assert.equal(folded.ids.includes("space-agent-snz"), false, "Snoozed folds by default");
   assert.equal(folded.texts.includes("Can't read"), true);
   assert.equal(folded.tips.includes(threads.bad.unavailable), true, "the why stays in its tooltip");
-  assert.equal(folded.ids.includes("refresh-bad"), true);
+  assert.equal(folded.ids.includes("space-agent-bad-action"), true, "Refresh is the row's action, beside the word");
   assert.equal(folded.tips.includes("Refresh"), true);
   const open = await sidebar({ view: "threads", agents, terminals, threads, shelvesOpen: new Set(["snoozed", "settled"]) });
   assert.equal(open.ids.includes("space-agent-snz"), true);
@@ -253,12 +239,13 @@ test("Sort's menu opened in one form of the sidebar does not come back in the ot
 });
 
 test("a computer folded shows its most urgent mark and how many projects; connected with none, the kit empty", async () => {
-  const spaces = [local(), { id: "sp2", name: "ops", folder: "/srv/ops", machine: "dark", active: false, tabs: [{ id: "tab2" }] }];
+  const spaces = [local(), ops];
   const layouts = [{ name: null, layout: "ready" }, { name: "dark", layout: "ready" }];
   const own = { machines: [{ name: "dark", state: "connected", target: "dark" }] };
   const agents = [agent("dark/t2", { status: "blocked", space: "sp2", tab: "tab2" })];
   const folded = await sidebar({ spaces, layouts, agents, own: { ...own, folded: new Set(["dark"]) } });
-  assert.equal(folded.ids.includes("machine-count-dark"), true);
+  assert.equal(folded.texts.includes("!"), true, "its most urgent mark, the blocked dot");
+  assert.equal(folded.texts.includes("1"), true, "and how many projects");
   assert.equal(folded.ids.includes("space-sp2"), false);
   assert.equal(folded.icons.some((p) => p.includes("chevron")), false);
   const none = await sidebar({ spaces: [local()], layouts, own });

@@ -1,12 +1,9 @@
 // The tab bar as the Storybook draws its tabs: chosen, at rest and waiting, close armed, renaming, dragging, folded, connecting and unreachable.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone, chain, gpuiHost } from "./helpers.mjs";
+import { load, clone, chain, gpuiHost, calls, arg, find, all, CHROME_NIGHT, fieldWith, texts } from "./helpers.mjs";
 
-const night = {
-  background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086",
-  blocked: "#d5674f", working: "#d9a74a", done: "#7fa66b", accent: "#7d9cd4", popover: "#222220", border: "#33332f", chrome: "#141413",
-};
+const night = CHROME_NIGHT;
 const model = () => load("kanso-tabs/tab-bar-model.js", ["tabMark", "barState", "foldTabs", "pillAt", "dropSide", "renameWaits"]);
 const TABS = [
   { id: "t1", index: 1, name: "checkout", active: true, status: "working" },
@@ -20,7 +17,7 @@ async function bar({ tabs = TABS, machine = null, computers = [], panes = [], fa
   const space = { id: "s1", active: true, machine, tabs: clone(tabs) };
   const host = {
     ...gpuiHost(), Popover: { new: (id) => chain(id) },
-    InputState: { new: ({ value }) => ({ on() {}, focus() {}, value: () => value, set_selected_range() {}, release() {} }) },
+    InputState: { new: fieldWith },
     theme: () => night, spaces: () => [space], panes: () => panes, machines: () => computers,
     layout: () => null, home: () => "/home/me", shared: (key) => store[key] ?? null, setShared: (key, value) => { store[key] = value; },
     run: (cmd, args) => { if (cmd === fails) throw new Error("refused"); ran.push([cmd, args]); }, notify: (note) => { toasts.push(note); }, openOverlay: (spec) => { opened.push(spec); },
@@ -32,14 +29,15 @@ async function bar({ tabs = TABS, machine = null, computers = [], panes = [], fa
   return { view, cx, ran, toasts, opened, space, c: tokens(night), W, PENDING };
 }
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const arg = (el, name) => calls(el, name).at(-1)?.[1];
-const find = (el, test) => (test(el) ? el : el.kids.map((kid) => find(kid, test)).find(Boolean) ?? null);
-const all = (el, test) => [...(test(el) ? [el] : []), ...el.kids.flatMap((kid) => all(kid, test))];
+// A bar whose three tabs are measured at 100 wide.
+const measuredBar = async () => {
+  const b = await bar();
+  for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
+  return b;
+};
 const byTag = (root, id) => find(root, (el) => el.tag === id || calls(el, "id").some((call) => call[1] === id));
 const handler = (el, name) => calls(el, name).at(-1)?.at(-1);
 const pressOf = (el, button) => calls(el, "on_mouse_down").find((call) => call[1] === button)?.at(-1);
-const texts = (el) => [...calls(el, "child").map((call) => call[1]).filter((x) => typeof x === "string"), ...el.kids.flatMap(texts)];
 const tab = (root, id) => byTag(root, `tab-${id}`);
 const press = { click_count: 1 };
 
@@ -91,7 +89,7 @@ test("Chosen, at rest and waiting each draw their own state: the quiet fill, mut
   const b = await bar();
   const root = b.view.render(b.cx);
   const [chosen, rest, waiting] = ["t1", "t2", "t3"].map((id) => tab(root, id));
-  assert.equal(arg(chosen, "bg"), b.c.w7, "until measured, the chosen tab wears its fill");
+  assert.equal(arg(chosen, "bg"), b.c.w12, "until measured, the chosen tab wears the selection wash");
   assert.equal(arg(chosen, "text_color"), b.c.text);
   assert.equal(arg(chosen, "selected"), true);
   assert.ok(byTag(chosen, "tab-t1-close"), "the chosen tab ends with ×");
@@ -116,7 +114,7 @@ test("Once measured, the chosen fill glides under the chosen tab and the tab pai
   const pill = byTag(root, "tab-pill");
   assert.equal(arg(pill, "left"), 0);
   assert.equal(arg(pill, "w"), 90);
-  assert.equal(arg(pill, "bg"), b.c.w7);
+  assert.equal(arg(pill, "bg"), b.c.w12);
   assert.equal(calls(tab(root, "t1"), "bg").length, 0);
 });
 
@@ -187,8 +185,7 @@ test("Escape restores the name, and a refused rename gives the old name back wit
 });
 
 test("Tabs that do not fit fold behind +N, a Menu of them with their marks; + and Arrange never fold", async () => {
-  const b = await bar();
-  for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
+  const b = await measuredBar();
   b.view.barW.area = 100 + 2 * (26 + 8) + 40;
   b.view.moreOpen = true;
   const root = b.view.render(b.cx);
@@ -252,8 +249,7 @@ test("On an unreachable computer the x is drawn but a press closes nothing", asy
 });
 
 test("Folded tabs, +N with its gap, new tab and Arrange fit the bar's width", async () => {
-  const b = await bar();
-  for (const id of ["t1", "t2", "t3"]) b.view.tabW[id] = 100;
+  const b = await measuredBar();
   b.view.barW.more = 30;
   const tools = 2 * (26 + 8);
   for (const area of [306, 308, 340, 420]) {

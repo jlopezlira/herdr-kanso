@@ -10,7 +10,9 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec, home, writeTextFile, notify, theme, appHome } from "herdr";
 import { findAsync, retry, tryOrAsync } from "./pure.js";
+import { INK, OPACITY } from "./ui.js";
 import { button } from "./ui-button.js";
+import { PAGE } from "./ui.js";
 
 export const NETWORKS = {
   x: { name: "X", wait: 4, url: (text) => `https://x.com/intent/post?text=${encodeURIComponent(text)}` },
@@ -31,7 +33,7 @@ export function palette(t = theme() ?? {}) {
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // #rrggbb (or #rrggbbaa) as fill plus opacity, which every renderer understands.
 function paint(hex, alpha) {
-  const h = String(hex ?? "#888888").replace(/^#/, "");
+  const h = String(hex ?? INK.fallback).replace(/^#/, "");
   const base = `#${h.slice(0, 6).padEnd(6, "8")}`;
   const a = alpha ?? (h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1);
   return `fill="${base}"${a < 1 ? ` fill-opacity="${Math.round(a * 1000) / 1000}"` : ""}`;
@@ -107,8 +109,7 @@ const streakBlock = (b, c) => (from) => {
   // Always a year's 53 columns, the latest at the right, so the squares keep their size.
   const weeks = (b.weeks ?? []).slice(-53), gap = 4, cell = Math.floor((INNER - 52 * gap) / 53), first = 53 - weeks.length;
   return drawn(top + 7 * cell + 6 * gap, [
-    text(PAD, titleY, 30, c.text, b.title),
-    ...(b.right ? [text(W - PAD, titleY, 22, c.dim, b.right, 'text-anchor="end"')] : []),
+    ...blockTitle(b, c, titleY),
     `<text x="${PAD}" y="${bigY}" font-size="96" font-weight="300" ${paint(c.text)}>${esc(b.n)}<tspan font-size="24" dx="16" ${paint(c.dim)}>${esc(b.unit)}</tspan></text>`,
     ...weeks.flatMap((w, wi) => w.contributionDays.map((d) => {
       const a = LEVEL[d.contributionLevel];
@@ -139,11 +140,10 @@ const barsBlock = (b, c) => (from) => {
   const gap = n > 40 ? 3 : 6, bw = (INNER - (n - 1) * gap) / n, bh = 140, y = top + bh + 30;
   const ticks = b.ticks ?? [], last = ticks.length - 1;
   return drawn(y, [
-    text(PAD, titleY, 30, c.text, b.title),
-    ...(b.right ? [text(W - PAD, titleY, 22, c.dim, b.right, 'text-anchor="end"')] : []),
+    ...blockTitle(b, c, titleY),
     ...values.map((v, i) => {
       const height = Math.max(4, Math.round((v / highest) * bh));
-      return `<rect x="${PAD + i * (bw + gap)}" y="${top + bh - height}" width="${bw}" height="${height}" rx="3" ${v ? paint(c.accent, i === peak ? 1 : 0.55) : paint(c.subtle)}/>`;
+      return `<rect x="${PAD + i * (bw + gap)}" y="${top + bh - height}" width="${bw}" height="${height}" rx="3" ${v ? paint(c.accent, i === peak ? 1 : OPACITY.quiet) : paint(c.subtle)}/>`;
     }),
     ...ticks.map((t, i) => text(PAD + (last ? (i * INNER) / last : 0), y, 18, c.dim, t, `text-anchor="${i === 0 ? "start" : i === last ? "end" : "middle"}"`)),
   ]);
@@ -265,6 +265,9 @@ export async function shareImage(network, make, workDir) {
   if (!copied) await openPath(png.replace(/\/[^/]+$/, ""));
 }
 
+// Under a panel's header: the share row while open, when the panel has something to share.
+export const shareRows = (view, c, note) => view.share.open && (view.canShare?.() ?? true) ? [view.share.row(c, () => view.shareCard(), note)] : [];
+
 export class Share {
   constructor(id, workDir) { this.id = id; this.workDir = workDir ?? paths.join(appHome(), "data", id); this.open = false; this.busy = null; }
 
@@ -287,9 +290,12 @@ export class Share {
     const choice = (key, label, network) => button(`${this.id}-share-${key}`, this.busy === key ? "Making the image…" : label,
       (cx) => this.run(network, make, cx), c, { kind: "tonal", small: true, spoken: label, disabled: this.busy === key });
     return h_flex().w_full().flex_wrap().gap(gap).items_center()
-      .child(div().text_size(12).text_color(c.dim).child("Share to"))
+      .child(div().text_size(PAGE.note).text_color(c.dim).child("Share to"))
       .children(Object.entries(NETWORKS).map(([key, n]) => choice(key, n.name, key)))
       .child(choice("save", "Save image", null))
       .child(div().w_full().text_size(11).text_color(c.dim).child(note));
   }
 }
+
+const blockTitle = (block, c, y) => [text(PAD, y, 30, c.text, block.title),
+  ...(block.right ? [text(W - PAD, y, 22, c.dim, block.right, 'text-anchor="end"')] : [])];

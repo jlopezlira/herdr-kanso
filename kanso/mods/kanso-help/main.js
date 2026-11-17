@@ -5,21 +5,21 @@ import { paths } from "./platform-paths.js";
 import { localName } from "./platform-host.js";
 import { modifierLabels, guideSections } from "./guide.js";
 import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } from "herdr";
-import { G, tokens } from "./ui.js";
+import { focusOn } from "./pure.js";
+import { Lit } from "./lit.js";
+import { pagedDialog } from "./pages.js";
+import { G, DIALOG, KEY, TINT, alpha, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
-import { segmented } from "./ui-tab.js";
+import { row } from "./ui-row.js";
 import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
 
-// kansō help and kansō settings: one window size, so going from one to the other feels like a page.
-const DIALOG = { width: 860, height: 680 };
 const PAGES = [
   { key: "keys", label: "Keyboard" },
   { key: "dojo", label: "hjkl dōjō" },
   { key: "guide", label: "Guide" },
 ];
-const U = 40, GAP = 5; // a key's unit and the space between keys
 
 const LIT_MS = 650;
 
@@ -27,8 +27,7 @@ const modsOf = (m = {}) => MODIFIERS.filter((k) => (k === "cmd" ? m.platform : k
 
 export default class Help extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
     this.pal = new Companion(cx.timer);
     this.pal.load(cx);
@@ -40,13 +39,7 @@ export default class Help extends View {
     this.mods = localName() === "windows" ? ["alt"] : ["cmd", "alt"]; // the layer shown first: the vim panes
     this.lists = false;
     this.picked = "h";
-    this.lit = null;
-  }
-
-  light(key, cx) {
-    const at = Date.now();
-    this.lit = { key, at };
-    cx.timer.after(LIT_MS, (cx) => { if (this.lit?.at === at) { this.lit = null; cx.notify(); } });
+    this.capLight = new Lit(LIT_MS);
   }
 
   key(e, cx) {
@@ -59,7 +52,7 @@ export default class Help extends View {
     const key = k === "return" ? "enter" : k === " " ? "space" : k;
     if (mods.length) { this.mods = mods; this.lists = false; }
     this.picked = key;
-    this.light(key, cx);
+    this.capLight.light(key, cx);
     cx.stop_propagation(); cx.notify();
   }
 
@@ -69,17 +62,17 @@ export default class Help extends View {
   }
 
   cap(t, c, [name, w = 1], i, bound) {
-    const width = Math.round(U * w + GAP * (w - 1));
+    const width = Math.round(KEY.unit * w + KEY.gap * (w - 1));
     const isMod = MODIFIERS.includes(name);
     const held = isMod && (this.lists ? name === "shift" && this.mods.includes("shift") : this.mods.includes(name));
     const does = bound.get(name);
-    const pressed = this.lit?.key === name;
+    const pressed = this.capLight.lit?.key === name;
     const picked = !isMod && this.picked === name;
-    const fill = pressed || picked ? c.accent : held ? c.text + "26" : does ? c.accent + "24" : c.text + "08";
+    const fill = pressed || picked ? c.accent : held ? alpha(c.text, TINT.soft) : does ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.cell);
     const ink = pressed || picked ? (t.accent_foreground ?? c.canvas) : does || held ? c.text : c.dim;
     const label = (isMod ? modifierLabels(localName()).MOD_GLYPH[name] : CAP[name]) ?? (name.length === 1 ? name.toUpperCase() : name);
-    return div().id(`cap-${name}-${i}`).w(width).h(U).flex_none().rounded(7)
-      .border_1().border_color(pressed || picked ? c.accent : does ? c.accent + "70" : held ? c.text + "40" : c.border)
+    return div().id(`cap-${name}-${i}`).w(width).h(KEY.unit).flex_none().rounded(7)
+      .border_1().border_color(pressed || picked ? c.accent : does ? alpha(c.accent, TINT.boundLine) : held ? alpha(c.text, TINT.strong) : c.border)
       .bg(fill).flex().items_center().justify_center()
       .text_size(label.length > 1 ? 11 : 13.5).font_medium().text_color(ink)
       .cursor_pointer().hover((s) => s.border_color(c.accent))
@@ -93,7 +86,7 @@ export default class Help extends View {
 
   chip(c, id, text, on, act) {
     return div().id(id).h(28).px(12).flex().items_center().rounded(7).cursor_pointer()
-      .border_1().border_color(on ? c.accent : c.border).bg(on ? c.accent + "24" : c.text + "06")
+      .border_1().border_color(on ? c.accent : c.border).bg(on ? alpha(c.accent, TINT.bound) : alpha(c.text, TINT.chip))
       .text_size(12.5).font_medium().text_color(on ? c.text : c.muted)
       .hover((s) => s.border_color(c.accent))
       .on_click((_e, cx) => { act(); cx.notify(); })
@@ -115,19 +108,17 @@ export default class Help extends View {
         .child(this.chip(c, "mod-lists", "Lists: j k gg G", this.lists, () => { this.lists = !this.lists; this.mods = []; this.picked = "j"; }))
         .child(div().flex_1())
         .child(div().text_size(12).text_color(c.dim).child(`${layerName} · ${bound.size} ${bound.size === 1 ? "key" : "keys"}`)))
-      .child(v_flex().gap(GAP).p(14).rounded(12).bg(c.text + "05").border_1().border_color(c.border).items_center()
-        .children(ROWS.map((row, r) => h_flex().gap(GAP).children(row.map((k, i) => this.cap(t, c, k, `${r}-${i}`, bound))))))
-      .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(10).bg(chosen ? c.accent + "18" : c.text + "06")
+      .child(v_flex().gap(KEY.gap).p(14).rounded(12).bg(alpha(c.text, TINT.board)).border_1().border_color(c.border).items_center()
+        .children(ROWS.map((row, r) => h_flex().gap(KEY.gap).children(row.map((k, i) => this.cap(t, c, k, `${r}-${i}`, bound))))))
+      .child(h_flex().h(44).px(14).gap(G.md).items_center().rounded(10).bg(chosen ? alpha(c.accent, TINT.diff) : alpha(c.text, TINT.chip))
         .child(div().min_w(64).text_size(17).font_semibold().text_color(chosen ? c.text : c.dim).child(chosen ? chordOf(chosen) : glyphs([...this.mods, this.picked].join("-"))))
         .child(div().flex_1().text_size(13.5).text_color(chosen ? c.text : c.dim)
           .child(chosen ? describe(chosen.action) : "Nothing on this key here. Press a key, or pick one.")))
-      .child(v_flex().gap(2)
-        .children(list.map(([key, d]) => h_flex().id(`row-${key}`).h(26).px(10).gap(G.md).items_center().rounded(6).cursor_pointer()
-          .when(key === this.picked, (el) => el.bg(c.selected))
-          .hover((s) => s.bg(c.subtle))
-          .on_click((_e, cx) => { this.picked = key; cx.notify(); })
-          .child(div().w(84).flex_none().text_size(12.5).font_medium().text_color(c.text).child(chordOf(d)))
-          .child(div().flex_1().truncate().text_size(12.5).text_color(c.muted).child(describe(d.action))))));
+      .child(v_flex()
+        .children(list.map(([key, d]) => row(`row-${key}`, c, {
+          name: describe(d.action), keys: [{ text: chordOf(d) }], current: key === this.picked,
+          onClick: (cx) => { this.picked = key; cx.notify(); },
+        }))));
   }
 
   enterDojo() {
@@ -170,15 +161,16 @@ export default class Help extends View {
     const t = theme(), c = tokens(t);
     const page = this.page === "dojo" ? this.dojoPage(t, c) : this.page === "guide" ? this.guidePage(t, c) : this.keysPage(t, c);
     // The same window as kansō settings, in its place: each leads to the other, so you can always go back.
-    const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.width, height: DIALOG.height, props: { page: "keys" } }); };
-    return v_flex().id("kanso-help").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().w_full().items_center().gap(G.md)
-        .child(svg("mods/kanso-chrome/icons/help.svg").size(17).text_color(c.accent))
+    const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.settingsW, height: DIALOG.settingsH, props: { page: "keys" } }); };
+    return pagedDialog({
+      name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
+      head: h_flex().w_full().items_center().gap(G.md)
+        .child(svg("mods/kanso-chrome/icons/circle-question-mark.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(segmented("help-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); }, c)))
-      .child(v_flex().id(`help-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
+        .child(div().text_size(11).text_color(t.dim).child("Esc")),
+      tabs: PAGES, tab: this.page, page, t, c,
+      onTab: (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); },
+    });
   }
 }

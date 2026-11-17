@@ -1,9 +1,5 @@
 import { Meta } from '@storybook/addon-docs/blocks';
-import { content, records } from '../kit/catalog.js';
-import { referenceFor } from '../kit/references.js';
-
-export const board = content(records.find((record) => record.id === referenceFor('Start/Philosophy').approvedRecords[0]).markup);
-export const rows = [...board.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(([, row]) => [...row.matchAll(/<t[hd]>([\s\S]*?)<\/t[hd]>/g)].map(([, cell]) => cell.replace(/<[^>]+>/g, '')));
+import { rows } from '../kit/philosophy.js';
 
 <Meta title="Start/Philosophy" />
 

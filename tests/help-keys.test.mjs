@@ -1,3 +1,4 @@
+import { loadGuideSections, loadHelp } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -16,7 +17,7 @@ test("Help names Windows modifiers and preserves macOS glyphs", async () => {
 });
 
 test("The Guide reads its chords by action from live keys on every platform", async () => {
-  const { guideSections } = await load("kanso-help/guide.js", ["guideSections"]);
+  const { guideSections } = await loadGuideSections();
   for (const platform of ["windows", "macos", "linux"]) {
     const bindings = bindingsOf(platform), home = platform === "windows" ? "C:\\Users\\Jo\\AppData\\Roaming\\herdr-app" : "/custom/herdr";
     const text = linesOf(guideSections(bindings, platform, home));
@@ -33,22 +34,28 @@ test("The Guide reads its chords by action from live keys on every platform", as
 });
 
 test("An unbound Guide action leaves a complete sentence with no chord", async () => {
-  const { guideSections } = await load("kanso-help/guide.js", ["guideSections"]);
+  const { guideSections } = await loadGuideSections();
   const sections = clone(guideSections([], "windows", "/custom"));
   assert.equal(sections[0][1][0], "Every pane sits in a row you slide along, each one wide enough to read. Open a pane to the right or below it in the same column.");
   const text = linesOf(sections);
   assert.doesNotMatch(text, /\(\)|undefined|null|Ctrl\+|Alt\+/);
 });
 
+// Help opened on `platform` with these bindings and folders, drawing on a tape.
+async function openHelp(platform, bindings, { folder = "/actual/config", userHome = "/users/jo" } = {}) {
+  const ui = tape();
+  const { Help } = await loadHelp({
+    ...ui.host, window: () => ({ platform }), keys: () => bindings, appHome: () => folder, home: () => userHome, props: () => ({}),
+    Companion: class { load() {} },
+  });
+  const help = new Help();
+  help.init({}, { focus_handle: () => ({ focus() {} }), timer: { every() {} } });
+  return { ui, help };
+}
+
 test("Help's keyboard and Guide render the current platform and bindings", async () => {
   for (const platform of ["windows", "macos"]) {
-    const ui = tape(), bindings = bindingsOf(platform);
-    const { Help } = await load("kanso-help/main.js", ["Help"], {
-      ...ui.host, window: () => ({ platform }), keys: () => bindings, appHome: () => "/actual/config", home: () => "/users/jo", props: () => ({}),
-      Companion: class { load() {} },
-    });
-    const help = new Help();
-    help.init({}, { focus_handle: () => ({ focus() {} }), timer: { every() {} } });
+    const { ui, help } = await openHelp(platform, bindingsOf(platform));
     assert.deepEqual(clone(help.mods), platform === "windows" ? ["alt"] : ["cmd", "alt"]);
     help.keysPage({}, {});
     help.guidePage({}, {});
@@ -62,7 +69,7 @@ test("Help's keyboard and Guide render the current platform and bindings", async
 });
 
 test("The Guide shows each family once and shares modifiers across a run", async () => {
-  const { guideSections } = await load("kanso-help/guide.js", ["guideSections"]);
+  const { guideSections } = await loadGuideSections();
   for (const [platform, vim, columns, panels] of [
     ["macos", "⌥⌘H J K L", "⌃⌥1–9", "⌃⇧1–9"],
     ["windows", "Alt+H J K L", "Alt+Shift+1–9", "Ctrl+Shift+1–9"],
@@ -102,12 +109,18 @@ test("The Guide shortens the actual settings folder only when it is under home",
     ["windows", "C:\\Users\\Jo", "C:\\Users\\Jo\\AppData\\Roaming\\herdr-app", "~\\AppData\\Roaming\\herdr-app"],
     ["macos", "/Users/jo", "/custom/herdr", "/custom/herdr"],
   ]) {
-    const ui = tape();
-    const { Help } = await load("kanso-help/main.js", ["Help"], {
-      ...ui.host, window: () => ({ platform }), keys: () => [], appHome: () => folder, home: () => userHome,
-    });
-    new Help().guidePage({}, {});
+    const { ui, help } = await openHelp(platform, [], { folder, userHome });
+    help.guidePage({}, {});
     const pathLine = ui.texts.find((text) => text.startsWith("Your settings folder"));
     assert.ok(pathLine.includes(`${expected}:`), pathLine);
   }
+});
+
+test("Help's key list is a row per key, the action then its chord as a key hint, and a press picks that key", async () => {
+  const { ui, help } = await openHelp("macos", bindingsOf("macos"));
+  help.keysPage({}, {});
+  const id = [...ui.handlers.keys()].find((key) => key?.startsWith("row-"));
+  assert.ok(id, "a key row is drawn");
+  ui.handlers.get(id)({}, { notify() {} });
+  assert.equal(help.picked, id.slice("row-".length));
 });

@@ -1,15 +1,15 @@
 // The status bar's kit pieces: an item with its mark or icon and words, and the item of an agent waiting for you.
+import { loadPendingState } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, chain, numberArguments } from "./helpers.mjs";
+import { load, gpuiHost, chain, numberArguments, calls } from "./helpers.mjs";
 
 const kit = async () => ({
   ...await load("kanso-panel/ui.js", ["tokens", "toneColor", "G", "R", "W", "ICON_INLINE"], gpuiHost()),
-  ...await load("kanso-panel/ui-state.js", ["PENDING"], gpuiHost()),
+  ...await loadPendingState(gpuiHost()),
   ...await load("kanso-panel/ui-status.js", ["statusItem", "needsItem"], gpuiHost()),
 });
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const first = (el, name) => calls(el, name)[0]?.slice(1);
 const kids = (el) => el.kids;
 const hoverOf = (el) => {

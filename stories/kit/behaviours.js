@@ -1,6 +1,8 @@
+import tokens from '../../kanso/tokens.json' with { type: 'json' };
 import { content, statesFor } from './catalog.js';
+import { applyGeometry } from './geometry.js';
 
-export const ARM_MS = 4000;
+export const ARM_MS = Number.parseFloat(tokens.motion.find(({ name }) => name === 'k-arm-ms').value);
 export const behaviours = {
   'kanso-reference__link': 'action',
   'kanso-segmented': 'select',
@@ -60,6 +62,7 @@ export const behaviours = {
 const groups = '.kanso-segmented,.kanso-segmented--options,.kanso-segmented--sidebar,.kanso-segmented--tabs,.kanso-rail__views,.kanso-tab-bar';
 const surfaces = '.kanso-menu,.kanso-dialog,.kanso-dialog--settings,.kanso-dialog--worktree,.kanso-sidebar__dialog';
 const selector = Object.keys(behaviours).map((name) => `.${name}`).join(',');
+const kindOf = (node) => Object.entries(behaviours).find(([name]) => node.classList.contains(name))?.[1];
 const disabled = (node) => !!node.closest('[disabled],[aria-disabled="true"],[aria-busy="true"],.kanso-control--off,.kanso-button--off,.kanso-button--pending,.kanso-menu__item--busy');
 const normal = (label) => label.trim().toLowerCase();
 const labelOf = (node) => node.getAttribute('aria-label') || node.title || node.textContent.trim() || node.querySelector('use')?.getAttribute('href')?.replace('#lu-', '') || 'Action';
@@ -163,7 +166,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
       }
     }
     for (const node of scope.querySelectorAll(selector)) {
-      const kind = Object.entries(behaviours).find(([name]) => node.classList.contains(name))?.[1];
+      const kind = kindOf(node);
       if (['animate', 'surface', 'field', 'select'].includes(kind) || node.closest('.kanso-skeleton__list')) continue;
       if (!node.hasAttribute('tabindex')) node.tabIndex = disabled(node) ? -1 : 0;
       if (!node.hasAttribute('role') && !node.matches('button,a,input,textarea')) node.setAttribute('role', node.matches('.kanso-menu__item') ? 'menuitem' : kind === 'toggle' ? 'switch' : 'button');
@@ -182,6 +185,7 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
       ?? candidates.find((item) => item.label === (kind === 'menu' ? 'Default' : 'Dialog')) ?? candidates[0];
     const holder = doc.createElement('div');
     holder.innerHTML = content(fixture.markup);
+    applyGeometry(holder);
     const surface = holder.querySelector(surfaces);
     surface.classList.add('kanso-story__overlay');
     surface.setAttribute('role', kind === 'menu' ? 'menu' : 'dialog');
@@ -305,10 +309,11 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     replay(node) { for (const animation of node.parentElement.getAnimations({ subtree: true })) { animation.cancel(); animation.play(); } },
     annotate(node, event) {
       const point = doc.createElement('button');
-      point.className = 'kanso-simulator__note-point';
+      point.className = 'kanso-simulator__note-point kanso-story__place';
       point.textContent = String(node.querySelectorAll('.kanso-simulator__note-point').length + 1);
-      point.style.cssText = `position:absolute;left:${event.offsetX}px;top:${event.offsetY}px`;
+      Object.assign(point.dataset, { left: event.offsetX, top: event.offsetY });
       node.append(point);
+      applyGeometry(node);
     },
     surface() {}, animate() {},
   };
@@ -317,11 +322,13 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
     const node = target.closest(selector);
     if (group && (!node || node === group)) return { node: target, kind: 'select' };
     if (!node || !root.contains(node)) return {};
-    const kind = Object.entries(behaviours).find(([name]) => node.classList.contains(name))?.[1];
+    const kind = kindOf(node);
     return { node, kind };
   };
   const on = (target, type, fn) => target.addEventListener(type, fn, { signal: abort.signal });
   prepare(root);
+  const armedSample = root.querySelector('[data-token="k-arm-ms"] .kanso-action--armed');
+  if (armedSample) arm(armedSample);
   for (const surface of root.querySelectorAll(surfaces)) {
     if (surface.parentElement.closest(surfaces)) continue;
     surface.setAttribute('role', surface.matches('.kanso-menu') ? 'menu' : 'dialog');

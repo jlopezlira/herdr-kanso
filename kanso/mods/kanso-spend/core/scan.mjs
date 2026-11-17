@@ -8,12 +8,7 @@ import * as zlib from "node:zlib";
 import { mapSeries, parseOr, reduceSeries, tryOr } from "../pure.js";
 import { closeParserState, openParserState, parseAdapterRecord } from "./adapters.mjs";
 import { PMap } from "./pmap.mjs";
-import {
-  MAX_LINE_BYTES,
-  expandHome,
-  isPlainObject,
-  localDay,
-} from "./util.mjs";
+import { MAX_LINE_BYTES, expandHome, isPlainObject, localDay } from "./util.mjs";
 import {
   addTask,
   addUsage,
@@ -251,7 +246,7 @@ function lineAt(run, onLine, buffer, start, newline, chunkStart) {
   const piece = buffer.subarray(start, newline);
   if (run.lines.pendingLength > 0) {
     const whole = Buffer.concat([...run.lines.pending, piece], run.lines.pendingLength + piece.length);
-    const emptied = { ...run, lines: { ...run.lines, pending: [], pendingLength: 0 } };
+    const emptied = clearPending(run);
     return whole.length > MAX_LINE_BYTES ? skipLine(emptied, absoluteEnd) : processLine(emptied, onLine, whole, absoluteEnd, true);
   }
   return piece.length > MAX_LINE_BYTES ? skipLine(run, absoluteEnd) : processLine(run, onLine, piece, absoluteEnd, true);
@@ -280,7 +275,7 @@ function feedAt(run, onLine, buffer, chunkStart) {
 }
 
 function finishLines(run, onLine, fileSize) {
-  const emptied = { ...run, lines: { ...run.lines, pending: [], pendingLength: 0 } };
+  const emptied = clearPending(run);
   if (run.lines.discarding) return emptied;
   if (run.lines.pendingLength === 0) return run;
   const whole = Buffer.concat(run.lines.pending, run.lines.pendingLength);
@@ -582,33 +577,11 @@ function readOpenCodeMessages(sqlite, filePath, work, key, entry, source) {
 
 // OpenCode messages are immutable once completed, so a full re-read through the max-upsert dedup is exact.
 // The WAL changes on every write while the main database may not, so the fingerprint covers both files.
-async function scanOpenCodeDb(work, tally, source, filePath) {
-  const statted = await stat(filePath).then((found) => ({ found }), (error) => ({ error }));
-  if (statted.error) {
-    const warned = statted.error?.code !== "ENOENT"
-      ? sourceWarn(tally, source, `opencode ${filePath}: cannot stat file: ${statted.error.message}`)
-      : tally;
-    return { work, tally: warned, dirty: false };
-  }
-  const dbStat = statted.found;
-  if (!dbStat.isFile()) return { work, tally, dirty: false };
+async function scanOpenCodeDb(work, tally, source, filePath, dbStat) {
   const walStat = await stat(`${filePath}-wal`).catch(() => null);
   const fingerprint = `${dbStat.mtimeMs}:${dbStat.size}:${walStat?.mtimeMs ?? 0}:${walStat?.size ?? 0}`;
 
-  const key = fileKey(source.id, filePath);
-  const known = work.files.get(key);
-  const isNew = !known;
-  const made = known ? { work, entry: known } : newFileEntry(work, {
-    sourceId: source.id,
-    adapter: source.adapter,
-    path: filePath,
-    dev: String(dbStat.dev),
-    ino: String(dbStat.ino),
-    size: 0,
-    mtimeMs: 0,
-    compressed: false,
-  });
-  const { entry } = made;
+  const { key, isNew, made, entry } = scannedEntry(work, source, filePath, dbStat, false);
   if (entry.state.opencodeParserVersion === 2 && entry.state.opencodeFingerprint === fingerprint) {
     const warned = entry.state.opencodeMalformedRows
       ? sourceWarn(tally, source, `opencode ${filePath}: ${entry.state.opencodeMalformedRows} malformed message rows were skipped.`)
@@ -661,33 +634,13 @@ async function scanOpenCodeDb(work, tally, source, filePath) {
 }
 
 async function scanOneFile(work, tally, source, filePath) {
-  if (source.adapter === "opencode") {
-    return scanOpenCodeDb(work, tally, source, filePath);
-  }
-  const statted = await stat(filePath).then((found) => ({ found }), (error) => ({ error }));
-  if (statted.error) {
-    const warned = statted.error?.code !== "ENOENT"
-      ? sourceWarn(tally, source, `${source.adapter} ${filePath}: cannot stat file: ${statted.error.message}`)
-      : tally;
-    return { work, tally: warned, dirty: false };
-  }
+  const statted = await scanFileStat(tally, source, filePath);
+  if (!statted.found) return { work, tally: statted.tally, dirty: false };
   const fileStat = statted.found;
   if (!fileStat.isFile()) return { work, tally, dirty: false };
+  if (source.adapter === "opencode") return scanOpenCodeDb(work, tally, source, filePath, fileStat);
 
-  const key = fileKey(source.id, filePath);
-  const known = work.files.get(key);
-  const isNew = !known;
-  const made = known ? { work, entry: known } : newFileEntry(work, {
-    sourceId: source.id,
-    adapter: source.adapter,
-    path: filePath,
-    dev: String(fileStat.dev),
-    ino: String(fileStat.ino),
-    size: 0,
-    mtimeMs: 0,
-    compressed: filePath.endsWith(".jsonl.zst"),
-  });
-  const { entry } = made;
+  const { key, isNew, made, entry } = scannedEntry(work, source, filePath, fileStat, filePath.endsWith(".jsonl.zst"));
 
   const dev = String(fileStat.dev);
   const ino = String(fileStat.ino);
@@ -833,3 +786,24 @@ export async function rebuildScan(store, { home }) {
 }
 
 export { scanOneFile, walkRoot };
+
+const clearPending = (run) => ({ ...run, lines: { ...run.lines, pending: [], pendingLength: 0 } });
+
+async function scanFileStat(tally, source, filePath) {
+  try {
+    return { found: await stat(filePath) };
+  } catch (error) {
+    return { tally: error?.code === "ENOENT" ? tally
+      : sourceWarn(tally, source, `${source.adapter} ${filePath}: cannot stat file: ${error.message}`) };
+  }
+}
+
+function scannedEntry(work, source, filePath, info, compressed) {
+  const key = fileKey(source.id, filePath);
+  const known = work.files.get(key);
+  const made = known ? { work, entry: known } : newFileEntry(work, {
+    sourceId: source.id, adapter: source.adapter, path: filePath,
+    dev: String(info.dev), ino: String(info.ino), size: 0, mtimeMs: 0, compressed,
+  });
+  return { key, isNew: !known, made, entry: made.entry };
+}

@@ -1,32 +1,36 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { G, R, T, ICON, tokens } from "./ui.js";
+import { G, H, R, T, ICON, SIDEBAR, TINT, alpha, tokens } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { present, RETURN_LABEL, focusedTarget, MAINTENANCE_MS } from "./since-left-model.js";
 import { SinceStore } from "./since-left-store.js";
-import { statusMark, AGENT_PAD, agentRowH, duration } from "./agents.js";
+import { statusMark, duration } from "./agents.js";
 
-const ROW_GAP = 1; // the sidebar list's gap; the kit has no token for it
+// A row with what the agent did is two lines; the header and the rest, one.
+const heightOf = (row) => (row.did ? H.two : H.line);
 
 // An error has no glyph; the sidebar draws the blocked disc for a failed agent.
 const lead = (c, mark) => (mark === "pr"
-  ? svg("mods/kanso-chrome/icons/pull-request.svg").size(ICON).flex_none().text_color(c.muted)
+  ? svg("mods/kanso-chrome/icons/git-pull-request.svg").size(ICON).flex_none().text_color(c.muted)
   : statusMark(c, mark === "error" ? "blocked" : mark));
 
 export class SinceLeft {
   constructor(db) {
     this.store = new SinceStore(db);
-    this.project = null;
-    this.rows = [];
-    this.expanded = false;
+    this.clear();
     this.heights = [];
     this.headed = false;
   }
 
-  leave() {
+  // Nothing shown any more: the list starts empty again.
+  clear() {
     this.project = null;
     this.rows = [];
     this.expanded = false;
+  }
+
+  leave() {
+    this.clear();
     this.showing = false;
   }
 
@@ -83,12 +87,12 @@ export class SinceLeft {
 
   blockHeight() {
     if (!this.heights.length) return 0;
-    const items = [...this.heights, ...(this.headed ? [agentRowH({}, {})] : [])];
-    return items.reduce((sum, h) => sum + h, 0) + (items.length - 1) * ROW_GAP;
+    const items = [...this.heights, ...(this.headed ? [H.line] : [])];
+    return items.reduce((sum, h) => sum + h, 0) + (items.length - 1) * SIDEBAR.gap;
   }
 
   dismissControl(c) {
-    return iconButton("since-dismiss", "close", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
+    return iconButton("since-dismiss", "x", "Dismiss", (cx) => { cx.stop_propagation(); return this.dismiss(cx).catch(() => {}); }, c);
   }
 
   line(t, c, row, nav, reach) {
@@ -102,8 +106,8 @@ export class SinceLeft {
       .when(Boolean(row.outcome), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.muted).child(row.outcome)))
       .child(div().flex_1())
       .when(Boolean(row.age), (el) => el.child(div().flex_none().text_size(T.body).text_color(t.dim).child(row.age)));
-    return h_flex().id(id).h(agentRowH({}, { activity: row.did })).w_full().flex_none().pl(AGENT_PAD).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
-      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(t.foreground + "0c")).on_click((_e, cx) => go(cx)))
+    return h_flex().id(id).h(heightOf(row)).w_full().flex_none().pl(SIDEBAR.agentX).pr(G.md).gap(G.md).min_w(0).items_center().rounded(R.card)
+      .when(Boolean(go), (el) => el.cursor_pointer().hover((s) => s.bg(alpha(t.foreground, TINT.row))).on_click((_e, cx) => go(cx)))
       .when(selected, (el) => el.border_1().border_color(t.accent))
       .when(!row.more, (el) => el.child(lead(c, row.mark)))
       .child(v_flex().flex_1().min_w(0).justify_center().child(top)
@@ -113,11 +117,11 @@ export class SinceLeft {
   render(t, project, nav, reach, head = null) {
     const shown = present(this.rows, this.viewOf());
     this.showing = project === this.project && shown.count > 0;
-    this.heights = this.showing ? shown.rows.map((row) => agentRowH({}, { activity: row.did })) : [];
+    this.heights = this.showing ? shown.rows.map(heightOf) : [];
     this.headed = Boolean(head) && this.showing;
     if (!this.showing) return div();
     const c = tokens(t);
     const body = shown.rows.map((row) => this.line(t, c, row, nav, reach));
-    return v_flex().w_full().gap(ROW_GAP).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(c)), ...body] : body);
+    return v_flex().w_full().gap(SIDEBAR.gap).children(head ? [head(RETURN_LABEL, shown.count, this.dismissControl(c)), ...body] : body);
   }
 }

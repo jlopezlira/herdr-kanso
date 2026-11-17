@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdir, rm, writeFile, stat, realpath } from "node:fs/promises";
+import { mkdir, rm, writeFile, realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, basename } from "node:path";
-import { load, context, temporary, clone, exec } from "./helpers.mjs";
+import { load, context, temporary, clone, exec, failure, gitOk, fileExists as exists } from "./helpers.mjs";
 
 const names = ["Worktrees", "removable", "losses", "lastDays", "spaceBy", "freedSpec", "freedText", "explainPrompt", "reviewPrompt", "rootsFor", "parseDiscovery", "basesFrom", "parseWorktrees", "parseProbe", "stateOf", "safe", "consequence", "fmtSize", "fmtAge", "inside"];
 const writeTextFile = (path, text) => writeFile(path, text);
@@ -13,12 +13,7 @@ const worktrees = async (host = {}) => load("kanso-panel/worktrees.js", names, {
   exec, spaces: () => [], panes: () => [], home: () => "/Users/me", run() {}, theme: () => ({}), shared: () => null, notify() {},
   knownAgents: async () => [], Share: class { constructor() { this.open = false; } }, postText: (parts, fallback) => (parts.length ? parts.join(", ") + "." : fallback), ...host,
 });
-const git = async (cwd, ...args) => {
-  const r = await exec("git", ["-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd });
-  assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.stderr}`);
-  return r.stdout.trim();
-};
-const exists = (p) => stat(p).then(() => true, () => false);
+const git = gitOk();
 
 test("Worktrees searches the top folders of your spaces, or the ones you chose", async () => {
   const { rootsFor, inside } = await worktrees();
@@ -271,4 +266,19 @@ test("Worktrees finds every kind in a real repository and cleans up the safe one
   assert.equal(panel.note, null);
   assert.equal(stateOf(row("moved")), "changes");
   assert.equal(row("moved").dirty, 1);
+});
+
+test("Explain names and starts the one installed agent, looked up once", async () => {
+  let lookups = 0;
+  const started = [];
+  const codex = { name: "Codex", installed: true, run: ["codex"] };
+  const { Worktrees } = await worktrees({ exec: async () => failure("not here"), knownAgents: async () => { lookups++; return [{ name: "Claude", installed: false, run: ["claude"] }, codex]; }, run: (verb, args) => started.push([verb, args]) });
+  const { cx, drain } = context();
+  const opened = new Worktrees();
+  opened.init(cx); await drain();
+  assert.equal(opened.explainer.name, "Codex");
+  assert.equal(typeof opened.agent, "function", "the Ask your agent section still draws");
+  opened.ask("Explain web", "/w", "Explain it");
+  assert.deepEqual(clone(started), [["tab.new", { name: "Explain web", folder: "/w", argv: ["codex"], task: "Explain it" }]]);
+  assert.equal(lookups, 1);
 });

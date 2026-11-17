@@ -156,11 +156,17 @@ export function isCandidate(version, tags) {
   });
 }
 
+// The changelog's sections; an error in it throws.
+export function changelogSections(changelog) {
+  const { sections, errors } = parseChangelog(changelog);
+  if (errors.length) throw new Error(errors.join("; "));
+  return sections;
+}
+
 export function nextVersion(changelog, tags) {
   const latest = stableTags(tags).sort(compare).at(-1);
   if (!latest) throw new Error("no stable tag to compute the next version from");
-  const { sections, errors } = parseChangelog(changelog);
-  if (errors.length) throw new Error(errors.join("; "));
+  const sections = changelogSections(changelog);
   const pending = sections.filter((s) => s.version === UNRELEASED || (parse(s.version) && compare(s.version, latest) > 0));
   return pending.length ? bump(latest, requiredBump(pending.flatMap((s) => Object.keys(s.categories)))) : null;
 }
@@ -215,6 +221,15 @@ export function readChangelog() {
   return readFileSync(CHANGELOG, "utf8");
 }
 
+// The version file and the changelog; one that cannot be read ends the process saying so.
+export function readReleaseFiles() {
+  const readOrExit = (path, read) => {
+    try { return read(); }
+    catch (e) { console.error(`error: ${path} could not be read: ${e.message}`); process.exit(1); }
+  };
+  return { version: readOrExit(VERSION_FILE, readVersion), changelog: readOrExit(CHANGELOG, readChangelog) };
+}
+
 export function installedChangedSince(tag, { isTag = true, ignoreVersion = false } = {}) {
   const paths = ignoreVersion ? [...INSTALLED, `:(exclude)${VERSION_FILE}`] : INSTALLED;
   try { git(["diff", "--quiet", isTag ? `v${bareRelease(tag)}` : tag, "HEAD", "--", ...paths]); return false; }
@@ -222,11 +237,7 @@ export function installedChangedSince(tag, { isTag = true, ignoreVersion = false
 }
 
 function main() {
-  let version, changelog;
-  try { version = readVersion(); }
-  catch (e) { console.error(`error: ${VERSION_FILE} could not be read: ${e.message}`); process.exit(1); }
-  try { changelog = readChangelog(); }
-  catch (e) { console.error(`error: ${CHANGELOG} could not be read: ${e.message}`); process.exit(1); }
+  const { version, changelog } = readReleaseFiles();
   if (process.argv.includes("--notes")) {
     const body = notes(changelog, version);
     if (body === null) { console.error(`${CHANGELOG} has no section for ${version}`); process.exit(1); }

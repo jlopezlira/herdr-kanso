@@ -1,123 +1,30 @@
 /* One rule set per composition, smallest first: each one is built from primitives and the compositions above it. */
 
 /* Toolbar: icon buttons in a row; collapsed, a column where a caret holds Sort and Search; Sort is dim at its default. */
-.kanso-toolbar{display:flex;flex:none;align-items:center;gap:var(--k-sp-1);color:var(--muted)}
-.kanso-toolbar.kanso-toolbar--column{flex-direction:column;gap:var(--k-sp-2)}
-.kanso-toolbar__add,.kanso-toolbar__sort{position:relative;display:flex}
-.kanso-toolbar__sort:not(.kanso-toolbar__sort--sorted)>.kanso-button:not(.kanso-button--active){color:var(--dim)}
-.kanso-toolbar__menu{position:absolute;top:calc(100% + var(--k-sp-1));left:0;z-index:1}
-.kanso-toolbar--column .kanso-toolbar__menu{top:0;left:calc(100% + var(--k-sp-1))}
-.kanso-toolbar__group{display:flex;flex-direction:column;align-items:center;gap:var(--k-sp-1);border-radius:var(--k-r-card)}
-.kanso-toolbar__group.kanso-toolbar__group--open{background:var(--w4)}
 
 /* Header: the window's lights and the sidebar's tools; Dawn Mode draws its sky behind them. */
-.kanso-header{position:relative;display:flex;flex-direction:column;flex:none;overflow:hidden;padding:0 var(--k-sp-2) var(--k-sp-1);background:var(--chrome)}
-.kanso-header>:not(.kanso-dawn){position:relative;z-index:1}
-.kanso-header__title{display:flex;align-items:center;height:48px;padding-left:var(--k-sp-1)}
-.kanso-header__title>.kanso-badge--pill{position:relative;margin-left:auto}
-.kanso-header>.kanso-toolbar{height:var(--k-h-header)}
-.kanso-header.kanso-header--collapsed>.kanso-toolbar{height:auto;padding-top:var(--k-sp-hair)}
 
 /* Sidebar: the header, the view switch, the rows of the chosen view and the footer; collapsed, the rail with tiles. */
-.kanso-sidebar>.kanso-header{margin:0 calc(-1 * var(--k-sp-2))}
-.kanso-rail>.kanso-sidebar__view-switch{align-self:center}
-.kanso-rail{anchor-name:--kanso-rail}
-.kanso-rail:has(.kanso-sidebar__view-menu){overflow:visible}
-.kanso-rail .kanso-sidebar__view-switch{position:relative}
-.kanso-sidebar__view-menu{position:absolute;top:0;left:calc(anchor(--kanso-rail right) + var(--k-sp-1));z-index:1}
 
 /* Pane header: program, name, digest, toolbar, grip. */
-.kanso-pane-header{display:flex;flex:none;align-items:center;gap:var(--k-sp-2);height:var(--k-h-pane);padding:0 var(--k-sp-2) 0 var(--k-sp-3);box-sizing:border-box;border-radius:var(--k-r-card) var(--k-r-card) 0 0;font-size:var(--k-fs-body);white-space:nowrap;cursor:grab}
-.kanso-pane-header__name{flex:0 1 auto;min-width:0;max-width:var(--k-w-pane-name);overflow:hidden;text-overflow:ellipsis;font-weight:var(--k-fw-medium);color:var(--fg)}
-.kanso-pane-header__digest{display:flex;flex:0 1 auto;align-items:center;gap:var(--k-sp-2);min-width:0;overflow:hidden;font-size:var(--k-fs-meta);color:var(--muted)}
-.kanso-pane-header__segment{display:flex;flex:none;align-items:center;gap:var(--k-sp-2);padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm);white-space:nowrap}
-.kanso-pane-header__segment--act{cursor:pointer}
-.kanso-pane-header__segment--act:is(:hover,.kanso-control--hover){background:var(--w12)}
-.kanso-pane-header__segment>span{overflow:hidden;text-overflow:ellipsis;max-width:var(--k-w-pane-segment)}
-.kanso-pane-header .kanso-state-line{flex:none}
-.kanso-pane-header>.kanso-grip{margin:0 var(--k-sp-hair)}
-.kanso-pane-header>.kanso-field--inline{flex:0 1 auto;min-width:0}
-.kanso-pane-header__tools{display:flex;flex:none;align-items:center;gap:var(--k-sp-hair)}
-.kanso-pane-header__tools:empty{display:none}
-.kanso-pane-header__more{position:relative;display:flex}
-.kanso-pane-header__menu{position:absolute;top:calc(100% + var(--k-sp-1));right:0;z-index:1;cursor:default}
 /* Its states: focus is the ground, blocked the wash, the keyboard's focus the ring, out of reach faded, held while it moves. */
-.kanso-pane-header.kanso-pane-header--focus{background:var(--selected)}
-.kanso-pane-header.kanso-pane-header--blocked{background:color-mix(in srgb,var(--blocked) var(--k-wash-blocked),transparent)}
-.kanso-pane-header--keyboard{outline:var(--k-sp-hair) solid var(--accent);outline-offset:calc(-1 * var(--k-sp-hair))}
-.kanso-pane-header--unreachable{opacity:var(--k-op-away)}
-.kanso-pane-header--held{opacity:var(--k-op-held);cursor:grabbing}
 
 /* Status bar: two halves around the fixed minimap slot; items 16 apart, icons and marks 14 with 8 to their words. */
-.kanso-status-bar.kanso-status-bar--grid{position:relative;display:grid;width:auto;height:var(--k-h-bar);gap:0;padding:0}
-.kanso-status-bar--grid .kanso-status-bar__item{transition:opacity var(--k-hover-ms) var(--k-ease-in)}
 @starting-style{.kanso-status-bar--grid .kanso-status-bar__item{opacity:0}}
-@media (prefers-reduced-motion:reduce){.kanso-status-bar--grid .kanso-status-bar__item{transition:none}}
-.kanso-status-bar__item.kanso-status-bar__needs{flex:0 1 auto;min-width:0}
-.kanso-status-bar__name{flex:none;font-weight:var(--k-fw-medium);color:var(--fg)}
-.kanso-status-bar__question{min-width:0;max-width:var(--k-w-question);overflow:hidden;text-overflow:ellipsis}
-.kanso-status-bar__more{flex:none;color:var(--dim)}
-.kanso-status-bar--grid .kanso-status-bar__middle{gap:var(--k-sp-3)}
-.kanso-status-bar__item.kanso-status-bar__stepper{gap:var(--k-sp-hair)}
-.kanso-status-bar__stepper>.kanso-button{display:none;transition:opacity var(--k-hover-ms) var(--k-hover-ease) var(--k-hover-delay),display 0s allow-discrete var(--k-hover-delay)}
-.kanso-status-bar__stepper:is(:hover,:focus-within,.kanso-control--hover,.kanso-status-bar__item--open)>.kanso-button{display:grid}
 @starting-style{.kanso-status-bar__stepper:is(:hover,:focus-within,.kanso-control--hover)>.kanso-button{opacity:0}}
-.kanso-status-bar__value{min-width:1ch;text-align:center;color:var(--fg)}
-.kanso-status-bar__item.kanso-status-bar__item--open{anchor-name:--kanso-status-item;margin:0 calc(-1 * var(--k-sp-1));padding:var(--k-sp-hair) var(--k-sp-1);border-radius:var(--k-r-sm);background:var(--w12)}
-.kanso-status-bar__popup{position:absolute;bottom:calc(anchor(--kanso-status-item top) + var(--k-sp-1));right:anchor(--kanso-status-item right);z-index:1}
-
-/* Panel: narrow, a page title drops to the section size; stale, all but the header steps down and takes no clicks. */
-.kanso-panel{--kanso-panel-pad:var(--k-sp-4);padding:var(--kanso-panel-pad)}
-.kanso-panel--narrow .kanso-panel-header:not(.kanso-panel-header--bar) .kanso-row__name{font-size:var(--k-fs-section)}
-.kanso-panel--stale>:not(.kanso-panel-header){opacity:var(--k-op-away);pointer-events:none}
-/* Panel header, bar: the name at the name size, flush with the panel's edges over a rule. */
-.kanso-panel-header--bar{margin:calc(-1 * var(--kanso-panel-pad)) calc(-1 * var(--kanso-panel-pad)) var(--k-sp-2);padding-inline:var(--k-sp-2);border-bottom:1px solid var(--border)}
-.kanso-panel-header--bar .kanso-row__name{font-size:var(--k-fs-name)}
-.kanso-panel-header--bar>.kanso-row--title{height:var(--k-h-header);align-content:center}
-.kanso-panel-header--bar .kanso-row--title .kanso-content__primary{height:auto}
 
 /* Tab bar: the project's tabs, + and Arrange, then the panel doors; 48 tall, nothing filled at rest. */
-.kanso-tab-bar{position:relative;display:flex;align-items:center;gap:var(--k-sp-2);height:var(--k-h-tab-bar);padding:0 var(--k-sp-3);box-sizing:border-box}
-.kanso-tab-bar>.kanso-tabs{gap:var(--k-sp-hair);min-width:0}
-.kanso-tab-bar .kanso-tabs__label{max-width:var(--k-w-tab-label)}
-.kanso-tab-bar__doors{display:flex;align-items:center;gap:var(--k-sp-hair)}
-.kanso-tab-bar__skeleton{width:var(--k-w-tab-skeleton);height:var(--k-h-icon);border-radius:var(--k-r-control)}
-.kanso-tab-bar__skeleton+.kanso-tab-bar__skeleton{width:var(--k-w-tab-skeleton-short)}
-.kanso-tab-bar__more{position:relative}
-.kanso-tab-bar__menu{position:absolute;top:calc(100% + var(--k-sp-1));left:0;z-index:1}
 
 /* Edges: the panes past each side of the strip, grouped by column. */
-.kanso-edge__column{display:flex;flex-direction:column;align-items:center;gap:var(--k-sp-hair)}
-.kanso-edge__more{position:relative}
-.kanso-edge__menu{position:absolute;top:0;z-index:1}
-.kanso-edge__menu--right{right:calc(100% + var(--k-sp-1))}
-.kanso-edge__menu--left{left:calc(100% + var(--k-sp-1))}
 
 /* State patterns: the bar's fix sits 4 after our words. */
 .kanso-state-line>.kanso-button{margin-left:var(--k-sp-1)}
 
 /* While you were away: a raised card docked at the foot of the list, 12 above the footer. */
-.kanso-away{display:flex;flex-direction:column;padding:var(--k-sp-1);border-radius:var(--k-r-card);background:var(--raised);box-shadow:0 0 0 1px var(--border)}
+.kanso-away{display:flex;flex-direction:column;padding:var(--k-sp-1);border-radius:var(--k-r-card);background:var(--surface-4);box-shadow:0 0 0 var(--k-w-line) var(--border)}
 .kanso-away>.kanso-button--quiet{align-self:flex-start}
-.kanso-sidebar>.kanso-away{margin-top:auto;margin-bottom:var(--k-sp-3)}
 
 /* Keyboard: the map of one layer beside the picked key. A key is a row tall; a wider key spans its units and the gaps between them. */
-.kanso-keyboard__layout{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--k-sp-4);margin-top:var(--k-sp-4);align-items:start}
-.kanso-keyboard{display:flex;flex-direction:column;gap:var(--k-sp-1);padding:var(--k-sp-3);border-radius:var(--k-r-card);background:var(--canvas);width:max-content}
-.kanso-keyboard__row{display:flex;gap:var(--k-sp-1)}
-.kanso-keyboard__key{--k-units:1;inline-size:calc(var(--k-h-row) * var(--k-units) + var(--k-sp-1) * (var(--k-units) - 1));height:var(--k-h-row);border-radius:var(--k-r-control);background:var(--w4);color:var(--dim);font-size:var(--k-fs-meta);display:flex;align-items:center;justify-content:center;box-sizing:border-box;flex:none;white-space:nowrap;cursor:default;transition:box-shadow var(--k-hover-out) var(--k-ease-out)}
-.kanso-keyboard__key:is(:hover,.kanso-control--hover){box-shadow:inset 0 0 0 1px var(--accent);transition-duration:var(--k-hover-in);transition-timing-function:var(--k-ease-in)}
-.kanso-keyboard__key:focus-visible{outline:var(--k-sp-hair) solid var(--accent);outline-offset:var(--k-sp-hair)}
-.kanso-keyboard__key.kanso-keyboard__key--bound{background:var(--w12);color:var(--fg)}
-.kanso-keyboard__key.kanso-keyboard__key--available{background:var(--w7);color:var(--muted)}
-.kanso-keyboard__key:is(.kanso-keyboard__key--held,.kanso-control--held){box-shadow:inset 0 0 0 1px var(--muted);color:var(--fg)}
-.kanso-keyboard__key.kanso-control--on{background:var(--solid);color:var(--solidfg);font-weight:var(--k-fw-medium)}
-.kanso-keyboard__selection{display:flex;flex-direction:column;gap:var(--k-sp-1);min-width:0}
-.kanso-keyboard__chord{font-size:var(--k-fs-title);font-weight:var(--k-fw-medium);letter-spacing:var(--k-ls-tight)}
-.kanso-keyboard__meaning{font-size:var(--k-fs-body);color:var(--fg);line-height:var(--k-lh-tight)}
-.kanso-keyboard__meaning.kanso-text--muted{color:var(--muted)}
-.kanso-keyboard__layer{font-size:var(--k-fs-meta);color:var(--dim)}
-.kanso-keyboard__selection>.kanso-actions{display:flex;flex-wrap:wrap;margin-top:var(--k-sp-1);gap:var(--k-sp-2)}
 
 /* Notifications: toasts stack at the corner, the newest at the bottom. */
 .kanso-toasts{display:flex;flex-direction:column;align-items:flex-end;gap:var(--k-sp-2)}

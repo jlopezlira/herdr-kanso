@@ -1,3 +1,4 @@
+import { sizedPage } from "./ui-page.js";
 import { localSleep } from "./platform-host.js";
 // Kanso's Shipped panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Statistics only, never one item at a time from GitHub.
@@ -7,15 +8,17 @@ import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
-import { Share } from "./share.js";
-import { G, tokens, breathe } from "./ui.js";
+import { Share, shareRows } from "./share.js";
+import { G, T, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
+import { metric, skeletonOf, failureBlock, tooltip } from "./kit.js";
+import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
-import { range, tryOrAsync, mapSeries } from "./pure.js";
+import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
-import { failure, said, failNote } from "./lib.js";
+import { spawnAndNotify, said } from "./lib.js";
+import { dot } from "./ui-dot.js";
 
 const DAY = 86400000;
 const RECORDS = "kanso.shipped.bests";
@@ -23,10 +26,8 @@ const REFRESH_MS = 5 * 60 * 1000;
 const PARALLEL = 6;
 const RETRIES = 6; // GitHub answers 202 while it computes a repository's statistics
 const REPO_ROWS = 8;
-const CELL_GAP = 3;
 export const PERIODS = ["day", "week", "month", "year"];
 const PERIOD_NAMES = { day: "Day", week: "Week", month: "Month", year: "Year" };
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -172,8 +173,8 @@ export function recordText(k, r) {
 
 export function heatLayout(width) {
   const w = Math.max(120, Math.floor(width));
-  const weeks = Math.max(4, Math.min(53, Math.floor((w + CELL_GAP) / (9 + CELL_GAP))));
-  const cell = Math.max(9, Math.min(16, Math.floor((w - (weeks - 1) * CELL_GAP) / weeks)));
+  const weeks = Math.max(4, Math.min(53, Math.floor((w + HEATMAP_GAP) / (9 + HEATMAP_GAP))));
+  const cell = Math.max(9, Math.min(16, Math.floor((w - (weeks - 1) * HEATMAP_GAP) / weeks)));
   return { weeks, cell };
 }
 
@@ -254,8 +255,7 @@ export class Shipped {
   pick(kind, offset, cx) {
     this.kind = kind; this.offset = Math.min(0, offset);
     this.refresh(cx);
-    cx.spawn(async (cx) => { await this.readRhythm(); cx.notify(); });
-    cx.notify();
+    spawnAndNotify(cx, async (cx) => { await this.readRhythm(); cx.notify(); });
   }
 
   refresh(cx, again = false) {
@@ -264,7 +264,7 @@ export class Shipped {
     cx.spawn(async (cx) => {
       try {
         const key = this.key(), now = Date.now();
-        const cur = periodRange(this.kind, this.offset, now), prev = comparedRange(this.kind, this.offset, now);
+        const { cur, prev } = this.ranges(now);
         if (again || !this.github[key]) {
           try {
             const data = await gql(periodQuery(cur, prev, now));
@@ -292,7 +292,7 @@ export class Shipped {
   startSync(cx) {
     if (this.syncing || !this.login) return;
     this.syncing = true; this.syncError = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try { await this.sync(cx); }
       catch (e) { this.syncError = String(e?.message ?? e); }
       finally {
@@ -302,7 +302,6 @@ export class Shipped {
         this.checkRecords(); cx.notify();
       }
     });
-    cx.notify();
   }
 
   async readRhythm() {
@@ -411,9 +410,11 @@ export class Shipped {
         .child(iconButton("shipped-next", "chevron-right", "Next period", (cx) => this.pick(this.kind, this.offset + 1, cx), c, { disabled: this.offset >= 0 })));
   }
 
+  ranges(now) { return { cur: periodRange(this.kind, this.offset, now), prev: comparedRange(this.kind, this.offset, now) }; }
+
   summary() {
     const now = Date.now();
-    const cur = periodRange(this.kind, this.offset, now), prev = comparedRange(this.kind, this.offset, now);
+    const { cur, prev } = this.ranges(now);
     // A running week compares with the whole last one: its sum can't be cut.
     const before = this.kind === "week" && this.offset === 0 ? periodRange("week", -1, now) : prev;
     const gh = this.github[this.key()], v = gh?.viewer;
@@ -453,20 +454,12 @@ export class Shipped {
     const s = this.summary();
     return v_flex().w_full().gap(G.lg)
       .child(v_flex().w_full().gap(G.xs)
-        .child(h_flex().w_full().flex_wrap().items_end().gap_x(G.md).gap_y(G.xs)
-          .child(div().text_size(narrow ? 40 : 56).line_height(1).font_light().text_color(c.text).child(s.big ?? "…"))
-          .when(Boolean(s.small), (el) => el.child(div().pb(6).text_size(narrow ? 18 : 22).line_height(1).font_light().text_color(c.muted).child(s.small))))
-        .child(h_flex().w_full().flex_wrap().gap_x(G.sm).gap_y(2).items_center()
-          .child(div().text_size(13).text_color(c.muted).child(`${s.label}${s.settled ? "" : ", still adding up"}`))
-          .when(s.delta !== null, (el) => el.child(h_flex().gap(6).items_center()
-            .child(div().size(6).rounded_full().bg(s.delta >= 0 ? c.green : c.red))
-            .child(div().text_size(13).text_color(s.delta >= 0 ? c.green : c.red).child(s.deltaText))))))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.lg : 32).gap_y(G.lg)
-        .children(s.stats.map((x) => v_flex().gap(4).min_w(64)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(x.value))
-          .child(div().text_size(11).text_color(c.dim).child(x.unit)))))
+        .child(metric({ value: s.big ?? "…", unit: [s.small, `${s.label}${s.settled ? "" : ", still adding up"}`].filter(Boolean).join(" "), facts: factList(s.stats) })("sh-metric", c))
+        .when(s.delta !== null, (el) => el.child(h_flex().gap(6).items_center()
+          .child(dot(c, s.delta >= 0 ? c.green : c.red))
+          .child(div().text_size(T.value).text_color(s.delta >= 0 ? c.green : c.red).child(s.deltaText)))))
       .when(Boolean(s.everText), (el) => el.child(div().text_size(12).text_color(c.muted).child(s.everText)))
-      .when(Boolean(s.error), (el) => el.child(failNote("sh-error", s.error, c)));
+      .when(Boolean(s.error), (el) => el.child(failureBlock(s.error)("sh-error", c)));
   }
 
   streak(c, width) {
@@ -479,16 +472,14 @@ export class Shipped {
       if (!d) return div().id(key).size(cell).flex_none(); // before the calendar, or still to come
       const a = level[d.contributionLevel];
       return div().id(key).size(cell).flex_none().rounded(radius).bg(a ? c.accent + a : c.subtle)
-        .tooltip(`${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}`);
+        .tooltip(tooltip({ label: `${fmt(d.contributionCount)} ${d.contributionCount === 1 ? "contribution" : "contributions"} on ${dayName(fromIsoDay(d.date))}` }));
     };
     return v_flex().w_full().gap(G.md)
       .child(section(c, "Streak", `longest ${fmt(longest.n)} ${longest.n === 1 ? "day" : "days"}`))
-      .child(h_flex().items_end().gap(G.sm)
-        .child(div().text_size(40).line_height(1).font_light().text_color(c.text).child(fmt(current)))
-        .child(div().pb(4).text_size(12).text_color(c.dim).child(current === 1 ? "day in a row" : "days in a row")))
-      .child(h_flex().w_full().gap(CELL_GAP).children(weeks.map((w, wi) => {
+      .child(metric({ value: fmt(current), unit: current === 1 ? "day in a row" : "days in a row" })("sh-streak", c))
+      .child(h_flex().w_full().gap(HEATMAP_GAP).children(weeks.map((w, wi) => {
         const byDay = new Map(w.contributionDays.map((d) => [d.weekday, d]));
-        return v_flex().flex_none().gap(CELL_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
+        return v_flex().flex_none().gap(HEATMAP_GAP).children([0, 1, 2, 3, 4, 5, 6].map((i) => square(byDay.get(i), `heat-${wi}-${i}`)));
       })));
   }
 
@@ -504,7 +495,7 @@ export class Shipped {
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(h_flex().gap(G.sm).items_center()
               .child(div().truncate().text_size(13).text_color(c.text).child(RECORD_NAMES[k]))
-              .when(fresh, (el) => el.child(div().flex_none().px(6).py(1).rounded(6).bg(c.accent + "26").text_size(11).text_color(c.accent).child("New record"))))
+              .when(fresh, (el) => el.child(div().flex_none().px(6).py(1).rounded(6).bg(alpha(c.accent, TINT.soft)).text_size(11).text_color(c.accent).child("New record"))))
             .child(div().truncate().text_size(11.5).text_color(c.dim).child(t.detail)))
           .child(h_flex().flex_none().items_end().gap(6)
             .child(div().text_size(20).line_height(1).font_light().text_color(fresh ? c.accent : c.text).child(t.value))
@@ -534,7 +525,7 @@ export class Shipped {
   }
 
   status(c) {
-    if (this.syncError) return failure("sh-sync", "Adding up stopped", c, { why: this.syncError });
+    if (this.syncError) return failureBlock({ text: "Adding up stopped", source: this.syncError })("sh-sync", c);
     if (!this.syncing || !this.phase) return null;
     return div().text_size(12).text_color(this.firstRead ? c.muted : c.dim)
       .child(`${this.firstRead ? "Adding up" : "Updating"}: ${this.phase}.${this.firstRead ? " The first time takes a few minutes; after that only what changed is read." : ""}`);
@@ -551,7 +542,7 @@ export class Shipped {
       .child(section(c, "When you ship", note))
       .child(h_flex().w_full().h(56).items_end().gap(2).children(r.hours.map((n, h) => div().id(`hour-${h}`).flex_1().min_w(2)
         .h(Math.max(2, Math.round((n / top) * 56))).rounded(2).bg(n ? c.accent + (h === peak ? "ff" : "90") : c.subtle)
-        .tooltip(`${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}`))))
+        .tooltip(tooltip({ label: `${fmt(n)} ${n === 1 ? "commit" : "commits"} at ${hour(h)}` })))))
       .child(h_flex().w_full().justify_between().text_size(10.5).text_color(c.dim)
         .children(["00", "06", "12", "18", "23"].map((t) => div().child(t))))
       .when(r.machines.length > 0, (el) => el.child(v_flex().w_full().pt(G.sm)
@@ -561,29 +552,7 @@ export class Shipped {
           .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(m.n)} commits · +${fmt(m.a)} −${fmt(m.d)}`))))));
   }
 
-  skeleton(c, narrow) {
-    const { block, line, row } = ghost(c);
-    const hours = [8, 12, 6, 10, 18, 28, 40, 48, 36, 22, 14, 10, 16, 30, 44, 50, 38, 20, 12, 8, 6, 10, 18, 24];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(v_flex().gap(G.md)
-        .child(line(120, 15))
-        .child(block(narrow ? 140 : 180, narrow ? 40 : 56, 6))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([40, 52, 36].map((w) => block(w, narrow ? 20 : 24, 4)))))
-      .child(h_flex().w_full().h(56).items_end().gap(2)
-        .children(hours.map((h) => div().flex_1().min_w(2).h(h).rounded(2).bg(c.border))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(90, 12))).children([0, 1, 2, 3].map(row)));
-  }
-
-  bones(c, narrow = true) {
-    const { header, block } = ghost(c);
-    const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(header(narrow ? 90 : 110, narrow ? 17 : 20))
-          .child(h_flex().h(26).gap(G.xs).items_center().children([64, 52, 48, 40].map((w) => block(w, 26, 6))))
-          .child(this.skeleton(c, narrow))));
-  }
+  skeleton(c) { return skeletonOf({ shape: "metric" })("kanso-skeleton", c); }
 
   render(cx) {
     const c = tokens(theme());
@@ -592,7 +561,7 @@ export class Shipped {
     const inner = Math.min(1080, width - 2 * pad);
     const gh = this.github[this.key()], status = this.status(c), rhythm = this.rhythmView(c);
     const body = !gh && !this.stats
-      ? this.skeleton(c, narrow)
+      ? this.skeleton(c)
       : v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
         .when(Boolean(status), (el) => el.child(status))
@@ -600,18 +569,14 @@ export class Shipped {
         .when(Object.keys(this.records).length > 0, (el) => el.child(this.recordsList(c)))
         .when(Boolean(rhythm), (el) => el.child(rhythm))
         .child(this.byRepo(c));
-    return v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+    return sizedPage.call(this, v_flex().id("kanso-shipped").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(h_flex().w_full().items_center().justify_between().gap(G.md)
             .child(div().truncate().text_size(narrow ? 17 : 20).text_color(c.text).child("Shipped"))
             .child(h_flex().gap(G.xs).items_center()
               .child(iconButton("shipped-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: !this.days }))
-              .child(iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
-          .when(Boolean(this.share.open), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only the totals, streak, records and hours: no repository or computer names. The post opens with the image in it.", G.sm)))
+              .child(iconButton("shipped-refresh", "refresh-cw", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
+          .children(shareRows(this, c, "Only the totals, streak, records and hours: no repository or computer names. The post opens with the image in it."))
           .child(this.periods(c))
-          .child(body)));
+          .child(body));
   }
 }

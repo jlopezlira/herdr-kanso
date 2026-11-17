@@ -9,14 +9,18 @@ import { fileApi } from "./platform-files.js";
 import { View, div, svg } from "gpui-kit";
 import { h_flex, Popover } from "gpui-base";
 import { spaces, panes, run, openOverlay, props, theme, window, shared, setShared, layout, appHome, exec, watchFolder, nextCommand, home, machines, notify } from "herdr";
-import { walkLayout, commitLayout, sidebarBack, foldSidebar } from "./layout.js";
+import { walkLayout, commitLayout, sidebarBack, foldSidebar, dropStripDrag } from "./layout.js";
 import { Updater } from "./update.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
-import { G, H, W, tokens } from "./ui.js";
+import { tryOr, readCommands } from "./pure.js";
+import { openArrange } from "./open.js";
+import { G, H, W, CLEAR, EASE, GLIDE, TINT, alpha, tokens } from "./ui.js";
 import { button, iconButton, pressAgain, Armed } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { tabSkeleton } from "./ui-skeleton.js";
+import { tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
+import { KANSO_SETTINGS } from "./footer-model.js";
 import { tabItem, tabInsertion, tabPill, TAB_NAME_LIMIT } from "./ui-tab.js";
 import { tabMark, barState, foldTabs, pillAt, dropSide, renameWaits } from "./tab-bar-model.js";
 import { Kdb, projectKey } from "./kdb.js";
@@ -58,13 +62,13 @@ const ICON = "mods/kanso-chrome/icons/";
 const openSettings = (page) => openOverlay({ mod: "kanso-settings", kind: "dialog", width: 860, height: 680, props: { page } });
 const BUILTIN = [
   { id: "files", label: "Files", icon: `${ICON}file.svg` },
-  { id: "insights", label: "Spend", icon: `${ICON}chart.svg` },
-  { id: "pr", label: "PR", icon: `${ICON}pull-request.svg` },
+  { id: "insights", label: "Spend", icon: `${ICON}chart-column.svg` },
+  { id: "pr", label: "PR", icon: `${ICON}git-pull-request.svg` },
   { id: "shipped", label: "Shipped", icon: `${ICON}trophy.svg` },
-  { id: "worktrees", label: "Worktrees", icon: `${ICON}worktree.svg` },
+  { id: "worktrees", label: "Worktrees", icon: `${ICON}git-fork.svg` },
   { id: "ports", label: "Ports", icon: `${ICON}plug.svg` },
   { id: "containers", label: "Containers", icon: `${ICON}container.svg` },
-  { id: "memory", label: "Memory", icon: `${ICON}memory.svg` },
+  { id: "memory", label: "Memory", icon: `${ICON}memory-stick.svg` },
   { id: "look", label: "Images", icon: `${ICON}eye.svg` },
   { id: "sim", label: "Simulator", icon: `${ICON}smartphone.svg` },
 ];
@@ -91,8 +95,6 @@ function setPanelOn(id, on) {
   setShared(STORE, setPiece(pieces(shared), `panel.${id}`, on ? "show" : "hide"));
 }
 
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
-
 function panelContent(id) {
   if (id === "preview") return { mod: "kanso-panel", props: { panel: "preview" } };
   if (PANELS[id]) return { ...PANELS[id] };
@@ -101,9 +103,6 @@ function panelContent(id) {
   return custom.props !== undefined ? { mod: custom.mod, props: custom.props } : { mod: custom.mod };
 }
 
-const TAB_H = 26; // inside the 2px padding of the pill, so the pill is 30px
-const CLEAR = "#00000000";
-const GLIDE = { duration: 220, easing: "ease-out" }; // the pill under the chosen tab, as the sidebar's
 // A size reported after layout: the sizes with it, or the same ones when it moved less than half a pixel.
 const withSize = (sizes, key, width) => (Math.abs((sizes[key] ?? 0) - width) < 0.5 ? sizes : { ...sizes, [key]: width });
 const closeKey = (tab) => `close-${tab.id}`;
@@ -142,23 +141,21 @@ export default class Tabs extends View {
       this.updater = new Updater();
       this.updater.start(cx);
       cx.timer.after(0, (next) => this.probeSimulator(next));
-      // keys.json: tab-N and panel-N arrive here as commands.
-      afterMount(cx, (cx) => cx.spawn(async (cx) => {
-        for (;;) {
-          const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-          if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-          const name = String(next.c).replace(/^kanso-tabs\./, "");
-          if (name === "update") this.updater.install(cx);
-          else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
-          else if (name === "settings" || name.startsWith("settings-")) {
-            const asked = name.slice(9);
-            openSettings(!asked || asked === "mods" ? "pieces" : asked);
-          }
-          else this.command(name);
-          cx.notify();
-        }
-      }));
+      readCommands(cx, () => nextCommand(), (c, cx) => this.barCommand(c, cx));
     }
+  }
+
+  // keys.json: tab-N and panel-N arrive here as commands.
+  async barCommand(c, cx) {
+    const name = String(c).replace(/^kanso-tabs\./, "");
+    if (name === "update") this.updater.install(cx);
+    else if (name === "check") { await this.updater.check(cx, true, true); this.updater.fit(); }
+    else if (name === "settings" || name.startsWith("settings-")) {
+      const asked = name.slice(9);
+      openSettings(!asked || asked === "mods" ? "pieces" : asked);
+    }
+    else this.command(name);
+    cx.notify();
   }
 
   probeSimulator(cx) {
@@ -497,7 +494,7 @@ export default class Tabs extends View {
     const tools = state === "connected" ? [
       tool("tab-new", "plus", "New", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 }))
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openArrange(); }),
-      shown("tabs.arrange", true, map) ? tool("tab-arrange", "layers", window()?.platform === "macos" ? "Arrangements  ⌥⌘T" : "Arrangements", () => openArrange()) : null,
+      shown("tabs.arrange", true, map) ? tool("tab-arrange", "layers", tooltip({ label: "Arrangements", chord: boundChord("kanso-strip.arrange") }), () => openArrange()) : null,
     ].filter(Boolean) : [];
     this.reconcile(space, panel, body, now);
     this.syncPanel(space, now, enabled);
@@ -510,13 +507,13 @@ export default class Tabs extends View {
       const wide = Math.ceil(String(p.label).length * 6.8) + 10;
       const name = div().id(`panel-name-${p.id}`).h_full().flex().items_center().overflow_hidden().flex_none()
         .w(named ? wide : 0).opacity(named ? 1 : 0)
-        .transition("width", { duration: 180, easing: "ease-out" })
-        .transition("opacity", { duration: 180, easing: "ease-out" })
+        .transition("width", EASE)
+        .transition("opacity", EASE)
         .child(div().pl(6).pr(4).whitespace_nowrap().child(p.label));
-      return h_flex().id(`panel-${p.id}`).h(TAB_H).min_w(TAB_H).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
-        .text_size(12).bg(on ? t.foreground + "12" : CLEAR)
+      return h_flex().id(`panel-${p.id}`).h(H.icon).min_w(H.icon).px(p.icon ? 5.5 : 4).flex_none().items_center().justify_center().rounded(6)
+        .text_size(12).bg(on ? alpha(t.foreground, TINT.tab) : CLEAR)
         .text_color(on ? t.foreground : t.muted)
-        .hover(s => s.bg(target ? t.foreground + "1a" : on ? t.foreground + "12" : t.foreground + "0a").text_color(t.foreground))
+        .hover(s => s.bg(alpha(t.foreground, target ? TINT.faint : on ? TINT.tab : TINT.hover)).text_color(t.foreground))
         .on_hover((hovered, cx) => {
           if (hovered) this.hoverPanel = p.id; else if (this.hoverPanel === p.id) this.hoverPanel = null;
           cx.notify();
@@ -536,7 +533,7 @@ export default class Tabs extends View {
     return h_flex().id("tab-bar").size_full().min_w(0).px(12).gap(2).items_center()
       .on_size_change(() => this.keepRail(layout()))
       // A pane held in the strip and let go here goes back where it was.
-      .on_mouse_up("left", () => { if (shared("strip.drag")) { setShared("strip.drop", null); setShared("strip.drag", null); } })
+      .on_mouse_up("left", dropStripDrag)
       .on_mouse_up("left", (_e, cx) => { this.pressed = null; this.dropAt = null; this.dragPanel = null; cx.notify(); })
       // A held tab let go outside the bar lands nowhere.
       .on_hover((hovered, cx) => { if (!hovered && this.pressed) { this.pressed = null; this.dropAt = null; cx.notify(); } })
@@ -544,11 +541,11 @@ export default class Tabs extends View {
       .child(this.tabArea(c, { space, openTabs, ps, state, tools }))
       .child(h_flex().flex_none().gap(2).items_center().children(shownPanels.map(panelButton))
         // Help and settings, alike and side by side: not panels, never dragged nor turned off.
-        .child(tool("kanso-help", "help", window()?.platform === "macos" ? "kansō help  ⌘⇧/" : "kansō help  Ctrl+Shift+/", () => run("mod.open", { name: "kanso-help" })).ml(4))
-        .child(tool("kanso-settings", "settings", update ? `kansō ${update} is available` : window()?.platform === "macos" ? "kansō settings  ⌃⇧," : "kansō settings  Ctrl+Shift+,",
+        .child(tool("kanso-help", "circle-question-mark", tooltip({ label: "kansō help", chord: boundChord("mod.open:kanso-help") }), () => run("mod.open", { name: "kanso-help" })).ml(4))
+        .child(tool("kanso-settings", "settings", tooltip(update ? { label: `kansō ${update} is available` } : { label: "kansō settings", chord: boundChord(KANSO_SETTINGS) }),
           () => openSettings(update ? "news" : "pieces"))))
       .when(window()?.buttons, el => el.child(tool("minimize", "minus", "Minimize", () => run("window.minimize")))
         .child(tool("maximize", "square", "Maximize", () => run("window.maximize")))
-        .child(tool("close-window", "close", "Close", () => run("window.close"))));
+        .child(tool("close-window", "x", "Close", () => run("window.close"))));
   }
 }

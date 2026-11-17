@@ -1,11 +1,11 @@
 // The sidebar footer: kansō's update row in each mode, its refusal, Settings and its one menu, Herdr's update, and the rail.
+import { loadWorkspaceChrome } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, chain, gpuiHost, calls } from "./helpers.mjs";
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", chrome: "#161615", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", blocked: "#d5674f", accent: "#c9a46a" };
 
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
 const arg = (el, name) => calls(el, name)[0]?.[1];
 // Kids, and what a popover holds as its trigger and content.
 const inside = (el) => [...el.kids, ...el.calls.filter((call) => call[0] === "trigger" || call[0] === "content").map((call) => call[1])];
@@ -27,8 +27,8 @@ async function footer({ shared = {}, ready = null, bindings = [{ action: "kanso-
     run: (name, args) => { ran.push([name, args]); }, openOverlay: (spec) => { overlays.push(spec); return "o"; },
     updates: () => ({ app: { ready } }), keys: () => bindings, settings: () => ({ font_family: "Mono" }), window: () => ({ platform: "macos" }),
   };
-  const { WorkspaceChrome } = await load("kanso-chrome/main.js", ["WorkspaceChrome"], host);
-  const kit = await load("kanso-chrome/ui.js", ["CHROME_SQUARE", "ICON_CHROME", "T", "G"], host);
+  const { WorkspaceChrome } = await loadWorkspaceChrome(host);
+  const kit = await load("kanso-chrome/ui.js", ["H", "ICON_CHROME", "T", "G"], host);
   const view = new WorkspaceChrome();
   view.init({}, { spawn() {}, timer: { after() {}, every() {} } });
   view.updater = { available: () => null, busy: false, refused: () => null, install: (context) => installs.push(context), ...updater };
@@ -127,11 +127,14 @@ test("Without a Herdr update the menu has no third row, and the footer no longer
 });
 
 test("In the rail the footer is chrome squares with their names as tips, and the gear opens the same menu", async () => {
-  const { view, CHROME_SQUARE } = await footer({ shared: { "sidebar.collapsed": true }, updater: { available: () => "3.31.0", refused: () => "words" } });
+  const { view, H } = await footer({ shared: { "sidebar.collapsed": true }, updater: { available: () => "3.31.0", refused: () => "words" } });
   const drawn = view.render();
   assert.deepEqual(texts(drawn), [], "no names, no refusal block in the rail");
   const squares = ["footer-kanso-update", "footer-settings"].map((id) => byId(drawn, id));
-  assert.deepEqual(squares.map((el) => arg(el, "size")), [CHROME_SQUARE, CHROME_SQUARE]);
+  // Button.new(id) is drawn under its id: the kit's large icon button, which Tab reaches and Enter and Space press.
+  assert.deepEqual(squares.map((el) => [el.tag, arg(el, "w"), arg(el, "h")]), [["footer-kanso-update", H.line, H.line], ["footer-settings", H.line, H.line]]);
+  assert.ok(squares.every((el) => calls(el, "focus").length === 1), "each shows the focus ring");
+  assert.ok(squares.every((el) => calls(el, "hover").length === 1 && calls(el, "active").length === 1), "each keeps its hover and press shading, from the kit's button");
   assert.deepEqual(squares.map((el) => arg(el, "tooltip")), ["Update kansō to 3.31.0", "Settings"]);
   assert.equal(arg(byId(drawn, "footer-settings-menu"), "trigger"), squares[1]);
   assert.equal(byId(drawn, "footer-machine"), null, "Add computer lives in +, not in the rail");

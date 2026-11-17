@@ -1,21 +1,19 @@
-import { paths } from "./platform-paths.js";
 // Send to an agent, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // props.pane: the pane whose work the draft is about.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
-import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme, home } from "herdr";
+import { v_flex } from "gpui-base";
+import { panes, spaces, terminals, shared, setShared, run, props, closeOverlay, theme } from "herdr";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
-import { G, tokens } from "./ui.js";
+import { shortFolder } from "./folder.js";
+import { G, H, ICON_ROW, tokens } from "./ui.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
+import { row } from "./ui-row.js";
 
 const LAST = "kanso.send.last";
-
-const tilde = (cwd) => {
-  if (!cwd) return "";
-  return paths.shorten(cwd, home());
-};
+// Rows the list shows before it scrolls.
+const LIST_ROWS = 6;
 
 export function targetsOf(all, from, last) {
   const list = all.filter((p) => p.pane !== from && p.terminal && isAgent(p));
@@ -47,7 +45,7 @@ export function everyone(terms, ps, { from = null, last = null, query = "", name
 
 export function draftFor(p, digest) {
   if (!p?.cwd) return "Review the latest changes.";
-  const where = tilde(p.cwd);
+  const where = shortFolder(p.cwd);
   const head = p.branch ? `Review the changes on branch ${p.branch} in ${where}.` : `Review the changes in ${where}.`;
   return digest?.pr ? `${head} Its pull request is #${digest.pr.number}.` : head;
 }
@@ -104,31 +102,21 @@ export default class Send extends View {
     // A search that hides the chosen project drops it, so Send always means what is shown.
     if (this.toProject && !groups.some((g) => g.project === this.toProject)) this.toProject = null;
     if (!this.toProject && !list.some((q) => q.terminal === this.to)) this.to = list[0]?.terminal ?? null;
-    const dot = (st) => ({ working: t.working, blocked: t.blocked, done: t.done }[st] ?? t.idle);
     const head = (g) => {
       const on = this.toProject === g.project;
-      return h_flex().id(`to-project-${g.project}`).flex_none().h(28).px(10).gap(8).items_center().rounded(7).cursor_pointer()
-        .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
-        .on_click((_e, cx) => { this.toProject = on ? null : g.project; this.error = null; cx.notify(); })
-        .child(div().flex_1().min_w(0).truncate().text_size(11.5).font_medium().text_color(t.muted).child(g.project))
-        .child(div().flex_none().text_size(11).text_color(on ? t.foreground : t.dim).child(on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : ""));
+      return row(`to-project-${g.project}`, c, {
+        name: g.project, heading: true, current: on, meta: on ? `All ${g.agents.length}` : g.agents.length > 1 ? `Send to all ${g.agents.length}` : null,
+        onClick: (cx) => { this.toProject = on ? null : g.project; this.error = null; cx.notify(); },
+      }).flex_none();
     };
-    const row = (q) => {
-      const on = !this.toProject && q.terminal === this.to;
-      const where = q.pane?.branch ?? "";
-      return h_flex().id(`to-${q.terminal}`).flex_none().h(34).px(10).gap(10).items_center().rounded(7).cursor_pointer()
-        .when(on, (el) => el.bg(t.selected)).when(!on, (el) => el.hover((s) => s.bg(t.hover)))
-        .on_click((_e, cx) => { this.to = q.terminal; this.toProject = null; this.error = null; cx.notify(); })
-        .child(programIcon(q.program, 15, t.muted) ?? div().size(15))
-        .child(div().flex_none().max_w(200).truncate().text_size(12.8).text_color(t.foreground).when(on, (el) => el.font_medium()).child(q.name))
-        .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(where))
-        .child(h_flex().flex_none().gap(6).items_center().text_size(11.5).text_color(q.status === "blocked" ? t.blocked : t.dim)
-          .when(q.status === "blocked", (el) => el.child("Needs you"))
-          .child(div().size(6).rounded_full().bg(dot(q.status))));
-    };
-    const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${tilde(this.from.cwd)}` : ""}` : "";
+    const agent = (q) => row(`to-${q.terminal}`, c, {
+      start: [programIcon(q.program, ICON_ROW, c.muted) ?? div().size(ICON_ROW)], name: q.name, detail: q.pane?.branch ?? null,
+      meta: q.status === "blocked" ? { text: "Needs you", tone: "blocked" } : null, mark: q.status, current: !this.toProject && q.terminal === this.to,
+      onClick: (cx) => { this.to = q.terminal; this.toProject = null; this.error = null; cx.notify(); },
+    }).flex_none();
+    const from = this.from ? `From ${name(this.from)}${this.from.cwd ? `, in ${shortFolder(this.from.cwd)}` : ""}` : "";
     const ready = Boolean(this.toProject || this.to) && Boolean(this.text.trim());
-    const rows = groups.flatMap((g) => [head(g), ...g.agents.map(row)]);
+    const rows = groups.flatMap((g) => [head(g), ...g.agents.map(agent)]);
     const close = () => closeOverlay(p.overlay);
     return dialog("kanso-send", c, {
       title: "Send to an agent", scope: from,
@@ -136,7 +124,7 @@ export default class Send extends View {
         field("send-to", this.query, c, { label: "To" }).pb(G.sm),
         rows.length
           // A set height, rows that never shrink: past it, the list scrolls.
-          ? v_flex().id("send-list").flex_none().h(Math.min(rows.length * 34, 6 * 34)).overflow_y_scrollbar().gap(1).children(rows)
+          ? v_flex().id("send-list").flex_none().h(Math.min(rows.length, LIST_ROWS) * H.line).mx(-G.sm).px(G.sm).overflow_y_scrollbar().children(rows)
           : div().py(8).text_size(12).text_color(t.muted).child(this.query.value().trim() ? "No agent or project by that name." : "No other agent is running. Start one in a pane, then send."),
         field("send-message", this.box, c, { label: "Message" }).pt(G.lg),
       ],

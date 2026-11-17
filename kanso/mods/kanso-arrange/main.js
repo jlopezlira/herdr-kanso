@@ -1,16 +1,19 @@
 // Arrangements, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { View, div, svg } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, panes, shared, hc, props, closeOverlay, theme, home } from "herdr";
 import { Store } from "./store.js";
 import { base, tilde, captureTab, describe, summary, projectOf, folderOfKey, openTab } from "./tabkit.js";
 import { listKey, moveTo } from "./listkeys.js";
-import { tryOr } from "./pure.js";
-import { breathe, G, tokens } from "./ui.js";
+import { tryOr, focusOn } from "./pure.js";
+import { G, H, tokens } from "./ui.js";
 import { Armed } from "./ui-button.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { skeleton } from "./ui-skeleton.js";
+import { row } from "./ui-row.js";
+import { skeletonOf } from "./kit.js";
+
+const LIST_ROWS = 13;
 
 export function listFor(projects, key) {
   const tag = (k) => (projects?.[k] ?? []).map((a) => ({ ...a, from: k }));
@@ -33,8 +36,7 @@ export function rebase(a, folder) {
 
 export default class Arrange extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.view = "list";
     this.list = null;
     this.others = [];
@@ -128,22 +130,6 @@ export default class Arrange extends View {
     return move;
   }
 
-  listBones(t) {
-    const { block, line } = skeleton({ border: t.border });
-    const row = (i) => h_flex().w_full().px(10).py(8).gap(10).items_center()
-      .child(block(15, 15, 4))
-      .child(v_flex().flex_1().gap(2).child(line([120, 96, 140, 84][i], 13)).child(line([180, 150, 100, 160][i], 11)));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(2)).children([0, 1, 2, 3].map(row));
-  }
-
-  captureBones(t) {
-    const { line } = skeleton({ border: t.border });
-    const col = (i) => h_flex().w_full().gap(10).items_stretch()
-      .child(div().w(2).flex_none().rounded_full().bg(t.border))
-      .child(v_flex().flex_1().gap(4).child(line([140, 100][i], 12)).child(line([90, 120][i], 11)));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(10)).children([0, 1].map(col));
-  }
-
   render() {
     const t = theme();
     const p = props() ?? {};
@@ -155,9 +141,7 @@ export default class Arrange extends View {
 
     if (this.view === "save") {
       const cols = this.capture?.cols ?? [];
-      const line = (q, i) => h_flex().id(`cap-${i}`).w_full().gap(10).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(q.argv ? t.foreground : t.muted).child(describe(q.argv)))
-        .child(div().flex_none().max_w(180).truncate().text_size(11.5).text_color(t.dim).child(tilde(q.cwd)));
+      const line = (q, i) => row(`cap-${i}`, c, { name: describe(q.argv), dimmed: !q.argv, meta: tilde(q.cwd) });
       const starts = cols.map((_, ci) => cols.slice(0, ci).reduce((s, c) => s + c.panes.length, 0));
       const typed = this.name.value().trim(), tg = this.target;
       const replaces = (tg && tg.name === typed) ? tg : (this.list ?? []).some((a) => a.name === typed) ? { name: typed } : null;
@@ -167,7 +151,7 @@ export default class Arrange extends View {
           field("ar-name", this.name, c, { label: "Name" }),
           cols.length ? v_flex().pt(G.md).gap(G.md).children(cols.map((c, ci) => h_flex().w_full().gap(G.md).items_stretch()
             .child(div().w(2).flex_none().rounded_full().bg(t.border))
-            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : this.captureBones(t),
+            .child(v_flex().flex_1().min_w(0).gap(4).children(c.panes.map((q, ri) => line(q, `${ci}-${starts[ci] + ri}`)))))) : skeletonOf({ shape: "list row", count: 2 })("kanso-skeleton", c),
         ],
         notes: [...(cols.length ? [{ text: `${cols.length} ${cols.length === 1 ? "column" : "columns"}, left to right` }] : []),
           { text: "Each program is kept with the flags you started it with. A resumed session's id is left out, so each agent starts fresh." },
@@ -182,39 +166,30 @@ export default class Arrange extends View {
     const others = this.others ?? [];
     this.order = [...list, ...others];
     const at = this.order[Math.min(this.at ?? 0, Math.max(0, this.order.length - 1))];
-    const row = (a) => {
+    const arrangement = (a) => {
       const id = `${a.from}:${a.name}`;
       const from = a.from === projectOf(this.space) ? null : originOf(a);
-      const n = a.cols.reduce((s, c) => s + c.panes.length, 0);
-      return h_flex().id(`ar-${id}`).w_full().px(10).py(8).gap(10).items_center().rounded(7)
-        .when(a === at, (el) => el.bg(t.selected))
-        .when(!this.busy, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.open(a, cx)))
-        .child(svg("mods/kanso-chrome/icons/layers.svg").size(15).flex_none().text_color(t.muted))
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(h_flex().min_w(0).gap(8).items_baseline()
-            .child(div().flex_shrink_1().min_w(0).truncate().text_size(13).text_color(t.foreground).child(a.name))
-            .when(Boolean(from), (el) => el.child(div().flex_none().max_w(140).truncate().text_size(11.5).text_color(t.dim).child(`from ${from}`))))
-          .child(div().truncate().text_size(11.5).text_color(t.dim).child(`${n} ${n === 1 ? "pane" : "panes"}: ${summary(a)}`)))
-        .when(!this.busy, (el) => el.child(div().id(`ar-ow-${id}`).flex_none().px(6).py(2).rounded(6).text_size(11.5).text_color(t.dim)
-          .hover((s) => s.text_color(t.foreground))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.startSave(cx, a); })
-          .child("Overwrite")))
-        .child(this.armed.link(`ar-rm-${id}`, "Delete", "delete", `rm:${id}`, (cx) => this.remove(a, cx), c)
-          .on_mouse_down("left", (_e, cx) => cx.stop_propagation()));
+      const n = a.cols.reduce((s, col) => s + col.panes.length, 0);
+      const remove = this.armed.verb("Delete", "delete", `rm:${id}`, (cx) => this.remove(a, cx));
+      return row(`ar-${id}`, c, {
+        icon: "layers", name: a.name, detail: from ? `from ${from}` : null, second: `${n} ${n === 1 ? "pane" : "panes"}: ${summary(a)}`, current: a === at,
+        verbs: this.busy ? [remove] : [{ label: "Overwrite", onClick: (cx) => this.startSave(cx, a) }, remove],
+        onClick: this.busy ? null : (cx) => this.open(a, cx),
+      });
     };
-    const label = (text) => div().pt(12).pb(4).px(10).text_size(11.5).text_color(t.dim).child(text);
+    const label = (text) => row(`ar-label-${text}`, c, { name: text, heading: true });
     return shell({
       title: "Arrangements", scope: `Opens in ${project}`,
-      // The list's content in a column that never shrinks: past 420 it scrolls.
-      body: v_flex().id("ar-list").pt(2).max_h(420).overflow_y_scrollbar().child(v_flex().flex_none().w_full().gap(2)
-        .when(this.list === null, (el) => el.child(this.listBones(t)))
+      // The list's content in a column that never shrinks: past LIST_ROWS lines it scrolls.
+      body: v_flex().id("ar-list").pt(G.hair).max_h(LIST_ROWS * H.line).mx(-G.sm).px(G.sm).overflow_y_scrollbar().child(v_flex().flex_none().w_full()
+        .when(this.list === null, (el) => el.child(skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c)))
         .when(this.list !== null && !list.length && !others.length, (el) => el.child(v_flex().py(6).gap(4)
           .child(div().text_size(13).text_color(t.muted).child("No arrangement yet."))
           .child(div().text_size(11.5).line_height(1.45).text_color(t.dim).child("Set up a tab the way you work, with your agents, their flags and your servers, then save it to open it again in one click, in this project or any other."))))
         .when(list.length > 0 && others.length > 0, (el) => el.child(label("This project")))
-        .children(list.map(row))
+        .children(list.map(arrangement))
         .when(others.length > 0, (el) => el.child(label(list.length ? "Other projects, opened here" : "From other projects, opened here")))
-        .children(others.map(row))),
+        .children(others.map(arrangement))),
       notes: said,
       primary: "Save this tab", kind: !list.length && !others.length ? "solid" : "tonal", state: this.busy ? "disabled" : "default",
       onPrimary: (cx) => this.startSave(cx), onCancel: () => closeOverlay(p.overlay),

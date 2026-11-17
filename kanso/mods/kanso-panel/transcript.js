@@ -5,7 +5,8 @@ import { transcriptApi } from "./platform-transcripts.js";
 // A Claude agent's conversation on disk: every path it printed, whole. Its screen abbreviates long paths
 // ("…/shot.png") and redraws, so what it made a while ago is no longer there; the transcript keeps it.
 import { hc, readTextFile } from "herdr";
-import { KINDS } from "./kinds.js";
+import { EXT } from "./look-model.js";
+import { parseOr as parsed } from "./pure.js";
 import { projectDir, transcriptPath, sessionPath, START_SLACK, sessionLive } from "./find.js";
 
 export { projectDir, transcriptPath, START_SLACK };
@@ -15,7 +16,6 @@ const LONGEST = 100000; // a line longer than this is a pasted picture in base64
 // bytes). A line not finished is left for the next read, so a path cut at the offset is not skipped. A prefix
 // that no longer matches, or a shorter file, is read from the start. Prints that offset, where it read from,
 // the prefix's cksum, then the last `$4` distinct matches; exit 3 when no new whole line was appended.
-const EXT = [...new Set(Object.values(KINDS).flat())].toSorted((a, b) => b.length - a.length).join("|");
 // A path up to one of Look's extensions, whole (not "linkedin.c" out of a URL), after something that is not part
 // of one. grep prints that something and the character after (a byte each, maybe half of a "…"): sed takes them
 // off, and `pathOf` does the same here, in case. Before grep, JSON's "\\n" and "\\"" became spaces and every
@@ -31,7 +31,6 @@ export function pathOf(match) {
   return p.includes("//") || !p ? null : p;
 }
 
-const parsed = (text) => { try { return JSON.parse(text); } catch { return null; } };
 
 // The record Claude Code writes per process (~/.claude/sessions/<pid>.json), for the program in front of
 // this terminal (`front`); null for another program, a shell, or a record of an earlier process with that pid.

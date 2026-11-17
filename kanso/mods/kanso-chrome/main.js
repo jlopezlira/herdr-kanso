@@ -5,9 +5,9 @@ import { systemApi } from "./platform-system.js";
 // Modified by José Gutiérrez (minimalistic, 0oz design fork): renamed from oz-chrome.
 // Modified by jlopezlira (Kanso, https://github.com/jlopezlira/herdr-kanso): renamed from mn-chrome; sidebar footer as centred squares when collapsed, one icon set (icons/), a title bar of the lights only; an "Update Kanso" row for Kanso's own releases (update.js); Settings opens one menu (footer.js).
 import { View, div } from "gpui-kit";
-import { theme, run, props, shared, setShared, updates, keys, settings, nextCommand, openOverlay, appHome, notify } from "herdr";
+import { theme, run, props, shared, setShared, updates, keys, nextCommand, openOverlay, appHome, notify } from "herdr";
 import { Updater } from "./update.js";
-import { tryOrAsync, afterMount } from "./pure.js";
+import { tryOrAsync, readCommands } from "./pure.js";
 import { loadPieces, pieces, shown } from "./pieces.js";
 import { outOfMemory } from "./notices.js";
 import { glyphs } from "./marks.js";
@@ -35,22 +35,19 @@ export default class WorkspaceChrome extends View {
     this.updater = new Updater();
     this.updater.start(cx, { polls: false });
     // Command names stay kanso-tabs.* for keys bound to them before.
-    afterMount(cx, (cx) => cx.spawn(async (cx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        const { c } = next;
-        if (c === "update") this.updater.install(cx);
-        else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
-        else if (c === "settings") openSettings();
-        else if (c === "settings-mods") openSettings("pieces");
-        else if (c === "settings-news") openSettings("news");
-        else if (c === "restart") this.restart();
-      }
-    }));
+    readCommands(cx, () => nextCommand(), (c, cx) => this.command(c, cx));
     cx.timer.every(SAMPLE_MS, (cx) => this.watch(cx));
     this.power(cx);
     cx.timer.every(SAMPLE_MS, (cx) => this.power(cx));
+  }
+
+  async command(c, cx) {
+    if (c === "update") this.updater.install(cx);
+    else if (c === "check") { await this.updater.check(cx, true, true); this.updater.fit(); cx.notify(); }
+    else if (c === "settings") openSettings();
+    else if (c === "settings-mods") openSettings("pieces");
+    else if (c === "settings-news") openSettings("news");
+    else if (c === "restart") this.restart();
   }
 
   // Written only when it changes: every mod draws again on a shared write.
@@ -111,7 +108,7 @@ export default class WorkspaceChrome extends View {
 
   refusal() {
     const why = this.updater?.available() && !this.updater.busy ? this.updater.refused() : null;
-    return why && { why, retry: (cx) => this.updater.install(cx), font: settings().font_family ?? null };
+    return why && { why, retry: (cx) => this.updater.install(cx) };
   }
 
   render() {

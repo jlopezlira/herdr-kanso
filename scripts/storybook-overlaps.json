@@ -109,7 +109,7 @@
     }
   },
   "guard/SystemNotice": {
-    "page": "Panels/Memory",
+    "page": "Compositions/Notifications",
     "states": {
       "Batch": "panels/memory/SystemNotice/Batch",
       "Did not resume": "panels/memory/SystemNotice/Did not resume",
@@ -605,7 +605,7 @@
     }
   },
   "spaces/SidebarStatus": {
-    "page": "Layouts/Sidebar",
+    "page": "Compositions/Sidebar",
     "states": {
       "Groups": "proto/compositions-sidebar-features/SidebarStatus/Groups",
       "Empty": "proto/compositions-sidebar-features/SidebarStatus/Empty",
@@ -613,7 +613,7 @@
     }
   },
   "spaces/SidebarThreads": {
-    "page": "Layouts/Sidebar",
+    "page": "Compositions/Sidebar",
     "states": {
       "Active": "proto/compositions-sidebar-features/SidebarThreads/Active",
       "Asleep": "proto/compositions-sidebar-features/SidebarThreads/Asleep",
@@ -625,15 +625,15 @@
     }
   },
   "spaces/SidebarSort": {
-    "page": "Layouts/Sidebar",
+    "page": "Compositions/Sidebar",
     "states": {
       "Projects": "proto/compositions-sidebar-rows/ProjectsStatusThreads/Default",
-      "Status": "proto/compositions-sidebar-rows/StatusViewTile/Default",
+      "Status": "proto/compositions-sidebar-rows/ProjectsStatusThreads/Default",
       "Threads": "proto/compositions-sidebar-rows/ProjectsStatusThreads/Default"
     }
   },
   "spaces/ProjectGit": {
-    "page": "Layouts/Sidebar",
+    "page": "Compositions/Sidebar/Project row",
     "states": {
       "Ahead": "proto/compositions-sidebar-features/ProjectGit/Ahead",
       "Behind": "proto/compositions-sidebar-features/ProjectGit/Behind",
@@ -642,7 +642,7 @@
     }
   },
   "spaces/Asleep": {
-    "page": "Layouts/Sidebar",
+    "page": "Compositions/Sidebar/Asleep",
     "states": {
       "Asleep menu": "proto/compositions-sidebar-features/Asleep/Asleep menu",
       "Forget armed": "proto/compositions-sidebar-features/Asleep/Forget armed",
@@ -653,7 +653,7 @@
     }
   },
   "spaces/NeedsQueue": {
-    "page": "Layouts/Sidebar",
+    "page": "Compositions/Sidebar/Section",
     "states": {
       "Empty": "proto/compositions-sidebar-features/NeedsQueue/Empty",
       "Loading": "proto/compositions-sidebar-features/NeedsQueue/Loading",
@@ -697,6 +697,256 @@
     "page": "Panels/Shipped",
     "states": {
       "Shipped days": "panels/shipped/HistoryChartShipped daysShippeddays/Default"
+    }
+  },
+  "dojo/Practice": {
+    "page": "Panels/Dojo",
+    "states": {
+      "1 · h l": "kit/Panels/Dojo/First open",
+      "3 · h j k l": "kit/Panels/Dojo/In a round",
+      "4 · 0 $ gg G": "kit/Panels/Dojo/Level cleared",
+      "6 · w b e": "kit/Panels/Dojo/Picking a level",
+      "7 · f t": "kit/Panels/Dojo/A text level",
+      "9 · All of it": "kit/Panels/Dojo/All cleared"
+    }
+  },
+  "dojo/PracticeFeedback": {
+    "page": "Panels/Dojo",
+    "states": {
+      "Exit armed": "kit/Panels/Dojo/Esc once",
+      "Extra moves": "kit/Panels/Dojo/A miss",
+      "Find pending": "kit/Panels/Dojo/A text level",
+      "First move": "kit/Panels/Dojo/First open",
+      "Sleeping": "kit/Panels/Dojo/Asleep",
+      "Streak": "kit/Panels/Dojo/A perfect move"
+    }
+  },
+  "dojo/PracticePet": {
+    "page": "Panels/Dojo",
+    "states": {
+      "Calm": "kit/Panels/Dojo/First open",
+      "Glad": "kit/Panels/Dojo/A perfect move",
+      "Sleep": "kit/Panels/Dojo/Asleep",
+      "Sweat": "kit/Panels/Dojo/A miss"
+    }
+  },
+  "dojo/PracticeResult": {
+    "page": "Panels/Dojo",
+    "states": {
+      "Completed": "kit/Panels/Dojo/Round over",
+      "New best": "kit/Panels/Dojo/A new best",
+      "Stopped": "kit/Panels/Dojo/Stopped"
+    }
+  },
+  "strip/StripNavigation": {
+    "page": "Compositions/Edges",
+    "states": {
+      "Offscreen edge": "proto/approved-bars-edges/Reference/1",
+      "Several offscreen": "proto/approved-bars-edges/Reference/1",
+      "Dragging": "proto/approved-bars-edges/Reference/1"
+    }
+  },
+  "status/StatusStandIn": {
+    "page": "Compositions/Status bar",
+    "states": {
+      "Quiet": "proto/approved-bars-status/Reference/1",
+      "Offscreen waiting": "proto/approved-bars-status/Reference/1"
+    }
+  },
+  "tabs/PanelToolbar": {
+    "page": "Compositions/Tab bar",
+    "states": {
+      "Available": "proto/approved-bars-panels/Reference/1",
+      "Opened": "proto/approved-bars-panels/Reference/1"
+    }
+  },
+  "chrome/RuntimeNotice": {
+    "page": "Compositions/Notifications",
+    "states": {
+      "Out of memory": "proto/approved-bars-toasts/Reference/1"
+    }
+  },
+  "chrome/UpdateNotice": {
+    "page": "Compositions/Notifications",
+    "states": {
+      "Available": "proto/approved-bars-toasts/Reference/1",
+      "Already updating": "proto/approved-bars-toasts/Reference/1",
+      "Installed": "panels/notifications/FeatureUpdateNotice/Installed, kept your keys",
+      "Install failed": "panels/notifications/FeatureUpdateNotice/Install failed, Windows tool missing"
+    }
+  },
+  "panel/ActionNotice": {
+    "page": "Compositions/Notifications",
+    "states": {
+      "1 · Merged #142": "proto/approved-bars-toasts/Reference/1",
+      "2 · Review requested from reviewer": "proto/approved-bars-toasts/Reference/1"
+    }
+  },
+  "spaces/ActionNotice": {
+    "page": "Compositions/Notifications",
+    "states": {
+      "1 · acme is already one of your projects": "proto/approved-bars-toasts/Reference/1",
+      "3 · feat/checkout already had a worktree": "proto/approved-bars-toasts/Reference/1"
+    }
+  },
+  "spaces/AgentMenu": {
+    "page": "Layouts/Context menus",
+    "states": {
+      "Agent": "proto/approved-sidebar-menus/Reference/1",
+      "Close armed": "proto/approved-sidebar-menus/Reference/2",
+      "Snooze picker": "proto/approved-sidebar-menus/Reference/3",
+      "Copy picker": "proto/approved-sidebar-menus/Reference/4",
+      "Move picker": "proto/approved-sidebar-menus/Reference/5"
+    }
+  },
+  "spaces/ProjectMenu": {
+    "page": "Layouts/Context menus",
+    "states": {
+      "Open project": "proto/approved-sidebar-menus/Reference/6",
+      "Remove armed": "proto/approved-sidebar-menus/Reference/7",
+      "Asleep": "proto/approved-sidebar-menus/Reference/9"
+    }
+  },
+  "spaces/ComputerMenu": {
+    "page": "Layouts/Context menus",
+    "states": {
+      "Connected": "proto/approved-sidebar-menus/Reference/8",
+      "Sync on": "proto/approved-sidebar-menus/Reference/8"
+    }
+  },
+  "menu/PaneMenu": {
+    "page": "Layouts/Context menus",
+    "states": {
+      "Rest": "proto/approved-bars-menus/Reference/1",
+      "Pinned": "proto/approved-bars-menus/Reference/1",
+      "Program menu": "proto/approved-bars-menus/Reference/1"
+    }
+  },
+  "help/KeyboardExplorer": {
+    "page": "Compositions/Keyboard",
+    "states": {
+      "Lists": "proto/approved-dialogs-keys/Reference/1",
+      "Modifier layer": "proto/approved-dialogs-keys/Reference/1",
+      "Picked key": "proto/approved-dialogs-keys/Reference/1",
+      "Unbound": "proto/approved-dialogs-keys/Reference/1"
+    }
+  },
+  "help/Help": {
+    "page": "Compositions/Keyboard",
+    "states": {
+      "Keys": "proto/approved-dialogs-help/Reference/1",
+      "Guide": "proto/approved-dialogs-help/Reference/3",
+      "Dōjō invitation": "proto/approved-dialogs-help/Reference/3"
+    }
+  },
+  "help/Guide": {
+    "page": "Compositions/Keyboard",
+    "states": {
+      "Every list and menu": "proto/approved-dialogs-help/Reference/3",
+      "Panels": "proto/approved-dialogs-help/Reference/3",
+      "Sleep and Arrangements": "proto/approved-dialogs-help/Reference/3",
+      "The sidebar": "proto/approved-dialogs-help/Reference/3",
+      "The strip": "proto/approved-dialogs-help/Reference/3",
+      "Your setup": "proto/approved-dialogs-help/Reference/3"
+    }
+  },
+  "arrange/Arrangements": {
+    "page": "Panels/Arrangements",
+    "states": {
+      "Saved": "proto/approved-dialogs-arrange/Reference/1",
+      "Delete armed": "proto/approved-dialogs-arrange/Reference/1",
+      "Opening": "proto/approved-dialogs-arrange/Reference/1",
+      "Empty": "proto/approved-dialogs-arrange/Reference/1"
+    }
+  },
+  "arrange/SaveArrangement": {
+    "page": "Primitives/Dialog",
+    "states": {
+      "Save": "panels/dialog/FeatureSaveArrangement/Save header",
+      "Overwrite": "panels/dialog/FeatureSaveArrangement/Overwrite header"
+    }
+  },
+  "open-with/OpenWith": {
+    "page": "Primitives/Dialog",
+    "states": {
+      "Folder": "proto/approved-dialogs-openwith/Reference/1",
+      "File": "proto/approved-dialogs-openwith/Reference/1",
+      "Remote": "proto/approved-dialogs-openwith/Reference/1",
+      "Keyboard": "proto/approved-dialogs-openwith/Reference/1",
+      "Looking": "proto/approved-dialogs-openwith/Reference/1",
+      "No editor": "proto/approved-dialogs-openwith/Reference/1"
+    }
+  },
+  "sleep/SleepDialog": {
+    "page": "Primitives/Dialog",
+    "states": {
+      "Agent": "proto/approved-dialogs-sleep/Reference/1",
+      "Tab": "proto/approved-dialogs-sleep/Reference/1",
+      "Project": "proto/approved-dialogs-sleep/Reference/1",
+      "Blocked": "proto/approved-dialogs-sleep/Reference/1",
+      "Reading": "proto/approved-dialogs-sleep/Reference/1",
+      "Sleeping": "proto/approved-dialogs-sleep/Reference/1",
+      "Waking": "proto/approved-dialogs-sleep/Reference/1"
+    }
+  },
+  "send/SendDialog": {
+    "page": "Primitives/Dialog",
+    "states": {
+      "Ready": "proto/approved-dialogs-send/Reference/1",
+      "Project selected": "proto/approved-dialogs-send/Reference/1",
+      "Sending": "proto/approved-dialogs-send/Reference/1",
+      "Refused": "proto/approved-dialogs-send/Reference/1",
+      "Unavailable target": "proto/approved-dialogs-send/Reference/1",
+      "No matches": "proto/approved-dialogs-send/Reference/1",
+      "No agents": "proto/approved-dialogs-send/Reference/1",
+      "Empty message": "proto/approved-dialogs-send/Reference/1",
+      "Search": "proto/approved-dialogs-send/Reference/1"
+    }
+  },
+  "spaces/NewConversation": {
+    "page": "Primitives/Dialog",
+    "states": {
+      "Programs": "proto/approved-sidebar-new/Reference/1",
+      "Loading programs": "proto/approved-sidebar-new/Reference/2",
+      "No programs": "proto/approved-sidebar-new/Reference/3"
+    }
+  },
+  "spaces/ProjectCreation": {
+    "page": "Primitives/Dialog",
+    "states": {
+      "Choose folder": "proto/approved-sidebar-new/Reference/5",
+      "Already project": "proto/approved-sidebar-new/Reference/7",
+      "Create failed": "proto/approved-sidebar-new/Reference/8",
+      "Creating": "proto/approved-sidebar-new/Reference/9"
+    }
+  },
+  "spaces/CreateWorktree": {
+    "page": "Primitives/Dialog",
+    "states": {
+      "New branch": "proto/approved-sidebar-new/Reference/11",
+      "Failed": "proto/approved-sidebar-new/Reference/13"
+    }
+  },
+  "tabs/Tabs": {
+    "page": "Primitives/Tab",
+    "states": {
+      "Selected": "proto/components-tab-states/TabStates/Default",
+      "Inactive": "proto/components-tab-states/TabStates/Default",
+      "Close": "proto/components-tab-states/TabStates/Default"
+    }
+  },
+  "prompt-editor/MultilinePrompt": {
+    "page": "Primitives/Field",
+    "states": {
+      "Editing": "proto/compositions-controls/Field/Default"
+    }
+  },
+  "toast/Notice": {
+    "page": "Primitives/Toast",
+    "states": {
+      "Success": "proto/compositions-bars/ToastWithItsSource/Default",
+      "With action": "proto/compositions-bars/ToastWithItsSource/Default",
+      "Failure": "proto/compositions-states/Toast/Default"
     }
   }
 }

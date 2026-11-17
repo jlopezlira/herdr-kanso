@@ -2,7 +2,7 @@
 
 const PHASE_ROWS = {
   off: () => [{ key: "power", icon: "power", label: "Turn on" }],
-  unavailable: () => [{ key: "retry", icon: "refresh", label: "Refresh" }],
+  unavailable: () => [{ key: "retry", icon: "refresh-cw", label: "Refresh" }],
   login: () => [{ key: "signin", icon: "key", label: "Sign in…" }],
   connected: (remote, syncOn) => [
     ...(remote ? [{ key: "power", icon: "power", label: "Turn off" }, { key: "sync", icon: "arrow-right-left", label: "Sync", hint: syncOn ? "on" : "off" }] : []),

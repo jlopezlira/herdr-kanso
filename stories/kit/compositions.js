@@ -1,5 +1,5 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { avatar, button, chip, chord, dawn, diffText, facts, headerSegment, input, paneName, setting, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
+import { button, chip, chord, dawn, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
 
 const tool = (icon, label) => button({ label, kind: 'icon', size: 'lg', icon });
 // + names what it adds in the view on show.
@@ -20,50 +20,10 @@ export const toolbar = ({ view = 'spaces', column = false, open = false, sorted 
 };
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
-const icon = (name, label) => ({ icon: name, label });
-
-export const sessionRow = ({ program = 'p-claude', name, activity = null, time = null, place = null, status = 'working', depth = 1, current = false, pinned = false, commands = 0, hover = false, focus = false, dimmed = false }) => row({
-  icon: program, name, second: activity, detail: place, meta: time, mark: status, depth, current, dimmed, hover, focus,
-  glint: status === 'working', flag: pinned ? 'lu-pin' : null, chip: commands, actions: [icon('lu-pin', 'Pin to the top'), icon('lu-ellipsis', 'More')],
-});
-
-export const projectRow = ({ name, folder = null, branch = null, sync = null, open = false, status = 'blocked', count = 0, hover = false, focus = false }) => row({
-  name, heading: true, current: open, hover, focus, detail: [folder, branch && { icon: 'lu-git-branch', text: branch }, sync],
-  mark: count ? status : 'none', meta: count || null, actions: [icon('lu-plus', phrase('New agent in', name)), icon('lu-ellipsis', 'More')],
-});
-
-export const computerStates = ['on', 'off', 'unreachable'];
-export const computerRow = ({ name, remote = true, state = 'on', status = 'blocked', count = 0, hover = false, focus = false }) => row({
-  icon: remote ? 'lu-server' : 'lu-monitor', name, heading: true, hover, focus,
-  mark: count && state === 'on' ? status : 'none', meta: { off: 'Off', unreachable: 'Unreachable' }[state] ?? (count || null),
-  action: state === 'off' ? { kind: 'icon', ...icon('lu-power', phrase('Turn', name, 'on')) } : state === 'unreachable' ? { kind: 'icon', ...icon('lu-refresh-cw', 'Refresh') } : null,
-  actions: state === 'on' && remote ? [icon('lu-power', 'Turn off'), icon('lu-plus', phrase('New project on', name)), icon('lu-arrow-right-left', 'Sync')] : [],
-});
-
-export const section = ({ title, status = 'none', count = 0 }) => row({ name: title, heading: true, mark: status, meta: count || null });
-
-export const asleep = ({ names = [], open = false } = {}) => list(row({ name: 'Asleep', heading: true, mark: 'asleep', meta: open ? null : phrase(names.length) }),
-  open ? names.map((name) => row({ name, depth: 1, dimmed: true, action: { label: 'Wake', kind: 'quiet' } })) : null);
-
-export const views = [
-  { key: 'spaces', label: 'Projects', icon: 'lu-folder' },
-  { key: 'agents', label: 'Status', icon: 'lu-activity' },
-  { key: 'threads', label: 'Threads', icon: 'lu-message-square' },
-];
-// Collapsed, one button for the current view opens the menu of all three.
-export const viewSwitch = ({ view = 'spaces', column = false, open = false } = {}) => {
-  if (!column) return stack({ variant: 'view switch' }, tabs({ items: views, value: view, size: 'sm', track: true, label: true }));
-  const current = views.find((item) => item.key === view) ?? views[0];
-  const list = open ? stack({ variant: 'view menu' }, menu({ items: views.map((item) => ({ ...item, selected: item.key === current.key })) })) : null;
-  return stack({ variant: 'view switch' }, button({ label: current.label, kind: 'icon', size: 'lg', icon: current.icon, active: open }), list);
-};
-
+// The rows the app draws (session, project, computer, section, asleep), the tile and the view switch live each in its own file, shared with the app.
 // The update's one icon: the footer row that runs it and every notice about it.
 export const updateIcon = 'lu-refresh-cw';
 export const sidebarFooter = ({ update = null } = {}) => stack({ variant: 'footer' }, update ? row({ icon: updateIcon, name: update }) : null, row({ icon: 'lu-settings', name: 'Settings' }));
-
-export const tile = ({ initial = null, tone = 'teal', status = 'none', count = 0, open = false }) => stack({ variant: 'rail tile', on: open },
-  initial ? avatar({ initial, tone, size: 'md' }) : mark({ status, size: 'lg' }), count ? chip({ label: count, quiet: true, tone: status === 'blocked' ? 'blocked' : null }) : null);
 
 // Status bar compositions: a computer stands in for its sidebar row; the rest are the bar's Menus and Buttons.
 export const computerItemStates = ['on', 'unreachable', 'pending'];
@@ -152,9 +112,10 @@ export const channelSettings = ({ channel = 'stable', art = true } = {}) => list
   channel === 'dawn' ? setting({ label: 'Dawn sky', control: toggle({ checked: art, label: 'Dawn sky' }) }) : null);
 
 // The rows and tiles of the current view come in drawn; the sidebar only places them.
-export const sidebar = ({ collapsed = false, dawn: early = false, art = true, view = 'spaces', switcher = true, menu: open = false, rows = [], tiles = [], away = null } = {}) => collapsed
-  ? stack({ variant: 'rail' }, header({ collapsed, dawn: early, art, view }), switcher ? viewSwitch({ view, column: true, open }) : null, stack({ variant: 'rail list' }, tiles), stack({ variant: 'rail footer' }, tool('lu-settings', 'Settings')))
-  : stack({ variant: 'sidebar' }, header({ dawn: early, art, view }), switcher ? viewSwitch({ view }) : null, stack({ variant: 'rows' }, rows), away, sidebarFooter());
+// `switcher`: the view switch, drawn for the form, or none.
+export const sidebar = ({ collapsed = false, dawn: early = false, art = true, view = 'spaces', switcher = null, rows = [], tiles = [], away = null } = {}) => collapsed
+  ? stack({ variant: 'rail' }, header({ collapsed, dawn: early, art, view }), switcher, stack({ variant: 'rail list' }, tiles), stack({ variant: 'rail footer' }, tool('lu-settings', 'Settings')))
+  : stack({ variant: 'sidebar' }, header({ dawn: early, art, view }), switcher, stack({ variant: 'rows' }, rows), away, sidebarFooter());
 
 // Two halves around the fixed slot of panes per view; each half folds its own items.
 export const statusBar = ({ left = [], middle = null, right = [], popup = null } = {}) => stack({ variant: 'status bar', grid: true },
@@ -167,9 +128,9 @@ const macRows = [
   [['tab', 1.6], ['q'], ['w'], ['e'], ['r'], ['t'], ['y'], ['u'], ['i'], ['o'], ['p'], ['['], [']'], ['\\']],
   [['capslock', 1.9], ['a'], ['s'], ['d'], ['f'], ['g'], ['h'], ['j'], ['k'], ['l'], [';'], ["'"], ['enter', 1.7]],
   [['shift', 2.4], ['z'], ['x'], ['c'], ['v'], ['b'], ['n'], ['m'], [','], ['.'], ['/'], ['shift', 2.2]],
-  [['ctrl', 1.3], ['alt', 1.3], ['cmd', 1.6], ['space', 5.3], ['cmd', 1.6], ['alt', 1.3], ['left'], ['up'], ['down'], ['right']],
+  [['ctrl', 1.3], ['alt', 1.3], ['cmd', 1.6], ['space', 3.5], ['cmd', 1.6], ['alt', 1.3], ['left'], ['up'], ['down'], ['right']],
 ];
-const pcRows = [...macRows.slice(0, 4), [['ctrl', 1.3], ['cmd', 1.3], ['alt', 1.6], ['space', 5.3], ['alt', 1.6], ['ctrl', 1.3], ['left'], ['up'], ['down'], ['right']]];
+const pcRows = [...macRows.slice(0, 4), [['ctrl', 1.3], ['cmd', 1.3], ['alt', 1.6], ['space', 3.5], ['alt', 1.6], ['ctrl', 1.3], ['left'], ['up'], ['down'], ['right']]];
 const arrows = { space: null, left: '←', right: '→', up: '↑', down: '↓' };
 const pcCaps = { ...arrows, backspace: 'Back', tab: 'Tab', capslock: 'Caps', enter: 'Enter', escape: 'Esc', shift: 'Shift', ctrl: 'Ctrl', alt: 'Alt' };
 export const keyboards = {
@@ -185,11 +146,13 @@ export const keyNames = (os = 'mac') => [...new Set(keyboards[os].rows.flat().ma
 export const heldChord = ({ os = 'mac', held = [], key = null }) => chord(keyboards[os].join, ...modifierKeys.filter((mod) => held.includes(mod)).map((mod) => capOf(os, mod)), ...(key ? [capOf(os, key)] : []));
 
 // Keyboard: the map of one layer. Holding or clicking a modifier picks the layer; a kansō key has ink, a Herdr key is quieter.
+// marks sets a key by name over its layer look: state, next-key hint, corner glyph, finger or label (the dōjō); inert keys take no focus.
 const keyState = { kanso: 'kanso', list: 'kanso', herdr: 'herdr', free: 'free' };
 const keyAct = { kanso: 'Change', herdr: 'Herdr settings', free: 'Give it an action' };
-export const keyboard = ({ os = 'mac', layer, picked = null, hover = null }) => stack({ variant: 'keyboard' },
-  keyboards[os].rows.map((line) => stack({ variant: 'keyboard row' }, line.map(([key, units = 1]) => keycap({ label: capOf(os, key), units, hover: key === hover,
-    state: layer.held.includes(key) ? 'held' : key === picked ? 'picked' : keyState[layer.keys[key]?.kind] ?? 'free' })))));
+const noLayer = { held: [], keys: {} };
+export const keyboard = ({ os = 'mac', layer = noLayer, picked = null, hover = null, marks = {}, inert = false }) => stack({ variant: 'keyboard' },
+  keyboards[os].rows.map((line) => stack({ variant: 'keyboard row' }, line.map(([key, units = 1]) => keycap({ label: capOf(os, key), units, hover: key === hover, inert,
+    state: layer.held.includes(key) ? 'held' : key === picked ? 'picked' : keyState[layer.keys[key]?.kind] ?? 'free', ...marks[key] })))));
 // The picked key: what it does here, or Nothing, with its one act; Lists opens the layer of every list and menu.
 const pickedChord = ({ os, layer, picked }) => layer.keys[picked]?.chord
   ? phrase(...layer.keys[picked].chord.map((part) => named(os, part) ? keyboards[os].caps[part] : part))
@@ -277,3 +240,20 @@ export const paneMenu = ({ name, state = 'none', focused = false, pinned = false
   ...(shown(fold, 'tools into ⋯') ? [] : [{ icon: 'lu-columns-2', label: 'Split right' }, { icon: 'lu-move-horizontal', label: 'Wider or narrower' }]),
   ...(shown(fold, 'close into ⋯') ? [] : [{ icon: 'lu-x', label: 'Close' }]),
   ...pieceLines] });
+
+// The dōjō: the path of levels, the board or the result, Hachi and his line, then the Keyboard with the level's keys marked.
+const dojoHeader = ({ title, level, name, share, shared, end, leave }) => stack({ variant: 'dojo header' }, dojoTitle({ title, level, name }), grow(),
+  share ? button({ label: 'Share', kind: 'icon', icon: 'lu-share', active: shared }) : null, end ? button(end) : null, button(leave));
+const dojoPath = ({ levels, keys }) => stack({ variant: 'dojo path' }, levels.map(dojoLevel), stack({ variant: 'dojo path keys' }, keyLegend({ items: keys })));
+const dojoWorld = ({ cells, lines }) => cells
+  ? stack({ variant: 'dojo grid' }, cells.map(dojoCell))
+  : stack({ variant: 'dojo text' }, lines.map((line) => stack({ variant: 'dojo line' }, line.map(dojoCharacter))));
+const dojoPlay = ({ statistics, progress, world }) => stack({ variant: 'dojo board' }, dojoStatistics(statistics), dojoProgress(progress), dojoWorld(world));
+const dojoResult = ({ record, summary, keys }) => stack({ variant: 'dojo board', result: true }, dojoRecord(record), dojoSummary({ text: summary }), stack({ variant: 'dojo result keys' }, keyLegend({ items: keys })));
+export const dojo = ({ header, path, play, result, pixels, sleep, feedback, marks, share }) => stack({ variant: 'dojo' },
+  dojoHeader(header),
+  stack({ variant: 'dojo body' }, dojoPath(path), stack({ variant: 'dojo main' },
+    result ? dojoResult(result) : dojoPlay(play),
+    stack({ variant: 'dojo conversation' }, mascot({ pixels }), sleep ? sleepLabel({ text: sleep }) : null, dojoFeedback(feedback)),
+    keyboard({ marks, inert: true }))),
+  share ? stack({ variant: 'dojo menu' }, menu(share)) : null);

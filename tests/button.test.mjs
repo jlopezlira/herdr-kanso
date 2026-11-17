@@ -1,21 +1,9 @@
 // One button in four kinds: its box from the tokens, its washes, focus and off.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, gpuiHost, calls, one, styled, themed, eachTheme } from "./helpers.mjs";
 
-const kit = async () => ({ ...await load("kanso-panel/ui.js", ["mix", "WASH", "tokens", "G", "H", "R", "T", "ICON", "ICON_ROW", "ICON_INLINE"], gpuiHost()), ...await load("kanso-panel/ui-button.js", ["button", "quietLink", "iconButton"], gpuiHost()) });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
-const styled = (el, name) => {
-  const style = chain();
-  one(el, name)(style);
-  return style.calls;
-};
+const kit = async () => themed({ ...await load("kanso-panel/ui.js", ["mix", "WASH", "tokens", "G", "H", "R", "T", "ICON", "ICON_ROW", "ICON_INLINE"], gpuiHost()), ...await load("kanso-panel/ui-button.js", ["button", "quietLink", "iconButton"], gpuiHost()) }, night);
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", solid: "#d8d4cb", solid_foreground: "#161615", accent: "#da627d", accent_foreground: "#161615", dim: "#6b6860", muted: "#949086" };
 const day = { background: "#f4f1eb", foreground: "#3c3934", hover: "#ebe6de", selected: "#e0dbd2", solid: "#3c3934", solid_foreground: "#f4f1eb", accent: "#b8405e", accent_foreground: "#f4f1eb", dim: "#a19c92", muted: "#7a756c" };
@@ -29,8 +17,7 @@ test("mix lays one colour over an opaque ground, and leaves anything it cannot r
 });
 
 test("Every kind is one box from the tokens: 30 high, 12 inside, radius 6, and the small kind 24 with 8", async () => {
-  const { button, tokens, G, H, R, T } = await kit();
-  const c = tokens(night);
+  const { button, G, H, R, T, c } = await kit();
   for (const kind of ["solid", "tonal", "quiet"]) {
     for (const small of [false, true]) {
       const el = button("b", "Merge", () => {}, c, { kind, small });
@@ -43,7 +30,7 @@ test("Every kind is one box from the tokens: 30 high, 12 inside, radius 6, and t
       assert.equal(calls(label, "font_medium").length, 1);
     }
   }
-  const icon = button("i", "Refresh", () => {}, c, { kind: "icon", icon: "refresh" });
+  const icon = button("i", "Refresh", () => {}, c, { kind: "icon", icon: "refresh-cw" });
   assert.equal(one(icon, "h"), H.icon);
   assert.equal(one(icon, "w"), H.icon);
   assert.equal(one(icon, "tooltip"), "Refresh");
@@ -52,8 +39,7 @@ test("Every kind is one box from the tokens: 30 high, 12 inside, radius 6, and t
 
 test("Solid, tonal and quiet wash from the theme, press with the selected wash, and a quiet label is muted", async () => {
   const { button, tokens, mix, WASH } = await kit();
-  for (const theme of [night, day]) {
-    const c = tokens(theme);
+  for (const { theme, c } of eachTheme(tokens, night, day)) {
     const solid = button("s", "Merge", () => {}, c);
     assert.equal(one(solid, "bg"), c.primary);
     assert.deepEqual(styled(solid, "hover"), [["bg", mix(c.primary, c.background, WASH.hover)]]);
@@ -75,8 +61,7 @@ test("Solid, tonal and quiet wash from the theme, press with the selected wash, 
 });
 
 test("Focus is an accent ring on a border kept clear at rest, so the box never changes size", async () => {
-  const { button, tokens } = await kit();
-  const c = tokens(night);
+  const { button, c } = await kit();
   for (const kind of ["solid", "tonal", "quiet", "icon"]) {
     const el = button("f", "Merge", () => {}, c, { kind, icon: kind === "icon" ? "copy" : null });
     assert.equal(calls(el, "border_2").length, 1);
@@ -102,8 +87,7 @@ test("Off is a w4 fill with dim text for solid and icon alike, and never reacts 
 });
 
 test("A press runs the action; armed fills with the accent and reads Press again to <verb>", async () => {
-  const { button, tokens } = await kit();
-  const c = tokens(night);
+  const { button, c } = await kit();
   const ran = [];
   const el = button("a", "Remove", (cx) => ran.push(cx), c, { verb: "remove", armed: true });
   assert.equal(one(el, "bg"), c.accent);
@@ -131,8 +115,7 @@ test("Arming changes no width: both labels share one cell at rest and armed, the
   }
 });
 test("quietLink and iconButton are the quiet and icon kinds", async () => {
-  const { quietLink, iconButton, tokens, H, ICON } = await kit();
-  const c = tokens(night);
+  const { quietLink, iconButton, H, ICON, c } = await kit();
   const link = quietLink("l", "Open", () => {}, c, { label: "Open the file" });
   assert.equal(one(link, "h"), H.compact);
   assert.equal(one(link, "accessibility_label"), "Open the file");
@@ -145,8 +128,7 @@ test("quietLink and iconButton are the quiet and icon kinds", async () => {
 });
 
 test("A small icon button is the row's tool, 20 with a 12 glyph, and the field's small icon and the plain one keep 24 and 26 with 15", async () => {
-  const { button, tokens, H, T, ICON, ICON_INLINE } = await kit();
-  const c = tokens(night);
+  const { button, H, T, ICON, ICON_INLINE, c } = await kit();
   const side = (o) => { const el = button("i", "Pin", () => {}, c, { kind: "icon", icon: "pin", ...o }); return [one(el, "h"), one(el, "w"), one(el.kids[0], "size")]; };
   assert.deepEqual([H.badge, ICON_INLINE], [20, 12]);
   assert.deepEqual(side({ size: "sm" }), [H.badge, H.badge, ICON_INLINE]);
@@ -155,4 +137,14 @@ test("A small icon button is the row's tool, 20 with a 12 glyph, and the field's
   const text = button("w", "Wake", () => {}, c, { kind: "quiet", size: "sm" });
   assert.equal(one(text, "h"), H.compact, "a small text button is the compact one");
   assert.equal(one(text.kids.at(-1), "text_size"), T.body);
+});
+
+test("A trimmed button cuts a long label at the token's width, as Spend's project menu does (press-targets checks it uses it), and any other grows with its label", async () => {
+  const { button, c } = await kit();
+  const { W } = await load("kanso-panel/ui.js", ["W"], gpuiHost());
+  const long = "a-project-folder-with-a-very-long-name-that-would-push-the-filters-away";
+  const label = (o) => button("b", long, () => {}, c, { kind: "quiet", small: true, icon: "chevron-down", ...o }).kids.at(-1);
+  assert.equal(one(label({ truncate: true }), "max_w"), W.buttonLabel);
+  assert.equal(calls(label({ truncate: true }), "truncate").length, 1);
+  assert.equal(calls(label({}), "max_w").length, 0);
 });

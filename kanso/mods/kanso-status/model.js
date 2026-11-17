@@ -1,5 +1,5 @@
 // What the status bar says, and where a click goes. No host calls.
-import { machineTitle, parseOr, oneLine, memoryFree, plural } from "./pure.js";
+import { machineTitle, parseOr, oneLine, memoryFree, plural, tellsSomething } from "./pure.js";
 
 export const MEMORY_MS = 60_000;
 // A now.json older than three minutes is not a current fact (the guard's own rule).
@@ -17,9 +17,7 @@ export function questionOf({ msg, title, name, program } = {}) {
   if (said) return said;
   if (!name) return null;
   const live = clean(title), raw = String(title ?? "").trim();
-  const telling = live && !/^[~/]|^[A-Za-z]:\\/.test(raw) && !/^[~/]|^[A-Za-z]:\\/.test(live) && !live.includes("@")
-    && live.toLowerCase() !== program?.key && live !== program?.name;
-  return telling && !sameName(live, name) ? live : null;
+  return tellsSomething(live, raw, program) && !sameName(live, name) ? live : null;
 }
 
 const waiting = (rows) => (Array.isArray(rows) ? rows : []).filter((row) => row?.status === "blocked" && row.address && row.pane);
@@ -59,8 +57,6 @@ export function workingItem(agents) {
   const count = (Array.isArray(agents) ? agents : []).filter((agent) => agent?.status === "working").length;
   return { count, mark: count > 0 ? "working" : "idle", words: String(count), command: STATUS_COMMAND, tooltip: `${plural(count, "agent", "agents")} working` };
 }
-
-export const paletteTip = (platform) => `Command palette ${platform === "macos" ? "⌘⇧P" : "Ctrl+Shift+P"}`;
 
 export function memoryLow(text, now = Date.now()) {
   const raw = typeof text === "string" ? parseOr(text, null) : text;

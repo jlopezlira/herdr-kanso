@@ -8,11 +8,15 @@ From a clone, with Node 22.15 or newer, Git, Bash and sqlite3:
 - `npm run sync:share -- --check`
 - `npm run check:version`
 - `npm run check:dupes`
+- `npm run build:site -- --check`
+- `npm run build:issue-forms -- --check`
 - `herdr-app check <mod folder>`
 
 `herdr-app check kanso/mods/kanso-guard` is one. `herdr-app check` passes for the `kanso-*` mods and `open-with`.
 
-`npm run check:dupes` fails on code repeated in `kanso/mods`, `stories`, `scripts`, `site`, `tests` or `.github` that `kanso/dupes-baseline.json` does not list: one line from 80 characters of code, or lines in a row from 50. Make it one component, state or primitive instead. Copies made by `npm run sync:share` are skipped. The baseline lists today's repeats and can only shrink: after removing one, run `npm run check:dupes -- --write`. In a pull request, CI also fails when the baseline lists more than the base branch's (`KANSO_BASE=origin/develop npm run check:dupes` checks it locally). `-- --report <file>` writes every repeat with its places.
+A site page is edited in `site/pages/`; `npm run build:site` writes it to `site/` with the shared head, nav and footer. The Bug and Work item issue forms are edited in `scripts/build-issue-forms.mjs`; `npm run build:issue-forms` writes them.
+
+`npm run check:dupes` fails on code repeated in `kanso/mods`, `stories`, `scripts`, `site`, `tests` or `.github` that `kanso/dupes-baseline.json` does not list: one line from 80 characters of code, or lines in a row from 50. Make it one component, state or primitive instead. Copies made by `npm run sync:share`, the files `npm run build:site` and `npm run build:issue-forms` write, and `site/tokens.css` are skipped. The baseline lists today's repeats and can only shrink: after removing one, run `npm run check:dupes -- --write`. Before opening a pull request, `KANSO_BASE=origin/develop npm run check:dupes` must pass too: it fails when the baseline lists more than the base branch's. `-- --report <file>` writes every repeat with its places.
 
 ## Version
 
@@ -22,7 +26,7 @@ Until a release candidate is cut, version.json stays at the newest stable versio
 
 Run the manual Release candidate workflow on `develop` to prepare the next version. It computes the same bump, moves Unreleased into a dated, numbered section, updates version.json, commits those files to develop and publishes `vX.Y.Z-rc.N`. Later candidates combine that numbered section with new Unreleased entries and recompute the bump from the newest stable tag. The number can go up until stable, but never down. A larger bump renames the section in place, updates version.json and starts rc.N at 1 for the new version; otherwise only N increases. Betas compute their version from the same combined entries. Merging develop into main releases the version in version.json.
 
-`npm run check:version -- --branch develop` checks the develop rules; CI also checks that a pull request leaves version.json and numbered history alone. `npm run check:version` checks main's stable rules. Technical debt goes under Unreleased too and ships with the next release.
+`npm run check:version -- --branch develop` checks the develop rules, including that a pull request leaves version.json and numbered history alone. `npm run check:version` checks main's stable rules. Technical debt goes under Unreleased too and ships with the next release.
 
 ## Shared files
 
@@ -39,6 +43,8 @@ Set `HERDR_APP_HOME` to a separate directory, so the try does not use your own H
 ## Pull requests
 
 Use `type(scope): subject` for the PR title, with `type` one of `feat`, `fix`, `perf`, `test`, `ci`, `docs` or `chore`. Do not use `bug` as a type or put a version or issue number in the title. Branch names use `<type>/<slug>`.
+
+CI does not run on pull requests. Before opening one, run `npm test` and every check above locally, and list each with its real result under Tests in the PR body. CI runs on pushes to develop and main, where it gates the beta and stable releases.
 
 Kansō tracks users' GitHub issues, not tickets. When a user's issue prompted the change, put `Closes #N` under Why in the PR body and end the related CHANGELOG entry with `(#N)`. With no issue, omit both references.
 

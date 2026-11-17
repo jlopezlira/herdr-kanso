@@ -209,9 +209,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     `#98ad8f`.
   - Light: background `#f4f1eb`, foreground `#3c3934`, chrome `#e3dfd6`,
     working `#8f7d52`, blocked `#9a6e68`, done `#6d7d62`.
-- **Icons**: one Lucide-style set in `mods/kanso-chrome/icons/`, every one
-  with the same stroke (2 on a 24 grid, 1.4 on a 16 grid), so they read as
-  one family.
+- **Icons**: Lucide's own icons in `mods/kanso-chrome/icons/`, unchanged and
+  named as Lucide names them (stroke 2 on a 24 grid); the ensō marks
+  (`enso`, `enso-idle`, `working`) are marks, not icons.
 
 ## How it behaves
 
@@ -504,7 +504,7 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
 
 ## Built from
 
-- **Layout tree** (`layouts/kanso.json`), root `row`, `titlebar: "none"`,
+- **Layout tree** (`layouts/kanso.json`, its sizes written from the layout tokens by `npm run build:ui-tokens`), root `row`, `titlebar: "none"`,
   `traffic_lights: [12, 16]`, `resizable: true`, `terminal_menu: "kanso-menu"`:
   - `sidebar` (column, `chrome`, 256 px, min 200, max 480):
     - `brand`: block `kanso-chrome` (Herdr's mark), 48 px, `window_drag`.
@@ -604,9 +604,9 @@ Left to right, then top to bottom. Sizes are px at zoom 1.
     a conflict when the file on disk changed; "Source" edits the whole file).
     Over 1 MiB stays a view. `blocks.js` splits and joins the blocks.
     kanso-tabs watches `data/kanso-open` (`markdown-handler.sh install`).
-    The markdown-panel mod is that copy, by sync:share); `lib.js` shares
-    `codeState` (an `EditorState`, read-only when the file is not text)
-    and `showPanel` (a block in `panel-body`). A panel
+    The markdown-panel mod is that copy, by sync:share); the kit's `ui-code.js`
+    gives `sourceState` (an `EditorState`, read-only when the file is not text)
+    and `lib.js` gives `showPanel` (a block in `panel-body`). A panel
     exists only while `kanso-tabs` shows it. A remote re-read runs only while it is shown and the window is in front.
     `ports.js` lists TCP listeners (`lsof -F pcn`) with their folder
     (`lsof -d cwd`), age and parent chain (`ps`); a listener under a

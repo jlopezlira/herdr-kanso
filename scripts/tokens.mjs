@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 export const ROOT = fileURLToPath(new URL("../", import.meta.url));
 export const TOKENS = "kanso/tokens.json";
 export const THEMES = ["dark", "light"];
+export const THEME_FILES = { dark: "kanso/themes/kanso.json", light: "kanso/themes/kanso-day.json" };
 
 export const read = (path) => readFileSync(ROOT + path, "utf8");
 export const loadTokens = () => JSON.parse(read(TOKENS));
@@ -22,7 +23,7 @@ const toHex = (c) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "
 export function colour(tokens, theme, name) {
   const t = tokens.colour[theme].find((x) => x.name === name);
   if (!t) throw new Error(`no colour ${name} in ${theme}`);
-  const mix = /^color-mix\(in srgb, var\(--([a-z]+)\) ([\d.]+)%, var\(--([a-z]+)\)\)$/.exec(t.value);
+  const mix = /^color-mix\(in srgb, var\(--([a-z0-9-]+)\) ([\d.]+)%, var\(--([a-z0-9-]+)\)\)$/.exec(t.value);
   if (!mix) return t.value;
   const a = rgb(colour(tokens, theme, mix[1])), b = rgb(colour(tokens, theme, mix[3])), p = Number(mix[2]) / 100;
   return toHex(a.map((v, i) => v * p + b[i] * (1 - p)));
@@ -39,7 +40,7 @@ export function contrast(a, b) {
 }
 
 export const TEXT = ["fg", "muted", "dim"];
-export const SURFACES = ["canvas", "chrome", "bg", "raised", "popover"];
+export const SURFACES = ["surface-1", "surface-0", "surface-2", "surface-4", "surface-3"];
 export const MIN_CONTRAST = 4.5;
 
 export function pairs(tokens) {

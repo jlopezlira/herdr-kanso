@@ -368,8 +368,9 @@ const INSTALL_MAIN = [
   "    if (-not $shown) { $shown = 'no version' }",
   "    Die 3 ('the v' + $want + ' release says it is ' + $shown)",
   "  }",
+  "  function Source-Mods { Get-ChildItem -LiteralPath (Join-Path $src 'mods') -Directory | Sort-Object Name }",
   "  Say 'running' 'check'",
-  "  foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $src 'mods') -Directory | Sort-Object Name)) {",
+  "  foreach ($d in @(Source-Mods)) {",
   "    $name = $d.Name",
   "    $modPath = $d.FullName",
   "    $out = ''",
@@ -401,7 +402,7 @@ const INSTALL_MAIN = [
   "  if (Test-Path -LiteralPath $themeDir) {",
   "    foreach ($t in @(Get-ChildItem -LiteralPath $themeDir -Filter '*.json' -File | Sort-Object Name)) { Add-Entry ('themes/' + $t.Name) }",
   "  }",
-  "  foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $src 'mods') -Directory | Sort-Object Name)) {",
+  "  foreach ($d in @(Source-Mods)) {",
   "    if ($d.Name -ne 'kanso-tabs' -and $d.Name -ne 'kanso-chrome') { Add-Entry $d.Name }",
   "  }",
   "  Add-Entry 'kanso-tabs'",
@@ -573,8 +574,7 @@ function posixHost(platform, run, scripts) {
 function windowsHost(run, writeTextFile) {
   return {
     async launch(spec) {
-      const name = `${spec.id}.ps1`;
-      const file = await place(spec.dir, name, windowsInstallScript(spec, paths.join(spec.dir, name)), writeTextFile);
+      const file = await installFile(spec, writeTextFile);
       return powershell(run, windowsLaunchScript(spec.dir, spec.id, file));
     },
     async recover(home, dir) {
@@ -594,8 +594,7 @@ function windowsHost(run, writeTextFile) {
     },
     pause(seconds) { return sleepFor("windows", run, seconds); },
     async foreground(spec, options) {
-      const name = `${spec.id}.ps1`;
-      const file = await place(spec.dir, name, windowsInstallScript(spec, paths.join(spec.dir, name)), writeTextFile);
+      const file = await installFile(spec, writeTextFile);
       return runPowershellFile(run, file, options);
     },
     holdArgs(lockPath) {
@@ -607,3 +606,8 @@ function windowsHost(run, writeTextFile) {
 export function updateHost(platform, run, writeTextFile, scripts) {
   return platform === "windows" ? windowsHost(run, writeTextFile) : posixHost(platform, run, scripts);
 }
+
+const installFile = (spec, writeTextFile) => {
+  const name = `${spec.id}.ps1`;
+  return place(spec.dir, name, windowsInstallScript(spec, paths.join(spec.dir, name)), writeTextFile);
+};

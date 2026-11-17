@@ -2,8 +2,12 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { G, H, R, T, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf, tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
 import { waitingReason, queueMessage } from "./needs-you.js";
+
+// The key that goes to the next agent that needs you, named in the count's tooltip.
+const NEXT_NEEDS = "kanso-spaces.needs-you.next";
 
 export function queueLabel(queue, collapsed, empty) {
   if (empty) return queueMessage(queue.state);
@@ -16,7 +20,7 @@ export function queueControl(t, queue, collapsed, empty, toggle) {
   if (!count && !empty) return div();
   const c = tokens(t), spoken = `Needs you: ${count}`;
   return h_flex().flex_none().px(G.sm).child(quietLink("needs-you-count", queueLabel(queue, collapsed, empty), toggle, c,
-    { label: spoken, color: count ? c.text : c.dim }).tooltip(spoken));
+    { label: spoken, color: count ? c.text : c.dim }).tooltip(tooltip({ label: spoken, chord: boundChord(NEXT_NEEDS) })));
 }
 
 export function queueList(t, queue, rowFor, age, scroll = null) {
@@ -34,7 +38,7 @@ export function queueList(t, queue, rowFor, age, scroll = null) {
           .child(div().truncate().text_size(10.5).text_color(c.dim).child(row.project))
           .child(h_flex().gap(G.sm).child(line(waitingReason(row), c.muted)).child(line(age(row), c.dim))));
     }))
-    .when(queue.state === "loading", (el) => el.child(skeleton(c).row(0, H.control)))
+    .when(queue.state === "loading", (el) => el.child(skeletonOf({ shape: "row" })("needs-you-loading", c)))
     .when(queue.state === "unavailable" || (!queue.rows.length && queue.state === "ready"),
       (el) => el.child(line(queueMessage(queue.state), c.dim)));
 }

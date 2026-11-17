@@ -2,7 +2,7 @@
 // folder only, so the source (the one you edit) is copied into every other
 // mod that uses it. `--check` fails instead when a copy differs.
 import { readFile, writeFile, readdir, rm } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { CHECK, isMain } from "./cli.mjs";
 
 const root = new URL("../", import.meta.url);
 // Each shared file (relative to the repo), and where it is copied.
@@ -35,6 +35,22 @@ const COMMON = [
   // Your pet and the one to choose, in the dōjō and on kansō help's dōjō page; the choice kept in the dōjō's SQLite.
   { source: "kanso/mods/kanso-dojo/pets.js", copies: ["kanso/mods/kanso-help/pets.js"] },
   { source: "kanso/mods/kanso-dojo/store.js", copies: ["kanso/mods/kanso-help/store.js"] },
+  // The cap a key press lights for a moment, in the dōjō and on help's keyboard page.
+  { source: "kanso/mods/kanso-dojo/lit.js", copies: ["kanso/mods/kanso-help/lit.js"] },
+  // The Open with popup, from the terminal's menu and from the strip's pane menu.
+  { source: "kanso/mods/open-with/popup.js", copies: ["kanso/mods/kanso-menu/popup.js", "kanso/mods/kanso-strip/popup.js"] },
+  // The way into the arrangements dialog, from the tab bar and from the strip.
+  { source: "kanso/mods/kanso-arrange/open.js", copies: ["kanso/mods/kanso-strip/open.js", "kanso/mods/kanso-tabs/open.js"] },
+  // The answer both rename dialogs give: a terminal's label, or a command with the new name.
+  { source: "kanso/mods/kanso-prompt/rename.js", copies: ["kanso/mods/kanso-prompt-editor/rename.js"] },
+  // A folder's short word, the same in Send and in the strip's pane header.
+  { source: "kanso/mods/kanso-send/folder.js", copies: ["kanso/mods/kanso-strip/folder.js"] },
+  // The one window kansō help and kansō settings share.
+  { source: "kanso/mods/kanso-settings/pages.js", copies: ["kanso/mods/kanso-help/pages.js"] },
+  // The shell of a full-page mod view: Memory draws in it, Containers the same.
+  { source: "kanso/mods/kanso-guard/page.js", copies: ["kanso/mods/kanso-containers/page.js"] },
+  // One SQLite file under the app's folder: the stores of arrangements and of the dōjō (and help's copy of it).
+  { source: "kanso/mods/kanso-dojo/file-store.js", copies: ["kanso/mods/kanso-help/file-store.js", "kanso/mods/kanso-arrange/file-store.js"] },
   // Lists by keyboard (j/k, gg/G, Enter, Esc), the same in every menu and list.
   { source: "kanso/mods/kanso-menu/listkeys.js", copies: ["kanso/mods/open-with/listkeys.js", "kanso/mods/kanso-spaces/listkeys.js", "kanso/mods/kanso-arrange/listkeys.js"] },
   // Opening a tab from data: arrangements; Sleep reads a few of its words.
@@ -56,7 +72,7 @@ const COMMON = [
   // One key waiter: the sidebar's commands, and Preview's Save, each while that view is up.
   { source: "kanso/mods/kanso-spaces/sidebar.js", copies: ["kanso/mods/kanso-panel/sidebar.js"] },
   // No reassignment anywhere: retry, range, parseOr... in every mod.
-  { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js", "open-with/mods/open-with/pure.js"]) },
+  { source: "kanso/mods/kanso-spaces/pure.js", copies: ["kanso-arrange", "kanso-chrome", "kanso-containers", "kanso-dojo", "kanso-guard", "kanso-help", "kanso-menu", "kanso-panel", "kanso-prompt", "kanso-prompt-editor", "kanso-send", "kanso-settings", "kanso-sim", "kanso-sleep", "kanso-spend", "kanso-status", "kanso-strip", "kanso-tabs", "kanso-toast", "open-with"].map((m) => `kanso/mods/${m}/pure.js`).concat(["markdown-panel/mods/markdown-panel/pure.js", "open-with/mods/open-with/pure.js"]) },
   // Who this computer is, and rows exchanged with the others. Spend runs it; the sidebar turns it on per machine.
   { source: "kanso/mods/kanso-spend/sync.js", copies: ["kanso/mods/kanso-spaces/sync.js"] },
   { source: "kanso/mods/kanso-tabs/layout.js", copies: ["kanso/mods/kanso-strip/layout.js", "kanso/mods/kanso-spaces/layout.js", "kanso/mods/kanso-panel/layout.js", "kanso/mods/open-with/layout.js"] },
@@ -68,6 +84,14 @@ const COMMON = [
   { source: "kanso/mods/kanso-panel/remote-file.js", copies: ["markdown-panel/mods/markdown-panel/remote-file.js"] },
   // One wake when a panel that was behind, or hidden, is in front again.
   { source: "kanso/mods/kanso-panel/front.js", copies: ["kanso/mods/kanso-containers/front.js", "kanso/mods/kanso-sim/front.js"] },
+  // Storybook compositions the app draws as they are, each in the mod that draws it.
+  { source: "stories/kit/session-row.js", copies: ["kanso/mods/kanso-spaces/session-row.js"] },
+  { source: "stories/kit/project-row.js", copies: ["kanso/mods/kanso-spaces/project-row.js"] },
+  { source: "stories/kit/computer-row.js", copies: ["kanso/mods/kanso-spaces/computer-row.js"] },
+  { source: "stories/kit/section.js", copies: ["kanso/mods/kanso-spaces/section.js"] },
+  { source: "stories/kit/asleep.js", copies: ["kanso/mods/kanso-spaces/asleep.js"] },
+  { source: "stories/kit/tile.js", copies: ["kanso/mods/kanso-spaces/tile.js"] },
+  { source: "stories/kit/view-switch.js", copies: ["kanso/mods/kanso-spaces/view-switch.js"] },
   { source: "kanso/mods/kanso-panel/blocks.js", copies: ["markdown-panel/mods/markdown-panel/blocks.js"] },
   { source: "kanso/mods/kanso-tabs/markdown-handler.sh", copies: ["markdown-panel/mods/markdown-panel/markdown-handler.sh"] },
 ];
@@ -89,13 +113,16 @@ export function sharedDependencies(modules, canonical) {
   return needed;
 }
 
+// Every mod folder under kanso/mods, as a path from the repository.
+export const kansoModFolders = async () => (await readdir(new URL("kanso/mods/", root), { withFileTypes: true })).filter((entry) => entry.isDirectory())
+  .map((entry) => `kanso/mods/${entry.name}/`);
+
 async function importedShares() {
   const canonical = new Map(await Promise.all((await readdir(new URL(PLATFORM, root))).filter(sharedFile)
     .map(async (name) => [name, await readFile(new URL(PLATFORM + name, root), "utf8")])));
   const shared = new Map([...canonical.keys()].map((name) => [name, { source: PLATFORM + name, copies: [] }]));
   const overrides = new Map(COMMON.flatMap(({ source, copies }) => copies.map((copy) => [copy, source])));
-  const folders = (await readdir(new URL("kanso/mods/", root), { withFileTypes: true })).filter((entry) => entry.isDirectory())
-    .map((entry) => `kanso/mods/${entry.name}/`).concat(["markdown-panel/mods/markdown-panel/"]);
+  const folders = (await kansoModFolders()).concat(["markdown-panel/mods/markdown-panel/"]);
   const obsolete = [];
   for (const folder of folders) {
     if (folder === PLATFORM) continue;
@@ -112,11 +139,10 @@ async function importedShares() {
 const imported = await importedShares();
 export const SHARED = [...COMMON, ...imported.shared];
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const check = process.argv.includes("--check");
+if (isMain(import.meta.url)) {
   let stale = 0;
   for (const copy of imported.obsolete) {
-    if (check) { console.error(`${copy} is unused: run npm run sync:share`); stale += 1; }
+    if (CHECK) { console.error(`${copy} is unused: run npm run sync:share`); stale += 1; }
     else { await rm(new URL(copy, root)); console.log(`removed unused ${copy}`); }
   }
   for (const { source: from, copies } of SHARED) {
@@ -125,7 +151,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const target = new URL(copy, root);
       const current = await readFile(target, "utf8").catch(() => null);
       if (current === source) continue;
-      if (check) { console.error(`${copy} differs from ${from}: run npm run sync:share`); stale += 1; }
+      if (CHECK) { console.error(`${copy} differs from ${from}: run npm run sync:share`); stale += 1; }
       else { await writeFile(target, source); console.log(`copied ${from} to ${copy}`); }
     }
   }

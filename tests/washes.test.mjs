@@ -3,13 +3,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { load, gpuiHost as host } from "./helpers.mjs";
-import { ROOT, loadTokens, colour, contrast } from "../scripts/tokens.mjs";
+import { ROOT, loadTokens, colour, contrast, THEME_FILES as THEMES } from "../scripts/tokens.mjs";
+import { WASH_TOKENS } from "../scripts/build-ui-tokens.mjs";
 
 const kit = () => load("kanso-panel/ui.js", ["tokens", "washes", "WASHES"], host());
 const tokens = loadTokens();
-const THEMES = { dark: "kanso/themes/kanso.json", light: "kanso/themes/kanso-day.json" };
 const NAMES = ["w4", "w7", "w12", "w14"];
-const share = (theme, name) => Number(/var\(--fg\) ([\d.]+)%, transparent\)$/.exec(tokens.colour[theme].find((x) => x.name === name).value)[1]) / 100;
+const share = (theme, name) => Number(/var\(--fg\) ([\d.]+)%, transparent\)$/.exec(tokens.colour[theme].find((x) => x.name === WASH_TOKENS[name]).value)[1]) / 100;
 const hex2 = (p) => Math.round(p * 255).toString(16).padStart(2, "0");
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const over = (fg, bg, p) => `#${rgb(fg).map((v, i) => Math.round(v * p + rgb(bg)[i] * (1 - p)).toString(16).padStart(2, "0")).join("")}`;
@@ -47,7 +47,7 @@ test("Without a background the washes read the canvas to tell a light theme from
 });
 
 test("In the light theme the strip's tiles and the tree guides stand out from the sidebar's ground by at least 1.19:1", () => {
-  const fg = colour(tokens, "light", "fg"), chrome = colour(tokens, "light", "chrome");
+  const fg = colour(tokens, "light", "fg"), chrome = colour(tokens, "light", "surface-0");
   const short = ["w7", "w12"].map((name) => ({ name, ratio: contrast(over(fg, chrome, share("light", name)), chrome) }))
     .filter(({ ratio }) => Number(ratio.toFixed(2)) < 1.19).map(({ name, ratio }) => `${name} on chrome: ${ratio.toFixed(3)}:1`);
   assert.deepEqual(short, []);

@@ -1,0 +1,13 @@
+name: Node
+description: The Node version the checks and scripts run on.
+inputs:
+  cache:
+    description: The package manager whose downloads are kept between runs, or none.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        cache: ${{ inputs.cache }}
+        node-version: 22

@@ -1,18 +1,18 @@
 // Concurrent database calls share a process without sharing their results or failures.
+import { loadKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { databaseTimer, load, clone, temporary, exec } from "./helpers.mjs";
+import { clone, temporary, exec, openedKdb } from "./helpers.mjs";
 
 async function database(t) {
   const dir = await temporary(t), calls = [];
   const clock = { now: Date.now() };
   class Clock extends Date { static now() { return clock.now; } }
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], {
+  const { Kdb } = await loadKdb({
     appHome: () => dir, Date: Clock,
     exec: (command, args) => { calls.push([command, args]); return exec(command, args); },
   });
-  const db = new Kdb(databaseTimer);
-  await db.open();
+  const db = await openedKdb(Kdb);
   calls.length = 0;
   return { db, calls, clock };
 }

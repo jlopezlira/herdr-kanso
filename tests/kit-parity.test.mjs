@@ -1,21 +1,25 @@
 // The app kit against the Storybook kit: same pieces, same prop names, and the committed gap may only shrink.
+// `waiting` holds app props the Storybook draws on sb-preview but not yet on develop; each clears when it lands.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
+import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { load, gpuiHost } from "./helpers.mjs";
 import * as storybookKit from "../stories/kit/pieces.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const STORYBOOK = "stories/kit/pieces.js";
+const PREVIEW = "origin/sb-preview";
 const LIST = "tests/kit-parity.json";
 const PANEL = "kanso/mods/kanso-panel/";
-// Exports of the Storybook kit that draw no piece of their own: they escape text, join children or words, or push siblings apart.
-const HELPERS = new Set(["escape", "list", "phrase", "grow"]);
+// Exports of the Storybook kit that draw no piece of their own: they escape text, join children or words, name a tool, or push siblings apart.
+const HELPERS = new Set(["escape", "list", "phrase", "grow", "icon"]);
 
 const read = (path) => readFileSync(`${root}${path}`, "utf8");
-const appFiles = () => [...readdirSync(`${root}${PANEL}`).filter((name) => /^ui(-[\w-]+)?\.js$/.test(name)).sort(), "marks.js"];
+// kit.js first: a piece a ui file draws is compared by that file's own props.
+const appFiles = () => ["kit.js", ...readdirSync(`${root}${PANEL}`).filter((name) => /^ui(-[\w-]+)?\.js$/.test(name)).sort(), "marks.js"];
 
 // The index of the quote that ends the string opening at `start`.
 const stringEnd = (text, start) => {
@@ -24,14 +28,16 @@ const stringEnd = (text, start) => {
   return i;
 };
 
+// Where the string starting at i ends, or i when none starts there.
+const pastString = (text, i) => ("\"'`".includes(text[i]) ? stringEnd(text, i) : i);
+
 // The index of the bracket that closes the one at `start`, skipping strings.
 const closing = (text, start) => {
   let depth = 0;
   for (let i = start; i < text.length; i++) {
-    const char = text[i];
-    if ("\"'`".includes(char)) i = stringEnd(text, i);
-    else if ("([{".includes(char)) depth++;
-    else if (")]}".includes(char) && --depth === 0) return i;
+    i = pastString(text, i);
+    if ("([{".includes(text[i])) depth++;
+    else if (")]}".includes(text[i]) && --depth === 0) return i;
   }
   throw new Error(`No closing bracket for ${text.slice(start, start + 40)}`);
 };
@@ -40,10 +46,9 @@ const topLevel = (text) => {
   const parts = [];
   let from = 0;
   for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if ("\"'`".includes(char)) i = stringEnd(text, i);
-    else if ("([{".includes(char)) i = closing(text, i);
-    else if (char === ",") { parts.push(text.slice(from, i)); from = i + 1; }
+    i = pastString(text, i);
+    if ("([{".includes(text[i])) i = closing(text, i);
+    else if (text[i] === ",") { parts.push(text.slice(from, i)); from = i + 1; }
   }
   return [...parts, text.slice(from)].map((part) => part.trim()).filter(Boolean);
 };
@@ -97,7 +102,18 @@ const kitOf = (sources) => {
   return kit;
 };
 
-const storybookPieces = (source) => new Map([...kitOf([source])].filter(([name, piece]) => piece.kind === "function" && !HELPERS.has(name)));
+// What the Storybook kit imports from another file by name, such as the app's facts it re-exports: each name with that file's own entry.
+const imported = (source, get) => new Map([...source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*["'](\.[^"']+)["']/gm)].flatMap(([, names, from]) => {
+  const other = get(posix.join(posix.dirname(STORYBOOK), from));
+  const found = other ? exportsOf(other) : new Map();
+  return topLevel(names).map((spec) => spec.split(/\s+as\s+/).map((part) => part.trim())).filter(([name]) => found.has(name)).map(([name, as = name]) => [as, found.get(name)]);
+}));
+const storybookPieces = (source, get = (path) => read(path)) => {
+  const kit = kitOf([source]);
+  const from = imported(source, get);
+  for (const [name, entry] of exportsOf(source)) if (entry.kind === "alias" && !kit.has(name) && from.get(entry.target)?.kind === "function") kit.set(name, from.get(entry.target));
+  return new Map([...kit].filter(([name, piece]) => piece.kind === "function" && !HELPERS.has(name)));
+};
 
 const minus = (a, b) => a.filter((item) => !b.includes(item));
 const factsOf = (list) => [
@@ -106,10 +122,16 @@ const factsOf = (list) => [
   ...Object.entries(list.props ?? {}).flatMap(([name, sides]) => ["storybook", "app"].flatMap((side) => (sides[side] ?? []).map((prop) => ({ kind: "props", name, side, prop, text: `${name} prop "${prop}" only in the ${side}` })))),
 ];
 
+// Props the app has ahead of the Storybook: each one still app only, and drawn on sb-preview when that kit is given.
+const waitingErrors = (waiting, differences, preview) => Object.entries(waiting).flatMap(([name, names]) => names.flatMap((prop) => [
+  ...(differences[name]?.app ?? []).includes(prop) ? [] : [`${name}: prop "${prop}" is in the Storybook now: take it off waiting`],
+  ...!preview || (preview.get(name)?.props ?? []).includes(prop) ? [] : [`${name}: prop "${prop}" is waiting, but sb-preview's Storybook does not draw it`],
+]));
+
 // What the app kit lacks, and every way the committed list disagrees with the two kits or grew since `base`.
-const compare = ({ storybook, app, list, base = null }) => {
+const compare = ({ storybook, app, list, base = null, preview = null }) => {
   const errors = [];
-  const missing = list.missing ?? [], renamed = list.renamed ?? {}, props = list.props ?? {};
+  const missing = list.missing ?? [], renamed = list.renamed ?? {}, props = list.props ?? {}, waiting = list.waiting ?? {};
   const gap = [], differences = {};
   for (const name of new Set(missing.filter((name, i) => missing.indexOf(name) !== i))) errors.push(`"${name}" is in missing twice`);
   for (const name of new Set([...missing, ...Object.keys(renamed), ...Object.keys(props)])) {
@@ -131,12 +153,14 @@ const compare = ({ storybook, app, list, base = null }) => {
     if (missing.includes(name) && !app.has(name)) errors.push(`${name} is in the app kit as ${as}: take it off missing`);
     const actual = { storybook: minus(piece.props, other.props), app: minus(other.props, piece.props) };
     if (actual.storybook.length || actual.app.length) differences[name] = actual;
+    const ahead = { ...actual, app: minus(actual.app, waiting[name] ?? []) };
     for (const side of ["storybook", "app"]) {
       const listed = props[name]?.[side] ?? [];
-      for (const prop of minus(actual[side], listed)) errors.push(`${name}: prop "${prop}" is only in the ${side} kit, and it is not listed`);
-      for (const prop of minus(listed, actual[side])) errors.push(`${name}: prop "${prop}" no longer differs: take it off props`);
+      for (const prop of minus(ahead[side], listed)) errors.push(`${name}: prop "${prop}" is only in the ${side} kit, and it is not listed`);
+      for (const prop of minus(listed, ahead[side])) errors.push(`${name}: prop "${prop}" no longer differs: take it off props`);
     }
   }
+  errors.push(...waitingErrors(waiting, differences, preview));
   if (base?.list) {
     const before = new Set(factsOf(base.list).map((fact) => fact.text));
     for (const fact of factsOf(list).filter((fact) => !before.has(fact.text))) {
@@ -156,7 +180,7 @@ const baseline = () => {
   const commit = ["origin/develop", "develop", "HEAD"].map((ref) => { try { return git("merge-base", "HEAD", ref).trim(); } catch { return null; } }).find(Boolean);
   assert.ok(commit, "git finds no commit to compare the list with");
   const list = shown(commit, LIST), source = shown(commit, STORYBOOK);
-  return { commit, list: list && JSON.parse(list), storybook: source ? storybookPieces(source) : new Map() };
+  return { commit, list: list && JSON.parse(list), storybook: source ? storybookPieces(source, (path) => shown(commit, path)) : new Map() };
 };
 
 const kits = () => ({
@@ -168,7 +192,9 @@ const kits = () => ({
 test("The app kit has every Storybook piece with the same prop names, except the committed list, which only shrinks", (t) => {
   const { storybook, app, list } = kits();
   const base = baseline();
-  const { gap, differences, errors } = compare({ storybook, app, list, base });
+  const source = shown(PREVIEW, STORYBOOK);
+  if (!source) t.diagnostic(`${PREVIEW} is not here: the waiting props are not checked against it`);
+  const { gap, differences, errors } = compare({ storybook, app, list, base, preview: source && storybookPieces(source, (path) => shown(PREVIEW, path)) });
   t.diagnostic(`Storybook pieces (${storybook.size}), app kit files: ${appFiles().join(", ")}, compared with ${base.commit.slice(0, 7)}`);
   t.diagnostic(`Missing from the app kit (${gap.length}): ${gap.join(", ")}`);
   t.diagnostic(`Named differently: ${Object.entries(list.renamed ?? {}).map(([name, as]) => `${name} → ${as}`).join(", ")}`);
@@ -248,4 +274,15 @@ test("A piece added to the app kit with the same name and props leaves the missi
   const app = appOf(appButton, "export function avatar(id, c, { initial, size } = {}) {}");
   assert.deepEqual(compare({ storybook, app, list: { missing: [] }, base }), { gap: [], differences: {}, errors: [] });
   assert.deepEqual(compare({ storybook, app, list: { missing: ["avatar"] }, base }).errors, ["avatar is in the app kit now: take it off missing"]);
+});
+
+test("An app prop the Storybook draws only on sb-preview waits in the list, and clears when the Storybook lands", () => {
+  const storybook = storybookOf(sbButton), app = appOf("export function button(id, c, { label, kind, verbs } = {}) {}");
+  const preview = storybookOf("export const button = ({ label, kind, verbs }) => '';");
+  const list = { waiting: { button: ["verbs"] } };
+  const base = { list: {}, storybook };
+  assert.deepEqual(compare({ storybook, app, list, base, preview }).errors, []);
+  assert.deepEqual(compare({ storybook, app, list, base, preview: storybookOf(sbButton) }).errors,
+    ["button: prop \"verbs\" is waiting, but sb-preview's Storybook does not draw it"]);
+  assert.deepEqual(compare({ storybook: preview, app, list, base, preview }).errors, ["button: prop \"verbs\" is in the Storybook now: take it off waiting"]);
 });

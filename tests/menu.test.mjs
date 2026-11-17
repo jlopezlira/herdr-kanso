@@ -1,19 +1,17 @@
 // The Menu: a heading, items of a control's height with their icon, a separator, and an item that asks twice.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, gpuiHost, numberArguments, texts } from "./helpers.mjs";
+import { load, gpuiHost, numberArguments, texts, calls, arg, themed, CHROME_NIGHT } from "./helpers.mjs";
 
-const kit = async () => ({
+const kit = async () => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T", "W"], gpuiHost()),
   ...await load("kanso-panel/ui-menu.js", ["menu", "menuHeight"], gpuiHost()),
-});
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const arg = (el, name) => calls(el, name).at(-1)?.[1];
-const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", dim: "#6b6860", muted: "#949086", accent: "#7d9cd4", popover: "#222220", border: "#33332f" };
+}, night);
+
+const night = CHROME_NIGHT;
 
 test("A Menu is a popover 252 wide, 4 inside, radius 8, with its heading dim in the meta size", async () => {
-  const { menu, tokens, G, R, T, W } = await kit();
-  const c = tokens(night);
+  const { menu, G, R, T, W, c } = await kit();
   const el = menu("m", { title: "checkout", items: [{ icon: "pin", label: "Pin" }] }, c);
   assert.equal(arg(el, "w"), W.menu);
   assert.equal(W.menu, 252);
@@ -28,8 +26,7 @@ test("A Menu is a popover 252 wide, 4 inside, radius 8, with its heading dim in 
 });
 
 test("An item is a control tall, its icon muted, its words in the body size; a click runs it", async () => {
-  const { menu, tokens, G, H, R, T } = await kit();
-  const c = tokens(night);
+  const { menu, G, H, R, T, c } = await kit();
   const done = [];
   const el = menu("m", { items: [{ icon: "pin", label: "Pin", onClick: () => done.push("pin") }, { separator: true }, { label: "Hide this" }] }, c);
   const [pin, line, hide] = el.kids;
@@ -47,9 +44,8 @@ test("An item is a control tall, its icon muted, its words in the body size; a c
 });
 
 test("An armed item is filled with the accent and reads Press again", async () => {
-  const { menu, tokens } = await kit();
-  const c = tokens(night);
-  const [close] = menu("m", { items: [{ icon: "close", label: "Close", armed: true, verb: "close checkout" }] }, c).kids;
+  const { menu, c } = await kit();
+  const [close] = menu("m", { items: [{ icon: "x", label: "Close", armed: true, verb: "close checkout" }] }, c).kids;
   assert.equal(arg(close, "bg"), c.accent);
   assert.equal(arg(close, "accessibility_label"), "Press again to close checkout");
   assert.equal(arg(close.kids[1], "text_color"), c.accentText);
@@ -61,7 +57,7 @@ test("The Menu draws every size from the tokens", () => {
 });
 
 const menuOf = async (items, title = null) => {
-  const { menu, tokens } = await kit(), c = tokens(night);
+  const { menu, c } = await kit();
   return { c, el: menu("m", { title, items }, c) };
 };
 

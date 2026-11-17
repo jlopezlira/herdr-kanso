@@ -2,28 +2,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  ASLEEP_ROW, showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
-  aheadOpen, gitControls, runPull, activityTone, machineWordTone, canWake, enterOpens, asleepControls,
-  gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, timePlace, untilWord, readWord,
-  threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, viewChord,
+  pullKey, pullLabel, pullCommand, refusalLine,
+  aheadOpen, gitControls, runPull, canWake, enterOpens,
+  gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, untilWord, readWord,
+  threadWord, threadActions, signInCommand, noProjectsOn, sortOf,
 } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
-import { readFile } from "node:fs/promises";
-import { load } from "./helpers.mjs";
+import { load, failure } from "./helpers.mjs";
 
 const place = { cwd: "/work/app", on: "dark", key: "[dark]" };
 const git = { branch: "feat", ahead: 2, behind: 3 };
-
-test("plus stays on the active project and the menu stays on hover", () => {
-  assert.equal(showPlus(true, false), true);
-  assert.equal(showPlus(false, true), true);
-  assert.equal(showPlus(false, false), false);
-  assert.equal(showDots(true), true);
-  assert.equal(showDots(false), false);
-  assert.deepEqual(projectControls({ active: true, hovered: false, place: { folder: "/work" } }), { plus: true, dots: false });
-  assert.deepEqual(projectControls({ active: false, hovered: true, place: { folder: "/work" } }), { plus: true, dots: true });
-  assert.deepEqual(projectControls({ active: true, hovered: false, place: null }), { plus: false, dots: false });
-  assert.deepEqual(projectControls({ active: false, hovered: false, place: { folder: "/work" } }), { plus: false, dots: false });
-});
 
 test("a count behind pulls with git on that computer at one press", () => {
   assert.equal(pullLabel(0), null);
@@ -48,10 +35,10 @@ test("a refusal shows git's own first line and a clean pull says nothing", async
   assert.equal(refusalLine({ code: 0, stderr: "already up to date" }), null);
   assert.equal(refusalLine({ code: 1, stderr: "\nfatal: Not possible to fast-forward\nmore", stdout: "hint" }), "fatal: Not possible to fast-forward");
   assert.equal(refusalLine({ code: 1, stderr: "  ", stdout: "could not read\nrest" }), "could not read");
-  assert.equal(refusalLine({ code: 1, stderr: "", stdout: "" }), null);
+  assert.equal(refusalLine(failure("")), null);
   const calls = [];
   const notes = [];
-  const exec = async (command, args, options) => { calls.push({ command, args, options }); return { code: 1, stderr: "fatal: no\nmore", stdout: "" }; };
+  const exec = async (command, args, options) => { calls.push({ command, args, options }); return failure("fatal: no\nmore"); };
   const notify = (note) => notes.push(note);
   const failed = await runPull(exec, notify, { folder: "/work/app", on: "dark" });
   assert.equal(failed.code, 1);
@@ -74,31 +61,12 @@ test("a count ahead goes to that project and opens the pull request panel", () =
   assert.equal(controls.find((item) => item.kind === "ahead").label, "\u21912");
 });
 
-test("an agent's second line is full ink while it waits, quiet while it works, and dim when it is finished", () => {
-  assert.equal(activityTone("blocked"), "foreground");
-  assert.equal(activityTone("working"), "muted");
-  assert.equal(activityTone("done"), "dim");
-  assert.equal(activityTone("idle"), "dim");
-  assert.equal(activityTone("asleep"), "muted");
-});
-
-test("A computer's state on its row is a dim word, unreachable included", () => {
-  assert.equal(machineWordTone("unavailable"), "dim");
-  assert.equal(machineWordTone("connected"), "dim");
-  assert.equal(machineWordTone("off"), "dim");
-  assert.equal(machineWordTone("login"), "dim");
-  assert.equal(machineWordTone("loading"), "dim");
-});
-
 test("Enter on an asleep row wakes it", () => {
   const z = { id: "tb1", tabId: "tb1", settled: true, space: "sp1" };
   const asleep = { address: "zz:t1", asleep: z };
-  assert.equal(ASLEEP_ROW, 32);
   assert.equal(canWake(asleep), true);
   assert.deepEqual(enterOpens(asleep), { wake: z });
-  assert.deepEqual(asleepControls(asleep), [{ id: "wake", label: "Wake" }]);
   assert.equal(canWake({ address: "d" }), false);
-  assert.deepEqual(asleepControls({ address: "d" }), []);
   assert.deepEqual(enterOpens({ address: "e", pane: "p1" }), { focus: "p1" });
   assert.deepEqual(enterOpens({ address: "f" }), { peek: "f" });
 });
@@ -110,8 +78,6 @@ test("nothing is painted that cannot act", () => {
   assert.equal(gitControls({ ahead: 4, behind: 0, branch: "main" }, { folder: "/work/app", on: null }).some((item) => item.kind === "behind"), false);
   assert.equal(gitControls(null, { folder: "/work/app", on: null }).length, 0);
 });
-
-
 
 test("a project row names its repository when it differs, its branch, or a detached commit's short id", () => {
   assert.deepEqual(gitTask({ name: "herdr-kanso", branch: "main" }, "kansō", null), { repo: "herdr-kanso", branch: "main", commit: "" });
@@ -143,13 +109,10 @@ test("a section head carries a mark only for Needs you, and its count only once 
   assert.equal(sectionCount(false, 2), 2);
 });
 
-test("a session row puts its project after the name, the computer when not this one, and its time after what it is on", () => {
+test("a session row puts its project after the name, and the computer when not this one", () => {
   assert.equal(rowDirectory("kansō", null), "kansō");
   assert.equal(rowDirectory("ops", "dark"), "ops · dark");
   assert.equal(rowDirectory(null, null), null);
-  assert.equal(timePlace("Reviewing step 01", "3m"), "line");
-  assert.equal(timePlace(null, "3m"), "end", "with no second line the time keeps its place at the end");
-  assert.equal(timePlace("x", null), null);
 });
 
 test("a thread row says it cannot be read, until when it sleeps, or that it woke", () => {
@@ -173,12 +136,6 @@ test("under the pointer a finished thread offers Settle, a settled one Bring bac
   assert.deepEqual(threadActions({ settled: false, status: "idle", pinned: true }), []);
 });
 
-test("a kept project shows + and the menu under the pointer, and Locate when its folder is gone", () => {
-  assert.deepEqual(closedControls({ hovered: false, missing: false }), { plus: false, dots: false, locate: false });
-  assert.deepEqual(closedControls({ hovered: true, missing: false }), { plus: true, dots: true, locate: false });
-  assert.deepEqual(closedControls({ hovered: false, missing: true }), { plus: false, dots: false, locate: true });
-});
-
 test("a computer that needs a login signs in from a terminal pane, and one with no project says so", () => {
   assert.deepEqual(signInCommand("dark"), { argv: ["hc", "machine", "login", "dark"], place: "right" });
   assert.equal(noProjectsOn("dark"), "No projects on dark yet");
@@ -193,13 +150,3 @@ test("the sort of each view is known, and away from its default it is not the qu
   });
 });
 
-test("the view switch names each view's key the way this platform binds it", async () => {
-  const bound = async (file) => Object.fromEntries(Object.entries(JSON.parse(await readFile(new URL(`../kanso/${file}`, import.meta.url), "utf8"))["layout:kanso"] ?? {})
-    .filter(([, c]) => String(c).startsWith("kanso-spaces.view-")).map(([chord, c]) => [c.slice("kanso-spaces.view-".length), chord]));
-  const mac = await bound("keys.json"), windows = await bound("keys.windows.json");
-  for (const view of ["spaces", "agents", "threads"]) {
-    assert.equal(viewChord(view, "macos"), mac[view], view);
-    assert.equal(viewChord(view, "windows"), windows[view], view);
-  }
-  assert.equal(viewChord("threads", "macos"), "ctrl-alt-t");
-});

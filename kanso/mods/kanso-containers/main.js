@@ -8,11 +8,13 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared, readTextFile } from "herdr";
-import { G, tokens, breathe } from "./ui.js";
+import { G, tokens } from "./ui.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
-import { ghost } from "./ui-skeleton.js";
+import { row } from "./ui-row.js";
+import { metric, skeletonOf } from "./kit.js";
 import { afterMount, parseOr } from "./pure.js";
+import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
 import {
   PS_FORMAT, IMAGES_FORMAT, STATS_FORMAT, INSPECT_FORMAT, CONTEXT_FORMAT, VOLUMES_FORMAT, COMPOSE_FILES, OTHER,
@@ -22,6 +24,7 @@ import {
 
 // Read while the panel is open; a closed panel is unmounted, so nothing runs behind it.
 const EVERY_MS = 5000;
+const HEALTH_TONES = { running: "done", busy: "working", failed: "blocked" };
 // `docker stats` takes a second or two: every third read. Compose files, images and volumes once a minute.
 const STATS_EVERY = 3, FILES_EVERY = 12;
 // A pull runs in a tab the panel cannot follow: images are read each time until they change, for 10 minutes at most.
@@ -271,11 +274,6 @@ export default class Containers extends View {
     });
   }
 
-  dot(c, health) {
-    const color = { running: c.green, busy: c.yellow, failed: c.red }[health] ?? c.border;
-    return div().size(7).flex_none().rounded_full().bg(color);
-  }
-
   detailsView(k, c) {
     const d = this.details.get(k.id.slice(0, 12));
     if (!d) return div().pl(15).text_size(11.5).text_color(c.dim).child("No details from Docker.");
@@ -293,45 +291,54 @@ export default class Containers extends View {
       .child(line("Id", k.id.slice(0, 12)));
   }
 
+  // On another machine's Docker, localhost is not where the ports are: shown, not copied.
+  portVerbs(k) {
+    if (this.context?.remote) return [];
+    return k.ports.slice(0, 3).map((p) => ({ label: `:${p.port}`, spoken: `Copy localhost:${p.port}`, onClick: (cx) => cx.write_to_clipboard?.(`localhost:${p.port}`) }));
+  }
+
   row(k, c) {
     const busy = this.busy.has(k.id), on = k.health === "running" || k.health === "busy";
     const open = this.opened.has(k.id);
     const mem = this.mem.get(k.id.slice(0, 12));
-    const web = !this.context?.remote && on ? k.ports.find(isWeb) : null;
-    return v_flex().w_full().px(G.md).py(9).gap(4).rounded(6).hover((s) => s.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
-      .child(h_flex().w_full().items_center().gap(G.sm)
-        .child(this.dot(c, k.health))
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(k.name).child(k.service ?? k.name))
-        .when(typeof mem === "number" && k.health === "running", (el) => el.child(div().flex_none().text_size(11.5).text_color(c.muted).child(size(mem))))
-        .child(div().flex_none().text_size(11).text_color(k.health === "failed" ? c.red : c.dim).child(since(k))))
-      .child(h_flex().w_full().min_w(0).gap(G.md).items_center().pl(15)
-        .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(k.image))
-        // On another machine's Docker, localhost is not where they are: shown, not copied.
-        .children(k.ports.slice(0, 3).map((p) => (this.context?.remote
-          ? div().flex_none().text_size(11.5).text_color(c.dim).child(`:${p.port}`)
-          : quietLink(`ct-port-${k.id}-${p.port}`, `:${p.port}`, (cx) => cx.write_to_clipboard?.(`localhost:${p.port}`), c,
-            { color: c.muted, label: `Copy localhost:${p.port}` })))))
-      .child(h_flex().flex_wrap().gap_x(G.lg).pl(15)
-        .child(quietLink(`ct-toggle-${k.id}`, busy ? "Working…" : on ? "Stop" : "Start", (cx) => { if (!busy) this.containers(on ? "stop" : "start", [k], cx); }, c, { color: c.text, disabled: busy }))
-        .when(on, (el) => el.child(quietLink(`ct-restart-${k.id}`, "Restart", (cx) => { if (!busy) this.containers("restart", [k], cx); }, c, { disabled: busy })))
-        .when(Boolean(web), (el) => el.child(quietLink(`ct-open-${k.id}`, "Open", (cx) => cx.open_url(urlOf(web)), c)))
-        .when(k.health === "running", (el) => el.child(quietLink(`ct-shell-${k.id}`, "Shell", () => inTab(`shell ${k.service ?? k.name}`, localService(systemApi).containerShell(k.name, this.details.get(k.id.slice(0, 12))?.platform)), c)))
-        .child(quietLink(`ct-logs-${k.id}`, "Logs", () => inTab(`logs ${k.service ?? k.name}`, ["docker", "logs", "-f", "--tail", "200", k.name]), c))
-        .child(quietLink(`ct-more-${k.id}`, open ? "Less" : "Details", (cx) => { this.opened = open ? new Set([...this.opened].filter((x) => x !== k.id)) : new Set([...this.opened, k.id]); cx.notify(); }, c))
-        .when(!on, (el) => el.child(this.armed.link(`ct-rm-${k.id}`, "Remove", "remove", `rm:${k.id}`, (cx) => this.containers("rm", [k], cx), c, { disabled: busy }))))
+    const remote = Boolean(this.context?.remote);
+    const web = !remote && on ? k.ports.find(isWeb) : null;
+    const tone = HEALTH_TONES[k.health];
+    const act = (verb) => (cx) => { if (!busy) this.containers(verb, [k], cx); };
+    const verbs = [
+      ...this.portVerbs(k),
+      { label: busy ? "Working…" : on ? "Stop" : "Start", onClick: act(on ? "stop" : "start"), color: c.text, disabled: busy },
+      on ? { label: "Restart", onClick: act("restart"), disabled: busy } : null,
+      web ? { label: "Open", onClick: (cx) => cx.open_url(urlOf(web)) } : null,
+      k.health === "running" ? { label: "Shell", onClick: () => inTab(`shell ${k.service ?? k.name}`, localService(systemApi).containerShell(k.name, this.details.get(k.id.slice(0, 12))?.platform)) } : null,
+      { label: "Logs", onClick: () => inTab(`logs ${k.service ?? k.name}`, ["docker", "logs", "-f", "--tail", "200", k.name]) },
+      { label: open ? "Less" : "Details", onClick: (cx) => { this.opened = open ? new Set([...this.opened].filter((x) => x !== k.id)) : new Set([...this.opened, k.id]); cx.notify(); } },
+      on ? null : this.armed.verb("Remove", "remove", `rm:${k.id}`, (cx) => this.containers("rm", [k], cx), { disabled: busy }),
+    ].filter(Boolean);
+    return v_flex().w_full()
+      .child(row(`ct-${k.id}`, c, {
+        name: k.service ?? k.name,
+        detail: tone ? { text: since(k), tone } : since(k),
+        meta: typeof mem === "number" && k.health === "running" ? size(mem) : null,
+        second: [k.image, k.service ? k.name : null, ...(remote ? k.ports.slice(0, 3).map((p) => `:${p.port}`) : [])],
+        verbs,
+        pending: busy,
+      }))
       .when(open, (el) => el.child(this.detailsView(k, c)));
   }
 
   stackRow(s, c) {
     const state = s.total === 0 ? "not started" : `${s.running} of ${s.total} running`;
     const id = `${s.dir}:${s.compose ?? ""}`;
-    return h_flex().w_full().flex_wrap().items_center().gap_x(G.lg).gap_y(G.xs).px(G.md).py(7).rounded(6).bg(c.subtle)
-      .child(div().min_w(0).flex_shrink(1).truncate().text_size(12.5).text_color(c.text).tooltip(s.file).child(`${s.compose && s.compose !== s.name ? s.compose : s.name} · compose`))
-      .child(div().flex_none().text_size(11.5).text_color(c.dim).child(state))
-      .child(h_flex().flex_none().gap(G.md)
-        .child(quietLink(`ct-up-${id}`, s.running ? "Up again" : "Up", () => this.stack(s, "up"), c, { color: c.text }))
-        .child(quietLink(`ct-build-${id}`, "Rebuild", () => this.stack(s, "rebuild"), c))
-        .when(s.total > 0, (el) => el.child(this.armed.link(`ct-down-${id}`, "Down", "take it down", `down:${id}`, () => this.stack(s, "down"), c))));
+    return row(`ct-stack-${id}`, c, {
+      name: s.compose && s.compose !== s.name ? s.compose : s.name,
+      detail: [{ text: "compose", tip: s.file }, state],
+      verbs: [
+        { label: s.running ? "Up again" : "Up", onClick: () => this.stack(s, "up"), color: c.text },
+        { label: "Rebuild", onClick: () => this.stack(s, "rebuild") },
+        s.total > 0 ? this.armed.verb("Down", "take it down", `down:${id}`, () => this.stack(s, "down")) : null,
+      ].filter(Boolean),
+    });
   }
 
   group(g, c) {
@@ -372,20 +379,27 @@ export default class Containers extends View {
 
   imageRow(i, c) {
     const form = this.runFor?.id === i.id ? this.runFor : null;
-    return v_flex().w_full().gap(4).px(G.md).py(7).border_t(1).border_color(c.border)
-      .child(h_flex().w_full().items_center().gap(G.md)
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(div().w_full().truncate().text_size(12.5).text_color(i.unused ? c.muted : c.text).child(i.name))
-          .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(i.unused ? `unused · ${i.age}` : `${i.projects.join(", ")} · ${i.users.join(", ")}`)))
-        .child(div().flex_none().text_size(12).text_color(c.muted).child(size(i.mb))))
-      .child(h_flex().flex_wrap().gap_x(G.lg)
-        .child(quietLink(`ct-run-${i.id}`, form ? "Cancel" : "Run…", (cx) => this.openRun(i, cx), c, { color: c.text }))
-        .when(i.unused, (el) => el.child(this.armed.link(`ct-rmi-${i.id}`, "Remove", "remove", `rmi:${i.id}`,
-          (cx) => this.act(["rmi", ...i.tags], cx, { what: "remove image" }), c))))
+    return v_flex().w_full()
+      .child(row(`ct-image-${i.id}`, c, {
+        name: i.name, dimmed: i.unused, meta: size(i.mb),
+        second: i.unused ? `unused · ${i.age}` : `${i.projects.join(", ")} · ${i.users.join(", ")}`,
+        verbs: [
+          { label: form ? "Cancel" : "Run…", onClick: (cx) => this.openRun(i, cx), color: c.text },
+          i.unused ? this.armed.verb("Remove", "remove", `rmi:${i.id}`, (cx) => this.act(["rmi", ...i.tags], cx, { what: "remove image" })) : null,
+        ].filter(Boolean),
+      }))
       .when(Boolean(form), (el) => el.child(h_flex().w_full().gap(G.sm).items_center()
         .child(field(`ct-run-name-${i.id}`, form.name, c).flex_1().min_w(0))
         .child(field(`ct-run-port-${i.id}`, form.port, c).flex_1().min_w(0))
         .child(quietLink(`ct-run-go-${i.id}`, "Run", (cx) => this.runImage(cx), c, { color: c.text }))));
+  }
+
+  volumeRow(v, c) {
+    return row(`ct-volume-${v.name}`, c, {
+      name: v.anonymous ? v.name.slice(0, 12) : v.name, dimmed: v.unused,
+      detail: v.anonymous ? { text: "anonymous", tip: v.name } : null,
+      second: v.unused ? "unused" : v.users.join(", "),
+    });
   }
 
   volumesView(c) {
@@ -395,10 +409,7 @@ export default class Containers extends View {
       .when(unused.length > 0, (el) => el.child(h_flex()
         .child(this.armed.link("ct-vrm", `Remove ${unused.length} unused volume${unused.length === 1 ? "" : "s"}`, "delete their data for good",
           "vrm", (cx) => this.act(["volume", "rm", ...unused.map((v) => v.name)], cx, { what: "remove volumes" }), c))))
-      .when(open, (el) => el.children(this.volumes.map((v) => h_flex().w_full().items_center().gap(G.md).px(G.md).py(7).border_t(1).border_color(c.border)
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(div().w_full().truncate().text_size(12.5).text_color(v.unused ? c.muted : c.text).tooltip(v.name).child(v.anonymous ? `${v.name.slice(0, 12)} (anonymous)` : v.name))
-          .child(div().w_full().truncate().text_size(11).text_color(c.dim).child(v.unused ? "unused" : v.users.join(", ")))))));
+      .when(open, (el) => el.children(this.volumes.map((v) => this.volumeRow(v, c))));
   }
 
   spaceView(c) {
@@ -409,18 +420,6 @@ export default class Containers extends View {
       .child(this.armed.link("ct-cache", "Clear", "clear", "cache", (cx) => this.act(["builder", "prune", "-f"], cx, { what: "clear the build cache" }), c, { color: c.text }));
   }
 
-  skeleton(c) {
-    const { block, line } = ghost(c);
-    const two = (i) => v_flex().w_full().py(9).gap(4)
-      .child(line([160, 140, 180, 120][i], 13)).child(line([200, 150, 110, 170][i], 11));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(32))
-      .child(v_flex().gap(G.md)
-        .child(line(180, 12))
-        .child(block(120, 48, 6))
-        .child(h_flex().gap(G.md).children([70, 64, 48].map((w) => line(w, 13)))))
-      .child(v_flex().w_full().children([0, 1, 2, 3].map(two)));
-  }
-
   body(c) {
     if (this.state === "missing") return div().text_size(13).text_color(c.dim).child("Docker is not installed on this computer.");
     if (this.state === "down") {
@@ -428,7 +427,7 @@ export default class Containers extends View {
         .child(div().text_size(13).text_color(c.muted).child("Docker isn't running."))
         .child(h_flex().child(quietLink("ct-open-docker", "Open Docker", (cx) => this.openDocker(cx), c, { color: c.text })));
     }
-    if (this.groups === null) return this.skeleton(c);
+    if (this.groups === null) return skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
     const all = this.groups.flatMap((g) => g.containers);
     const running = all.filter((k) => k.health === "running").length;
     const remote = Boolean(this.context?.remote);
@@ -436,9 +435,7 @@ export default class Containers extends View {
     const hero = v_flex().gap(G.md)
       .when(!remote, (el) => el.child(v_flex().gap(4)
         .child(div().text_size(12.5).text_color(c.dim).child("Docker uses of this computer's memory"))
-        .child(h_flex().items_end().gap(G.md).flex_wrap()
-          .child(div().text_size(48).line_height(1).font_light().text_color(c.text).child(typeof this.held === "number" ? size(this.held) : "–"))
-          .when(Boolean(this.limit), (el2) => el2.child(div().pb(6).text_size(13).text_color(c.dim).child(`can grow to ${size(this.limit)}`))))))
+        .child(metric({ value: typeof this.held === "number" ? size(this.held) : "–", unit: this.limit ? `can grow to ${size(this.limit)}` : "" })("ct-metric", c))))
       .when(remote, (el) => el.child(div().text_size(12.5).text_color(c.yellow)
         .child(`Docker context ${this.context?.name}: these containers run on ${this.context?.host}, not this computer.`)))
       .child(h_flex().items_center().gap(G.md).flex_wrap()
@@ -457,18 +454,17 @@ export default class Containers extends View {
   }
 
   render(cx) {
-    this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
+    this.front?.wake(cx, (frontCx) => this.refresh(frontCx));
     const c = tokens(theme()), narrow = this.width < 560;
     const header = h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Containers"))
-      .child(iconButton("ct-refresh", "refresh", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading }));
+      .child(iconButton("ct-refresh", "refresh-cw", "Read again", (cx) => this.refresh(cx, true, true), c, { spin: this.reading }));
     return v_flex().id("kanso-containers").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
       .on_size_change((s, sizeCx) => { if (Math.abs(this.width - s.width) >= 1) { this.width = s.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 28 : 40)
-          .child(header)
-          .child(this.body(c))
-          .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(c.red).child(this.error ?? "")))
-          .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
+      .child(pageFrame(narrow, narrow ? 28 : 40, (column) => column
+        .child(header)
+        .child(this.body(c))
+        .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(c.red).child(this.error ?? "")))
+        .when(Boolean(this.note), (el) => el.child(div().text_size(12).text_color(this.note === "Starting Docker…" ? c.dim : c.red).child(this.note ?? "")))));
   }
 }

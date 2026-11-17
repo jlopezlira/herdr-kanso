@@ -2,14 +2,14 @@
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-menu.js.
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Button } from "gpui-base";
-import { G, H, R, T, W, ICON_ROW, breathe, glyphOf, mix, toneColor } from "./ui.js";
+import { G, H, R, T, W, ICON_ROW, TINT, breathe, glyphOf, mix } from "./ui.js";
 import { armedLook, pressAgain, withLook } from "./ui-button.js";
 import { tile } from "./ui-avatar.js";
 import { field } from "./ui-field.js";
+import { dot as drawDot } from "./ui-dot.js";
 import { mark } from "./ui-mark.js";
 import { stateBlock, stateBlockPx } from "./ui-state.js";
 
-const BADGE_WASH = 0.15;
 const RULE = 1;
 const ITEM_PX = H.control;
 const TWO_LINES_PX = H.control + G.md;
@@ -21,14 +21,13 @@ export const menuHeading = (title, c, status = null) => div().min_h(H.icon).flex
   .when(Boolean(status), (el) => el.justify_between().gap(G.sm).child(mark(c, { status, size: "sm" })));
 export const menuSeparator = (c) => div().m(G.xs).border_t_1().border_color(c.border);
 const spacer = () => div().size(ICON_ROW).flex_none().flex().items_center().justify_center();
-const dotOf = (c, tone) => div().size(G.sm).rounded_full().bg(tone.startsWith("#") ? tone : toneColor(c, tone));
 // An item leads with an app's picture or letter as a tile, a colour dot, or its icon.
 const lead = (c, { picture, letter, tone, dot, icon }, ink) => {
   if (picture || letter) return tile(c, { initial: letter ?? "", image: picture, size: "sm", tone });
-  if (dot) return spacer().child(dotOf(c, dot));
+  if (dot) return spacer().child(drawDot(c, dot));
   return icon ? svg(glyphOf(icon)).size(ICON_ROW).flex_none().text_color(ink) : spacer();
 };
-const badge = (text, c) => div().flex().flex_none().items_center().h(H.badge).px(G.sm).rounded_full().bg(mix(c.accent, c.popover, BADGE_WASH))
+const badge = (text, c) => div().flex().flex_none().items_center().h(H.badge).px(G.sm).rounded_full().bg(mix(c.accent, c.popover, TINT.soft))
   .text_size(T.body).font_semibold().text_color(c.accent).child(text);
 const labelOf = (words, second, ink, c) => (second
   ? v_flex().flex_1().min_w(0).child(div().truncate().text_size(T.value).text_color(ink).child(words))
@@ -44,7 +43,6 @@ const grouped = (items) => items.reduce((lines, line) => {
   if (!line.loading) return [...lines, line];
   return lines[end]?.bones ? lines.map((kept, i) => (i === end ? { bones: kept.bones + 1 } : kept)) : [...lines, { bones: 1 }];
 }, []);
-const failed = (id, { text, source = null, fixes = [] }, c) => stateBlock(id, { mark: mark(c, { status: "blocked" }), what: text, why: source, fixes }, c);
 
 const lookOf = (c, { armed, selected, disabled }) => {
   if (disabled) return { fill: null, ink: c.dim, hover: null, press: null };
@@ -86,7 +84,7 @@ const finder = (id, { field: label, text }, c) => div().p(G.xs).child(field(id, 
 function entry(id, line, c) {
   if (line.separator) return menuSeparator(c);
   if (line.field) return finder(id, line, c);
-  if (line.failure) return failed(id, line.failure, c);
+  if (line.failure) return stateBlock(id, c, line.failure);
   if (line.heading) return menuHeading(line.heading, c, line.mark);
   if (line.scroll) return run(id, line, c);
   if (line.bones) return bones(line.bones, c);
@@ -96,7 +94,7 @@ function entry(id, line, c) {
 const linePx = (line) => {
   if (line.separator) return 2 * G.xs + RULE;
   if (line.field) return 2 * G.xs + H.control;
-  if (line.failure) return stateBlockPx({ why: line.failure.source, fixes: line.failure.fixes });
+  if (line.failure) return stateBlockPx(line.failure);
   if (line.heading) return H.icon;
   if (line.scroll) return line.scroll.slice(0, line.rows ?? RUN_ROWS).reduce((sum, item) => sum + linePx(item), 0);
   return line.second ? TWO_LINES_PX : ITEM_PX;
@@ -115,7 +113,7 @@ function drawn(id, lines, c) {
 export const menuHeight = ({ title = null, items = [] }) => 2 * G.xs + (title ? H.icon : 0) + items.reduce((sum, line) => sum + linePx(line), 0);
 
 /** The Menu inside a frame its host draws (a popup Herdr frames): its heading and items, full width. `items`: an item (see menuItem),
- * { heading, mark }, { loading: true }, { failure: { text, source, fixes } }, { field, text }, { scroll: items, rows, handle } or { separator: true }. */
+ * { heading, mark }, { loading: true }, { failure: { text, source, fix, onClick } }, { field, text }, { scroll: items, rows, handle } or { separator: true }. */
 export const menuList = (id, { title = null, items = [] }, c) => v_flex().id(id).w_full().p(G.xs).bg(c.popover)
   .when(Boolean(title), (el) => el.child(menuHeading(title, c)))
   .children(drawn(id, items, c));

@@ -1,9 +1,8 @@
 // What each pull request state says, and the one action that state can take.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { load } from "./helpers.mjs";
+import { load, clone as host } from "./helpers.mjs";
 
-const host = (value) => JSON.parse(JSON.stringify(value));
 const agent = { isAgent: true, name: "checkout", address: "t1", blocked: false };
 const now = Date.parse("2026-11-11T18:00:00Z");
 
@@ -110,9 +109,8 @@ test("a failed check shows the step and its last lines, and one more opens the r
   assert.equal(view.body.step, "Run");
   assert.equal(view.body.elapsed, "1m 30s");
   assert.equal(view.body.lines.length, 12);
-  assert.equal(view.body.lines[0].text, "line 1");
-  assert.equal(view.body.lines.at(-1).text, "FAIL no");
-  assert.equal(view.body.lines.at(-1).tone, "blocked");
+  assert.equal(view.body.lines[0], "line 1");
+  assert.equal(view.body.lines.at(-1), "FAIL no");
   assert.equal(view.more.label, "+1 more");
   assert.equal(view.more.target, "failures");
   assert.equal(view.logKey, "99");
@@ -238,9 +236,9 @@ test("a branch with no pull request says where it is, and offers the one next st
 });
 
 test("a failed log keeps the last lines of the matching step, without the timestamp", async () => {
-  const { failedLog, logGroup, logLineTone, firstLines, elapsed, clockOf } = await load(
+  const { failedLog, logGroup, firstLines, elapsed, clockOf } = await load(
     "kanso-panel/pr-verdict.js",
-    ["failedLog", "logGroup", "logLineTone", "firstLines", "elapsed", "clockOf"],
+    ["failedLog", "logGroup", "firstLines", "elapsed", "clockOf"],
     {},
   );
   const body = ["a", "b"].map((line, i) => `CI / test\tRun\t2026-11-11T12:00:0${i}.000Z ${i === 1 ? "FAIL no" : line}`).join("\n");
@@ -249,9 +247,6 @@ test("a failed log keeps the last lines of the matching step, without the timest
   assert.equal(groups[0].lines[0], "a");
   assert.equal(groups[0].lines[1], "FAIL no");
   assert.equal(groups[1].lines.length, 12);
-  assert.equal(logLineTone("FAIL no"), "blocked");
-  assert.equal(logLineTone("##[error] boom"), "blocked");
-  assert.equal(logLineTone("all well"), "muted");
   const check = { name: "test", workflowName: "CI" };
   assert.equal(logGroup(groups, check).step, "Run");
   assert.equal(logGroup([], check), null);

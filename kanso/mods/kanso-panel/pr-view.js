@@ -1,16 +1,18 @@
 // The pull request page: the verdict, its one action, and the fold under it.
-import { div, svg } from "gpui-kit";
+import { scopedColumn } from "./ui-page.js";
+import { div } from "gpui-kit";
 import { shared } from "herdr";
-import { v_flex, h_flex, Button } from "gpui-base";
-import { G, H, R, T, toneColor } from "./ui.js";
+import { v_flex, h_flex } from "gpui-base";
+import { G, R, T, PR, PAGE, OPACITY, toneColor } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
+import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
+import { diffText, failureBlock, row as kitRow } from "./kit.js";
 import { ageOf, footLine } from "./pr-poll.js";
 import { aliasText, machineTitle } from "./pure.js";
-import { verdictCard, VIEW } from "./pr-body.js";
-import { failNote } from "./lib.js";
+import { verdictBody } from "./pr-body.js";
+import { dot } from "./ui-dot.js";
 
-const ICON = "mods/kanso-chrome/icons/";
 
 export function footOf(panel) {
   return footLine({ wait: panel.wait, stale: Boolean(panel.stale), at: panel.stale?.at, now: Date.now() });
@@ -29,8 +31,8 @@ function scopeRow(panel, c) {
   const text = scopeText(panel);
   if (!text && !panel.pr) return null;
   return h_flex().w_full().items_center().justify_between().gap(G.md)
-    .child(div().min_w(0).truncate().text_size(VIEW.meta).text_color(c.dim).child(text))
-    .when(Boolean(panel.pr), (el) => el.child(div().flex_none().text_size(VIEW.meta).text_color(c.dim).child(`#${panel.pr.number}`)));
+    .child(div().min_w(0).truncate().text_size(PAGE.note).text_color(c.dim).child(text))
+    .when(Boolean(panel.pr), (el) => el.child(div().flex_none().text_size(PAGE.note).text_color(c.dim).child(`#${panel.pr.number}`)));
 }
 
 function actionLabel(panel, action) {
@@ -65,28 +67,19 @@ function onAction(panel, action, cx) {
 
 export function listedRow(panel, c, p, i, { finished = false, id = null } = {}) {
   const on = p.url === panel.pr?.url;
-  const state = !finished ? panel.rowState(p, c)
-    : p.state === "MERGED" ? { text: "Merged", color: c.violet } : { text: "Closed without merging", color: c.red };
+  const state = !finished ? panel.rowState(p)
+    : p.state === "MERGED" ? { text: "Merged", tone: "violet" } : { text: "Closed without merging", tone: "blocked" };
   const when = !finished ? `updated ${ageOf(p.updatedAt, Date.now())}`
     : p.state === "MERGED" ? `merged ${ageOf(p.mergedAt || p.updatedAt, Date.now())}` : `closed ${ageOf(p.closedAt || p.updatedAt, Date.now())}`;
   const mine = Boolean(panel.viewer) && p.author?.login === panel.viewer;
   const meta = [`#${p.number}`, mine ? "you" : p.author?.login, when].filter(Boolean).join(" · ");
-  return Button.new(id || `pr-${finished ? "done" : "open"}-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
-    .selected(on)
-    .when(on, (el) => el.bg(c.selected))
-    .when(!on, (el) => el.hover((s) => s.bg(c.subtle)))
-    .accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`)
-    .on_click((_e, cx) => panel.choose(p, cx))
-    .child(v_flex().w_full().min_w(0).gap(4)
-      .child(h_flex().w_full().items_start().gap(G.md)
-        .child(div().flex_1().min_w(0).text_size(14).line_height(1.35).text_color(c.text).when(on, (e) => e.font_medium()).child(p.title))
-        .when(on, (el) => el.child(div().flex_none().pt(2).text_size(11).text_color(c.text).child("Shown"))))
-      .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
-      .child(h_flex().w_full().gap(G.sm).items_center()
-        .child(div().size(6).flex_none().rounded_full().bg(state.color))
-        .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
-        .when(p.additions !== undefined, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${p.additions} −${p.deletions}`)))));
+  return prRow(id || `pr-${finished ? "done" : "open"}-${i}`, c, p, { meta, state, on, onClick: (cx) => panel.choose(p, cx) });
 }
+
+// A pull request in a list: its title, its state and what it changes, then who and when.
+export const prRow = (id, c, p, { meta, state, on = false, onClick }) => row(id, c, {
+  name: p.title, detail: [state, p.additions == null ? null : diffText({ add: p.additions, del: p.deletions })], meta: on ? "Shown" : null, second: meta, current: on, onClick,
+}).aria_selected(on).accessibility_label(`#${p.number} ${p.title}${on ? ", shown" : ""}`);
 
 function otherPrs(panel, c, titled) {
   const rows = (panel.openPrs ?? []).filter((pr) => pr.url !== panel.pr?.url);
@@ -105,13 +98,8 @@ function writeRow(panel, c, writes) {
 function detailsButton(panel, c, view) {
   const on = panel.detailsOn();
   const label = view.id === "none" || view.id === "base" ? "Other open pull requests" : "Details";
-  return Button.new("pr-details").w_full().h(H.compact).gap(G.sm).items_center().cursor_pointer()
-    .accessibility_label(label)
-    .on_click((_e, cx) => panel.setDetails(cx))
-    .child(svg(`${ICON}chevron-${on ? "down" : "right"}.svg`).size(VIEW.meta).text_color(c.muted))
-    .child(div().flex_none().text_size(T.value).text_color(c.muted).child(label))
-    .child(div().flex_1())
-    .child(div().min_w(0).truncate().text_size(T.value).text_color(c.dim).child(view.detailsNote ?? ""));
+  // The kit's row: Tab reaches it, Enter and Space open or close the details.
+  return kitRow({ icon: on ? "chevron-down" : "chevron-right", name: label, meta: view.detailsNote || null, dimmed: true })("pr-details", c, { onClick: (cx) => panel.setDetails(cx) });
 }
 
 function detailParts(panel, c, view) {
@@ -145,8 +133,7 @@ function footnote(panel, c) {
 }
 
 function heroTop(panel, c, view) {
-  const scope = scopeRow(panel, c);
-  const card = verdictCard(c, view.body);
+  const { scope, card } = viewParts(panel, c, view);
   const preview = panel.sendShown && panel.sendFor ? String(panel.sendFor).split("\n") : null;
   const ink = toneColor(c, view.tone);
   const body = v_flex().w_full().gap(G.lg)
@@ -158,21 +145,20 @@ function heroTop(panel, c, view) {
     .child(h_flex().w_full().gap(G.lg).items_center().flex_wrap()
       .when(Boolean(view.primary), (row) => row.child(actionButton(panel, c, view.primary)))
       .when(Boolean(view.quiet), (row) => row.child(quietAction(panel, c, view.quiet))));
-  return v_flex().w_full().gap(G.lg)
-    .when(Boolean(scope), (el) => el.child(scope))
-    .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(VIEW.titleMax).overflow_hidden().text_size(VIEW.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
+  return scopedColumn(scope)
+    .when(Boolean(panel.pr?.title), (el) => el.child(div().w_full().max_h(PR.titleMax).overflow_hidden().text_size(PR.title).line_height(1.3).font_medium().text_color(c.text).child(panel.pr.title)))
     .child(h_flex().gap(G.sm).items_center()
-      .child(div().size(VIEW.dot).flex_none().rounded_full().bg(ink))
+      .child(dot(c, ink))
       .child(div().text_size(T.card).font_medium().text_color(ink).child(view.text)))
     .when(Boolean(view.note), (el) => el.child(div().text_size(T.value).text_color(c.muted).child(view.note)))
-    .child(view.dimmed ? body.opacity(VIEW.stale) : body);
+    .child(view.dimmed ? body.opacity(OPACITY.away) : body);
 }
 
 // The fold's blocks are siblings of the verdict, so a scroll can land on the checks.
 export function heroPieces(panel, c) {
   const view = panel.view();
-  const veil = (el) => view.dimmed ? el.opacity(VIEW.stale) : el;
-  const note = panel.note ? [["remark", veil(failNote("remark", panel.note, c))]] : [];
+  const veil = (el) => view.dimmed ? el.opacity(OPACITY.away) : el;
+  const note = panel.note ? [["remark", veil(failureBlock(panel.note)("remark", c))]] : [];
   const foot = footnote(panel, c);
   const tail = foot ? [["foot", foot.id("foot")]] : [];
   return [
@@ -190,14 +176,14 @@ export function drawHero(panel, c) {
 export function drawEmpty(panel, c) {
   const view = panel.view();
   const action = view.primary ? actionButton(panel, c, view.primary) : view.quiet ? quietAction(panel, c, view.quiet) : null;
-  const scope = scopeRow(panel, c);
-  const card = verdictCard(c, view.body);
+  const { scope, card } = viewParts(panel, c, view);
   const foot = footnote(panel, c);
-  return v_flex().w_full().gap(G.lg)
-    .when(Boolean(scope), (el) => el.child(scope))
+  return scopedColumn(scope)
     .child(panel.waiting(c, view.text, null, action))
     .when(Boolean(card), (el) => el.child(card))
     .when(view.details, (el) => el.child(fold(panel, c, view)))
-    .when(Boolean(panel.note), (el) => el.child(failNote("pr-view-note", panel.note, c)))
+    .when(Boolean(panel.note), (el) => el.child(failureBlock(panel.note)("pr-view-note", c)))
     .when(Boolean(foot), (el) => el.child(foot));
 }
+
+const viewParts = (panel, c, view) => ({ scope: scopeRow(panel, c), card: verdictBody(c, view.body) });

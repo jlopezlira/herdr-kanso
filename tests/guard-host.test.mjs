@@ -5,10 +5,10 @@ import { mkdir, writeFile, utimes, symlink, access, readFile } from "node:fs/pro
 import { guardHost, guardHome, guardEnvironment, macProcesses, footprintValues, workingSets, windowsMemory, macMemory, memoryLow, idleValue, corePid, windowAncestor, uniqueWindow, windowNotice, resumeShellReason } from "../kanso/mods/kanso-guard/guard-host.mjs";
 import { windowsProcesses } from "../kanso/mods/kanso-panel/platform-processes.js";
 import { watchChecks, acquireGuardLock, guardReads } from "../kanso/mods/kanso-guard/guard.mjs";
-import { temporary } from "./helpers.mjs";
+import { temporary, success, failure } from "./helpers.mjs";
 
 const MB = 1024 * 1024;
-const result = (stdout = "") => ({ code: 0, stdout, stderr: "" });
+const result = (stdout = "") => (success(stdout));
 const windowsRows = [{ pid: 40, ppid: 30, name: "node.exe", executable: "C:\\Node\\node.exe" }, { pid: 30, ppid: 20, name: "pwsh.exe" }, { pid: 20, ppid: 10, name: "cmd.exe" }, { pid: 10, ppid: 1, name: "renamed.exe", executable: "C:\\Program Files\\My Window.exe" }];
 
 test("The installer follows ancestors through launchers and never guesses from a program name", () => {
@@ -113,7 +113,7 @@ test("Windows commands carry literal arguments, use limited logon scheduling and
   assert.match(toast, /InnerText='A ''title'' <&'/);
   assert.match(toast, /Windows.UI.Notifications/);
   assert.match(host.commandLine("C:\\O'Brien", ["claude", "--resume", "s"]), /Set-Location -LiteralPath 'C:\\O''Brien'/);
-  const failed = guardHost({ platform: "windows", run: async () => ({ code: 1, stderr: "denied", stdout: "" }) });
+  const failed = guardHost({ platform: "windows", run: async () => (failure("denied")) });
   assert.equal((await failed.stop(42, true)).note, "");
   await assert.rejects(() => failed.install(), /denied/);
 });
@@ -155,7 +155,7 @@ for (const [key, fallback] of [
   const events = [], values = { "hw.memsize": String(1000 * MB), "kern.memorystatus_level": "30", "vm.swapusage": "total = 4000.00M used = 512.5M" };
   const source = guardHost({ platform: "macos", run: async (command, args) => {
     assert.equal(command, "sysctl");
-    return args[1] === key ? { code: 1, stdout: "", stderr: `${key} denied` } : result(values[args[1]]);
+    return args[1] === key ? failure(`${key} denied`) : result(values[args[1]]);
   } });
   const reads = guardReads(source, (...event) => events.push(event));
   assert.deepEqual(await reads.machine(), fallback);
@@ -165,14 +165,14 @@ for (const [key, fallback] of [
 test("A failed macOS ioreg logs once and reports zero idle seconds so automatic actions keep waiting", async () => {
   const events = [], source = guardHost({ platform: "macos", run: async (command) => {
     assert.equal(command, "ioreg");
-    return { code: 1, stdout: "", stderr: "ioreg denied" };
+    return failure("ioreg denied");
   } });
   const reads = guardReads(source, (...event) => events.push(event));
   assert.equal(await reads.idleSeconds(), 0);
   assert.deepEqual(events, [["error", "Idle seconds failed: ioreg denied"]]);
 });
 
-for (const response of [{ code: 1, stdout: "", stderr: "core lookup denied" }, result("not json"), result('{"pid":0}')]) {
+for (const response of [failure("core lookup denied"), result("not json"), result('{"pid":0}')]) {
   test(`A failed Windows core lookup returns no pids and one error instead of losing the check (${response.stdout || response.stderr})`, async () => {
     const events = [], source = guardHost({ platform: "windows", run: async (command, args) => {
       assert.equal(command, "hc");

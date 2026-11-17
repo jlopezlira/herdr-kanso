@@ -1,4 +1,3 @@
-import { paths } from "./platform-paths.js";
 // Kanso strip, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Herdr can't clip a terminal, so the view shows only whole, live panes and slides a column at a time.
 // Herdr rules that shape the tree: a layout nests at most 16 levels (columns sit directly in work-body), and Herdr folds empty and single-child containers.
@@ -8,18 +7,23 @@ import { paths } from "./platform-paths.js";
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
 import { spaces, panes, agents, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
-import { programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
+import { programIcon, givenNames, nameOf, NAME_LABEL } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
+import { tryOr, readCommands, pad2 } from "./pure.js";
+import { shortFolder } from "./folder.js";
+import { openArrange } from "./open.js";
+import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
-import { G, R, T, W, ICON, OPACITY, CLEAR, DRAG_START, glyphOf, mix, tokens, washes } from "./ui.js";
+import { G, R, T, W, ICON, OPACITY, TINT, CLEAR, DRAG_START, CHROME_SQUARE, PANE, alpha, glyphOf, mix, tokens, washes } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { iconButton, Armed } from "./ui-button.js";
 import { menu } from "./ui-menu.js";
 import { field, TextField } from "./ui-field.js";
-import { stateLine, pendingDot, PENDING } from "./ui-state.js";
+import { pendingDot, PENDING } from "./ui-state.js";
+import { failureLine, tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
 import { headerSegment } from "./ui-header.js";
 import { NAME_LIMIT, ENTRIES, DIGEST_PIECES, PIECE_GROUP, shownAt, foldFor, headerWidths, headerTools, hoverTools, menuEntries, placeOf, paneLabel, headerMark, prTitle } from "./header-model.js";
 
@@ -30,8 +34,7 @@ const MIN_W = 0.08; // narrowest a column can be dragged, as a share of the view
 const W_STEPS = [1 / 4, 1 / 3, 1 / 2, 2 / 3, 1];
 const newW = (st) => 1 / (st.n ?? DEFAULT_N);
 // The minimap's slot is 180px and its stepper takes about 60: the pills shrink to the rest, and past a mark's least width they are cut in their own box, so the stepper always shows.
-const PILLS_PX = 110;
-export function pillWidths(cols, budget = PILLS_PX) {
+export function pillWidths(cols, budget = PANE.pills) {
   const raw = cols.map((c) => 6 + (Number(c.w) || 0) * 18);
   const room = budget - cols.length * 2 - Math.max(0, cols.length - 1) * 3;
   const total = raw.reduce((a, b) => a + b, 0);
@@ -40,25 +43,19 @@ export function pillWidths(cols, budget = PILLS_PX) {
 }
 const EPS = 1e-3;
 const KEY = "strip.state";
-const HEADER_H = 34;
 const WHEEL_PX = 600; // trackpad/wheel pixels that slide the view one full width
-const EDGE_W = 28; // the tab at an edge that stands for the panes beyond it
 const WHEEL_STEP = 0.25; // of a view width of wheel travel moves one column
 const MIN_VIEW = 0.2; // pinned columns always leave this much of the view to slide
-const COL_MIN = 140; // px: a column can't be dragged narrower
-const ROW_MIN = 90; // px: a stacked pane can't be dragged shorter
 // Layout writes are throttled: a burst writes its first step at once, then its latest state every WRITE_MS.
 const WRITE_MS = 100;
 const SETTLE = 250; // ms without the dragged sizes changing before the strip adopts them
 
-const GAP = 6; // the soft gutter between panes, in the frame's tone: no lines
-const RADIUS = 8;
 const TAB_BLOCK = {
   id: "main", type: "block", background: "chrome",
   content: { tab: "active", pane: {
-    header: { content: { mod: "kanso-strip" }, reveal: "always", height: HEADER_H, position: "top" },
+    header: { content: { mod: "kanso-strip" }, reveal: "always", height: CHROME_SQUARE, position: "top" },
     background: "background", border: { width: 0, color: "border" }, focus: { width: 0, color: "border" },
-    radius: RADIUS, gap: GAP, lone: false } },
+    radius: R.card, gap: PANE.gap, lone: false } },
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -93,6 +90,8 @@ const PX = "strip.px";
 const DRAG_MAX = 12000; // ms a held pane stays held with nobody dropping it (let go over a gutter)
 
 const iconOf = (prog, size, color) => programIcon(prog, size, color) ?? div().size(size);
+// A pane beyond the edge shows its agent's mark only while it has something to say.
+const EDGE_MARKS = ["working", "blocked", "done"];
 const zoneOf = (e, fallback = "below") => {
   const w = e.bounds?.width, h = e.bounds?.height, at = e.local_position;
   if (!w || !h || !at) return fallback;
@@ -100,9 +99,15 @@ const zoneOf = (e, fallback = "below") => {
 };
 const endDrag = () => { setShared("strip.drop", null); setShared("strip.drag", null); };
 
-const folder = (cwd) => {
-  if (!cwd) return "";
-  return paths.shorten(cwd, home());
+// Let go on a landing place: the held pane moves there. The ruler's foot ends the drag even with nothing held, as it always has.
+const dropMove = (to, side, end = true) => {
+  const d = shared("strip.drag");
+  if (!d) {
+    if (end) endDrag();
+    return;
+  }
+  if (d.pane !== to) setShared("strip.req", { op: "move", pane: d.pane, to, side, n: nonce() });
+  endDrag();
 };
 
 // When an agent stops working: what is in its folder, read from git and gh (never from the conversation).
@@ -170,7 +175,7 @@ const words = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export function readClock(at) {
   if (at == null || !Number.isFinite(Number(at))) return null;
   const date = new Date(at);
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 const readNote = (working, at) => {
@@ -214,7 +219,6 @@ export function digestOpen(segment, cwd) {
 }
 
 const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
 const openSleep = (p) => {
   const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
   if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
@@ -246,15 +250,11 @@ export default class Strip extends View {
     this.lastStatus = new Map();
     this.digesting = new Set();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
-    afterMount(cx, (cx) => cx.spawn(async (cx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        this.command(String(next.c).replace(/^kanso-strip\./, ""));
-        this.seq += 1;
-        cx.notify();
-      }
-    }));
+    readCommands(cx, () => nextCommand(), (c, cx) => {
+      this.command(String(c).replace(/^kanso-strip\./, ""));
+      this.seq += 1;
+      cx.notify();
+    });
   }
 
   renderEdge() {
@@ -267,46 +267,34 @@ export default class Strip extends View {
     const given = givenNames();
     const drag = shared("strip.drag");
     const takes = Boolean(drag) && drag.pane !== p.edge; // a held pane can land beyond this edge
-    const calm = onBattery(); // on battery the dots hold still (marks.js)
-    const dot = (st, size) => st === "working" ? div().size(size).rounded_full().bg(t.working).when(!calm, (d) => d.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
-      : st === "blocked" ? div().size(size).rounded_full().bg(t.blocked).when(!calm, (d) => d.loop("opacity", { from: 0.45, to: 1, period: 1600 }))
-      : st === "done" ? div().size(size).rounded_full().bg(t.done) : null;
+    const c = tokens(t);
+    const corner = (st) => (["working", "blocked", "done"].includes(st) ? mark(c, { status: st, size: "sm" }) : null);
     const MAX_TILES = 8;
     const tile = (id) => {
-      const info = byId.get(id), d = dot(info?.status, 7);
+      const info = byId.get(id), d = corner(info?.status);
       return div().id(`edge-tile-${id}`).relative().size(20).flex_none().rounded(6).bg(w?.w7 ?? t.hover)
         .flex().items_center().justify_center()
         .hover((h) => h.bg(w?.w12 ?? t.selected))
         .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
         .child(iconOf(info?.program, 12, t.muted))
-        .when(Boolean(d), (el) => el.child(d.absolute().top(-2).right(-2).border(1).border_color(t.chrome)));
+        .when(Boolean(d), (el) => el.child(d.absolute().top(-G.hair).right(-G.hair).rounded_full().border_1().border_color(c.chrome)));
     };
     const stack = v_flex().id("edge-stack").items_center().gap(5).py(6).px(4)
       .child(div().h(16).text_size(14).text_color(takes ? t.foreground : t.muted).child(chevron))
       .children(ids.slice(0, MAX_TILES).map(tile))
       .when(ids.length > MAX_TILES, (el) => el.child(div().text_size(10).text_color(t.dim).child(`+${ids.length - MAX_TILES}`)));
-    const rowOf = (id) => {
-      const info = byId.get(id), d = dot(info?.status, 6);
-      return h_flex().id(`edge-row-${id}`).h(26).px(8).gap(8).items_center().rounded(6).cursor_pointer()
-        .hover((h) => h.bg(t.hover))
-        .on_click((_e, cx) => { cx.stop_propagation(); show(id); })
-        .child(iconOf(info?.program, 13, t.muted))
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(t.foreground).child(nameOf(info, given)))
-        .when(Boolean(d), (el) => el.child(d));
+    const item = (id) => {
+      const info = byId.get(id), prog = info?.program;
+      return {
+        ...(prog?.icon ? { [prog.tint ? "icon" : "picture"]: prog.icon } : {}), label: nameOf(info, given),
+        mark: EDGE_MARKS.includes(info?.status) ? info.status : null, onClick: (cx) => { cx.stop_propagation(); show(id); },
+      };
     };
-    const card = v_flex().w(220).p(6).gap(1).rounded(8).bg(t.chrome).shadow_md()
-      .child(div().h(22).px(8).flex().items_center().text_size(11).text_color(t.dim)
-        .child(`${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`))
-      .children(ids.map(rowOf));
+    const card = menu("edge-menu", { title: `${ids.length === 1 ? "One pane" : `${ids.length} panes`} beyond the ${left ? "left" : "right"} edge`, items: ids.map(item) }, c);
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
-      .hover((h) => h.bg(takes ? t.accent + "40" : t.hover))
-      .when(takes, (el) => el.bg(t.accent + "24").cursor_grabbing())
-      .on_mouse_up("left", () => {
-        const d = shared("strip.drag");
-        if (!d) return;
-        if (d.pane !== p.edge) setShared("strip.req", { op: "move", pane: d.pane, to: p.edge, side: left ? "after" : "before", n: nonce() });
-        endDrag();
-      })
+      .hover((h) => h.bg(takes ? alpha(t.accent, TINT.strong) : t.hover))
+      .when(takes, (el) => el.bg(alpha(t.accent, TINT.bound)).cursor_grabbing())
+      .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
       .on_click(() => show(p.edge))
       .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
       .child(HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(350).close_delay(250)
@@ -322,7 +310,7 @@ export default class Strip extends View {
     const takes = Boolean(drag) && drag.pane !== what;
     const drop = takes ? shared("strip.drop") : null;
     // A shared write redraws every mod, so write the last measurement only once the size has rested 120 ms.
-    return div().size_full().rounded_b(RADIUS).bg(t.background).on_size_change((sz, cx) => {
+    return div().size_full().rounded_b(R.card).bg(t.background).on_size_change((sz, cx) => {
       const v = Math.round(sz.width);
       if (!v) return;
       this.measured = v;
@@ -335,12 +323,8 @@ export default class Strip extends View {
     })
       .when(takes, (el) => el.cursor_grabbing()
         .on_mouse_move(() => { const d = shared("strip.drop"); if (d?.to !== what || d.side !== "below") setShared("strip.drop", { to: what, side: "below" }); })
-        .on_mouse_up("left", () => {
-          const d = shared("strip.drag");
-          if (d && d.pane !== what) setShared("strip.req", { op: "move", pane: d.pane, to: what, side: "below", n: nonce() });
-          endDrag();
-        }))
-      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(RADIUS).bg(t.accent + "40")));
+        .on_mouse_up("left", () => dropMove(what, "below")))
+      .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(R.card).bg(alpha(t.accent, TINT.strong))));
   }
 
   // The drop card stands in for a pane's terminal, which lives on: the whole pane takes the drop, not just its header.
@@ -359,9 +343,9 @@ export default class Strip extends View {
         .text_color(strong ? t.foreground : t.muted).child(nameOf(info, given)));
     const across = side === "before" || side === "after";
     const first = side === "before" || side === "above";
-    const ghost = () => label(held, true).bg(t.accent + "40");
+    const ghost = () => label(held, true).bg(alpha(t.accent, TINT.strong));
     return div().id(`drop-${id}`).size_full().relative().cursor_grabbing()
-      .when(mine, (el) => el.opacity(0.4))
+      .when(mine, (el) => el.opacity(OPACITY.held))
       .when(!mine, (el) => el
         .on_mouse_move((e) => {
           const s = zoneOf(e), d = shared("strip.drop");
@@ -418,12 +402,6 @@ export default class Strip extends View {
     if (d) postScroll(d / WHEEL_PX);
   }
 
-  // Opens on the machine the pane's space lives on.
-  openWith(p) {
-    const space = spaces().find((s) => s.tabs.some((x) => x.id === p.tab));
-    openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { folder: p.cwd, machine: space?.machine ?? null } });
-  }
-
   // The header is the handle: a press held and moved a few pixels picks the pane up.
   pressMove(e, pane) {
     const from = this.press;
@@ -456,7 +434,7 @@ export default class Strip extends View {
       unpin: pin,
       sleep: () => openSleep(p),
       send: () => openSend(p),
-      "open-with": () => this.openWith(p),
+      "open-with": () => openWithPopup(p),
       "split-right": () => this.act("pane.split", { direction: "right", pane }),
       "split-down": () => this.act("pane.split", { direction: "down", pane }),
       width: () => setShared("strip.req", { op: "width", pane, n: nonce() }),
@@ -513,7 +491,7 @@ export default class Strip extends View {
     };
     const tone = working ? "dim" : null;
     const piece = (seg) => {
-      if (seg.kind === "failure") return stateLine(`digest-failure-${pane}`, mark(c, { status: "blocked" }), seg.text, c, { label: "Refresh", onClick: does.refresh }).tooltip(seg.tip);
+      if (seg.kind === "failure") return failureLine({ text: seg.text, fix: "Refresh", detail: seg.tip })(`digest-failure-${pane}`, c, { onClick: does.refresh });
       if (seg.kind === "pr") return shownAt(fold, "PR") ? headerSegment(`digest-pr-${pane}`, { act: open(seg), title: prTitle(segments, fold),
         parts: [{ text: seg.number, tone: "muted" }, shownAt(fold, "verdict word") && seg.verdict ? { text: `· ${seg.verdict}`, tone: seg.verdictTone } : null] }, c) : null;
       const step = seg.kind === "files" ? "files" : "commits";
@@ -579,7 +557,7 @@ export default class Strip extends View {
 
   // Where a held pane would land on this header: its left or right half, or both for "above".
   dropZones(t, side) {
-    const zone = (lit) => div().flex_1().h_full().when(lit, (d) => d.bg(t.accent + "40"));
+    const zone = (lit) => div().flex_1().h_full().when(lit, (d) => d.bg(alpha(t.accent, TINT.strong)));
     return h_flex().absolute().inset_0().rounded_t(R.card).overflow_hidden()
       .child(zone(side === "before" || side === "above"))
       .child(zone(side === "after" || side === "above"));
@@ -614,10 +592,7 @@ export default class Strip extends View {
         .on_mouse_move((e) => { this.pressMove(e, pane); this.dragMove(e, pane); })
         .on_mouse_up("left", () => {
           this.press = null;
-          const d = shared("strip.drag");
-          if (!d) return;
-          if (d.pane !== pane) setShared("strip.req", { op: "move", pane: d.pane, to: pane, side: side ?? "above", n: nonce() });
-          endDrag();
+          dropMove(pane, side ?? "above", false);
         }))
       .on_click(() => { if (!this.renaming) run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }); });
   }
@@ -651,8 +626,8 @@ export default class Strip extends View {
     return this.headEvents(row, p, f, does)
       .child(programIcon(p.program, ICON, c.muted) ?? svg(glyphOf("terminal")).size(ICON).flex_none().text_color(c.muted))
       .child(this.headName(c, pane, f.name))
-      .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: folder(f.where.folder) }] }, c)))
-      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "branch", parts: [{ text: f.where.branch }] }, c)))
+      .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: shortFolder(f.where.folder) }] }, c)))
+      .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "git-branch", parts: [{ text: f.where.branch }] }, c)))
       .when(f.segments.length > 0, (el) => el.child(this.digestBar(c, p, f.segments, { fold: f.fold, working: p.status === "working", reading: Boolean(f.record?.reading), strip: f.strip, does })))
       .when(f.pinned, (el) => el.child(headerSegment(`ph-pinned-${pane}`, { icon: "pin", tone: "dim", title: "Pinned" }, c)))
       .child(div().flex_1())
@@ -1115,22 +1090,22 @@ export default class Strip extends View {
   build(st, ps, sorting = false) {
     const byId = new Map(ps.map((p) => [p.pane, p]));
     const weight = (f) => Math.max(1, Math.round(f * 1000));
-    const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: HEADER_H }, content: { mod: "kanso-strip", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
+    const header = (id) => ({ id: `head-${id}`, type: "block", size: { px: CHROME_SQUARE }, content: { mod: "kanso-strip", props: { pane: id, terminal: byId.get(id).terminal, strip: true } } });
     const body = (id) => ({ id: `term-${id}`, type: "block", content: sorting ? { mod: "kanso-strip", props: { drop: id } } : { terminal: byId.get(id).terminal } });
-    // A terminal paints square corners, so the ruler doubles as a RADIUS-tall foot drawing the slab's rounded bottom.
-    const ruler = (what) => ({ id: `strip-ruler-${what}`, type: "block", size: { px: RADIUS }, min: RADIUS, max: RADIUS, background: "chrome",
+    // A terminal paints square corners, so the ruler doubles as an R.card-tall foot drawing the slab's rounded bottom.
+    const ruler = (what) => ({ id: `strip-ruler-${what}`, type: "block", size: { px: R.card }, min: R.card, max: R.card, background: "chrome",
       content: { mod: "kanso-strip", props: { ruler: what } } });
     // Every pane keeps a 1px border, clear except the selected one's accent, so moving the selection never shifts a terminal.
     const t = theme();
     const sel = ps.length > 1 && !sorting ? st.focus : null;
-    const edgeOf = (id) => ({ width: 1, color: id === sel ? t.accent + "8c" : t.background + "00" });
-    const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: RADIUS,
+    const edgeOf = (id) => ({ width: 1, color: id === sel ? alpha(t.accent, TINT.line) : CLEAR });
+    const live = (id, size, min) => ({ id: `strip-${id}`, type: "column", size, min, background: "background", radius: R.card,
       border: edgeOf(id), children: [header(id), body(id), ruler(id)] });
     const share = (c, id) => (c.hs?.[id] ?? 1) / c.panes.reduce((s, k) => s + (c.hs?.[k] ?? 1), 0);
-    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) }, COL_MIN)
-      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: GAP, background: "chrome", min: COL_MIN, size: { weight: weight(c.w) },
-        children: c.panes.map((id) => live(id, { weight: weight(share(c, id)) }, ROW_MIN)) };
-    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: EDGE_W }, min: EDGE_W, max: EDGE_W,
+    const whole = (c) => c.panes.length === 1 ? live(c.panes[0], { weight: weight(c.w) }, PANE.minW)
+      : { id: `strip-col-${c.panes[0]}`, type: "column", gap: PANE.gap, background: "chrome", min: PANE.minW, size: { weight: weight(c.w) },
+        children: c.panes.map((id) => live(id, { weight: weight(share(c, id)) }, PANE.minH)) };
+    const edge = (ci, side, beyond) => ({ id: `strip-edge-${side}`, type: "block", size: { px: PANE.edge }, min: PANE.edge, max: PANE.edge,
       content: { mod: "kanso-strip", props: { edge: st.cols[ci].panes[0], side, count: beyond.length, panes: beyond.flatMap((r) => st.cols[r.ci].panes) } } });
     const row = this.row(st), shown = this.shownCols(st);
     this.shown = new Set(shown);
@@ -1262,19 +1237,19 @@ export default class Strip extends View {
     if (!shown("strip.minimap", true, pieces(shared))) return div();
     const n = st.n ?? DEFAULT_N;
     const tiny = (id, label, tip, action) => div().id(id).size(16).flex_none().flex().items_center().justify_center().rounded(6)
-      .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tip)
-      .hover((h) => h.bg(t.foreground + "12").text_color(t.foreground))
+      .text_size(11).text_color(t.dim).cursor_pointer().tooltip(tooltip(tip))
+      .hover((h) => h.bg(alpha(t.foreground, TINT.tab)).text_color(t.foreground))
       .on_click(() => { action(); this.dirty = true; })
       .child(label);
     return h_flex().id("strip-map").size_full().gap(3).justify_center().items_center()
       .on_mouse_up("left", () => { if (shared("strip.drag")) endDrag(); })
       .on_scroll_wheel((ev) => this.wheel(ev, tab, st))
       // Past what fits, the extra marks are cut here, never the stepper.
-      .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PILLS_PX).overflow_hidden().gap(3).items_center().children(pills))
+      .child(h_flex().id("strip-pills").flex_shrink(1).min_w(0).max_w(PANE.pills).overflow_hidden().gap(3).items_center().children(pills))
       .child(div().w(8).flex_none())
-      .child(tiny("strip-fewer", "\u2212", "Fewer panes per view", () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
-      .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(`${n} per view · click to even out`).cursor_pointer()
+      .child(tiny("strip-fewer", "\u2212", { label: "Fewer panes per view", chord: boundChord("kanso-strip.fewer") }, () => this.edit(tab, st, (now) => this.setN(now, n - 1, now.focus))))
+      .child(div().id("strip-n").flex_none().text_size(11).text_color(t.muted).tooltip(tooltip({ label: `${n} per view`, chord: boundChord("kanso-strip.fit"), detail: "click to even out" })).cursor_pointer()
         .on_click(() => { this.edit(tab, st, (now) => this.fit(now, now.focus)); this.dirty = true; }).child(String(n)))
-      .child(tiny("strip-more", "+", "More panes per view", () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
+      .child(tiny("strip-more", "+", { label: "More panes per view", chord: boundChord("kanso-strip.more") }, () => this.edit(tab, st, (now) => this.setN(now, n + 1, now.focus))));
   }
 }

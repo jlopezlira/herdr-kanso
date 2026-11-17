@@ -1,11 +1,14 @@
+import { loadMarkdownDoc, loadFiles, listedFiles } from "./mod-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import vm from "node:vm";
-import { mkdtemp, readdir, readFile, rename, rm, stat, unlink, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, unlink, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileApi } from "../kanso/mods/kanso-panel/platform-files.js";
-import { bindHerdrModules, load, context, clone, modSandbox } from "./helpers.mjs";
+import { bindHerdrModules, load, context, clone, modSandbox, success, failure, moved, isDecode, decoded } from "./helpers.mjs";
+
+const isBase64 = (cmd) => cmd === "base64" || cmd === "/usr/bin/base64";
 
 const NAMES = ["bring", "copyName", "fileId", "dropCopies", "lookStamp", "sweepLook", "tooBig", "BYTE_CAP", "ASK_BYTES", "CHECK_MS", "SLOW_MS", "CHUNK", "slices", "cutShort", "copyFailure", "listFailure", "remoteDue", "machineOf", "appRelative", "drawablePath", "svgPixels", "markdownParts", "pollStart", "pollNext", "checkOutcome", "asOf", "staleView", "askPicture", "bytesLabel", "parseTree"];
 const pure = await load("kanso-panel/remote-file.js", NAMES, { appHome: () => "/app", window: () => ({ platform: "macos" }) });
@@ -154,7 +157,7 @@ for (const platform of ["macos", "linux", "windows"]) {
     const calls = [];
     const api = fileApi(platform, async (cmd, args) => {
       calls.push([cmd, args]);
-      return { code: 0, stdout: "\x050 0\x00\x01\x00\x02\x00\x03\x00\x04\x00", stderr: "" };
+      return success("\x050 0\x00\x01\x00\x02\x00\x03\x00\x04\x00");
     });
     await api.tree("/repo", ["", "src"]);
     assert.equal(calls.length, 1);
@@ -181,14 +184,15 @@ for (const platform of ["macos", "linux", "windows"]) {
     const run = async (cmd, args) => {
       calls.push([cmd, args]);
       const script = String(args?.at?.(-1) ?? "");
-      if (cmd === "stat" || cmd === "/usr/bin/stat") return { code: 0, stdout: "4 1700000000\n", stderr: "" };
-      if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
-      if (cmd === "sh" && String(args?.[1] ?? "").includes("tail -c")) return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
-      if (cmd === "sh" && String(args?.[1] ?? "").includes("base64 -d")) return { code: 0, stdout: "", stderr: "" };
-      if (cmd === "pwsh") return { code: 0, stdout: script.includes("ToBase64String") || script.includes("WriteAllBytes") ? "AQIDBA==\n" : "4 1700000000\n", stderr: "" };
-      return { code: 1, stdout: "", stderr: cmd };
+      if (cmd === "stat" || cmd === "/usr/bin/stat") return success("4 1700000000\n");
+      if (isBase64(cmd)) return success("AQIDBA==\n");
+      if (cmd === "sh" && String(args?.[1] ?? "").includes("tail -c")) return success("AQIDBA==\n");
+      if (cmd === "sh" && String(args?.[1] ?? "").includes("base64 -d")) return success("");
+      if (cmd === "pwsh") return success(script.includes("ToBase64String") || script.includes("WriteAllBytes") ? "AQIDBA==\n" : "4 1700000000\n");
+      return failure(cmd);
     };
     const api = fileApi(platform, run);
+    const pwshScripts = () => calls.filter((c) => c[0] === "pwsh").map((c) => String(c[1].at(-1)));
     assert.deepEqual(await api.stat("/tmp/a.png"), { size: 4, mtime: 1700000000 });
     await api.encode("/tmp/a.png");
     await api.encode("/tmp/a.png", { offset: 2, length: 2 });
@@ -201,7 +205,7 @@ for (const platform of ["macos", "linux", "windows"]) {
       assert.equal(calls.some((c) => c[0] === "python3"), false);
     }
     if (platform === "windows") {
-      const scripts = calls.filter((c) => c[0] === "pwsh").map((c) => String(c[1].at(-1)));
+      const scripts = pwshScripts();
       assert.ok(scripts.some((script) => script.includes("Get-Item") && script.includes("ToUnixTimeSeconds")));
       assert.ok(scripts.some((script) => script.includes("[Convert]::ToBase64String([IO.File]::ReadAllBytes(")));
       assert.ok(scripts.some((script) => script.includes("OpenRead") && script.includes("Seek") && !script.includes("sh ")));
@@ -214,8 +218,7 @@ for (const platform of ["macos", "linux", "windows"]) {
       assert.deepEqual(decode[1], ["-c", "base64 -d \"$1\" > \"$2\"", "b64", "/tmp/in.b64", "/tmp/out.bin"]);
     }
     if (platform === "windows") {
-      const scripts = calls.filter((c) => c[0] === "pwsh").map((c) => String(c[1].at(-1)));
-      assert.ok(scripts.some((script) => script.includes("[IO.File]::WriteAllBytes(") && script.includes("[Convert]::FromBase64String(") && script.includes("ReadAllText(")));
+      assert.ok(pwshScripts().some((script) => script.includes("[IO.File]::WriteAllBytes(") && script.includes("[Convert]::FromBase64String(") && script.includes("ReadAllText(")));
       assert.equal(calls.some((c) => c[0] === "sh" || c[0] === "base64"), false);
     }
   });
@@ -229,39 +232,32 @@ async function remoteBring(platform) {
   const note = async (path, data, ...rest) => { writes.push(typeof data); return writeFile(path, data, ...rest); };
   const exec = async (cmd, args = [], options = {}) => {
     calls.push([cmd, args, options.on ?? null]);
-    if ((cmd === "base64" || cmd === "/usr/bin/base64") && args[0] === "-D") {
-      const text = await readFile(args[2], "utf8");
-      await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));
-      return { code: 0, stdout: "", stderr: "" };
-    }
+    if (isDecode(cmd, args)) return decoded(args);
     if (cmd === "sh" && String(args[1] ?? "").includes(">>")) {
       const extra = await readFile(args[3]);
       const prior = await readFile(args[4]).catch(() => Buffer.alloc(0));
       await writeFile(args[4], Buffer.concat([prior, extra]));
-      return { code: 0, stdout: "", stderr: "" };
+      return success("");
     }
     if ((cmd === "stat" || cmd === "/usr/bin/stat") && !options.on) {
       const info = await stat(args.at(-1)).catch(() => null);
-      return info ? { code: 0, stdout: `${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "missing" };
+      return info ? success(`${info.size} ${Math.floor(info.mtimeMs / 1000)}\n`) : failure("missing");
     }
-    if (cmd === "mv" && !options.on) {
-      await rename(args.at(-2), args.at(-1));
-      return { code: 0, stdout: "", stderr: "" };
-    }
+    if (cmd === "mv" && !options.on) return moved(args);
     if (state.fail && options.on) throw state.fail;
     const script = String(args.at(-1) ?? "");
     if (cmd === "pwsh" || cmd === "powershell") {
-      if (platform !== "windows") return { code: 127, stdout: "", stderr: "" };
-      if (script.includes("OSVersion")) return { code: 0, stdout: "Win32NT\n", stderr: "" };
-      if (script.includes("Get-Item")) return { code: 0, stdout: state.stat, stderr: "" };
-      if (script.includes("ToBase64String")) return { code: 0, stdout: state.stdout, stderr: "" };
-      return { code: 1, stdout: "", stderr: script.slice(0, 40) };
+      if (platform !== "windows") return failure("", 127);
+      if (script.includes("OSVersion")) return success("Win32NT\n");
+      if (script.includes("Get-Item")) return success(state.stat);
+      if (script.includes("ToBase64String")) return success(state.stdout);
+      return failure(script.slice(0, 40));
     }
-    if (cmd === "uname") return { code: 0, stdout: platform === "macos" ? "Darwin\n" : "Linux\n", stderr: "" };
-    if (cmd === "stat" || cmd === "/usr/bin/stat") return { code: 0, stdout: state.stat, stderr: "" };
-    if (cmd === "sh" && String(args[1] ?? "").includes("tail -c")) return { code: 0, stdout: state.stdout, stderr: "" };
-    if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: state.stdout, stderr: "" };
-    return { code: 1, stdout: "", stderr: cmd };
+    if (cmd === "uname") return success(platform === "macos" ? "Darwin\n" : "Linux\n");
+    if (cmd === "stat" || cmd === "/usr/bin/stat") return success(state.stat);
+    if (cmd === "sh" && String(args[1] ?? "").includes("tail -c")) return success(state.stdout);
+    if (cmd === "base64" || cmd === "/usr/bin/base64") return success(state.stdout);
+    return failure(cmd);
   };
   const loaded = await load("kanso-panel/remote-file.js", ["bring"], {
     appHome: () => dir, window: () => ({ platform: "macos" }), exec, writeFile: note, mkdir, readdir, unlink, stat,
@@ -371,38 +367,58 @@ test("linux and windows copies use that computer's encoder and never a shell on 
 });
 
 const node = () => {
-  const el = new Proxy({}, { get(_target, key) {
-    if (key === "then") return undefined;
-    return () => el;
-  } });
+  const el = new Proxy({}, { get: (_target, key) => (key === "then" ? undefined : () => el) });
   return el;
 };
+
+// A Mac at the other end of exec: no PowerShell, `stamp()` for stat, four bytes for base64; `rest` answers anything else.
+const remoteMac = (stamp, rest) => async (cmd, args = []) => {
+  if (cmd === "pwsh" || cmd === "powershell") return failure("", 127);
+  if (cmd === "uname") return success("Darwin\n");
+  if (cmd === "stat" || cmd === "/usr/bin/stat") return stamp();
+  if (isBase64(cmd)) return success("AQIDBA==\n");
+  return rest(cmd, args);
+};
+
+// The window and panel a host shows, to put behind or hide.
+const facing = () => {
+  const seen = { active: true, hidden: false };
+  return { seen, window: () => ({ active: seen.active, platform: "macos" }), layout: () => ({ id: "panel-body", hidden: seen.hidden }) };
+};
+// The next check with the window behind, then with the panel hidden; it is left hidden.
+const checkAway = async (seen, fire) => {
+  seen.active = false;
+  await fire();
+  seen.active = true;
+  seen.hidden = true;
+  await fire();
+  return fire;
+};
+const lastAfter = (afters, cx, drain) => async () => { afters.at(-1)[1](cx); await drain(); };
 
 test("preview chooses a picture, markdown or text, and re-reads a remote file only while shown", async () => {
   const dir = await mkdtemp(join(tmpdir(), "kanso-preview-"));
   const reads = [];
   const calls = [];
   const afters = [];
-  let active = true, hidden = false, stamp = "4 9\n", failStat = false;
+  let stamp = "4 9\n", failStat = false;
+  const { seen, window, layout } = facing();
   try {
     const { Preview, previewKind } = await load("kanso-panel/preview.js", ["Preview", "previewKind"], {
       appHome: () => dir,
-      window: () => ({ active, platform: "macos" }),
-      layout: () => ({ id: "panel-body", hidden }),
+      window, layout,
       readTextFile: async (path) => { reads.push(path); return "hello"; },
       isMarkdown: (path) => /\.md$/.test(path),
-      codeState: () => ({ release() {}, value() { return ""; }, set_value() {} }),
+      sourceState: () => ({ release() {}, value() { return ""; }, set_value() {} }),
       theme: () => ({}),
       div: node, svg: node, image: node, h_flex: node, v_flex: node, Editor: { new: node },
-      exec: async (cmd, args = []) => {
+      exec: (cmd, args) => {
         calls.push(cmd);
-        if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
-        if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
-        if (cmd === "stat" || cmd === "/usr/bin/stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
-        if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
-        if (cmd === "sips") return { code: 0, stdout: "pixelWidth: 12\npixelHeight: 8\n", stderr: "" };
-        if (cmd === "head") return { code: 0, stdout: "hello", stderr: "" };
-        return { code: 0, stdout: "", stderr: "" };
+        return remoteMac(() => (failStat ? failure("timed out") : success(stamp)), (other) => {
+          if (other === "sips") return success("pixelWidth: 12\npixelHeight: 8\n");
+          if (other === "head") return success("hello");
+          return success("");
+        })(cmd, args);
       },
       writeFile, mkdir, readdir, unlink, stat,
       watchFolder: async () => { throw new Error("no watch"); },
@@ -439,13 +455,8 @@ test("preview chooses a picture, markdown or text, and re-reads a remote file on
     const heads = () => calls.filter((cmd) => cmd === "head").length;
     const before = heads();
     assert.equal(before, 1);
-    const fire = async () => { afters.at(-1)[1](cx); await drain(); };
-    active = false;
-    await fire();
-    active = true;
-    hidden = true;
-    await fire();
-    hidden = false;
+    const fire = await checkAway(seen, lastAfter(afters, cx, drain));
+    seen.hidden = false;
     await fire();
     assert.equal(heads(), before, "a stat that has not changed does not read the file");
     assert.equal(remote.code != null, true);
@@ -472,22 +483,18 @@ test("a remote folder says why it failed and is listed again only while shown", 
   const calls = [];
   const ticks = [];
   const afters = [];
-  let active = true, hidden = false, denied = false, listed = false;
+  let denied = false, listed = false;
+  const { seen, window, layout } = facing();
   const tree = ["\x055 9", "\x01", "./a.txt", "\x02", "\x03", "\x04"].join("\0") + "\0";
-  const { Files } = await load("kanso-panel/files.js", ["Files"], {
+  const { Files } = await loadFiles({
     key: () => "ctx",
     location: () => ({ cwd: "/repo", on: "light" }),
-    window: () => ({ active, platform: "macos" }),
-    layout: () => ({ id: "panel-body", hidden }),
-    exec: async (cmd) => {
+    window, layout,
+    exec: async (cmd, args) => {
       calls.push(cmd);
       if (denied) throw new Error("Permission denied");
       if (!listed) throw new Error("light is unreachable");
-      if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
-      if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
-      if (cmd === "stat" || cmd === "/usr/bin/stat") return failStat ? { code: 1, stdout: "", stderr: "timed out" } : { code: 0, stdout: stamp, stderr: "" };
-      if (cmd === "sh") return { code: 0, stdout: tree, stderr: "" };
-      return { code: 1, stdout: "", stderr: cmd };
+      return remoteMac(() => (failStat ? failure("timed out") : success(stamp)), (other) => (other === "sh" ? success(tree) : failure(other)))(cmd, args);
     },
     watchFolder: async () => { throw new Error("no"); },
   });
@@ -495,38 +502,35 @@ test("a remote folder says why it failed and is listed again only while shown", 
   const { cx, drain } = context();
   cx.timer = { every(_ms, fn) { ticks.push(fn); }, after(ms, fn) { afters.push([ms, fn]); } };
   const files = new Files();
+  const topNames = () => clone(files.entries.get("").map((entry) => entry.name));
   files.init(cx, {});
   await drain();
   assert.equal(files.error, "light did not answer");
   assert.equal(files.loading, false);
   assert.equal(afters.at(-1)[0], 30000);
   const quiet = calls.length;
-  const fire = async () => { afters.at(-1)[1](cx); await drain(); };
-  active = false;
-  await fire();
-  active = true;
-  hidden = true;
-  await fire();
+  const fire = await checkAway(seen, lastAfter(afters, cx, drain));
   assert.equal(calls.length, quiet);
-  hidden = false;
+  seen.hidden = false;
   await fire();
   assert.ok(calls.length > quiet);
   const mid = calls.length;
   ticks[0](cx);
   await drain();
   assert.equal(calls.length, mid);
+  const listAgain = async () => {
+    files.context = null;
+    files.refresh(cx);
+    await drain();
+  };
   denied = true;
-  files.context = null;
-  files.refresh(cx);
-  await drain();
+  await listAgain();
   assert.equal(files.error, "Cannot list this folder: permission denied");
   denied = false;
   listed = true;
-  files.context = null;
-  files.refresh(cx);
-  await drain();
+  await listAgain();
   assert.equal(files.error, null);
-  assert.deepEqual(clone(files.entries.get("").map((entry) => entry.name)), ["a.txt"]);
+  assert.deepEqual(topNames(), ["a.txt"]);
   const shells = calls.filter((cmd) => cmd === "sh").length;
   stamp = "5 9\n";
   await fire();
@@ -537,38 +541,19 @@ test("a remote folder says why it failed and is listed again only while shown", 
   assert.equal(files.error, null);
   assert.equal(files.loading, false);
   assert.ok(files.held);
-  assert.deepEqual(clone(files.entries.get("").map((entry) => entry.name)), ["a.txt"]);
+  assert.deepEqual(topNames(), ["a.txt"]);
   files.held = { at: Date.now() - 120000 };
   assert.equal(pure.asOf(files.held.at, Date.now()), "as of 2 min ago");
 });
 
 test("a picture in Files opens in Preview, and a Markdown file on another computer draws its pictures", async () => {
   const seen = [];
-  let listed;
-  const element = () => {
-    const target = { handlers: {}, when(condition, callback) { if (condition) callback(proxy); return proxy; } };
-    const proxy = new Proxy(target, { get(object, name) {
-      if (name in object) return object[name];
-      return (...args) => {
-        if (String(name).startsWith("on_")) object.handlers[name] = args[0];
-        return proxy;
-      };
-    } });
-    return proxy;
-  };
-  const { Files } = await load("kanso-panel/files.js", ["Files"], {
-    div: element, svg: element, h_flex: element, v_flex: element,
-    Scrollbar: { vertical: element }, theme: () => ({}), key: () => "fixture",
-    isMarkdown: (path) => /\.md$/.test(path),
-    v_virtual_list: (_id, count, _height, key, render) => { const el = element(); listed = { count, key, render, el }; return el; },
-  });
-  const panel = new Files();
-  Object.assign(panel, { context: "fixture", root: "/repo", folders: new Set(), marks: {},
-    entries: new Map([["", [{ name: "shot.png", dir: false }, { name: "notes.txt", dir: false }]]]) });
+  const { panel, list } = await listedFiles([{ name: "shot.png", dir: false }, { name: "notes.txt", dir: false }]);
   const actions = [];
   panel.read = (path) => actions.push(["read", path]);
   panel.show = (path) => actions.push(["show", path]);
   panel.render({});
+  const listed = list();
   listed.el.handlers.on_item_click(listed.key(0), {});
   listed.el.handlers.on_item_click(listed.key(1), {});
   assert.deepEqual(actions, [["read", "shot.png"], ["read", "notes.txt"]]);
@@ -581,7 +566,7 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
       if (key === "child") return (value) => { if (typeof value === "string") texts.push(value); return view(); };
       return () => view();
     } });
-    const { MarkdownDoc } = await load("kanso-panel/doc.js", ["MarkdownDoc"], {
+    const { MarkdownDoc } = await loadMarkdownDoc({
       appHome: () => dir,
       readTextFile: async () => "Hello\n\n![shot](./shot.png)\n",
       window: () => ({ platform: "macos" }),
@@ -589,33 +574,22 @@ test("a picture in Files opens in Preview, and a Markdown file on another comput
       TextView: { markdown: () => view() }, Textarea: { new: view }, Editor: { new: view },
       EditorState: { new: () => ({}) }, TextareaState: { new: () => ({ set_auto_grow() {}, on() {}, focus() {}, release() {} }) },
       exec: async (cmd, args = []) => {
-        if (cmd === "mv") {
-          await rename(args.at(-2), args.at(-1));
-          return { code: 0, stdout: "", stderr: "" };
-        }
-        if ((cmd === "base64" || cmd === "/usr/bin/base64") && args[0] === "-D") {
-          const text = await readFile(args[2], "utf8");
-          await writeFile(args[4], Buffer.from(text.replace(/\s/g, ""), "base64"));
-          return { code: 0, stdout: "", stderr: "" };
-        }
-        if (cmd === "pwsh" || cmd === "powershell") return { code: 127, stdout: "", stderr: "" };
-        if (cmd === "uname") return { code: 0, stdout: "Darwin\n", stderr: "" };
-        if (cmd === "stat" || cmd === "/usr/bin/stat") return { code: 0, stdout: "4 3\n", stderr: "" };
-        if (cmd === "base64" || cmd === "/usr/bin/base64") return { code: 0, stdout: "AQIDBA==\n", stderr: "" };
-        if (cmd === "head") return { code: 0, stdout: "Hello\n\n![shot](./shot.png)\n", stderr: "" };
-        return { code: 1, stdout: "", stderr: cmd };
+        if (cmd === "mv") return moved(args);
+        if (isDecode(cmd, args)) return decoded(args);
+        return remoteMac(() => success("4 3\n"), (other) => (other === "head" ? success("Hello\n\n![shot](./shot.png)\n") : failure(other)))(cmd, args);
       },
       writeFile, mkdir, readdir, unlink, stat,
     });
+    const DOC_TONE = { border: "#111", dim: "#222", foreground: "#000", background: "#fff" };
     const doc = new MarkdownDoc("/repo/PLAN.md", "light");
     assert.equal(doc.canEdit, false);
     const { cx, drain } = context();
     doc.load(cx);
     await drain();
-    doc.body({ border: "#111", dim: "#222", foreground: "#000", background: "#fff" }, "doc");
+    doc.body(DOC_TONE, "doc");
     assert.match(seen[0], /^data\/kanso-panel\/remote\//);
     doc.shots = new Map([["/repo/shot.png", null]]);
-    doc.body({ border: "#111", dim: "#222", foreground: "#000", background: "#fff" }, "doc");
+    doc.body(DOC_TONE, "doc");
     assert.equal(texts.includes("Cannot show this picture"), true);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

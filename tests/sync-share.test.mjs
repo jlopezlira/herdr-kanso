@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { SHARED, sharedDependencies, sharedFile as platformFile } from "../scripts/sync-share.mjs";
+import { SHARED, sharedDependencies, sharedFile, kansoModFolders } from "../scripts/sync-share.mjs";
 
 const root = new URL("../", import.meta.url);
 const source = "kanso/mods/kanso-panel/";
@@ -31,17 +31,16 @@ test("A mod that imports one piece of the kit gets that piece and the base it us
 });
 
 test("Every shipped platform and kit copy is required by its mod's imports", async () => {
-  const names = (await readdir(new URL(source, root))).filter(platformFile);
+  const names = (await readdir(new URL(source, root))).filter(sharedFile);
   const canonical = new Map(await Promise.all(names.map(async (name) => [name, await readFile(new URL(source + name, root), "utf8")])));
-  const folders = (await readdir(new URL("kanso/mods/", root), { withFileTypes: true })).filter((entry) => entry.isDirectory())
-    .map((entry) => `kanso/mods/${entry.name}/`).concat(["markdown-panel/mods/markdown-panel/", "open-with/mods/open-with/"]);
+  const folders = (await kansoModFolders()).concat(["markdown-panel/mods/markdown-panel/", "open-with/mods/open-with/"]);
   for (const folder of folders.filter((folder) => folder !== source)) {
     const files = await readdir(new URL(folder, root));
-    const modules = await Promise.all(files.filter((name) => /\.m?js$/.test(name) && !platformFile(name)).map((name) => readFile(new URL(folder + name, root), "utf8")));
+    const modules = await Promise.all(files.filter((name) => /\.m?js$/.test(name) && !sharedFile(name)).map((name) => readFile(new URL(folder + name, root), "utf8")));
     const needed = [...sharedDependencies(modules, canonical)].sort();
-    assert.deepEqual(files.filter(platformFile).sort(), needed, folder);
+    assert.deepEqual(files.filter(sharedFile).sort(), needed, folder);
     if (folder.startsWith("kanso/") || folder.startsWith("markdown-panel/")) {
-      const listed = SHARED.flatMap(({ copies }) => copies).filter((copy) => copy.startsWith(folder) && platformFile(copy.slice(folder.length))).map((copy) => copy.slice(folder.length)).sort();
+      const listed = SHARED.flatMap(({ copies }) => copies).filter((copy) => copy.startsWith(folder) && sharedFile(copy.slice(folder.length))).map((copy) => copy.slice(folder.length)).sort();
       assert.deepEqual(listed, needed, `${folder} sync map`);
     }
   }

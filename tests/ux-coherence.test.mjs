@@ -13,6 +13,8 @@ import { describe } from "../kanso/mods/kanso-help/keymap.js";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const text = (path) => readFile(join(root, path), "utf8");
 
+const MOD_ROOTS = ["kanso/mods", "open-with/mods", "markdown-panel/mods"];
+
 test("Spend opens on today, and a chosen period is the one it accepts next time", () => {
   assert.equal(spendPeriod(undefined), "day");
   assert.equal(spendPeriod("nope"), "day");
@@ -67,6 +69,20 @@ test("a second press within four seconds confirms, and after that it arms again"
   }
 });
 
+test("A row's verb that asks twice arms on the first press, reads as armed, and runs on the second", async () => {
+  const { Armed } = await load("kanso-panel/ui-button.js", ["Armed"], { Date });
+  const armed = new Armed();
+  const ran = [];
+  const cx = { notify() {}, timer: { after() {} } };
+  const stop = () => armed.verb("Stop", "stop", "stop:1", () => ran.push("stop"), { disabled: false });
+  assert.deepEqual({ ...stop(), onClick: null }, { label: "Stop", verb: "stop", armed: false, disabled: false, onClick: null });
+  stop().onClick(cx);
+  assert.equal(stop().armed, true);
+  assert.deepEqual(ran, []);
+  stop().onClick(cx);
+  assert.deepEqual(ran, ["stop"]);
+});
+
 test("the sidebar and settings confirm through Armed", async () => {
   const spaces = await text("kanso/mods/kanso-spaces/main.js");
   assert.equal(spaces.includes("confirmClose"), false);
@@ -102,7 +118,7 @@ test("armed ink comes from the kit token", async () => {
 });
 
 test("one armed wording: only the kit says Press again, and only as Press again to <verb>", async () => {
-  const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
+  const dirs = MOD_ROOTS.map((dir) => join(root, dir));
   const all = async (dir) => (await readdir(dir, { recursive: true })).filter((name) => /\.m?js$/.test(name)).map((name) => join(dir, name));
   const files = (await Promise.all(dirs.map(all))).flat().filter((file) => !/[\\/]ui-button\.js$/.test(file));
   const found = [];
@@ -278,7 +294,7 @@ test("a comment beside a regular expression is not text a person reads", () => {
 });
 
 test("retired words stay out of the words a person reads", async () => {
-  const dirs = ["kanso/mods", "open-with/mods", "markdown-panel/mods"].map((dir) => join(root, dir));
+  const dirs = MOD_ROOTS.map((dir) => join(root, dir));
   const files = (await Promise.all(dirs.map((dir) => sources(dir)))).flat();
   const found = [];
   for (const file of files) {

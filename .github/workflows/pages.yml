@@ -35,9 +35,8 @@ jobs:
       - uses: actions/configure-pages@v5
       # The changelog page reads it next to itself, so a release shows there.
       - run: cp CHANGELOG.md site/CHANGELOG.md
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/node
         with:
-          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build-storybook -- -o site/storybook

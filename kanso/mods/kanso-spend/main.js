@@ -1,21 +1,24 @@
+import { detailColumn, pageBody, pageSize, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 // Spend, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // QuickJS runs every step under a time limit, so nothing heavy happens here.
 import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover } from "gpui-base";
+import { v_flex, h_flex, Popover } from "gpui-base";
 import { exec, appHome, home, theme, nextCommand, readTextFile, writeTextFile, layout, machines, shared, setShared } from "herdr";
-import { G, H, PULSE, breathe, tokens } from "./ui.js";
+import { G, H, OPACITY, breathe, tokens } from "./ui.js";
+import { mark } from "./ui-mark.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
+import { button as kitButton, metric, row, skeletonOf, tooltip } from "./kit.js";
+import { factList } from "./ui-facts.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
@@ -26,7 +29,6 @@ const MOD = "kanso-spend";
 const RUNTIME_FILE = `mods/${MOD}/runtime.json`;
 const PRESENTER_FILE = `mods/${MOD}/presenter.mjs`;
 const DATA_DIR = `data/${MOD}`;
-const icon = (name) => `mods/${MOD}/icons/${name}.svg`;
 // A project or model chooser shows this many, then scrolls.
 const CHOOSER_ROWS = 8;
 const PAYLOAD_KIND = "kanso-spend-costs";
@@ -82,14 +84,13 @@ function hiddenInLayout() {
 }
 
 function formatTime(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const at = new Date(iso).getTime();
+  return Number.isNaN(at) ? "" : clock(at, at);
 }
 
 function metricLine(c, name, tokensText, value, { color = c.text, tip = "", medium = false } = {}) {
   return h_flex().w_full().items_end().gap(G.md)
-    .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tip)).child(name))
+    .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(color).when(medium, (el) => el.font_medium()).when(Boolean(tip), (el) => el.tooltip(tooltip({ label: tip }))).child(name))
     .child(div().text_size(11).text_color(c.dim).child(tokensText))
     .child(div().min_w(64).text_right().text_size(15).font_light().text_color(c.text).child(value));
 }
@@ -462,16 +463,10 @@ export default class TokenSpend extends View {
       : this.costs?.hero ? this.costsView(c, narrow, top) : this.waitingView(c, narrow);
     return v_flex().id("spend-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => {
-        const changed = Math.abs((this.width || 0) - size.width) >= 1;
-        this.width = size.width;
-        if (changed) sizeCx.notify();
-      })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+      .on_size_change(pageSize.call(this, { always: true }))
+      .child(pageBody(narrow, (column) => column
           .child(this.header(c, narrow))
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only the totals and the days: no project, task or session names. The post opens with the image in it.", G.sm)))
+          .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
           .child(body)));
   }
 
@@ -497,44 +492,20 @@ export default class TokenSpend extends View {
     const crumb = this.page === "settings" ? "" : top ? ({ project: "Project", model: "Model", task: "Task" })[top.kind] : "";
     return h_flex().w_full().items_center().justify_between().gap(G.md)
       .child(h_flex().flex_1().min_w(0).items_center().gap(G.sm)
-        .when(inner, (el) => el.child(iconButton("spend-back", icon("back"), "Back", (cx) => this.back(cx), c)))
+        .when(inner, (el) => el.child(iconButton("spend-back", "chevron-left", "Back", (cx) => this.back(cx), c)))
         .child(v_flex().flex_1().min_w(0).gap(1)
           .when(Boolean(crumb), (el) => el.child(div().text_size(11).text_color(c.dim).child(crumb)))
-          .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(title).child(title))))
+          .child(div().truncate().text_size(inner ? (narrow ? 15 : 17) : (narrow ? 17 : 20)).text_color(c.text).tooltip(tooltip({ label: title })).child(title))))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(Boolean(reading), (el) => el.child(div().pr(G.xs).text_size(11).text_color(c.dim).child(reading)))
-        .when(this.canShare(), (el) => el.child(iconButton("spend-share", icon("share"), "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("spend-refresh", icon("refresh"), tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
-        .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", icon("settings"), "Settings", (cx) => this.openSettings(cx), c))));
-  }
-
-  sourcesBones(c) {
-    const { line } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full())
-      .children([0, 1, 2].map((i) => v_flex().w_full().py(G.sm).gap(2).child(line([100, 80, 120][i], 13)).child(line([180, 160, 140][i], 11))));
-  }
-
-  skeleton(c, narrow) {
-    const { block, line, row } = ghost(c);
-    const heights = [18, 26, 22, 40, 64, 92, 48, 52, 36, 44, 20, 38, 70, 50, 42, 46, 28, 34, 58, 30, 44, 24, 14, 10, 8, 8, 6, 6, 6, 6, 8];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(h_flex().w_full().gap(G.lg).items_center()
-        .children([44, 52, 34, 52].map((w) => block(w, 10))))
-      .child(v_flex().gap(G.md)
-        .child(line(110, 12))
-        .child(block(narrow ? 170 : 250, narrow ? 40 : 58, 6))
-        .child(line(170, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([46, 64, 58].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(h_flex().w_full().h(150).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, h, 1)))))
-      .child(v_flex().w_full()
-        .child(h_flex().pb(G.sm).child(line(70, 12)))
-        .children([0, 1, 2, 3, 4].map(row)));
+        .when(this.canShare(), (el) => el.child(iconButton("spend-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
+        .child(iconButton("spend-refresh", "refresh-cw", tip, (cx) => this.run("snapshot", cx), c, { spin: busy, disabled: busy }))
+        .when(this.page !== "settings", (el) => el.child(iconButton("spend-settings", "settings", "Settings", (cx) => this.openSettings(cx), c))));
   }
 
   waitingView(c, narrow) {
     const failed = this.runtimeError || (this.error && !this.running);
-    if (!failed) return this.skeleton(c, narrow);
+    if (!failed) return skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
     const scan = this.scan;
     const title = failed ? "Spend could not read your sessions." : "Adding up your sessions";
     const detail = failed ? (this.runtimeError || this.error)
@@ -554,9 +525,9 @@ export default class TokenSpend extends View {
     ].filter(Boolean);
     const wide = (this.width || 960) >= 860;
     return v_flex().w_full().gap(narrow ? 36 : 48)
-      .opacity(this.running === "prepare" ? 0.55 : 1)
+      .opacity(this.running === "prepare" ? OPACITY.away : 1)
       .when(Boolean(this.error) && !this.running, (el) => el.child(h_flex().w_full().gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(this.error)
+        .child(div().flex_1().min_w(0).text_size(12).text_color(c.red).truncate().tooltip(tooltip({ label: this.error }))
           .child(`Last update failed: ${this.error}`))
         .child(quietLink("spend-retry-inline", "Try again", (cx) => this.run("snapshot", cx), c))))
       .child(this.controls(c, Boolean(top)))
@@ -599,12 +570,8 @@ export default class TokenSpend extends View {
     const allLabel = field === "project" ? "All projects" : "All models";
     const shown = value === "all" ? allLabel : (facet.find((entry) => entry.value === value)?.label ?? projectName(value));
     const id = `ins-menu-${field}`;
-    const trigger = Button.new(`${id}-trigger`).h(H.compact).gap(6).items_center().cursor_pointer()
-      .accessibility_label(`${field === "project" ? "Project" : "Model"}: ${shown}`)
-      .hover((style) => style.opacity(0.75))
-      .focus((style) => style.opacity(0.75))
-      .child(div().max_w(170).truncate().text_size(12).text_color(value === "all" ? c.muted : c.text).child(shown))
-      .child(div().text_size(10).text_color(c.dim).child("⌄"));
+    // The kit's quiet button with the menu's caret: Tab reaches it, Enter and Space open the menu.
+    const trigger = kitButton({ label: shown, kind: "quiet", small: true, icon: "lu-chevron-down", truncate: true, spoken: `${field === "project" ? "Project" : "Model"}: ${shown}`, color: value === "all" ? c.muted : c.text })(`${id}-trigger`, c);
     const popover = Popover.new(id).trigger(trigger)
       .open(this.openMenu === id)
       .on_open_change((open, cx) => {
@@ -633,8 +600,7 @@ export default class TokenSpend extends View {
   hero(c, hero, narrow) {
     const offset = this.cost.offset || 0;
     const stepper = this.cost.period !== "all";
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
+    return heroStack(heroHeading()
         .child(h_flex().gap(G.md).items_center()
           .child(div().text_size(15).text_color(c.muted).child(hero.title))
           .when(stepper, (el) => el
@@ -643,18 +609,12 @@ export default class TokenSpend extends View {
               label: "Next period", disabled: offset >= 0,
             }))
             .when(offset < 0, (row) => row.child(quietLink("ins-now", "Back to now", (cx) => this.setCost({ offset: 0 }, cx), c)))))
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 48 : 72).line_height(1).font_light().text_color(c.text).tooltip(hero.tip).child(hero.value))
-          .child(div().pb(narrow ? 6 : 10).text_size(13).text_color(c.dim).child("API value")))
+        .child(metric({ value: hero.value, unit: "API value", facts: hero.empty ? "" : factList(hero.stats), tip: hero.tip })("ins-metric", c))
         .when(Boolean(hero.note), (el) => el.child(div().text_size(15).text_color(c.dim).child(hero.note)))
         .when(Boolean(hero.empty), (el) => el.child(div().text_size(15).text_color(c.muted).child(hero.empty)))
         .when(Boolean(hero.plan), (el) => el.child(div().text_size(13).text_color(c.muted).child(hero.plan)))
         .when(Boolean(this.scan?.partial), (el) => el.child(div().text_size(12).text_color(c.dim)
-          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))))
-      .when(!hero.empty, (el) => el.child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(hero.stats.map((stat) => h_flex().items_end().gap(6).tooltip(stat.tip)
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(c.text).child(stat.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(stat.unit))))));
+          .child(`Still reading your history: ${this.scan.processed} of ${this.scan.total} files so far.`))));
   }
 
   chart(c, chart) {
@@ -662,12 +622,12 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(G.sm)
       .child(h_flex().w_full().items_end()
         .children(chart.bars.map((bar) => v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4)
-          .tooltip(bar.tip)
+          .tooltip(tooltip({ label: bar.tip }))
           .when(bar.peak, (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
           .child(div().w(bar.peak ? 3 : 2).flex_none().rounded_t(1)
             .h(bar.ratio > 0 ? Math.max(3, Math.round(bar.ratio * height)) : 1)
             .bg(bar.peak ? c.accent : bar.ratio > 0 ? c.muted : c.border)
-            .opacity(bar.peak || bar.ratio === 0 ? 1 : 0.55)))))
+            .opacity(bar.peak || bar.ratio === 0 ? 1 : OPACITY.quiet)))))
       .child(h_flex().w_full().justify_between()
         .child(div().text_size(10).text_color(c.dim).child(chart.first))
         .child(div().text_size(10).text_color(c.dim).child(chart.title))
@@ -690,14 +650,10 @@ export default class TokenSpend extends View {
       .when(items.length === 0, (el) => el.child(div().text_size(12).text_color(c.dim).child("Nothing here in this period.")))
       .children(shown.map((item, index) => {
         const active = selected === item.value;
-        return Button.new(`ins-${field}-${index}`).w_full().py(7).cursor_pointer()
-          .hover((style) => style.opacity(0.75))
-          .focus((style) => style.opacity(0.75))
-          .accessibility_label(`${item.name}, ${item.usdText}`)
-          .on_click((_event, cx) => this.openDetail(field, item, cx))
-          .child(metricLine(c, item.name, item.tokensText, item.usdText, {
-            color: active || selected === "all" ? c.text : c.muted, tip: item.detail, medium: active,
-          }));
+        const line = row({ name: item.name, detail: item.tokensText, meta: item.usdText, current: active, dimmed: !active && selected !== "all" })(`ins-${field}-${index}`, c, {
+          onClick: (cx) => this.openDetail(field, item, cx),
+        }).accessibility_label(`${item.name}, ${item.usdText}`);
+        return item.detail ? line.tooltip(tooltip({ label: item.detail })) : line;
       }))
       .when(items.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
         .child(quietLink(`ins-${field}-more`, open ? "Show fewer" : `Show ${items.length - LIST_ROWS} more`, (cx) => {
@@ -707,9 +663,8 @@ export default class TokenSpend extends View {
   }
 
   taskView(c, d, narrow) {
-    const row = (name, sub, usd, tokens, index) => h_flex().w_full().items_end().gap(G.md).py(7)
-      .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-      .child(v_flex().flex_1().min_w(0).gap(2)
+    const row = (name, sub, usd, tokens, index) => separatedRow(h_flex().w_full().items_end().gap(G.md).py(7), c, index)
+      .child(detailColumn()
         .child(div().truncate().text_size(13).text_color(c.text).child(name))
         .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub))))
       .child(div().text_size(11).text_color(c.dim).child(tokens))
@@ -721,13 +676,7 @@ export default class TokenSpend extends View {
         .child(h_flex().w_full().flex_wrap().gap_x(G.md).gap_y(2)
           .children([d.project, d.tools, d.when].filter(Boolean).map((part) => div().text_size(12).text_color(c.dim).child(part)))))
       .child(v_flex().gap(G.xl)
-        .child(h_flex().flex_wrap().items_end().gap_x(G.md)
-          .child(div().text_size(narrow ? 44 : 60).line_height(1).font_light().text_color(c.text).tooltip(`${d.usdExact} at API list price`).child(d.usdText))
-          .child(div().pb(narrow ? 5 : 8).text_size(13).text_color(c.dim).child("API value")))
-        .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 40).gap_y(G.lg)
-          .children(d.parts.map((part) => v_flex().gap(4)
-            .child(div().text_size(narrow ? 20 : 24).line_height(1).font_light().text_color(c.text).child(part.value))
-            .child(div().text_size(11).text_color(c.dim).child(part.label))))))
+        .child(metric({ value: d.usdText, unit: "API value", facts: factList(d.parts.map((part) => ({ value: part.value, unit: part.label }))), tip: `${d.usdExact} at API list price` })("ins-task-metric", c)))
       .child(v_flex().w_full()
         .child(section(c, "Models", `${d.models.length}`))
         .children(d.models.map((m, index) => row(m.name, "", m.usdText, m.tokensText, index))))
@@ -747,12 +696,11 @@ export default class TokenSpend extends View {
     return v_flex().w_full().gap(44)
       .child(v_flex().w_full()
         .child(heading("Sources", "Where Spend reads your sessions. Turning one off removes it from every number."))
-        .when(!s, (el) => el.child(this.sourcesBones(c)))
-        .children((s?.sources ?? []).map((source, index) => h_flex().w_full().items_center().gap(G.md).py(G.sm)
-          .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-          .child(v_flex().flex_1().min_w(0).gap(2)
+        .when(!s, (el) => el.child(skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c)))
+        .children((s?.sources ?? []).map((source, index) => separatedRow(h_flex().w_full().items_center().gap(G.md).py(G.sm), c, index)
+          .child(detailColumn()
             .child(div().text_size(13).text_color(source.enabled ? c.text : c.muted).child(source.label))
-            .child(div().truncate().text_size(11).text_color(c.dim).tooltip(source.roots).child(source.roots)))
+            .child(div().truncate().text_size(11).text_color(c.dim).tooltip(tooltip({ label: source.roots })).child(source.roots)))
           .child(toggleSwitch(`ins-source-${source.id}`, source.enabled, (next, cx) => this.toggleSource(source.id, next, cx), c, {
             label: `${source.label}: ${source.enabled ? "on" : "off"}`,
           }))))
@@ -764,7 +712,7 @@ export default class TokenSpend extends View {
           .child(div().text_size(12).text_color(c.dim).child("$"))
           .child(div().w(84).flex_none().child(field(`ins-plan-amount-${index}`, input.amount, c)))
           .child(div().text_size(11).text_color(c.dim).child("/ mo"))
-          .child(iconButton(`ins-plan-remove-${index}`, icon("close"), "Remove plan", (cx) => this.removePlan(index, cx), c))))
+          .child(iconButton(`ins-plan-remove-${index}`, "x", "Remove plan", (cx) => this.removePlan(index, cx), c))))
         .child(h_flex().w_full().gap(G.lg).items_center().pt(G.sm)
           .child(quietLink("ins-plan-add", "Add plan", (cx) => this.addPlan(cx), c))
           .child(quietLink("ins-plan-save", "Save plans", (cx) => this.savePlans(cx), c))
@@ -783,23 +731,16 @@ export default class TokenSpend extends View {
   live(c, sessions) {
     return v_flex().w_full()
       .child(h_flex().w_full().items_center().gap(G.sm).pb(G.sm)
-        .child(breathe(div().size(6).flex_none().rounded_full().bg(c.accent), PULSE))
+        .child(mark(c, { status: "working", size: "sm" }))
         .child(div().text_size(15).text_color(c.text).child("Active now")))
-      .children(sessions.map((s, index) => Button.new(`ins-live-${index}`).w_full().cursor_pointer()
-        .hover((style) => style.opacity(0.75))
-        .focus((style) => style.opacity(0.75))
-        .accessibility_label(`${s.title}, ${s.usdText}`)
-        .on_click((_event, cx) => this.openDetail("task", s.detail, cx))
-        .child(h_flex().w_full().items_center().gap(G.lg).py(G.sm)
-        .when(index > 0, (el) => el.border_t(1).border_color(c.border))
-        .child(v_flex().flex_1().min_w(0).gap(3)
-          .child(h_flex().w_full().gap(G.sm).items_end()
-            .when(Boolean(s.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(s.ticket)))
-            .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(s.tip).child(s.title)))
-          .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(s.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
-        .child(v_flex().items_end().gap(2).flex_none()
-          .child(div().text_size(17).font_light().text_color(c.text).child(s.usdText))
-          .child(div().text_size(11).text_color(c.dim).child(s.tokensText))))));
+      .children(sessions.map((s, index) => this.taskRow(`ins-live-${index}`, s, c)));
+  }
+
+  // A task or a live session: the kit's row, its ticket beside the title, its facts and tokens under it, its cost at the end; a press opens its detail.
+  taskRow(id, task, c) {
+    return row({ name: task.title, detail: task.ticket || null, meta: task.usdText, second: [...task.meta, task.tokensText] })(id, c, {
+      onClick: (cx) => this.openDetail("task", task.detail, cx),
+    }).accessibility_label(`${task.title}, ${task.usdText}`).tooltip(tooltip({ label: task.tip }));
   }
 
   tasks(c, data) {
@@ -809,21 +750,7 @@ export default class TokenSpend extends View {
       .child(h_flex().w_full().items_end().justify_between().pb(G.md)
         .child(div().text_size(15).text_color(c.text).child("Tasks"))
         .child(div().text_size(12).text_color(c.dim).child(data.tasksNote)))
-      .children(shown.map((task, index) => Button.new(`ins-task-${index}`).w_full().py(G.md).cursor_pointer()
-        .border_t(1).border_color(c.border)
-        .hover((style) => style.opacity(0.75))
-        .focus((style) => style.opacity(0.75))
-        .accessibility_label(`${task.title}, ${task.usdText}`)
-        .on_click((_event, cx) => this.openDetail("task", task.detail, cx))
-        .child(h_flex().w_full().items_center().gap(G.lg)
-          .child(v_flex().flex_1().min_w(0).gap(4)
-            .child(h_flex().w_full().gap(G.sm).items_end()
-              .when(Boolean(task.ticket), (el) => el.child(div().flex_none().text_size(12).font_medium().text_color(c.muted).child(task.ticket)))
-              .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).tooltip(task.tip).child(task.title)))
-            .child(h_flex().w_full().flex_wrap().gap_x(G.md).children(task.meta.map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))))
-          .child(v_flex().items_end().gap(2).flex_none()
-            .child(div().text_size(17).font_light().text_color(c.text).child(task.usdText))
-            .child(div().text_size(11).text_color(c.dim).child(task.tokensText))))))
+      .children(shown.map((task, index) => this.taskRow(`ins-task-${index}`, task, c)))
       .when(data.tasks.length > TASK_ROWS, (el) => el.child(h_flex().pt(G.md).border_t(1).border_color(c.border)
         .child(quietLink("ins-tasks-more", open ? "Show fewer" : `Show ${data.tasks.length - TASK_ROWS} more`, (cx) => {
           this.expanded = { ...this.expanded, tasks: !open };
@@ -831,3 +758,5 @@ export default class TokenSpend extends View {
         }, c))));
   }
 }
+
+const separatedRow = (row, c, index) => row.when(index > 0, (el) => el.border_t(1).border_color(c.border));

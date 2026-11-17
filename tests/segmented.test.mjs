@@ -1,21 +1,9 @@
 // One tab group (`segmented` is its old name): its box from the tokens, selection by tone, and nothing that moves.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, gpuiHost, calls, one, styled, themed, eachTheme } from "./helpers.mjs";
 
-const kit = async () => ({ ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T"], gpuiHost()), ...await load("kanso-panel/ui-tab.js", ["segmented", "tab"], gpuiHost()) });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
-const styled = (el, name) => {
-  const style = chain();
-  one(el, name)(style);
-  return style.calls;
-};
+const kit = async () => themed({ ...await load("kanso-panel/ui.js", ["tokens", "G", "H", "R", "T"], gpuiHost()), ...await load("kanso-panel/ui-tab.js", ["segmented", "tab"], gpuiHost()) }, night);
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", hover: "#232321", selected: "#2b2b28", raised: "#252523", accent: "#da627d", dim: "#6b6860", muted: "#949086", blocked: "#e06c75" };
 const day = { background: "#f4f1eb", foreground: "#3c3934", hover: "#ebe6de", selected: "#e0dbd2", raised: "#fbf9f5", accent: "#b8405e", dim: "#a19c92", muted: "#7a756c", blocked: "#c0392b" };
@@ -28,8 +16,7 @@ const box = (el) => JSON.stringify([sizing(el), el.kids.map(sizing)]);
 
 test("The track is 30 high on the w4 wash, radius 8, 2 inside; each item radius 6 with 8 inside", async () => {
   const { segmented, tokens, G, H, R } = await kit();
-  for (const theme of [night, day]) {
-    const c = tokens(theme);
+  for (const c of [night, day].map(tokens)) {
     const el = segmented("seg", ITEMS, "day", () => {}, c);
     assert.equal(one(el, "h"), H.control);
     assert.equal(one(el, "p"), G.hair);
@@ -47,8 +34,7 @@ test("The track is 30 high on the w4 wash, radius 8, 2 inside; each item radius 
 
 test("Selection is a tone: on its track the chosen tab is raised in the text colour, the others muted with the w4 wash and the text colour on hover", async () => {
   const { segmented, tokens } = await kit();
-  for (const theme of [night, day]) {
-    const c = tokens(theme);
+  for (const { theme, c } of eachTheme(tokens, night, day)) {
     const [chosen, other] = segmented("seg", ITEMS, "day", () => {}, c).kids;
     assert.equal(one(chosen, "bg"), theme.raised);
     assert.equal(one(chosen, "selected"), true);
@@ -65,12 +51,11 @@ test("Selection is a tone: on its track the chosen tab is raised in the text col
   }
 });
 
-test("Without a track the chosen tab is the w7 wash, the group has no ground, and each tab is the size high", async () => {
-  const { tab, tokens, H } = await kit();
-  const c = tokens(night);
+test("Without a track the chosen tab is the w12 wash, the group has no ground, and each tab is the size high", async () => {
+  const { tab, H, c } = await kit();
   const el = tab("t", ITEMS, "day", () => {}, c, { track: false, size: "sm" });
   for (const name of ["bg", "p", "h", "rounded"]) assert.equal(calls(el, name).length, 0, name);
-  assert.equal(one(el.kids[0], "bg"), c.w7);
+  assert.equal(one(el.kids[0], "bg"), c.w12);
   for (const item of el.kids) {
     assert.equal(one(item, "h"), H.compact);
     assert.equal(calls(item, "flex_1").length, 0, "tabs size to their label");
@@ -89,8 +74,7 @@ test("Sizes: sm 24, md 26 and lg 30, the default, are the track's thickness, and
 });
 
 test("Choosing another item changes no width and moves nothing", async () => {
-  const { segmented, tokens } = await kit();
-  const c = tokens(night);
+  const { segmented, c } = await kit();
   for (const item of ITEMS) {
     const sizes = ITEMS.map((value) => box(segmented("seg", ITEMS, value.key, () => {}, c).kids[ITEMS.indexOf(item)]));
     assert.equal(new Set(sizes).size, 1, `${item.label} is one box whether chosen or not`);
@@ -112,8 +96,7 @@ test("A press on another item hands its key; on the chosen one, nothing", async 
 
 test("Focus draws the accent ring on a border kept clear at rest", async () => {
   const { segmented, tokens } = await kit();
-  for (const theme of [night, day]) {
-    const c = tokens(theme);
+  for (const c of [night, day].map(tokens)) {
     for (const item of segmented("seg", ITEMS, "day", () => {}, c).kids) {
       assert.equal(calls(item, "border_2").length, 1);
       assert.equal(one(item, "border_color"), "#00000000");
@@ -123,8 +106,7 @@ test("Focus draws the accent ring on a border kept clear at rest", async () => {
 });
 
 test("Off: dim text, no hover, no pointer, no press", async () => {
-  const { segmented, tokens } = await kit();
-  const c = tokens(night);
+  const { segmented, c } = await kit();
   for (const item of segmented("seg", ITEMS, "day", () => assert.fail("pressed"), c, { disabled: true }).kids) {
     assert.equal(one(item, "disabled"), true);
     for (const name of ["hover", "on_click", "cursor_pointer"]) assert.equal(calls(item, name).length, 0, name);
@@ -133,9 +115,8 @@ test("Off: dim text, no hover, no pointer, no press", async () => {
 });
 
 test("A dot marks an unselected item; collapsed, the items are icons with their label as tip", async () => {
-  const { segmented, tokens, H, G } = await kit();
-  const c = tokens(night);
-  const items = [{ key: "spaces", label: "Projects", icon: "folder" }, { key: "agents", label: "Status", icon: "pulse", dot: true }];
+  const { segmented, H, G, c } = await kit();
+  const items = [{ key: "spaces", label: "Projects", icon: "folder" }, { key: "agents", label: "Status", icon: "activity", dot: true }];
   const open = segmented("v", items, "spaces", () => {}, c);
   assert.equal(open.kids[1].kids.at(-1).calls.some((call) => call[0] === "bg" && call[1] === c.blocked), true);
   assert.equal(segmented("v", items, "agents", () => {}, c).kids[1].kids.some((kid) => kid.calls.some((call) => call[0] === "bg" && call[1] === c.blocked)), false, "no dot on the chosen item");

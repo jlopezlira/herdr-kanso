@@ -1,10 +1,21 @@
 import { elements, escapeMarkup as escape, frame } from './storybook-markup.mjs';
 import { THEMES, colour, contrast } from './tokens.mjs';
-import { asleep, computerRow, header, projectRow, section, sessionRow, sidebarFooter, tile, viewSwitch } from '../stories/kit/compositions.js';
-import { dawn as dawnSky, stack, windowControls } from '../stories/kit/pieces.js';
-import { sampleSidebar } from '../stories/kit/samples.js';
+import { header, sidebarFooter } from '../stories/kit/compositions.js';
+import { tile } from '../stories/kit/tile.js';
+import { viewSwitch } from '../stories/kit/view-switch.js';
+import { projectRow } from '../stories/kit/project-row.js';
+import { computerRow } from '../stories/kit/computer-row.js';
+import { section } from '../stories/kit/section.js';
+import { asleep } from '../stories/kit/asleep.js';
+import { sessionRow } from '../stories/kit/session-row.js';
+import { button, dawn as dawnSky, mark, marks, row, stack, windowControls } from '../stories/kit/pieces.js';
+import { sampleSidebar, sessionTools } from '../stories/kit/samples.js';
 import { statedPages } from '../stories/kit/states.js';
 export { elements } from './storybook-markup.mjs';
+
+// Each named state of a stated page, drawn from its preset; coverage plans can point at them.
+export const statedRecords = () => Object.entries(statedPages).flatMap(([page, { args, markup, states }]) => states.map(({ label, args: preset, caption }) => (
+  { id: `kit/${page.replace('Compositions/', '')}/${label}`, source: 'kit', page, label, html: frame(markup({ ...args, ...preset })), caption })));
 
 export function kitRecords(records) {
   const originals = records.filter((record) => record.html !== undefined && !['kit', 'tokens'].includes(record.source));
@@ -32,6 +43,8 @@ export function kitRecords(records) {
       add(name, label, html, `${label} appearance of the shared ${name.toLowerCase()}.`);
     }
   }
+  add('Row', 'Wrapped', `<div class="kanso-panel">${row({ name: 'This retries forever when the bucket is empty: Retry-After is in seconds, so wait that long once and give up after three tries instead of looping on every 429 the server answers.', second: ['src/api/limits.ts:42', 'mara', '2 replies'], wrap: true })}</div>`,
+    'Proposed. A review thread: its comment wraps, up to 240 characters, over the path, author and replies.');
   const photo = 'https://images.placeholders.dev/96x96';
   const avatar = (size, inner) => `<span class="kanso-avatar kanso-avatar--round${size ? ` kanso-avatar--${size}` : ''}">${inner}</span>`;
   const img = `<img src="${photo}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
@@ -60,23 +73,58 @@ export function kitRecords(records) {
     ['kit/Header/Dawn collapsed', 'Collapsed, Dawn Mode', header({ collapsed: true, dawn: true }), 'The dawn behind the lights, centred on the rail.'],
   ]) if (html) results.push({ id, source: 'kit', page: 'Compositions/Header', label, html: frame(html), caption });
   const inSidebar = (html) => stack({ variant: 'sidebar frame' }, html), inRail = (html) => stack({ variant: 'rail frame' }, html);
+  const atlas = { name: 'Atlas', activity: 'Reviewing step 01', time: '3m' }, juno = { name: 'Juno', status: 'idle', depth: 2 }, iris = { program: 'p-codex', name: 'Iris', status: 'done', depth: 2 };
   for (const [page, label, html, caption, id] of [
-    ['Session row', 'Working', inSidebar(sessionRow({ name: 'Atlas', activity: 'Reviewing step 01', time: '3m' })), 'What it is on and for how long.'],
-    ['Session row', 'Needs you', inSidebar(sessionRow({ program: 'lu-terminal', name: 'Nova', activity: 'Run npm publish?', time: '2m', status: 'blocked' })), 'The question, in foreground.'],
+    ['Session row', 'Working', inSidebar(sessionRow(atlas)), 'What it is on and for how long.', 'proto/compositions-sidebar-rows/AgentTwoLines/Default'],
+    ['Session row', 'Working, under the pointer', inSidebar(sessionRow({ ...atlas, hover: true })), 'Pin and ⋯ in the time\'s place.'],
+    ['Session row', 'Needs you', inSidebar(sessionRow({ program: 'p-codex', name: 'Nova', activity: 'Run npm publish?', time: '2m', status: 'blocked' })), 'The question, in foreground.'],
     ['Session row', 'Finished', inSidebar(sessionRow({ program: 'p-codex', name: 'Iris', status: 'done', current: true })), 'One line, the mark.'],
-    ['Session row', 'Sub-session', inSidebar(sessionRow({ program: 'p-codex', name: 'Juno', status: 'idle', depth: 2 })), 'Under its parent.'],
+    ['Session row', 'Finished, a command still runs', inSidebar(sessionRow({ program: 'p-codex', name: 'tests', status: 'done', commands: 1 })), 'The count; the command in its tooltip.'],
+    ['Session row', 'Idle', inSidebar(sessionRow({ name: 'Orion', status: 'idle' })), 'Its name, muted.', 'proto/compositions-sidebar-rows/AgentOneLine/Default'],
+    ['Session row', 'Terminal', inSidebar(sessionRow({ program: 'lu-terminal', name: 'shell', status: 'none' })), 'A name, no ensō.'],
+    ['Session row', 'Pinned', inSidebar(sessionRow({ ...atlas, pinned: true })), 'The pin stays before the mark.'],
+    ['Session row', 'Keyboard ring', inSidebar(sessionRow({ name: 'Orion', status: 'idle', focus: true })), 'Where the keyboard is.'],
+    ['Session row', 'Sent a message', inSidebar(sessionRow({ name: 'Iris', activity: 'Message from Atlas', time: '1m', status: 'done' })), 'Not opened yet: the message and its time.'],
+    ['Session row', 'What it is on', inSidebar([sessionRow(atlas), sessionRow({ ...juno, activity: 'Waiting for you', time: '12m' }), sessionRow({ ...iris, activity: 'Boards 01 to 04 done', time: '6m' })].join('')), 'The user\'s choice: every row says what it is on.'],
+    ['Session row', 'Sub-session', inSidebar([sessionRow(atlas), sessionRow(juno), sessionRow(iris)].join('')), 'Under its parent.', 'proto/compositions-sidebar-rows/SubAgent/Default'],
+    ['Session row', 'Sub-session needs you', inSidebar([sessionRow(atlas), sessionRow({ ...juno, activity: 'Allow network access?', time: '1m', status: 'blocked' }), sessionRow(iris)].join('')), 'Its own mark and line.'],
+    ['Session row', 'Status and Threads', inSidebar([sessionRow({ name: 'Atlas', place: 'kansō', depth: 0 }), sessionRow({ name: 'Nova', place: 'amtelser · dark', status: 'idle', depth: 0 })].join('')), 'The project after the name, the computer when not this one.'],
+    ['Session row', 'Computer unreachable', inSidebar(sessionRow({ name: 'ops', status: 'idle', dimmed: true })), 'Dim, the ensō idle; its computer row says why.'],
+    ['Session row', 'Stuck on a step', inSidebar(sessionRow({ name: 'Atlas', activity: 'Reviewing step 01', step: { time: '14m', stuck: true }, time: '20m' })), 'How long on this step, in the blocked colour once it is long.'],
+    ['Session row', 'Under the pointer, pinned', inSidebar(sessionRow({ name: 'Atlas', status: 'done', pinned: true, hover: true })), 'Unpin takes the pin\'s place.'],
+    ['Session row', 'Conversation tools', inSidebar(sessionRow({ name: 'Iris', status: 'done', depth: 0, pinnable: false, tools: sessionTools, hover: true })), 'Settle, and the menu; pin stays in the menu.'],
+    ['Session row', "Can't read", inSidebar(sessionRow({ name: 'Iris', status: 'idle', depth: 0, place: "Can't read", placeTip: 'The transcript is gone', refresh: true, dimmed: true })), 'Refresh beside the word.'],
+    ['Session row', 'Dragged over', inSidebar(sessionRow({ name: 'Atlas', status: 'idle', drop: 'before' })), 'Where the dragged row lands.'],
+    ['Session row', 'Tree', inSidebar(stack({ variant: 'rows' }, sessionRow({ name: 'Atlas' }), sessionRow({ program: 'p-codex', name: 'Juno', status: 'idle', depth: 2, guides: [null, 'tee'] }), sessionRow({ program: 'p-codex', name: 'Iris', status: 'done', depth: 2, guides: [null, 'end'] }))), 'Each sub-session hangs from its parent.'],
     ['Project row', 'At rest', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12' })), 'Name, folder, branch and sync.'],
     ['Project row', 'Folded', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', count: 3 })), 'The most urgent mark and how many.'],
+    ['Project row', 'Under the pointer', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: { text: '↓12', tip: 'Pull 12 from origin/main', label: 'Pull' }, hover: true })), '+ and ⋯ under the pointer; ↓ pulls on one press.'],
+    ['Project row', 'Pulling', inSidebar(projectRow({ name: 'kansō', folder: 'herdr-kanso', branch: 'main', sync: '↓12', pending: true })), 'It breathes until git answers.'],
+    ['Project row', 'Worktree', inSidebar(stack({ variant: 'rows' }, projectRow({ name: 'kansō', branch: 'main' }), projectRow({ name: 'fix-toast', tree: 'end', dimmed: true }))), 'Under its checkout, on the guide.'],
+    ['Project row', 'Folder not found', inSidebar(projectRow({ name: 'search', dimmed: true, missing: true })), 'Locate finds where it went.'],
+    ['Project row', 'Dragged over', inSidebar(projectRow({ name: 'kansō', drop: 'after' })), 'Where the dragged project lands.'],
     ['Computer row', 'This computer', inSidebar(computerRow({ name: 'light', remote: false })), 'This computer first.'],
     ['Computer row', 'Off', inSidebar(computerRow({ name: 'dark', state: 'off' })), 'A choice, not a failure.'],
     ['Computer row', 'Unreachable', inSidebar(computerRow({ name: 'devbox', state: 'unreachable' })), 'Refresh as its button.'],
+    ['Computer row', 'Needs login', inSidebar(computerRow({ name: 'devbox', state: 'login' })), 'Sign in as its button.'],
+    ['Computer row', 'Turning on', inSidebar(computerRow({ name: 'dark', pending: true })), 'It breathes until hc answers.'],
+    ['Computer row', 'Under the pointer', inSidebar(computerRow({ name: 'dark', hover: true, sync: 'Sync dark: synced 2m ago' })), 'Turn off and +; Sync stays out while it is on.'],
+    ['Computer row', 'Keyboard on a tool', inSidebar(computerRow({ name: 'dark', hover: true, lit: 'lu-plus' })), 'Each tool is a stop after the row; Enter presses it.'],
     ['Asleep', 'Folded', inSidebar(asleep({ names: ['site', 'dojo'] })), 'One folded line, its count.'],
     ['Asleep', 'Open', inSidebar(asleep({ names: ['site', 'dojo'], open: true })), 'The names dim, Wake at the right.'],
     ['Section', 'Default', inSidebar(section({ title: 'Needs you', status: 'blocked' })), 'A heading in Status and Threads.'],
+    ['Asleep', 'A sleeping tab', inSidebar(asleep({ names: ['Atlas'], title: 'review', open: true, selected: 0 })), 'Named by its tab; the keyboard on a row.'],
+    ['Section', 'A project\'s conversations', inSidebar(section({ title: 'kansō', add: 'New conversation in kansō', hover: true })), '+ under the pointer starts one there.'],
+    ['Section', 'Folded', inSidebar(section({ title: 'Idle', count: 2 })), 'How many, once it is folded.'],
     ['View switch', 'Row', inSidebar(viewSwitch()), 'Sidebar open: the three views by name.'],
     ['View switch', 'Column', inRail(viewSwitch({ column: true })), 'Sidebar collapsed: the three views as icons.'],
+    ['View switch', 'Someone needs you', inSidebar(viewSwitch({ asks: true, tips: { spaces: 'Projects ⌃⌥P', agents: 'Status ⌃⌥S', threads: 'Threads ⌃⌥T' } })), 'Status carries the dot; each view\'s tooltip has its key.'],
+    ['View switch', 'Menu', inRail(viewSwitch({ column: true, open: true, asks: true })), 'Collapsed, the button opens the three views; Status is marked while someone needs you.'],
     ['Tile', 'Project', inRail(tile({ initial: 'A', status: 'blocked', count: 4, open: true })), 'A project in the rail.'],
     ['Tile', 'Status', inRail(tile({ status: 'working', count: 3 })), 'A state in the rail.'],
+    ['Tile', 'A shelf', inRail(tile({ icon: 'lu-pin', status: 'working', count: 2, marked: true, label: 'Pinned' })), 'A shelf or a group with no state leads with its icon.'],
+    ['Tile', 'Its most urgent state', inRail(tile({ initial: 'D', tone: 'yellow', status: 'working', count: 1, marked: true, label: 'dojo' })), 'The mark of the most urgent state inside, beside the count.'],
+    ['Tile', 'Unread', inRail(tile({ initial: 'A', status: 'done', count: 2, strong: true, label: 'kansō' })), 'Something inside is unread or woke: a ring.'],
     ['Footer', 'Default', inSidebar(sidebarFooter()), 'Settings.'],
     ['Footer', 'Update', inSidebar(sidebarFooter({ update: 'Update kansō to 3.31.0' })), 'An update adds a row on top.'],
     ['Sidebar', 'Open', sampleSidebar(), 'Header, views, rows and footer.'],
@@ -87,9 +135,6 @@ export function kitRecords(records) {
     ['Sidebar', 'Status collapsed', sampleSidebar({ collapsed: true, view: 'agents' }), 'The rail on Status.', 'kit/Rail/Collapsed'],
     ['Sidebar', 'Views menu', sampleSidebar({ collapsed: true, menu: true }), 'The rail: its one view button opens Projects, Status and Threads.'],
   ]) results.push({ id: id ?? `kit/${page}/${label}`, source: 'kit', page: page === 'Sidebar' ? 'Compositions/Sidebar' : `Compositions/Sidebar/${page}`, label, html: frame(html), caption });
-  for (const [page, { args, markup, states }] of Object.entries(statedPages)) {
-    for (const { label, args: preset, caption } of states) results.push({ id: `kit/${page.replace('Compositions/', '')}/${label}`, source: 'kit', page, label, html: frame(markup({ ...args, ...preset })), caption });
-  }
   const choices = elements(byId('proto/components-choosing-the-channel/ChoosingTheChannel/Default'), 'kanso-update');
   const sky = elements(byId('proto/tokens-dawn/TheBand/Default'), 'kanso-dawn--preview')[0];
   const mark = elements(byId('proto/approved-dawn/Reference/12'), 'kanso-settings__piece-choice')[0];
@@ -116,37 +161,57 @@ export function kitRecords(records) {
 }
 
 const contrastRecord = (tokens) => {
-  const surfaces = ['canvas', 'chrome', 'bg', 'raised', 'popover', 'hover', 'selected'];
-  const pairs = [...['fg', 'muted', 'dim'].flatMap((text) => surfaces.map((surface) => [text, surface, 4.5])), ...['input', 'focus', 'working', 'blocked', 'done', 'idle'].map((edge) => [edge, 'bg', 3])];
-  const sample = ([fore, surface, min]) => min === 4.5 ? `<span class="kanso-tokens__contrast kanso-text--${fore} kanso-fill--${surface}">Aa</span>` : `<span class="kanso-tokens__contrast kanso-ring--${fore} kanso-fill--${surface}"></span>`;
+  const surfaces = ['surface-1', 'surface-0', 'surface-2', 'surface-4', 'surface-3', 'hover', 'selected'];
+  const pairs = [...['fg', 'muted', 'dim'].flatMap((text) => surfaces.map((surface) => [text, surface, 4.5])), ...['line-strong', 'focus', 'working', 'blocked', 'done', 'idle'].flatMap((edge) => surfaces.map((surface) => [edge, surface, 3]))];
+  const sample = ([fore, surface, min]) => min === 4.5 ? `<span class="kanso-tokens__contrast kanso-text--${fore} kanso-fill--${surface}">Aa</span>` : `<span class="kanso-tokens__contrast kanso-fill--${surface}${marks[fore] ? '' : ` kanso-ring--${fore}`}">${marks[fore] ? mark({ status: fore }) : ''}</span>`;
   const ratio = ([fore, surface]) => THEMES.map((theme) => `<span class="kanso-tokens__value kanso-tokens__value--${theme}">${contrast(colour(tokens, theme, fore), colour(tokens, theme, surface)).toFixed(1)}:1</span>`).join('');
   const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Colour</th><th>On</th><th>Ratio</th><th>Minimum</th></tr></thead><tbody>${pairs.map((pair) => `<tr><td class="kanso-tokens__example">${sample(pair)}</td><td class="kanso-tokens__name">--${pair[0]}</td><td class="kanso-tokens__name">--${pair[1]}</td><td class="kanso-tokens__name">${ratio(pair)}</td><td>${pair[2]}:1</td></tr>`).join('')}</tbody></table>`;
   return { id: 'tokens/Contrast', source: 'tokens', page: 'Tokens/Contrast, light and dark', label: 'Reference', caption: 'Ratios from kanso/tokens.json.', html: frame(html) };
 };
 
+// The utility family that shows a type token: weights and tracking have their own, sizes use type.
+const SAMPLE_CLASS = { fw: 'weight', ls: 'tracking' };
+// One token group's reference page.
+const reference = (name, html) => ({ id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) });
+
+// Measurements reserved for the Storybook frame stay available to its CSS, outside the token references.
+const frameToken = ({ name }) => /^k-(?:w-window(?:-(?:wide|narrow|small))?$|room-|h-strip$|dawn-preview)/.test(name);
+const measure = (name, height = false) => `<span class="kanso-tokens__measure${height ? ' kanso-tokens__measure--height' : ''}" data-${height ? 'height' : 'width'}="var(--${name})"></span>`;
+const motionSample = (name) => {
+  if (/^k-(hover|ease)-/.test(name)) return button({ label: 'Hover', kind: 'tonal' });
+  if (name === 'k-arm-ms') return button({ label: 'Close', kind: 'tonal', armed: true });
+  if (name === 'k-spin-ms') return mark({ status: 'working' });
+  if (name === 'k-skel-ms') return '<span class="kanso-skeleton kanso-tokens__skeleton"></span>';
+  if (/^k-(fade|glide)-/.test(name)) return '<span class="kanso-tokens__glide"><i></i></span>';
+  if (/^k-beat-/.test(name)) return '<span class="kanso-tokens__beat"></span>';
+  const glint = '<span class="kanso-text--glint">checkout</span>';
+  return name === 'k-glint-ms' ? glint : `<span class="kanso-tokens__glint">${glint}${measure(name)}</span>`;
+};
+
 export function tokenRecords(tokens) {
-  const groups = { Colour: ['colour'], Type: ['type'], Spacing: ['space', 'height', 'switch'], Radius: ['radius'], Motion: ['motion'], Icons: ['icon'] };
+  const scale = { Colour: ['colour', 'opacity'], Type: ['type'], Spacing: ['space'], Radius: ['radius'], Motion: ['motion'], Icons: ['icon'] };
+  const sizes = Object.keys(tokens).filter((key) => key !== 'board' && !Object.values(scale).flat().includes(key));
+  const groups = { ...scale, Sizes: sizes };
+  const sample = ({ group, name: n }) => {
+    const [, kind, step] = /^k-(\w+)-(.+)$/.exec(n) ?? [];
+    if (group === 'colour') return `<span class="kanso-tokens__${n === 'shadow' ? 'shadow kanso-shadow' : `swatch kanso-fill--${escape(n)}`}"></span>`;
+    if (group === 'opacity') return `<span class="kanso-tokens__swatch kanso-tokens__${n === 'k-wash-blocked' ? 'blocked' : kind === 'tint' ? 'tint' : 'opacity'}" data-token="${n}"></span>`;
+    if (group === 'type') return kind === 'lh' ? `<span class="kanso-tokens__lines kanso-leading--${step}">Two lines<br>of text</span>` : `<span class="kanso-${SAMPLE_CLASS[kind] ?? 'type'}--${step}">Aa Quiet sessions</span>`;
+    if (group === 'space') return `<span class="kanso-tokens__space kanso-gap--${step}"><i></i><i></i></span>`;
+    if (group === 'radius' || n.endsWith('radius')) return `<span class="kanso-tokens__radius" data-radius="var(--${n})"></span>`;
+    if (group === 'icon') return `<svg class="kanso-icon kanso-icon--${step}" aria-hidden="true"><use href="#lu-bot"/></svg>`;
+    if (group === 'motion') return motionSample(n);
+    return measure(n, group === 'height' || group === 'skeleton' || /(?:-h|-height|-tall|-line)$/.test(n));
+  };
+  const role = (text) => text.replace(/:? ?ui\.js [\w.]+/g, '').replace(/ ?\(\d+ merged here\)/g, '').replace(/^4-based$/, 'base step').trim();
   return Object.entries(groups).map(([name, keys]) => {
-    if (keys[0] === 'colour') {
-      const names = [...new Set(Object.values(tokens.colour).flatMap((values) => values.map((row) => row.name)))];
-      const value = (theme, n) => tokens.colour[theme].find((row) => row.name === n);
-      const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${names.map((n) => `<tr><td><span class="kanso-tokens__swatch ${n === 'shadow' ? 'kanso-shadow' : `kanso-fill--${escape(n)}`}"></span></td><td class="kanso-tokens__name">--${escape(n)}</td><td class="kanso-tokens__name">${Object.keys(tokens.colour).map((theme) => `<span class="kanso-tokens__value kanso-tokens__value--${theme}">${escape(value(theme, n)?.value ?? '')}</span>`).join('')}</td><td>${escape((value('dark', n) ?? value('light', n)).role)}</td></tr>`).join('')}</tbody></table>`;
-      return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
-    }
-    const rows = keys.flatMap((key) => tokens[key].map((row) => ({ ...row, group: key })));
-    const sample = ({ group, name: n }) => {
-      const [, kind, step] = /^k-(\w+)-(.+)$/.exec(n);
-      if (group === 'type') return kind === 'lh' ? `<span class="kanso-tokens__lines kanso-leading--${step}">Two lines<br>of text</span>` : `<span class="kanso-${kind === 'fw' ? 'weight' : 'type'}--${step}">Aa Quiet sessions</span>`;
-      if (group === 'space') return `<span class="kanso-tokens__space kanso-gap--${step}"><i></i><i></i></span>`;
-      if (group === 'radius') return `<span class="kanso-tokens__radius kanso-radius--${step}"></span>`;
-      if (group === 'height') return `<span class="kanso-tokens__height kanso-height--${step}"></span>`;
-      if (group === 'switch') return '<span class="kanso-switch kanso-control--on"><i></i></span>';
-      if (group === 'icon') return `<svg class="kanso-icon kanso-icon--${step}" aria-hidden="true"><use href="#lu-bot"/></svg>`;
-      if (group === 'motion') return /^k-(hover|ease)-/.test(n) ? '<span class="kanso-tokens__wash"></span>' : n === 'k-arm-ms' ? '<span class="kanso-tokens__arm"></span>' : n === 'k-skel-ms' ? '<span class="kanso-skeleton kanso-skeleton--breathing kanso-tokens__skeleton"></span>' : n === 'k-spin-ms' ? '<svg class="kanso-mark kanso-mark--working"><use href="#e-work"/></svg>' : '<span class="kanso-text--glint">checkout</span>';
-      return '';
-    };
-    const role = (text) => text.replace(/:? ?ui\.js [\w.]+/g, '').replace(/ ?\(\d+ merged here\)/g, '').replace(/^4-based$/, 'base step').trim();
-    const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${rows.map((row) => `<tr><td class="kanso-tokens__example">${sample(row)}</td><td class="kanso-tokens__name">--${escape(row.name)}</td><td class="kanso-tokens__name">${escape(row.value)}</td><td>${escape(role(row.role))}</td></tr>`).join('')}</tbody></table>`;
-    return { id: `tokens/${name}`, source: 'tokens', page: `Tokens/${name}`, label: 'Reference', caption: 'Values and roles from kanso/tokens.json.', html: frame(html) };
+    const rows = keys.flatMap((key) => key === 'colour'
+      ? [...new Set(Object.values(tokens.colour).flatMap((values) => values.map((row) => row.name)))].map((n) => {
+        const values = Object.entries(tokens.colour).map(([theme, values]) => `<span class="kanso-tokens__value kanso-tokens__value--${theme}">${escape(values.find((row) => row.name === n)?.value ?? '')}</span>`).join('');
+        return { ...tokens.colour.dark.find((row) => row.name === n), group: key, values };
+      })
+      : tokens[key].filter((row) => !frameToken(row)).map((row) => ({ ...row, group: key, role: name === 'Sizes' ? `${key[0].toUpperCase()}${key.slice(1)}: ${row.role}` : row.role })));
+    const html = `<table class="kanso-tokens"><thead><tr><th></th><th>Token</th><th>Value</th><th>Use</th></tr></thead><tbody>${rows.map((row) => `<tr><td class="kanso-tokens__example" data-token="${row.name}">${sample(row)}</td><td class="kanso-tokens__name">--${escape(row.name)}</td><td class="kanso-tokens__name">${row.values ?? escape(row.value)}</td><td>${escape(role(row.role))}</td></tr>`).join('')}</tbody></table>`;
+    return reference(name, html);
   }).concat(contrastRecord(tokens));
 }

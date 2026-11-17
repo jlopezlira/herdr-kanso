@@ -2,9 +2,43 @@
 import { row as drawRow } from "./ui-row.js";
 import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
+import { stateEmpty, stateLine, stateBlock } from "./ui-state.js";
+import { toast as drawToast } from "./ui-toast.js";
+import { skeletonOf as drawSkeleton } from "./ui-skeleton.js";
+import { figure } from "./ui-metric.js";
+import { diffText, facts, plus } from "./ui-facts.js";
+import { card as drawCard } from "./ui-card.js";
+import { code as drawCode } from "./ui-code.js";
+import { tipText } from "./ui-tooltip.js";
+import { avatar as drawAvatar } from "./ui-avatar.js";
+import { chip as drawChip } from "./ui-chip.js";
+import { mark as drawMark } from "./ui-mark.js";
+import { tab as drawTabs } from "./ui-tab.js";
+import { stackOf } from "./ui-stack.js";
+import { svg } from "gpui-kit";
+import { ICON_ROW, glyphOf, toneColor } from "./ui.js";
 
-const HANDLERS = ["on", "onClick", "onHover", "onKey", "focusHandle"];
-const appIcon = (icon) => icon?.replace(/^lu-/, "");
+// Facts as words, as the Storybook writes them.
+export { diffText, facts, plus };
+
+// A composition's children: the Storybook joins their markup, the app keeps the pieces, each drawn where the list places it.
+export const list = (...children) => children.flat(Infinity).filter((child) => child !== null && child !== undefined && child !== false);
+// A label made of words and values, such as a name inside an action's title.
+export const phrase = (...parts) => parts.join(" ");
+// A tool: its icon and the label its tooltip reads.
+export const icon = (name, label) => ({ icon: name, label });
+
+const EVENTS = {
+  onPress: (el, fn) => el.on_mouse_down("left", fn),
+  onRelease: (el, fn) => el.on_mouse_up("left", fn),
+  onMenu: (el, fn) => el.on_mouse_down("right", fn),
+  onMove: (el, fn) => el.on_mouse_move(fn),
+};
+// `onChange(key, cx)`: a choice among tabs or menu items; `onOpen(open, cx)`: a menu under a button opens or shuts.
+const HANDLERS = ["on", "onClick", "onChange", "onOpen", "onHover", "onKey", "focusHandle", ...Object.keys(EVENTS)];
+const withEvents = (el, events) => Object.entries(events).filter(([, fn]) => fn).reduce((drawnEl, [name, fn]) => EVENTS[name](drawnEl, fn), el);
+const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
+const iconOf = (icon) => (icon === "none" ? null : appIcon(icon));
 const withIcon = (part) => (part?.icon ? { ...part, icon: appIcon(part.icon) } : part);
 const keyOf = ({ icon, label }) => (icon ? appIcon(icon) : label);
 const parts = (slot) => [slot].flat(Infinity).filter((part) => part !== null && part !== undefined && part !== false);
@@ -18,32 +52,102 @@ const given = (more) => {
 
 const wired = (on) => (tool) => (tool && on[keyOf(tool)] ? { ...tool, onClick: on[keyOf(tool)] } : tool);
 
-const withHandlers = (id, raw, actions, action) => {
+// A detail fact with a `label` is a press, wired by that label as a tool is.
+const pressFact = (part) => typeof part === "object" && Boolean(part.label);
+const withHandlers = (id, raw, actions, action, detail) => {
   const on = Object.fromEntries(Object.entries(raw).map(([key, fn]) => [appIcon(key), fn]));
   const own = parts(actions).map(withIcon);
   const lone = withIcon(action);
-  const missing = Object.keys(on).filter((key) => ![...own, lone].some((tool) => tool && keyOf(tool) === key));
+  const facts = parts(detail).map(withIcon);
+  const presses = [...own, lone, ...facts.filter(pressFact)];
+  const missing = Object.keys(on).filter((key) => !presses.some((tool) => tool && keyOf(tool) === key));
   if (missing.length) throw new Error(`kit: ${id} has no tool ${missing.join(", ")}`);
-  return { actions: own.map(wired(on)), action: wired(on)(lone) };
+  return { actions: own.map(wired(on)), action: wired(on)(lone), detail: facts.map((part) => (pressFact(part) ? wired(on)(part) : part)) };
 };
 
 export const row = ({ icon, flag, detail, action, actions, start, tools, ...props }) => (id, c, more = {}) => {
-  const { on = {}, ...handlers } = given(more);
-  return drawRow(id, c, {
-    ...props, ...handlers, ...withHandlers(id, on, actions, action), icon: appIcon(icon), flag: appIcon(flag),
-    detail: Array.isArray(detail) ? detail.map(withIcon) : withIcon(detail),
+  const { on = {}, onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
+  const drawnRow = drawRow(id, c, {
+    ...props, ...handlers, ...withHandlers(id, on, actions, action, detail), icon: iconOf(icon), flag: appIcon(flag),
     start: drawn(id, c, "start", start), tools: drawn(id, c, "tools", tools),
   });
+  return withEvents(drawnRow, { onPress, onRelease, onMenu, onMove });
 };
 
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.
-export const button = ({ label, icon = "none", ...props }) => (id, c, more = {}) => {
+// `content`: kit pieces or elements drawn in place of the icon and label, such as a picture and its name.
+export const button = ({ label, icon = "none", content = [], ...props }) => (id, c, more = {}) => {
   const { onClick = null } = given(more);
-  return drawButton(id, label, onClick, c, { ...props, icon: icon === "none" ? null : appIcon(icon) });
+  return drawButton(id, label, onClick, c, { ...props, icon: iconOf(icon), content: drawn(id, c, "content", content) });
 };
 
-// Each item carries its own `onClick`: a menu's items are data, not tools.
+// Explain to <agent>: the bot icon and the agent named in words; its press starts that agent on the question.
+export const explainButton = ({ agent, size = "md" }) => button({ label: `Explain to ${agent}`, kind: "tonal", size, icon: "lu-bot" });
+
+// Each item carries its own `onClick`, or, with a `key`, calls `onChange` with it: a menu's items are data, not tools.
 export const menu = ({ title = null, items = [] }) => (id, c, more = {}) => {
+  const { onChange = null } = given(more);
+  const chosen = (item) => (onChange && item.key && !item.onClick ? { ...item, onClick: (cx) => onChange(item.key, cx) } : item);
+  return drawMenu(id, { title, items: items.map(withIcon).map(chosen) }, c);
+};
+
+// A drawing that takes no handler: the app's piece with these props.
+const still = (draw) => (props) => (id, c, more = {}) => {
   given(more);
-  return drawMenu(id, { title, items: items.map(withIcon) }, c);
+  return draw(c, props);
+};
+export const avatar = ({ initial, image = null, size = "md", tone = null }) => still(drawAvatar)({ initial, image, size, tone: tone || null });
+export const chip = ({ label, quiet = false, tone = null }) => still(drawChip)({ label, quiet, tone: tone || null });
+export const mark = ({ status, size = "md" }) => still(drawMark)({ status, size });
+// An icon on its own, at a row's size, in the muted ink or its `tone`.
+export const glyph = (icon, tone = "") => still((c) => svg(glyphOf(appIcon(icon))).size(ICON_ROW).flex_none().text_color(tone ? toneColor(c, tone) : c.muted))();
+
+// `icon` draws each item's icon and `label` its name; icons without names are a column of squares, each name its tip. `onChange(key, cx)` picks one.
+export const tabs = ({ items = [], value = null, size = "md", track = false, disabled = false, icon = false, label = false }) => (id, c, more = {}) => {
+  const { onChange = null } = given(more);
+  const shown = items.map((item) => ({ ...item, icon: icon ? appIcon(item.icon) : null }));
+  return drawTabs(id, shown, value, onChange, c, { size, track, disabled, collapsed: icon && !label });
+};
+
+// A wrapper that only places other pieces, as the Storybook's: `label` is a focusable one's tooltip and spoken name.
+// A pressable one takes `onClick` itself; any other gives its handlers to its children.
+export const stack = ({ variant, on = false, label = "", ...flags }, ...children) => (id, c, more = {}) => {
+  const { onPress, onRelease, onMenu, onMove, ...handlers } = given(more);
+  return stackOf(id, c, { variant, on, label, ...flags }, list(...children), handlers, (el) => withEvents(el, { onPress, onRelease, onMenu, onMove }));
+};
+
+// The state patterns and the toast: the one action or fix takes `onClick`.
+const pattern = (draw) => (props) => (id, c, more = {}) => draw(id, c, { ...props, onClick: given(more).onClick ?? null });
+export const emptyState = ({ icon = "", text, action = "" }) => pattern(stateEmpty)({ icon: appIcon(icon), text, action });
+export const failureLine = ({ text, fix = "", detail = "" }) => pattern(stateLine)({ text, fix, detail });
+export const failureBlock = ({ text, source = "", fix = "" }) => pattern(stateBlock)({ text, source, fix });
+// A press on the toast or its fix goes home.
+export const toast = ({ icon = "none", ...props }) => pattern(drawToast)({ ...props, icon: iconOf(icon) });
+export const skeletonOf = ({ shape, count }) => (id, c, more = {}) => {
+  given(more);
+  return drawSkeleton(id, c, { shape, count });
+};
+
+// The one number: its unit beside it, its facts (separated by |) on a quiet line under it. App only: `tone` and `tip` for the value.
+export const metric = ({ value, unit = "", facts = "", loading = false, tone = "", tip = "" }) => (id, c, more = {}) => {
+  given(more);
+  return figure(id, c, { value, unit, facts, loading, tone, tip });
+};
+
+// `content`: kit pieces drawn in place of the prose body.
+export const card = ({ content = [], ...props }) => (id, c, more = {}) => {
+  given(more);
+  return drawCard(id, c, { ...props, content: drawn(id, c, "content", content) });
+};
+
+export const code = (props) => (id, c, more = {}) => {
+  given(more);
+  return drawCode(id, c, props);
+};
+
+// Herdr's `.tooltip()` takes only a string, so the tooltip is its words: `.tooltip(tooltip({ label, detail, chord }))`.
+// `chord` is the key table's chord ("cmd-shift-p", from ui-tooltip.js `boundChord`), written as this computer writes it. Anything else throws.
+export const tooltip = ({ label, detail = "", chord = "", ...rest }) => {
+  if (Object.keys(rest).length) throw new Error(`kit: a tooltip takes label, detail and chord, not ${Object.keys(rest).join(", ")}`);
+  return tipText({ label, detail, chord });
 };

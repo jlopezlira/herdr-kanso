@@ -1,12 +1,4 @@
-// What the sidebar may paint, and the pull a press runs. Drawing stays next door.
-export const ASLEEP_ROW = 32;
-
-export const showPlus = (active, hovered) => Boolean(active || hovered);
-export const showDots = (hovered) => Boolean(hovered);
-
-export function projectControls({ active, hovered, place }) {
-  return { plus: Boolean(place) && showPlus(active, hovered), dots: showDots(hovered) };
-}
+// What the sidebar's rows say and the pull a press runs. Drawing stays in the compositions.
 
 export const pullKey = (folder, on) => `pull:${on ?? ""}:${folder ?? ""}`;
 
@@ -50,16 +42,6 @@ export async function runPull(exec, notify, place) {
   return result;
 }
 
-export function activityTone(status) {
-  if (status === "blocked") return "foreground";
-  if (status === "working") return "muted";
-  if (status === "done" || status === "idle") return "dim";
-  return "muted";
-}
-
-// A state on the row is a word: the blocked colour is only for an edge and a mark.
-export const machineWordTone = () => "dim";
-
 export const canWake = (row) => Boolean(row?.asleep);
 
 export function enterOpens(row) {
@@ -68,8 +50,6 @@ export function enterOpens(row) {
   if (row?.address) return { peek: row.address };
   return null;
 }
-
-export const asleepControls = (row) => (canWake(row) ? [{ id: "wake", label: "Wake" }] : []);
 
 // The project row's task: its repository when the name differs, the branch, or a detached commit's short id.
 export function gitTask(g, name, tree) {
@@ -111,9 +91,6 @@ export function rowDirectory(project, machine) {
   return [project, machine].filter(Boolean).join(" · ") || null;
 }
 
-// The time follows what the session is on; with nothing on the second line it keeps its place at the end.
-export const timePlace = (activity, time) => (!time ? null : activity ? "line" : "end");
-
 const hm = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -140,11 +117,6 @@ export function threadActions({ settled, status, pinned }) {
   return [{ id: "settle", icon: "check", tip: "Settle" }];
 }
 
-// A kept project with nothing open: + and the menu under the pointer; a missing folder offers Locate instead of +.
-export function closedControls({ hovered, missing }) {
-  return { plus: Boolean(hovered) && !missing, dots: Boolean(hovered), locate: Boolean(missing) };
-}
-
 export const signInCommand = (name) => ({ argv: ["hc", "machine", "login", name], place: "right" });
 
 export const noProjectsOn = (title) => `No projects on ${title} yet`;
@@ -156,9 +128,3 @@ export function sortOf(view, { order, statusOrder, threadOrder }, { ORDERS, STAT
   return { orders: ORDERS, current: order, key: "order", head: "Agents, pinned first, then by", plain: order === DEFAULT_ORDER };
 }
 
-// The view switch's keys, as keys.json binds them (keys.windows.json on Windows).
-const VIEW_CHORDS = {
-  windows: { spaces: "ctrl-shift-r", agents: "ctrl-shift-s", threads: "ctrl-shift-h" },
-  other: { spaces: "ctrl-alt-p", agents: "ctrl-alt-s", threads: "ctrl-alt-t" },
-};
-export const viewChord = (view, platform) => (VIEW_CHORDS[platform === "windows" ? "windows" : "other"][view] ?? null);

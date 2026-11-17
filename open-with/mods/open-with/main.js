@@ -8,7 +8,7 @@ import { exec, run, notify, theme, props, closeOverlay, focused, panes, spaces, 
 import { walkLayout, commitLayout } from "./layout.js";
 import { listKey, moveTo } from "./listkeys.js";
 import { isText } from "./kinds.js";
-import { aliasText, machineTitle } from "./pure.js";
+import { aliasText, machineTitle, focusOn } from "./pure.js";
 import { tokens } from "./ui.js";
 import { menuList } from "./ui-menu.js";
 
@@ -56,7 +56,7 @@ const LIST_ROWS = 13;
 const TILE_TONES = ["blue", "teal", "violet", "yellow", "green", "red"];
 
 // One shell pass: prints `app|cli|flatpak <tab> key <tab> path` per hit.
-const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file-text.svg", builtin: true };
+const PREVIEW = { id: "preview", name: "Preview in the panel", icon: "mods/kanso-chrome/icons/file.svg", builtin: true };
 
 function showPreview(file, machine) {
   if (!walkLayout(layout(), "panel-body")) return false;
@@ -76,8 +76,7 @@ export default class OpenWith extends View {
     this.found = shared(FOUND) ?? null;
     this.at = 0;
     this.icons = {};
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.target = this.resolveTarget();
     cx.spawn(async (cx) => {
       try {

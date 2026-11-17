@@ -1,5 +1,5 @@
 // The sidebar footer as data: its rows in their words, its sizes, and the Settings menu's entries.
-import { G, H, CHROME_SQUARE } from "./ui.js";
+import { G, H } from "./ui.js";
 import { parseRelease } from "./release.js";
 
 export const KANSO_SETTINGS = "kanso-tabs.settings";
@@ -30,11 +30,11 @@ export const footerRows = ({ update = null, busy = false } = {}) => [
 export const footerHeight = (rows, refusedPx = 0) => PAD.top + rows * H.line + PAD.bottom
   + (refusedPx ? REFUSAL.above + Math.ceil(refusedPx) + REFUSAL.below : 0);
 
-/** The rail footer's height: its squares, a hair apart. */
-export const railHeight = (rows) => PAD.top + rows * CHROME_SQUARE + (rows - 1) * PAD.railGap + PAD.railBottom;
+/** The rail footer's height: its squares (the kit's large icon button), a hair apart. */
+export const railHeight = (rows) => PAD.top + rows * H.line + (rows - 1) * PAD.railGap + PAD.railBottom;
 
 /** A refused update's failure block: our words, the tool's, and Update to try again. */
-export const refusalBlock = (why, retry = null) => ({ what: "kansō didn't update", why, fixes: [{ label: "Update", onClick: retry }] });
+export const refusalBlock = (why) => ({ text: "kansō didn't update", source: why, fix: "Update" });
 
 /** The chord bound to kansō settings, or null. `bindings`: Herdr's keys(). */
 export const settingsChord = (bindings) => bindings.find((binding) => binding.action === KANSO_SETTINGS)?.keys ?? null;

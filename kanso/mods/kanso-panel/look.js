@@ -1,3 +1,5 @@
+import { restorePath, nearestRemaining, tilde } from "./lib.js";
+import { pageFrame, toolbar } from "./ui-page.js";
 import { localService, serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -8,13 +10,12 @@ import { bring, machineOf, copyFailure, drawablePath, remoteDue, ArmPoll, pollSt
 // they are about. Herdr tells no mod about a click on a terminal's link, so it reads what the agent
 // printed: its screen, and the conversation on disk, from the byte it stored last time.
 import { div, image } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
+import { v_flex, h_flex } from "gpui-base";
 import { hc, focused, panes, terminals, theme, appHome, home, shared, setShared, watchFolder, openOverlay, window, layout } from "herdr";
-import { tilde } from "./lib.js";
-import { G, H, R, T, tokens, breathe } from "./ui.js";
+import { G, H, T, tokens } from "./ui.js";
 import { button, quietLink, iconButton } from "./ui-button.js";
-import { skeleton } from "./ui-skeleton.js";
-import { stateEmpty } from "./ui-state.js";
+import { row } from "./ui-row.js";
+import { button as kitButton, emptyState, skeletonOf } from "./kit.js";
 import { programIcon, givenNames, nameOf } from "./marks.js";
 import { deliver, isAgent, sendKey, waitingNote } from "./deliver.js";
 import { openPath, toPng } from "./share.js";
@@ -25,6 +26,10 @@ import { Front } from "./front.js";
 import { transcriptPaths, MOST } from "./transcript.js";
 
 const LINES = 400;
+const NOTE_ROWS = 5; // notes shown before the list scrolls
+// A pin's number, on the picture and on its note's row: the accent once it has a note.
+const pinBadge = (c, p, i) => div().size(G.lg).flex_none().rounded_full().bg(p.note ? c.accent : c.muted)
+  .flex().items_center().justify_center().text_size(T.body).font_bold().text_color(c.canvas).child(String(i + 1));
 const TICK_MS = 1000; // which agent is in focus: Herdr's state, no process
 const DIR = "data/kanso-panel/look"; // the copies image() draws, under the app's folder
 const KEPT = "kanso.look"; // { follow, pinned }: whose pictures these are, kept while the panel is closed
@@ -68,9 +73,9 @@ export class Look {
 
   saveState() { return this.selected?.path ? { path: this.selected.path, on: machineOf(this.agent()) } : null; }
 
-  async restoreState(state) {
-    const path = typeof state?.path === "string" ? state.path : "";
-    if (!path) return false;
+  async restoreState(state) { return restorePath.call(this, state, this.restoreImage); }
+
+  async restoreImage(path, state) {
     const ok = await (await serviceOn(fileApi, state?.on || null)).test(path).catch(() => false);
     if (!lookMemory(state, () => ok) || !shows(itemOf(path))) return false;
     this.keptPath = path;
@@ -124,16 +129,23 @@ export class Look {
 
   armLocal(cx) { this.armWhen(cx, this.screenDue(), (tick) => this.probeLocal(tick)); }
 
+  agentFile(address) { return this.transcript?.address === address ? this.transcript.file : null; }
+
+  readChanged(outcome, cx) {
+    if (!outcome) return true;
+    if (outcome === "changed") this.read(cx);
+    return false;
+  }
+
   probeLocal(cx) {
     const address = this.agent();
-    const file = this.transcript?.address === address ? this.transcript.file : null;
+    const file = this.agentFile(address);
     if (!this.screenDue()) return;
     if (!file) { this.read(cx); return; }
     cx.spawn(async (cx) => {
       const outcome = await this.take(address, () => localService(fileApi).stat(file), listFailure(new Error("timed out"), null));
-      if (!outcome) return;
-      if (outcome === "changed") this.read(cx);
-      else { this.poll = pollNext(this.poll, outcome); this.armLocal(cx); if (outcome === "failed") cx.notify(); }
+      if (this.readChanged(outcome, cx)) return;
+      if (outcome !== "changed") { this.poll = pollNext(this.poll, outcome); this.armLocal(cx); if (outcome === "failed") cx.notify(); }
     });
   }
 
@@ -163,13 +175,12 @@ export class Look {
 
   probe(cx) {
     const address = this.agent(), on = machineOf(address);
-    const file = this.transcript?.address === address ? this.transcript.file : null;
+    const file = this.agentFile(address);
     if (!file || !remoteDue(on, window()?.active, this.paneHidden())) return;
     cx.spawn(async (cx) => {
       const outcome = await this.take(address, async () => (await serviceOn(fileApi, on)).stat(file), copyFailure(new Error("timed out"), on));
-      if (!outcome) return;
-      if (outcome === "changed") this.read(cx);
-      else { this.poll = pollNext(this.poll, outcome); this.armCheck(cx); }
+      if (this.readChanged(outcome, cx)) return;
+      if (outcome !== "changed") { this.poll = pollNext(this.poll, outcome); this.armCheck(cx); }
       cx.notify();
     });
   }
@@ -237,9 +248,9 @@ export class Look {
         if (this.selected && !still(this.selected)) {
           const gone = this.selected.path;
           const at = previous.findIndex((i) => i.path === gone);
-          const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
+          const next = nearestRemaining(previous, at, still);
           this.picked = false;
-          if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
+          if (next) this.selectRemaining(next, cx);
           else { this.hold(); this.selected = null; this.shown = null; this.pins = []; }
         } else if (fresh && !this.picked && !this.pins.length) this.select(fresh, cx, false);
         const live = new Set(this.list().map((i) => i.path));
@@ -328,8 +339,8 @@ export class Look {
         this.dropBlind(path);
         this.selected = null; this.shown = null; this.pins = [];
         const still = (i) => this.list().some((k) => k.path === i.path);
-        const next = previous.slice(at + 1).find(still) ?? previous.slice(0, Math.max(at, 0)).toReversed().find(still) ?? null;
-        if (next) this.select(this.list().find((i) => i.path === next.path), cx, false);
+        const next = nearestRemaining(previous, at, still);
+        this.selectRemaining(next, cx);
         cx.notify();
         return;
       }
@@ -482,23 +493,19 @@ export class Look {
 
   // One pin's row: its number, its note (or that it has none yet), a click to write it again, an x to drop it.
   noteRow(p, i, c) {
-    return h_flex().id(`look-note-${i}`).flex_none().min_h(H.compact).px(G.sm).gap(G.sm).items_center().rounded(R.control).cursor_pointer()
-      .hover((s) => s.bg(c.subtle)).on_click((_e, cx) => this.askNote(i, cx))
-      .child(div().flex_none().size(G.lg).rounded_full().bg(p.note ? c.accent : c.border).flex().items_center().justify_center().text_size(9.5).font_bold().text_color(c.canvas).child(String(i + 1)))
-      .child(div().flex_1().min_w(0).text_size(T.body).text_color(p.note ? c.text : c.dim).child(p.note ?? "No note yet"))
-      .child(div().id(`look-drop-${i}`).flex_none().px(G.xs).text_size(T.card).text_color(c.muted).cursor_pointer().hover((s) => s.text_color(c.text))
-        .on_click((_e, cx) => { cx.stop_propagation(); this.drop(i, cx); }).child("×"));
+    return row(`look-note-${i}`, c, {
+      start: [pinBadge(c, p, i)], name: p.note ?? "No note yet", dimmed: !p.note,
+      action: { kind: "icon", icon: "x", label: "Remove this pin", onClick: (cx) => this.drop(i, cx) },
+      onClick: (cx) => this.askNote(i, cx),
+    }).flex_none();
   }
 
   // One circle per picture. The one shown is filled with that picture's color.
   dot(item, c) {
     const on = this.selected?.path === item.path;
     const color = item.color || c.accent;
-    return Button.new(`look-dot-${keyOf(item.path)}`).size(H.compact).flex_none().items_center().justify_center().cursor_pointer()
-      .accessibility_label(item.name)
-      .when(!on, (el) => el.hover((s) => s.opacity(0.7)))
-      .on_click((_e, cx) => this.select(item, cx, true))
-      .child(div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color)));
+    const face = div().size(G.sm).rounded_full().border_1().border_color(on ? color : c.muted).when(on, (el) => el.bg(color));
+    return kitButton({ label: item.name, kind: "icon", size: "compact", content: [face] })(`look-dot-${keyOf(item.path)}`, c, { onClick: (cx) => this.select(item, cx, true) });
   }
 
   dots(list, c) {
@@ -509,8 +516,7 @@ export class Look {
   picture(c) {
     const s = this.shown;
     if (!s?.image) return null;
-    const mark = (p, i) => div().absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-G.sm).mt(-G.sm).size(G.lg).rounded_full().bg(p.note ? c.accent : c.muted)
-      .flex().items_center().justify_center().text_size(9.5).font_bold().text_color(c.canvas).child(String(i + 1));
+    const mark = (p, i) => pinBadge(c, p, i).absolute().left(`${p.x * 100}%`).top(`${p.y * 100}%`).ml(-G.sm).mt(-G.sm);
     return div().id("look-picture").relative().w_full().cursor_crosshair()
       .on_mouse_down("left", (e, cx) => this.pin(e, cx))
       .child(image(s.image).w_full())
@@ -518,20 +524,17 @@ export class Look {
   }
 
   empty(c) {
-    return v_flex().flex_1().w_full().justify_center().child(stateEmpty("look-empty", "eye", this.emptyLine(), c));
+    return v_flex().flex_1().w_full().justify_center().child(emptyState({ icon: "eye", text: this.emptyLine() })("look-empty", c));
   }
 
-  drawing(c) {
-    const { block } = skeleton(c);
-    return breathe(v_flex().id("kanso-skeleton").flex_1().w_full().items_center().justify_center()).child(block(240, 180, 8));
+  drawing(c) { return v_flex().flex_1().w_full().items_center().justify_center().child(skeletonOf({ shape: "picture" })("kanso-skeleton", c)); }
+
+  selectRemaining(next, cx) {
+    if (next) this.select(this.list().find((item) => item.path === next.path), cx, false);
   }
 
   bones(c) {
-    const { header } = skeleton(c);
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().flex_none().px(G.lg).py(G.sm).gap(G.sm).items_center().border_b(1).border_color(c.border)
-        .child(header(72, 13)))
-      .child(this.drawing(c));
+    return pageFrame(c).child(toolbar(c).child(skeletonOf({ shape: "header" })("kanso-skeleton-header", c))).child(this.drawing(c));
   }
 
   view(c) {
@@ -557,17 +560,17 @@ export class Look {
     const status = this.note?.text ?? (this.pins.length ? "" : item ? "Pin a spot" : "");
     return v_flex().id("kanso-look").track_focus(this.handle).size_full().min_h(0).bg(c.canvas).text_color(c.text)
       .on_key_down((e, cx) => { if (sendKey(e)) { this.send(cx); cx.stop_propagation(); } })
-      .child(h_flex().flex_none().px(G.lg).py(G.sm).gap(G.sm).items_center().border_b(1).border_color(c.border)
+      .child(toolbar(c)
         .child(programIcon(who?.pane?.program, 15, c.muted) ?? div())
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().font_semibold().text_size(T.card).child(who?.name ?? "Images"))
           .child(div().truncate().text_size(10.5).text_color(c.dim).child([who ? tilde(terminals().find((k) => k.address === address)?.cwd ?? "") : "", this.held ? asOf(this.held.at, Date.now()) : ""].filter(Boolean).join(" · "))))
         .when(Boolean(address), (el) => el.child(iconButton("look-pin", "pin", this.pinned ? "Follow the pane in focus" : "Stay on this agent",
           (cx) => { this.pinned = this.pinned ? null : address; this.keep(); cx.notify(); }, c, { active: Boolean(this.pinned) })))
-        .child(iconButton("look-refresh", "refresh", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
+        .child(iconButton("look-refresh", "refresh-cw", this.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); this.arm = null; this.read(cx); if (item && shows(item) && !this.shown?.deferred) this.draw(item, cx); }, c, { spin: this.reading })))
       .child(v_flex().id("look-view").flex_1().min_h(0).w_full().overflow_hidden().items_center().justify_center().child(this.view(c)))
       .when(list.length > 0, (el) => el.child(this.dots(list, c)))
-      .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.compact * 5 + G.xs * 4).px(G.lg).py(G.sm).gap(G.xs).overflow_y_scrollbar().border_t(1).border_color(c.border)
+      .when(this.pins.length > 0, (el) => el.child(v_flex().id("look-notes").flex_none().max_h(H.line * NOTE_ROWS).px(G.lg).py(G.sm).overflow_y_scrollbar().border_t(1).border_color(c.border)
         .children(this.pins.map((p, i) => this.noteRow(p, i, c)))))
       .when(Boolean(item), (el) => el.child(h_flex().id("look-bar").flex_none().h(H.control).px(G.lg).gap(G.md).items_center().border_t(1).border_color(c.border)
         .child(div().flex_1().min_w(0).truncate().text_size(T.body).text_color(c.dim).child(tilde(item.path)))

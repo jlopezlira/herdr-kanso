@@ -45,7 +45,7 @@ export class Database {
 
   async sql(text, json = false) {
     const r = await this.execute(text, { json });
-    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
+    sqliteOk(r);
     return json ? (r.stdout.trim() ? JSON.parse(r.stdout) : []) : r.stdout;
   }
 
@@ -59,3 +59,8 @@ export class Database {
     return pending;
   }
 }
+
+export const sqliteOk = (result) => {
+  if (result.code !== 0) throw new Error((result.stderr || "sqlite3 failed").trim().split("\n")[0]);
+  return result;
+};

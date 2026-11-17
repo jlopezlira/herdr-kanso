@@ -4,10 +4,10 @@ import { exec, home, appHome, shared, setShared, window, theme, layout, spaces }
 import { mkdir, readFile, readdir, unlink } from "fs/promises";
 import { pathApi } from "./platform-paths.js";
 import { checked } from "./platform-command.js";
-import { G, H, R, T, tokens } from "./ui.js";
+import { G, H, T, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
-import { skeleton } from "./ui-skeleton.js";
+import { row, skeletonOf } from "./kit.js";
 import { Front } from "./front.js";
 import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
 import { pieces, runs } from "./pieces.js";
@@ -80,8 +80,7 @@ export default class Simulator extends View {
       this.note = "Devices did not answer."; this.devices ??= []; this.reading = false; this.readAt = Date.now();
       next.notify(); this.schedule(next, 0);
     });
-    this.schedule(cx, 1000);
-    cx.spawn(async (next) => {
+    this.soon(cx, async (next) => {
       try {
         const tools = this.tools ?? await probeTools(this.platform, home(), exec);
         if (!this.inFront() || token !== this.readToken) return;
@@ -103,6 +102,12 @@ export default class Simulator extends View {
     });
   }
 
+  // Both slow tasks: the next tick is scheduled first, then the work runs in the background.
+  soon(cx, work) {
+    this.schedule(cx, 1000);
+    cx.spawn(work);
+  }
+
   pick(device, cx) {
     this.selected = device.id; this.press = null; this.error = null;
     this.loop.ready(Date.now(), this.inFront(), device.state === "Booted" ? device.id : null);
@@ -117,8 +122,7 @@ export default class Simulator extends View {
     const file = this.paths.join(this.directory, filename);
     this.deadline?.cancel();
     this.deadline = cx.timer.after(FRAME_MS, (next) => next.notify());
-    this.schedule(cx, 1000);
-    cx.spawn(async (next) => {
+    this.soon(cx, async (next) => {
       try {
         await mkdir(this.directory, { recursive: true });
         if (!this.inFront()) { this.loop.land(key, null, Date.now()); return; }
@@ -228,7 +232,7 @@ export default class Simulator extends View {
 
   line(text, c, error = false) { return div().text_size(T.body).text_color(error ? c.red : c.muted).child(text); }
 
-  loading(c) { return skeleton(c).block(H.control * 3, H.control * 5, R.card); }
+  loading(c) { return skeletonOf({ shape: "device" })("kanso-skeleton", c); }
 
   controls(device, c) {
     const link = (label, fn) => quietLink(`sim-${label}`, label, fn, c, { disabled: this.acting });
@@ -270,15 +274,11 @@ export default class Simulator extends View {
       .child(h_flex().flex_none().items_center().gap(G.sm)
         .child(div().flex_1().text_size(T.title).font_semibold().child("Simulator"))
         .child(quietLink("sim-refresh", "Refresh", (next) => { this.readAt = 0; this.tick(next); }, c, { disabled: this.reading })))
-      .when(this.devices === null, (el) => el.child(skeleton(c).row()))
+      .when(this.devices === null, (el) => el.child(skeletonOf({ shape: "row", count: 2 })("kanso-skeleton-devices", c)))
       .when(Boolean(this.devices), (el) => el.child(v_flex().id("sim-devices").flex_none().max_h(H.control * 5).overflow_y_scrollbar().gap(G.xs)
-        .children((this.devices ?? []).map((item) => h_flex().id(`sim-device-${item.id}`).min_h(H.control).px(G.sm).gap(G.sm).rounded(R.control).items_center().cursor_pointer()
-          .when(item.id === this.selected, (row) => row.bg(c.selected))
-          .hover((row) => row.bg(c.subtle))
-          .on_click((_event, next) => this.pick(item, next))
-          .child(div().flex_1().min_w(0).truncate().text_size(T.value).child(item.name))
-          .child(div().flex_none().text_size(10.5).text_color(c.dim).child(item.runtime ?? "Android"))
-          .child(this.line(this.boot?.id === item.id ? bootState(item, this.boot, Date.now()) ?? item.state : item.state, c))))))
+        .children((this.devices ?? []).map((item) => row({
+          name: item.name, detail: item.runtime ?? "Android", meta: this.boot?.id === item.id ? bootState(item, this.boot, Date.now()) ?? item.state : item.state, current: item.id === this.selected,
+        })(`sim-device-${item.id}`, c, { onClick: (next) => this.pick(item, next) })))))
       .when(Boolean(spaces().find((space) => space.active)?.machine), (el) => el.child(this.line("Devices are on this computer.", c)))
       .when(Boolean(this.tools?.adb && !this.tools.emulator), (el) => el.child(this.line("Android SDK emulator binary is missing.", c)))
       .when(Boolean(this.note), (el) => el.child(this.line(this.note, c)))

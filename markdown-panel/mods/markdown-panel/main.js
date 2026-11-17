@@ -16,6 +16,7 @@ import { appHome, exec, watchFolder, focused, spaces, props, closeOverlay, theme
 import { MarkdownDoc, tildePath } from "./doc.js";
 import { tokens } from "./ui.js";
 import { button, iconButton } from "./ui-button.js";
+import { tooltip } from "./kit.js";
 import { afterMount } from "./pure.js";
 import { pollStart, pollNext, takeStamp, ArmPoll, asOf } from "./remote-file.js";
 
@@ -235,9 +236,9 @@ export default class MarkdownPanel extends View {
           .child(div().truncate().font_semibold().child(doc ? nameOf(doc.path) : "Markdown"))
           .child(div().truncate().text_size(11).text_color(t.dim).child(`${tildePath(doc ? folderOf(doc.path) : this.folder, doc ? doc.on : this.on)}${doc?.held ? ` · ${asOf(doc.held.at, Date.now())}` : ""}`)))
         .children(doc ? doc.controls(t, "md") : [])
-        .when(Boolean(doc) && !doc.editing, (el) => el.child(tool("md-refresh", "refresh", doc.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); doc.load(cx); })))
-        .when(reviewing, (el) => el.child(button("md-done", "Done", (cx) => this.done(cx), c, { kind: "tonal", small: true }).tooltip("Review done: tell the agent")))
-        .child(tool("md-close", "close", "Close", (cx) => this.close(cx))))
+        .when(Boolean(doc) && !doc.editing, (el) => el.child(tool("md-refresh", "refresh-cw", doc.held ? "Retry" : "Read again", (cx) => { this.poll = pollStart(); doc.load(cx); })))
+        .when(reviewing, (el) => el.child(button("md-done", "Done", (cx) => this.done(cx), c, { kind: "tonal", small: true }).tooltip(tooltip({ label: "Review done", detail: "tell the agent" }))))
+        .child(tool("md-close", "x", "Close", (cx) => this.close(cx))))
       .when(Boolean(this.notice), (el) => el.child(div().flex_none().px(14).py(6).text_size(12).text_color(t.blocked).border_b(1).border_color(t.border).child(this.notice ?? "")))
       .child(doc ? doc.body(t, "md-doc") : this.listView(t));
   }

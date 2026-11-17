@@ -1,4 +1,5 @@
 // Whether each conversation's process still runs: how many `ps` the sidebar takes to know, on a fake clock.
+import { loadSpaces } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -25,7 +26,7 @@ async function sidebar({ latency = 0, active = true, collapsed = false, view = "
     h.most = Math.max(h.most, h.inFlight);
     return new Promise((resolve) => h.waiting.push({ due: h.clock + latency, done: () => { h.inFlight -= 1; resolve(answer(args)); } }));
   };
-  const { Spaces } = await load("kanso-spaces/main.js", ["Spaces"], {
+  const { Spaces } = await loadSpaces({
     Date: { now: () => h.clock }, exec,
     window: () => ({ active: h.active, platform: "macos" }),
     shared: (k) => (k === "sidebar.collapsed" ? h.collapsed : null), setShared: () => {},
@@ -56,10 +57,25 @@ async function sidebar({ latency = 0, active = true, collapsed = false, view = "
   return { h, v };
 }
 
+const EVERY_TEN_SECONDS = [0, 10000, 20000, 30000, 40000, 50000, 60000];
+// An idle t1 whose only conversation is its own.
+const idleOnlyT1 = async () => {
+  const opened = await sidebar({ terms: [{ ...T1, status: "idle" }] });
+  opened.v.threads = { t1: opened.v.threads.t1 };
+  return opened;
+};
+// The hung table answers late, after 202 ended, and changes nothing.
+const lateAnswerIgnored = async (h, v) => {
+  h.live.delete(202);
+  h.hung[0]();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual([...v.alive], [101, 202]);
+};
+
 test("one full process table serves tasks and liveness every ten seconds in front", async () => {
   const { h, v } = await sidebar();
   await h.run(60000);
-  assert.deepEqual(h.ps.map((x) => x.at), [0, 10000, 20000, 30000, 40000, 50000, 60000]);
+  assert.deepEqual(h.ps.map((x) => x.at), EVERY_TEN_SECONDS);
   assert.ok(h.ps.every((x) => x.whole), "no separate ps -p reader");
   assert.deepEqual([...v.alive].toSorted(), [101, 202]);
 });
@@ -84,8 +100,7 @@ test("idle agents without conversations never ask for a process table", async ()
 });
 
 test("idle conversations with live foreground pids need no process table", async () => {
-  const { h, v } = await sidebar({ terms: [{ ...T1, status: "idle" }] });
-  v.threads = { t1: v.threads.t1 };
+  const { h, v } = await idleOnlyT1();
   h.live.clear();
   await h.run(60000);
   assert.equal(h.ps.length, 0);
@@ -100,8 +115,7 @@ test("idle conversations not confirmed by a terminal still check the process tab
 });
 
 test("a replaced foreground pid stops confirming the previous conversation", async () => {
-  const { h, v } = await sidebar({ terms: [{ ...T1, status: "idle" }] });
-  v.threads = { t1: v.threads.t1 };
+  const { h, v } = await idleOnlyT1();
   await h.run(20000, (t) => {
     if (t === 1000) {
       h.terms = [{ ...T1, status: "idle", foreground: { pid: 303 } }];
@@ -140,7 +154,7 @@ test("a slow process table never overlaps another reader", async () => {
     if (t === 21000) v.view = "threads";
   });
   assert.equal(h.most, 1);
-  assert.deepEqual(h.ps.map((x) => x.at), [0, 10000, 20000, 30000, 40000, 50000, 60000]);
+  assert.deepEqual(h.ps.map((x) => x.at), EVERY_TEN_SECONDS);
 });
 
 test("the shared table is parsed once for all terminals and preserves child task starts", async () => {
@@ -178,20 +192,14 @@ test("a hung table is abandoned and a late answer cannot replace a newer table",
   const { h, v } = await sidebar({ plan: (n) => n === 0 ? "hang" : null });
   await h.run(10000);
   assert.deepEqual(h.ps.map((x) => x.at), [0, 10000]);
-  h.live.delete(202);
-  h.hung[0]();
-  await new Promise((r) => setImmediate(r));
-  assert.deepEqual([...v.alive], [101, 202]);
+  await lateAnswerIgnored(h, v);
 });
 
 test("a late background table is dropped even before its replacement starts", async () => {
   const { h, v } = await sidebar({ active: false, plan: (n) => n === 1 ? "hang" : null });
   await h.run(39500);
   assert.deepEqual(h.ps.map((x) => x.at), [0, 30000]);
-  h.live.delete(202);
-  h.hung[0]();
-  await new Promise((r) => setImmediate(r));
-  assert.deepEqual([...v.alive], [101, 202]);
+  await lateAnswerIgnored(h, v);
   await h.run(60000);
   assert.deepEqual([...v.alive], [101]);
 });

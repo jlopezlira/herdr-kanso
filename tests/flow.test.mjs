@@ -1,9 +1,11 @@
 // Cmd+J, the header's digest, Send to an agent, Arrangements and Ports.
+import { loadStore, loadKdb, loadReadDigest, loadHachiPixels } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, singleUse } from "./helpers.mjs";
+import { databaseTimer, load, clone, temporary, exec, singleUse, failure, success } from "./helpers.mjs";
+import { PASSED } from "./pr-fixtures.mjs";
 
 const HOME = "/Users/me";
 
@@ -28,7 +30,7 @@ test("The digest reads changed files, lines, commits and checks", async () => {
 });
 
 test("The header digest names why a blocked pull request cannot merge", async () => {
-  const { readDigest } = await load("kanso-strip/main.js", ["readDigest"]);
+  const { readDigest } = await loadReadDigest();
   const answer = (cmd, args) => {
     if (cmd === "gh") {
       assert.ok(args.join(" ").includes("mergeStateStatus"));
@@ -36,7 +38,7 @@ test("The header digest names why a blocked pull request cannot merge", async ()
       return JSON.stringify({
         number: 575, state: "OPEN", isDraft: false, mergeable: "MERGEABLE", mergeStateStatus: "BLOCKED",
         reviewDecision: "REVIEW_REQUIRED", baseRefName: "main",
-        statusCheckRollup: [{ __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS", name: "ci" }],
+        statusCheckRollup: PASSED,
       });
     }
     const line = args.join(" ");
@@ -46,7 +48,7 @@ test("The header digest names why a blocked pull request cannot merge", async ()
     if (line.includes("symbolic-ref")) return "feat\n";
     return null;
   };
-  const run = async (cmd, args) => { const out = answer(cmd, args); return out == null ? { code: 1, stdout: "", stderr: "" } : { code: 0, stdout: out, stderr: "" }; };
+  const run = async (cmd, args) => { const out = answer(cmd, args); return out == null ? failure("") : success(out); };
   const d = await readDigest("/repo", run);
   assert.equal(d.pr.hold, "Review required");
   assert.equal(d.pr.checks, "passing");
@@ -54,7 +56,7 @@ test("The header digest names why a blocked pull request cannot merge", async ()
 });
 
 test("The digest of a real repository: uncommitted files, lines and commits on the branch", async (t) => {
-  const { readDigest } = await load("kanso-strip/main.js", ["readDigest"]);
+  const { readDigest } = await loadReadDigest();
   const dir = await temporary(t);
   const git = (...args) => exec("git", ["-C", dir, ...args]);
   await git("init", "-q", "-b", "main");
@@ -288,14 +290,13 @@ test("hjkl dōjō: vim's motions on a board and on code, the fewest moves and th
 });
 
 test("Hachi, the dōjō's shiba, wears the game on its face", async () => {
-  const { hachiPixels } = await load("kanso-dojo/mascot-pixels.js", ["hachiPixels"]);
+  const { hachiPixels } = await loadHachiPixels();
   const eyes = (g) => g.slice(6, 8).map((r) => r.join("")).join("|");
   const moods = ["calm", "glad", "sweat", "sleep"].map((m) => eyes(hachiPixels(m)));
   assert.equal(new Set([moods[0], moods[1], moods[3]]).size, 3, "open, glad and asleep look apart");
   assert.ok(hachiPixels("sweat").some((r) => r.includes("B")), "a drop of sweat");
   assert.ok(hachiPixels("glad").some((r) => r.includes("T")), "tongue out when glad");
 });
-
 
 test("The dōjō's card: the best round, the days in a row, only the levels played", async () => {
   const host = { theme: () => ({}), exec, appHome: () => "/x", notify: () => {}, window: () => ({ platform: "macos" }) };
@@ -334,12 +335,11 @@ test("The dōjō keeps its rounds in its own SQLite: bests per level, totals, th
   assert.equal(store.file, join(dir, "data", "kanso-dojo", "dojo.db"));
 });
 
-
 test("A dōjō round ends after ten targets, with its result kept; End round stops one without counting it", async () => {
   const added = [];
   const host = {
     theme: () => ({}), props: () => ({ overlay: "o" }), closeOverlay: () => {}, appHome: () => "/x", settings: () => ({}),
-    exec: async () => ({ code: 0, stdout: "", stderr: "" }), notify: () => {}, window: () => ({ platform: "macos" }),
+    exec: async () => (success("")), notify: () => {}, window: () => ({ platform: "macos" }),
     ...singleUse(),
   };
   const { Dojo, shortest } = await load("kanso-dojo/main.js", ["Dojo", "shortest"], host);
@@ -370,8 +370,8 @@ test("The sidebar keeps its state in the left nav's database: prefs moved from l
   const local = new Map([["spaces.view", "threads"], ["spaces.sections", "[\"done\"]"]]);
   const localStorage = { getItem: (k) => local.get(k) ?? null, setItem: (k, v) => local.set(k, v) };
   const { Panel } = await load("kanso-spaces/panel.js", ["Panel"], { exec, appHome: () => dir, localStorage });
-  const { Store } = await load("kanso-spaces/store.js", ["Store"], { exec, appHome: () => dir });
-  const { Kdb } = await load("kanso-spaces/kdb.js", ["Kdb"], { exec, appHome: () => dir });
+  const { Store } = await loadStore({ exec, appHome: () => dir });
+  const { Kdb } = await loadKdb({ exec, appHome: () => dir });
   const store = new Store(new Kdb(databaseTimer));
   const p = new Panel(["spaces.view", "spaces.sections", "spaces.order"], store);
   assert.equal(p.get("spaces.view"), "threads", "the first frame: the copy in localStorage");

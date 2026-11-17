@@ -3,14 +3,17 @@ import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
 import { imageApi } from "./platform-images.js";
 // Kanso settings, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
-import { View, div, svg, image } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme, props, closeOverlay, keys, shared, setShared, readTextFile, writeTextFile, appHome, run } from "herdr";
-import { G, H, T, tokens, breathe } from "./ui.js";
-import { button, quietLink, Armed, pressAgain } from "./ui-button.js";
+import { G, R, T, W, ICON, TINT, alpha, tokens } from "./ui.js";
+import { avatar, tile } from "./ui-avatar.js";
+import { dot } from "./ui-dot.js";
+import { button, quietLink, iconButton, Armed, pressAgain } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
+import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { skeleton } from "./ui-skeleton.js";
+import { button as kitButton, skeletonOf, tooltip } from "./kit.js";
 import { undoLine } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
@@ -21,7 +24,11 @@ import { DEFAULT_KEYS } from "./defaults.js";
 import { shippedKeymap } from "./platform-keymap.js";
 import { parseChangelog, plain } from "./changelog.js";
 import { channelOf, compareReleases, installedRelease, offerRelease, stableStay } from "./release.js";
-import { tryOrAsync } from "./pure.js";
+import { tryOrAsync, focusOn } from "./pure.js";
+import { pagedDialog } from "./pages.js";
+
+// A shortcut's key hints: each chord, or a faint No key.
+const keysOf = (chords) => (chords.length ? chords.map((k) => ({ text: shownChord(k) })) : [{ text: "No key", faint: true }]);
 
 const REPO = "https://github.com/jlopezlira/herdr-kanso";
 const UPDATE_CHOICES = [{ key: "stable", label: "Stable" }, { key: "beta", label: "Early" }];
@@ -45,8 +52,7 @@ const MODIFIERS = new Set(["shift", "control", "ctrl", "alt", "option", "cmd", "
 
 export default class Settings extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     const asked = props()?.page === "mods" ? "pieces" : props()?.page;
     this.page = PAGES.some((p) => p.key === asked) ? asked : "pieces";
     this.capture = null; // { key, section, row, old }: the row waiting for a press
@@ -153,13 +159,12 @@ export default class Settings extends View {
     const panels = roster.filter((p) => p && p.on !== false).slice(0, 9);
     const pattern = this.chordsOf(panelRow, group.section, list)[0] ?? null;
     const capturing = this.capture?.row === panelRow || this.capture?.row === gearRow;
-    const tile = (id, icon, label, row, chord, old) => v_flex().id(`bar-${id}`).w(78).flex_none().py(G.sm).gap(6).items_center().rounded(8)
-      .cursor_pointer().hover((s) => s.bg(c.subtle)).tooltip(`${label}: click, then press the new key`)
-      .when(this.capture?.row === row, (el) => el.bg(c.subtle))
-      .on_click((_e, cx) => this.startCapture(row, group.section, old, cx))
-      .child(icon ? svg(icon).size(16).text_color(c.muted) : div().size(16).rounded(4).bg(c.subtle))
-      .child(div().w_full().px(4).text_center().truncate().text_size(11.5).text_color(c.text).child(label))
-      .child(chord ? keycap(t, glyphs(chord)) : keycap(t, "No key", true));
+    // Each tile is the kit's button with the panel's icon, name and key as its face: Tab reaches it, Enter and Space start the capture.
+    const tile = (id, icon, label, row, chord, old) => kitButton({ label, kind: "quiet", active: this.capture?.row === row, content: [v_flex().w(W.keyTile).py(G.sm).gap(G.xs).items_center()
+      .child(icon ? svg(icon).size(ICON).text_color(c.muted) : div().size(ICON).rounded(R.sm).bg(c.subtle))
+      .child(div().w_full().px(G.xs).text_center().truncate().text_size(T.body).text_color(c.text).child(label))
+      .child(chord ? keycap(t, glyphs(chord)) : keycap(t, "No key", true))] })(`bar-${id}`, c, { onClick: (cx) => this.startCapture(row, group.section, old, cx) })
+      .tooltip(tooltip({ label, detail: "click, then press the new key" }));
     const gear = this.chordsOf(gearRow, group.section, list)[0] ?? null;
     const tiles = [
       ...panels.map((pnl, i) => tile(pnl.id, pnl.icon, pnl.label, panelRow, pattern ? pattern.replace(/N$/, String(i + 1)) : null, pattern)),
@@ -186,20 +191,19 @@ export default class Settings extends View {
 
   keysPage(t, c) {
     const list = this.bound();
-    const rows = GROUPS.map((g) => g.bar ? this.barKeys(t, c, g, list) : v_flex().w_full()
-      .child(div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child(g.name))
-      .children(g.actions.map((row) => {
-        const id = row.family ?? row.action;
-        const chords = this.chordsOf(row, g.section, list);
-        const changed = JSON.stringify(chords.toSorted()) !== JSON.stringify(this.shipped(row, g.section).toSorted());
-        const capturing = this.capture?.row === row;
-        const line = h_flex().id(`key-${id}`).w_full().h(32).gap(G.sm).items_center().px(G.sm).rounded(6)
-          .cursor_pointer().hover((s) => s.bg(c.subtle)).when(capturing, (el) => el.bg(c.subtle))
-          .on_click((_e, cx) => this.startCapture(row, g.section, chords[0] ?? null, cx))
-          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(row.label))
-          .when(changed && !capturing, (el) => el.child(quietLink(`reset-${id}`, "Reset", (cx) => this.reset(row, g.section, cx), c)))
-          .when(!capturing, (el) => el.children(chords.length ? chords.map((k) => keycap(t, shownChord(k))) : [keycap(t, "No key", true)]))
-          .when(capturing, (el) => el.child(div().flex_none().text_size(12).text_color(c.accent).child(row.family ? "Press a key with a digit" : "Press the new key")));
+    const rows = GROUPS.map((g) => g.bar ? this.barKeys(t, c, g, list) : v_flex().w_full().pt(G.lg)
+      .child(row(`keys-${g.section}-${g.name}`, c, { name: g.name, heading: true }))
+      .children(g.actions.map((action) => {
+        const id = action.family ?? action.action;
+        const chords = this.chordsOf(action, g.section, list);
+        const changed = JSON.stringify(chords.toSorted()) !== JSON.stringify(this.shipped(action, g.section).toSorted());
+        const capturing = this.capture?.row === action;
+        const line = row(`key-${id}`, c, {
+          name: action.label, current: capturing,
+          action: changed && !capturing ? { label: "Reset", kind: "quiet", onClick: (cx) => this.reset(action, g.section, cx) } : null,
+          keys: capturing ? [{ text: action.family ? "Press a key with a digit" : "Press the new key", recording: true }] : keysOf(chords),
+          onClick: (cx) => this.startCapture(action, g.section, chords[0] ?? null, cx),
+        });
         return capturing ? v_flex().w_full().child(line).child(this.pressNote(c, "Esc to keep, Backspace to remove.")) : line;
       })));
     return v_flex().w_full()
@@ -232,29 +236,26 @@ export default class Settings extends View {
     ];
     const groups = groupsOf(ordered);
     // kanso.panels.order: the same list the bar's drag writes.
-    const step = (id, by, glyph) => {
+    const step = (id, by, icon, label) => {
       const i = panelIds.indexOf(id), j = i + by, can = i >= 0 && j >= 0 && j < panelIds.length;
-      return div().id(`order-${id}-${by}`).size(22).flex_none().rounded(4).flex().items_center().justify_center().text_size(12)
-        .text_color(can ? c.muted : c.border).when(can, (el) => el.cursor_pointer().hover((s) => s.bg(c.subtle).text_color(c.text))
-          .on_click(() => setShared("kanso.panels.order", panelIds.with(i, panelIds[j]).with(j, panelIds[i]))))
-        .child(glyph);
+      return iconButton(`order-${id}-${by}`, icon, label, () => setShared("kanso.panels.order", panelIds.with(i, panelIds[j]).with(j, panelIds[i])), c, { size: "sm", disabled: !can });
     };
-    const row = (piece) => {
+    const pieceRow = (piece) => {
       const items = piece.states.map((key) => ({ key, label: STATE_LABEL[key] }));
       const bare = piece.id.startsWith("panel.") ? piece.id.slice("panel.".length) : "";
-      return h_flex().id(`piece-row-${piece.id}`).w_full().h(H.row).gap(G.md).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(c.text).child(piece.label))
-        .when(piece.stops === "work" && piece.job, (el) => el.child(div().flex_none().text_size(T.body).text_color(c.dim).child(piece.job)))
-        .when(Boolean(bare), (el) => el.child(h_flex().flex_none().gap(2).children([step(bare, -1, "\u2191"), step(bare, 1, "\u2193")])))
-        .child(segmented(`piece-${piece.id}`, items, choice(piece.id, map), (state, cx) => {
-          setShared(STORE, setPiece(pieces(shared), piece.id, state));
-          this.undo = null; cx.notify();
-        }, c));
+      return row(`piece-row-${piece.id}`, c, {
+        name: piece.label, meta: piece.stops === "work" && piece.job ? piece.job : null,
+        tools: [...(bare ? [step(bare, -1, "chevron-up", "Move up"), step(bare, 1, "chevron-down", "Move down")] : []),
+          segmented(`piece-${piece.id}`, items, choice(piece.id, map), (state, cx) => {
+            setShared(STORE, setPiece(pieces(shared), piece.id, state));
+            this.undo = null; cx.notify();
+          }, c)],
+      });
     };
     return v_flex().w_full()
       .child(this.findField(c))
       .when(!groups.length, (el) => el.child(div().id("pieces-none").py(G.sm).text_size(T.body).text_color(c.dim).child("No piece matches.")))
-      .children(groups.map((group) => v_flex().w_full().pt(G.lg).child(section(c, group.name)).children(group.rows.map(row))))
+      .children(groups.map((group) => v_flex().w_full().pt(G.lg).child(section(c, group.name)).children(group.rows.map(pieceRow))))
       .child(h_flex().w_full().justify_end().pt(G.lg).child(this.undo
         ? undoLine("pieces-reset", "Back to the defaults", (cx) => { setShared(STORE, this.undo); this.undo = null; cx.notify(); }, c)
         : quietLink("pieces-reset", "Reset all", (cx) => { this.undo = pieces(shared); setShared(STORE, {}); cx.notify(); }, c)));
@@ -280,13 +281,6 @@ export default class Settings extends View {
     });
   }
 
-  newsBones(c) {
-    const { line } = skeleton(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().pt(G.lg).gap(G.sm))
-      .child(line(72, 15)).child(line(220, 12)).child(line(180, 12))
-      .child(line(64, 15)).child(line(200, 12));
-  }
-
   newsPage(t, c) {
     const { entries, error, from } = this.news;
     const updateState = shared("kanso.update") ?? {};
@@ -301,12 +295,12 @@ export default class Settings extends View {
         .child(h_flex().w_full().gap(G.sm).items_baseline()
           .child(div().text_size(15).font_medium().text_color(c.text).child(e.version))
           .when(Boolean(e.date), (el) => el.child(div().text_size(11.5).text_color(c.dim).child(e.date)))
-          .when(Boolean(tag), (el) => el.child(div().px(6).h(18).rounded_full().bg((rel === 0 ? c.green : c.accent) + "26").flex().items_center()
+          .when(Boolean(tag), (el) => el.child(div().px(6).h(18).rounded_full().bg(alpha(rel === 0 ? c.green : c.accent, TINT.soft)).flex().items_center()
             .text_size(11).font_medium().text_color(rel === 0 ? c.green : c.accent).child(tag))))
         .children(e.sections.map((s) => v_flex().w_full().pt(G.xs).gap(G.xs)
           .child(div().text_size(12).text_color(c.dim).child(s.name))
           .children(s.items.map((item, i) => h_flex().w_full().gap(G.sm).items_start()
-            .child(div().flex_none().w(6).pt(7).child(div().size(4).rounded_full().bg(c.dim)))
+            .child(dot(c, "dim", "sm").mt(G.sm))
             .child(div().flex_1().min_w(0).text_size(12.5).line_height(1.5).text_color(c.muted).child(plain(item)))))));
     };
     const waiting = offerRelease(updateState.latest, have, channel);
@@ -328,8 +322,8 @@ export default class Settings extends View {
       .child(h_flex().w_full().pt(G.sm).items_center()
         .child(
           button("check-kanso-update", "Check for updates", () => run("kanso-tabs.check"), c)))
-      .when(entries === null, (el) => el.child(this.newsBones(c)))
-      .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(c.accent + "1a")
+      .when(entries === null, (el) => el.child(skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c)))
+      .when(Boolean(waiting), (el) => el.child(h_flex().w_full().gap(G.md).items_center().p(G.md).rounded(8).bg(alpha(c.accent, TINT.faint))
         .child(div().flex_1().text_size(13).text_color(c.text).child(`kansō ${waiting} is available. You have ${have}.`))
         .child(button("update-kanso", `Update to ${waiting}`, () => { run("kanso-tabs.update"); closeOverlay(props().overlay); }, c))))
       .when(Boolean(error), (el) => el.child(div().text_size(12.5).text_color(c.red).child(error)))
@@ -338,27 +332,17 @@ export default class Settings extends View {
   }
 
   creditsPage(t, c) {
-    const link = (id, lead, title, note, url) => h_flex().id(`credit-${id}`).w_full().h(52).gap(G.md).items_center().px(G.sm).rounded(8)
-      .cursor_pointer().hover((s) => s.bg(c.subtle)).tooltip(url).on_click((_e, cx) => cx.open_url(url))
-      .child(lead)
-      .child(v_flex().flex_1().min_w(0).gap(2)
-        .child(div().truncate().text_size(13).text_color(c.text).child(title))
-        .child(div().truncate().text_size(11.5).text_color(c.dim).child(note)))
-      .child(div().flex_none().text_size(11.5).text_color(c.muted).child(url.replace(/^https:\/\//, "")))
-      .child(svg("mods/kanso-chrome/icons/open-with.svg").size(13).flex_none().text_color(c.dim));
-    const heading = (text) => div().pt(G.lg).pb(G.xs).text_size(12).text_color(c.dim).child(text);
+    const link = (id, start, title, note, url) => row(`credit-${id}`, c, {
+      start, name: title, second: note, meta: url.replace(/^https:\/\//, ""), flag: "external-link", onClick: (cx) => cx.open_url(url),
+    });
+    const heading = (text) => row(`credits-${text}`, c, { name: text, heading: true }).mt(G.lg);
     return v_flex().w_full()
       .child(div().text_size(12.5).line_height(1.5).text_color(c.muted).child("kansō is a layout for Herdr, made in the open."))
       .child(heading("Where it comes from"))
       // Herdr's mark ships with the app; the ensō is Kanso's.
-      .children(PLACES.map((p) => link(p.id, p.id === "herdr"
-        ? image("frame/welcome/herdr.png").size(28).flex_none().rounded(7)
-        : div().size(28).flex_none().rounded(7).bg(c.subtle).flex().items_center().justify_center().child(svg("mods/kanso-chrome/icons/enso.svg").size(16).text_color(c.text)),
-        p.name, p.note, p.url)))
+      .children(PLACES.map((p) => link(p.id, [tile(c, { initial: p.name, image: p.id === "herdr" ? "frame/welcome/herdr.png" : null, size: "lg" })], p.name, p.note, p.url)))
       .child(heading("Made by"))
-      .children(PEOPLE.map((p) => link(p.login, this.avatars?.has(p.login)
-        ? image(`${AVATARS_DIR}/${p.login}.jpg`).size(28).flex_none().rounded_full()
-        : div().size(28).flex_none().rounded_full().bg(c.subtle).flex().items_center().justify_center().text_size(12).font_medium().text_color(c.muted).child(p.name[0]),
+      .children(PEOPLE.map((p) => link(p.login, [avatar(c, { initial: p.name, image: this.avatars?.has(p.login) ? `${AVATARS_DIR}/${p.login}.jpg` : null, size: "lg" })],
         p.name, `@${p.login} on GitHub`, `https://github.com/${p.login}`)));
   }
 
@@ -366,15 +350,17 @@ export default class Settings extends View {
     const t = theme(), c = tokens(t), p = props() ?? {};
     const page = this.page === "keys" ? this.keysPage(t, c) : this.page === "news" ? this.newsPage(t, c) : this.page === "credits" ? this.creditsPage(t, c) : this.piecesPage(t, c);
     // The same window as kansō help, in its place: each leads to the other, so you can always go back.
-    return v_flex().id("kanso-settings").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().w_full().items_center().gap(G.md)
+    return pagedDialog({
+      name: "settings", handle: this.handle, t, c, page,
+      tabs: PAGES, tab: this.page,
+      onTab: (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); },
+      onKey: (e, cx) => this.key(e, cx),
+      head: h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/settings.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō settings"))
         .when(Boolean(this.shown()), (el) => el.child(div().text_size(12).text_color(t.dim).child(this.shown())))
         .child(quietLink("settings-help", "Help", () => { closeOverlay(p.overlay); run("mod.open", { name: "kanso-help" }); }, c, { color: c.accent }))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(segmented("settings-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "credits") this.readAvatars(cx); this.undo = null; this.capture = null; this.conflict = null; this.message = null; this.armed.clear(); cx.notify(); }, c)))
-      .child(v_flex().id(`settings-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
+        .child(div().text_size(11).text_color(t.dim).child("Esc")),
+    });
   }
 }

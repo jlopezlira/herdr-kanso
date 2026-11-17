@@ -1,26 +1,27 @@
+import { spawnAndNotify, commandOk, location, key, tilde, said } from "./lib.js";
+import { pageSize, pageBones, listBones } from "./ui-page.js";
+import { drawHero, drawEmpty, footOf, listedRow, prRow, heroPieces } from "./pr-view.js";
 import { localService } from "./platform-host.js";
 import { openApi } from "./platform-open.js";
 // Kanso's pull request panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // One of the kanso-panel mod's panels: it exists only while shown.
 import { div, svg } from "gpui-kit";
-import { v_flex, h_flex, Button, Popover, TextView, ScrollHandle } from "gpui-base";
+import { v_flex, h_flex, Popover, TextView, ScrollHandle } from "gpui-base";
 import { exec, notify, run, theme, setShared, shared, window, layout, focused, panes, terminals, props } from "herdr";
-import { location, key, diffRows, monoFont, tilde, failure, said, failNote } from "./lib.js";
 import { walkLayout } from "./layout.js";
-import { G, H, R, T, breathe, tokens, toneColor } from "./ui.js";
+import { G, T, PR, TINT, alpha, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { TextField } from "./ui-field.js";
 import { menu } from "./ui-menu.js";
+import { failureBlock, skeletonOf, diffText, facts, code, tooltip, row as kitRow } from "./kit.js";
+import { dot } from "./ui-dot.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
 import { aliasText, machineTitle, tryOr, tryOrAsync, bounded } from "./pure.js";
 import { STATES, checkState, onePerJob, checkSummary, runIdOf, listHold, mergeReadiness } from "./ghchecks.js";
 import { deliver, isAgent } from "./deliver.js";
 import { nameOf, givenNames } from "./marks.js";
 import { verdictOf, failedLog, sendText, sendStep } from "./pr-verdict.js";
-import { VIEW } from "./pr-body.js";
-import { drawHero, drawEmpty, footOf, listedRow, heroPieces } from "./pr-view.js";
 import { readyProviders } from "./pr-providers.js";
 import { groupInbox, inboxLabel, isNew, limitLine, mergeInbox, refreshInbox, seenSql, recordPrFacts } from "./pr-inbox.js";
 import { prMemory } from "./panel-state.js";
@@ -33,6 +34,7 @@ import { CALL_MS, TICK_MS, ageOf, authFresh, heldView, logDue, needsPermission, 
 const keepsFacts = () => awayShown(pieces(shared));
 
 const ICON = "mods/kanso-chrome/icons/";
+const INBOX_TONES = { Draft: "dim", "Changes requested": "blocked", "Review required": "working", Approved: "done" };
 const FIELDS = "number,title,body,state,isDraft,url,author,baseRefName,headRefName,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,latestReviews,reviewRequests,assignees,labels,additions,deletions,changedFiles,commits,files,updatedAt,mergedAt,closedAt";
 const THREADS = "query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){totalCount nodes{author{login} body url}}}}}}}";
 // assignableUsers is GitHub's own picker list and, unlike `collaborators`, needs no push access to read.
@@ -45,7 +47,6 @@ const DONE_LIMIT = 30;
 const NO_PR = /no (open )?pull requests? found|could not determine current branch/i;
 const MAX_DIFF = 400;
 const FILE_ROWS = 8;
-const BODY_FOLD = 150;
 
 // A pull request's body as Markdown to show: no template comments, no Windows line ends.
 export function cleanBody(text) {
@@ -383,7 +384,7 @@ export class PullRequest {
     if (!this.inboxDb) {
       try { await this.db.open(); this.inboxDb = this.db; }
       catch (e) {
-        this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]);
+        this.inboxFailure(e);
         this.inboxOn = false; this.inboxOpen = null;
         return;
       }
@@ -400,7 +401,7 @@ export class PullRequest {
     if (model instanceof Error) {
       const e = model;
       if (key() !== context) return;
-      this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]);
+      this.inboxFailure(e);
       return;
     }
     if (key() !== context) return;
@@ -420,7 +421,7 @@ export class PullRequest {
     if (!url || this.inboxOpen !== false || !this.inboxDb) return;
     const now = Date.now();
     try { await this.inboxDb.run(seenSql(url, now)); }
-    catch (e) { this.note = said("Could not keep pull requests", String(e?.message ?? e).split("\n")[0]); return; }
+    catch (e) { this.inboxFailure(e); return; }
     const stamp = (item) => item.url === url ? { ...item, seenAt: now } : item;
     const needs = (this.inbox?.needs ?? []).map(stamp);
     if (this.inbox) this.inbox = { ...this.inbox, needs, yours: (this.inbox.yours ?? []).map(stamp), unseen: needs.filter(isNew).length };
@@ -546,8 +547,7 @@ export class PullRequest {
     if (this.closedLoading || !this.root || this.wait) return;
     this.bind(cx);
     this.closedLoading = true;
-    const context = this.context;
-    cx.spawn(async (cx) => {
+    cx.spawn(this.contextTask(async (cx, context) => {
       try {
         const r = await this.gh(["pr", "list", "--state", "closed", "--limit", String(DONE_LIMIT), "--json", DONE]);
         if (r?.code === 0 && key() === context) {
@@ -558,7 +558,7 @@ export class PullRequest {
         }
       } catch { }
       finally { this.closedLoading = false; cx.notify(); }
-    });
+    }));
   }
 
   showTab(tab, cx) {
@@ -575,54 +575,64 @@ export class PullRequest {
     this.loadedAt = 0; this.refresh(cx); cx.notify();
   }
 
+  inboxFailure(error) { this.note = said("Could not keep pull requests", String(error?.message ?? error).split("\n")[0]); }
+
+  finishAction(cx) { this.busy = null; cx.notify(); }
+
+  finishAndRefresh(cx) {
+    this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx);
+  }
+
+  contextTask(work) {
+    const context = this.context;
+    return (cx) => work(cx, context);
+  }
+
   act(label, args, cx, run = (a) => this.gh(a)) {
     if (this.busy) return;
     this.bind(cx);
     this.busy = label; this.note = null; this.armed.clear();
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const r = await run(args);
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+        commandOk(r);
       } catch (e) { this.note = said(`${label} failed`, e?.message ?? e); }
-      finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
+      finally { this.finishAndRefresh(cx); }
     });
-    cx.notify();
   }
 
   mergeNow(cx) {
     const pr = this.pr;
     this.bind(cx);
     this.busy = "Merge"; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const { o, r: name } = this.repo();
         const repo = await this.gh(["repo", "view", `${o}/${name}`, "--json", "squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed"]);
         const allowed = repo.code === 0 ? JSON.parse(repo.stdout) : {};
         const method = allowed.squashMergeAllowed !== false ? "--squash" : allowed.mergeCommitAllowed ? "--merge" : "--rebase";
         const r = await this.gh(["pr", "merge", pr.url, method]);
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+        commandOk(r);
         notify({ title: `Merged #${pr.number}`, body: pr.title, level: "success" });
       } catch (e) { this.note = said("Merge failed", e?.message ?? e); }
-      finally { this.busy = null; this.loadedAt = 0; cx.notify(); this.refresh(cx); }
+      finally { this.finishAndRefresh(cx); }
     });
-    cx.notify();
   }
 
   createPr(cx) {
     if (this.busy) return;
     this.bind(cx);
     this.busy = "Create"; this.note = null;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const now = await this.readPushed(this.root, this.on);
         if (!now || now.state === "late") throw new Error("It took too long to answer.");
         if (now.state !== "pushed") throw new Error(`${now.state === "behind" ? "pull" : "push"} ${this.branch ?? "the branch"} first`);
         const r = await this.gh(["pr", "create", "--web"]);
-        if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+        commandOk(r);
       } catch (e) { this.note = said("Could not create it", e?.message ?? e); }
-      finally { this.busy = null; cx.notify(); }
+      finally { this.finishAction(cx); }
     });
-    cx.notify();
   }
 
   // terminal.open cannot name a machine; the pane opens in the space already on screen.
@@ -642,7 +652,7 @@ export class PullRequest {
         try {
           const q = kind === "labels" ? LABELS : PEOPLE;
           const r = await this.gh(["api", "graphql", "-f", `query=${q}`, "-F", `o=${repo.o}`, "-F", `r=${repo.r}`]);
-          if (r.code !== 0) throw new Error((r.stderr || r.stdout).trim().split("\n")[0]);
+          commandOk(r);
           if (this.context !== context || this.picker !== kind) return;
           const data = JSON.parse(r.stdout).data;
           if (data?.viewer?.login) this.viewer = data.viewer.login;
@@ -676,10 +686,9 @@ export class PullRequest {
     const failed = { labels: on ? `Could not take ${name} off` : `Could not put ${name} on`, assignees: on ? `Could not unassign ${name}` : `Could not assign ${name}`, reviewers: on ? `Could not take back the request to ${name}` : `Could not ask ${name} for a review` }[kind];
     const why = { labels: "Changing labels needs triage access on this repository.", assignees: "Assigning needs triage access on this repository.", reviewers: "Asking for a review needs write access on this repository." }[kind];
     this.pending = name;
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
-        const res = await this.gh(["api", ...call, "--silent"]);
-        if (res.code !== 0) throw new Error((res.stderr || res.stdout).trim().split("\n")[0]);
+        commandOk(await this.gh(["api", ...call, "--silent"]));
         // Reflect it at once; the reread below confirms it.
         const pr = this.pr;
         if (kind === "labels") this.pr = { ...pr, labels: on ? pr.labels.filter((l) => l.name !== name) : [...pr.labels, (this.candidates ?? []).find((l) => l.name === name) ?? { name }] };
@@ -689,13 +698,12 @@ export class PullRequest {
       } catch (e) { notify({ title: failed, body: `${String(e?.message ?? e)} ${why}`, level: "error" }); }
       finally { this.pending = null; cx.notify(); this.loadedAt = 0; this.refresh(cx); }
     });
-    cx.notify();
   }
 
   pickerFor(kind, c) {
     const id = `pr-pick-${kind}`;
     const label = { labels: "Change labels", assignees: "Assign people", reviewers: "Request a review" }[kind];
-    const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: kind === "labels" ? "tag" : "user-plus" });
+    const trigger = button(`${id}-trigger`, label, null, c, { kind: "icon", icon: "plus" });
     const popover = Popover.new(id).trigger(trigger).anchor("top_right")
       .open(this.picker === kind)
       .on_open_change((open, cx) => this.openPicker(kind, open, cx));
@@ -734,12 +742,12 @@ export class PullRequest {
     return m && this.permissionRepo === `${m[1]}/${m[2]}` ? this.permission : null;
   }
 
-  rowState(p, c) {
+  rowState(p) {
     const sum = summaryOf(checksIn(p.statusCheckRollup));
     const gate = p.mergeStateStatus || p.mergeable === "CONFLICTING" || p.isDraft
       ? mergeReadiness(p, { permission: this.rowPermission(p), checks: sum }) : null;
     const shown = gate && !gate.awaitingPermission ? gate : listHold(p, sum);
-    return { text: shown.text, color: toneColor(c, shown.tone) };
+    return { text: shown.text, tone: shown.tone };
   }
 
   canSwitch() {
@@ -761,7 +769,7 @@ export class PullRequest {
       else this.refresh(cx);
       cx.notify();
     }, c, { kind: "tonal", small: true, active: this.listing, spoken })
-      .tooltip(this.listing ? "Back to the one shown" : "Every open pull request, and the closed ones")
+      .tooltip(tooltip({ label: this.listing ? "Back to the one shown" : "Every open pull request, and the closed ones" }))
       .when(!this.listing, (el) => el.child(svg(`${ICON}chevron-right.svg`).size(12).text_color(c.muted)));
   }
 
@@ -797,13 +805,15 @@ export class PullRequest {
     const create = !finished && this.none && Boolean(this.branch) && !this.isBase();
     // Rows are numbered down the page, across the groups.
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, [, rows]) => n + rows.length, 0));
-    return v_flex().w_full().gap(G.xl)
+    return this.withNote(v_flex().w_full().gap(G.xl)
       .children(groups.map(([title, rows], g) => v_flex().w_full().gap(2)
         .child(section(c, title, String(rows.length)))
         .children(rows.map((p, k) => listedRow(this, c, p, firsts[g] + k, { finished })))))
-      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) }))))
-      .when(Boolean(this.note), (el) => el.child(failNote("pr-note", this.note, c)));
+      .when(create && this.canCreate(), (el) => el.child(h_flex().child(quietLink("pr-create-list", this.busy === "Create" ? "Opening GitHub…" : "Create on GitHub", (cx) => this.createPr(cx), c, { color: c.text, disabled: Boolean(this.busy) })))), c);
   }
+
+  // The last write's failure, under the page.
+  withNote(page, c) { return page.when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pr-note", c))); }
 
   reviewCount() { return this.inbox?.needs?.length ?? 0; }
 
@@ -816,7 +826,7 @@ export class PullRequest {
       else this.noteSeen(this.pr?.url);
       cx.notify();
     }, c, { kind: "tonal", small: true, active: this.inboxOpen })
-      .tooltip(this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests");
+      .tooltip(tooltip({ label: this.inboxOpen ? "Back to this pane" : "Reviews and your open pull requests" }));
   }
 
   readNote() { return footOf(this).text; }
@@ -826,13 +836,13 @@ export class PullRequest {
     const limited = this.inbox?.limitedUntil;
     const refreshed = this.readNote() ?? (limited ? `limited until ${limitLine(limited).match(/\d{2}:\d{2}/)?.[0]}` : null);
     return h_flex().w_full().items_center().justify_between().gap(G.md)
-      .child(div().truncate().text_size(narrow ? VIEW.title : T.page).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
+      .child(div().truncate().text_size(narrow ? PR.title : T.page).text_color(c.text).child(this.inboxOn || this.listing ? "Pull requests" : "Pull request"))
       .child(h_flex().gap(G.xs).items_center().flex_none()
         .when(this.inboxOn, (el) => el.child(this.reviewPill(c)))
         .when(pill, (el) => el.child(this.switchPill(c)))
-        .child(iconButton("pr-refresh", "refresh", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.loading }))
+        .child(iconButton("pr-refresh", "refresh-cw", refreshed ? `Refresh · ${refreshed}` : "Refresh", (cx) => this.again(cx), c, { spin: this.loading }))
         .when(Boolean(pr?.url) && !this.listing && !here, (el) => el.child(iconButton("pr-copy", this.copied === pr.url ? "check" : "copy", this.copied === pr.url ? "Copied" : "Copy link", (cx) => this.copyUrl(pr.url, cx), c)))
-        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "open-with", "Open on GitHub", () => openUrl(pr.url), c))));
+        .when(Boolean(pr?.url) && !here, (el) => el.child(iconButton("pr-web", "external-link", "Open on GitHub", () => openUrl(pr.url), c))));
   }
 
   copyUrl(url, cx) {
@@ -842,38 +852,12 @@ export class PullRequest {
     cx.timer.after(1500, (cx) => { if (this.copiedAt === at) { this.copied = null; cx.notify(); } });
   }
 
-  closedBones(c) {
-    const { block, line } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.lg))
-      .children([0, 1, 2].map((i) => v_flex().w_full().px(G.md).py(10).gap(4)
-        .child(line([220, 180, 200][i], 14))
-        .child(line([140, 120, 160][i], 11))
-        .child(h_flex().gap(G.sm).items_center().child(block(6, 6, 6)).child(line(72, 12)))));
-  }
+  closedBones(c) { return skeletonOf({ shape: "line", count: 3 })("kanso-skeleton", c); }
 
-  diffBones(c) {
-    const { line } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().py(6).gap(2))
-      .children([160, 200, 120, 180, 90].map((w) => h_flex().h(20).flex_none().items_center().px(10).child(line(w, 11))));
-  }
+  diffBones(c) { return skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c); }
 
   bones(c, narrow = true) {
-    const { header } = ghost(c);
-    const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.background).text_color(c.text)
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(G.lg)
-          .child(header(narrow ? 110 : 140, narrow ? 17 : 20))
-          .child(this.skeleton(c, narrow))));
-  }
-
-  skeleton(c, narrow) {
-    const { block, row } = ghost(c);
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48))
-      .child(v_flex().gap(G.md).child(block(140, 12)).child(block(narrow ? 240 : 420, narrow ? 22 : 28, 4)).child(block(180, 22, 4)).child(block(150, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([30, 46, 40, 30].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(v_flex().gap(G.sm).children([0, 1, 2].map((i) => h_flex().gap(G.md).child(block(70, 10)).child(block([90, 120, 80][i], 10)))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2, 3, 4].map(row)));
+    return pageBones(c, narrow, { body: listBones(c), background: c.background, gap: G.lg });
   }
 
   waiting(c, title, detail, action) {
@@ -945,14 +929,13 @@ export class PullRequest {
     const address = this.frontAgent()?.address;
     if (!address) { this.note = said("Not sent: no agent in front"); cx.notify(); return; }
     this.busy = "Send"; this.sendShown = false; this.note = null; this.bind(cx);
-    cx.spawn(async (cx) => {
+    spawnAndNotify(cx, async (cx) => {
       try {
         const sent = await deliver(address, text, "you");
         if (sent?.code !== 0) this.note = said("Not sent", String(sent?.stderr || sent?.stdout || "could not send").split("\n")[0]);
       } catch (e) { this.note = said("Not sent", e?.message ?? e); }
-      finally { this.busy = null; cx.notify(); }
+      finally { this.finishAction(cx); }
     });
-    cx.notify();
   }
 
   openChecks(cx) { this.expanded = { ...this.expanded, checks: true }; this.setDetails(cx, true); }
@@ -995,11 +978,10 @@ export class PullRequest {
   loadOthers(cx) {
     if (this.listingOthers || this.listed || this.wait || !this.root) return;
     this.listingOthers = true; this.bind(cx);
-    const context = this.context;
-    cx.spawn(async (cx) => {
+    cx.spawn(this.contextTask(async (cx, context) => {
       try { this.takeOpen(await this.gh(openListArgs()).catch(() => null), context); }
       finally { this.listingOthers = false; cx.notify(); }
-    });
+    }));
   }
 
   description(c) {
@@ -1009,7 +991,7 @@ export class PullRequest {
       .child(section(c, "Description"))
       .child(text
         ? div().id("pr-body").w_full().text_size(13).line_height(1.5).text_color(c.text)
-          .when(long && !open, (el) => el.max_h(BODY_FOLD).overflow_hidden())
+          .when(long && !open, (el) => el.max_h(PR.fold).overflow_hidden())
           .child(TextView.markdown("pr-body-md", text).selectable(true).on_link_click((url) => openUrl(url)))
         : div().text_size(13).text_color(c.dim).child("No description."))
       .when(Boolean(text) && long, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-body-more", open ? "Show less" : "Show all", toggle, c))));
@@ -1024,7 +1006,7 @@ export class PullRequest {
         .when(Boolean(extra), (el) => el.child(extra)))
       .when(Boolean(picker), (el) => el.child(picker));
     const person = (login, sub, color) => h_flex().gap(4).items_center()
-      .when(Boolean(color), (el) => el.child(div().size(6).rounded_full().bg(color)))
+      .when(Boolean(color), (el) => el.child(dot(c, color)))
       .child(div().text_size(13).text_color(c.text).child(login))
       .when(Boolean(sub), (el) => el.child(div().text_size(11).text_color(c.dim).child(sub)));
     const assignees = (pr.assignees ?? []).map((a) => person(a.login));
@@ -1034,8 +1016,8 @@ export class PullRequest {
     const asked = (pr.reviewRequests ?? []).map((r) => person(r.login ?? r.name ?? r.slug, r.login ? "requested" : "team · requested", c.yellow));
     const labels = (pr.labels ?? []).map((l) => {
       const color = labelColor(l.color) ?? c.dim;
-      return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(color + "26")
-        .child(div().size(6).rounded_full().bg(color))
+      return h_flex().h(22).px(8).gap(5).items_center().rounded(6).bg(alpha(color, TINT.soft))
+        .child(dot(c, color))
         .child(div().max_w(160).truncate().text_size(11.5).text_color(c.text).child(l.name));
     });
     const decision = { APPROVED: "Approved", CHANGES_REQUESTED: "Changes requested", REVIEW_REQUIRED: "Review required" }[pr.reviewDecision] ?? "";
@@ -1055,45 +1037,32 @@ export class PullRequest {
     const note = checksNote(summaryOf(checks));
     return v_flex().w_full()
       .child(section(c, "Checks", note))
-      .children(shown.map((ch, i) => Button.new(`pr-check-${i}`).w_full().py(7).cursor_pointer()
-        .when(i > 0, (el) => el.border_t(1).border_color(c.border))
-        .hover((s) => s.opacity(0.75))
-        .on_click(() => { if (ch.url) openUrl(ch.url); })
-        .child(h_flex().w_full().items_end().gap(G.md)
-          .child(v_flex().flex_1().min_w(0).gap(2)
-            .child(div().truncate().text_size(13).text_color(c.text).child(ch.name))
-            .when(Boolean(ch.workflow), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child(ch.workflow))))
-          .child(div().text_size(12).text_color(c[CHECK_WORDS[ch.state].color]).child(CHECK_WORDS[ch.state].label)))))
+      .children(shown.map((ch, i) => kitRow({ name: ch.name, second: ch.workflow || null, meta: { text: CHECK_WORDS[ch.state].label, tone: CHECK_WORDS[ch.state].color } })(`pr-check-${i}`, c, {
+        onClick: () => { if (ch.url) openUrl(ch.url); },
+      })))
       .when(sorted.length > 5, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-checks-more", open ? "Show fewer" : `Show ${sorted.length - 5} more`, (cx) => { this.expanded = { ...this.expanded, checks: !open }; cx.notify(); }, c))));
   }
 
   discussion(c) {
     return v_flex().w_full()
       .child(section(c, "Unresolved threads", String(this.threads.length)))
-      .children(this.threads.map((th, i) => Button.new(`pr-thread-${i}`).w_full().py(8).cursor_pointer()
-        .when(i > 0, (el) => el.border_t(1).border_color(c.border))
-        .hover((s) => s.opacity(0.75))
-        .on_click(() => { if (th.url) openUrl(th.url); })
-        .child(v_flex().w_full().gap(3)
-          .child(div().w_full().text_size(13).line_height(1.45).text_color(c.text).child(th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body))
-          .child(h_flex().w_full().flex_wrap().gap_x(G.md)
-            .child(div().text_size(11).text_color(c.dim).child(`${th.path}${th.line ? `:${th.line}` : ""}`))
-            .child(div().text_size(11).text_color(c.dim).child(th.author))
-            .when(th.replies > 0, (el) => el.child(div().text_size(11).text_color(c.dim).child(`${th.replies} repl${th.replies > 1 ? "ies" : "y"}`)))
-            .when(th.outdated, (el) => el.child(div().text_size(11).text_color(c.dim).child("outdated")))))));
+      .children(this.threads.map((th, i) => {
+        const body = th.body.length > 240 ? th.body.slice(0, 240) + "…" : th.body;
+        const second = [`${th.path}${th.line ? `:${th.line}` : ""}`, th.author, th.replies > 0 ? `${th.replies} repl${th.replies > 1 ? "ies" : "y"}` : null, th.outdated ? "outdated" : null];
+        // The thread's first 240 characters, wrapped over its lines.
+        return kitRow({ name: body, second, wrap: true })(`pr-thread-${i}`, c, { onClick: () => { if (th.url) openUrl(th.url); } });
+      }));
   }
 
-  diffView(c, path) {
+  // A line is cut at MAX_DIFF characters too: a minified file's one line stays cheap to draw.
+  fileDiff(c, path) {
     if (this.diffLoading && !this.diffs) return this.diffBones(c);
     const lines = this.diffs?.[path];
-    if (!lines) return div().py(6).text_size(11).text_color(c.dim).child(this.diffs ? "No text diff for this file." : "");
-    return v_flex().w_full().mb(G.sm).rounded(6).border_1().border_color(c.border).overflow_hidden().font_family(monoFont()).text_size(11)
-      .children(diffRows(lines, { max: MAX_DIFF, width: 400 }).map((r) => r.kind === "@"
-        ? div().h(20).px(10).flex_none().truncate().text_color(c.dim).child(r.text)
-        : h_flex().h(20).flex_none().gap(8).when(r.kind === "+", (e) => e.bg(c.green + "18")).when(r.kind === "-", (e) => e.bg(c.red + "18"))
-          .child(div().w(30).flex_none().text_right().text_color(c.dim).child(r.number === undefined ? "" : String(r.number)))
-          .child(div().flex_1().min_w(0).truncate().text_color(c.text).child(r.text))))
-      .when(lines.length > MAX_DIFF, (el) => el.child(div().px(10).py(4).text_color(c.dim).child(`The first ${MAX_DIFF} lines; the rest is on GitHub.`)));
+    const note = (text) => div().py(G.xs).text_size(T.body).text_color(c.dim).child(text);
+    if (!lines?.length) return note(this.diffs ? "No text diff for this file." : "");
+    return v_flex().w_full().mb(G.sm)
+      .child(code({ text: lines.slice(0, MAX_DIFF).map((line) => line.slice(0, MAX_DIFF)).join("\n"), kind: "diff" })("pr-diff", c))
+      .when(lines.length > MAX_DIFF, (el) => el.child(note(`The first ${MAX_DIFF} lines; the rest is on GitHub.`).px(G.lg)));
   }
 
   pickFile(path, cx) {
@@ -1118,28 +1087,23 @@ export class PullRequest {
     const pr = this.pr, files = pr.files ?? [], open = this.expanded.files;
     const shown = open ? files : files.slice(0, FILE_ROWS);
     return v_flex().w_full()
-      .child(section(c, "Files", `${pr.changedFiles} · +${pr.additions} −${pr.deletions}`))
+      .child(section(c, "Files", facts(String(pr.changedFiles), diffText({ add: pr.additions, del: pr.deletions }))))
       .children(shown.map((f, i) => {
         const all = f.path.split("/"), parts = all.slice(0, -1), name = all.at(-1), on = this.openFile === f.path;
         const mark = { ADDED: "added", DELETED: "deleted", RENAMED: "renamed" }[f.changeType] ?? "";
         return v_flex().w_full().when(i > 0, (el) => el.border_t(1).border_color(c.border))
-          .child(Button.new(`pr-file-${i}`).w_full().py(7).cursor_pointer().hover((s) => s.opacity(0.75))
-            .on_click((_e, cx) => this.pickFile(f.path, cx))
-            .child(h_flex().w_full().items_end().gap(G.md)
-              .child(v_flex().flex_1().min_w(0).gap(2)
-                .child(div().truncate().text_size(13).text_color(c.text).when(on, (e) => e.font_medium()).child(name))
-                .when(parts.length > 0 || Boolean(mark), (el) => el.child(div().truncate().text_size(11).text_color(c.dim).child([parts.join("/"), mark].filter(Boolean).join(" · ")))))
-              .child(div().text_size(11).text_color(c.dim).child(`+${f.additions} −${f.deletions}`))))
-          .when(on, (el) => el.child(this.diffView(c, f.path)));
+          .child(kitRow({ name, second: [parts.join("/"), mark].filter(Boolean).join(" · ") || null, meta: diffText({ add: f.additions, del: f.deletions }), current: on })(`pr-file-${i}`, c, {
+            onClick: (cx) => this.pickFile(f.path, cx),
+          }))
+          .when(on, (el) => el.child(this.fileDiff(c, f.path)));
       }))
       .when(files.length > FILE_ROWS, (el) => el.child(h_flex().pt(G.sm).child(quietLink("pr-files-more", open ? "Show fewer" : `Show ${files.length - FILE_ROWS} more`, (cx) => { this.expanded = { ...this.expanded, files: !open }; cx.notify(); }, c))))
       .when(files.length < pr.changedFiles, (el) => el.child(div().pt(G.sm).text_size(11).text_color(c.dim).child(`GitHub lists the first ${files.length} of ${pr.changedFiles} files.`)));
   }
 
-  inboxState(item, c) {
+  inboxState(item) {
     const text = inboxLabel(item);
-    const color = { Draft: c.dim, "Changes requested": c.red, "Review required": c.yellow, Approved: c.green }[text] ?? c.dim;
-    return { text, color };
+    return { text, tone: INBOX_TONES[text] ?? "dim" };
   }
 
   openInboxItem(item, cx) {
@@ -1154,21 +1118,10 @@ export class PullRequest {
     const mine = new Set((this.inbox?.logins ?? [this.inbox?.login]).filter(Boolean).map((name) => name.toLowerCase()));
     const firsts = groups.map((_, g) => groups.slice(0, g).reduce((n, group) => n + group.rows.length, 0));
     const row = (item, i) => {
-      const state = this.inboxState(item, c);
       const meta = [`#${item.number}`, item.author && mine.has(String(item.author).toLowerCase()) ? "you" : item.author, item.updatedAt ? ago(item.updatedAt) : "", isNew(item) ? "new" : ""].filter(Boolean).join(" · ");
-      return Button.new(`pr-in-${i}`).w_full().px(G.md).py(10).rounded(6).cursor_pointer()
-        .hover((s) => s.bg(c.subtle))
-        .accessibility_label(`#${item.number} ${item.title}`)
-        .on_click((_e, cx) => this.openInboxItem(item, cx))
-        .child(v_flex().w_full().min_w(0).gap(4)
-          .child(div().w_full().min_w(0).text_size(14).line_height(1.35).text_color(c.text).child(item.title))
-          .child(div().w_full().truncate().text_size(11.5).text_color(c.dim).child(meta))
-          .child(h_flex().w_full().gap(G.sm).items_center()
-            .child(div().size(6).flex_none().rounded_full().bg(state.color))
-            .child(div().text_size(12).text_color(state.color === c.dim ? c.muted : state.color).child(state.text))
-            .when(item.additions != null, (el) => el.child(div().text_size(12).text_color(c.dim).child(`+${item.additions} −${item.deletions}`)))));
+      return prRow(`pr-in-${i}`, c, item, { meta, state: this.inboxState(item), onClick: (cx) => this.openInboxItem(item, cx) });
     };
-    return v_flex().w_full().gap(G.lg)
+    return this.withNote(v_flex().w_full().gap(G.lg)
       .child(segmented("pr-inbox", [{ key: "needs", label: "Needs you" }, { key: "yours", label: "Yours" }], tab, (key, cx) => { this.inboxTab = key; cx.notify(); }, c))
       .when(this.outside, (el) => el.child(div().text_size(12).text_color(c.dim).child("This pane is not in a repository.")))
       .child(!groups.length
@@ -1176,8 +1129,7 @@ export class PullRequest {
         : v_flex().w_full().gap(G.xl).children(groups.map((group, g) => v_flex().w_full().gap(2)
           .child(section(c, group.title, String(group.rows.length)))
           .children(group.rows.map((item, k) => row(item, firsts[g] + k))))))
-      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil))))
-      .when(Boolean(this.note), (el) => el.child(failNote("pr-note", this.note, c)));
+      .when(Boolean(this.wait || this.inbox?.limitedUntil), (el) => el.child(div().text_size(12).text_color(c.dim).child(this.wait || limitLine(this.inbox.limitedUntil)))), c);
   }
 
   body(c, narrow) {
@@ -1185,9 +1137,9 @@ export class PullRequest {
     if (this.listing) return this.listPage(c);
     const kind = this.sceneKind();
     if (kind === "pr") return this.hero(c);
-    if (kind === "loading") return this.skeleton(c, narrow);
+    if (kind === "loading") return listBones(c);
     if (kind === "wait") return this.waiting(c, this.wait);
-    if (kind === "error") return failure("pr-failed", this.error.title, c, { why: this.error.detail, fixes: [{ label: "Refresh", onClick: (cx) => this.again(cx) }] });
+    if (kind === "error") return failureBlock({ text: this.error.title, source: this.error.detail, fix: "Refresh" })("pr-failed", c, { onClick: (cx) => this.again(cx) });
     return drawEmpty(this, c);
   }
 
@@ -1254,9 +1206,10 @@ export class PullRequest {
     const padX = narrow ? G.lg : 32;
     const padY = narrow ? G.lg : 28;
     return v_flex().id("kanso-pr").size_full().min_h(0).bg(c.background).text_color(c.text).overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
+      .on_size_change(pageSize.call(this))
       .pt(padY).pb(padY).gap(G.lg).track_scroll(this.scroll)
       .children(nodes.map(([, el]) => h_flex().flex_none().w_full().justify_center().px(padX)
         .child(v_flex().w_full().max_w(1080).child(el))));
   }
 }
+

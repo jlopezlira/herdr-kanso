@@ -1,21 +1,18 @@
 import { serviceOn } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
-import { div, svg, image } from "gpui-kit";
+import { div, image } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, Textarea, TextareaState } from "gpui-base";
 import { readTextFile, writeTextFile, theme, settings, home, appHome } from "herdr";
 import { parseBlocks, joinBlocks, headingOf, headingLine, parseTable, tableLines } from "./blocks.js";
-import { breathe, tokens } from "./ui.js";
+import { G, tokens } from "./ui.js";
 import { quietLink, button } from "./ui-button.js";
-import { skeleton } from "./ui-skeleton.js";
+import { button as kitButton, skeletonOf, tooltip } from "./kit.js";
 import { bring, appRelative, markdownParts, staleView, bytesLabel, copyFailure, quietError } from "./remote-file.js";
 import { EDIT_LIMIT, drafts, draftKey, remember, opened, restore, seenDisk, typed, beginSave, commitText, applied, word, didFail, keepMine, takeTheirs, tooLarge, wholeText, overRead } from "./edit.js";
 
-export function readingLines(t) {
-  const { line } = skeleton({ border: t.border });
-  return breathe(v_flex().id("kanso-skeleton").w_full().max_w(760).px(16).pt(14).gap(10))
-    .children([280, 200, 240, 120, 220, 160, 190].map((w) => line(w, 12)));
-}
+// Where text is about to be: a preview's few lines, a Markdown document's more.
+export const readingLines = (t, count = 4) => v_flex().w_full().px(G.lg).pt(G.md).child(skeletonOf({ shape: "line", count })("kanso-skeleton", t));
 
 const AUTOSAVE_MS = 700;
 const HEADING_SIZE = [0, 22, 18, 16, 15, 14, 13.5];
@@ -317,14 +314,14 @@ export class MarkdownDoc {
     return [
       ...(state ? [div().text_size(11.5).text_color(t.dim).child(state)] : []),
       ...(this.canEdit ? [button(`${prefix}-source`, this.source ? "Formatted" : "Source", (cx) => this.toggleSource(cx), c, { kind: "quiet", small: true, active: Boolean(this.source), color: this.source ? null : c.muted })
-        .tooltip(this.source ? "Back to the formatted document" : "Edit the whole file as Markdown")] : []),
+        .tooltip(tooltip({ label: this.source ? "Back to the formatted document" : "Edit the whole file as Markdown" }))] : []),
     ];
   }
 
   body(t, id) {
     if (this.big) return div().p(16).text_color(t.dim).child("Too large to edit");
     if (this.error) return div().p(16).text_color(t.dim).child(this.error);
-    if (this.text === null) return readingLines(t);
+    if (this.text === null) return readingLines(t, 6);
     const conflict = this.conflict ? conflictBar(id, t, (cx) => this.keepMine(cx), (cx) => this.takeTheirs(cx)) : null;
     const main = this.source
       ? div().flex_1().min_h(0).px(6).py(4).child(Editor.new(this.source).size_full())
@@ -359,7 +356,7 @@ export class MarkdownDoc {
       if (part.kind === "text") return part.text.trim() ? TextView.markdown(`${id}-v${i}-${k}`, part.text).on_link_click((url, cx) => this.follow(url, cx)) : null;
       const file = linkTarget(part.url, this.path)?.file;
       const shot = file && this.shots?.has(file) ? this.shots.get(file) : undefined;
-      if (shot === undefined) return breathe(div().id(`${id}-shot-${k}`)).child(skeleton({ border: t.border }).block(240, 140, 8));
+      if (shot === undefined) return skeletonOf({ shape: "picture" })(`${id}-shot-${k}`, t);
       if (shot?.deferred) return h_flex().id(`${id}-shot-${k}`).gap(8).items_center()
         .child(div().text_size(12).text_color(t.foreground).child(paths.basename(file)))
         .child(div().text_size(12).text_color(t.dim).child(bytesLabel(shot.size)))
@@ -378,26 +375,31 @@ export class MarkdownDoc {
     const prior = this.shots ?? new Map();
     this.shots = new Map(files.map((file) => [file, prior.has(file) ? prior.get(file) : undefined]));
     this.shotSeq = (this.shotSeq ?? 0) + 1;
-    const seq = this.shotSeq, path = this.path, on = this.on;
-    cx.spawn(async (cx) => {
+    this.shotTask(cx, async (cx, { seq, path, on }) => {
       await files.reduce(async (done, file) => {
         await done;
         if (this.shotSeq !== seq || this.path !== path) return;
         const shot = await bring(file, on).then((got) => got.deferred ? { deferred: true, size: got.size, file } : appRelative(got.path, appHome())).catch(() => null);
-        if (this.shotSeq !== seq || this.path !== path) return;
-        this.shots = new Map([...this.shots, [file, shot]]);
-        cx.notify();
+        this.keepShot(file, shot, seq, path, cx);
       }, Promise.resolve());
     });
   }
 
+  shotTask(cx, work) {
+    const address = { seq: this.shotSeq, path: this.path, on: this.on };
+    cx.spawn((next) => work(next, address));
+  }
+
+  keepShot(file, shot, seq, path, cx) {
+    if (this.shotSeq !== seq || this.path !== path) return;
+    this.shots = new Map([...this.shots, [file, shot]]);
+    cx.notify();
+  }
+
   loadShot(file, cx) {
-    const seq = this.shotSeq, path = this.path, on = this.on;
-    cx.spawn(async (cx) => {
+    this.shotTask(cx, async (cx, { seq, path, on }) => {
       const shot = await bring(file, on, { ask: true }).then((got) => appRelative(got.path, appHome())).catch(() => null);
-      if (this.shotSeq !== seq || this.path !== path) return;
-      this.shots = new Map([...this.shots, [file, shot]]);
-      cx.notify();
+      this.keepShot(file, shot, seq, path, cx);
     });
   }
 
@@ -405,9 +407,8 @@ export class MarkdownDoc {
     const { head, rows, table } = this.cells;
     const n = head.length;
     const palette = tokens(t), quiet = { kind: "quiet", small: true, color: palette.muted };
-    const icon = (key, tip, action) => div().id(key).size(20).flex_none().flex().items_center().justify_center().rounded(4).cursor_pointer()
-      .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip(tip).on_click((_e, cx) => action(cx))
-      .child(svg(`${this.icons}/close.svg`).size(11));
+    // The kit's small icon button: its tip is its label, Tab reaches it, Enter and Space press it.
+    const icon = (key, tip, action) => kitButton({ label: tip, kind: "icon", size: "sm", icon: `${this.icons}/x.svg` })(key, palette, { onClick: action });
     const cell = (s, key, strong) => div().id(key).flex_1().min_w(96).border_r(1).border_color(t.border)
       .child(Textarea.new(s).w_full().px(8).py(5).text_size(12.5).text_color(t.foreground).when(strong, (el) => el.font_semibold()));
     const line = (cells, key, strong, end) => h_flex().id(key).w_full().items_start().border_b(1).border_color(t.border)

@@ -2,15 +2,12 @@
 // Apache-2.0; derived from Herdr's shipped `menu` mod.
 // In the strip Herdr's menu gets the block id ("term-<pane>"), so pane commands fail: this menu resolves the real pane.
 import { View } from "gpui-kit";
-import { run, props, closeOverlay, openOverlay, theme, terminals, panes, spaces, shared, setShared, keys } from "herdr";
+import { run, props, closeOverlay, openOverlay, theme, terminals, panes, shared, setShared, keys } from "herdr";
 import { listKey, moveTo } from "./listkeys.js";
+import { focusOn } from "./pure.js";
+import { openWithPopup } from "./popup.js";
 import { tokens } from "./ui.js";
 import { menuList } from "./ui-menu.js";
-
-function openWith(p) {
-  const space = spaces().find((s) => s.tabs.some((x) => x.id === p.tab));
-  openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { folder: p.cwd, machine: space?.machine ?? null } });
-}
 
 function items(tg) {
   const ps = panes();
@@ -29,17 +26,17 @@ function items(tg) {
     run("pane.split", { pane, direction: dir === "down" ? "down" : "right" });
   }, icon, key];
   return [
-    split("Split right", "right", "split-right", "kanso-strip.new-right"),
-    split("Split left", "left", "split-right", "kanso-strip.new-left"),
-    split("Split down", "down", "split-down", "kanso-strip.new-down"),
-    ["Wider or narrower", () => setShared("strip.req", { op: "width", pane, n: Date.now() + Math.random() }), "zoom", "kanso-strip.width"],
+    split("Split right", "right", "columns-2", "kanso-strip.new-right"),
+    split("Split left", "left", "columns-2", "kanso-strip.new-left"),
+    split("Split down", "down", "rows-2", "kanso-strip.new-down"),
+    ["Wider or narrower", () => setShared("strip.req", { op: "width", pane, n: Date.now() + Math.random() }), "move-horizontal", "kanso-strip.width"],
     [pinned ? "Unpin pane" : "Pin pane", () => setShared("strip.req", { op: "pin", pane, n: Date.now() + Math.random() }), "pin", "kanso-strip.pin"],
     ...(term ? [[toProgram ? "Use Herdr right-click menu" : "Send right-clicks to pane",
-      () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }), "sidebar", null]] : []),
+      () => run("terminal.right_click", { terminal: term.address, to: toProgram ? "menu" : "program" }), "panel-left", null]] : []),
     ...(parent ? [[`Send back to ${parent.name || parent.address}`, () => run("terminal.park", { terminal: term.address }), "chevron-right", null]] : []),
-    ...(info?.cwd ? [["Open with…", () => openWith(info), "open-with", "mod.open:open-with"]] : []),
+    ...(info?.cwd ? [["Open with…", () => openWithPopup(info), "external-link", "mod.open:open-with"]] : []),
     ...(info?.terminal ? [["Send to an agent…", () => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane } }), "send", "kanso-strip.send"]] : []),
-    ["Close pane", () => run("pane.close", { pane }), "close", "kanso-strip.close"],
+    ["Close pane", () => run("pane.close", { pane }), "x", "kanso-strip.close"],
   ];
 }
 
@@ -48,8 +45,14 @@ const shortcut = (action) => (action ? keys().find((b) => b.action === action)?.
 export default class KansoMenu extends View {
   init(_props, cx) {
     this.at = -1; // nothing chosen for you: j or the down arrow lights the first
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
+  }
+
+  // The pending g (for gg) is kept on the view between keys.
+  listed(e) {
+    const nav = listKey(e, this.listG);
+    this.listG = nav.gAt;
+    return nav.move;
   }
 
   choose(i) {
@@ -67,8 +70,7 @@ export default class KansoMenu extends View {
       { icon: it[2], label: it[0], hint: shortcut(it[3]) || null, selected: i === this.at, onClick: () => this.choose(i) }]);
     return menuList("kanso-menu", { items: lines }, tokens(theme())).track_focus(this.handle)
       .on_key_down((e, cx) => {
-        const { move, gAt } = listKey(e, this.listG);
-        this.listG = gAt;
+        const move = this.listed(e);
         if (!move) return;
         if (move === "enter") this.choose(this.at);
         else if (move === "escape") closeOverlay(props().overlay);

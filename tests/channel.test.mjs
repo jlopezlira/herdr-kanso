@@ -61,8 +61,10 @@ test("The first RC moves Unreleased, fixes the version, and keeps stable history
   assert.equal(planRelease({ ...input, kind: "rc", branch: "develop", changelog: stableLog }).action, "fail");
 });
 
+const firstCandidate = () => prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+
 test("Later RCs retain the version when the combined categories need no larger bump", () => {
-  const first = prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+  const first = firstCandidate();
   const tags = ["1.1.0", "1.2.0-beta.13", "1.2.0-rc.1", "v1.2.0-rc.2"];
   assert.deepEqual(prepareCandidate({ ...first, tags, date: "2026-11-12" }), first, "no entries means no file changes");
   assert.equal(planRelease({ ...first, tags, kind: "rc", branch: "develop" }).tag, "v1.2.0-rc.3");
@@ -81,7 +83,7 @@ test("Later RCs retain the version when the combined categories need no larger b
 });
 
 test("A later RC recomputes all unreleased entries and renames a minor candidate for Breaking or Removed", () => {
-  const first = prepareCandidate({ version: "1.1.0", changelog: pendingLog, tags: ["1.1.0"], date: "2026-11-02" });
+  const first = firstCandidate();
   const tags = ["1.1.0", "1.2.0-rc.1", "1.2.0-rc.7"];
   for (const category of ["Breaking", "Removed"]) {
     const changelog = first.changelog.replace("## [1.2.0]", `## [Unreleased]\n\n### ${category}\n\n- Old behavior.\n\n## [1.2.0]`);
@@ -112,24 +114,33 @@ const workflow = (name) => readFile(new URL(name, workflows), "utf8");
 test("Workflows publish a beta from develop, a release candidate on demand, and a stable release from main", async () => {
   const ci = await workflow("ci.yml");
   assert.match(ci, /branches: \[main, develop\]/);
-  assert.match(ci, /KANSO_BRANCH: \$\{\{ github\.event_name == 'pull_request' && github\.base_ref \|\| github\.ref_name \}\}/);
+  assert.match(ci, /KANSO_BRANCH: \$\{\{ github\.ref_name \}\}/);
   const stable = ci.slice(ci.indexOf("\n  stable:"));
   assert.match(stable, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/, "a stable release waits for all three platforms");
-  assert.match(stable, /release-plan\.mjs stable/);
+  assert.match(stable, /uses: \.\/\.github\/workflows\/release\.yml\n    with:\n      kind: stable\n      branch: main/);
   assert.doesNotMatch(stable, /--prerelease/);
-  assert.deepEqual((await readdir(workflows)).sort(), ["ci.yml", "pages.yml", "rc.yml"], "no workflow publishes a stable release beside CI");
+  assert.deepEqual((await readdir(workflows)).sort(), ["ci.yml", "pages.yml", "rc.yml", "release.yml"]);
+  const release = await workflow("release.yml");
+  assert.match(release, /^on:\n  workflow_call:\n/m, "the release workflow runs only when CI or the release candidate calls it");
+  assert.doesNotMatch(release, /\n\s*(push|workflow_dispatch|pull_request):/, "no workflow publishes a stable release beside CI");
+  assert.match(release, /release-plan\.mjs \$\{\{ inputs\.kind \}\}/);
+  assert.match(release, /test "\$GITHUB_REF_NAME" = "\$\{\{ inputs\.branch \}\}"/);
+  const archive = release.slice(release.indexOf("Tag the archive"), release.indexOf("Commit and tag"));
+  assert.match(archive, /release-tag\.mjs "\$RELEASE_TAG"/);
+  assert.match(archive, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.doesNotMatch(archive, /HEAD:refs\/heads/);
   const beta = ci.slice(ci.indexOf("\n  beta:"), ci.indexOf("\n  stable:"));
   assert.match(beta, /needs: platform\n    if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/develop'/, "a beta waits for all three platforms");
-  assert.match(beta, /release-plan\.mjs beta/);
+  assert.match(beta, /kind: beta\n      branch: develop/);
   assert.match(beta, /--prerelease/);
-  assert.match(beta, /release-tag\.mjs "\$RELEASE_TAG"/);
-  assert.match(beta, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.match(beta, /tag: archive/);
   assert.match(beta, /--verify-tag/);
   assert.doesNotMatch(beta, /--target|HEAD:refs\/heads\/develop/);
   assert.doesNotMatch(ci, /workflow_dispatch/);
   const rc = await workflow("rc.yml");
   assert.match(rc, /workflow_dispatch/);
-  assert.match(rc, /release-plan\.mjs rc/);
+  assert.match(rc, /kind: rc --prepare\n      branch: develop/);
+  assert.match(rc, /tag: commit/);
   assert.match(rc, /--prerelease/);
   assert.doesNotMatch(rc, /\n\s*push:/);
   const pages = await workflow("pages.yml");
@@ -138,13 +149,15 @@ test("Workflows publish a beta from develop, a release candidate on demand, and 
   assert.doesNotMatch(pages, /develop/);
 });
 
-test("CI drops only a pull request's older run, and every job of every workflow has a time limit", async () => {
+test("CI runs only on pushes to main and develop, never cancels a run, and every job of every workflow has a time limit", async () => {
   const ci = await workflow("ci.yml");
-  assert.match(ci, /group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.run_id \}\}\n  cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+  assert.match(ci, /^on:\n  push:\n    branches: \[main, develop\]\n/m);
+  assert.doesNotMatch(ci, /pull_request|cancel-in-progress/, "pull requests are checked locally before they are opened");
   for (const name of await readdir(workflows)) {
     const text = await workflow(name);
     const jobs = text.slice(text.indexOf("\njobs:")).match(/^  [\w-]+:$/gm);
-    assert.equal(text.match(/^    timeout-minutes: \d+$/gm)?.length, jobs.length, name);
+    const calls = text.match(/^    uses: \.\/\.github\/workflows\//gm)?.length ?? 0;
+    assert.equal(text.match(/^    timeout-minutes: \d+$/gm)?.length ?? 0, jobs.length - calls, `${name}: a job that calls the release workflow takes its limit`);
   }
 });
 

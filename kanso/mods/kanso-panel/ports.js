@@ -1,3 +1,4 @@
+import { sizedPage, listBones, heroStack, heroHeading } from "./ui-page.js";
 import { localService, serviceFor, REMOTE_TIMEOUT } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { processApi } from "./platform-processes.js";
@@ -7,17 +8,20 @@ import { fileApi } from "./platform-files.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, hc, panes, terminals, machines, home, run, theme, appHome, readTextFile, shared } from "herdr";
-import { tilde, said, failNote } from "./lib.js";
+import { tilde, said } from "./lib.js";
+import { failureBlock, metric, tooltip } from "./kit.js";
+import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, tryOr } from "./pure.js";
 import { parseProcesses, etimeSecs } from "./procs.js";
 import { STOP_LOOP, systemApi } from "./platform-system.js";
 export { STOP_LOOP };
-import { G, tokens, breathe } from "./ui.js";
+import { G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
+import { row } from "./ui-row.js";
+import { factList } from "./ui-facts.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
 import { portsMemory } from "./panel-state.js";
@@ -194,20 +198,21 @@ export class Ports {
     if (this.busy.install && (hist.state === "ok" || now - this.busy.install > BUSY_MS)) this.idle();
   }
 
+  pictureTask(work) { return (cx) => work(cx, this.picture()); }
+
   refresh(cx, { history = false, then = null, now = false } = {}) {
     if (this.front.behind()) { this.front.rest(); return; }
     this.front.woke();
     this.readRemotes(cx, now);
     if (this.reading) { if (then) cx.timer.after(1000, (cx) => this.refresh(cx, { history, then })); return; }
     this.reading = true;
-    cx.spawn(async (cx) => {
-      const before = this.picture();
+    cx.spawn(this.pictureTask(async (cx, before) => {
       try {
         if (history || Date.now() - this.histAt >= HISTORY_MS) await this.readHistory();
         this.list = await this.read(); this.note = this.attribution;
       } catch (e) { this.note = said("Can't read the ports", e?.message ?? e); this.list = this.list ?? []; }
       finally { this.reading = false; then?.(); if (this.picture() !== before) cx.notify(); }
-    });
+    }));
   }
 
   readRemotes(cx, now = false) {
@@ -219,15 +224,14 @@ export class Ports {
       if (r.reading && at - r.reading < LONGEST_MS) continue;
       if (!now && at < r.next) continue;
       this.remote = { ...this.remote, [name]: { ...r, reading: at } };
-      cx.spawn(async (cx) => {
-        const before = this.picture();
+      cx.spawn(this.pictureTask(async (cx, before) => {
         const was = this.remote[name], fails = now ? 0 : was.fails;
         const next = await this.read(name).then(
           (list) => ({ list, why: null, fails: 0, next: Date.now() + REST_MS }),
           (e) => ({ list: null, why: unreadable(e), fails: fails + 1, next: Date.now() + backoffMs(fails + 1) }));
         this.remote = { ...this.remote, [name]: { ...next, said: next.list ? null : this.remote[name]?.said ?? null, reading: 0 } };
         if (this.picture() !== before) cx.notify();
-      });
+      }));
     }
   }
 
@@ -345,25 +349,25 @@ export class Ports {
     return { pane: p, name: given || p?.program?.name || p?.title || address };
   }
 
+  // The server's ports, then where it runs; its command, folder and age under them, and its actions last.
   row(s, c) {
     const busy = this.stopping.has(portKey(s)), id = rowId(s);
     const owner = s.owner ? this.paneOf(s.owner) : null;
     const since = s.startedAt ?? Date.now() - s.secs * 1000;
-    return v_flex().w_full().px(G.md).py(10).gap(4).rounded(6).hover((st) => st.bg(c.subtle)).when(busy, (el) => el.opacity(0.45))
-      .child(h_flex().w_full().items_center().gap(G.md)
-        .child(div().flex_none().text_size(17).font_light().text_color(c.text).child(s.ports.map((p) => `:${p}`).join(" ")))
-        .child(div().flex_1().min_w(0).truncate().text_size(12.5).text_color(c.muted).child(shortArgs(s.args)))
-        .when(typeof s.mb === "number", (el) => el.child(div().flex_none().text_size(12.5).text_color(c.muted).child(size(s.mb))))
-        .child(div().flex_none().text_size(11.5).text_color(c.dim).tooltip(`Since ${clock(since)}`).child(age(s.secs))))
-      .child(h_flex().w_full().min_w(0).gap(G.sm).items_center()
-        .child(div().size(6).flex_none().rounded_full().bg(owner ? c.green : c.yellow))
-        .child(div().flex_none().text_size(12).text_color(owner ? c.muted : c.yellow).child(owner ? `In ${owner.name}` : NO_PANE))
-        .when(Boolean(s.cwd || s.project || s.cwdReason), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(c.dim).child(s.cwd ? tilde(s.cwd) : s.project || s.cwdReason))))
-      .child(h_flex().flex_wrap().gap_x(G.lg)
-        .child(quietLink(`pt-open-${id}`, "Open in the browser", (cx) => this.openPort(s, cx), c, { color: c.text }))
-        .when(Boolean(owner?.pane), (el) => el.child(quietLink(`pt-go-${id}`, "Go to its pane", () => run("pane.focus", { terminal: s.owner }), c)))
-        .child(this.armed.link(`pt-stop-${id}`, busy ? "Stopping…" : s.force ? "Force stop" : "Stop", s.force ? "force stop" : "stop",
-          `stop:${id}`, (cx) => this.stop([s], cx), c, { disabled: busy })));
+    const stop = this.armed.verb(busy ? "Stopping…" : s.force ? "Force stop" : "Stop", s.force ? "force stop" : "stop",
+      `stop:${id}`, (cx) => this.stop([s], cx), { disabled: busy });
+    return row(`pt-${id}`, c, {
+      name: s.ports.map((p) => `:${p}`).join(" "),
+      detail: owner ? `In ${owner.name}` : { text: NO_PANE, tone: "working" },
+      meta: typeof s.mb === "number" ? size(s.mb) : null,
+      second: [shortArgs(s.args), s.cwd ? tilde(s.cwd) : s.project || s.cwdReason, { text: age(s.secs), tip: `Since ${clock(since)}` }],
+      verbs: [
+        { label: "Open in the browser", onClick: (cx) => this.openPort(s, cx), color: c.text },
+        owner?.pane ? { label: "Go to its pane", onClick: () => run("pane.focus", { terminal: s.owner }) } : null,
+        stop,
+      ].filter(Boolean),
+      pending: busy,
+    });
   }
 
   hero(c, list, narrow) {
@@ -372,22 +376,15 @@ export class Ports {
     const held = list.reduce((t, s) => t + (typeof s.mb === "number" ? s.mb : 0), 0);
     const st = this.digest?.stats;
     const stats = [
-      { value: String(loose.length), unit: NO_PANE, hot: loose.length > 0 },
+      { value: String(loose.length), unit: NO_PANE },
       held > 0 ? { value: size(held), unit: "held now" } : null,
       st ? { value: String(st.openedToday), unit: "opened today" } : null,
-      st ? { value: String(st.stopped), unit: "stopped by you", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
-      st && st.freedMB > 0 ? { value: size(st.freedMB), unit: "given back", tip: st.since ? `Since ${clock(st.since)}` : null } : null,
+      st ? { value: String(st.stopped), unit: st.since ? `stopped by you since ${clock(st.since)}` : "stopped by you" } : null,
+      st && st.freedMB > 0 ? { value: size(st.freedMB), unit: st.since ? `given back since ${clock(st.since)}` : "given back" } : null,
     ].filter(Boolean);
-    return v_flex().w_full().gap(G.xl)
-      .child(v_flex().gap(G.xs)
+    return heroStack(heroHeading()
         .child(div().text_size(15).text_color(c.muted).child(here ? `Listening on ${machineTitle("", "", here)}` : "Listening on this computer"))
-        .child(h_flex().items_end().gap(G.md)
-          .child(div().text_size(narrow ? 48 : 64).line_height(1).font_light().text_color(c.text).child(String(list.length)))
-          .child(div().pb(narrow ? 6 : 9).text_size(13).text_color(c.dim).child(list.length === 1 ? "server" : "servers"))))
-      .child(h_flex().w_full().flex_wrap().gap_x(narrow ? G.xl : 48).gap_y(G.lg)
-        .children(stats.map((s) => h_flex().items_end().gap(6).when(Boolean(s.tip), (el) => el.tooltip(s.tip))
-          .child(div().text_size(narrow ? 22 : 28).line_height(1).font_light().text_color(s.hot ? c.yellow : c.text).child(s.value))
-          .child(div().pb(3).text_size(12).text_color(c.dim).child(s.unit)))))
+        .child(metric({ value: String(list.length), unit: list.length === 1 ? "server" : "servers", facts: factList(stats) })("pt-metric", c)))
       .when(loose.length > 0, (el) => el.child(h_flex().gap(G.lg).items_center().flex_wrap()
         .child(this.armed.button("pt-stop-all", `Stop ${loose.length} ${NO_PANE}`, `stop ${loose.length}`, "all", (cx) => this.stop(loose, cx), c))
         .child(div().text_size(12).text_color(c.dim).child("The ones in a pane stay."))));
@@ -428,18 +425,18 @@ export class Ports {
         .children((series?.bars ?? []).map((bar) => {
           const total = bar.empty ? 1 : Math.max(2, Math.round(bar.ratio * height));
           const looseH = bar.loose ? Math.min(total, Math.max(2, Math.round(bar.looseRatio * height))) : 0;
-          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4).tooltip(bar.tip)
+          return v_flex().flex_1().min_w(0).h(height + 18).items_center().justify_end().gap(4).tooltip(tooltip({ label: bar.tip }))
             .when(Boolean(bar.mark), (el) => el.child(div().text_size(10).text_color(c.text).whitespace_nowrap().child(bar.value)))
             .child(v_flex().w(bar.mark ? 3 : 2).flex_none()
               .when(total - looseH > 0, (el) => el.child(div().w_full().h(total - looseH).rounded_t(1)
-                .bg(bar.mark ? c.accent : bar.empty ? c.border : c.muted).opacity(bar.mark || bar.empty ? 1 : 0.55)))
+                .bg(bar.mark ? c.accent : bar.empty ? c.border : c.muted).opacity(bar.mark || bar.empty ? 1 : OPACITY.quiet)))
               .when(looseH > 0, (el) => el.child(div().w_full().h(looseH).when(total === looseH, (d) => d.rounded_t(1)).bg(c.yellow))));
         })))
       .child(h_flex().w_full().justify_between().items_center()
         .child(div().text_size(10).text_color(c.dim).child(series?.first ?? ""))
         .child(h_flex().gap(G.xs).items_center()
           .child(div().text_size(10).text_color(c.dim).child("Servers"))
-          .when(anyLoose, (el) => el.child(div().size(5).ml(G.sm).rounded_full().bg(c.yellow)).child(div().text_size(10).text_color(c.dim).child(NO_PANE))))
+          .when(anyLoose, (el) => el.child(dot(c, c.yellow).ml(G.sm)).child(div().text_size(10).text_color(c.dim).child(NO_PANE))))
         .child(div().text_size(10).text_color(c.dim).child(series?.last ?? "")));
   }
 
@@ -466,35 +463,12 @@ export class Ports {
           .child(h_flex().w_full().flex_wrap().gap_x(G.md)
             .children([r.ports, r.opened, r.ran].filter(Boolean).map((part) => div().text_size(11).text_color(c.dim).whitespace_nowrap().child(part)))
             .when(Boolean(r.how), (el) => el.child(div().text_size(11).text_color(r.loose ? c.yellow : c.dim).whitespace_nowrap().child(r.how)))))
-        .child(div().flex_none().text_size(15).font_light().text_color(c.text).whitespace_nowrap().tooltip("Its largest").child(r.peak))))
+        .child(div().flex_none().text_size(15).font_light().text_color(c.text).whitespace_nowrap().tooltip(tooltip({ label: "Its largest" })).child(r.peak))))
       .when(tab.rows.length > LIST_ROWS, (el) => el.child(h_flex().pt(G.sm)
         .child(quietLink("pt-more", this.showAll ? "Show fewer" : `Show ${tab.rows.length - LIST_ROWS} more`, (cx) => { this.showAll = !this.showAll; cx.notify(); }, c))));
   }
 
-  skeleton(c, narrow) {
-    const { block, line } = ghost(c);
-    const heights = [28, 50, 36, 72, 40, 60, 24, 44, 32, 48, 20, 56];
-    const two = (i) => v_flex().w_full().py(10).gap(4)
-      .child(line([140, 110, 160, 96][i], 13)).child(line([180, 150, 120, 170][i], 11));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 32 : 44))
-      .child(v_flex().gap(G.xs)
-        .child(line(160, 15))
-        .child(h_flex().items_end().gap(G.md).child(block(narrow ? 72 : 96, narrow ? 48 : 64, 6)).child(line(70, 13))))
-      .child(h_flex().gap(narrow ? G.xl : 48).children([52, 46, 64].map((w) => block(w, narrow ? 22 : 28, 4))))
-      .child(h_flex().w_full().h(72).items_end()
-        .children(heights.map((h) => v_flex().flex_1().min_w(0).items_center().justify_end().child(block(2, Math.min(h, 72), 1)))))
-      .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(70, 12))).children([0, 1, 2, 3].map(two)));
-  }
-
-  bones(c, narrow = true) {
-    const { header } = ghost(c);
-    const pad = narrow ? G.lg : 32;
-    return v_flex().size_full().min_h(0).bg(c.canvas).text_color(c.text)
-      .child(h_flex().flex_none().w_full().justify_center().px(pad).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
-          .child(header(narrow ? 70 : 90, narrow ? 17 : 20))
-          .child(this.skeleton(c, narrow))));
-  }
+  skeleton(c) { return listBones(c); }
 
   render(cx) {
     this.front?.wake(cx, (wakeCx) => this.refresh(wakeCx));
@@ -505,28 +479,24 @@ export class Ports {
       .child(div().text_size(narrow ? 17 : 20).text_color(c.text).child("Ports"))
       .child(h_flex().gap(G.xs).items_center()
         .when(this.canShare(), (el) => el.child(iconButton("pt-share", "share", "Share", (cx) => this.share.toggle(cx), c, { active: this.share.open })))
-        .child(iconButton("pt-refresh", "refresh", "Read again", (cx) => this.refresh(cx, { history: true, now: true }), c, { spin: this.reading })));
+        .child(iconButton("pt-refresh", "refresh-cw", "Read again", (cx) => this.refresh(cx, { history: true, now: true }), c, { spin: this.reading })));
     const history = this.history(c);
     const others = this.list === null ? [] : this.remoteSections(c);
     const body = this.list === null
-      ? this.skeleton(c, narrow)
+      ? this.skeleton(c)
       : v_flex().w_full().gap(narrow ? 32 : 44)
         .child(this.hero(c, list, narrow))
         .when(state !== undefined && state !== "ok", (el) => el.child(this.guardOff(c)))
-        .when(Boolean(this.digest), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(this.chart(c))))
+        .when(Boolean(this.digest), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? OPACITY.away : 1).child(this.chart(c))))
         .when(list.length > 0, (el) => el.child(v_flex().w_full().gap(2)
           .child(section(c, others.length ? machineTitle("", "", aliasText(shared("kanso.alias"), "")) : "Running", ""))
           .children(list.map((s) => this.row(s, c)))))
         .children(others)
-        .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(history)));
-    return v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar()
-      .on_size_change((size, sizeCx) => { if (Math.abs((this.width || 0) - size.width) >= 1) { this.width = size.width; sizeCx.notify(); } })
-      .child(h_flex().flex_none().w_full().justify_center().px(narrow ? G.lg : 32).py(narrow ? G.lg : 28)
-        .child(v_flex().w_full().max_w(1080).gap(narrow ? 32 : 44)
+        .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? OPACITY.away : 1).child(history)));
+    return sizedPage.call(this, v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(header)
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it.", G.sm)))
+          .children(shareRows(this, c, "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it."))
           .child(body)
-          .when(Boolean(this.note), (el) => el.child(failNote("pt-note", this.note, c)))));
+          .when(Boolean(this.note), (el) => el.child(failureBlock(this.note)("pt-note", c))));
   }
 }

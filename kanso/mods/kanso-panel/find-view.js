@@ -3,10 +3,10 @@ import { processApi } from "./platform-processes.js";
 import { div, list, svg } from "gpui-kit";
 import { v_flex, h_flex, VirtualListScrollHandle, Scrollbar } from "gpui-base";
 import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, shared, setShared } from "herdr";
-import { tokens, G, H, R, T, ICON, EASE } from "./ui.js";
+import { tokens, G, H, R, T, ICON, EASE, PAGE } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { markdownView } from "./lib.js";
 import { tryOr } from "./pure.js";
 import {
@@ -15,7 +15,6 @@ import {
 } from "./find.js";
 
 const WAIT = 120;
-const MAX = 300; // the list stops here so Find does not cover the terminal
 
 function hintOf(address) {
   const agent = tryOr(() => agents().find((a) => a.address === address));
@@ -204,10 +203,14 @@ export class Find {
     });
   }
 
+  async nextSlice() {
+    const prev = this.state.from;
+    return { prev, parsed: await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName()) };
+  }
+
   async catchUp(cx) {
     while (!this.gone) {
-      const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
+      const { prev, parsed } = await this.nextSlice();
       if (this.gone) return;
       if (!parsed) { this.missing = prev === 0 && !this.state.turns.length; break; }
       if (parsed.end === prev) break;
@@ -225,8 +228,7 @@ export class Find {
     if (this.slicing || this.gone || !this.file) return;
     this.slicing = true;
     try {
-      const prev = this.state.from;
-      const parsed = await readSlice(exec, this.file, prev, SLICE_BUDGET, LINE_MAX, localName());
+      const { prev, parsed } = await this.nextSlice();
       if (this.gone || !parsed) return;
       const applied = applySlice(this.state, parsed);
       if (applied.reset) { this.restart(); await this.catchUp(cx); return; }
@@ -301,8 +303,7 @@ export class Find {
       .when(on, (el) => el.bg(c.selected))
       .hover((s) => s.bg(c.selected))
       .child(h_flex().gap(G.sm).items_center()
-        .child(div().text_size(10.5).text_color(c.muted).child(whoOf(turn)))
-        .child(div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at))))
+        .children(turnMeta(turn, c)))
       .child(this.excerpt(this.partsFor(item), c));
   }
 
@@ -310,19 +311,18 @@ export class Find {
     const hit = this.hits[this.at];
     const turn = this.state.turns[hit?.turn];
     const text = String(turn?.text ?? "");
-    return v_flex().w_full().max_h(MAX)
+    return v_flex().w_full().max_h(PAGE.findList)
       .child(h_flex().px(G.sm).pt(G.xs).items_center()
         .child(iconButton("find-back", "chevron-left", "Back", (cx) => this.back(cx), c))
-        .child(div().text_size(10.5).text_color(c.muted).child(whoOf(turn)))
-        .child(div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at))))
+        .children(turnMeta(turn, c)))
       .child(div().px(G.md).pb(G.xs).child(this.excerpt(hit ? partsOf(text, hit, EXCERPT) : [], c)))
-      .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(MAX));
+      .child(markdownView(`find-turn-${hit?.turn ?? 0}-${hit?.at ?? 0}`, text, t).max_h(PAGE.findList));
   }
 
   listBox(c, laid) {
-    return v_flex().relative().w_full().max_h(MAX).min_h(0)
+    return v_flex().relative().w_full().max_h(PAGE.findList).min_h(0)
       .child(list("kanso-find", laid.items.length, (i) => this.keyOf(laid.items[i]), (i) => this.cell(laid.items[i], c))
-        .w_full().max_h(MAX).track_scroll(this.scroll).on_item_click((key, cx) => this.pick(key, cx)))
+        .w_full().max_h(PAGE.findList).track_scroll(this.scroll).on_item_click((key, cx) => this.pick(key, cx)))
       .child(Scrollbar.vertical("kanso-find").absolute().inset_0());
   }
 
@@ -355,7 +355,7 @@ export class Find {
   bodyOf(c, t, laid, showSkel) {
     if (this.open) return this.reading(c, t);
     if (laid.items.length) return this.listBox(c, laid);
-    if (showSkel) return v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1].map((i) => skeleton(c).row(i)));
+    if (showSkel) return div().w_full().p(G.sm).child(skeletonOf({ shape: "line", count: 2 })("kanso-skeleton", c));
     return div().px(G.md).py(G.sm).text_size(10.5).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
   }
 
@@ -392,3 +392,8 @@ export class Find {
     return root;
   }
 }
+
+const turnMeta = (turn, c) => [
+  div().text_size(10.5).text_color(c.muted).child(whoOf(turn)),
+  div().text_size(10.5).text_color(c.dim).child(whenLabel(turn?.at)),
+];

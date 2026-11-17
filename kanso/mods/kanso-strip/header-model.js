@@ -96,8 +96,8 @@ export const paneLabel = ({ agent, cwd, given, name }) => given || (agent || cwd
 /** Each tool and ⋯ entry: its icon in kanso-chrome's icons and its words. */
 export const ENTRIES = {
   pin: ["pin", "Pin"], unpin: ["pin", "Unpin"], sleep: ["moon", "Sleep this agent"], send: ["send", "Send to another agent"],
-  "open-with": ["open-with", "Open with…"], "split-down": ["split-down", "Split down"], zoom: ["zoom", "Zoom"], unzoom: ["unzoom", "Unzoom"],
-  "split-right": ["split-right", "Split right"], width: ["move-horizontal", "Wider or narrower"], close: ["close", "Close"],
+  "open-with": ["external-link", "Open with…"], "split-down": ["rows-2", "Split down"], zoom: ["maximize-2", "Zoom"], unzoom: ["minimize-2", "Unzoom"],
+  "split-right": ["columns-2", "Split right"], width: ["move-horizontal", "Wider or narrower"], close: ["x", "Close"],
   needed: ["check", "Only when needed"], hide: ["eye-off", "Hide this"], settings: ["sliders-vertical", "Settings for this…"],
 };
 

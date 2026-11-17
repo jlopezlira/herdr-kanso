@@ -6,7 +6,7 @@ herdr.dev gallery reads.
 
 Memory opens from the tab bar like the other panels: the `memory` panel id,
 mounted with `{ mod: "kanso-guard" }`, with a memory-stick icon
-(`kanso-chrome/icons/memory.svg`). Its `mod.json` has `"place": "none"` and
+(`kanso-chrome/icons/memory-stick.svg`). Its `mod.json` has `"place": "none"` and
 the title "Memory", so Herdr never docks a copy on its own.
 
 A quiet panel for sessions that run for weeks: about a dozen coding agents that

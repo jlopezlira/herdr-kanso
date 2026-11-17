@@ -5,6 +5,7 @@ import { h_flex, v_flex, Button } from "gpui-base";
 import { G, H, R, T, ICON_ROW, ICONS, CLEAR } from "./ui.js";
 import { armedLook } from "./ui-button.js";
 import { field } from "./ui-field.js";
+import { dot as drawDot } from "./ui-dot.js";
 import { mark } from "./ui-mark.js";
 import { PENDING, pendingDot } from "./ui-state.js";
 
@@ -16,7 +17,7 @@ const groundOf = (c, { on, track, armed, held, fill }) => {
   if (armed) return armedLook(c).fill;
   if (held) return c.selected;
   if (!on || !fill) return null;
-  return track ? c.raised : c.w7;
+  return track ? c.raised : c.w12;
 };
 
 const inkOf = (c, { on, disabled, armed }) => {
@@ -30,7 +31,7 @@ const closeGlyph = (id, ink, c, onClose, disabled) => div().id(`${id}-close`).fl
   .when(!disabled, (el) => el.hover((s) => s.text_color(c.text))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => { cx.stop_propagation(); onClose(cx); }))
-  .child(svg(`${ICONS}close.svg`).size(ICON_ROW));
+  .child(svg(`${ICONS}x.svg`).size(ICON_ROW));
 
 const nameOf = (id, item, c, nameWidth) => (item.editing
   ? div().id(`${id}-rename`).min_w(0).on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click((_e, cx) => cx.stop_propagation())
@@ -45,7 +46,7 @@ export function tabItem(id, item, c, { on = false, disabled = false, collapsed =
   const armed = Boolean(item.armed) && !disabled;
   const ink = inkOf(c, { on, disabled, armed });
   const ground = groundOf(c, { on, track, armed, held: Boolean(item.held), fill });
-  const dot = div().size(G.sm).flex_none().rounded_full().bg(c.blocked);
+  const dot = drawDot(c, "blocked");
   return Button.new(id).items_center().justify_center().gap(G.xs).rounded(R.control)
     .border_2().border_color(CLEAR).focus((s) => s.border_color(c.accent))
     .text_color(ink)
@@ -72,7 +73,7 @@ export function tabItem(id, item, c, { on = false, disabled = false, collapsed =
 export const tabInsertion = (c) => div().w(G.hair).h(H.badge).flex_none().rounded(R.sm).bg(c.accent);
 
 /** The chosen fill on its own, for a group that slides it under the chosen tab. */
-export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.w7);
+export const tabPill = (c, size = "md") => div().h(TAB[size] ?? TAB.lg).rounded(R.control).bg(c.w12);
 
 /** One tab group: the chosen tab is a quiet fill (raised on a track), never a weight, so nothing moves. Items: { key, label, icon, dot, tip, drop } and tabItem's states;
  * `drop` draws where a dragged tab lands, before it. `size`: sm 24, md 26, lg 30, the track's thickness, or each tab's without one. Collapsed: a column of icons, each label its tip. */
