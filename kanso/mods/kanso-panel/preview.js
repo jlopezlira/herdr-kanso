@@ -338,7 +338,7 @@ export class Preview {
     this.leave(cx, () => { previewKeys.unbind(this); showPanel(this.back, { mod: "kanso-panel", props: { panel: this.back } }); });
   }
 
-  bones(c) { return documentBones(c, 120, readingLines(c)); }
+  bones(c) { return documentBones(c, readingLines(c)); }
 
   render(cx) {
     if (this.on && this.path && !this.arm && remoteDue(this.on, window()?.active, walkLayout(layout(), "panel-body")?.hidden)) new ArmPoll(this).start(cx, (tick) => this.probe(tick));

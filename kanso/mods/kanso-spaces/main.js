@@ -28,16 +28,15 @@ import { commandLoop, MachineRead } from "./sidebar.js";
 import { gitTail, asleepRow, openAhead, flush } from "./sidebar-draw.js";
 import { guideBars, climb } from "./guides.js";
 import { projectControls, pullKey, runPull, canWake, enterOpens, machineWordTone, sectionMarkOf, sectionCount, rowDirectory, threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, foldTail, readWord, viewChord } from "./sidebar-rows.js";
-import { breathe, H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens, washes } from "./ui.js";
+import { H, G, T, R, W, ICON, SIDEBAR, GLIDE, OPACITY, TINT, alpha, tokens, washes } from "./ui.js";
 import { ELBOW } from "./ui-row.js";
 import { button, iconButton, Armed } from "./ui-button.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { skeleton } from "./ui-skeleton.js";
 import { pendingDot } from "./ui-state.js";
 import { segmented } from "./ui-tab.js";
 import { mark } from "./ui-mark.js";
-import { menu, emptyState } from "./kit.js";
+import { menu, emptyState, skeletonOf } from "./kit.js";
 import { menuList, menuHeight } from "./ui-menu.js";
 import { toolbar } from "./ui-toolbar.js";
 import { header } from "./ui-sidebar-header.js";
@@ -1838,7 +1837,7 @@ export default class Spaces extends View {
       return state === "loading" || (!state && this.machines.some(k => k.name === m && k.state === "connected"))
         || rows.length < sp.length && sp.some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => item(this.machineBones(t, collapsed, m), collapsed ? SIDEBAR.railRow : H.line);
+    const loadingRow = m => item(skeletonOf({ shape: collapsed ? "tile" : "line" })(`machine-loading-${m ?? "local"}`, t), collapsed ? SIDEBAR.railRow : H.line);
     // Projects you added with no space open, on their machine; each keeps a + to start an agent in it.
     const names = shownNames(ctx.registry);
     const closed = (m) => (collapsed ? [] : this.closedOn(m, ctx)).flatMap((entry) => [item(div().h(10).flex_none(), 10), item(this.closedRow(t, entry, names), H.line)]);
@@ -2154,7 +2153,7 @@ export default class Spaces extends View {
 
   agentsView(t, sp, ps, ctx) {
     const { c, sections } = this.agentsCtx(t, sp, ctx);
-    if (!sections.length) return machines().some((m) => m.layout === "loading") ? [item(this.silhouette(t), 3 * 32 + 4)]
+    if (!sections.length) return machines().some((m) => m.layout === "loading") ? [this.loadingRows(t)]
       : [item(emptyState({ icon: "activity", text: "No agents running" })("agents-empty", c))];
     const project = this.projectOf(sp, t);
     return sections.flatMap((s, i) => {
@@ -2196,18 +2195,8 @@ export default class Spaces extends View {
       .when(Boolean(extra), (el) => el.child(extra));
   }
 
-  machineBones(t, collapsed, m) {
-    const { block, line } = skeleton({ border: t.border });
-    if (collapsed) return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center()).child(block(28, 32, 6));
-    return breathe(h_flex().id(`machine-loading-${m ?? "local"}`).h(H.line).flex_none().px(8).items_center()).child(line(96, 11));
-  }
-
   // First read: the kit skeleton at the rows' height.
-  silhouette(t) {
-    const { block, line } = skeleton({ border: t.border });
-    const row = (w) => h_flex().h(32).px(G.sm).gap(G.sm).flex_none().items_center().child(block(15, 15, 4)).child(line(w, 11));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.hair)).children([120, 96, 140].map(row));
-  }
+  loadingRows(t) { return item(skeletonOf({ shape: "row", count: 3 })("kanso-skeleton", t), 3 * H.line); }
 
   projectOf(sp, t) {
     const byId = new Map(sp.map((s) => [s.id, s]));
@@ -2340,7 +2329,7 @@ export default class Spaces extends View {
   }
 
   threadsView(t, sp, ps, ctx) {
-    if (!this.threads) return [item(this.silhouette(t), 3 * 32 + 4)];
+    if (!this.threads) return [this.loadingRows(t)];
     const c = tokens(t);
     const project = this.projectOf(sp, t);
     const rows = this.threadRows(ctx);

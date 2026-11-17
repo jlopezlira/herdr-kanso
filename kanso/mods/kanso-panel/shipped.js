@@ -1,4 +1,4 @@
-import { sizedPage, pageBones, skeletonStack } from "./ui-page.js";
+import { sizedPage } from "./ui-page.js";
 import { localSleep } from "./platform-host.js";
 // Kanso's Shipped panel, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Statistics only, never one item at a time from GitHub.
@@ -12,7 +12,7 @@ import { Share, shareRows } from "./share.js";
 import { G, HEATMAP_GAP, TINT, alpha, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { segmented } from "./ui-tab.js";
 import { range, tryOrAsync, mapSeries, MONTHS } from "./pure.js";
 import { shippedMemory } from "./panel-state.js";
@@ -562,11 +562,7 @@ export class Shipped {
           .child(div().flex_none().text_size(12).text_color(c.dim).child(`${fmt(m.n)} commits · +${fmt(m.a)} −${fmt(m.d)}`))))));
   }
 
-  skeleton(c, narrow) { return shippedSkeleton(c, narrow); }
-
-  bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: { narrow: 90, wide: 110 }, body: this.skeleton(c, narrow), extra: [h_flex().h(26).gap(G.xs).items_center().children([64, 52, 48, 40].map((w) => ghost(c).block(w, 26, 6)))] });
-  }
+  skeleton(c) { return skeletonOf({ shape: "metric" })("kanso-skeleton", c); }
 
   render(cx) {
     const c = tokens(theme());
@@ -575,7 +571,7 @@ export class Shipped {
     const inner = Math.min(1080, width - 2 * pad);
     const gh = this.github[this.key()], status = this.status(c), rhythm = this.rhythmView(c);
     const body = !gh && !this.stats
-      ? this.skeleton(c, narrow)
+      ? this.skeleton(c)
       : v_flex().w_full().gap(narrow ? 36 : 48)
         .child(this.hero(c, narrow))
         .when(Boolean(status), (el) => el.child(status))
@@ -594,16 +590,3 @@ export class Shipped {
           .child(body));
   }
 }
-
-const shippedSkeleton = (c, narrow) => {
-  const { block, line, row } = ghost(c);
-  const hours = [8, 12, 6, 10, 18, 28, 40, 48, 36, 22, 14, 10, 16, 30, 44, 50, 38, 20, 12, 8, 6, 10, 18, 24];
-  return skeletonStack(narrow)
-    .child(v_flex().gap(G.md)
-      .child(line(120, 15))
-      .child(block(narrow ? 140 : 180, narrow ? 40 : 56, 6))
-      .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([40, 52, 36].map((w) => block(w, narrow ? 20 : 24, 4)))))
-    .child(h_flex().w_full().h(56).items_end().gap(2)
-      .children(hours.map((h) => div().flex_1().min_w(2).h(h).rounded(2).bg(c.border))))
-    .child(v_flex().w_full().child(h_flex().pb(G.sm).child(line(90, 12))).children([0, 1, 2, 3].map(row)));
-};

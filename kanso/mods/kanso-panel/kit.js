@@ -4,6 +4,7 @@ import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
 import { stateEmpty, stateLine, stateBlock } from "./ui-state.js";
 import { toast as drawToast } from "./ui-toast.js";
+import { skeletonOf as drawSkeleton } from "./ui-skeleton.js";
 
 const EVENTS = {
   onPress: (el, fn) => el.on_mouse_down("left", fn),
@@ -64,3 +65,7 @@ export const failureLine = ({ text, fix = "", detail = "" }) => pattern(stateLin
 export const failureBlock = ({ text, source = "", fix = "" }) => pattern(stateBlock)({ text, source, fix });
 // A press on the toast or its fix goes home.
 export const toast = ({ icon = "none", ...props }) => pattern(drawToast)({ ...props, icon: iconOf(icon) });
+export const skeletonOf = ({ shape, count }) => (id, c, more = {}) => {
+  given(more);
+  return drawSkeleton(id, c, { shape, count });
+};

@@ -1,26 +1,40 @@
-// Kanso's panel kit: the silhouette a view draws while it loads. Apache-2.0.
+// Kanso's panel kit: the skeleton a view draws while it loads. Apache-2.0.
 // Kept byte for byte by `npm run sync:share`: edit kanso-panel/ui-skeleton.js.
 import { div } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { G, H, R, W, PAGE, breathe } from "./ui.js";
+import { h_flex, v_flex } from "gpui-base";
+import { G, H, R, W, SIDEBAR, SKELETON, ICON_ROW, breathe } from "./ui.js";
 
-const SK_W = [120, 96, 140, 84, 110, 72];
-// A height is a fixed row with its icon; without one, the py(9) list row the panels already use.
-export function skeleton(c) {
-  const block = (w, h, radius = 3) => div().w(w).h(h).flex_none().rounded(radius).bg(c.border);
-  const line = (w, h = 9) => block(w, h, 3);
-  const row = (i, h) => {
-    const name = line(SK_W[(i ?? 0) % SK_W.length], 9);
-    const base = h_flex().w_full().items_center().gap(G.md);
-    return h
-      ? base.h(h).flex_none().px(8).child(block(14, 14, 4)).child(name).child(div().flex_1())
-      : base.py(PAGE.skeletonY).child(name).child(div().flex_1()).child(block(40, 11));
-  };
-  const header = (titleW = 88, titleH = 14) => h_flex().w_full().items_center().justify_between().gap(G.md)
-    .child(line(titleW, titleH)).child(block(26, 26, 6));
-  return { line, block, row, header };
-}
-export const ghost = skeleton;
+// Widths in G.xs, as the Storybook's: the lines take theirs in turn.
+const LINES = [30, 24, 35, 21, 27.5, 18];
+const SPAN = { title: 22, detail: 18, value: 45, stat: 12, tile: 7, picture: 84, pictureH: 52.5, device: 50, deviceH: 105 };
+const STATS = 3;
+const ONCE = ["header", "picture", "metric", "device"];
+
+const bar = (c, w, h = SKELETON.text, radius = R.sm) => div().w(w).h(h).flex_none().rounded(radius).bg(c.border);
+const span = (c, name, h, radius) => bar(c, SPAN[name] * G.xs, h, radius);
+const line = (c, i, h) => bar(c, LINES[i % LINES.length] * G.xs, h);
+const row = () => h_flex().w_full().h(H.line).flex_none().items_center().gap(G.sm);
+const grow = () => div().flex_1();
+const meta = (c) => bar(c, H.row, SKELETON.meta);
+
+const SHAPES = {
+  row: (c, i) => row().child(bar(c, ICON_ROW, ICON_ROW)).child(line(c, i)),
+  "list row": (c, i) => row().child(line(c, i)).child(grow()).child(meta(c)),
+  header: (c) => row().child(span(c, "title", ICON_ROW)).child(grow()).child(bar(c, H.icon, H.icon, R.control)),
+  line: (c, i) => row().child(line(c, i)),
+  "two lines": (c, i) => v_flex().w_full().flex_none().py(G.sm).gap(G.sm)
+    .child(h_flex().items_center().gap(G.sm).child(line(c, i, SKELETON.meta)).child(grow()).child(meta(c)))
+    .child(span(c, "detail")),
+  picture: (c) => span(c, "picture", SPAN.pictureH * G.xs, R.card).w_full().max_w(SPAN.picture * G.xs),
+  metric: (c) => v_flex().gap(G.md).child(span(c, "value", H.row, R.control)).child(line(c, 0))
+    .child(h_flex().pt(G.sm).gap(G.xl).children(Array.from({ length: STATS }, () => span(c, "stat", H.badge, R.control)))),
+  tile: (c) => h_flex().w_full().h(SIDEBAR.railRow).flex_none().justify_center().items_center().child(span(c, "tile", H.line, R.control)),
+  device: (c) => h_flex().w_full().justify_center().child(span(c, "device", SPAN.deviceH * G.xs, R.card)),
+};
+
+/** A view's loading skeleton, breathing: `count` of one shape; a header, a picture, a metric and a device are drawn once. */
+export const skeletonOf = (id, c, { shape, count = 1 }) => breathe(v_flex().id(id).w_full())
+  .children(Array.from({ length: ONCE.includes(shape) ? 1 : count }, (_, i) => SHAPES[shape](c, i)));
 
 /** One breathing tab while a tab bar waits for its computer: the first long, every later one short. */
 export const tabSkeleton = (id, c, index) => breathe(div().id(id).w(index ? W.tabSkeletonShort : W.tabSkeleton).h(H.icon).flex_none().rounded(R.control).bg(c.border));

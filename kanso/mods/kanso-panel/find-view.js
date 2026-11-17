@@ -6,7 +6,7 @@ import { exec, hc, readTextFile, home, theme, props, closeOverlay, run, agents, 
 import { tokens, G, H, R, T, ICON, EASE, PAGE } from "./ui.js";
 import { iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { markdownView } from "./lib.js";
 import { tryOr } from "./pure.js";
 import {
@@ -355,7 +355,7 @@ export class Find {
   bodyOf(c, t, laid, showSkel) {
     if (this.open) return this.reading(c, t);
     if (laid.items.length) return this.listBox(c, laid);
-    if (showSkel) return v_flex().w_full().px(G.sm).py(G.sm).gap(G.sm).children([0, 1].map((i) => skeleton(c).row(i)));
+    if (showSkel) return div().w_full().p(G.sm).child(skeletonOf({ shape: "line", count: 2 })("kanso-skeleton", c));
     return div().px(G.md).py(G.sm).text_size(10.5).text_color(c.dim).child(this.unavailable ?? "This conversation is no longer there.");
   }
 

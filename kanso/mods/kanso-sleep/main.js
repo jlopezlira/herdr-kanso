@@ -8,9 +8,9 @@ import { spaces, panes, terminals, shared, hc, run, props, closeOverlay, theme, 
 import { isClaude, promptEmpty, asksToExit, RESUME_LABEL, isSessionId, resumeLine, asleepTerminal } from "./resume.js";
 import { tilde, describe, spaceBeside } from "./tabkit.js";
 import { focusOn } from "./pure.js";
-import { breathe, tokens } from "./ui.js";
+import { tokens } from "./ui.js";
 import { dialog, statusNotes } from "./ui-dialog.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 
 export const CLEAR_MS = 3000;
 export const RESEND_MS = 5000;
@@ -180,12 +180,6 @@ export default class Sleep extends View {
     });
   }
 
-  sleepBones(t) {
-    const { line } = skeleton({ border: t.border });
-    return breathe(v_flex().id("kanso-skeleton").w_full().pt(14).gap(10))
-      .children([0, 1, 2].map((i) => h_flex().w_full().gap(10).items_center().child(line([140, 110, 160][i], 12)).child(div().flex_1()).child(line(80, 11))));
-  }
-
   render() {
     const t = theme();
     const close = () => closeOverlay(props()?.overlay);
@@ -203,7 +197,7 @@ export default class Sleep extends View {
       ...shell,
       title: scope === "project" ? `Sleep ${project}` : scope === "agent" ? "Sleep this agent" : "Sleep this tab",
       body: [
-        this.reads === null && !this.error ? this.sleepBones(t) : null,
+        this.reads === null && !this.error ? skeletonOf({ shape: "list row", count: 3 })("kanso-skeleton", c) : null,
         v_flex().gap(4).children(list.map(line)),
       ],
       notes: [{ text: WHAT_SLEEPS[scope] ?? WHAT_SLEEPS.tab }, ...(others.length ? [{ text: `${others.join(", ")} will stop now.` }] : []), ...statusNotes(this)],

@@ -7,7 +7,7 @@ import { checked } from "./platform-command.js";
 import { G, H, R, T, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
-import { skeleton } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { Front } from "./front.js";
 import { TOOLS, PROBE_MS, probeTools } from "./registration.js";
 import { pieces, runs } from "./pieces.js";
@@ -232,7 +232,7 @@ export default class Simulator extends View {
 
   line(text, c, error = false) { return div().text_size(T.body).text_color(error ? c.red : c.muted).child(text); }
 
-  loading(c) { return skeleton(c).block(H.control * 3, H.control * 5, R.card); }
+  loading(c) { return skeletonOf({ shape: "device" })("kanso-skeleton", c); }
 
   controls(device, c) {
     const link = (label, fn) => quietLink(`sim-${label}`, label, fn, c, { disabled: this.acting });
@@ -274,7 +274,7 @@ export default class Simulator extends View {
       .child(h_flex().flex_none().items_center().gap(G.sm)
         .child(div().flex_1().text_size(T.title).font_semibold().child("Simulator"))
         .child(quietLink("sim-refresh", "Refresh", (next) => { this.readAt = 0; this.tick(next); }, c, { disabled: this.reading })))
-      .when(this.devices === null, (el) => el.child(skeleton(c).row()))
+      .when(this.devices === null, (el) => el.child(skeletonOf({ shape: "row", count: 2 })("kanso-skeleton-devices", c)))
       .when(Boolean(this.devices), (el) => el.child(v_flex().id("sim-devices").flex_none().max_h(H.control * 5).overflow_y_scrollbar().gap(G.xs)
         .children((this.devices ?? []).map((item) => h_flex().id(`sim-device-${item.id}`).min_h(H.control).px(G.sm).gap(G.sm).rounded(R.control).items_center().cursor_pointer()
           .when(item.id === this.selected, (row) => row.bg(c.selected))

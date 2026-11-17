@@ -8,11 +8,11 @@ import { systemApi } from "./platform-system.js";
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { exec, run, spaces, panes, home, theme, shared, setShared, readTextFile } from "herdr";
-import { G, tokens, breathe } from "./ui.js";
+import { G, tokens } from "./ui.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { field, TextField } from "./ui-field.js";
 import { row } from "./ui-row.js";
-import { ghost } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { afterMount, parseOr } from "./pure.js";
 import { pageFrame } from "./page.js";
 import { Front } from "./front.js";
@@ -420,18 +420,6 @@ export default class Containers extends View {
       .child(this.armed.link("ct-cache", "Clear", "clear", "cache", (cx) => this.act(["builder", "prune", "-f"], cx, { what: "clear the build cache" }), c, { color: c.text }));
   }
 
-  skeleton(c) {
-    const { block, line } = ghost(c);
-    const two = (i) => v_flex().w_full().py(9).gap(4)
-      .child(line([160, 140, 180, 120][i], 13)).child(line([200, 150, 110, 170][i], 11));
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(32))
-      .child(v_flex().gap(G.md)
-        .child(line(180, 12))
-        .child(block(120, 48, 6))
-        .child(h_flex().gap(G.md).children([70, 64, 48].map((w) => line(w, 13)))))
-      .child(v_flex().w_full().children([0, 1, 2, 3].map(two)));
-  }
-
   body(c) {
     if (this.state === "missing") return div().text_size(13).text_color(c.dim).child("Docker is not installed on this computer.");
     if (this.state === "down") {
@@ -439,7 +427,7 @@ export default class Containers extends View {
         .child(div().text_size(13).text_color(c.muted).child("Docker isn't running."))
         .child(h_flex().child(quietLink("ct-open-docker", "Open Docker", (cx) => this.openDocker(cx), c, { color: c.text })));
     }
-    if (this.groups === null) return this.skeleton(c);
+    if (this.groups === null) return skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton", c);
     const all = this.groups.flatMap((g) => g.containers);
     const running = all.filter((k) => k.health === "running").length;
     const remote = Boolean(this.context?.remote);

@@ -9,7 +9,7 @@ import { G, T, OPACITY, breathe, tokens } from "./ui.js";
 import { mark } from "./ui-mark.js";
 import { Armed, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
+import { skeletonOf } from "./kit.js";
 import { segmented } from "./ui-tab.js";
 import { Share } from "./share.js";
 import { tryOr, tryOrAsync, afterMount, readCommands, num } from "./pure.js";
@@ -226,7 +226,7 @@ export default class Memory extends View {
     if (!localService(systemApi).memoryGuardAvailable) return v_flex().size_full().p(G.xl).text_size(T.card).text_color(c.muted).child(localService(systemApi).memoryGuardReason);
     const narrow = (this.width || 960) < 560;
     const state = this.now?.state;
-    const body = !this.now ? this.skeleton(c, narrow)
+    const body = !this.now ? this.skeleton(c)
       : state === "off" || state === "bad" ? this.offView(c, state)
         : this.mainView(c, narrow);
     return v_flex().id("guard-root").size_full().min_h(0).bg(c.canvas).text_color(c.text)
@@ -261,20 +261,8 @@ export default class Memory extends View {
         .child(iconButton("guard-refresh", "refresh-cw", tip, (cx) => this.check(cx), c, { spin: busy, disabled: busy })));
   }
 
-  skeleton(c, narrow) {
-    const { row, block } = ghost(c);
-    const heights = [40, 44, 42, 46, 50, 48, 52, 38, 30, 26, 34, 42, 48, 54, 56, 52, 50, 46, 44, 48, 52, 50, 46, 44];
-    const bars = heights.map((h) => v_flex().flex_1().min_w(0).justify_end().items_center().child(block(2, h, 1)));
-    const page = breathe(v_flex().id("kanso-skeleton").w_full().gap(narrow ? 36 : 48));
-    return page
-      .child(v_flex().gap(G.md)
-        .child(block(narrow ? 120 : 170, narrow ? 40 : 58, 6))
-        .child(block(190, 11))
-        .child(h_flex().gap(narrow ? G.xl : 48).pt(G.md).children([52, 46, 64, 40].map((w) => block(w, narrow ? 18 : 22, 4)))))
-      .child(h_flex().w_full().h(110).items_end().children(bars))
-      .child(v_flex().w_full()
-        .child(h_flex().pb(G.sm).child(block(70, 12)))
-        .children([0, 1, 2, 3, 4].map(row)));
+  skeleton(c) {
+    return v_flex().w_full().gap(G.xl).child(skeletonOf({ shape: "metric" })("kanso-skeleton", c)).child(skeletonOf({ shape: "two lines", count: 3 })("kanso-skeleton-rows", c));
   }
 
   offView(c, state, narrow) {

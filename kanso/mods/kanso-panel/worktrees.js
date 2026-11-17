@@ -1,5 +1,5 @@
 import { spawnAndNotify, commandOk, tilde, pool, said } from "./lib.js";
-import { sizedPage, pageBones, skeletonStack, skeletonMetrics, heroStack, heroHeading, metricValue, metricStats, skeletonBars } from "./ui-page.js";
+import { sizedPage, heroStack, heroHeading, metricValue, metricStats } from "./ui-page.js";
 import { localService } from "./platform-host.js";
 import { paths } from "./platform-paths.js";
 import { fileApi } from "./platform-files.js";
@@ -12,12 +12,11 @@ import { v_flex, h_flex } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
 import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
-import { G, OPACITY, breathe, tokens } from "./ui.js";
+import { G, OPACITY, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { row } from "./ui-row.js";
 import { section } from "./ui-section.js";
-import { ghost } from "./ui-skeleton.js";
-import { emptyState, failureBlock } from "./kit.js";
+import { emptyState, failureBlock, skeletonOf } from "./kit.js";
 import { dot } from "./ui-dot.js";
 import { aliasText, machineTitle, range, reduceSeries, MONTHS } from "./pure.js";
 import { worktreesMemory } from "./panel-state.js";
@@ -612,26 +611,16 @@ export class Worktrees {
         .child(iconButton("wt-refresh", "refresh-cw", "Scan again", (cx) => { if (!this.working) this.refresh(cx); }, c, { spin: scanning })));
   }
 
-  freedBones(c, narrow) {
-    const { block, line } = ghost(c);
-    const heights = [28, 50, 36, 72, 40, 60, 24, 44, 32];
-    return breathe(v_flex().id("kanso-skeleton").w_full().gap(G.lg))
-      .child(h_flex().items_end().gap(G.md).child(block(narrow ? 90 : 120, narrow ? 36 : 48, 6)).child(line(80, 13)))
-      .child(line(200, 12))
-      .child(h_flex().w_full().h(96).items_end()
-        .children(skeletonBars(block, heights)));
-  }
+  freedBones(c) { return skeletonOf({ shape: "line", count: 4 })("kanso-skeleton", c); }
 
   async probeWorktree(w) {
     const group = this.groups.find((item) => item.repo === w.repo);
     return parseProbe((await localService(repositoryApi).probe(w.path, idleMinutes(), group?.bases ?? [])).stdout);
   }
 
-  bones(c, narrow = true) {
-    return pageBones(c, narrow, { title: { narrow: 110, wide: 140 }, body: this.skeleton(c, narrow) });
+  skeleton(c) {
+    return v_flex().w_full().gap(G.xl).child(skeletonOf({ shape: "metric" })("kanso-skeleton", c)).child(skeletonOf({ shape: "line", count: 2 })("kanso-skeleton-lines", c));
   }
-
-  skeleton(c, narrow) { return worktreesSkeleton(ghost(c), narrow); }
 
   hero(c, narrow) {
     const all = this.groups.flatMap((g) => g.items), live = all.filter((w) => !w.missing);
@@ -790,7 +779,7 @@ export class Worktrees {
   freed(c, narrow) {
     const h = this.hist;
     if (!h) return v_flex().w_full().child(section(c, "Freed"))
-      .child(this.storeNote ? failureBlock(this.storeNote)("wt-store", c) : this.freedBones(c, narrow));
+      .child(this.storeNote ? failureBlock(this.storeNote)("wt-store", c) : this.freedBones(c));
     const freedBars = this.bars(c, h.freedByDay, "Freed each day", 96, "fills as you remove")
       , diskBars = this.bars(c, h.diskByDay, "In worktrees each day", 56, "a bar per day with a scan");
     const stats = [
@@ -863,7 +852,7 @@ export class Worktrees {
       ? b.items.reduce((n, w) => n + (w.size ?? 0), 0) - a.items.reduce((n, w) => n + (w.size ?? 0), 0)
       : b.items.length - a.items.length);
     const shown = this.allRepos ? groups : groups.slice(0, REPOS);
-    const body = !scanned && this.phase ? this.skeleton(c, narrow)
+    const body = !scanned && this.phase ? this.skeleton(c)
       : !scanned ? (this.note
         ? failureBlock({ ...this.note, fix: "Refresh" })("wt-failed", c, { onClick: (cx) => { if (!this.working) this.refresh(cx); } })
         : emptyState({ icon: "git-fork", text: "No worktrees besides your checkouts" })("wt-empty", c))
@@ -881,9 +870,3 @@ const cleanedStats = (h) => [
   { value: String(h.branches), unit: h.branches === 1 ? "merged branch deleted" : "merged branches deleted" },
   { value: String(h.records + h.orphans), unit: "leftovers cleared" },
 ];
-
-const worktreesSkeleton = ({ block, row }, narrow) => skeletonStack(narrow)
-  .child(v_flex().gap(G.md).child(block(110, 12)).child(block(narrow ? 150 : 220, narrow ? 40 : 58, 6)).child(block(200, 11))
-    .child(skeletonMetrics(block, narrow)))
-  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(90, 12))).children([0, 1, 2, 3].map(row)))
-  .child(v_flex().w_full().child(h_flex().pb(G.sm).child(block(70, 12))).children([0, 1, 2].map(row)));
