@@ -146,13 +146,16 @@ export function rawValues(source, text, css = false) {
   return [...inline, ...raw.map((found) => `raw ${found}`)].map((value) => ({ source, value }));
 }
 
+// Text a story shows is not a style: a pull request number such as #142 is not a colour.
+export const markupTags = (html) => html.match(/<[^>]*>/g)?.join('') ?? '';
+
 export function rawValueReport(root = '.') {
   const read = (file) => readFileSync(join(root, file), 'utf8');
   const code = RAW_CODE.flatMap((dir) => readdirSync(join(root, dir)).filter((name) => /\.(?:m?js|jsx|mdx)$/.test(name)).sort().map((name) => `${dir}/${name}`));
   return [
     ...RAW_CSS.flatMap((file) => rawValues(file, read(file), true)),
     ...code.flatMap((file) => rawValues(file, read(file))),
-    ...expand(JSON.parse(read('stories/catalog.json'))).filter((record) => record.html !== undefined).flatMap((record) => rawValues(record.id, record.html).filter(({ value }) => !(record.page.startsWith('Tokens/') && value.startsWith('raw ')))),
+    ...expand(JSON.parse(read('stories/catalog.json'))).filter((record) => record.html !== undefined).flatMap((record) => rawValues(record.id, markupTags(record.html)).filter(({ value }) => !(record.page.startsWith('Tokens/') && value.startsWith('raw ')))),
   ];
 }
 

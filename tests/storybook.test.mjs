@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { expand } from "../scripts/storybook-catalog.mjs";
-import { compositionErrors, lint, primitiveErrors, rawValueErrors, rawValues, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
+import { compositionErrors, lint, markupTags, primitiveErrors, rawValueErrors, rawValues, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
 import { rules } from "../stories/kit/rules.js";
 
@@ -50,6 +50,11 @@ test("A primitive given an inline style or a raw px or colour fails the lint", (
   assert.deepEqual(rawValueErrors(rawValues("Panels/Dojo", html), []), ['Panels/Dojo: inline style="width:937px;color:#123456" is not a token or a primitive']);
   assert.deepEqual(rawValueErrors(rawValues(css, ".kanso-row{width:937px;color:#123456;gap:var(--k-sp-2)}", true), []), raw);
   assert.deepEqual(lintChanged(css, `${read(css)}.kanso-row{width:937px;color:#123456}\n`), raw);
+});
+
+test("A pull request number a story shows is not a raw colour, while a colour in its markup still is", () => {
+  const html = '<div class="kanso-panel__scope" data-tone="#fa0">#142 · src/api</div>';
+  assert.deepEqual(rawValues("Panels/PR", markupTags(html)), [{ source: "Panels/PR", value: "raw #fa0" }]);
 });
 
 test("A composition that draws its own markup fails the lint", () => {
