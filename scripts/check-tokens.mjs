@@ -68,18 +68,31 @@ const NUMBER = String.raw`(?<![\w$.])\d*\.?\d+(?![\w$])`;
 const COUNT = new RegExp(String.raw`\s*[*/]\s*${NUMBER}|${NUMBER}\s*\*\s*`, "g");
 const isSize = (init) => /^[\w$.\s+\-*/()]+$/.test(init) && new RegExp(NUMBER).test(init.replace(COUNT, ""));
 const ARGUMENT = new RegExp(`\\.(${[...groupOf.keys()].join("|")})\\(([^()]*)\\)`, "g");
-const STATEMENT = /^(?:export )?const\s+([\s\S]*?);[ \t]*(?:\/\/.*)?$/gm;
+const STATEMENT = /(?<=^|;[ \t]*)(?:export )?const\s+/gm;
 const withoutTokens = (text) => (text.includes(START) ? text.slice(0, text.indexOf(START)) + text.slice(text.indexOf(END)) : text);
 const uncommented = (text) => text.replace(/\/\/.*$/gm, "").trim();
+const nesting = (ch) => "([{".includes(ch) - ")]}".includes(ch);
 const topLevel = (text) => [...text].reduce(({ depth, parts }, ch) => (ch === "," && !depth
   ? { depth, parts: [...parts, ""] }
-  : { depth: depth + ("([{".includes(ch)) - (")]}".includes(ch)), parts: [...parts.slice(0, -1), parts.at(-1) + ch] }), { depth: 0, parts: [""] }).parts;
+  : { depth: depth + nesting(ch), parts: [...parts.slice(0, -1), parts.at(-1) + ch] }), { depth: 0, parts: [""] }).parts;
+// A statement ends at its first semicolon outside brackets, so another may share its line.
+const bodyAt = (text, from) => {
+  let depth = 0;
+  for (let i = from; i < text.length; i += 1) {
+    if (text[i] === ";" && !depth) return text.slice(from, i);
+    depth += nesting(text[i]);
+  }
+  return text.slice(from);
+};
 const sizesIn = (name, init) => (/^\{[\s\S]*\}$/.test(init)
   ? topLevel(init.slice(1, -1)).map((member) => /^\s*(\w+)\s*:\s*([\s\S]+)$/.exec(member)).filter((m) => m && isSize(m[2].trim())).map((m) => `${name}.${m[1]}`)
   : isSize(init) ? [name] : []);
-const declared = (text, exported = false) => [...withoutTokens(text).matchAll(STATEMENT)]
-  .filter((m) => !exported || m[0].startsWith("export "))
-  .flatMap((m) => topLevel(uncommented(m[1])).map((part) => /^\s*([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(part)).filter(Boolean).flatMap((d) => sizesIn(d[1], d[2].trim())));
+const declared = (text, exported = false) => {
+  const code = uncommented(withoutTokens(text));
+  return [...code.matchAll(STATEMENT)]
+    .filter((m) => !exported || m[0].startsWith("export "))
+    .flatMap((m) => topLevel(bodyAt(code, m.index + m[0].length)).map((part) => /^\s*([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(part)).filter(Boolean).flatMap((d) => sizesIn(d[1], d[2].trim())));
+};
 const IMPORT = /^import \{([^}]*)\} from "\.\/([\w.-]+)";/gm;
 
 export function named(files) {

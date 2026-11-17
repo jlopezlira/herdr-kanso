@@ -39,12 +39,14 @@ test("A module-level number passed whole to a linted call fails with its file an
   ]);
 });
 
-test("A module-level size split over lines, in an object with named members, or offset from a name still fails; a count does not", () => {
+test("A module-level size split over lines, sharing a line with another statement, in an object with named members, or offset from a name still fails; a count does not", () => {
   const file = "kanso/mods/x/main.js";
   const sizes = (text) => named([{ file, text }]).map(({ number, value }) => [number, value]);
   assert.deepEqual(sizes("const GAP =\n  6;\ndiv().gap(GAP);"), [[3, "GAP"]]);
   assert.deepEqual(sizes("const VIEW = {\n  title: 17, // the title\n  stale: OPACITY.away,\n};\ndiv().text_size(VIEW.title).h(VIEW.stale);"), [[5, "VIEW.title"]]);
   assert.deepEqual(sizes("const GAP = 6;\ndiv().gap(\n  GAP\n);"), [[2, "GAP"]]);
+  assert.deepEqual(sizes("const GAP = 6; div().gap(GAP);"), [[1, "GAP"]]);
+  assert.deepEqual(sizes("const A = 6; const B = 7;\ndiv().gap(A).gap(B);"), [[2, "A"], [2, "B"]]);
   assert.deepEqual(sizes("const EDGE = H.line,\n  PAD = 4;\ndiv().p(PAD).h(EDGE);"), [[3, "PAD"]]);
   assert.deepEqual(sizes("const PAD = GUIDE.x + ELBOW.w + 6 - 8;\nconst LIST = 8 * H.line;\ndiv().pl(PAD).max_h(LIST);"), [[3, "PAD"]]);
 });
