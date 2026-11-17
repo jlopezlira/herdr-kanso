@@ -53,7 +53,7 @@
     "row": { "app": ["focusHandle", "onClick", "onHover", "onKey"] },
     "statusItem": { "app": ["onClick", "tip"] },
     "tabs": { "storybook": ["icon", "items", "label", "value"], "app": ["collapsed", "spoken"] },
-    "toast": { "storybook": ["body", "explain"], "app": ["onClick"] },
+    "toast": { "app": ["onClick"] },
     "toggle": { "storybook": ["checked"] }
   }
 }

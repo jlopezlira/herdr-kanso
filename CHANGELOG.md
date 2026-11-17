@@ -80,6 +80,7 @@ the branch's rules.
 - Every Storybook page is approved and marked Ready; a page added later starts In review.
 - The sidebar, the panes, the panel buttons in the tab bar, the pull request view, Shipped's heatmap, Help's keyboard, the dōjō board and the panel pages take their sizes from kansō's design tokens, and nothing on screen moves. (#315)
 - Hover and selection washes, coloured tints, dimmed items and slide timings in the sidebar, the tab bar, the panes, the panels, Help and the dōjō each have one name, and CI rejects a new unnamed one. Nothing on screen changes.
+- Notices in the corner share the kit's toast: the lead, one sentence at body size instead of bold, and at most one small fix, with the detail in the tooltip. Tab reaches a notice, and Enter or Space opens it as a click does. (#321)
 
 ### Fixed
 
@@ -98,7 +99,6 @@ the branch's rules.
 - Storybook draws all missing Sidebar and Activity feature states with the shared kit, including queues, sleeping conversations, Git controls and activity overflow.
 - Storybook draws missing Settings and Memory feature states with the shared kit and source-linked coverage.
 - Storybook draws all missing pull request and Spend feature states with the shared kit.
-- Notices in the corner share the kit's toast: the lead, one sentence at body size instead of bold, and at most one small fix, with the detail in the tooltip. Tab reaches a notice, and Enter or Space opens it as a click does. (#321)
 - Cmd+J (Ctrl+Shift+J on Windows) jumps to finished agents again, after the ones waiting for you.
 - Storybook panel and layout stories draw at real size without a frame card, with the row actions, header marks, device rows, skeleton bars, checks list and code lines of the approved designs.
 - Storybook controls respond with sample data: selection, editing, toggles, Armed confirmation and Undo, menus, dialogs, navigation folds, filtering and copy feedback reset with the State control.

@@ -133,6 +133,17 @@ test("A toast from the shared kit draws what the app's toast draws, its Lucide i
   assert.throws(() => app.toast({ title: "Saved" })("t", c, { title: "Gone" }), /only handlers, not title/);
 });
 
+test("A toast draws the Storybook's sentence at body size, its second line and its Explain button", async () => {
+  const { app, c } = await kits();
+  const { T } = await load("kanso-panel/ui.js", ["T"], host());
+  const props = { title: "Failed", body: "Details", explain: "Claude", action: "Retry" };
+  const el = app.toast(props)("t", c);
+  assert.ok(storybookPieces.toast(props).includes("Explain to Claude"));
+  assert.deepEqual(texts(el), ["Failed", "Details", "Retry", "Explain to Claude"]);
+  assert.deepEqual(nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "text_size").map((call) => call[1])).slice(0, 2), [T.value, T.body]);
+  assert.ok(svgs(el).some((path) => path.endsWith("bot.svg")));
+});
+
 test("The Storybook's shared kit is its pieces, and the app's has only Storybook pieces", (t) => {
   assert.deepEqual(Object.keys(storybookKit).sort(), Object.keys(storybookPieces).sort());
   const app = exportedNames(readFileSync(new URL("../kanso/mods/kanso-panel/kit.js", import.meta.url), "utf8"));
