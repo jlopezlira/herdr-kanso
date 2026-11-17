@@ -1,4 +1,5 @@
 // The left nav's roster: who sleeps where, one name per agent, asleep as a status.
+import { loadSleepingNow, loadRosterReads, loadTerminalNames } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { load, clone } from "./helpers.mjs";
@@ -14,7 +15,7 @@ const C1 = "78efdf1f-a14a-432a-acf8-0a964fcc0b1a", C2 = "019a1b2c-3d4e-4f50-8a6b
 const shell = (address, resume, labels = {}) => ({ address, state: "live", program: { shell: true }, status_ms: 7, labels: { ...(resume ? { "kanso.resume": resume } : {}), ...labels } });
 
 test("asleep is read from Herdr: a settled tab with a conversation kept on a terminal sleeps as one", async () => {
-  const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
+  const { sleepingNow } = await loadSleepingNow();
   const sp = [{ id: "sp-kanso", name: "herdr-kanso", tabs: [{ id: "tb-k", index: 1, settled: true, settled_at: 50 }, { id: "tb-o", index: 2 }] }];
   const ps = [{ terminal: "t1", tab: "tb-k" }, { terminal: "t2", tab: "tb-k" }, { terminal: "t3", tab: "tb-k" }, { terminal: "t4", tab: "tb-o" }];
   const terms = [shell("t1", "00000000-0000-4000-8000-000000000001", { "kanso.name": "Hashiko" }), shell("t2", "00000000-0000-4000-8000-000000000002"), shell("t3", null), { address: "t4", state: "live", program: { agent: true }, labels: {} }];
@@ -28,7 +29,7 @@ test("asleep is read from Herdr: a settled tab with a conversation kept on a ter
 });
 
 test("settled without a conversation is not asleep, and a conversation in a tab still shown sleeps alone", async () => {
-  const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
+  const { sleepingNow } = await loadSleepingNow();
   const sp = [{ id: "sp", name: "app", tabs: [{ id: "a", index: 0, settled: true }, { id: "b", index: 1 }] }];
   const ps = [{ terminal: "t1", tab: "a" }, { terminal: "t2", tab: "b" }];
   const none = sleepingNow(sp, ps, [shell("t1", null), shell("t2", null)]);
@@ -39,7 +40,7 @@ test("settled without a conversation is not asleep, and a conversation in a tab 
 });
 
 test("a conversation kept on a terminal that runs something, or ended, is not asleep", async () => {
-  const { sleepingNow } = await load("kanso-spaces/roster.js", ["sleepingNow"], {});
+  const { sleepingNow } = await loadSleepingNow();
   const sp = [{ id: "sp", name: "app", tabs: [{ id: "a", settled: true }] }];
   const ps = [{ terminal: "t1", tab: "a" }];
   const running = { ...shell("t1", "00000000-0000-4000-8000-000000000001"), program: { shell: false, agent: true } };
@@ -66,9 +67,11 @@ test("asleep is a status like working, idle or done: its own section in Status, 
   assert.deepEqual(clone(sections.map((s) => [s.id, s.entries.map((x) => x.a.address)])), [["working", ["t1"]], ["done", ["t3"]], ["idle", ["t2"]], ["asleep", ["zz:1"]]]);
 });
 
+// Alice's conversation, read from process 10, and the roster's readers.
+const aliceReads = async () => ({ ...await loadRosterReads(), th: { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 } });
+
 test("a conversation read from a terminal is its agent's only while that process still runs there", async () => {
-  const { readNow, seenNow } = await load("kanso-spaces/roster.js", ["readNow", "seenNow"], {});
-  const th = { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 };
+  const { readNow, seenNow, th } = await aliceReads();
   assert.equal(readNow(th, { foreground: { pid: 10 } }), true);
   assert.equal(readNow(th, { foreground: { pid: 11 } }), false, "Bob started in Alice's terminal: not Alice's conversation");
   assert.equal(readNow(th, { foreground: null }), false, "nothing runs there now");
@@ -83,8 +86,7 @@ test("a conversation read from a terminal is its agent's only while that process
 });
 
 test("where Herdr's terminal list does not say what runs in front, a reading counts only while its process lives", async () => {
-  const { readNow, seenNow } = await load("kanso-spaces/roster.js", ["readNow", "seenNow"], {});
-  const th = { file: `/h/.claude/projects/-w/${C1}.jsonl`, pid: 10 };
+  const { readNow, seenNow, th } = await aliceReads();
   assert.equal(readNow(th, { address: "t1" }, new Set([10])), true, "Alice still runs: hers");
   assert.equal(readNow(th, { address: "t1" }, new Set([11])), false, "Alice ended (Bob runs there now): not Bob's");
   assert.equal(readNow(th, { address: "t1" }, null), false, "not looked yet: no");
@@ -95,7 +97,7 @@ test("where Herdr's terminal list does not say what runs in front, a reading cou
 });
 
 test("every terminal has a name in Herdr, whatever its program, and no two share one", async () => {
-  const { terminalNames } = await load("kanso-spaces/roster.js", ["terminalNames"], {});
+  const { terminalNames } = await loadTerminalNames();
   const terms = [
     { address: "t5t", state: "live", title: "qb2      ", agent: "qwen-code", labels: { "herdr.space": "sp-f" } },
     { address: "t5s", state: "live", title: "\u25d0\ufe0e qwen    ", labels: { "kanso.name": "qwen", "herdr.space": "sp-a" } },
@@ -128,7 +130,7 @@ test("an agent's key: its conversation while it runs there, else its terminal's 
 });
 
 test("names stay unique even when one is already called like a second", async () => {
-  const { terminalNames } = await load("kanso-spaces/roster.js", ["terminalNames"], {});
+  const { terminalNames } = await loadTerminalNames();
   const terms = ["t1", "t2", "t3"].map((address, i) => ({ address, state: "live", labels: { "kanso.name": ["Lead", "Lead", "Lead 2"][i] } }));
   assert.deepEqual(clone([...terminalNames(terms).values()].map((x) => x.name)), ["Lead", "Lead 3", "Lead 2"]);
 });

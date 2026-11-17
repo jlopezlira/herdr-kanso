@@ -1,7 +1,7 @@
 // One text field: its box from the tokens, its edge, ring, error, off and multi-line states.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, chain, gpuiHost } from "./helpers.mjs";
+import { load, chain, gpuiHost, calls, one, styled } from "./helpers.mjs";
 
 const textState = (kind) => ({
   new: (options = {}) => {
@@ -13,18 +13,6 @@ const textState = (kind) => ({
 });
 const host = () => ({ ...gpuiHost(), Input: { new: () => chain("input") }, Textarea: { new: () => chain("textarea") }, InputState: textState("input"), TextareaState: textState("textarea") });
 const kit = async () => ({ ...await load("kanso-panel/ui.js", ["tokens", "mix", "WASH", "G", "H", "R", "T", "ICON"], host()), ...await load("kanso-panel/ui-field.js", ["field", "TextField", "FIELD_LINES"], host()) });
-
-const calls = (el, name) => el.calls.filter((call) => call[0] === name);
-const one = (el, name) => {
-  const found = calls(el, name);
-  assert.equal(found.length, 1, name);
-  return found[0][1];
-};
-const styled = (el, name) => {
-  const style = chain();
-  one(el, name)(style);
-  return style.calls;
-};
 
 const night = { background: "#1b1b19", foreground: "#d8d4cb", input: "#3a3935", hover: "#232321", selected: "#2b2b28", accent: "#da627d", dim: "#6b6860", muted: "#949086", blocked: "#d0675f" };
 const parts = (ring) => {

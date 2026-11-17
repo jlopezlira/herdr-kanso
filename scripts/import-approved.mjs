@@ -11,21 +11,20 @@ import { normalizeComponent, COMPONENT_CSS } from "./storybook-components.mjs";
 import { selectorCoverage, selectorList } from "./storybook-selectors.mjs";
 import { cssBlocks, normalizeCss } from "./storybook-css.mjs";
 
-const withoutNavigation = (css) => cssBlocks(css).flatMap((rule) => {
-  const brace = rule.indexOf("{"), selector = rule.slice(0, brace);
+// Each rule of css through `keep(rule, selector, body, context)`, inside @media, @supports and @layer too, whose
+// selectors make up the context; a group left empty goes.
+const eachRule = (css, keep, context = "") => cssBlocks(css).flatMap((rule) => {
+  const brace = rule.indexOf("{"), selector = rule.slice(0, brace), body = rule.slice(brace + 1, -1);
   if (/^@(media|supports|layer)\b/.test(selector)) {
-    const nested = withoutNavigation(rule.slice(brace + 1, -1));
+    const nested = eachRule(body, keep, `${context}|${selector}`);
     return nested ? `${selector}{${nested}}` : [];
   }
-  return selector.includes("kanso-prototype__sidebar") ? [] : [rule];
+  return keep(rule, selector, body, context);
 }).join("\n");
-export const sharedThemeCss = (css) => cssBlocks(css).flatMap((rule) => {
-  const brace = rule.indexOf("{"), selector = rule.slice(0, brace);
-  let body = rule.slice(brace + 1, -1);
-  if (/^@(media|supports|layer)\b/.test(selector)) {
-    const nested = sharedThemeCss(body);
-    return nested ? `${selector}{${nested}}` : [];
-  }
+
+const withoutNavigation = (css) => eachRule(css, (rule, selector) => (selector.includes("kanso-prototype__sidebar") ? [] : [rule]));
+export const sharedThemeCss = (css) => eachRule(css, (rule, selector, declared) => {
+  let body = declared;
   if (/\.kanso-story--(?:dark|light)\b/.test(selector)) body = body.split(";").filter((declaration) => !/^\s*--[\w-]+\s*:/.test(declaration)).join(";");
   if (selector.includes("kanso-prototype__theme-control")) {
     const colors = { "#6b6862": "dim", "#272725": "border", "#1f1f1d": "border", "#bdb8ad": "muted", "#d8d4cb": "fg" };
@@ -33,23 +32,18 @@ export const sharedThemeCss = (css) => cssBlocks(css).flatMap((rule) => {
   }
   if (selector.includes(".kanso-story--light .kanso-dojo__mascot")) return [];
   return body.trim() ? `${selector}{${body}}` : [];
-}).join("\n");
+});
 export function additionalCss(existing, incoming) {
   const known = new Set();
-  const visit = (css, context = "", collect = false) => cssBlocks(css).flatMap((rule) => {
-    const brace = rule.indexOf("{"), selector = rule.slice(0, brace), body = rule.slice(brace + 1, -1);
-    if (/^@(media|supports|layer)\b/.test(selector)) {
-      const nested = visit(body, `${context}|${selector}`, collect);
-      return nested ? `${selector}{${nested}}` : [];
-    }
+  const visit = (css, collect = false) => eachRule(css, (_rule, selector, body, context) => {
     const selectors = selector.startsWith("@") ? [selector] : selectorList(selector);
     if (!collect) { selectors.forEach((selector) => known.add(`${context}|${selector}`)); return []; }
     const missing = selectors.filter((selector) => !known.has(`${context}|${selector}`));
     missing.forEach((selector) => known.add(`${context}|${selector}`));
     return missing.length ? `${missing.join(",")}{${body}}` : [];
-  }).join("\n");
+  });
   visit(existing);
-  return visit(incoming, "", true);
+  return visit(incoming, true);
 }
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const themed = (node) => node.classes.some((name) => ["k-dark", "k-light"].includes(name));
@@ -119,16 +113,11 @@ export function importApproved(file, root = ".") {
   const currentCss = sharedThemeCss(withoutNavigation(readFileSync(`${root}/stories/proto.css`, "utf8")));
   const missingCss = additionalCss(currentCss, normalizeCss(sharedThemeCss(withoutNavigation(renameCss(approvedCss))).replace(/section\[id\^=/g, "section[data-reference-board^=").replace(/#(pr-light|pr)(?=\s)/g, '[data-reference-board="$1"]')));
   const unused = new Set(selectorCoverage(missingCss, Object.fromEntries([...retained, ...records].filter((record) => record.html).map((record) => [record.id, record.html]))).unused);
-  const usedCss = (text) => cssBlocks(text).flatMap((rule) => {
-    const brace = rule.indexOf("{"), selector = rule.slice(0, brace), body = rule.slice(brace + 1, -1);
-    if (/^@(media|supports|layer)\b/.test(selector)) {
-      const nested = usedCss(body);
-      return nested ? `${selector}{${nested}}` : [];
-    }
+  const usedCss = (text) => eachRule(text, (rule, selector, body) => {
     if (selector.startsWith("@")) return rule;
-    const kept = selectorList(selector).filter((selector) => !unused.has(selector));
+    const kept = selectorList(selector).filter((name) => !unused.has(name));
     return kept.length ? `${kept.join(",")}{${body}}` : [];
-  }).join("\n");
+  });
   const css = normalizeCss(`${currentCss}\n${usedCss(missingCss)}\n${COMPONENT_CSS}`, { kit: true });
   writeFileSync(`${root}/stories/references.json`, `${JSON.stringify(references, null, 2).replaceAll("<", "\\u003c")}\n`);
   writeFileSync(`${root}/stories/proto.css`, css);
