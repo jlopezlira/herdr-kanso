@@ -4,23 +4,12 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, EditorState } from "gpui-base";
 import { theme } from "herdr";
 import { G, T, CODE, ICON_ROW, TINT, alpha, monoFont, tokens } from "./ui.js";
-import { extOf } from "./pure.js";
+import { extOf, diffNumbers } from "./pure.js";
 
 const SIGNS = { "+": "added", "-": "deleted", "@": "hunk" };
 const MARKS = { added: "+", deleted: "-" };
 const FAILURE = /\b(fail(ed|ure)?|\w*error|\w*exception)\b|^\s*>/i;
-const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)/;
-const STEPS = { "-": { old: 1, next: 0, from: "old" }, "+": { old: 0, next: 1, from: "next" }, " ": { old: 1, next: 1, from: "next" } };
 const GROUNDS = { added: (c) => alpha(c.done, TINT.diff), deleted: (c) => alpha(c.blocked, TINT.diff), hunk: (c) => c.w4 };
-
-/** A diff numbers its lines from its hunk headers: a deleted line by the old file, the others by the new one. */
-export const diffNumbers = (lines, first) => lines.reduce(({ at, numbers }, source) => {
-  const head = HUNK.exec(source);
-  if (head) return { at: { old: Number(head[1]), next: Number(head[2]) }, numbers: [...numbers, undefined] };
-  const step = STEPS[source[0]];
-  if (!step) return { at, numbers: [...numbers, undefined] };
-  return { at: { old: at.old + step.old, next: at.next + step.next }, numbers: [...numbers, at[step.from]] };
-}, { at: { old: first, next: first }, numbers: [] }).numbers;
 
 const lineOf = (c, kind) => (source, { number, on }) => {
   const sign = kind === "diff" ? SIGNS[source[0]] : undefined;

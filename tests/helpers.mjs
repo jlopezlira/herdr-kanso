@@ -92,6 +92,8 @@ export const styled = (el, name) => {
 export const arg = (el, name) => calls(el, name).at(-1)?.[1];
 export const find = (el, test) => (test(el) ? el : el.kids.map((kid) => find(kid, test)).find(Boolean) ?? null);
 export const all = (el, test) => [...(test(el) ? [el] : []), ...el.kids.flatMap((kid) => all(kid, test))];
+// A drawing as plain data: handlers compare by kind, since each draw makes new ones.
+export const drawn = (el) => ({ tag: el.tag, calls: el.calls.map((call) => call.map((arg) => (typeof arg === "function" ? "handler" : arg?.calls ? "element" : arg))), kids: el.kids.map(drawn) });
 export const nativePlatform = ({ darwin: "macos", win32: "windows" })[process.platform] ?? "linux";
 export const nativeWindow = () => ({ platform: nativePlatform });
 const mods = new URL("../kanso/mods/", import.meta.url);

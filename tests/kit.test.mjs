@@ -3,7 +3,7 @@ import { loadTokens, loadRow, loadMenu } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, nodes, texts, press, themed, KIT_NIGHT, drawingHost } from "./helpers.mjs";
+import { load, nodes, texts, press, themed, KIT_NIGHT, drawingHost, drawn } from "./helpers.mjs";
 import { exportedNames } from "../scripts/mod-source.mjs";
 import * as storybookKit from "../stories/kit/kit.js";
 import * as storybookPieces from "../stories/kit/pieces.js";
@@ -16,8 +16,6 @@ const kits = async () => themed({
   app: await load("kanso-panel/kit.js", ["row", "button", "menu", "toast"], host()),
 }, night);
 const night = KIT_NIGHT;
-// A drawing as plain data: handlers compare by kind, since each draw makes new ones.
-const drawn = (el) => ({ tag: el.tag, calls: el.calls.map((call) => call.map((arg) => (typeof arg === "function" ? "handler" : arg?.calls ? "element" : arg))), kids: el.kids.map(drawn) });
 const svgs = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "svg").map((call) => call[1]));
 const ids = (el) => nodes(el).flatMap((kid) => kid.calls.filter((call) => call[0] === "id").map((call) => call[1]));
 const tools = [{ icon: "lu-pin", label: "Pin to the top" }, { icon: "lu-ellipsis", label: "More" }];

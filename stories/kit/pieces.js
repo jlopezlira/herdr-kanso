@@ -1,5 +1,6 @@
 // The kit's pieces: every function here returns markup; compositions.js only calls them.
 import { diffText, facts, plus } from '../../kanso/mods/kanso-panel/ui-facts.js';
+import { diffNumbers } from '../../kanso/mods/kanso-spaces/pure.js';
 
 export const escape = (text) => String(text).replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -53,16 +54,6 @@ const highlight = (line) => {
 };
 const signs = { '+': 'added', '-': 'deleted', '@': 'hunk' };
 const failure = /\b(fail(ed|ure)?|\w*error|\w*exception)\b|^\s*>/i;
-const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)/;
-const steps = { '-': { old: 1, next: 0, from: 'old' }, '+': { old: 0, next: 1, from: 'next' }, ' ': { old: 1, next: 1, from: 'next' } };
-// A diff numbers its lines from its hunk headers: a deleted line by the old file, the others by the new one.
-const diffNumbers = (lines, first) => lines.reduce(({ at, numbers }, source) => {
-  const head = hunk.exec(source);
-  if (head) return { at: { old: Number(head[1]), next: Number(head[2]) }, numbers: [...numbers, undefined] };
-  const step = steps[source[0]];
-  if (!step) return { at, numbers: [...numbers, undefined] };
-  return { at: { old: at.old + step.old, next: at.next + step.next }, numbers: [...numbers, at[step.from]] };
-}, { at: { old: first, next: first }, numbers: [] }).numbers;
 export const code = ({ text, kind, first, line }) => {
   const lines = text.split('\n');
   const numbers = kind === 'diff' ? diffNumbers(lines, first) : lines.map((_, index) => first + index);

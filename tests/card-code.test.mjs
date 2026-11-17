@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { load, nodes, texts, calls, one, numberArguments, themed, KIT_NIGHT, drawingHost, svgsOf } from "./helpers.mjs";
+import { load, nodes, texts, calls, one, numberArguments, themed, KIT_NIGHT, drawingHost, svgsOf, drawn } from "./helpers.mjs";
 import { card as storyCard, code as storyCode } from "../stories/kit/pieces.js";
 
 const night = { ...KIT_NIGHT, ansi4: "#93a3b5", ansi5: "#ad9cab" };
@@ -10,14 +10,13 @@ const host = () => ({ ...drawingHost(), theme: () => night, settings: () => ({ f
 const kit = async (extra = {}) => themed({
   ...await load("kanso-panel/ui.js", ["tokens", "alpha", "G", "H", "R", "T", "LH", "CODE", "TINT", "ICON_INLINE"], { ...host(), ...extra }),
   ...await load("kanso-panel/ui-card.js", ["card"], { ...host(), ...extra }),
-  ...await load("kanso-panel/ui-code.js", ["code", "diffNumbers", "sourceState"], { ...host(), ...extra }),
+  ...await load("kanso-panel/ui-code.js", ["code", "sourceState"], { ...host(), ...extra }),
+  ...await load("kanso-panel/pure.js", ["diffNumbers"]),
   ...await load("kanso-panel/ui-avatar.js", ["avatar"], { ...host(), ...extra }),
   app: await load("kanso-panel/kit.js", ["card", "code", "row"], { ...host(), ...extra }),
   body: await load("kanso-panel/pr-body.js", ["verdictBody"], { ...host(), ...extra }),
 }, night);
 
-// A drawing as plain data: handlers compare by kind, since each draw makes new ones.
-const drawn = (el) => ({ tag: el.tag, calls: el.calls.map((call) => call.map((arg) => (typeof arg === "function" ? "handler" : arg?.calls ? "element" : arg))), kids: el.kids.map(drawn) });
 const lineTexts = (el) => el.kids.map((line) => texts(line).at(-1));
 const numbersOf = (el) => el.kids.map((line) => (line.kids.length > 1 ? texts(line.kids[0])[0] : undefined));
 const DIFF = "@@ -10,3 +10,4 @@\n const a = 1;\n-const b = 2;\n+const b = 3;\n+const c = 4;\n const d = 5;";
