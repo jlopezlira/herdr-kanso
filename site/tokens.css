@@ -113,6 +113,19 @@
   --k-window-preview: 720px;
   --k-window-preview-wide: 900px;
   --k-metadata-label: 72px;
+  --k-board-pad: 18px;
+  --k-board-gutter: 56px;
+  --k-board-wrap: 360px;
+  --k-board-caption: 12px;
+  --k-board-indent: 18px;
+  --k-lab-label: 150px;
+  --k-contrast-column: 600px;
+  --k-contrast-label: 240px;
+  --k-token-name: 64px;
+  --k-token-sample: 80px;
+  --k-icon-example: 240px;
+  --k-swatch-w: 64px;
+  --k-swatch-pad: 10px;
   --k-brand-mark: 72px;
   --k-brand-wordmark: 28px;
   --k-brand-subtitle: 13px;
@@ -138,6 +151,8 @@
   --k-pane-drop-h: 168px;
   --k-arrangement-h: 96px;
   --k-chart-h: 72px;
+  --k-thumbnail-inset: 5px;
+  --k-thumbnail-line: 3px;
   --k-dialog-w: 480px;
   --k-dialog-small: 340px;
   --k-dialog-sidebar: 460px;
@@ -229,6 +244,7 @@
   --dojo-fur: #e8963a;
   --dojo-cream: #f6ece0;
   --dojo-ink: #161615;
+  --caption: #8a867d;
 }
 
 :root[data-theme="dark"] { color-scheme: dark; }

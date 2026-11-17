@@ -122,6 +122,9 @@
 .kanso-text--dojo-ink{color:var(--dojo-ink)!important}
 .kanso-fill--dojo-ink{background:var(--dojo-ink)}
 .kanso-ring--dojo-ink{box-shadow:inset 0 0 0 1px var(--dojo-ink)}
+.kanso-text--caption{color:var(--caption)!important}
+.kanso-fill--caption{background:var(--caption)}
+.kanso-ring--caption{box-shadow:inset 0 0 0 1px var(--caption)}
 .kanso-shadow{box-shadow:var(--shadow)}
 .kanso-type--display{font-size:var(--k-fs-display)}
 .kanso-type--title{font-size:var(--k-fs-title)}
