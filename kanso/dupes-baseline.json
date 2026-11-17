@@ -324,15 +324,6 @@
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-spend/main.js": 1
  },
- "aff597bfe029": {
-  "kanso/mods/kanso-guard/main.js": 1,
-  "kanso/mods/kanso-spend/main.js": 1
- },
- "8d8b645e7c49": {
-  "kanso/mods/kanso-guard/main.js": 1,
-  "kanso/mods/kanso-panel/ports.js": 1,
-  "kanso/mods/kanso-spend/main.js": 1
- },
  "9342b9c22a76": {
   "kanso/mods/kanso-guard/main.js": 1,
   "kanso/mods/kanso-panel/ports.js": 1

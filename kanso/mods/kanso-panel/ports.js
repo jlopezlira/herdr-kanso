@@ -18,7 +18,7 @@ import { Armed, button, quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
 import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { portsSpec, portsText } from "./ports-card.js";
 import { parsePorts, historyOf, RANGES, activeSeries, portStats, historyLists, size, clock } from "./ports-model.js";
 import { portsMemory } from "./panel-state.js";
@@ -512,8 +512,7 @@ export class Ports {
         .when(Boolean(history), (el) => el.child(v_flex().w_full().opacity(state === "stale" ? 0.55 : 1).child(history)));
     return sizedPage.call(this, v_flex().id("kanso-ports").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(header)
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it.", G.sm)))
+          .children(shareRows(this, c, "Only counts and sizes: no ports, folders, projects or commands. The post opens with the image in it."))
           .child(body)
           .when(Boolean(this.note), (el) => el.child(failNote("pt-note", this.note, c))));
   }

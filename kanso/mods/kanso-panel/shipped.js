@@ -8,7 +8,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { exec, theme, shared, setShared, notify } from "herdr";
 import { Store } from "./shipped-store.js";
 import { shippedSpec, shareText } from "./shipped-card.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { G, tokens } from "./ui.js";
 import { quietLink, iconButton } from "./ui-button.js";
 import { section } from "./ui-section.js";
@@ -591,8 +591,7 @@ export class Shipped {
             .child(h_flex().gap(G.xs).items_center()
               .child(iconButton("shipped-share", "share", "Share", (cx) => this.share.toggle(cx), c, { disabled: !this.days }))
               .child(iconButton("shipped-refresh", "refresh", "Refresh", (cx) => this.refresh(cx, true), c, { spin: this.loading || this.syncing }))))
-          .when(Boolean(this.share.open), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only the totals, streak, records and hours: no repository or computer names. The post opens with the image in it.", G.sm)))
+          .children(shareRows(this, c, "Only the totals, streak, records and hours: no repository or computer names. The post opens with the image in it."))
           .child(this.periods(c))
           .child(body));
   }

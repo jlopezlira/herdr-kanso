@@ -16,7 +16,7 @@ import { ghost } from "./ui-skeleton.js";
 import { segmented } from "./ui-tab.js";
 import { toggleSwitch } from "./ui-toggle.js";
 import { PERIOD_KEY, SPEND_PERIODS, spendPeriod } from "./period.js";
-import { Share } from "./share.js";
+import { Share, shareRows } from "./share.js";
 import { spendSpec, spendText } from "./spend-card.js";
 import { clock, tryOr, tryOrAsync, afterMount } from "./pure.js";
 import { powerOf } from "./sync-power.js";
@@ -465,8 +465,7 @@ export default class TokenSpend extends View {
       .on_size_change(pageSize.call(this, { always: true }))
       .child(pageBody(narrow, (column) => column
           .child(this.header(c, narrow))
-          .when(this.share.open && this.canShare(), (el) => el.child(this.share.row(c, () => this.shareCard(),
-            "Only the totals and the days: no project, task or session names. The post opens with the image in it.", G.sm)))
+          .children(shareRows(this, c, "Only the totals and the days: no project, task or session names. The post opens with the image in it."))
           .child(body)));
   }
 

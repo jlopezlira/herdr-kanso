@@ -10,7 +10,7 @@ import { systemApi } from "./platform-system.js";
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Button } from "gpui-base";
 import { exec, spaces, panes, home, run, theme, shared, notify, knownAgents } from "herdr";
-import { Share, postText } from "./share.js";
+import { Share, postText, shareRows } from "./share.js";
 import { WorktreeStore } from "./worktrees-store.js";
 import { G, PULSE, breathe, tokens } from "./ui.js";
 import { Armed, button, quietLink, iconButton } from "./ui-button.js";
@@ -879,9 +879,8 @@ export class Worktrees {
         : this.page(c, narrow, groups, shown);
     return sizedPage.call(this, v_flex().id("kanso-worktrees").size_full().min_h(0).bg(c.canvas).text_color(c.text).overflow_y_scrollbar(), narrow, (column) => column
           .child(this.header(c, narrow))
-          .when(this.share.open, (el) => el.child(this.share.row(c, () => this.shareCard(),
-            (this.hist?.kb ?? 0) > 0 ? "Only the totals: how much was freed, how many were removed, and the days. Never a repository, branch or folder name."
-              : "Nothing freed yet, so it shares what the worktrees take now: totals only, never a repository, branch or folder name.", G.sm)))
+          .children(shareRows(this, c, (this.hist?.kb ?? 0) > 0 ? "Only the totals: how much was freed, how many were removed, and the days. Never a repository, branch or folder name."
+              : "Nothing freed yet, so it shares what the worktrees take now: totals only, never a repository, branch or folder name."))
           .child(body));
   }
 }

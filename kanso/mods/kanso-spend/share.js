@@ -263,6 +263,9 @@ export async function shareImage(network, make, workDir) {
   if (!copied) await openPath(png.replace(/\/[^/]+$/, ""));
 }
 
+// Under a panel's header: the share row while open, when the panel has something to share.
+export const shareRows = (view, c, note) => view.share.open && (view.canShare?.() ?? true) ? [view.share.row(c, () => view.shareCard(), note)] : [];
+
 export class Share {
   constructor(id, workDir) { this.id = id; this.workDir = workDir ?? paths.join(appHome(), "data", id); this.open = false; this.busy = null; }
 
