@@ -1,5 +1,6 @@
 // Sample sidebar content for the stories: the rows and tiles of each view, drawn with the compositions.
-import { asleep, computerRow, panelBack, panelClose, panelRefresh, projectRow, section, sessionRow, sidebar, tile } from './compositions.js';
+import { asleep, computerRow, panelBack, panelClose, panelRefresh, projectRow, section, sidebar, tile } from './compositions.js';
+import { sessionRow } from './session-row.js';
 import { button, glyph, menu, stack, statusItem } from './pieces.js';
 import keyFile from '../../kanso/keys.json' with { type: 'json' };
 import windowsKeyFile from '../../kanso/keys.windows.json' with { type: 'json' };
@@ -10,6 +11,10 @@ import { hachiPixels } from '../../kanso/mods/kanso-dojo/mascot-pixels.js';
 // A pull request's number as the app shows it.
 export const pullRequest = (number) => `#${number}`;
 const group = (...rows) => stack({ variant: 'row group' }, ...rows);
+// A conversation's own tools under the pointer, and what a session's commands tooltip says.
+export const sessionTools = [{ icon: 'lu-check', label: 'Settle' }];
+export const sessionCommandsTip = 'npm test · 2m';
+
 export const sampleRows = {
   spaces: () => [
     group(computerRow({ name: 'light', remote: false })),

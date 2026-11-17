@@ -64,10 +64,15 @@
   --k-glint-w1: 44px;
   --k-glint-w2: 26px;
   --k-glint-w3: 12px;
+  --k-glint-stagger: 160ms;
+  --k-dots-ms: 380ms;
   --k-skel-ms: 1800ms;
   --k-spin-ms: 900ms;
   --k-op-away: .55;
   --k-op-held: .4;
+  --k-op-glint-faint: .35;
+  --k-op-glint-mid: .6;
+  --k-wash-blocked-row: 8%;
   --k-wash-blocked: 40%;
   --k-w-pane-name: 256px;
   --k-w-pane-segment: 224px;

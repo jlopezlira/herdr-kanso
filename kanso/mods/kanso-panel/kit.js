@@ -3,8 +3,13 @@ import { row as drawRow } from "./ui-row.js";
 import { button as drawButton } from "./ui-button.js";
 import { menu as drawMenu } from "./ui-menu.js";
 
-const HANDLERS = ["on", "onClick", "onHover", "onKey", "focusHandle"];
-const appIcon = (icon) => icon?.replace(/^lu-/, "");
+const EVENTS = {
+  onPress: (el, fn) => el.on_mouse_down("left", fn),
+  onRelease: (el, fn) => el.on_mouse_up("left", fn),
+  onMenu: (el, fn) => el.on_mouse_down("right", fn),
+};
+const HANDLERS = ["on", "onClick", "onHover", "onKey", "focusHandle", ...Object.keys(EVENTS)];
+const appIcon = (icon) => (typeof icon === "string" ? icon.replace(/^lu-/, "") : icon);
 const withIcon = (part) => (part?.icon ? { ...part, icon: appIcon(part.icon) } : part);
 const keyOf = ({ icon, label }) => (icon ? appIcon(icon) : label);
 const parts = (slot) => [slot].flat(Infinity).filter((part) => part !== null && part !== undefined && part !== false);
@@ -28,12 +33,13 @@ const withHandlers = (id, raw, actions, action) => {
 };
 
 export const row = ({ icon, flag, detail, action, actions, start, tools, ...props }) => (id, c, more = {}) => {
-  const { on = {}, ...handlers } = given(more);
-  return drawRow(id, c, {
+  const { on = {}, onPress, onRelease, onMenu, ...handlers } = given(more);
+  const drawnRow = drawRow(id, c, {
     ...props, ...handlers, ...withHandlers(id, on, actions, action), icon: appIcon(icon), flag: appIcon(flag),
     detail: Array.isArray(detail) ? detail.map(withIcon) : withIcon(detail),
     start: drawn(id, c, "start", start), tools: drawn(id, c, "tools", tools),
   });
+  return Object.entries({ onPress, onRelease, onMenu }).filter(([, fn]) => fn).reduce((el, [name, fn]) => EVENTS[name](el, fn), drawnRow);
 };
 
 // `icon: "none"` is the Storybook's no icon; app-only props, such as `color`, pass through as the row's do.

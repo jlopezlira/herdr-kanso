@@ -50,13 +50,6 @@ export async function runPull(exec, notify, place) {
   return result;
 }
 
-export function activityTone(status) {
-  if (status === "blocked") return "foreground";
-  if (status === "working") return "muted";
-  if (status === "done" || status === "idle") return "dim";
-  return "muted";
-}
-
 // A state on the row is a word: the blocked colour is only for an edge and a mark.
 export const machineWordTone = () => "dim";
 
@@ -110,9 +103,6 @@ export const sectionCount = (open, count) => (open ? null : count);
 export function rowDirectory(project, machine) {
   return [project, machine].filter(Boolean).join(" · ") || null;
 }
-
-// The time follows what the session is on; with nothing on the second line it keeps its place at the end.
-export const timePlace = (activity, time) => (!time ? null : activity ? "line" : "end");
 
 const hm = (ms) => { const d = new Date(ms); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

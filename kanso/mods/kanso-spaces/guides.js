@@ -15,6 +15,3 @@ export function climb(above, gap, overlap) {
   const between = above.slice(at + 1);
   return between.every((it) => it.h === 0) ? gap * (between.length + 1) : overlap;
 }
-
-// A sub-agent's climb in column `c`: into its parent's row (no line in its own column) when first, else the gap to the row above.
-export const reachOf = (lines, c, { first, gap = 1 }, into) => (first && c === lines.length - 1 ? into : gap);

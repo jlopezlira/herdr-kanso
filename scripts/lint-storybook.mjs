@@ -101,6 +101,9 @@ export function structureErrors(files, catalog, template) {
   return errors;
 }
 
+// One file per composition the app shares, beside the ones it does not draw yet.
+export const COMPOSITIONS = ['stories/kit/compositions.js', 'stories/kit/session-row.js'];
+
 // Compositions only call pieces and never treat them as strings, so the app can share the file as it is.
 export function compositionErrors(source, path = 'stories/kit/compositions.js') {
   const code = source.replace(/^\s*\/\/.*$/gm, '');
@@ -197,7 +200,7 @@ export function lint(root = '.') {
   const errors = structureErrors(storyFiles(join(root, 'stories')), catalog, readFileSync(join(root, 'stories/kit/ComponentPage.jsx'), 'utf8'));
   if (readFileSync(join(root, 'stories/GAPS.md'), 'utf8') !== gapDocument(expand(catalog))) errors.push('GAPS.md: feature inventory differs from component pages');
   const read = (file) => readFileSync(join(root, file), 'utf8');
-  errors.push(...compositionErrors(read('stories/kit/compositions.js')));
+  errors.push(...COMPOSITIONS.flatMap((file) => compositionErrors(read(file), file)));
   const [, canvas, docs] = /frame\.className = [^?]+\? '([^']+)' : '([^']+)'/.exec(read('.storybook/preview.js')) ?? [];
   const classes = [
     ['.storybook/preview.js', `${canvas ?? ''} ${docs ?? ''}`.split(/\s+/).filter(Boolean)],

@@ -1,5 +1,5 @@
 // The sidebar's rows and its Projects, Status and Threads views draw what the Storybook drawings show.
-import { loadAgentRowH } from "./mod-fixtures.mjs";
+import { loadSessionHeight } from "./mod-fixtures.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -119,10 +119,10 @@ test("each session row has its own mark and words: a terminal's icon, the time a
 });
 
 test("a sub-session that needs you gets its own line; the others stay on one", async () => {
-  const { agentRowH } = await loadAgentRowH({ div: () => ({}), svg: () => ({}) });
-  assert.equal(agentRowH({ sub: true }, {}), 28);
-  assert.equal(agentRowH({}, { activity: "Allow network access?" }), 50);
-  assert.equal(agentRowH({}, { activity: null }), 32, "finished with nothing to say: one line");
+  const { sessionHeight } = await loadSessionHeight({ div: () => ({}), svg: () => ({}) });
+  assert.equal(sessionHeight({}), 32, "a sub-session is the row's one line, as in its Storybook story");
+  assert.equal(sessionHeight({ activity: "Allow network access?" }), 50);
+  assert.equal(sessionHeight({ activity: null }), 32, "finished with nothing to say: one line");
 });
 
 test("Status draws its sections with only Needs you marked, a count once folded, and its empty state", async () => {
@@ -169,7 +169,7 @@ test("Threads lists active, finished, snoozed and settled conversations, and one
   assert.equal(folded.ids.includes("space-agent-snz"), false, "Snoozed folds by default");
   assert.equal(folded.texts.includes("Can't read"), true);
   assert.equal(folded.tips.includes(threads.bad.unavailable), true, "the why stays in its tooltip");
-  assert.equal(folded.ids.includes("refresh-bad"), true);
+  assert.equal(folded.ids.includes("space-agent-bad-action"), true, "Refresh is the row's action, beside the word");
   assert.equal(folded.tips.includes("Refresh"), true);
   const open = await sidebar({ view: "threads", agents, terminals, threads, shelvesOpen: new Set(["snoozed", "settled"]) });
   assert.equal(open.ids.includes("space-agent-snz"), true);

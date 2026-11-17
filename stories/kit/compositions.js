@@ -22,15 +22,6 @@ export const toolbar = ({ view = 'spaces', column = false, open = false, sorted 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
 const icon = (name, label) => ({ icon: name, label });
 
-// The time follows the activity on the second line; on hover pin and ⋯ take its place.
-export const sessionRow = ({ program = 'p-claude', name, activity = null, time = null, place = null, status = 'working', depth = 1, current = false, pinned = false, commands = 0, hover = false, focus = false, dimmed = false }) => {
-  const when = hover ? null : time;
-  return row({
-    icon: program, name, second: when && activity ? phrase(activity, '·', when) : activity, detail: place, meta: activity ? null : when, mark: status, depth, current, dimmed, hover, focus,
-    glint: status === 'working', flag: pinned ? 'lu-pin' : null, chip: commands, actions: [icon('lu-pin', 'Pin to the top'), icon('lu-ellipsis', 'More')],
-  });
-};
-
 export const projectRow = ({ name, folder = null, branch = null, sync = null, open = false, status = 'blocked', count = 0, hover = false, focus = false }) => row({
   name, heading: true, current: open, hover, focus, detail: [folder, branch && { icon: 'lu-git-branch', text: branch }, sync],
   mark: count ? status : 'none', meta: count || null, actions: [icon('lu-plus', phrase('New agent in', name)), icon('lu-ellipsis', 'More')],

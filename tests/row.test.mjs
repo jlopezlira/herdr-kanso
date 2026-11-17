@@ -87,12 +87,13 @@ const grows = (el, G) => {
   assert.equal(one(el, "py") + G.hair, G.sm);
 };
 
-test("Two lines put the second fact under the name in the meta size, dim, and let the row grow", async () => {
-  const { row, G, T, c } = await kit();
+test("Two lines put the second fact under the name in the meta size, dim, in the two-line row's height, which a list can add up", async () => {
+  const { row, G, H, T, c } = await kit();
   const el = row("r", c, { name: "Atlas", second: "Reviewing step 01", meta: "3m" });
-  grows(el, G);
+  assert.equal(one(el, "h"), H.two);
+  assert.equal(calls(el, "py").length, 0);
   const body = byTag(el, "v_flex");
-  assert.equal(one(body, "gap"), G.sm);
+  assert.equal(one(body, "gap"), G.xs);
   const second = body.kids.at(-1);
   assert.equal(one(second, "text_size"), T.body);
   assert.equal(one(second, "text_color"), c.dim);
@@ -202,9 +203,8 @@ test("The title form is the panel's title line: 40 high, the title size, semibol
 });
 
 test("A tone colours the lead icon, and the drawn start comes before it", async () => {
-  const { row, tokens, ICON_ROW } = await kit();
+  const { row, ICON_ROW, c } = await kit();
   const { toneColor } = await load("kanso-panel/ui.js", ["toneColor"], drawingHost());
-  const c = tokens(night);
   const grip = chain("grip");
   const el = row("r", c, { icon: "circle-alert", tone: "blocked", name: "Build failed", start: [grip] });
   const [first, icon] = line(el).kids;
@@ -225,6 +225,50 @@ test("Tools are always shown after the action, and key hints close the right sid
   assert.ok(at(byTag(el, "r-action")) < at(reset) && at(reset) < at(hints[0]), "action, tools, then keys");
   assert.equal(at(hints[1]), kids.length - 2, "the mark stays last");
   assert.ok(texts(el).includes("changed"), "tools do not hide the meta: only the hover tools do");
+});
+
+test("A working row's name glints, and a program's own art leads it, tinted or in its own colours", async () => {
+  const { row, ICON_ROW, c } = await kit();
+  const working = row("r", c, { name: "Atlas", glint: true });
+  assert.ok(all(working).some((kid) => calls(kid, "loop").length), "the name glints");
+  assert.equal(all(row("r", c, { name: "Atlas" })).some((kid) => calls(kid, "loop").length), false);
+  const tinted = row("r", c, { icon: { icon: "programs/claude.svg", tint: true }, name: "Atlas" });
+  assert.ok(svgs(tinted).includes("programs/claude.svg"));
+  const art = row("r", c, { icon: { icon: "programs/codex.png", tint: false }, name: "Iris" });
+  const picture = all(art).find((kid) => kid.tag === "image");
+  assert.deepEqual([one(picture, "w"), one(picture, "h")], [ICON_ROW, ICON_ROW]);
+});
+
+test("Facts, the second line, the meta and the chip take a tone and a tip", async () => {
+  const { row, c } = await kit();
+  const el = row("r", c, {
+    name: "Atlas", detail: { text: "Can't read", tip: "The transcript is gone" }, meta: { text: "2m", tone: "blocked" }, chip: { label: 2, tip: "npm test · 2m" },
+    second: [{ text: "Run npm publish?", tone: "fg" }, null, { text: "14m", tone: "blocked" }],
+  });
+  const tips = all(el).flatMap((kid) => calls(kid, "tooltip").map((call) => call[1]));
+  assert.deepEqual(tips.sort(), ["The transcript is gone", "npm test · 2m"]);
+  const inkOf = (text) => all(el).find((kid) => calls(kid, "child").some((call) => call[1] === text)).calls.filter((call) => call[0] === "text_color").at(-1)[1];
+  assert.deepEqual([inkOf("2m"), inkOf("Run npm publish?"), inkOf("14m")], [c.blocked, c.text, c.blocked]);
+  assert.deepEqual(texts(el), ["Atlas", "Can't read", "2m", "2", "Run npm publish?", "14m"]);
+});
+
+test("A dragged row shows where it lands, a waiting row has the blocked wash, and a sub-row hangs from its parent by its guides", async () => {
+  const { row, G, H, ICON_ROW, c } = await kit();
+  for (const [drop, edge] of [["before", "top_0"], ["after", "bottom_0"]]) {
+    const line = row("r", c, { name: "Atlas", drop }).kids.find((kid) => calls(kid, "bg").some((call) => call[1] === c.accent));
+    assert.ok(line && calls(line, edge).length && one(line, "h") === G.hair, drop);
+  }
+  assert.equal(row("r", c, { name: "Atlas" }).kids.some((kid) => calls(kid, "bg").length), false);
+  const waiting = row("r", c, { name: "Nova", wash: "blocked" });
+  assert.notEqual(one(waiting, "bg"), c.background);
+  assert.equal(calls(row("r", c, { name: "Nova", wash: "blocked", current: true }), "bg")[0][1], c.selected, "the current row keeps its own ground");
+  const guides = (props) => row("r", c, { name: "Juno", ...props }).kids.filter((kid) => calls(kid, "border_l_1").length || calls(kid, "border_t_1").length);
+  assert.equal(guides({ depth: 2 }).length, 1, "one guide under the parent's icon");
+  assert.equal(guides({ depth: 1 }).length, 0);
+  const tee = guides({ depth: 2, guides: [null, "tee"] }), end = guides({ depth: 2, guides: [null, "end"] }), pass = guides({ depth: 3, guides: [null, "pass", "end"] });
+  assert.deepEqual([tee.length, end.length, pass.length], [2, 2, 3]);
+  assert.equal(one(end[0], "h"), H.line / 2, "the last child's guide stops at its elbow");
+  assert.equal(one(tee[1], "w"), ICON_ROW / 2 + G.xs);
 });
 
 test("A tree row steps in by its level and leads with its fold: a chevron for a folder, open or not, and an empty slot for a file", async () => {
