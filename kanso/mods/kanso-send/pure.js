@@ -31,6 +31,41 @@ export function memoryFree(pct) {
 // A panel's first command waits one timer turn: Herdr can lose one started in a remounted view's init turn.
 export const afterMount = (cx, start) => cx.timer.after(0, start);
 
+// The mod's command reader: each command goes to `act` until the build is replaced (hot reload,
+// update) and nextCommand throws, or `act` answers false. `closed` stops a start that lands after
+// the view's close(); `keep` takes the task, so a close() still in time can cancel it.
+export function readCommands(cx, next, act, { closed = () => false, keep = () => {} } = {}) {
+  return afterMount(cx, (outer) => {
+    if (closed()) return;
+    keep(outer.spawn(async (loopCx) => {
+      for (;;) {
+        const got = await tryOrAsync(async () => ({ command: await next() }));
+        // A replaced build stops here, before acting.
+        if (!got) return;
+        loopCx.notify();
+        if ((await act(got.command, loopCx)) === false) return;
+      }
+    }));
+  });
+}
+
+// A dialog takes the keys the moment it opens: one handle, focused.
+export function focusOn(cx) {
+  const handle = cx.focus_handle();
+  handle.focus();
+  return handle;
+}
+
+// A layout node by its id, anywhere in the tree.
+export function nodeById(node, id) {
+  if (node?.id === id) return node;
+  for (const kid of node?.children ?? []) {
+    const below = nodeById(kid, id);
+    if (below) return below;
+  }
+  return null;
+}
+
 // Herdr can leave a promise unsettled. The timer resolves this instead, so the caller moves on.
 export const LATE = Object.freeze({ late: true, code: 1, stdout: "", stderr: "timed out" });
 
@@ -80,14 +115,43 @@ export async function reduceSeries(list, fn, acc, i = 0) {
   return i >= list.length ? acc : reduceSeries(list, fn, await fn(acc, list[i], i), i + 1);
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const pad2 = (n) => String(n).padStart(2, "0");
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const pad2 = (n) => String(n).padStart(2, "0");
+const DAY = 86_400_000;
+
+// The meter panels' three ranges: a day of minute samples, a week and a month of hourly ones.
+export const RANGES = [["day", "24 h", 1, 96], ["week", "7 days", 7, 84], ["month", "30 days", 30, 90]]
+  .map(([key, label, days, buckets]) => ({ key, label, ms: days * DAY, buckets }));
+
+// A finite number, or null: the one read of a measured value.
+export const num = (v) => (Number.isFinite(v) ? v : null);
+
+// A size in MB a person reads: whole MB under a GB, then GB, one decimal under 10.
+export function sizeMB(mb) {
+  const n = num(mb);
+  if (n === null) return "–";
+  if (n >= 1000) {
+    const gb = n / 1024, word = gb < 10 ? gb.toFixed(1).replace(/\.0$/, "") : Math.round(gb);
+    return `${word} GB`;
+  }
+  return `${Math.max(0, Math.round(n))} MB`;
+}
+
+// A day's own words: "Nov 16".
+export const dayWord = (d) => `${MONTHS[d.getMonth()]} ${d.getDate()}`;
 
 export function clock(ms, now = Date.now()) {
   const d = new Date(ms);
-  if (Number.isNaN(d.getTime())) return "";
+  if (Number.isNaN(+d)) return "";
   const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  return new Date(now).toDateString() === d.toDateString() ? time : `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`;
+  return new Date(now).toDateString() === d.toDateString() ? time : `${dayWord(d)} ${time}`;
+}
+
+// A title worth showing: not a path, not a user@host prompt, not the program's own name.
+const TITLE_PATH = /^(?:[~/]|[A-Za-z]:\\)/;
+export function tellsSomething(live, raw, program) {
+  return Boolean(live) && !TITLE_PATH.test(raw) && !TITLE_PATH.test(live) && !live.includes("@")
+    && live.toLowerCase() !== program?.key && live !== program?.name;
 }
 
 // The one name a person sees for a computer. A name they typed wins; otherwise the words already in use.

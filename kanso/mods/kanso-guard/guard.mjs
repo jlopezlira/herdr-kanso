@@ -194,8 +194,7 @@ async function terminalOf(pid) {
 const exited = (pid) => retry(30, async () => { await sleep(1000); return !host.alive(pid); });
 
 async function recycle(pid, reason, { manual = false, focusOnly = false } = {}) {
-  const procs = await processes();
-  const s = claudeSession(pid, procs);
+  const procs = await processes(), s = claudeSession(pid, procs);
   if (!s) return skip(pid, "its Claude session record was not found for this process");
   if (s.status !== "idle") return skip(pid, "it is working");
   const { term = null, g = null } = (await terminalOf(pid)) ?? {};
@@ -274,6 +273,17 @@ const saveBatch = (batch) => {
   return next;
 };
 
+// One agent at a time: `step` does the work and returns the row that says how it went.
+async function runBatch(list, begun, step) {
+  return reduceSeries(list, async (batch, a) => {
+    const going = saveBatch({ ...batch, current: a.name });
+    const done = saveBatch({ ...going, done: [...going.done, await step(a)], current: null });
+    // The panel's picture stays fresh while the batch holds the lock.
+    await check({ act: false, locked: true });
+    return done;
+  }, begun);
+}
+
 async function recycleBatch(overMB = 0) {
   const snap = await sample();
   const focused = snap.focused;
@@ -286,14 +296,10 @@ async function recycleBatch(overMB = 0) {
   const list = want.filter((a) => a.terminal !== focused).toSorted((a, b) => b.mb - a.mb);
   const begun = saveBatch({ ...start, total: list.length, skippedFocused: want.some((a) => a.terminal === focused) ? focused : null });
   event("recycle-batch", list.length ? `Recycling ${list.length} ${list.length === 1 ? "agent" : "agents"}${overMB ? ` over ${overMB} MB` : ""}` : "Nothing to recycle");
-  const ran = await reduceSeries(list, async (batch, a) => {
-    const going = saveBatch({ ...batch, current: a.name });
+  const ran = await runBatch(list, begun, async (a) => {
     const o = await recycle(a.pid, overMB ? `all over ${overMB} MB, asked from Memory` : "all idle, asked from Memory", { manual: true, focusOnly: true });
-    const done = saveBatch({ ...going, done: [...going.done, { name: a.name, terminal: a.terminal, ok: o.ok, beforeMB: o.beforeMB ?? a.mb, afterMB: o.afterMB ?? null, why: o.ok ? null : o.why ?? "not recycled" }], current: null });
-    // The panel's picture stays fresh while the batch holds the lock.
-    await check({ act: false, locked: true });
-    return done;
-  }, begun);
+    return { name: a.name, terminal: a.terminal, ok: o.ok, beforeMB: o.beforeMB ?? a.mb, afterMB: o.afterMB ?? null, why: o.ok ? null : o.why ?? "not recycled" };
+  });
   const batch = saveBatch({ ...ran, finished: true, finishedAt: Date.now() });
   const freed = batch.done.reduce((s, d) => s + (d.ok ? Math.max(0, d.beforeMB - (d.afterMB ?? d.beforeMB)) : 0), 0);
   const okN = batch.done.filter((d) => d.ok).length;
@@ -312,8 +318,7 @@ async function paneOf(term) {
 // It leaves with /exit, so its conversation stays resumable; only Claude agents have an idle state to trust.
 async function closeAgent(pid, why, minIdle = 0) {
   const no = (reason) => skip(pid, reason, "closed");
-  const procs = await processes();
-  const s = claudeSession(pid, procs);
+  const procs = await processes(), s = claudeSession(pid, procs);
   if (!s) return no("only a Claude agent with its session record can be closed from here");
   if (s.status !== "idle") return no("it is working");
   const idleMin = Math.floor((Date.now() - (s.statusUpdatedAt ?? Date.now())) / MIN);
@@ -356,13 +361,10 @@ async function closeStale(minIdle) {
     .toSorted((a, b) => (b.idleMin ?? 0) - (a.idleMin ?? 0));
   const start = { kind: "close", at: Date.now(), beat: Date.now(), owner: process.pid, overMB: 0, minIdle, total: list.length, current: null, done: [], skippedFocused: null, finished: false };
   if (snap.focused === undefined) { saveBatch({ ...start, finished: true, finishedAt: Date.now(), error: "The window did not say which agent you are on, so nothing was closed." }); return; }
-  const ran = await reduceSeries(list, async (batch, a) => {
-    const going = saveBatch({ ...batch, current: a.name });
+  const ran = await runBatch(list, saveBatch(start), async (a) => {
     const o = await closeAgent(a.pid, `not used for ${Math.round(a.idleMin / 60)} h, asked from Memory`, minIdle);
-    const done = saveBatch({ ...going, done: [...going.done, { name: a.name, terminal: a.terminal, ok: o.ok, beforeMB: a.mb, afterMB: o.ok ? 0 : null, why: o.ok ? null : o.why ?? "not closed" }], current: null });
-    await check({ act: false, locked: true });
-    return done;
-  }, saveBatch(start));
+    return { name: a.name, terminal: a.terminal, ok: o.ok, beforeMB: a.mb, afterMB: o.ok ? 0 : null, why: o.ok ? null : o.why ?? "not closed" };
+  });
   const batch = saveBatch({ ...ran, finished: true, finishedAt: Date.now() });
   const okN = batch.done.filter((d) => d.ok).length;
   if (list.length) event("close-batch", `Closed ${okN} of ${list.length} agents not used for ${Math.round(minIdle / 60)} h`);
@@ -532,8 +534,11 @@ async function serversNow(procs, shells) {
       project: cwd ? cwd.split("/").filter(Boolean).at(-1) : null, owner, mb: treeOf(l.pid, procs).reduce((t, p) => t + p.rssMB, 0),
       startedAt, lstart: proc.lstart,
     }];
-  }).toSorted((a, b) => Boolean(a.owner) - Boolean(b.owner) || a.ports[0] - b.ports[0]);
+  }).toSorted(byOwnerThenPort);
 }
+
+// Ones in a terminal first, then by their first port.
+const byOwnerThenPort = (a, b) => Boolean(a.owner) - Boolean(b.owner) || a.ports[0] - b.ports[0];
 
 export function updatePorts(prev, now, at = Date.now()) {
   const p = prev?.v === 1 ? prev : { v: 1, minutes: [], hours: [], servers: [], totals: { opened: 0, stopped: 0, exited: 0, freedMB: 0, since: at } };

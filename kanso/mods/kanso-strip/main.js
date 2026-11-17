@@ -1,4 +1,3 @@
-import { paths } from "./platform-paths.js";
 // Kanso strip, by jlopezlira (https://github.com/jlopezlira/herdr-kanso). Apache-2.0.
 // Herdr can't clip a terminal, so the view shows only whole, live panes and slides a column at a time.
 // Herdr rules that shape the tree: a layout nests at most 16 levels (columns sit directly in work-body), and Herdr folds empty and single-child containers.
@@ -10,7 +9,10 @@ import { h_flex, v_flex, HoverCard, Popover } from "gpui-base";
 import { spaces, panes, agents, machines, focused, layout, run, hc, shared, setShared, theme, nextCommand, props, openOverlay, home, exec, notify, window } from "herdr";
 import { programIcon, givenNames, nameOf, NAME_LABEL, onBattery } from "./marks.js";
 import { STRIP_INTENT, isKansoTree, walkLayout, paintLayout, changeLayout, commitLayout } from "./layout.js";
-import { tryOr, tryOrAsync, afterMount } from "./pure.js";
+import { tryOr, readCommands, pad2 } from "./pure.js";
+import { shortFolder } from "./folder.js";
+import { openArrange } from "./open.js";
+import { openWithPopup } from "./popup.js";
 import { FIND } from "./find-key.js";
 import { rollupState, headerHold, prFacts, prLine } from "./ghchecks.js";
 import { pieces, shown, runs, setPiece, STORE } from "./pieces.js";
@@ -100,9 +102,12 @@ const zoneOf = (e, fallback = "below") => {
 };
 const endDrag = () => { setShared("strip.drop", null); setShared("strip.drag", null); };
 
-const folder = (cwd) => {
-  if (!cwd) return "";
-  return paths.shorten(cwd, home());
+// Let go on a landing place: the held pane moves there. The ruler's foot ends the drag even with nothing held, as it always has.
+const dropMove = (to, side, end = true) => {
+  const d = shared("strip.drag");
+  if (!d) { if (end) endDrag(); return; }
+  if (d.pane !== to) setShared("strip.req", { op: "move", pane: d.pane, to, side, n: nonce() });
+  endDrag();
 };
 
 // When an agent stops working: what is in its folder, read from git and gh (never from the conversation).
@@ -170,7 +175,7 @@ const words = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 export function readClock(at) {
   if (at == null || !Number.isFinite(Number(at))) return null;
   const date = new Date(at);
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 const readNote = (working, at) => {
@@ -214,7 +219,6 @@ export function digestOpen(segment, cwd) {
 }
 
 const openSend = (p) => openOverlay({ mod: "kanso-send", kind: "dialog", width: 520, props: { pane: p.pane } });
-const openArrange = () => openOverlay({ mod: "kanso-arrange", kind: "dialog", width: 480 });
 const openSleep = (p) => {
   const space = spaces().find((s) => s.tabs.some((t) => t.id === p.tab));
   if (space) openOverlay({ mod: "kanso-sleep", kind: "dialog", width: 520, props: { sleep: { scope: "agent", space: space.id, tab: p.tab, pane: p.pane } } });
@@ -246,15 +250,11 @@ export default class Strip extends View {
     this.lastStatus = new Map();
     this.digesting = new Set();
     cx.timer.every(1500, (cx) => this.watchDigests(cx));
-    afterMount(cx, (cx) => cx.spawn(async (cx) => {
-      for (;;) {
-        const next = await tryOrAsync(async () => { const c = await nextCommand(); cx.notify(); return { c }; });
-        if (!next) break; // a replaced build (hot reload, update) stops here, before acting
-        this.command(String(next.c).replace(/^kanso-strip\./, ""));
-        this.seq += 1;
-        cx.notify();
-      }
-    }));
+    readCommands(cx, () => nextCommand(), (c, cx) => {
+      this.command(String(c).replace(/^kanso-strip\./, ""));
+      this.seq += 1;
+      cx.notify();
+    });
   }
 
   renderEdge() {
@@ -301,12 +301,7 @@ export default class Strip extends View {
     return v_flex().id("edge").size_full().items_center().justify_center().bg(t.chrome).cursor_pointer()
       .hover((h) => h.bg(takes ? t.accent + "40" : t.hover))
       .when(takes, (el) => el.bg(t.accent + "24").cursor_grabbing())
-      .on_mouse_up("left", () => {
-        const d = shared("strip.drag");
-        if (!d) return;
-        if (d.pane !== p.edge) setShared("strip.req", { op: "move", pane: d.pane, to: p.edge, side: left ? "after" : "before", n: nonce() });
-        endDrag();
-      })
+      .on_mouse_up("left", () => dropMove(p.edge, left ? "after" : "before", false))
       .on_click(() => show(p.edge))
       .on_scroll_wheel((e) => { const d = wheelDelta(e); if (d) postScroll(d / WHEEL_PX); })
       .child(HoverCard.new(`edge-card-${p.side}`).anchor(left ? "left_center" : "right_center").open_delay(350).close_delay(250)
@@ -335,11 +330,7 @@ export default class Strip extends View {
     })
       .when(takes, (el) => el.cursor_grabbing()
         .on_mouse_move(() => { const d = shared("strip.drop"); if (d?.to !== what || d.side !== "below") setShared("strip.drop", { to: what, side: "below" }); })
-        .on_mouse_up("left", () => {
-          const d = shared("strip.drag");
-          if (d && d.pane !== what) setShared("strip.req", { op: "move", pane: d.pane, to: what, side: "below", n: nonce() });
-          endDrag();
-        }))
+        .on_mouse_up("left", () => dropMove(what, "below")))
       .when(drop?.to === what && drop.side === "below", (el) => el.child(div().size_full().rounded_b(RADIUS).bg(t.accent + "40")));
   }
 
@@ -418,12 +409,6 @@ export default class Strip extends View {
     if (d) postScroll(d / WHEEL_PX);
   }
 
-  // Opens on the machine the pane's space lives on.
-  openWith(p) {
-    const space = spaces().find((s) => s.tabs.some((x) => x.id === p.tab));
-    openOverlay({ mod: "open-with", kind: "popup", width: 340, props: { folder: p.cwd, machine: space?.machine ?? null } });
-  }
-
   // The header is the handle: a press held and moved a few pixels picks the pane up.
   pressMove(e, pane) {
     const from = this.press;
@@ -456,7 +441,7 @@ export default class Strip extends View {
       unpin: pin,
       sleep: () => openSleep(p),
       send: () => openSend(p),
-      "open-with": () => this.openWith(p),
+      "open-with": () => openWithPopup(p),
       "split-right": () => this.act("pane.split", { direction: "right", pane }),
       "split-down": () => this.act("pane.split", { direction: "down", pane }),
       width: () => setShared("strip.req", { op: "width", pane, n: nonce() }),
@@ -614,10 +599,7 @@ export default class Strip extends View {
         .on_mouse_move((e) => { this.pressMove(e, pane); this.dragMove(e, pane); })
         .on_mouse_up("left", () => {
           this.press = null;
-          const d = shared("strip.drag");
-          if (!d) return;
-          if (d.pane !== pane) setShared("strip.req", { op: "move", pane: d.pane, to: pane, side: side ?? "above", n: nonce() });
-          endDrag();
+          dropMove(pane, side ?? "above", false);
         }))
       .on_click(() => { if (!this.renaming) run("pane.focus", strip && p.terminal ? { terminal: p.terminal } : { pane }); });
   }
@@ -651,7 +633,7 @@ export default class Strip extends View {
     return this.headEvents(row, p, f, does)
       .child(programIcon(p.program, ICON, c.muted) ?? svg(glyphOf("terminal")).size(ICON).flex_none().text_color(c.muted))
       .child(this.headName(c, pane, f.name))
-      .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: folder(f.where.folder) }] }, c)))
+      .when(Boolean(f.where.folder) && shownAt(f.fold, "folder"), (el) => el.child(headerSegment(`ph-folder-${pane}`, { icon: "folder", parts: [{ text: shortFolder(f.where.folder) }] }, c)))
       .when(Boolean(f.where.branch) && shownAt(f.fold, "branch"), (el) => el.child(headerSegment(`ph-branch-${pane}`, { icon: "branch", parts: [{ text: f.where.branch }] }, c)))
       .when(f.segments.length > 0, (el) => el.child(this.digestBar(c, p, f.segments, { fold: f.fold, working: p.status === "working", reading: Boolean(f.record?.reading), strip: f.strip, does })))
       .when(f.pinned, (el) => el.child(headerSegment(`ph-pinned-${pane}`, { icon: "pin", tone: "dim", title: "Pinned" }, c)))

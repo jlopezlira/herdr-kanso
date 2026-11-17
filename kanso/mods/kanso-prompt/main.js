@@ -6,14 +6,15 @@ import { View } from "gpui-kit";
 import { tokens } from "./ui.js";
 import { dialog } from "./ui-dialog.js";
 import { field, TextField } from "./ui-field.js";
-import { run, hc, props, closeOverlay, theme, shared, setShared } from "herdr";
+import { applyRename, trackText } from "./rename.js";
+import { props, closeOverlay, theme, shared, setShared } from "herdr";
 
 export default class Prompt extends View {
   init(_props, cx) {
     this.text = props()?.value ?? "";
     this.input = new TextField({ value: this.text });
     if (this.text) this.input.set_selected_range({ start: 0, end: this.text.length });
-    this.input.on("change", (_e, cx) => { this.text = this.input.value(); cx.notify(); });
+    trackText(this.input, (text) => { this.text = text; });
     this.input.on("submit", () => this.submit());
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
@@ -21,14 +22,11 @@ export default class Prompt extends View {
   }
 
   submit() {
-    const p = props();
+    const p = props(), name = this.text.trim();
     closeOverlay(p.overlay);
-    const name = this.text.trim();
-    if (p.label) hc(["label", p.label.terminal, `${p.label.key}=${name}`]).catch(() => {});
-    else if (p.command) run(p.command.name, { ...(p.command.args ?? {}), name });
     // A mod with no command for it reads the answer from shared state: under `shared`, by this dialog's `token`, so two
     // dialogs answered in a row both keep theirs until read; `text` null when cancelled.
-    else if (p.shared) this.answer(p, name);
+    if (!applyRename(p, name) && p.shared) this.answer(p, name);
   }
 
   answer(p, text) {

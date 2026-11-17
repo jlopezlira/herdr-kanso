@@ -111,6 +111,9 @@ export function statements(text) {
 // sqlite3 -json prints one array per statement; a raw newline never appears inside JSON, so "]\n[" only parts them.
 export const rowsOfOutput = (out) => (out.trim() ? JSON.parse(`[${out.trim().replace(/\r\n?/g, "\n").replace(/\]\n\[/g, "],[")}]`).flat() : []);
 
+// The first line of what sqlite3 said: the one a person reads.
+const sqliteError = (r) => new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
+
 const CACHE_MS = 30_000;
 // Files whose schema is in place. Plain values only: a view's queue and cache die with the view.
 class Schemas {
@@ -136,7 +139,7 @@ export class Kdb extends Database {
 
   async sql(text) {
     const r = await this.bound(this.execute(text), sqliteLimit(text));
-    if (r.code !== 0) throw new Error((r.stderr || "sqlite3 failed").trim().split("\n")[0]);
+    if (r.code !== 0) throw sqliteError(r);
     return rowsOfOutput(r.stdout);
   }
 

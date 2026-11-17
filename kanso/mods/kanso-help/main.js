@@ -5,9 +5,11 @@ import { paths } from "./platform-paths.js";
 import { localName } from "./platform-host.js";
 import { modifierLabels, guideSections } from "./guide.js";
 import { theme, appHome, home, props, closeOverlay, keys, openOverlay, run } from "herdr";
+import { focusOn } from "./pure.js";
+import { Lit } from "./lit.js";
+import { pagedDialog } from "./pages.js";
 import { G, tokens } from "./ui.js";
 import { button, quietLink } from "./ui-button.js";
-import { segmented } from "./ui-tab.js";
 import { glyphs } from "./marks.js";
 import { TICK_MS, Companion } from "./pets.js";
 import { ROWS, MODIFIERS, CAP, layer, LIST_LAYER, LIST_SHIFT, describe } from "./keymap.js";
@@ -27,8 +29,7 @@ const modsOf = (m = {}) => MODIFIERS.filter((k) => (k === "cmd" ? m.platform : k
 
 export default class Help extends View {
   init(_props, cx) {
-    this.handle = cx.focus_handle();
-    this.handle.focus();
+    this.handle = focusOn(cx);
     this.page = PAGES.some((p) => p.key === props()?.page) ? props().page : "keys";
     this.pal = new Companion(cx.timer);
     this.pal.load(cx);
@@ -40,13 +41,7 @@ export default class Help extends View {
     this.mods = localName() === "windows" ? ["alt"] : ["cmd", "alt"]; // the layer shown first: the vim panes
     this.lists = false;
     this.picked = "h";
-    this.lit = null;
-  }
-
-  light(key, cx) {
-    const at = Date.now();
-    this.lit = { key, at };
-    cx.timer.after(LIT_MS, (cx) => { if (this.lit?.at === at) { this.lit = null; cx.notify(); } });
+    this.capLight = new Lit(LIT_MS);
   }
 
   key(e, cx) {
@@ -59,7 +54,7 @@ export default class Help extends View {
     const key = k === "return" ? "enter" : k === " " ? "space" : k;
     if (mods.length) { this.mods = mods; this.lists = false; }
     this.picked = key;
-    this.light(key, cx);
+    this.capLight.light(key, cx);
     cx.stop_propagation(); cx.notify();
   }
 
@@ -73,7 +68,7 @@ export default class Help extends View {
     const isMod = MODIFIERS.includes(name);
     const held = isMod && (this.lists ? name === "shift" && this.mods.includes("shift") : this.mods.includes(name));
     const does = bound.get(name);
-    const pressed = this.lit?.key === name;
+    const pressed = this.capLight.lit?.key === name;
     const picked = !isMod && this.picked === name;
     const fill = pressed || picked ? c.accent : held ? c.text + "26" : does ? c.accent + "24" : c.text + "08";
     const ink = pressed || picked ? (t.accent_foreground ?? c.canvas) : does || held ? c.text : c.dim;
@@ -171,14 +166,15 @@ export default class Help extends View {
     const page = this.page === "dojo" ? this.dojoPage(t, c) : this.page === "guide" ? this.guidePage(t, c) : this.keysPage(t, c);
     // The same window as kansō settings, in its place: each leads to the other, so you can always go back.
     const toSettings = () => { closeOverlay(props()?.overlay); openOverlay({ mod: "kanso-settings", kind: "dialog", width: DIALOG.width, height: DIALOG.height, props: { page: "keys" } }); };
-    return v_flex().id("kanso-help").track_focus(this.handle).size_full().min_h(0).p(20).bg(t.popover).text_color(t.foreground)
-      .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().w_full().items_center().gap(G.md)
+    return pagedDialog({
+      name: "help", handle: this.handle, onKey: (e, cx) => this.key(e, cx),
+      head: h_flex().w_full().items_center().gap(G.md)
         .child(svg("mods/kanso-chrome/icons/help.svg").size(17).text_color(c.accent))
         .child(div().flex_1().text_size(15).font_semibold().child("kansō help"))
         .child(quietLink("help-settings", "Settings", toSettings, c, { color: c.accent }))
-        .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(div().pt(G.md).child(segmented("help-pages", PAGES, this.page, (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); }, c)))
-      .child(v_flex().id(`help-scroll-${this.page}`).flex_1().min_h(0).pt(G.lg).overflow_y_scrollbar().child(div().flex_none().w_full().child(page)));
+        .child(div().text_size(11).text_color(t.dim).child("Esc")),
+      tabs: PAGES, tab: this.page, page, t, c,
+      onTab: (key, cx) => { this.page = key; if (key === "dojo") { this.hello = Date.now(); this.pal.bring(cx); } cx.notify(); },
+    });
   }
 }

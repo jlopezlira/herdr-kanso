@@ -27,10 +27,7 @@ export function totalsOf(rows, days) {
 }
 
 export class Store extends Database {
-  constructor(timer) {
-    super(timer);
-    this.file = paths.join(appHome(), STORE_DIR, "dojo.db");
-  }
+  constructor(timer) { super(timer); this.file = paths.join(appHome(), STORE_DIR, "dojo.db"); }
 
   open() {
     return this.opening(async () => {

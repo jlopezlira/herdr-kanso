@@ -42,11 +42,7 @@ export function importSql(text) {
 }
 
 export class Store extends Database {
-  constructor(timer) {
-    super(timer);
-    this.dir = paths.join(appHome(), STORE_DIR);
-    this.file = paths.join(this.dir, "arrange.db");
-  }
+  constructor(timer) { super(timer); this.dir = paths.join(appHome(), STORE_DIR); this.file = paths.join(this.dir, "arrange.db"); }
 
   open() {
     return this.opening(async () => {
