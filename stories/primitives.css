@@ -1497,7 +1497,7 @@
 .kanso-state-line__pending-dot.kanso-state-line__pending-dot--centered{align-self:center}
 .kanso-arrangement__column.kanso-arrangement__column--grow{flex:1}
 .kanso-icon.kanso-icon--centered{align-self:center}
-.kanso-metric.kanso-metric--spaced{margin-top:var(--k-sp-6)}
+.kanso-metric.kanso-metric--loose{margin-top:var(--k-sp-6)}
 .kanso-metric.kanso-metric--flush{margin-top:0}
 .kanso-state-block.kanso-state-block--spaced{margin-top:var(--k-sp-4)}
 .kanso-state-block.kanso-state-block--near{margin-top:var(--k-sp-3)}
