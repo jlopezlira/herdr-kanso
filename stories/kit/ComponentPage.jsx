@@ -13,6 +13,7 @@ export function ComponentPage({ of, page }) {
   const states = statesFor(page);
   const name = page.split('/').at(-1);
   const description = descriptions[page] ?? descriptions[name];
+  const guidance = guidelines[page] ?? (page === 'Tokens/Sizes' ? guidelines['Tokens/Components'] : undefined);
   const [copied, setCopied] = useState(false);
   const prompt = promptFor(page, states);
   const gaps = featuresFor(page).filter((feature) => feature.gap);
@@ -23,7 +24,7 @@ export function ComponentPage({ of, page }) {
     <Canvas of={of.Variants} />
     <Controls of={of.Variants} />
     {(sections[page] ?? []).map(([title, text]) => <React.Fragment key={title}><h2>{title}</h2><Markdown>{text}</Markdown></React.Fragment>)}
-    {guidelines[page] && <><h2>Design guidelines</h2><ul className="kanso-docs__guidelines">{guidelines[page].map(([principle, rule, detail]) => <li key={rule}><span className="kanso-docs__principle">{principle}</span> <b>{rule}</b> <Markdown options={{ forceInline: true }}>{detail}</Markdown></li>)}</ul></>}
+    {guidance && <><h2>Design guidelines</h2><ul className="kanso-docs__guidelines">{guidance.map(([principle, rule, detail]) => <li key={rule}><span className="kanso-docs__principle">{principle}</span> <b>{rule}</b> <Markdown options={{ forceInline: true }}>{detail}</Markdown></li>)}</ul></>}
     {hypotheses[page] && <><h2>Hypotheses</h2><ul className="kanso-docs__guidelines">{hypotheses[page].map((item) => <Hypothesis key={item.change} {...item} />)}</ul></>}
     {rules[page] && <><h2>Guidelines</h2><ul className="kanso-docs__guidelines">{rules[page].map((rule) => <li key={rule}><Markdown options={{ forceInline: true }}>{rule}</Markdown></li>)}</ul></>}
     <h2>Prompt for agents</h2>

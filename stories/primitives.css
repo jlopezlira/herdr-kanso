@@ -981,7 +981,7 @@
 /* Text: one line that truncates, glints, shimmers, dims, or takes a computer colour. */
 .kanso-text--shimmer{background:linear-gradient(90deg,var(--muted) 0 34%,var(--fg) 44%,var(--fg) 50%,var(--muted) 62% 100%);background-size:260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;animation:shim 2.6s linear infinite alternate}
 .kanso-text--truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.kanso-text--glint{color:transparent;-webkit-background-clip:text;background-clip:text;background-repeat:no-repeat;animation:kit-glint 2200ms linear infinite;
+.kanso-text--glint{color:transparent;-webkit-background-clip:text;background-clip:text;background-repeat:no-repeat;animation:kit-glint var(--k-glint-ms) linear infinite;
   background-image:linear-gradient(color-mix(in srgb,var(--fg) 35%,var(--muted)),color-mix(in srgb,var(--fg) 35%,var(--muted))),
     linear-gradient(color-mix(in srgb,var(--fg) 60%,var(--muted)),color-mix(in srgb,var(--fg) 60%,var(--muted))),
     linear-gradient(var(--fg),var(--fg)),linear-gradient(var(--muted),var(--muted));

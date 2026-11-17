@@ -3,11 +3,15 @@ import assert from "node:assert/strict";
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import vm from "node:vm";
 import { inTemporaryDir } from "./helpers.mjs";
 import { expand } from "../scripts/storybook-catalog.mjs";
 import { compositionErrors, lint, markupTags, primitiveErrors, rawValueErrors, rawValues, storyFiles, structureErrors } from "../scripts/lint-storybook.mjs";
 import { statusOf, statusTags } from "../stories/kit/status.js";
 import { rules } from "../stories/kit/rules.js";
+import { promptFor } from "../stories/kit/prompt.js";
+import { content, statesFor } from "../stories/kit/catalog.js";
+import { tokenRecords } from "../scripts/storybook-kit.mjs";
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
 const json = (file) => JSON.parse(read(file));
@@ -284,4 +288,49 @@ test("A bar asked at a width the kit has no frame for fails instead of drawing a
   const { atWidth, barWidths } = await import("../stories/kit/frames.js");
   for (const width of barWidths) assert.match(atWidth(width, ""), new RegExp(`kanso-story--w${width}`));
   assert.throws(() => atWidth(900, ""), { message: "frames: unknown width 900" });
+});
+
+test("Icons open with the complete catalog and every current kit icon has its meaning", () => {
+  const componentStory = vm.runInNewContext(`${read("stories/kit/story.js").replace(/^import .*;$/gm, "").replace("export function", "function")}\ncomponentStory`, { content, statesFor, playgrounds: {} });
+  const story = componentStory("Tokens/Icons");
+  const html = story.render(story.args);
+  assert.equal([...html.matchAll(/class="kanso-icon__example"/g)].length, 72);
+  for (const icon of ["command", "message-square-plus", "maximize-2", "minimize-2"]) {
+    assert.match(html, new RegExp(`lu-${icon}</div><div class="kanso-icon__description">[^<]+`));
+  }
+});
+
+test("Spacing, sizes, colour and motion each show their own tokens with a sample", () => {
+  const tokens = json("kanso/tokens.json");
+  const pages = tokenRecords(tokens);
+  const html = (name) => pages.find((page) => page.page === `Tokens/${name}`).html;
+  assert.deepEqual([...html("Spacing").matchAll(/class="kanso-tokens__name">--([^<]+)/g)].map((m) => m[1]), tokens.space.map((t) => t.name));
+  for (const token of [...tokens.height, ...tokens.switch]) assert.ok(html("Sizes").includes(`var(--${token.name})`));
+  for (const page of pages) {
+    assert.doesNotMatch(page.html, /<td[^>]*><\/td>/);
+    for (const token of tokens.board) assert.ok(!page.html.includes(`--${token.name}`));
+  }
+  for (const token of tokens.opacity) {
+    assert.ok(html("Colour").includes(`--${token.name}`));
+    assert.ok(!html("Motion").includes(`--${token.name}`));
+  }
+});
+
+test("Motion and contrast samples use the shared action and mark primitives", () => {
+  const pages = tokenRecords(json("kanso/tokens.json"));
+  const motion = pages.find((page) => page.page === "Tokens/Motion").html;
+  assert.match(motion, /kanso-action--armed/);
+  assert.match(motion, /Press again to/);
+  assert.doesNotMatch(motion, /kanso-tokens__arm"/);
+  for (const token of json("kanso/tokens.json").motion) assert.ok(motion.includes(`var(--${token.name})`) || motion.includes(`data-token="${token.name}"`));
+  const contrast = pages.find((page) => page.page === "Tokens/Contrast, light and dark").html;
+  for (const state of ["working", "blocked", "done", "idle"]) assert.equal([...contrast.matchAll(new RegExp(`kanso-mark--${state}`, "g"))].length, 7);
+});
+
+test("Token prompts concern the tokens on their own page", () => {
+  for (const page of new Set(records.filter((record) => record.page.startsWith("Tokens/")).map((record) => record.page))) {
+    const prompt = promptFor(page, statesFor(page));
+    assert.doesNotMatch(prompt, /Build Tokens|one .* component|refresh failure|irreversible actions|four-second Armed/);
+    assert.ok(prompt.includes(page));
+  }
 });

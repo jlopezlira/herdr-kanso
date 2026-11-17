@@ -76,9 +76,9 @@ export const descriptions = {
   Colour: 'The colour roles and washes for both themes.',
   'Contrast, light and dark': 'Text, edges and marks against every surface, in both themes.',
   Type: 'The type roles with size, weight and line height.',
-  Spacing: 'The spacing scale, control dimensions and layout widths.',
+  Spacing: 'The spacing scale.',
   Radius: 'The corner radius scale.',
-  Motion: 'Durations, easing, opacities and the only animations allowed; reduced motion holds still.',
-  Components: 'Sizes that belong to one component, grouped by it.',
+  Motion: 'Durations, easing and the only animations allowed; reduced motion holds still.',
+  Sizes: 'Sizes that belong to one component, grouped by it.',
   Icons: 'The sprite symbols and icon sizes.',
 };

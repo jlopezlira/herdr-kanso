@@ -1,7 +1,8 @@
+import tokens from '../../kanso/tokens.json' with { type: 'json' };
 import { content, statesFor } from './catalog.js';
 import { applyGeometry } from './geometry.js';
 
-export const ARM_MS = 4000;
+export const ARM_MS = Number.parseFloat(tokens.motion.find(({ name }) => name === 'k-arm-ms').value);
 export const behaviours = {
   'kanso-reference__link': 'action',
   'kanso-segmented': 'select',
@@ -326,6 +327,8 @@ export function mountBehaviours(root, { page, state, inlineSurfaces = false, upd
   };
   const on = (target, type, fn) => target.addEventListener(type, fn, { signal: abort.signal });
   prepare(root);
+  const armedSample = root.querySelector('[data-token="k-arm-ms"] .kanso-action--armed');
+  if (armedSample) arm(armedSample);
   for (const surface of root.querySelectorAll(surfaces)) {
     if (surface.parentElement.closest(surfaces)) continue;
     surface.setAttribute('role', surface.matches('.kanso-menu') ? 'menu' : 'dialog');

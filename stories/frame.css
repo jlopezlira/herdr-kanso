@@ -37,17 +37,29 @@
 .kanso-tokens__space { display: flex; }
 .kanso-tokens__space > i { inline-size: var(--k-sp-3); block-size: var(--k-sp-3); border-radius: var(--k-r-sm); background: var(--muted); }
 .kanso-tokens__radius { display: block; inline-size: var(--k-h-header); block-size: var(--k-h-control); background: var(--surface-4); box-shadow: inset 0 0 0 var(--k-w-line) var(--line-strong); }
-.kanso-tokens__height { display: block; inline-size: var(--k-h-header); background: var(--surface-4); box-shadow: inset 0 0 0 var(--k-w-line) var(--line-strong); border-radius: var(--k-r-sm); }
 .kanso-tokens .kanso-tokens__lines { display: inline-block; font-size: var(--k-fs-body); }
 .kanso-tokens td:first-child { color: var(--fg); }
 .kanso-tokens .kanso-tokens__example { white-space: nowrap; }
-.kanso-tokens__wash, .kanso-tokens__arm { display: block; inline-size: var(--k-h-header); block-size: var(--k-h-control); border-radius: var(--k-r-control); box-shadow: inset 0 0 0 var(--k-w-line) var(--border); transition: background-color var(--k-hover-out) var(--k-ease-out); }
-.kanso-tokens__wash:hover { background: var(--hover); transition: background-color var(--k-hover-in) var(--k-ease-in); }
-.kanso-tokens__arm { animation: kanso-tokens-arm calc(var(--k-arm-ms) * 2) steps(1) infinite; }
+.kanso-tokens__wash { display: block; inline-size: var(--k-h-header); block-size: var(--k-h-control); border-radius: var(--k-r-control); box-shadow: inset 0 0 0 var(--k-w-line) var(--border); transition: background-color var(--kanso-hover-out, var(--k-hover-out)) var(--kanso-ease-out, var(--k-ease-out)) var(--kanso-hover-delay, 0ms); }
+.kanso-tokens__wash:is(:hover, :focus-visible) { background: var(--hover); transition-duration: var(--kanso-hover-in, var(--k-hover-in)); transition-timing-function: var(--kanso-ease-in, var(--k-ease-in)); }
+.kanso-tokens__wash[data-token="k-hover-in"] { --kanso-hover-in: var(--k-hover-in); }
+.kanso-tokens__wash[data-token="k-hover-out"] { --kanso-hover-out: var(--k-hover-out); }
+.kanso-tokens__wash[data-token="k-ease-in"] { --kanso-ease-in: var(--k-ease-in); }
+.kanso-tokens__wash[data-token="k-ease-out"] { --kanso-ease-out: var(--k-ease-out); }
+.kanso-tokens__wash[data-token="k-hover-ms"] { --kanso-hover-in: var(--k-hover-ms); --kanso-hover-out: var(--k-hover-ms); }
+.kanso-tokens__wash[data-token="k-hover-delay"] { --kanso-hover-delay: var(--k-hover-delay); }
+.kanso-tokens__wash[data-token="k-hover-ease"] { --kanso-ease-in: var(--k-hover-ease); --kanso-ease-out: var(--k-hover-ease); }
 .kanso-tokens__contrast { display: inline-flex; align-items: center; justify-content: center; inline-size: var(--k-h-header); block-size: var(--k-h-control); border-radius: var(--k-r-control); font-weight: var(--k-fw-medium); }
-.kanso-tokens__skeleton { inline-size: var(--k-h-header); }
-@keyframes kanso-tokens-arm { from { background: var(--accent); } 50% { background: none; } }
-@media (prefers-reduced-motion: reduce) { .kanso-tokens__arm { animation: none; } }
+.kanso-skeleton.kanso-tokens__skeleton { inline-size: var(--k-h-header); background-image: none; animation: ghost var(--k-skel-ms) var(--k-hover-ease) infinite alternate; }
+.kanso-tokens__measure { display: block; height: var(--k-sp-3); background: var(--muted); }
+.kanso-tokens__measure--height { width: var(--k-sp-3); }
+.kanso-tokens__glint { display: grid; gap: var(--k-sp-2); }
+.kanso-tokens__shadow { display: block; inline-size: var(--k-h-header); block-size: var(--k-h-control); border-radius: var(--k-r-card); background: var(--surface-4); }
+.kanso-tokens__opacity { background: var(--fg); }
+.kanso-tokens__opacity[data-token="k-op-away"] { opacity: var(--k-op-away); }
+.kanso-tokens__opacity[data-token="k-op-held"] { opacity: var(--k-op-held); }
+.kanso-tokens__blocked { background: color-mix(in srgb, var(--blocked) var(--k-wash-blocked), transparent); }
+@media (prefers-reduced-motion: reduce) { .kanso-skeleton.kanso-tokens__skeleton { animation: none; } }
 .kanso-story__gallery { display: flex; flex-direction: column; gap: var(--k-sp-6); padding: var(--k-sp-4); }
 .kanso-story__variant-label { margin: 0 0 var(--k-sp-2); font-size: var(--k-fs-meta); font-weight: var(--k-fw-medium); color: var(--dim); }
 .sbdocs.sbdocs-content { max-width: none; }
