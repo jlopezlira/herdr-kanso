@@ -144,9 +144,3 @@ export function sortOf(view, { order, statusOrder, threadOrder }, { ORDERS, STAT
   return { orders: ORDERS, current: order, key: "order", head: "Agents, pinned first, then by", plain: order === DEFAULT_ORDER };
 }
 
-// The view switch's keys, as keys.json binds them (keys.windows.json on Windows).
-const VIEW_CHORDS = {
-  windows: { spaces: "ctrl-shift-r", agents: "ctrl-shift-s", threads: "ctrl-shift-h" },
-  other: { spaces: "ctrl-alt-p", agents: "ctrl-alt-s", threads: "ctrl-alt-t" },
-};
-export const viewChord = (view, platform) => (VIEW_CHORDS[platform === "windows" ? "windows" : "other"][view] ?? null);

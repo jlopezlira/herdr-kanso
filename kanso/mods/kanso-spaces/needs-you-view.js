@@ -2,8 +2,12 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { G, H, R, T, tokens } from "./ui.js";
 import { quietLink } from "./ui-button.js";
-import { skeletonOf } from "./kit.js";
+import { skeletonOf, tooltip } from "./kit.js";
+import { boundChord } from "./ui-tooltip.js";
 import { waitingReason, queueMessage } from "./needs-you.js";
+
+// The key that goes to the next agent that needs you, named in the count's tooltip.
+const NEXT_NEEDS = "kanso-spaces.needs-you.next";
 
 export function queueLabel(queue, collapsed, empty) {
   if (empty) return queueMessage(queue.state);
@@ -16,7 +20,7 @@ export function queueControl(t, queue, collapsed, empty, toggle) {
   if (!count && !empty) return div();
   const c = tokens(t), spoken = `Needs you: ${count}`;
   return h_flex().flex_none().px(G.sm).child(quietLink("needs-you-count", queueLabel(queue, collapsed, empty), toggle, c,
-    { label: spoken, color: count ? c.text : c.dim }).tooltip(spoken));
+    { label: spoken, color: count ? c.text : c.dim }).tooltip(tooltip({ label: spoken, chord: boundChord(NEXT_NEEDS) })));
 }
 
 export function queueList(t, queue, rowFor, age, scroll = null) {

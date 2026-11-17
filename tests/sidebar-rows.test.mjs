@@ -5,9 +5,8 @@ import {
   showPlus, showDots, projectControls, pullKey, pullLabel, pullCommand, refusalLine,
   aheadOpen, gitControls, runPull, machineWordTone, canWake, enterOpens, asleepControls,
   gitTask, behindTip, aheadTip, foldTail, sectionMarkOf, sectionCount, rowDirectory, untilWord, readWord,
-  threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf, viewChord,
+  threadWord, threadActions, closedControls, signInCommand, noProjectsOn, sortOf,
 } from "../kanso/mods/kanso-spaces/sidebar-rows.js";
-import { readFile } from "node:fs/promises";
 import { load, failure } from "./helpers.mjs";
 
 const place = { cwd: "/work/app", on: "dark", key: "[dark]" };
@@ -179,13 +178,3 @@ test("the sort of each view is known, and away from its default it is not the qu
   });
 });
 
-test("the view switch names each view's key the way this platform binds it", async () => {
-  const bound = async (file) => Object.fromEntries(Object.entries(JSON.parse(await readFile(new URL(`../kanso/${file}`, import.meta.url), "utf8"))["layout:kanso"] ?? {})
-    .filter(([, c]) => String(c).startsWith("kanso-spaces.view-")).map(([chord, c]) => [c.slice("kanso-spaces.view-".length), chord]));
-  const mac = await bound("keys.json"), windows = await bound("keys.windows.json");
-  for (const view of ["spaces", "agents", "threads"]) {
-    assert.equal(viewChord(view, "macos"), mac[view], view);
-    assert.equal(viewChord(view, "windows"), windows[view], view);
-  }
-  assert.equal(viewChord("threads", "macos"), "ctrl-alt-t");
-});
