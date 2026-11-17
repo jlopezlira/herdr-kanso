@@ -1,12 +1,10 @@
 // The rail's tiles and the view switch: the Storybook's Tile and View switch compositions, copied as they are and drawn by the app kit.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, chain, KIT_NIGHT, drawingHost, repoText, sameCopies } from "./helpers.mjs";
+import { load, nodes, texts, tipsOf, svgsOf, themed, calls, arg, KIT_NIGHT, popoverHost as host, blockedDots, repoText as read, sameCopies } from "./helpers.mjs";
 import { loadSidebar, mountedState, recorder } from "./sidebar-fixtures.mjs";
 
 const FILES = ["tile", "view-switch"];
-const read = repoText;
-const host = () => ({ ...drawingHost(), Popover: { new: (id) => chain(id) } });
 const compositions = async () => themed({
   ...await load("kanso-spaces/tile.js", ["tile"], host()),
   ...await load("kanso-spaces/view-switch.js", ["viewSwitch", "views"], host()),
@@ -57,7 +55,7 @@ test("Each View switch state in the Storybook draws in the app, with no margin o
   assert.deepEqual(tipsOf(row), Object.values(tips), "each tooltip has its view's key");
   assert.deepEqual([arg(row, "mx"), arg(row, "mt"), arg(row, "mb")], [G.sm, G.xs, G.sm], "the Storybook's margins, from the tokens");
   const dotted = viewSwitch({ view: "spaces", asks: true })("v", c, { onChange() {} });
-  const dots = (el) => nodes(el).filter((kid) => calls(kid, "rounded_full").length && calls(kid, "bg").some((call) => call[1] === c.blocked)).length;
+  const dots = (el) => blockedDots(el, c);
   assert.equal(dots(dotted), 1, "someone needs you: Status carries the dot");
   assert.equal(dots(viewSwitch({ view: "spaces" })("v", c, { onChange() {} })), 0);
   const column = viewSwitch({ view: "threads", column: true, tips })("v", c, { onChange() {}, onOpen() {} });

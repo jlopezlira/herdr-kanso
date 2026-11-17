@@ -175,7 +175,10 @@ test("The row takes its click, hover, keyboard and focus from the caller, wires 
   assert.equal(one(wired, "on_key_down"), onKey);
   assert.equal(one(wired, "track_focus"), focusHandle);
   assert.deepEqual(styled(wired, "focus"), [["border_color", c.accent]]);
-  assert.equal(wired.tag, "h_flex", "a handle drives it, so it stays a plain row");
+  assert.equal(wired.tag, "h_flex", "it reads its own keys, so it stays a plain row");
+  const held = row("r", c, { name: "Juno", onClick: () => {}, focusHandle });
+  assert.equal(held.tag, "r", "a row that acts with the caller's handle is still a Button");
+  assert.equal(one(held, "track_focus"), focusHandle);
   const pressable = row("r", c, { name: "Juno", onClick: () => {} });
   assert.equal(pressable.tag, "r", "a row that acts is a Button: Tab reaches it, Enter and Space press it");
   assert.deepEqual(styled(pressable, "focus"), [["border_color", c.accent]]);

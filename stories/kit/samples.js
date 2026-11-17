@@ -2,6 +2,9 @@
 import { panelBack, panelClose, panelRefresh, sidebar } from './compositions.js';
 import { tile } from './tile.js';
 import { viewSwitch } from './view-switch.js';
+import { toolbar } from './toolbar.js';
+import { header } from './header.js';
+import { sidebarFooter } from './sidebar-footer.js';
 import { projectRow } from './project-row.js';
 import { computerRow } from './computer-row.js';
 import { section } from './section.js';
@@ -48,9 +51,15 @@ export const sampleTiles = {
   agents: () => [tile({ status: 'blocked', count: 1 }), tile({ status: 'working', count: 3 }), tile({ status: 'done', count: 2 }), tile({ status: 'idle', count: 3 })],
   threads: () => [tile({ status: 'blocked', count: 1 }), tile({ status: 'working', count: 1 }), tile({ status: 'done', count: 1 })],
 };
+// The sidebar's Header with its Toolbar, in Dawn Mode or not, open or collapsed.
+export const sampleHeader = ({ collapsed = false, dawn = false, art = true, title = true, view = 'spaces', open = false } = {}) => header({ collapsed, dawn, art, title, toolbar: toolbar({ view, column: collapsed, open }) });
+// The footer's Settings menu, and an update the tool refused.
+export const sampleSettingsMenu = () => menu({ title: 'Settings', items: [{ icon: 'lu-sliders-vertical', label: 'kansō settings', hint: '⌃⇧,' }, { icon: 'lu-panels-top-left', label: 'Herdr settings' }] });
+export const sampleRefusal = { text: 'kansō didn\'t update', source: 'git ls-remote: Could not resolve host: github.com', fix: 'Update' };
 // `switcher: false` hides the view switch; `menu`, collapsed, opens its menu.
-export const sampleSidebar = ({ view = 'spaces', switcher = true, menu: open = false, ...args } = {}) => sidebar({ ...args, view, rows: sampleRows[view](), tiles: sampleTiles[view](),
-  switcher: switcher ? viewSwitch({ view, column: Boolean(args.collapsed), open }) : null });
+export const sampleSidebar = ({ view = 'spaces', switcher = true, menu: open = false, collapsed = false, dawn = false, art = true, ...args } = {}) => sidebar({ ...args, collapsed,
+  header: sampleHeader({ collapsed, dawn, art, view }), rows: sampleRows[view](), tiles: sampleTiles[view](),
+  switcher: switcher ? viewSwitch({ view, column: collapsed, open }) : null, footer: sidebarFooter({ collapsed }) });
 
 // Sample status bar content: what each panel item holds when its Menu opens.
 const hide = [{ separator: true }, { icon: 'lu-eye-off', label: 'Hide this' }];

@@ -1,18 +1,13 @@
-// The sidebar footer as data: its rows in their words, its sizes, and the Settings menu's entries.
-import { G, H } from "./ui.js";
+// The sidebar footer as data: its rows' words, its sizes, and the Settings menu's entries.
+import { H } from "./ui.js";
+import { FOOTER } from "./ui-stack.js";
 import { parseRelease } from "./release.js";
 
 export const KANSO_SETTINGS = "kanso-tabs.settings";
 export const COLLAPSED = "sidebar.collapsed";
 // At the sidebar's narrowest our words can wrap once; the block is fitted for that.
 export const REFUSAL_LINES = 2;
-export const ROW = Object.freeze({ update: "kanso-update", settings: "settings" });
 export const ITEM = Object.freeze({ kanso: "kanso", herdr: "herdr", updateHerdr: "update-herdr" });
-
-// Open, rows touch between 8 above and 16 below, their edge 8 in (a kit row reaches 8 past its parent); in the rail, squares a hair apart above 12.
-export const PAD = Object.freeze({ top: G.sm, bottom: G.lg, side: G.lg, railBottom: G.md, railGap: G.hair });
-// A refused update's block sits under its row, a hair below it and 8 above the next.
-export const REFUSAL = Object.freeze({ above: G.hair, below: G.sm });
 
 // A Dawn Mode build is a prerelease: its row names the build, not kansō.
 export const updateLabel = (version, busy) => {
@@ -20,18 +15,12 @@ export const updateLabel = (version, busy) => {
   return parseRelease(version)?.channel ? `Update to ${version}` : `Update kansō to ${version}`;
 };
 
-/** kansō's update while one is offered (quiet once pressed), then Settings. */
-export const footerRows = ({ update = null, busy = false } = {}) => [
-  ...(update ? [{ key: ROW.update, icon: "refresh-cw", name: updateLabel(update, busy), quiet: busy }] : []),
-  { key: ROW.settings, icon: "settings", name: "Settings", quiet: true },
-];
-
-/** The open footer's height: its rows, and `refusedPx` (a refused update's block, or 0) with its margins. */
-export const footerHeight = (rows, refusedPx = 0) => PAD.top + rows * H.line + PAD.bottom
-  + (refusedPx ? REFUSAL.above + Math.ceil(refusedPx) + REFUSAL.below : 0);
+/** The open footer's height, in the kit's footer room: its rows, and `refusedPx` (a refused update's block, or 0) with its margins. */
+export const footerHeight = (rows, refusedPx = 0) => FOOTER.top + rows * H.line + FOOTER.bottom
+  + (refusedPx ? FOOTER.refusalAbove + Math.ceil(refusedPx) + FOOTER.refusalBelow : 0);
 
 /** The rail footer's height: its squares (the kit's large icon button), a hair apart. */
-export const railHeight = (rows) => PAD.top + rows * H.line + (rows - 1) * PAD.railGap + PAD.railBottom;
+export const railHeight = (rows) => FOOTER.top + rows * H.line + (rows - 1) * FOOTER.railGap + FOOTER.railBottom;
 
 /** A refused update's failure block: our words, the tool's, and Update to try again. */
 export const refusalBlock = (why) => ({ text: "kansō didn't update", source: why, fix: "Update" });

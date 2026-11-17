@@ -1,29 +1,8 @@
 // The kit's compositions: each one only calls pieces with its own props and draws no markup.
-import { button, chip, chord, dawn, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast, windowControls } from './kit.js';
-
-const tool = (icon, label) => button({ label, kind: 'icon', size: 'lg', icon });
-// + names what it adds in the view on show.
-export const addLabels = { spaces: 'Add project', agents: 'New conversation', threads: 'New conversation' };
-// A tool whose menu, open, hangs under it.
-const menuTool = ({ variant, flags = {}, label, icon, open }) => stack({ variant, ...flags },
-  button({ label, kind: 'icon', size: 'lg', icon, active: Boolean(open) }), open ? stack({ variant: 'toolbar menu' }, open) : null);
-// Sort is quieter at its default.
-const sortTool = ({ sorted, menu: open }) => menuTool({ variant: 'toolbar sort', flags: { sorted }, label: 'Sort', icon: 'lu-arrow-up-down', open });
-// Collapsed, the bar contracts: + and Show sidebar stay, Sort and Search fold under a caret.
-const more = (open, sort) => stack({ variant: 'toolbar group', open }, tool(open ? 'lu-chevron-up' : 'lu-chevron-down', open ? 'Fewer tools' : 'More tools'), open ? [sortTool(sort), tool('lu-search', 'Search')] : null);
-export const toolbar = ({ view = 'spaces', column = false, open = false, sorted = false, sortMenu = null, addMenu = null } = {}) => {
-  const add = menuTool({ variant: 'toolbar add', label: addLabels[view], icon: 'lu-plus', open: addMenu });
-  const sort = { sorted, menu: sortMenu };
-  return column
-    ? stack({ variant: 'toolbar', column }, add, tool('lu-panel-left', 'Show sidebar'), more(open, sort))
-    : stack({ variant: 'toolbar' }, add, grow(), sortTool(sort), tool('lu-search', 'Search'), tool('lu-panel-left', 'Hide sidebar'));
-};
+import { button, chord, diffText, dojoCell, dojoCharacter, dojoFeedback, dojoLevel, dojoProgress, dojoRecord, dojoStatistics, dojoSummary, dojoTitle, facts, headerSegment, input, keyLegend, paneName, setting, sleepLabel, toggle, failureBlock, failureLine, glyph, grow, keycap, keyPicked, list, mark, mascot, menu, phrase, pieceLines, plus, row, stack, statusItem, tabSkeleton, tabs, toast } from './kit.js';
 
 // Sidebar compositions: each one is the Row, Tab, Menu, Avatar, Mark, Chip or Button in its own configuration.
-// The rows the app draws (session, project, computer, section, asleep), the tile and the view switch live each in its own file, shared with the app.
-// The update's one icon: the footer row that runs it and every notice about it.
-export const updateIcon = 'lu-refresh-cw';
-export const sidebarFooter = ({ update = null } = {}) => stack({ variant: 'footer' }, update ? row({ icon: updateIcon, name: update }) : null, row({ icon: 'lu-settings', name: 'Settings' }));
+// The rows the app draws (session, project, computer, section, asleep), the tile, the view switch, the toolbar, the header and the footer live each in its own file, shared with the app.
 
 // Status bar compositions: a computer stands in for its sidebar row; the rest are the bar's Menus and Buttons.
 export const computerItemStates = ['on', 'unreachable', 'pending'];
@@ -99,11 +78,6 @@ export const panelBack = () => button({ label: 'Markdown in this folder', kind: 
 
 // Cells
 
-// Dawn Mode: the pill always says the mode at the right of the open header; the sky behind the lights is optional. Stable Mode shows nothing.
-export const header = ({ collapsed = false, dawn: early = false, art = true, open = false, view = 'spaces' } = {}) => stack({ variant: 'header', collapsed },
-  early && art ? dawn() : null, stack({ variant: 'header title' }, windowControls(), early && !collapsed ? chip({ label: 'Dawn Mode', pill: true }) : null),
-  toolbar({ view, column: collapsed, open }));
-
 // The channel in Settings · Updates: one press switches; Dawn Mode says it can break, and the sky can be turned off.
 export const channels = [{ key: 'stable', label: 'Stable Mode' }, { key: 'dawn', label: 'Dawn Mode' }];
 export const channelSettings = ({ channel = 'stable', art = true } = {}) => list(
@@ -111,11 +85,10 @@ export const channelSettings = ({ channel = 'stable', art = true } = {}) => list
     link: channel === 'dawn' ? button({ label: 'Star on GitHub', kind: 'quiet', size: 'sm' }) : null }),
   channel === 'dawn' ? setting({ label: 'Dawn sky', control: toggle({ checked: art, label: 'Dawn sky' }) }) : null);
 
-// The rows and tiles of the current view come in drawn; the sidebar only places them.
-// `switcher`: the view switch, drawn for the form, or none.
-export const sidebar = ({ collapsed = false, dawn: early = false, art = true, view = 'spaces', switcher = null, rows = [], tiles = [], away = null } = {}) => collapsed
-  ? stack({ variant: 'rail' }, header({ collapsed, dawn: early, art, view }), switcher, stack({ variant: 'rail list' }, tiles), stack({ variant: 'rail footer' }, tool('lu-settings', 'Settings')))
-  : stack({ variant: 'sidebar' }, header({ dawn: early, art, view }), switcher, stack({ variant: 'rows' }, rows), away, sidebarFooter());
+// The header, the view switch, the rows or tiles of the current view and the footer come in drawn; the sidebar only places them.
+export const sidebar = ({ collapsed = false, header = null, switcher = null, rows = [], tiles = [], away = null, footer = null } = {}) => collapsed
+  ? stack({ variant: 'rail' }, header, switcher, stack({ variant: 'rail list' }, tiles), footer)
+  : stack({ variant: 'sidebar' }, header, switcher, stack({ variant: 'rows' }, rows), away, footer);
 
 // Two halves around the fixed slot of panes per view; each half folds its own items.
 export const statusBar = ({ left = [], middle = null, right = [], popup = null } = {}) => stack({ variant: 'status bar', grid: true },
@@ -183,7 +156,7 @@ export const shortcutRow = ({ name, chords = [], state = 'rest', taken = null, h
 // The lead is the home's icon in the state's colour; an agent has no icon, so its mark; a failure is always the blocked mark.
 export const noticeStates = ['waits', 'done', 'failed', 'fact'];
 export const noticePlaces = ['home in view', 'window on screen', 'away'];
-const noticeIcons = { ...Object.fromEntries(panelDoors.map(({ key, icon }) => [key, icon])), update: updateIcon };
+const noticeIcons = { ...Object.fromEntries(panelDoors.map(({ key, icon }) => [key, icon])), update: 'lu-refresh-cw' }; // the footer's updateIcon (sidebar-footer.js)
 export const noticeHomes = ['agent', ...Object.keys(noticeIcons)];
 const noticeTone = { waits: 'blocked', done: 'done', failed: 'blocked', fact: 'muted' };
 const noticeMark = { waits: 'blocked', done: 'done', failed: 'blocked', fact: 'idle' };

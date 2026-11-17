@@ -40,8 +40,8 @@ import { field, TextField } from "./ui-field.js";
 import { menu, row, emptyState, skeletonOf, tooltip } from "./kit.js";
 import { boundChord } from "./ui-tooltip.js";
 import { menuList, menuHeight } from "./ui-menu.js";
-import { toolbar } from "./ui-toolbar.js";
-import { header } from "./ui-sidebar-header.js";
+import { toolbar } from "./toolbar.js";
+import { header } from "./header.js";
 import { pieces, shown, runs, asksPs, setPiece, pieceOf, STORE } from "./pieces.js";
 import { machineRecord, canRestore, addArgs, rmArgs, loginLine, hcError, needsLogin, heldNames, connectedNames, machinePhase, machineOf, visibleSpaces, visibleAgents, pollKeys, machineState, machineHot, machineStop, machineTip, machineInk, listedMachines } from "./machines.js";
 import { Names } from "./alias.js";
@@ -97,7 +97,7 @@ const MACHINE_READ_MS = 20_000;
 
 // The views' names, by key, as the view switch says them.
 const VIEWS = Object.fromEntries(views.map(({ key, label }) => [key, label]));
-// A project's stored hue, as the Storybook's avatar tone.
+// A project's stored hue, as the Storybook's avatar tone; its keys are the hues new projects take, least used first, in this order.
 const HUES = { ansi6: "teal", ansi3: "yellow", ansi4: "blue", ansi5: "violet", ansi2: "green", ansi1: "red" };
 // A project's tile shows its first letter, upper case.
 const initialOf = (name) => (name?.[0] ?? "?").toUpperCase();
@@ -800,7 +800,14 @@ export default class Spaces extends View {
     else setRail(true, shared("sidebar.width") ?? SIDEBAR.w);
   }
 
+  // Opening or folding the sidebar shuts its menus for good: the view menu belongs to the rail, Sort's to the form it opened in.
+  shutMenus() {
+    this.viewMenu = false;
+    this.orderOpen = null;
+  }
+
   openRail() {
+    this.shutMenus();
     const width = shared("sidebar.width") ?? SIDEBAR.w;
     setShared("sidebar.collapsed", false);
     setRail(true, width);
@@ -808,6 +815,7 @@ export default class Spaces extends View {
 
   // Remembers how wide you left it open (`width`, when known), to open it the same width.
   foldRail(width) {
+    this.shutMenus();
     if (width != null) setShared("sidebar.width", Math.round(width));
     foldSidebar();
   }
@@ -1705,8 +1713,10 @@ export default class Spaces extends View {
     setShared(STORE, next);
   }
 
+  // A view picked any way, by its key too, shuts the collapsed view menu.
   setView(view, cx) {
     this.view = view;
+    this.viewMenu = false;
     this.panel.set("spaces.view", view);
     if (view === "threads" && cx) this.refreshThreads(cx);
   }
@@ -1745,7 +1755,7 @@ export default class Spaces extends View {
   }
 
   // The Sort menu: the view's orders, the current one ticked, then what the sidebar shows.
-  sortMenu(c, view) {
+  sortMenu(view) {
     const { orders, current, key, head } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
     const ticked = (label, on, onClick) => ({ label, icon: on ? "check" : null, onClick });
     const grouped = view === "threads" ? [ticked("Grouped by project", this.threadGroup, (cx) => this.setOrder("threadGroup", !this.threadGroup, cx))] : [];
@@ -1758,27 +1768,33 @@ export default class Spaces extends View {
       ticked("What each agent is on", this.showActivity !== false, (cx) => this.setShown("activity", this.showActivity === false, cx)),
       ticked(RETURN_LABEL, this.showAway !== false, (cx) => this.setShown("away", this.showAway === false, cx)),
       ticked("Projects, Status and Threads", this.showSwitch !== false, (cx) => this.setShown("switch", this.showSwitch === false, cx)),
-    ] })("spaces-order-menu", c);
+    ] });
   }
 
-  // The header's Toolbar: + names what it adds in this view; collapsed, Sort and Search fold under the caret.
-  tools(c, view, collapsed) {
+  // The Header composition with its Toolbar: + names what it adds in this view; collapsed, Sort and Search fold under the caret.
+  // The window's lights are the block above, so the header has no title row of its own.
+  header(c, view, collapsed) {
     const { orders, current, plain } = sortOf(view, this, { ORDERS, STATUS_ORDERS, THREAD_ORDERS, DEFAULT_ORDER });
     const form = collapsed ? "rail" : "bar";
-    // Sort's menu stays with the form it opened in, and in the rail with the caret open; anywhere else it is shut for good.
-    const sortOpen = this.orderOpen === form && (!collapsed || this.toolsOpen === true);
-    if (!sortOpen) this.orderOpen = null;
-    return toolbar("spaces-tools", c, {
-      view, column: collapsed, open: this.toolsOpen === true, sorted: !plain,
-      sortOpen, sortTip: `Sort: ${orders[current]}`, sortMenu: () => this.sortMenu(c, view),
-      on: {
-        add: () => (view === "spaces" ? this.addProject() : this.newConversationMenu()),
-        sort: (open, cx) => { this.orderOpen = open ? form : null; cx.notify(); },
-        search: () => run("mod.open", { name: "picker" }),
-        sidebar: () => this.toggleRail(),
-        more: (cx) => { this.toolsOpen = !this.toolsOpen; cx.notify(); },
+    // Folding the caret, or the sidebar, shuts Sort's menu for good.
+    const more = (cx) => { this.toolsOpen = !this.toolsOpen; if (!this.toolsOpen) this.orderOpen = null; cx.notify(); };
+    const open = this.toolsOpen === true;
+    const bar = toolbar({ view, column: collapsed, open, sorted: !plain, order: orders[current], sortMenu: this.sortShown(form, collapsed) ? this.sortMenu(view) : null });
+    // Only the tools on show: a name the Toolbar does not draw throws. Collapsed, Search sits under the open caret.
+    return header({ collapsed, title: false, toolbar: bar })("spaces-header", c, {
+      presses: {
+        plus: () => (view === "spaces" ? this.addProject() : this.newConversationMenu()),
+        "panel-left": () => this.toggleRail(),
+        ...(!collapsed || open ? { search: () => run("mod.open", { name: "picker" }) } : {}),
+        ...(collapsed ? { [open ? "chevron-up" : "chevron-down"]: more } : {}),
       },
+      onOpen: (open, cx) => { this.orderOpen = open ? form : null; cx.notify(); },
     });
+  }
+
+  // Sort's menu stays with the form it opened in, and in the rail with the caret open.
+  sortShown(form, collapsed) {
+    return this.orderOpen === form && (!collapsed || this.toolsOpen === true);
   }
 
   grouped(t, collapsed, sp, ps, ctx) {
@@ -2245,11 +2261,9 @@ export default class Spaces extends View {
   // Each tooltip has the view's key; Status carries the dot while someone needs you.
   switchViews(t, sp, collapsed = false) {
     const tips = Object.fromEntries(Object.entries(VIEWS).map(([key, label]) => [key, tooltip({ label, chord: boundChord(`kanso-spaces.view-${key}`) })]));
-    const pick = (view, cx) => { this.viewMenu = false; this.setView(view, cx); cx.notify(); };
+    const pick = (view, cx) => { this.setView(view, cx); cx.notify(); };
     const open = (next, cx) => { this.viewMenu = next; cx.notify(); };
-    // The menu belongs to the rail: opening the sidebar shuts it for good.
-    if (!collapsed) this.viewMenu = false;
-    const look = { view: this.view, column: collapsed, open: this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), tips };
+    const look = { view: this.view, column: collapsed, open: collapsed && this.viewMenu === true, asks: sp.some((s) => s.status === "blocked"), carry: true, tips };
     return viewSwitch(look)(collapsed ? "rail-view" : "spaces-view", tokens(t), collapsed ? { onChange: pick, onOpen: open } : { onChange: pick });
   }
 
@@ -2400,7 +2414,7 @@ export default class Spaces extends View {
 
   // Kept in shared "space.colors" so every window agrees; a gone space gives its hue up.
   assignColors(sp) {
-    const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
+    const palette = Object.keys(HUES);
     const ids = new Set(sp.map((p) => p.id));
     const had = shared("space.colors") ?? {};
     const stale = Object.keys(had).some((id) => !ids.has(id));
@@ -2462,7 +2476,7 @@ export default class Spaces extends View {
       .on_size_change((size, cx) => this.sized(size.width, cx))
       // A pane held in the strip and let go here goes back where it was.
       .on_mouse_up("left", dropStripDrag)
-      .child(header("spaces-header", { collapsed }, this.tools(tokens(t), view, collapsed)))
+      .child(this.header(tokens(t), view, collapsed))
       .when(switchShown, (el) => el.child(this.switchViews(t, sp, collapsed)))
       .when(shown("sidebar.needs", queue.rows.length > 0 || this.needsEmpty, map), (el) => el.child(queueControl(t, queue, collapsed, this.needsEmpty && !queue.rows.length, (cx) => this.toggleNeeds(cx))))
       .child(this.needsOpen && shown("sidebar.needs", true, map) ? this.needsList(t, queue, read.now) : this.list(t, collapsed, view, [

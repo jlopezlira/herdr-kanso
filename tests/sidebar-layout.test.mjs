@@ -102,14 +102,14 @@ test("the toolbar, every row and the footer share one gutter, the same on both s
 
 test("the footer's rows sit on the same gutter", async () => {
   const { G, H, ICON_CHROME, tokens } = await load("kanso-panel/ui.js", ["G", "H", "ICON_CHROME", "tokens"], {});
-  const { sidebarFooter } = await load("kanso-chrome/footer.js", ["sidebarFooter"], host());
-  const { ROW } = await load("kanso-chrome/footer-model.js", ["ROW"], host());
-  const settings = { open: false, onOpenChange() {}, items: [] };
-  const drawn = sidebarFooter(tokens({ foreground: "#ffffff", background: "#000000" }), { collapsed: false, rows: [{ key: ROW.update, icon: "refresh-cw", name: "Update kansō" }, { key: ROW.settings, icon: "settings", name: "Settings" }], settings });
-  const rows = rowsIn(drawn);
-  assert.equal(rows.length, 2, "Update kansō and Settings");
+  const { sidebarFooter } = await load("kanso-chrome/sidebar-footer.js", ["sidebarFooter"], host());
+  const c = tokens({ foreground: "#ffffff", background: "#000000" });
   const toolbar = px(G.sm + (H.line - ICON_CHROME) / 2);
-  assert.deepEqual(edges(rows), [`${toolbar}/${toolbar}`], "on the edges the toolbar's icons are on");
+  for (const footer of [sidebarFooter({ update: "Update kansō" }), sidebarFooter({ update: "Update kansō", refused: { text: "kansō didn't update", source: "offline" } })]) {
+    const rows = rowsIn(footer("f", c, {}));
+    assert.equal(rows.length, 2, "Update kansō and Settings");
+    assert.deepEqual(edges(rows), [`${toolbar}/${toolbar}`], "on the edges the toolbar's icons are on");
+  }
 });
 
 // The room above each row in the list: the spacers since the row before it (the list's top for the first); every row is also the list's 1 px gap apart.

@@ -9,8 +9,12 @@ const inkOf = (c, quiet, tone) => {
   return quiet ? c.dim : c.text;
 };
 
-/** `label`: a count or a few words; `quiet`: no wash, dim text; `tone`: a tone name that colours the text. */
-export const chip = (c, { label, quiet = false, tone = null } = {}) => div().flex().flex_none().items_center().whitespace_nowrap()
+// The pill says Dawn Mode: always the night of the sky with light words, in dark and light.
+const pilled = (el, c) => el.h(H.badge).px(G.sm).rounded_full().bg(c.dawn.top).text_color(c.dawn.star).font_medium();
+
+/** `label`: a count or a few words; `quiet`: no wash, dim text; `pill`: Dawn Mode's pill; `tone`: a tone name that colours the text. */
+export const chip = (c, { label, quiet = false, pill = false, tone = null } = {}) => div().flex().flex_none().items_center().whitespace_nowrap()
   .text_size(T.body).text_color(inkOf(c, quiet, tone))
-  .when(!quiet, (el) => filled(el, c))
+  .when(!quiet && !pill, (el) => filled(el, c))
+  .when(pill, (el) => pilled(el, c))
   .child(String(label));

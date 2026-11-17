@@ -1,7 +1,8 @@
 // The pages drawn from named states: each state is a preset of its page's playground, and the catalog draws its record from that preset.
-import { computerItem, dojo, edge, toolbar, keyboard, keyboardExplorer, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
+import { computerItem, dojo, edge, keyboard, keyboardExplorer, keyboardSystems, layoutPaused, paletteDoor, panel, panelBack, panelHeader, panelRefresh, pickedKey, shortcutRow, stepperMenu, tabBar } from './compositions.js';
 import { emptyState, phrase, failureBlock, keycap, metric, needsItem, row, skeletonOf, stack, statusItem, stepper, tabs } from './pieces.js';
 import { atWidth, inBar } from './frames.js';
+import { toolbar } from './toolbar.js';
 import { keyLayer, keyLayerMods, sampleDojo, samplePanel, samplePanelHeader, sampleAddMenu, sampleSortMenus, statusMenus, statusPanels } from './samples.js';
 
 export const layerDefaults = Object.fromEntries(keyboardSystems.map((os) => [`${os}Layer`, keyLayerMods[os][0]]));
@@ -87,7 +88,7 @@ const firstOpen = 'Make a move to start: 10 targets, in as few moves as you can.
 
 export const statedPages = {
   'Compositions/Toolbar': {
-    args: { view: 'spaces', column: false, open: false, sorted: false, menu: false, add: false },
+    args: { view: 'spaces', column: false, open: false, sorted: false, order: null, menu: false, add: false },
     markup: ({ menu: shown, add, ...args }) => {
       const bar = toolbar({ ...args, sortMenu: shown ? sampleSortMenus[args.view]() : null, addMenu: add ? sampleAddMenu() : null });
       return shown || add ? `<div class="kanso-story__tools-room">${bar}</div>` : bar;
@@ -97,6 +98,7 @@ export const statedPages = {
       { label: 'Status and Threads', args: { view: 'agents' }, caption: '+ starts a conversation in a project you pick.' },
       { label: '+ menu', args: { view: 'agents', add: true }, caption: 'After a click on +, on Status and Threads: Add computer… ends it.' },
       { label: 'Sorted', args: { sorted: true }, caption: 'The order is not the default one.' },
+      { label: 'Sort names its order', args: { sorted: true, order: 'Needs you first' }, caption: 'Proposed. Sort\'s tooltip names the order in use.' },
       { label: 'Sort menu, Projects', args: { menu: true }, caption: 'After a click on Sort, on Projects.' },
       { label: 'Sort menu, Status', args: { view: 'agents', menu: true }, caption: 'After a click on Sort, on Status.' },
       { label: 'Sort menu, Threads', args: { view: 'threads', menu: true }, caption: 'After a click on Sort, on Threads.' },
