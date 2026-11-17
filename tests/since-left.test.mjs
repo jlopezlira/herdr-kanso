@@ -1,8 +1,7 @@
-import { loadSpaces, loadPullRequest, loadSinceLeft, loadAgentRowH, loadRecordPrFacts, loadDuration } from "./mod-fixtures.mjs";
+import { loadSpaces, loadPullRequest, loadSinceLeft, loadAgentRowH, loadRecordPrFacts, loadDuration, temporaryKdb } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { databaseTimer, load, clone, temporary, exec, singleUse, context, tape } from "./helpers.mjs";
+import { load, clone, exec, singleUse, context, tape, recordingElement } from "./helpers.mjs";
 import { AWAY_MS, KEEP_MS, EVENT_CAP, MAINTENANCE_MS, targetOf, parseTarget, returnSignature, changes, digest, lines, focusedTarget, agentSnapshot, observedAgents, present, RETURN_LABEL, destinationOf, livePlaces, eventLabel, oneLine, awayShown, AWAY_PIECE, DID_CAP } from "../kanso/mods/kanso-spaces/since-left-model.js";
 
 const project = ":C:\\work\\kanso";
@@ -11,13 +10,29 @@ const snapshot = (status, name = "Padme") => ({ source: "agent:c1", project, val
 const cx = { notify() {} };
 
 async function database(t) {
-  const dir = await temporary(t);
-  const { Kdb, rowsOfOutput } = await load("kanso-spaces/kdb.js", ["Kdb", "rowsOfOutput"], { exec, appHome: () => dir });
+  const { dir, db, rowsOfOutput } = await temporaryKdb(t, ["rowsOfOutput"]);
   const { SinceStore } = await load("kanso-spaces/since-left-store.js", ["SinceStore"], { exec, appHome: () => dir });
-  const db = new Kdb(databaseTimer, join(dir, "data"));
-  await db.open();
   return { db, store: new SinceStore(db), rowsOfOutput };
 }
+// A database whose store has seen the project at 0.
+const entered = async (t) => {
+  const opened = await database(t);
+  await opened.store.enter(project, 0);
+  return opened;
+};
+// A database with the project App on the GitHub repository o/r.
+const appOnGitHub = async (t) => {
+  const { db } = await database(t);
+  await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
+  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
+  return db;
+};
+const eventCount = async (db) => (await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n;
+// A return view with no database, and the calls its store will keep.
+const detached = async () => {
+  const { SinceLeft } = await loadSinceLeft();
+  return { view: new SinceLeft(null), calls: [] };
+};
 
 const saveEvents = (db, events) => db.run(["BEGIN;", ...events.map((row) => `INSERT INTO since_events(id,project,target,kind,text,at) VALUES(${row.id},'${project}','${row.target}','${row.kind}','${row.text}',${row.at});`), "COMMIT;"]);
 
@@ -89,8 +104,7 @@ test("PR facts include approval, requested changes, failed checks, and merges wi
 });
 
 test("the database remembers projects separately, persists dismissal, and keeps new events", async (t) => {
-  const { db, store } = await database(t);
-  await store.enter(project, 0);
+  const { db, store } = await entered(t);
   await store.observe([snapshot("working")], 1);
   await store.observe([snapshot("blocked")], 2);
   assert.deepEqual(clone(await store.enter(":other", AWAY_MS)), []);
@@ -112,7 +126,7 @@ test("two observers record one transition, reject older sightings, and do not re
   await store.observe([snapshot("working")], 150);
   await store.seed([snapshot("working")], 300);
   await store.observe([snapshot("done")], 400);
-  assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n, 1);
+  assert.equal(await eventCount(db), 1);
 });
 
 test("the event log prunes by age and cap and sqlite output accepts Windows line endings", async (t) => {
@@ -150,9 +164,7 @@ test("the return view expands inline, never focuses a handle, and stays silent w
     return new Proxy(element, { get: (target, key) => key === "on_click" ? (fn) => { clicks.set(id, fn); return target; } : target[key] });
   };
   const { SinceLeft } = await loadSinceLeft({ ...ui });
-  const view = new SinceLeft(db);
-  view.project = project;
-  view.rows = Array.from({ length: 4 }, (_, i) => event(i + 1));
+  const view = Object.assign(new SinceLeft(db), { project, rows: Array.from({ length: 4 }, (_, i) => event(i + 1)) });
   const register = (id, go) => { nav.push({ id, go }); return false; };
   const heads = [];
   view.render({}, project, register, () => true, (label, count) => { heads.push([label, count]); return {}; });
@@ -160,12 +172,11 @@ test("the return view expands inline, never focuses a handle, and stays silent w
   assert.equal(nav.length, 3);
   nav.at(-1).go(cx);
   assert.equal(view.lineCount(), 4);
-  view.render({}, project, register, () => true);
-  assert.equal(nav.length, 7);
+  const rendered = () => { view.render({}, project, register, () => true); return nav.length; };
+  assert.equal(rendered(), 7);
   await view.dismiss(cx);
   assert.equal(view.rows.length, 0);
-  view.render({}, project, register, () => true);
-  assert.equal(nav.length, 7);
+  assert.equal(rendered(), 7);
 });
 
 test("a second finished turn is recorded even when both observed states are done", () => {
@@ -222,16 +233,15 @@ test("the return head shows the count and its dismiss clears the rows", async (t
   const texts = [], clicks = new Map();
   const node = (initial = null) => {
     const self = { id: initial };
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "id") return (value) => { self.id = value; return el; };
-      if (key === "child") return (value) => { if (typeof value === "string" || typeof value === "number") texts.push(String(value)); return el; };
+    const record = {
+      id: (value) => { self.id = value; },
+      child: (value) => { if (typeof value === "string" || typeof value === "number") texts.push(String(value)); },
+      on_click: (fn) => { clicks.set(self.id, fn); },
+    };
+    return recordingElement((key, el) => {
       if (key === "children") return (list) => list;
-      if (key === "when") return (on, apply) => (on ? apply(el) : el);
-      if (key === "on_click") return (fn) => { clicks.set(self.id, fn); return el; };
-      return () => el;
-    } });
-    return el;
+      return Object.hasOwn(record, key) ? (value) => { record[key](value); return el; } : undefined;
+    });
   };
   const { SinceLeft } = await loadSinceLeft({ div: node, svg: node, h_flex: node, v_flex: node, Button: { new: node } });
   const view = new SinceLeft(db);
@@ -255,8 +265,7 @@ test("the return head shows the count and its dismiss clears the rows", async (t
 });
 
 test("return tracking holds the initial focus, dismisses on a later target, and retries a failed load silently", async () => {
-  const { SinceLeft } = await loadSinceLeft();
-  const view = new SinceLeft(null), calls = [];
+  const { view, calls } = await detached();
   let fails = true;
   view.store = {
     async observe() {}, async prune() {}, async touch() {},
@@ -312,16 +321,14 @@ test("each kind of event leads where it happened: a waiting or failed agent to i
 });
 
 test("a first detailed PR read compares against the inbox cache, including a merged PR", async (t) => {
-  const { db } = await database(t);
-  await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
-  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
+  const db = await appOnGitHub(t);
   await db.run("INSERT INTO pr_items(url,provider,host,owner,name,number,title,state,review_decision,role,fetched_at) VALUES('https://github.com/o/r/pull/4','github','github.com','o','r',4,'Fix','OPEN','REVIEW_REQUIRED','author',1);");
   const { recordPrFacts } = await loadRecordPrFacts();
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 2);
   assert.equal((await db.read("SELECT text FROM since_events;"))[0].text, "PR #4 merged");
   await recordPrFacts(db, [], 3);
   await recordPrFacts(db, [{ url: "https://github.com/o/r/pull/4", number: 4, state: "MERGED" }], 4);
-  assert.equal((await db.read("SELECT COUNT(*) AS n FROM since_events;"))[0].n, 1);
+  assert.equal(await eventCount(db), 1);
 });
 
 test("raw errors and nested agents keep their project even when absent from the main agent list", () => {
@@ -340,8 +347,7 @@ test("raw errors and nested agents keep their project even when absent from the 
 });
 
 test("an unseen digest adds the next absence's events and skips events from the visit between them", async (t) => {
-  const { db, store } = await database(t);
-  await store.enter(project, 0);
+  const { db, store } = await entered(t);
   await saveEvents(db, [event(1, "blocked", 1)]);
   assert.equal((await store.enter(project, AWAY_MS)).length, 1);
   await saveEvents(db, [event(2, "finished", AWAY_MS + 1)]);
@@ -403,8 +409,7 @@ test("the return signature changes with event facts and project assignment", () 
 });
 
 test("unchanged return polling skips snapshots and sleeping projects never read the log", async () => {
-  const { SinceLeft } = await loadSinceLeft();
-  const view = new SinceLeft(null), calls = [];
+  const { view, calls } = await detached();
   view.store = { async observe(rows) { if (rows.length) calls.push("observe"); }, async prune() { calls.push("prune"); }, async touchSources() { calls.push("heartbeat"); } };
   const { Spaces } = await loadSpaces({ agents: () => [], terminals: () => [], focused: () => null, shared: () => null, machines: () => [], home: () => "" });
   const spaces = new Spaces();
@@ -491,9 +496,7 @@ test("a row says who, what happened and what it did; a gone agent's row stays bu
 });
 
 test("with While you were away off, a pull request read records no fact", async (t) => {
-  const { db } = await database(t);
-  await db.run("INSERT INTO projects(id,name,folder,machine,added) VALUES('p1','App','C:\\work\\app','',0);");
-  await db.run("INSERT INTO pr_repos(id,provider,host,owner,name,project_id) VALUES('r1','github','github.com','o','r','p1');");
+  const db = await appOnGitHub(t);
   const observed = async (hidden) => {
     const { PullRequest } = await loadPullRequest({
       exec, shared: (key) => (key === "kanso.pieces" ? Object.fromEntries(hidden.map((id) => [id, "hide"])) : null),

@@ -2,7 +2,7 @@
 import { loadToast } from "./mod-fixtures.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { load, clone } from "./helpers.mjs";
+import { load, clone, recordingElement } from "./helpers.mjs";
 
 // Herdr's side: posting opens a copy of the mod with the notification as its props.
 async function screen(clock = null) {
@@ -102,11 +102,7 @@ test("Clicking one away closes those past their clock too, so none is forgotten 
 async function drawn(notification) {
   const calls = [], ran = [], closed = [];
   const node = (kind, arg) => {
-    const el = new Proxy({}, { get(_target, key) {
-      if (key === "then") return undefined;
-      if (key === "when") return (on, apply) => (on ? apply(el) : el);
-      return (...args) => { calls.push([kind, key, ...args]); return el; };
-    } });
+    const el = recordingElement((key, self) => (...args) => { calls.push([kind, key, ...args]); return self; });
     calls.push([kind, "new", arg]);
     return el;
   };
