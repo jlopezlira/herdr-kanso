@@ -47,7 +47,7 @@ test("Without a background the washes read the canvas to tell a light theme from
 });
 
 test("In the light theme the strip's tiles and the tree guides stand out from the sidebar's ground by at least 1.19:1", () => {
-  const fg = colour(tokens, "light", "fg"), chrome = colour(tokens, "light", "chrome");
+  const fg = colour(tokens, "light", "fg"), chrome = colour(tokens, "light", "surface-0");
   const short = ["w7", "w12"].map((name) => ({ name, ratio: contrast(over(fg, chrome, share("light", name)), chrome) }))
     .filter(({ ratio }) => Number(ratio.toFixed(2)) < 1.19).map(({ name, ratio }) => `${name} on chrome: ${ratio.toFixed(3)}:1`);
   assert.deepEqual(short, []);

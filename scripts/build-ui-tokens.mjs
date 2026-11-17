@@ -45,7 +45,7 @@ const share = (tokens) => {
 const WASH = /^color-mix\(in srgb, var\(--fg\) ([\d.]+)%, transparent\)$/;
 
 // The foreground washes' shares per theme, keyed by the kit's names and read from their tokens.
-export const WASH_TOKENS = { w4: "wash-4", w7: "wash-7", w12: "wash-12", w14: "w14" };
+export const WASH_TOKENS = { w4: "wash-4", w7: "wash-7", w12: "wash-12", w14: "wash-14" };
 export function washes(tokens) {
   const share = (theme, name) => {
     const t = tokens.colour[theme].find((x) => x.name === name), m = WASH.exec(t?.value ?? "");

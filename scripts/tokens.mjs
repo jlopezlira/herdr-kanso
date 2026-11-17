@@ -40,7 +40,7 @@ export function contrast(a, b) {
 }
 
 export const TEXT = ["fg", "muted", "dim"];
-export const SURFACES = ["canvas", "chrome", "surface-1", "surface-3", "surface-2"];
+export const SURFACES = ["surface-1", "surface-0", "surface-2", "surface-4", "surface-3"];
 export const MIN_CONTRAST = 4.5;
 
 export function pairs(tokens) {

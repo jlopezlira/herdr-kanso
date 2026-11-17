@@ -232,7 +232,7 @@ export const guidelines = {
   ],
   "Primitives/Markdown": [
     ["Seijaku", "Reads like the window.", "Headings 20 and 15, body 13.5, code 11.5 on wash-7, tables 12.5 with border rows."],
-    ["Yūgen", "One click edits in place.", "The block under the pointer takes the hover wash; a click gives it the surface-3 slab and the kit's focus ring. A click on a link still follows it."],
+    ["Yūgen", "One click edits in place.", "The block under the pointer takes the hover wash; a click gives it the surface-4 slab and the kit's focus ring. A click on a link still follows it."],
     ["Shizen", "Save follows code.", "⌘S or the button, never on its own. Esc closes any block."],
   ],
   "Primitives/Menu": [
@@ -245,7 +245,7 @@ export const guidelines = {
     ["Kansō", "Facts follow, quiet.", "Supporting facts sit on one dim line under it; none repeats the number."],
   ],
   "Primitives/Switch": [
-    ["Seijaku", "One switch.", "Off is surface-3 with the input edge, on is solid; only the knob moves."],
+    ["Seijaku", "One switch.", "Off is surface-4 with the input edge, on is solid; only the knob moves."],
     ["Kansō", "Disabled is quiet.", "The 4% wash and a dim knob. The label is spoken, not shown inside."],
   ],
   "Primitives/Row": [
@@ -269,9 +269,9 @@ export const guidelines = {
     ["Kansō", "Icon, label or both.", "Without a label each tab is a square the size of its height, the label its tooltip, and marks give way to the one dot. Compositions build on this: the rail's column of views is icon tabs."],
   ],
   "Primitives/Thumbnail": [
-    ["Seijaku", "One thumbnail.", "40 square, radius 4, border edge on surface-3; the picture is cropped to fill it. One per shot in a strip, 4 apart."],
+    ["Seijaku", "One thumbnail.", "40 square, radius 4, border edge on surface-4; the picture is cropped to fill it. One per shot in a strip, 4 apart."],
     ["Shizen", "Selected is the shared state.", "The chosen thumbnail takes kanso-control--selected: the 2 px accent ring outside, the same as a focused field, a row or a menu item; nothing moves."],
-    ["Kansō", "Nothing to show, nothing drawn.", "A picture that cannot load leaves the surface-3 square; the name is its tooltip."],
+    ["Kansō", "Nothing to show, nothing drawn.", "A picture that cannot load leaves the surface-4 square; the name is its tooltip."],
   ],
   "Primitives/Toast": [
     ["Kansō", "Only what has no home on screen.", "A toast says a result whose row is not visible; when the row is on screen, the row says it instead."],
